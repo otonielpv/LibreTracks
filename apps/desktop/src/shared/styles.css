@@ -293,7 +293,7 @@ button:disabled {
   inset-block: 0.45rem;
   min-width: 2.5rem;
   overflow: hidden;
-  padding: 0.35rem 0.55rem 0.4rem;
+  padding: 0;
   position: absolute;
   text-align: left;
 }
@@ -302,7 +302,7 @@ button:disabled {
   align-items: center;
   display: flex;
   gap: 1px;
-  inset: 0.3rem 0.35rem 1.35rem 0.35rem;
+  inset: 0.18rem;
   opacity: 0.95;
   position: absolute;
 }
@@ -328,8 +328,13 @@ button:disabled {
 }
 
 .clip-label {
-  align-self: end;
-  position: relative;
+  background: rgba(255, 248, 240, 0.9);
+  border-radius: 999px;
+  bottom: 0.3rem;
+  left: 0.35rem;
+  max-width: calc(100% - 0.7rem);
+  padding: 0.12rem 0.45rem;
+  position: absolute;
   z-index: 1;
 }
 
