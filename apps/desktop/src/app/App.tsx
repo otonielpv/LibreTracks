@@ -6,16 +6,16 @@ export function App() {
       <header className="hero">
         <div>
           <p className="eyebrow">LibreTracks</p>
-          <h1>Base tecnica lista para el primer prototipo multitrack</h1>
+          <h1>Importa WAVs y prueba el primer reproductor multitrack</h1>
           <p className="lede">
-            La interfaz todavia es minima, pero ya refleja el modelo de trabajo:
-            transporte, grupos y timeline como piezas separadas.
+            La shell del escritorio ya puede importar pistas WAV, crear una cancion basica y
+            controlar el transporte desde Tauri.
           </p>
         </div>
         <div className="meta-card">
-          <span>BPM 72</span>
-          <span>Key D</span>
-          <span>4/4</span>
+          <span>WAV Import</span>
+          <span>Rust Audio</span>
+          <span>Tauri Desktop</span>
         </div>
       </header>
 
@@ -26,7 +26,7 @@ export function App() {
         <ul>
           <li>Persistencia de `song.json` completada.</li>
           <li>Importacion WAV completada.</li>
-          <li>Transporte local sincronizado en progreso.</li>
+          <li>Importacion y reproduccion WAV iniciales ya probables en Tauri.</li>
         </ul>
       </section>
     </main>

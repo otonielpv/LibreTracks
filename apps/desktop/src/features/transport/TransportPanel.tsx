@@ -1,137 +1,269 @@
-import { useState } from "react";
-
-const initialGroups = [
-  { id: "group-monitor", name: "Click + Guide", volume: 100, muted: false },
-  { id: "group-rhythm", name: "Drums + Bass", volume: 92, muted: false },
-  { id: "group-keys", name: "Keys + Pads", volume: 78, muted: true },
-];
-
-const initialTracks = [
-  { id: "track-click", name: "Click", group: "Click + Guide", volume: 100, muted: false },
-  { id: "track-guide", name: "Guide", group: "Click + Guide", volume: 86, muted: false },
-  { id: "track-drums", name: "Drums", group: "Drums + Bass", volume: 94, muted: false },
-  { id: "track-bass", name: "Bass", group: "Drums + Bass", volume: 88, muted: false },
-  { id: "track-keys", name: "Keys", group: "Keys + Pads", volume: 72, muted: true },
-];
+import { useEffect, useState } from "react";
+import {
+  getTransportSnapshot,
+  isTauriApp,
+  pauseTransport,
+  pickAndImportSong,
+  playTransport,
+  seekTransport,
+  stopTransport,
+  type TransportSnapshot,
+} from "./desktopApi";
 
 export function TransportPanel() {
-  const [groups, setGroups] = useState(initialGroups);
-  const [tracks, setTracks] = useState(initialTracks);
+  const [snapshot, setSnapshot] = useState<TransportSnapshot | null>(null);
+  const [status, setStatus] = useState("Cargando estado de la sesión...");
+  const [isBusy, setIsBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadInitialState() {
+      const nextSnapshot = await getTransportSnapshot();
+      if (!active) {
+        return;
+      }
+
+      setSnapshot(nextSnapshot);
+      setStatus(
+        nextSnapshot.isNativeRuntime
+          ? "Modo escritorio nativo listo para importar WAVs."
+          : "Modo demo web: la reproducción real se prueba con Tauri.",
+      );
+    }
+
+    void loadInitialState();
+
+    if (!isTauriApp) {
+      return () => {
+        active = false;
+      };
+    }
+
+    const interval = window.setInterval(async () => {
+      const nextSnapshot = await getTransportSnapshot();
+      if (!active) {
+        return;
+      }
+
+      setSnapshot(nextSnapshot);
+    }, 350);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const song = snapshot?.song ?? null;
+  const groups = song?.groups ?? [];
+  const tracks = song?.tracks ?? [];
+  const positionSeconds = snapshot?.positionSeconds ?? 0;
+  const durationSeconds = song?.durationSeconds ?? 0;
+
+  const handleImport = async () => {
+    setIsBusy(true);
+    setStatus("Abriendo selector de archivos WAV...");
+
+    try {
+      const nextSnapshot = await pickAndImportSong();
+      if (!nextSnapshot) {
+        setStatus("Importación cancelada.");
+        return;
+      }
+
+      setSnapshot(nextSnapshot);
+      setStatus(
+        `Canción cargada: ${nextSnapshot.song?.title ?? "Sin título"}. Ya puedes pulsar Play.`,
+      );
+    } catch (error) {
+      setStatus(`No se pudo importar la canción: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handlePlay = async () => {
+    try {
+      const nextSnapshot = await playTransport();
+      setSnapshot(nextSnapshot);
+      setStatus("Reproducción en curso.");
+    } catch (error) {
+      setStatus(`No se pudo reproducir: ${String(error)}`);
+    }
+  };
+
+  const handlePause = async () => {
+    try {
+      const nextSnapshot = await pauseTransport();
+      setSnapshot(nextSnapshot);
+      setStatus("Reproducción pausada.");
+    } catch (error) {
+      setStatus(`No se pudo pausar: ${String(error)}`);
+    }
+  };
+
+  const handleStop = async () => {
+    try {
+      const nextSnapshot = await stopTransport();
+      setSnapshot(nextSnapshot);
+      setStatus("Reproducción detenida.");
+    } catch (error) {
+      setStatus(`No se pudo detener: ${String(error)}`);
+    }
+  };
+
+  const handleSeek = async (position: number) => {
+    try {
+      const nextSnapshot = await seekTransport(position);
+      setSnapshot(nextSnapshot);
+    } catch (error) {
+      setStatus(`No se pudo mover el transporte: ${String(error)}`);
+    }
+  };
 
   return (
     <section className="panel">
       <div className="transport">
-        <button type="button">Play</button>
-        <button type="button">Pause</button>
-        <button type="button">Stop</button>
-        <strong>00:00.000</strong>
+        <button disabled={!song || isBusy} type="button" onClick={() => void handlePlay()}>
+          Play
+        </button>
+        <button disabled={!song || isBusy} type="button" onClick={() => void handlePause()}>
+          Pause
+        </button>
+        <button disabled={!song || isBusy} type="button" onClick={() => void handleStop()}>
+          Stop
+        </button>
+        <strong>{formatClock(positionSeconds)}</strong>
+        <span className="transport-state">{snapshot?.playbackState ?? "empty"}</span>
       </div>
 
-      <div className="group-list">
-        {groups.map((group) => (
-          <article className="group-row" key={group.name}>
-            <div>
-              <h3>{group.name}</h3>
-              <p>Vol {group.volume}%</p>
-            </div>
-            <div className="row-controls">
-              <label className="slider-field">
-                <span>Volumen</span>
-                <input
-                  aria-label={`Volumen de grupo ${group.name}`}
-                  max="100"
-                  min="0"
-                  type="range"
-                  value={group.volume}
-                  onChange={(event) => {
-                    const volume = Number(event.target.value);
-                    setGroups((currentGroups) =>
-                      currentGroups.map((currentGroup) =>
-                        currentGroup.id === group.id
-                          ? { ...currentGroup, volume }
-                          : currentGroup,
-                      ),
-                    );
-                  }}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setGroups((currentGroups) =>
-                    currentGroups.map((currentGroup) =>
-                      currentGroup.id === group.id
-                        ? { ...currentGroup, muted: !currentGroup.muted }
-                        : currentGroup,
-                    ),
-                  );
-                }}
-              >
-                {group.muted ? "Unmute" : "Mute"}
-              </button>
-            </div>
-          </article>
-        ))}
+      <div className="status-box">
+        <strong>{song?.title ?? "Todavía no hay canción cargada"}</strong>
+        <p>{status}</p>
+        {song && (
+          <p className="status-meta">
+            {formatClock(positionSeconds)} / {formatClock(durationSeconds)}
+            {snapshot?.songDir ? ` • ${snapshot.songDir}` : ""}
+          </p>
+        )}
       </div>
+
+      {groups.length > 0 && (
+        <div className="group-list">
+          {groups.map((group) => (
+            <article className="group-row" key={group.id}>
+              <div>
+                <h3>{group.name}</h3>
+                <p>Vol {Math.round(group.volume * 100)}%</p>
+              </div>
+              <div className="row-controls">
+                <label className="slider-field">
+                  <span>Volumen</span>
+                  <input
+                    aria-label={`Volumen de grupo ${group.name}`}
+                    disabled
+                    max="100"
+                    min="0"
+                    type="range"
+                    value={Math.round(group.volume * 100)}
+                    onChange={() => undefined}
+                  />
+                </label>
+                <button disabled type="button">
+                  {group.muted ? "Unmute" : "Mute"}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
 
       <div className="track-header">
         <div>
           <h2>Tracks</h2>
-          <p>Lista inicial para la fase de mezcla y timeline.</p>
+          <p>Importa WAVs y la canción quedará lista para probar el transporte.</p>
         </div>
         <div className="track-actions">
-          <button type="button">Crear Cancion</button>
-          <button type="button">Importar Pistas</button>
-          <button type="button">Abrir Proyecto</button>
+          <button disabled={!isTauriApp || isBusy} type="button">
+            Crear Cancion
+          </button>
+          <button disabled={!isTauriApp || isBusy} type="button" onClick={() => void handleImport()}>
+            Importar WAVs
+          </button>
+          <button disabled type="button">
+            Abrir Proyecto
+          </button>
         </div>
       </div>
 
-      <div className="track-list">
-        {tracks.map((track) => (
-          <article className="track-row" key={track.id}>
-            <div className="track-meta">
-              <strong>{track.name}</strong>
-              <span>{track.group}</span>
-            </div>
-
-            <label className="slider-field track-slider">
-              <span>Vol {track.volume}%</span>
+      {song ? (
+        <>
+          <div className="seek-box">
+            <label className="seek-field">
+              <span>Posición</span>
               <input
-                aria-label={`Volumen de pista ${track.name}`}
-                max="100"
+                aria-label="Posición del transporte"
+                max={Math.max(durationSeconds, 0)}
                 min="0"
+                step="0.01"
                 type="range"
-                value={track.volume}
+                value={positionSeconds}
                 onChange={(event) => {
-                  const volume = Number(event.target.value);
-                  setTracks((currentTracks) =>
-                    currentTracks.map((currentTrack) =>
-                      currentTrack.id === track.id
-                        ? { ...currentTrack, volume }
-                        : currentTrack,
-                    ),
-                  );
+                  const nextPosition = Number(event.target.value);
+                  void handleSeek(nextPosition);
                 }}
               />
             </label>
+          </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setTracks((currentTracks) =>
-                  currentTracks.map((currentTrack) =>
-                    currentTrack.id === track.id
-                      ? { ...currentTrack, muted: !currentTrack.muted }
-                      : currentTrack,
-                  ),
-                );
-              }}
-            >
-              {track.muted ? "Unmute" : "Mute"}
-            </button>
-          </article>
-        ))}
-      </div>
+          <div className="track-list">
+            {tracks.map((track) => (
+              <article className="track-row" key={track.id}>
+                <div className="track-meta">
+                  <strong>{track.name}</strong>
+                  <span>{track.groupName ?? "Sin grupo"}</span>
+                </div>
+
+                <label className="slider-field track-slider">
+                  <span>Vol {Math.round(track.volume * 100)}%</span>
+                  <input
+                    aria-label={`Volumen de pista ${track.name}`}
+                    disabled
+                    max="100"
+                    min="0"
+                    type="range"
+                    value={Math.round(track.volume * 100)}
+                    onChange={() => undefined}
+                  />
+                </label>
+
+                <button disabled type="button">
+                  {track.muted ? "Unmute" : "Mute"}
+                </button>
+              </article>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="empty-state">
+          <p>
+            Usa <strong>Importar WAVs</strong> desde la app Tauri para seleccionar una o varias
+            pistas. Se copiarán a la carpeta interna del proyecto y podrás escucharlas con{" "}
+            <strong>Play</strong>.
+          </p>
+        </div>
+      )}
     </section>
   );
+}
+
+function formatClock(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  const milliseconds = Math.floor((totalSeconds % 1) * 1000);
+
+  return `${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}.${milliseconds.toString().padStart(3, "0")}`;
 }

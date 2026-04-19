@@ -31,6 +31,11 @@ button {
   padding: 0.75rem 1rem;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .panel h2 {
   margin-top: 0;
 }
@@ -88,6 +93,44 @@ button {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+.transport-state {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+  text-transform: uppercase;
+}
+
+.status-box,
+.empty-state,
+.seek-box {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.status-box p,
+.empty-state p,
+.status-meta {
+  color: var(--muted);
+  margin-bottom: 0;
+}
+
+.seek-field {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.seek-field input {
+  accent-color: var(--accent);
+  width: 100%;
 }
 
 .group-list {
