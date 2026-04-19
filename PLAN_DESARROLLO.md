@@ -908,13 +908,15 @@ Nota: la base está preparada, pero faltan instalar dependencias y disponer de t
 [x] Pantalla de inicio
 [ ] Botón crear canción
 [ ] Botón importar pistas
-[ ] Lista de tracks
+[x] Lista de tracks
 [x] Botones play/stop
-[ ] Sliders de volumen
+[x] Sliders de volumen
 [x] Botones mute
 [ ] Guardar proyecto
 [ ] Abrir proyecto
 ```
+
+Nota: la UI ya muestra acciones de crear/importar/abrir como esqueleto visual, pero todavía no están conectadas con lógica real de proyecto.
 
 ## Milestone 6 — Timeline básico
 
