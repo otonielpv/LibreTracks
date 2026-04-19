@@ -16,10 +16,12 @@ Estado a 19/04/2026:
 
 - Ya existe la base del monorepo con `apps/`, `crates/`, `docs/`, `samples/` y `tests/`.
 - Ya existe una app desktop React con placeholder visual y una base Tauri en Rust.
-- Ya existe el crate `libretracks-core` con modelo de dominio, validaciones y tests escritos.
-- Ya existe el crate `libretracks-project` con lectura/escritura de `song.json` y estructura de carpeta de canción.
+- Ya existe el crate `libretracks-core` con modelo de dominio, validaciones y tests unitarios Rust escritos.
+- Ya existe el crate `libretracks-project` con lectura/escritura de `song.json`, estructura de carpeta de canción y tests unitarios Rust escritos.
+- Vitest estaba configurado, pero todavía no había tests frontend implementados.
 - Todavía no están implementados el motor de audio, la importación WAV ni el timeline editable.
 - En este entorno hay `node` y `npm`, pero no hay `cargo` ni `rustc`, así que la parte Tauri/Rust no puede compilarse todavía aquí.
+- Los tests Rust existen en código, pero todavía no se han podido ejecutar en esta máquina por falta de toolchain Rust.
 
 ## Objetivo de la primera etapa
 
@@ -542,6 +544,12 @@ Objetivo:
 Proyecto creado y funcionando.
 ```
 
+Estado actual:
+
+```txt
+Parcial. La base tecnica existe, pero faltan dependencias instaladas para arrancar el frontend y falta toolchain Rust para arrancar Tauri.
+```
+
 Incluye:
 
 * Tauri + React + Rust.
@@ -843,7 +851,7 @@ En modo directo, evitar acciones destructivas o accidentales.
 [x] Crear docs/architecture.md
 ```
 
-Nota: la base está preparada, pero faltan instalar dependencias y disponer de toolchain Rust para ejecutar Tauri y tests reales.
+Nota: la base está preparada, pero faltan instalar dependencias y disponer de toolchain Rust para ejecutar Tauri y tests Rust reales.
 
 ## Milestone 2 — Modelo de dominio
 
@@ -857,7 +865,7 @@ Nota: la base está preparada, pero faltan instalar dependencias y disponer de t
 [x] Definir OutputBus
 [x] Crear validadores
 [x] Crear serialización JSON
-[x] Tests de creación/validación
+[x] Tests de creación/validación escritos en Rust
 ```
 
 ## Milestone 3 — Proyecto/canciones
@@ -870,7 +878,7 @@ Nota: la base está preparada, pero faltan instalar dependencias y disponer de t
 [ ] Importar archivos a audio/
 [ ] Detectar duración básica de audio
 [ ] Crear tracks automáticamente desde archivos
-[x] Tests de guardar/cargar
+[x] Tests de guardar/cargar escritos en Rust
 ```
 
 ## Milestone 4 — Audio mínimo

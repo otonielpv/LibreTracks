@@ -37,4 +37,6 @@ tests/
 
 ## Estado
 
-Todavia no se han instalado dependencias ni generado binarios. La estructura esta preparada para avanzar por milestones sin rehacer el repositorio.
+Hay tests unitarios Rust escritos en `libretracks-core` y `libretracks-project`, pero en esta maquina todavia no se pueden ejecutar porque falta instalar Rust.
+
+El frontend todavia no tiene dependencias instaladas, asi que el siguiente objetivo es dejar `apps/desktop` arrancable con `npm`.
