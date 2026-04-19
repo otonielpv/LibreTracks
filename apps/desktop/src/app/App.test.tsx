@@ -28,8 +28,6 @@ describe("App", () => {
     render(<App />);
 
     expect(screen.getByText("Tracks")).toBeTruthy();
-    expect(await screen.findByText("Secciones")).toBeTruthy();
-    expect((await screen.findAllByRole("button", { name: /4 compases/i })).length).toBeGreaterThan(0);
     expect(await screen.findByText("Click")).toBeTruthy();
     expect(await screen.findByText("Guide")).toBeTruthy();
     expect(await screen.findByText("Drums")).toBeTruthy();

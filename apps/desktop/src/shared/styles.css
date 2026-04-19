@@ -107,8 +107,7 @@ button:disabled {
 
 .status-box,
 .empty-state,
-.seek-box,
-.sections-panel {
+.seek-box {
   background: white;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -132,54 +131,6 @@ button:disabled {
 .seek-field input {
   accent-color: var(--accent);
   width: 100%;
-}
-
-.sections-header {
-  align-items: center;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
-
-.sections-header h2,
-.sections-header p {
-  margin: 0;
-}
-
-.sections-header p {
-  color: var(--muted);
-  margin-top: 0.3rem;
-}
-
-.section-list {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.section-row {
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: minmax(180px, 1fr) auto;
-  padding: 1rem;
-}
-
-.section-meta {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.section-meta span {
-  color: var(--muted);
-}
-
-.section-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
 }
 
 .group-list {
@@ -282,16 +233,13 @@ button:disabled {
   }
 
   .group-row,
-  .section-row,
   .track-header,
   .track-row {
     align-items: stretch;
     grid-template-columns: 1fr;
   }
 
-  .sections-header,
   .track-actions,
-  .section-actions,
   .row-controls,
   .slider-field {
     align-items: stretch;

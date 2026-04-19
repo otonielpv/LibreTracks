@@ -70,12 +70,7 @@ const fallbackSnapshot: TransportSnapshot = {
     key: "D",
     timeSignature: "4/4",
     durationSeconds: 240,
-    sections: [
-      { id: "section-1", name: "Intro", startSeconds: 0, endSeconds: 32 },
-      { id: "section-2", name: "Verse", startSeconds: 32, endSeconds: 96 },
-      { id: "section-3", name: "Chorus", startSeconds: 96, endSeconds: 160 },
-      { id: "section-4", name: "Outro", startSeconds: 160, endSeconds: 240 },
-    ],
+    sections: [],
     groups: [
       { id: "group-monitor", name: "Click + Guide", volume: 1, muted: false },
       { id: "group-rhythm", name: "Drums + Bass", volume: 0.92, muted: false },
@@ -89,7 +84,7 @@ const fallbackSnapshot: TransportSnapshot = {
       { id: "track-keys", name: "Keys", groupName: "Keys + Pads", volume: 0.72, muted: true },
     ],
   },
-  currentSection: { id: "section-1", name: "Intro", startSeconds: 0, endSeconds: 32 },
+  currentSection: null,
   pendingSectionJump: null,
   songDir: null,
 };

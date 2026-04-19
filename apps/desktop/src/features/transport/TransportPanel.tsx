@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import {
-  cancelSectionJump,
   getTransportSnapshot,
   isTauriApp,
   pauseTransport,
   pickAndImportSong,
   playTransport,
-  scheduleSectionJump,
   seekTransport,
   stopTransport,
   type TransportSnapshot,
@@ -59,12 +57,9 @@ export function TransportPanel() {
 
   const song = snapshot?.song ?? null;
   const groups = song?.groups ?? [];
-  const sections = song?.sections ?? [];
   const tracks = song?.tracks ?? [];
   const positionSeconds = snapshot?.positionSeconds ?? 0;
   const durationSeconds = song?.durationSeconds ?? 0;
-  const currentSection = snapshot?.currentSection ?? null;
-  const pendingJump = snapshot?.pendingSectionJump ?? null;
 
   const handleImport = async () => {
     setIsBusy(true);
@@ -127,30 +122,6 @@ export function TransportPanel() {
     }
   };
 
-  const handleScheduleJump = async (
-    targetSectionId: string,
-    trigger: "immediate" | "section_end" | "after_bars",
-    bars?: number,
-  ) => {
-    try {
-      const nextSnapshot = await scheduleSectionJump({ targetSectionId, trigger, bars });
-      setSnapshot(nextSnapshot);
-      setStatus(buildJumpStatus(nextSnapshot, trigger, bars));
-    } catch (error) {
-      setStatus(`No se pudo programar el salto: ${String(error)}`);
-    }
-  };
-
-  const handleCancelJump = async () => {
-    try {
-      const nextSnapshot = await cancelSectionJump();
-      setSnapshot(nextSnapshot);
-      setStatus("Salto programado cancelado.");
-    } catch (error) {
-      setStatus(`No se pudo cancelar el salto: ${String(error)}`);
-    }
-  };
-
   return (
     <section className="panel">
       <div className="transport">
@@ -177,10 +148,7 @@ export function TransportPanel() {
               {snapshot?.songDir ? ` • ${snapshot.songDir}` : ""}
             </p>
             <p className="status-meta">
-              Seccion actual: <strong>{currentSection?.name ?? "Sin seccion activa"}</strong>
-              {pendingJump
-                ? ` • Salto pendiente: ${formatPendingJump(pendingJump.trigger)} a ${pendingJump.targetSectionName}`
-                : ""}
+              La creacion de secciones y los saltos musicales volveran cuando exista el timeline.
             </p>
           </>
         )}
@@ -254,73 +222,6 @@ export function TransportPanel() {
             </label>
           </div>
 
-          {sections.length > 0 && (
-            <div className="sections-panel">
-              <div className="sections-header">
-                <div>
-                  <h2>Secciones</h2>
-                  <p>Programa saltos tipo Ableton sobre la rejilla musical de la cancion.</p>
-                </div>
-                <button disabled={!pendingJump} type="button" onClick={() => void handleCancelJump()}>
-                  Cancelar salto
-                </button>
-              </div>
-
-              <div className="section-list">
-                {sections.map((section) => {
-                  const isCurrent = currentSection?.id === section.id;
-                  const isPending = pendingJump?.targetSectionId === section.id;
-
-                  return (
-                    <article className="section-row" key={section.id}>
-                      <div className="section-meta">
-                        <strong>
-                          {section.name}
-                          {isCurrent ? " • sonando" : ""}
-                          {isPending ? " • pendiente" : ""}
-                        </strong>
-                        <span>
-                          {formatClock(section.startSeconds)} - {formatClock(section.endSeconds)}
-                        </span>
-                      </div>
-
-                      <div className="section-actions">
-                        <button
-                          disabled={isBusy}
-                          type="button"
-                          onClick={() => void handleScheduleJump(section.id, "immediate")}
-                        >
-                          Ahora
-                        </button>
-                        <button
-                          disabled={isBusy}
-                          type="button"
-                          onClick={() => void handleScheduleJump(section.id, "section_end")}
-                        >
-                          Fin seccion
-                        </button>
-                        <button
-                          disabled={isBusy}
-                          type="button"
-                          onClick={() => void handleScheduleJump(section.id, "after_bars", 2)}
-                        >
-                          2 compases
-                        </button>
-                        <button
-                          disabled={isBusy}
-                          type="button"
-                          onClick={() => void handleScheduleJump(section.id, "after_bars", 4)}
-                        >
-                          4 compases
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           <div className="track-list">
             {tracks.map((track) => (
               <article className="track-row" key={track.id}>
@@ -370,38 +271,4 @@ function formatClock(totalSeconds: number) {
   return `${minutes.toString().padStart(2, "0")}:${seconds
     .toString()
     .padStart(2, "0")}.${milliseconds.toString().padStart(3, "0")}`;
-}
-
-function formatPendingJump(trigger: string) {
-  if (trigger === "section_end") {
-    return "al final de la seccion";
-  }
-
-  if (trigger.startsWith("after_bars:")) {
-    const bars = trigger.split(":")[1] ?? "0";
-    return `en ${bars} compases`;
-  }
-
-  return "ahora";
-}
-
-function buildJumpStatus(
-  snapshot: TransportSnapshot,
-  trigger: "immediate" | "section_end" | "after_bars",
-  bars?: number,
-) {
-  const target =
-    snapshot.pendingSectionJump?.targetSectionName ??
-    snapshot.currentSection?.name ??
-    "la seccion";
-
-  if (trigger === "immediate") {
-    return `Salto inmediato ejecutado hacia ${target}.`;
-  }
-
-  if (trigger === "section_end") {
-    return `Salto programado al final de la seccion hacia ${target}.`;
-  }
-
-  return `Salto programado a ${target} en la siguiente cuantizacion de ${bars ?? 4} compases.`;
 }
