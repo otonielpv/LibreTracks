@@ -249,17 +249,7 @@ button:disabled {
   align-items: stretch;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(140px, 180px) 1fr;
-}
-
-.timeline-track {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.timeline-track span {
-  color: var(--muted);
-  font-size: 0.92rem;
+  grid-template-columns: 1fr;
 }
 
 .timeline-lane {

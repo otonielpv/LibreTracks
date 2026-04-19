@@ -296,12 +296,7 @@ export function TransportPanel() {
 
                   {tracks.map((track) => (
                     <article className="timeline-row" key={track.id}>
-                      <div className="timeline-track">
-                        <strong>{track.name}</strong>
-                        <span>{track.groupName ?? "Sin grupo"}</span>
-                      </div>
-
-                      <div className="timeline-lane">
+                      <div className="timeline-lane" aria-label={`Carril de ${track.name}`}>
                         {clips
                           .filter((clip) => clip.trackId === track.id)
                           .map((clip) => (
