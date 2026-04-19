@@ -325,7 +325,7 @@ El motor de audio debe poder:
 * Aplicar mute por grupo.
 * Detectar sección actual.
 * Programar salto a otra sección.
-* Ejecutar saltos instantáneos, al final de sección o tras compases.
+* Ejecutar saltos instantáneos, al final de sección o cuantizados a compases.
 * Cancelar saltos programados.
 
 ## Librerías Rust candidatas

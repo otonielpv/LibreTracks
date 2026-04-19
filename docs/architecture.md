@@ -45,5 +45,6 @@ Cliente web reducido para control desde movil/tablet.
 - El transporte no debe modelarse solo como una posicion lineal en segundos.
 - Necesitamos separar la posicion real de reproduccion del comportamiento musical esperado por el usuario.
 - Las canciones podran programar saltos entre secciones de tres tipos iniciales: inmediato, al terminar la seccion actual y tras cierto numero de compases.
+- La cuantizacion por compases debe comportarse como Ableton Live: el salto se ejecuta en el siguiente limite global de la rejilla musical configurada, no X compases despues del clic.
 - Los saltos programados deben poder cancelarse antes de ejecutarse.
 - La futura barra de seguimiento y el timeline estilo DAW tendran que mostrar tanto la posicion actual como el salto pendiente cuando exista.

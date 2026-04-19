@@ -299,9 +299,9 @@ fn jump_execute_at(
         }
         JumpTrigger::AfterBars(bars) => {
             let bar_duration = song_bar_duration_seconds(song)?;
-            let musical_target = current_position + (bar_duration * f64::from(*bars));
-            let bars_from_start = (musical_target / bar_duration).ceil();
-            Ok((bars_from_start * bar_duration).min(song.duration_seconds))
+            let quantization_window = bar_duration * f64::from(*bars);
+            let next_window_index = (current_position / quantization_window).floor() + 1.0;
+            Ok((next_window_index * quantization_window).min(song.duration_seconds))
         }
     }
 }
@@ -519,7 +519,7 @@ mod tests {
     }
 
     #[test]
-    fn jump_after_bars_snaps_to_musical_boundary() {
+    fn jump_after_bars_uses_global_quantization_grid() {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
         engine.seek(1.0).expect("seek should work");
@@ -530,10 +530,29 @@ mod tests {
             .expect("jump should schedule");
 
         let position = engine
-            .advance_transport(10.2)
+            .advance_transport(6.0)
             .expect("transport should advance");
 
-        assert!((position - 13.2).abs() < 0.0001);
+        assert!((position - 12.3333333333).abs() < 0.0001);
+        assert!(engine.pending_section_jump().is_none());
+    }
+
+    #[test]
+    fn four_bar_jump_waits_for_the_next_four_bar_boundary() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(7.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        engine
+            .schedule_section_jump("section_outro", JumpTrigger::AfterBars(4))
+            .expect("jump should schedule");
+
+        let position = engine
+            .advance_transport(7.0)
+            .expect("transport should advance");
+
+        assert!((position - 12.6666666667).abs() < 0.0001);
         assert!(engine.pending_section_jump().is_none());
     }
 
