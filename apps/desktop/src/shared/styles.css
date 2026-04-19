@@ -107,7 +107,8 @@ button:disabled {
 
 .status-box,
 .empty-state,
-.seek-box {
+.seek-box,
+.timeline-panel {
   background: white;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -131,6 +132,122 @@ button:disabled {
 .seek-field input {
   accent-color: var(--accent);
   width: 100%;
+}
+
+.timeline-head {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.timeline-head h2,
+.timeline-head p {
+  margin: 0;
+}
+
+.timeline-head p,
+.timeline-meta {
+  color: var(--muted);
+}
+
+.timeline-ruler {
+  border-bottom: 1px solid var(--line);
+  height: 2.5rem;
+  margin-bottom: 0.75rem;
+  position: relative;
+}
+
+.ruler-mark {
+  border-left: 1px dashed var(--line);
+  bottom: 0;
+  position: absolute;
+  top: 0;
+}
+
+.ruler-mark span {
+  background: white;
+  color: var(--muted);
+  font-size: 0.82rem;
+  left: 0.4rem;
+  padding: 0 0.2rem;
+  position: absolute;
+  top: 0;
+}
+
+.timeline-body {
+  display: grid;
+  gap: 0.6rem;
+  position: relative;
+}
+
+.timeline-cursor {
+  background: linear-gradient(180deg, var(--accent), #ef8a35);
+  border-radius: 999px;
+  bottom: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  width: 3px;
+  z-index: 2;
+}
+
+.timeline-row {
+  align-items: stretch;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(140px, 180px) 1fr;
+}
+
+.timeline-track {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.timeline-track span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.timeline-lane {
+  background:
+    linear-gradient(180deg, rgba(191, 91, 4, 0.04), rgba(191, 91, 4, 0.01)),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent calc(12.5% - 1px),
+      rgba(216, 202, 184, 0.8) calc(12.5% - 1px),
+      rgba(216, 202, 184, 0.8) 12.5%
+    );
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  min-height: 4rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.clip-block {
+  align-items: center;
+  background: linear-gradient(135deg, #f0b374, #d97706);
+  border: 1px solid rgba(90, 44, 4, 0.18);
+  border-radius: 12px;
+  box-shadow: 0 10px 18px rgba(191, 91, 4, 0.18);
+  color: #2f1906;
+  display: flex;
+  font-size: 0.9rem;
+  font-weight: 700;
+  inset-block: 0.45rem;
+  min-width: 2.5rem;
+  padding: 0 0.7rem;
+  position: absolute;
+}
+
+.clip-block span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group-list {
@@ -234,11 +351,13 @@ button:disabled {
 
   .group-row,
   .track-header,
+  .timeline-row,
   .track-row {
     align-items: stretch;
     grid-template-columns: 1fr;
   }
 
+  .timeline-head,
   .track-actions,
   .row-controls,
   .slider-field {

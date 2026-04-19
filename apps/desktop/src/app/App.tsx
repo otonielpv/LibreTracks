@@ -27,6 +27,7 @@ export function App() {
           <li>Persistencia de `song.json` completada.</li>
           <li>Importacion WAV completada.</li>
           <li>Importacion y reproduccion WAV iniciales ya probables en Tauri.</li>
+          <li>Timeline visual minimo ya integrado en el escritorio.</li>
         </ul>
       </section>
     </main>

@@ -28,9 +28,11 @@ describe("App", () => {
     render(<App />);
 
     expect(screen.getByText("Tracks")).toBeTruthy();
-    expect(await screen.findByText("Click")).toBeTruthy();
-    expect(await screen.findByText("Guide")).toBeTruthy();
-    expect(await screen.findByText("Drums")).toBeTruthy();
+    expect(await screen.findByText("Timeline")).toBeTruthy();
+    expect(await screen.findByText(/primera vista daw/i)).toBeTruthy();
+    expect((await screen.findAllByText("Click")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Guide")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Drums")).length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Volumen de pista Click")).toBeTruthy();
     expect(screen.getByRole("button", { name: /importar wavs/i })).toBeTruthy();
   });

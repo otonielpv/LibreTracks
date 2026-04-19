@@ -7,6 +7,7 @@ import {
   playTransport,
   seekTransport,
   stopTransport,
+  type ClipSummary,
   type TransportSnapshot,
 } from "./desktopApi";
 
@@ -58,8 +59,11 @@ export function TransportPanel() {
   const song = snapshot?.song ?? null;
   const groups = song?.groups ?? [];
   const tracks = song?.tracks ?? [];
+  const clips = song?.clips ?? [];
   const positionSeconds = snapshot?.positionSeconds ?? 0;
   const durationSeconds = song?.durationSeconds ?? 0;
+  const cursorPercent = durationSeconds > 0 ? (positionSeconds / durationSeconds) * 100 : 0;
+  const rulerMarks = buildRulerMarks(durationSeconds);
 
   const handleImport = async () => {
     setIsBusy(true);
@@ -142,15 +146,10 @@ export function TransportPanel() {
         <strong>{song?.title ?? "Todavia no hay cancion cargada"}</strong>
         <p>{status}</p>
         {song && (
-          <>
-            <p className="status-meta">
-              {formatClock(positionSeconds)} / {formatClock(durationSeconds)}
-              {snapshot?.songDir ? ` • ${snapshot.songDir}` : ""}
-            </p>
-            <p className="status-meta">
-              La creacion de secciones y los saltos musicales volveran cuando exista el timeline.
-            </p>
-          </>
+          <p className="status-meta">
+            {formatClock(positionSeconds)} / {formatClock(durationSeconds)}
+            {snapshot?.songDir ? ` • ${snapshot.songDir}` : ""}
+          </p>
         )}
       </div>
 
@@ -187,7 +186,7 @@ export function TransportPanel() {
       <div className="track-header">
         <div>
           <h2>Tracks</h2>
-          <p>Importa WAVs y la cancion quedara lista para probar el transporte.</p>
+          <p>Importa WAVs y la cancion quedara lista para probar transporte y timeline.</p>
         </div>
         <div className="track-actions">
           <button disabled={!isTauriApp || isBusy} type="button">
@@ -221,6 +220,54 @@ export function TransportPanel() {
               />
             </label>
           </div>
+
+          <section className="timeline-panel">
+            <div className="timeline-head">
+              <div>
+                <h2>Timeline</h2>
+                <p>Primera vista DAW: regla temporal, pistas verticales, clips y cursor.</p>
+              </div>
+              <strong className="timeline-meta">{tracks.length} pistas</strong>
+            </div>
+
+            <div className="timeline-ruler">
+              {rulerMarks.map((mark) => (
+                <div className="ruler-mark" key={mark.seconds} style={{ left: `${mark.percent}%` }}>
+                  <span>{mark.label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="timeline-body">
+              <div className="timeline-cursor" style={{ left: `${cursorPercent}%` }} />
+
+              {tracks.map((track) => (
+                <article className="timeline-row" key={track.id}>
+                  <div className="timeline-track">
+                    <strong>{track.name}</strong>
+                    <span>{track.groupName ?? "Sin grupo"}</span>
+                  </div>
+
+                  <div className="timeline-lane">
+                    {clips
+                      .filter((clip) => clip.trackId === track.id)
+                      .map((clip) => (
+                        <div
+                          className="clip-block"
+                          key={clip.id}
+                          style={clipStyle(clip, durationSeconds)}
+                          title={`${clip.trackName} • ${formatClock(clip.timelineStartSeconds)} / ${formatClock(
+                            clip.durationSeconds,
+                          )}`}
+                        >
+                          <span>{clip.trackName}</span>
+                        </div>
+                      ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
 
           <div className="track-list">
             {tracks.map((track) => (
@@ -261,6 +308,39 @@ export function TransportPanel() {
       )}
     </section>
   );
+}
+
+function clipStyle(clip: ClipSummary, durationSeconds: number) {
+  const safeDuration = Math.max(durationSeconds, 0.001);
+  const left = (clip.timelineStartSeconds / safeDuration) * 100;
+  const width = Math.max((clip.durationSeconds / safeDuration) * 100, 1.5);
+
+  return {
+    left: `${left}%`,
+    width: `${width}%`,
+  };
+}
+
+function buildRulerMarks(durationSeconds: number) {
+  const safeDuration = Math.max(durationSeconds, 1);
+  const markCount = 8;
+
+  return Array.from({ length: markCount + 1 }, (_, index) => {
+    const seconds = (safeDuration / markCount) * index;
+
+    return {
+      seconds,
+      percent: (seconds / safeDuration) * 100,
+      label: formatTimelineMark(seconds),
+    };
+  });
+}
+
+function formatTimelineMark(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.round(totalSeconds % 60);
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function formatClock(totalSeconds: number) {

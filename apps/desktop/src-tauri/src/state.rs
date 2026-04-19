@@ -7,7 +7,7 @@ use std::{
 use libretracks_audio::{
     AudioEngine, AudioEngineError, JumpTrigger, PlaybackState, PendingSectionJump,
 };
-use libretracks_core::{Section, Song};
+use libretracks_core::{Clip, Section, Song};
 use libretracks_project::{import_wav_song, ImportedSong, ProjectError, ProjectImportRequest};
 use rodio::{decoder::DecoderError, PlayError, StreamError};
 use rfd::FileDialog;
@@ -84,6 +84,7 @@ pub struct SongSummary {
     pub time_signature: String,
     pub duration_seconds: f64,
     pub sections: Vec<SectionSummary>,
+    pub clips: Vec<ClipSummary>,
     pub tracks: Vec<TrackSummary>,
     pub groups: Vec<GroupSummary>,
 }
@@ -122,6 +123,18 @@ pub struct PendingJumpSummary {
     pub target_section_id: String,
     pub target_section_name: String,
     pub trigger: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipSummary {
+    pub id: String,
+    pub track_id: String,
+    pub track_name: String,
+    pub file_path: String,
+    pub timeline_start_seconds: f64,
+    pub duration_seconds: f64,
+    pub gain: f64,
 }
 
 impl DesktopSession {
@@ -396,6 +409,7 @@ fn song_to_summary(song: &Song) -> SongSummary {
         time_signature: song.time_signature.clone(),
         duration_seconds: song.duration_seconds,
         sections: song.sections.iter().map(section_to_summary).collect(),
+        clips: song.clips.iter().map(|clip| clip_to_summary(song, clip)).collect(),
         tracks: song
             .tracks
             .iter()
@@ -422,6 +436,25 @@ fn song_to_summary(song: &Song) -> SongSummary {
                 muted: group.muted,
             })
             .collect(),
+    }
+}
+
+fn clip_to_summary(song: &Song, clip: &Clip) -> ClipSummary {
+    let track_name = song
+        .tracks
+        .iter()
+        .find(|track| track.id == clip.track_id)
+        .map(|track| track.name.clone())
+        .unwrap_or_else(|| clip.track_id.clone());
+
+    ClipSummary {
+        id: clip.id.clone(),
+        track_id: clip.track_id.clone(),
+        track_name,
+        file_path: clip.file_path.clone(),
+        timeline_start_seconds: clip.timeline_start_seconds,
+        duration_seconds: clip.duration_seconds,
+        gain: clip.gain,
     }
 }
 

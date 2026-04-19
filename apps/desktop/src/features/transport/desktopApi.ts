@@ -29,6 +29,16 @@ export type TrackSummary = {
   muted: boolean;
 };
 
+export type ClipSummary = {
+  id: string;
+  trackId: string;
+  trackName: string;
+  filePath: string;
+  timelineStartSeconds: number;
+  durationSeconds: number;
+  gain: number;
+};
+
 export type SongSummary = {
   id: string;
   title: string;
@@ -38,6 +48,7 @@ export type SongSummary = {
   timeSignature: string;
   durationSeconds: number;
   sections: SectionSummary[];
+  clips: ClipSummary[];
   tracks: TrackSummary[];
   groups: GroupSummary[];
 };
@@ -71,6 +82,53 @@ const fallbackSnapshot: TransportSnapshot = {
     timeSignature: "4/4",
     durationSeconds: 240,
     sections: [],
+    clips: [
+      {
+        id: "clip-click",
+        trackId: "track-click",
+        trackName: "Click",
+        filePath: "audio/click.wav",
+        timelineStartSeconds: 0,
+        durationSeconds: 240,
+        gain: 1,
+      },
+      {
+        id: "clip-guide",
+        trackId: "track-guide",
+        trackName: "Guide",
+        filePath: "audio/guide.wav",
+        timelineStartSeconds: 0,
+        durationSeconds: 240,
+        gain: 1,
+      },
+      {
+        id: "clip-drums",
+        trackId: "track-drums",
+        trackName: "Drums",
+        filePath: "audio/drums.wav",
+        timelineStartSeconds: 16,
+        durationSeconds: 176,
+        gain: 1,
+      },
+      {
+        id: "clip-bass",
+        trackId: "track-bass",
+        trackName: "Bass",
+        filePath: "audio/bass.wav",
+        timelineStartSeconds: 32,
+        durationSeconds: 160,
+        gain: 1,
+      },
+      {
+        id: "clip-keys",
+        trackId: "track-keys",
+        trackName: "Keys",
+        filePath: "audio/keys.wav",
+        timelineStartSeconds: 48,
+        durationSeconds: 128,
+        gain: 1,
+      },
+    ],
     groups: [
       { id: "group-monitor", name: "Click + Guide", volume: 1, muted: false },
       { id: "group-rhythm", name: "Drums + Bass", volume: 0.92, muted: false },
