@@ -1,19 +1,28 @@
 //! Persistencia y operaciones de proyecto.
 
+mod importer;
 mod song_store;
 
+pub use importer::{
+    import_wav_song, read_wav_metadata, ImportedAudioFile, ImportedSong, ProjectImportRequest,
+    WavMetadata,
+};
 pub use song_store::{
     create_song_folder, load_song, save_song, song_file_path, ProjectError, SONG_FILE_NAME,
 };
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, path::Path};
 
+    use hound::{SampleFormat, WavSpec, WavWriter};
     use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackGroup};
     use tempfile::tempdir;
 
-    use crate::{create_song_folder, load_song, save_song, song_file_path, ProjectError};
+    use crate::{
+        create_song_folder, import_wav_song, load_song, read_wav_metadata, save_song,
+        song_file_path, ProjectError, ProjectImportRequest,
+    };
 
     fn demo_song() -> Song {
         Song {
@@ -112,6 +121,105 @@ mod tests {
 
         match error {
             ProjectError::InvalidSong(_) => {}
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    fn write_test_wav(
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+        duration_seconds: u32,
+    ) {
+        let spec = WavSpec {
+            channels,
+            sample_rate,
+            bits_per_sample: 16,
+            sample_format: SampleFormat::Int,
+        };
+
+        let mut writer = WavWriter::create(path, spec).expect("wav should be created");
+        let total_frames = sample_rate * duration_seconds;
+
+        for _ in 0..total_frames {
+            for _ in 0..channels {
+                writer.write_sample(0_i16).expect("sample should be written");
+            }
+        }
+
+        writer.finalize().expect("wav should finalize");
+    }
+
+    #[test]
+    fn reads_wav_metadata_and_duration() {
+        let root = tempdir().expect("temp dir should exist");
+        let wav_path = root.path().join("drums.wav");
+        write_test_wav(&wav_path, 48_000, 2, 2);
+
+        let metadata = read_wav_metadata(&wav_path).expect("metadata should be readable");
+
+        assert_eq!(metadata.channels, 2);
+        assert_eq!(metadata.sample_rate, 48_000);
+        assert!((metadata.duration_seconds - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn imports_wav_files_and_creates_song_structure() {
+        let root = tempdir().expect("temp dir should exist");
+        let imports_dir = root.path().join("imports");
+        fs::create_dir_all(&imports_dir).expect("imports dir should exist");
+
+        let drums_path = imports_dir.join("drums.wav");
+        let bass_path = imports_dir.join("bass.wav");
+        write_test_wav(&drums_path, 44_100, 2, 3);
+        write_test_wav(&bass_path, 44_100, 1, 2);
+
+        let request = ProjectImportRequest {
+            song_id: "song_002".into(),
+            title: "Import Demo".into(),
+            artist: Some("LibreTracks".into()),
+            bpm: 120.0,
+            key: None,
+            time_signature: "4/4".into(),
+            wav_files: vec![drums_path.clone(), bass_path.clone()],
+        };
+
+        let imported = import_wav_song(root.path(), "import-demo", &request)
+            .expect("wav import should succeed");
+
+        assert_eq!(imported.song.title, "Import Demo");
+        assert_eq!(imported.song.tracks.len(), 2);
+        assert_eq!(imported.song.clips.len(), 2);
+        assert!((imported.song.duration_seconds - 3.0).abs() < 0.001);
+        assert!(imported.song_dir.join("audio").join("drums.wav").exists());
+        assert!(imported.song_dir.join("audio").join("bass.wav").exists());
+
+        let loaded = load_song(&imported.song_dir).expect("imported song should load");
+        assert_eq!(loaded.tracks.len(), 2);
+        assert_eq!(loaded.clips[0].timeline_start_seconds, 0.0);
+    }
+
+    #[test]
+    fn rejects_non_wav_imports() {
+        let root = tempdir().expect("temp dir should exist");
+        let text_path = root.path().join("notes.txt");
+        fs::write(&text_path, "not audio").expect("fixture should be written");
+
+        let request = ProjectImportRequest {
+            song_id: "song_003".into(),
+            title: "Bad Import".into(),
+            artist: None,
+            bpm: 100.0,
+            key: None,
+            time_signature: "4/4".into(),
+            wav_files: vec![text_path],
+        };
+
+        let error =
+            import_wav_song(root.path(), "bad-import", &request).expect_err("import should fail");
+
+        match error {
+            ProjectError::UnsupportedAudioFormat { .. } => {}
             other => panic!("unexpected error: {other}"),
         }
     }

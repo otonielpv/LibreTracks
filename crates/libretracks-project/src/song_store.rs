@@ -18,10 +18,18 @@ pub enum ProjectError {
     UnsupportedVersion(u32),
     #[error("song folder name is empty")]
     EmptySongFolderName,
+    #[error("wav import requires at least one audio file")]
+    EmptyImportSet,
+    #[error("unsupported audio format for file: {path}")]
+    UnsupportedAudioFormat { path: PathBuf },
+    #[error("invalid file name for path: {0}")]
+    InvalidFileName(PathBuf),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("wav error: {0}")]
+    Wav(#[from] hound::Error),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

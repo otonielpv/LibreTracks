@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+hound = "3"
 libretracks-core = { path = "../libretracks-core" }
 serde.workspace = true
 serde_json.workspace = true
