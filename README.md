@@ -42,10 +42,10 @@ tests/
 3. Ejecuta los tests frontend con `npm run test:desktop`.
 4. Genera build del frontend con `npm run build:desktop`.
 
-Nota: el frontend desktop ya arranca con Vite, pero Tauri todavia no puede ejecutarse aqui porque falta instalar Rust (`cargo` y `rustc`).
+Tambien puedes validar la parte Rust con `cargo test -p libretracks-core` y `cargo test -p libretracks-project`.
 
 ## Estado
 
-Hay tests unitarios Rust escritos en `libretracks-core` y `libretracks-project`, pero en esta maquina todavia no se pueden ejecutar porque falta instalar Rust.
+Rust ya esta instalado en la maquina y los tests unitarios de `libretracks-core` y `libretracks-project` ya se han ejecutado correctamente.
 
-El frontend desktop ya puede instalar dependencias, ejecutar tests y generar build con `npm`. El siguiente objetivo es conectar esa UI con Tauri y el dominio real.
+El frontend desktop ya puede instalar dependencias, ejecutar tests y generar build con `npm`, y la app Tauri ya pasa `cargo check`. El siguiente objetivo es conectar esa UI con Tauri y el dominio real.

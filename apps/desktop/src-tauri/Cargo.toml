@@ -12,4 +12,4 @@ serde_json = "1"
 tauri = { version = "2", features = [] }
 
 [dependencies.libretracks-core]
-path = "../../crates/libretracks-core"
+path = "../../../crates/libretracks-core"

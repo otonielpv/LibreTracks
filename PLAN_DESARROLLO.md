@@ -20,9 +20,11 @@ Estado a 19/04/2026:
 - Ya existe el crate `libretracks-project` con lectura/escritura de `song.json`, estructura de carpeta de canción y tests unitarios Rust escritos.
 - Ya hay tests frontend mínimos en `apps/desktop` ejecutándose con Vitest.
 - El frontend desktop ya arranca en modo web con Vite y responde localmente.
+- Rust ya está instalado en esta máquina.
+- Los tests Rust de `libretracks-core` y `libretracks-project` ya se han ejecutado correctamente en esta máquina.
+- La app desktop de Tauri ya pasa `cargo check`.
 - Todavía no están implementados el motor de audio, la importación WAV ni el timeline editable.
-- En este entorno hay `node` y `npm`, pero no hay `cargo` ni `rustc`, así que la parte Tauri/Rust no puede compilarse todavía aquí.
-- Los tests Rust existen en código, pero todavía no se han podido ejecutar en esta máquina por falta de toolchain Rust.
+- Sigue faltando implementar funcionalidad real en Tauri, pero el entorno nativo ya no está bloqueado por la ausencia de Rust.
 
 ## Objetivo de la primera etapa
 
