@@ -24,9 +24,9 @@ export function App() {
       <section className="panel">
         <h2>Roadmap inmediato</h2>
         <ul>
-          <li>Persistencia de `song.json`.</li>
-          <li>Importacion WAV.</li>
-          <li>Transporte local sincronizado.</li>
+          <li>Persistencia de `song.json` completada.</li>
+          <li>Importacion WAV completada.</li>
+          <li>Transporte local sincronizado en progreso.</li>
         </ul>
       </section>
     </main>

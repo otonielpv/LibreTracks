@@ -31,6 +31,10 @@ button {
   padding: 0.75rem 1rem;
 }
 
+.panel h2 {
+  margin-top: 0;
+}
+
 .shell {
   margin: 0 auto;
   max-width: 1040px;
@@ -89,6 +93,7 @@ button {
 .group-list {
   display: grid;
   gap: 0.75rem;
+  margin-bottom: 1.5rem;
 }
 
 .group-row {
@@ -111,8 +116,94 @@ button {
   margin-top: 0.3rem;
 }
 
+.row-controls,
+.track-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.slider-field {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.slider-field span {
+  color: var(--muted);
+  font-size: 0.95rem;
+  min-width: 5.75rem;
+}
+
+.slider-field input {
+  accent-color: var(--accent);
+  width: 160px;
+}
+
+.track-header {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.track-header p {
+  color: var(--muted);
+  margin: 0.3rem 0 0;
+}
+
+.track-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.track-row {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(120px, 1fr) minmax(180px, 280px) auto;
+  padding: 1rem;
+}
+
+.track-meta {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.track-meta span {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.track-slider {
+  justify-content: flex-start;
+}
+
 @media (max-width: 760px) {
   .hero {
     grid-template-columns: 1fr;
+  }
+
+  .group-row,
+  .track-header,
+  .track-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .track-actions,
+  .row-controls,
+  .slider-field {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .slider-field input {
+    width: 100%;
   }
 }
