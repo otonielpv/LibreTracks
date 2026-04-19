@@ -107,7 +107,6 @@ button:disabled {
 
 .status-box,
 .empty-state,
-.seek-box,
 .timeline-panel {
   background: white;
   border: 1px solid var(--line);
@@ -176,11 +175,17 @@ button:disabled {
   color: var(--muted);
 }
 
+.timeline-status-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr);
+  margin-bottom: 0.9rem;
+}
+
 .clip-inspector {
   background: linear-gradient(180deg, rgba(191, 91, 4, 0.08), rgba(191, 91, 4, 0.03));
   border: 1px solid var(--line);
   border-radius: 16px;
-  margin-bottom: 0.9rem;
   padding: 0.85rem 1rem;
 }
 
@@ -225,6 +230,41 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+}
+
+.timeline-context {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.timeline-context-card {
+  background: linear-gradient(180deg, rgba(191, 91, 4, 0.06), rgba(255, 255, 255, 0.96));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0.85rem 1rem;
+}
+
+.timeline-context-card strong,
+.timeline-context-card p {
+  margin: 0;
+}
+
+.timeline-context-card p {
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.timeline-context-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.mode-toggle.is-active {
+  background: var(--accent-soft);
+  border-color: rgba(191, 91, 4, 0.45);
+  color: var(--accent);
 }
 
 .timeline-shell {
@@ -283,8 +323,9 @@ button:disabled {
 
 .timeline-ruler {
   border-bottom: 1px solid var(--line);
-  height: 2.5rem;
+  height: 3.1rem;
   margin-bottom: 0.75rem;
+  overflow: hidden;
   position: relative;
 }
 
@@ -305,6 +346,46 @@ button:disabled {
   top: 0;
 }
 
+.timeline-sections-layer {
+  inset: 1.25rem 0 0.2rem;
+  pointer-events: none;
+  position: absolute;
+}
+
+.timeline-section-chip {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(191, 91, 4, 0.26), rgba(240, 179, 116, 0.95));
+  border: 1px solid rgba(191, 91, 4, 0.28);
+  border-radius: 999px;
+  bottom: 0;
+  color: #623205;
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 700;
+  min-width: 2rem;
+  overflow: hidden;
+  padding: 0 0.6rem;
+  position: absolute;
+  top: 0;
+}
+
+.timeline-section-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-section-chip.is-current {
+  background: linear-gradient(135deg, rgba(191, 91, 4, 0.85), rgba(217, 119, 6, 0.95));
+  color: #fff9f2;
+}
+
+.timeline-section-chip.is-draft {
+  background: linear-gradient(135deg, rgba(20, 96, 122, 0.22), rgba(52, 211, 153, 0.42));
+  border-color: rgba(20, 96, 122, 0.28);
+  color: #11495c;
+}
+
 .timeline-body {
   display: grid;
   gap: 0.6rem;
@@ -321,6 +402,17 @@ button:disabled {
   transform: translateX(-50%);
   width: 3px;
   z-index: 2;
+}
+
+.timeline-section-overlay {
+  background: linear-gradient(90deg, rgba(20, 96, 122, 0.12), rgba(52, 211, 153, 0.16));
+  border: 1px solid rgba(20, 96, 122, 0.26);
+  border-radius: 12px;
+  bottom: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  z-index: 1;
 }
 
 .timeline-row {
@@ -495,6 +587,7 @@ button:disabled {
   }
 
   .timeline-shell,
+  .timeline-status-grid,
   .group-row,
   .track-header,
   .timeline-row,
@@ -507,6 +600,7 @@ button:disabled {
   .timeline-tools,
   .clip-inspector-tools,
   .clip-nudge-actions,
+  .timeline-context-actions,
   .zoom-field,
   .track-actions,
   .row-controls,

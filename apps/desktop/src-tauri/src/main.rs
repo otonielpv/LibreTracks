@@ -39,6 +39,40 @@ fn pick_and_import_song_from_dialog(
 }
 
 #[tauri::command]
+fn create_song(app: AppHandle, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .create_song(&app, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session.save_project().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn open_project_from_dialog(state: State<'_, DesktopState>) -> Result<Option<TransportSnapshot>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .open_project_from_dialog(&state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn play_transport(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
@@ -130,6 +164,22 @@ fn move_clip(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn create_section(
+    start_seconds: f64,
+    end_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .create_section(start_seconds, end_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 fn parse_jump_trigger(trigger: &str, bars: Option<u32>) -> Result<JumpTrigger, DesktopError> {
     match trigger {
         "immediate" => Ok(JumpTrigger::Immediate),
@@ -147,6 +197,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             healthcheck,
             get_transport_snapshot,
+            create_song,
+            save_project,
+            open_project_from_dialog,
             pick_and_import_song_from_dialog,
             play_transport,
             pause_transport,
@@ -154,7 +207,8 @@ fn main() {
             seek_transport,
             schedule_section_jump,
             cancel_section_jump,
-            move_clip
+            move_clip,
+            create_section
         ])
         .run(tauri::generate_context!())
         .expect("failed to run LibreTracks desktop application");

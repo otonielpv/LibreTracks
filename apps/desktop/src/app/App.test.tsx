@@ -29,8 +29,7 @@ describe("App", () => {
 
     expect(screen.getByText("Tracks")).toBeTruthy();
     expect(await screen.findByText("Timeline")).toBeTruthy();
-    expect(await screen.findByText(/primera vista daw/i)).toBeTruthy();
-    expect(await screen.findByText(/cabeceras de pista fijas/i)).toBeTruthy();
+    expect(await screen.findByText(/cursor y secciones sobre la propia linea de tiempo/i)).toBeTruthy();
     expect(await screen.findByLabelText(/zoom horizontal del timeline/i)).toBeTruthy();
     expect((await screen.findAllByText("Click")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Guide")).length).toBeGreaterThan(0);
@@ -59,5 +58,15 @@ describe("App", () => {
 
     expect(await screen.findByDisplayValue("17.00")).toBeTruthy();
     expect(await screen.findByText(/inicio 00:17.000/i)).toBeTruthy();
+  });
+
+  it("creates a blank project from the transport header", async () => {
+    render(<App />);
+
+    const createButton = await screen.findByRole("button", { name: /crear cancion/i });
+    fireEvent.click(createButton);
+
+    expect(await screen.findByText("Nueva Cancion")).toBeTruthy();
+    expect(await screen.findByText(/proyecto creado/i)).toBeTruthy();
   });
 });

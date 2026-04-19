@@ -30,7 +30,10 @@ Estado a 19/04/2026:
 - La importación actual ya permite seleccionar varios WAVs en una sola operación y crear una pista por archivo.
 - El timeline ya separa las cabeceras de pista del área temporal para que el audio arranque visualmente en el 0:00.
 - El timeline ya permite recolocar clips desde la UI del inspector y persiste la nueva posición en `song.json`.
-- El transporte mantiene una base lógica para saltos entre secciones, pero la creación y edición de secciones queda aplazada hasta que exista timeline en la UI.
+- La UI desktop ya permite crear un proyecto vacío, guardar el proyecto actual y abrir un `song.json` existente.
+- El cursor del transporte ya se mueve directamente sobre el timeline con click/arrastre, sin depender de un slider separado.
+- La selección de secciones ya se puede marcar arrastrando directamente sobre el timeline y crearla desde ese rango.
+- El transporte mantiene una base lógica para saltos entre secciones y la UI ya puede crear rangos de sección desde el timeline, aunque la gestión musical completa de saltos sigue pendiente.
 - Todavía no está implementado el timeline editable ni el control de mezcla en tiempo real.
 
 ## Objetivo de la primera etapa
@@ -924,14 +927,14 @@ Nota: el MVP ya saca audio real por dispositivo desde Tauri, pero la sincronía 
 
 ```txt
 [x] Pantalla de inicio
-[ ] Botón crear canción
+[x] Botón crear canción
 [x] Botón importar pistas
 [x] Lista de tracks
 [x] Botones play/stop
 [x] Sliders de volumen
 [x] Botones mute
-[ ] Guardar proyecto
-[ ] Abrir proyecto
+[x] Guardar proyecto
+[x] Abrir proyecto
 ```
 
 Nota: importar pistas ya está conectado a Tauri, permite seleccionar uno o varios WAVs en el mismo paso y deja probar carga y reproducción, pero crear canción, guardar y abrir proyecto siguen pendientes.
@@ -951,7 +954,7 @@ Nota adicional: la cuantización y los saltos musicales se mantienen a nivel ló
 [x] Separar cabeceras de pista del timeline
 [x] Mover clip
 [x] Persistir posición del clip
-[ ] Mostrar sección actual
+[x] Mostrar sección actual
 [ ] Mostrar salto programado
 [ ] Cancelar salto desde la UI
 ```
