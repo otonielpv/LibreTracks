@@ -327,24 +327,6 @@ button:disabled {
   transform: translateY(-1px);
 }
 
-.clip-label {
-  background: rgba(255, 248, 240, 0.9);
-  border-radius: 999px;
-  bottom: 0.3rem;
-  left: 0.35rem;
-  max-width: calc(100% - 0.7rem);
-  padding: 0.12rem 0.45rem;
-  position: absolute;
-  z-index: 1;
-}
-
-.clip-label,
-.clip-block span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .group-list {
   display: grid;
   gap: 0.75rem;

@@ -332,7 +332,6 @@ export function TransportPanel() {
                                   <span className="waveform-empty" />
                                 )}
                               </div>
-                              <span className="clip-label">{clip.trackName}</span>
                             </button>
                           ))}
                       </div>
