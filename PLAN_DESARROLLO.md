@@ -943,11 +943,11 @@ Nota adicional: la cuantización y los saltos musicales se mantienen a nivel ló
 [x] Mostrar clips como bloques
 [x] Cursor de reproducción
 [x] Mostrar waveform básica por clip
+[x] Zoom horizontal básico
+[x] Selección de clip
 [ ] Mostrar sección actual
 [ ] Mostrar salto programado
 [ ] Cancelar salto desde la UI
-[ ] Zoom horizontal básico
-[ ] Selección de clip
 [ ] Mover clip
 [ ] Persistir posición del clip
 ```

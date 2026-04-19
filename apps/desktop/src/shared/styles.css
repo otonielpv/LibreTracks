@@ -147,9 +147,60 @@ button:disabled {
   margin: 0;
 }
 
+.timeline-tools {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+
+.zoom-field {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+}
+
+.zoom-field span {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.zoom-field input {
+  accent-color: var(--accent);
+  width: 170px;
+}
+
 .timeline-head p,
 .timeline-meta {
   color: var(--muted);
+}
+
+.clip-inspector {
+  background: linear-gradient(180deg, rgba(191, 91, 4, 0.08), rgba(191, 91, 4, 0.03));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  margin-bottom: 0.9rem;
+  padding: 0.85rem 1rem;
+}
+
+.clip-inspector strong,
+.clip-inspector p {
+  margin: 0;
+}
+
+.clip-inspector p {
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.timeline-scroll {
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.timeline-content {
+  min-width: 100%;
 }
 
 .timeline-ruler {
@@ -229,6 +280,7 @@ button:disabled {
 }
 
 .clip-block {
+  appearance: none;
   align-items: stretch;
   background: linear-gradient(135deg, #f0b374, #d97706);
   border: 1px solid rgba(90, 44, 4, 0.18);
@@ -243,6 +295,7 @@ button:disabled {
   overflow: hidden;
   padding: 0.35rem 0.55rem 0.4rem;
   position: absolute;
+  text-align: left;
 }
 
 .clip-waveform {
@@ -267,6 +320,11 @@ button:disabled {
   border-radius: 999px;
   height: 35%;
   width: 100%;
+}
+
+.clip-block.is-selected {
+  box-shadow: 0 0 0 2px rgba(255, 250, 240, 0.9), 0 0 0 4px rgba(191, 91, 4, 0.45);
+  transform: translateY(-1px);
 }
 
 .clip-label {
@@ -390,6 +448,8 @@ button:disabled {
   }
 
   .timeline-head,
+  .timeline-tools,
+  .zoom-field,
   .track-actions,
   .row-controls,
   .slider-field {

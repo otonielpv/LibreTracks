@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { App } from "./App";
 
 describe("App", () => {
@@ -30,10 +30,20 @@ describe("App", () => {
     expect(screen.getByText("Tracks")).toBeTruthy();
     expect(await screen.findByText("Timeline")).toBeTruthy();
     expect(await screen.findByText(/primera vista daw/i)).toBeTruthy();
+    expect(await screen.findByLabelText(/zoom horizontal del timeline/i)).toBeTruthy();
     expect((await screen.findAllByText("Click")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Guide")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Drums")).length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Volumen de pista Click")).toBeTruthy();
     expect(screen.getByRole("button", { name: /importar wavs/i })).toBeTruthy();
+  });
+
+  it("allows selecting a clip in the timeline", async () => {
+    render(<App />);
+
+    const clipButton = await screen.findByRole("button", { name: /clip drums/i });
+    fireEvent.click(clipButton);
+
+    expect(await screen.findByText(/clip seleccionado: drums/i)).toBeTruthy();
   });
 });
