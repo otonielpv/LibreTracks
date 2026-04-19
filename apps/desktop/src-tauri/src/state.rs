@@ -4,8 +4,10 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
-use libretracks_audio::{AudioEngine, AudioEngineError, PlaybackState};
-use libretracks_core::Song;
+use libretracks_audio::{
+    AudioEngine, AudioEngineError, JumpTrigger, PlaybackState, PendingSectionJump,
+};
+use libretracks_core::{Section, Song};
 use libretracks_project::{import_wav_song, ImportedSong, ProjectError, ProjectImportRequest};
 use rodio::{decoder::DecoderError, PlayError, StreamError};
 use rfd::FileDialog;
@@ -65,6 +67,8 @@ pub struct TransportSnapshot {
     pub playback_state: String,
     pub position_seconds: f64,
     pub song: Option<SongSummary>,
+    pub current_section: Option<SectionSummary>,
+    pub pending_section_jump: Option<PendingJumpSummary>,
     pub song_dir: Option<String>,
     pub is_native_runtime: bool,
 }
@@ -79,6 +83,7 @@ pub struct SongSummary {
     pub key: Option<String>,
     pub time_signature: String,
     pub duration_seconds: f64,
+    pub sections: Vec<SectionSummary>,
     pub tracks: Vec<TrackSummary>,
     pub groups: Vec<GroupSummary>,
 }
@@ -100,6 +105,23 @@ pub struct GroupSummary {
     pub name: String,
     pub volume: f64,
     pub muted: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionSummary {
+    pub id: String,
+    pub name: String,
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingJumpSummary {
+    pub target_section_id: String,
+    pub target_section_name: String,
+    pub trigger: String,
 }
 
 impl DesktopSession {
@@ -182,6 +204,35 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn schedule_section_jump(
+        &mut self,
+        target_section_id: &str,
+        trigger: JumpTrigger,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        let was_playing = self.engine.playback_state() == PlaybackState::Playing;
+
+        self.engine
+            .schedule_section_jump(target_section_id, trigger.clone())?;
+
+        if was_playing && trigger == JumpTrigger::Immediate {
+            self.restart_audio(audio)?;
+            self.started_at = Some(Instant::now());
+        }
+
+        Ok(self.snapshot())
+    }
+
+    pub fn cancel_section_jump(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        self.engine.cancel_section_jump();
+        Ok(self.snapshot())
+    }
+
     pub fn snapshot_with_sync(
         &mut self,
         audio: &AudioController,
@@ -226,21 +277,32 @@ impl DesktopSession {
             return Ok(());
         }
 
-        let position = self.current_position();
+        let base_position = self.engine.position_seconds();
+        let elapsed = self
+            .started_at
+            .map(|started_at| started_at.elapsed().as_secs_f64())
+            .unwrap_or(0.0);
+        let linear_position = base_position + elapsed;
         let song_duration = self
             .engine
             .song()
             .map(|song| song.duration_seconds)
             .ok_or(DesktopError::NoSongLoaded)?;
 
-        if position >= song_duration {
+        if linear_position >= song_duration {
             audio.stop()?;
             self.engine.stop()?;
             self.started_at = None;
             return Ok(());
         }
 
-        self.engine.seek(position)?;
+        let advanced_position = self.engine.advance_transport(elapsed)?;
+        let jump_executed = (advanced_position - linear_position).abs() > 0.001;
+
+        if jump_executed {
+            self.restart_audio(audio)?;
+        }
+
         self.started_at = Some(Instant::now());
 
         Ok(())
@@ -251,9 +313,21 @@ impl DesktopSession {
             playback_state: playback_state_label(self.engine.playback_state()).to_string(),
             position_seconds: self.current_position(),
             song: self.engine.song().map(song_to_summary),
+            current_section: self.engine.current_section().ok().flatten().map(section_to_summary),
+            pending_section_jump: self
+                .engine
+                .pending_section_jump()
+                .map(pending_jump_to_summary),
             song_dir: self.song_dir.as_ref().map(|value| value.display().to_string()),
             is_native_runtime: true,
         }
+    }
+
+    fn restart_audio(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let active_clips = self.engine.active_clips()?;
+        audio.play(song_dir, active_clips)?;
+        Ok(())
     }
 }
 
@@ -321,6 +395,7 @@ fn song_to_summary(song: &Song) -> SongSummary {
         key: song.key.clone(),
         time_signature: song.time_signature.clone(),
         duration_seconds: song.duration_seconds,
+        sections: song.sections.iter().map(section_to_summary).collect(),
         tracks: song
             .tracks
             .iter()
@@ -347,6 +422,31 @@ fn song_to_summary(song: &Song) -> SongSummary {
                 muted: group.muted,
             })
             .collect(),
+    }
+}
+
+fn section_to_summary(section: &Section) -> SectionSummary {
+    SectionSummary {
+        id: section.id.clone(),
+        name: section.name.clone(),
+        start_seconds: section.start_seconds,
+        end_seconds: section.end_seconds,
+    }
+}
+
+fn pending_jump_to_summary(pending_jump: &PendingSectionJump) -> PendingJumpSummary {
+    PendingJumpSummary {
+        target_section_id: pending_jump.target_section_id.clone(),
+        target_section_name: pending_jump.target_section_name.clone(),
+        trigger: pending_jump_trigger_label(&pending_jump.trigger),
+    }
+}
+
+fn pending_jump_trigger_label(trigger: &JumpTrigger) -> String {
+    match trigger {
+        JumpTrigger::Immediate => "immediate".to_string(),
+        JumpTrigger::SectionEnd => "section_end".to_string(),
+        JumpTrigger::AfterBars(bars) => format!("after_bars:{bars}"),
     }
 }
 

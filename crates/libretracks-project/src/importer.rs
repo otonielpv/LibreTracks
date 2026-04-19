@@ -5,7 +5,7 @@ use std::{
 };
 
 use hound::WavReader;
-use libretracks_core::{validate_song, Clip, OutputBus, Song, Track};
+use libretracks_core::{validate_song, Clip, OutputBus, Section, Song, Track};
 
 use crate::{create_song_folder, save_song, ProjectError};
 
@@ -135,7 +135,7 @@ pub fn import_wav_song(
                 fade_out_seconds: None,
             })
             .collect(),
-        sections: vec![],
+        sections: build_default_sections(duration_seconds, request.bpm, &request.time_signature),
     };
 
     validate_song(&song)?;
@@ -236,4 +236,54 @@ fn humanize_track_name(value: &str) -> String {
     } else {
         words.join(" ")
     }
+}
+
+fn build_default_sections(duration_seconds: f64, bpm: f64, time_signature: &str) -> Vec<Section> {
+    if duration_seconds <= 0.0 {
+        return vec![];
+    }
+
+    let Ok(bar_duration) = bar_duration_seconds(bpm, time_signature) else {
+        return vec![Section {
+            id: "section_1".into(),
+            name: "Section 1".into(),
+            start_seconds: 0.0,
+            end_seconds: duration_seconds,
+        }];
+    };
+
+    let phrase_duration = (bar_duration * 8.0).max(bar_duration);
+    let mut sections = Vec::new();
+    let mut start_seconds = 0.0;
+    let mut index = 1_u32;
+
+    while start_seconds < duration_seconds {
+        let end_seconds = (start_seconds + phrase_duration).min(duration_seconds);
+        sections.push(Section {
+            id: format!("section_{index}"),
+            name: format!("Section {index}"),
+            start_seconds,
+            end_seconds,
+        });
+
+        start_seconds = end_seconds;
+        index += 1;
+    }
+
+    sections
+}
+
+fn bar_duration_seconds(bpm: f64, time_signature: &str) -> Result<f64, ()> {
+    let (numerator, denominator) = time_signature.split_once('/').ok_or(())?;
+    let numerator = numerator.parse::<u32>().map_err(|_| ())?;
+    let denominator = denominator.parse::<u32>().map_err(|_| ())?;
+
+    if bpm <= 0.0 || numerator == 0 || denominator == 0 {
+        return Err(());
+    }
+
+    let beat_duration_seconds = 60.0 / bpm;
+    let quarter_notes_per_bar = f64::from(numerator) * (4.0 / f64::from(denominator));
+
+    Ok(beat_duration_seconds * quarter_notes_per_bar)
 }

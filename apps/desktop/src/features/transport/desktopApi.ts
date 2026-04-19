@@ -1,10 +1,24 @@
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
+export type JumpTriggerLabel = "immediate" | "section_end" | `after_bars:${number}`;
 
 export type GroupSummary = {
   id: string;
   name: string;
   volume: number;
   muted: boolean;
+};
+
+export type SectionSummary = {
+  id: string;
+  name: string;
+  startSeconds: number;
+  endSeconds: number;
+};
+
+export type PendingJumpSummary = {
+  targetSectionId: string;
+  targetSectionName: string;
+  trigger: JumpTriggerLabel;
 };
 
 export type TrackSummary = {
@@ -23,6 +37,7 @@ export type SongSummary = {
   key?: string | null;
   timeSignature: string;
   durationSeconds: number;
+  sections: SectionSummary[];
   tracks: TrackSummary[];
   groups: GroupSummary[];
 };
@@ -31,6 +46,8 @@ export type TransportSnapshot = {
   playbackState: PlaybackState;
   positionSeconds: number;
   song?: SongSummary | null;
+  currentSection?: SectionSummary | null;
+  pendingSectionJump?: PendingJumpSummary | null;
   songDir?: string | null;
   isNativeRuntime: boolean;
 };
@@ -53,6 +70,12 @@ const fallbackSnapshot: TransportSnapshot = {
     key: "D",
     timeSignature: "4/4",
     durationSeconds: 240,
+    sections: [
+      { id: "section-1", name: "Intro", startSeconds: 0, endSeconds: 32 },
+      { id: "section-2", name: "Verse", startSeconds: 32, endSeconds: 96 },
+      { id: "section-3", name: "Chorus", startSeconds: 96, endSeconds: 160 },
+      { id: "section-4", name: "Outro", startSeconds: 160, endSeconds: 240 },
+    ],
     groups: [
       { id: "group-monitor", name: "Click + Guide", volume: 1, muted: false },
       { id: "group-rhythm", name: "Drums + Bass", volume: 0.92, muted: false },
@@ -66,6 +89,8 @@ const fallbackSnapshot: TransportSnapshot = {
       { id: "track-keys", name: "Keys", groupName: "Keys + Pads", volume: 0.72, muted: true },
     ],
   },
+  currentSection: { id: "section-1", name: "Intro", startSeconds: 0, endSeconds: 32 },
+  pendingSectionJump: null,
   songDir: null,
 };
 
@@ -116,8 +141,61 @@ export async function stopTransport(): Promise<TransportSnapshot> {
 
 export async function seekTransport(positionSeconds: number): Promise<TransportSnapshot> {
   if (!isTauriApp) {
-    return { ...fallbackSnapshot, positionSeconds };
+    return {
+      ...fallbackSnapshot,
+      positionSeconds,
+      currentSection:
+        fallbackSnapshot.song?.sections.find(
+          (section) => positionSeconds >= section.startSeconds && positionSeconds < section.endSeconds,
+        ) ?? null,
+    };
   }
 
   return invokeCommand<TransportSnapshot>("seek_transport", { positionSeconds });
+}
+
+export async function scheduleSectionJump(args: {
+  targetSectionId: string;
+  trigger: "immediate" | "section_end" | "after_bars";
+  bars?: number;
+}): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const targetSection =
+      fallbackSnapshot.song?.sections.find((section) => section.id === args.targetSectionId) ?? null;
+
+    return {
+      ...fallbackSnapshot,
+      pendingSectionJump:
+        args.trigger === "immediate" || !targetSection
+          ? null
+          : {
+              targetSectionId: targetSection.id,
+              targetSectionName: targetSection.name,
+              trigger: args.trigger === "after_bars" ? `after_bars:${args.bars ?? 4}` : "section_end",
+            },
+      currentSection:
+        args.trigger === "immediate" && targetSection ? targetSection : fallbackSnapshot.currentSection,
+      positionSeconds:
+        args.trigger === "immediate" && targetSection
+          ? targetSection.startSeconds
+          : fallbackSnapshot.positionSeconds,
+    };
+  }
+
+  return invokeCommand<TransportSnapshot>("schedule_section_jump", {
+    targetSectionId: args.targetSectionId,
+    trigger: args.trigger,
+    bars: args.bars,
+  });
+}
+
+export async function cancelSectionJump(): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    return {
+      ...fallbackSnapshot,
+      pendingSectionJump: null,
+    };
+  }
+
+  return invokeCommand<TransportSnapshot>("cancel_section_jump");
 }

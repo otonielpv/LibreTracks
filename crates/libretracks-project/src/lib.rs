@@ -190,6 +190,8 @@ mod tests {
         assert_eq!(imported.song.title, "Import Demo");
         assert_eq!(imported.song.tracks.len(), 2);
         assert_eq!(imported.song.clips.len(), 2);
+        assert!(!imported.song.sections.is_empty());
+        assert_eq!(imported.song.sections[0].start_seconds, 0.0);
         assert!((imported.song.duration_seconds - 3.0).abs() < 0.001);
         assert!(imported.song_dir.join("audio").join("drums.wav").exists());
         assert!(imported.song_dir.join("audio").join("bass.wav").exists());

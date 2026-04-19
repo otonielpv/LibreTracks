@@ -26,6 +26,7 @@ Estado a 19/04/2026:
 - Los tests Rust de `libretracks-core` y `libretracks-project` ya se han ejecutado correctamente en esta máquina.
 - La app desktop de Tauri ya pasa `cargo check`.
 - La app desktop ya puede importar WAVs desde un selector nativo, crear una canción básica y lanzar una primera reproducción local.
+- La app desktop ya muestra secciones básicas, sección actual y permite programar/cancelar saltos musicales desde el panel de transporte.
 - Todavía no está implementado el timeline editable ni el control de mezcla en tiempo real.
 
 ## Objetivo de la primera etapa
@@ -930,6 +931,8 @@ Nota: el MVP ya saca audio real por dispositivo desde Tauri, pero la sincronía 
 ```
 
 Nota: importar pistas ya está conectado a Tauri y permite probar carga y reproducción de WAVs, pero crear canción, guardar y abrir proyecto siguen pendientes.
+
+Nota adicional: el panel de transporte ya expone sección actual, salto pendiente y botones de cuantización a 2/4 compases, aunque todavía no existe un timeline visual editable.
 
 ## Milestone 6 — Timeline básico
 
