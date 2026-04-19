@@ -52,4 +52,6 @@ El frontend desktop ya puede instalar dependencias, ejecutar tests y generar bui
 
 En Rust ya existe persistencia de `song.json` e importacion basica de WAV para copiar archivos a `audio/`, detectar duracion y crear `Track`/`Clip` automaticamente.
 
-El siguiente objetivo es conectar esa UI con Tauri y empezar el transporte real de audio.
+Tambien existe ya un transporte minimo testeable en `libretracks-audio` con `play/pause/stop/seek`, clips activos y ganancia efectiva por pista/grupo.
+
+El siguiente objetivo es conectar esa UI con Tauri y pasar del transporte logico a reproduccion real de audio.

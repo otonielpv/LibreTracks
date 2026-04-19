@@ -19,12 +19,13 @@ Estado a 19/04/2026:
 - Ya existe el crate `libretracks-core` con modelo de dominio, validaciones y tests unitarios Rust escritos.
 - Ya existe el crate `libretracks-project` con lectura/escritura de `song.json`, estructura de carpeta de canción y tests unitarios Rust escritos.
 - `libretracks-project` ya importa WAVs al almacenamiento interno, detecta duración y crea `Track`/`Clip` automáticamente.
+- `libretracks-audio` ya tiene un transporte lógico mínimo testeable con `play/pause/stop/seek`, clips activos y mezcla básica por pista/grupo.
 - Ya hay tests frontend mínimos en `apps/desktop` ejecutándose con Vitest.
 - El frontend desktop ya arranca en modo web con Vite y responde localmente.
 - Rust ya está instalado en esta máquina.
 - Los tests Rust de `libretracks-core` y `libretracks-project` ya se han ejecutado correctamente en esta máquina.
 - La app desktop de Tauri ya pasa `cargo check`.
-- Todavía no están implementados el motor de audio, la importación WAV ni el timeline editable.
+- Todavía no están implementados la reproducción WAV real ni el timeline editable.
 - Sigue faltando implementar funcionalidad real en Tauri, pero el entorno nativo ya no está bloqueado por la ausencia de Rust.
 
 ## Objetivo de la primera etapa
@@ -888,19 +889,21 @@ Nota: la base está preparada, pero faltan instalar dependencias y disponer de t
 ## Milestone 4 — Audio mínimo
 
 ```txt
-[ ] Crear crate libretracks-audio
+[x] Crear crate libretracks-audio
 [ ] Cargar WAV
 [ ] Reproducir un WAV
 [ ] Reproducir varios WAV
 [ ] Sincronizar inicio
-[ ] Play
-[ ] Stop
-[ ] Pause
-[ ] Seek
-[ ] Volumen por pista
-[ ] Mute por pista
-[ ] Tests del transporte
+[x] Play
+[x] Stop
+[x] Pause
+[x] Seek
+[x] Volumen por pista
+[x] Mute por pista
+[x] Tests del transporte
 ```
+
+Nota: por ahora el audio engine resuelve transporte y mezcla lógica en memoria, pero todavía no saca audio real por dispositivo.
 
 ## Milestone 5 — UI inicial
 
