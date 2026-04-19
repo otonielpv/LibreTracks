@@ -28,6 +28,7 @@ export function App() {
           <li>Importacion WAV completada.</li>
           <li>Importacion y reproduccion WAV iniciales ya probables en Tauri.</li>
           <li>Timeline visual minimo ya integrado en el escritorio.</li>
+          <li>Base de waveform por clip ya integrada para evolucionar el timeline.</li>
         </ul>
       </section>
     </main>

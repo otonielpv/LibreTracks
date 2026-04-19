@@ -229,21 +229,53 @@ button:disabled {
 }
 
 .clip-block {
-  align-items: center;
+  align-items: stretch;
   background: linear-gradient(135deg, #f0b374, #d97706);
   border: 1px solid rgba(90, 44, 4, 0.18);
   border-radius: 12px;
   box-shadow: 0 10px 18px rgba(191, 91, 4, 0.18);
   color: #2f1906;
-  display: flex;
+  display: grid;
   font-size: 0.9rem;
   font-weight: 700;
   inset-block: 0.45rem;
   min-width: 2.5rem;
-  padding: 0 0.7rem;
+  overflow: hidden;
+  padding: 0.35rem 0.55rem 0.4rem;
   position: absolute;
 }
 
+.clip-waveform {
+  align-items: center;
+  display: flex;
+  gap: 1px;
+  inset: 0.3rem 0.35rem 1.35rem 0.35rem;
+  opacity: 0.95;
+  position: absolute;
+}
+
+.waveform-bar {
+  background: rgba(74, 32, 3, 0.72);
+  border-radius: 999px;
+  flex: 1 1 0;
+  min-width: 1px;
+  opacity: 0.92;
+}
+
+.waveform-empty {
+  background: rgba(74, 32, 3, 0.18);
+  border-radius: 999px;
+  height: 35%;
+  width: 100%;
+}
+
+.clip-label {
+  align-self: end;
+  position: relative;
+  z-index: 1;
+}
+
+.clip-label,
 .clip-block span {
   overflow: hidden;
   text-overflow: ellipsis;

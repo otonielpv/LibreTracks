@@ -8,7 +8,9 @@ use libretracks_audio::{
     AudioEngine, AudioEngineError, JumpTrigger, PlaybackState, PendingSectionJump,
 };
 use libretracks_core::{Clip, Section, Song};
-use libretracks_project::{import_wav_song, ImportedSong, ProjectError, ProjectImportRequest};
+use libretracks_project::{
+    import_wav_song, load_waveform_summary, ImportedSong, ProjectError, ProjectImportRequest,
+};
 use rodio::{decoder::DecoderError, PlayError, StreamError};
 use rfd::FileDialog;
 use serde::Serialize;
@@ -135,6 +137,7 @@ pub struct ClipSummary {
     pub timeline_start_seconds: f64,
     pub duration_seconds: f64,
     pub gain: f64,
+    pub waveform_peaks: Vec<f32>,
 }
 
 impl DesktopSession {
@@ -325,7 +328,10 @@ impl DesktopSession {
         TransportSnapshot {
             playback_state: playback_state_label(self.engine.playback_state()).to_string(),
             position_seconds: self.current_position(),
-            song: self.engine.song().map(song_to_summary),
+            song: self
+                .engine
+                .song()
+                .map(|song| song_to_summary(song, self.song_dir.as_deref())),
             current_section: self.engine.current_section().ok().flatten().map(section_to_summary),
             pending_section_jump: self
                 .engine
@@ -399,7 +405,7 @@ fn playback_state_label(state: PlaybackState) -> &'static str {
     }
 }
 
-fn song_to_summary(song: &Song) -> SongSummary {
+fn song_to_summary(song: &Song, song_dir: Option<&std::path::Path>) -> SongSummary {
     SongSummary {
         id: song.id.clone(),
         title: song.title.clone(),
@@ -409,7 +415,11 @@ fn song_to_summary(song: &Song) -> SongSummary {
         time_signature: song.time_signature.clone(),
         duration_seconds: song.duration_seconds,
         sections: song.sections.iter().map(section_to_summary).collect(),
-        clips: song.clips.iter().map(|clip| clip_to_summary(song, clip)).collect(),
+        clips: song
+            .clips
+            .iter()
+            .map(|clip| clip_to_summary(song, clip, song_dir))
+            .collect(),
         tracks: song
             .tracks
             .iter()
@@ -439,13 +449,17 @@ fn song_to_summary(song: &Song) -> SongSummary {
     }
 }
 
-fn clip_to_summary(song: &Song, clip: &Clip) -> ClipSummary {
+fn clip_to_summary(song: &Song, clip: &Clip, song_dir: Option<&std::path::Path>) -> ClipSummary {
     let track_name = song
         .tracks
         .iter()
         .find(|track| track.id == clip.track_id)
         .map(|track| track.name.clone())
         .unwrap_or_else(|| clip.track_id.clone());
+    let waveform_peaks = song_dir
+        .and_then(|dir| load_waveform_summary(dir, &clip.file_path).ok())
+        .map(|summary| summary.peaks)
+        .unwrap_or_default();
 
     ClipSummary {
         id: clip.id.clone(),
@@ -455,6 +469,7 @@ fn clip_to_summary(song: &Song, clip: &Clip) -> ClipSummary {
         timeline_start_seconds: clip.timeline_start_seconds,
         duration_seconds: clip.duration_seconds,
         gain: clip.gain,
+        waveform_peaks,
     }
 }
 

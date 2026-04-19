@@ -37,6 +37,7 @@ export type ClipSummary = {
   timelineStartSeconds: number;
   durationSeconds: number;
   gain: number;
+  waveformPeaks: number[];
 };
 
 export type SongSummary = {
@@ -91,6 +92,7 @@ const fallbackSnapshot: TransportSnapshot = {
         timelineStartSeconds: 0,
         durationSeconds: 240,
         gain: 1,
+        waveformPeaks: buildDemoWaveform(96, 0.25, 0.85),
       },
       {
         id: "clip-guide",
@@ -100,6 +102,7 @@ const fallbackSnapshot: TransportSnapshot = {
         timelineStartSeconds: 0,
         durationSeconds: 240,
         gain: 1,
+        waveformPeaks: buildDemoWaveform(96, 0.2, 0.72),
       },
       {
         id: "clip-drums",
@@ -109,6 +112,7 @@ const fallbackSnapshot: TransportSnapshot = {
         timelineStartSeconds: 16,
         durationSeconds: 176,
         gain: 1,
+        waveformPeaks: buildDemoWaveform(96, 0.35, 1),
       },
       {
         id: "clip-bass",
@@ -118,6 +122,7 @@ const fallbackSnapshot: TransportSnapshot = {
         timelineStartSeconds: 32,
         durationSeconds: 160,
         gain: 1,
+        waveformPeaks: buildDemoWaveform(96, 0.28, 0.8),
       },
       {
         id: "clip-keys",
@@ -127,6 +132,7 @@ const fallbackSnapshot: TransportSnapshot = {
         timelineStartSeconds: 48,
         durationSeconds: 128,
         gain: 1,
+        waveformPeaks: buildDemoWaveform(96, 0.18, 0.62),
       },
     ],
     groups: [
@@ -251,4 +257,13 @@ export async function cancelSectionJump(): Promise<TransportSnapshot> {
   }
 
   return invokeCommand<TransportSnapshot>("cancel_section_jump");
+}
+
+function buildDemoWaveform(bucketCount: number, floor: number, ceiling: number) {
+  return Array.from({ length: bucketCount }, (_, index) => {
+    const waveA = Math.sin(index * 0.33) * 0.5 + 0.5;
+    const waveB = Math.cos(index * 0.12) * 0.5 + 0.5;
+    const blend = (waveA * 0.7 + waveB * 0.3) * (ceiling - floor);
+    return Number((floor + blend).toFixed(3));
+  });
 }

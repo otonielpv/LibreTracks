@@ -260,7 +260,20 @@ export function TransportPanel() {
                             clip.durationSeconds,
                           )}`}
                         >
-                          <span>{clip.trackName}</span>
+                          <div className="clip-waveform" aria-hidden="true">
+                            {clip.waveformPeaks.length > 0 ? (
+                              clip.waveformPeaks.map((peak, index) => (
+                                <span
+                                  className="waveform-bar"
+                                  key={`${clip.id}-${index}`}
+                                  style={{ height: `${Math.max(peak * 100, 6)}%` }}
+                                />
+                              ))
+                            ) : (
+                              <span className="waveform-empty" />
+                            )}
+                          </div>
+                          <span className="clip-label">{clip.trackName}</span>
                         </div>
                       ))}
                   </div>

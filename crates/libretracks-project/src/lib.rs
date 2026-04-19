@@ -2,6 +2,7 @@
 
 mod importer;
 mod song_store;
+mod waveform;
 
 pub use importer::{
     import_wav_song, read_wav_metadata, ImportedAudioFile, ImportedSong, ProjectImportRequest,
@@ -9,6 +10,9 @@ pub use importer::{
 };
 pub use song_store::{
     create_song_folder, load_song, save_song, song_file_path, ProjectError, SONG_FILE_NAME,
+};
+pub use waveform::{
+    generate_waveform_summary, load_waveform_summary, waveform_file_path, WaveformSummary,
 };
 
 #[cfg(test)]
@@ -20,8 +24,8 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        create_song_folder, import_wav_song, load_song, read_wav_metadata, save_song,
-        song_file_path, ProjectError, ProjectImportRequest,
+        create_song_folder, import_wav_song, load_song, load_waveform_summary, read_wav_metadata,
+        save_song, song_file_path, waveform_file_path, ProjectError, ProjectImportRequest,
     };
 
     fn demo_song() -> Song {
@@ -194,10 +198,16 @@ mod tests {
         assert!((imported.song.duration_seconds - 3.0).abs() < 0.001);
         assert!(imported.song_dir.join("audio").join("drums.wav").exists());
         assert!(imported.song_dir.join("audio").join("bass.wav").exists());
+        assert!(waveform_file_path(&imported.song_dir, "audio/drums.wav").exists());
 
         let loaded = load_song(&imported.song_dir).expect("imported song should load");
         assert_eq!(loaded.tracks.len(), 2);
         assert_eq!(loaded.clips[0].timeline_start_seconds, 0.0);
+
+        let waveform =
+            load_waveform_summary(&imported.song_dir, "audio/drums.wav").expect("waveform should load");
+        assert_eq!(waveform.bucket_count, waveform.peaks.len());
+        assert_eq!(waveform.bucket_count, 96);
     }
 
     #[test]

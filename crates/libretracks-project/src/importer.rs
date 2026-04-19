@@ -7,7 +7,7 @@ use std::{
 use hound::WavReader;
 use libretracks_core::{validate_song, Clip, OutputBus, Song, Track};
 
-use crate::{create_song_folder, save_song, ProjectError};
+use crate::{create_song_folder, generate_waveform_summary, save_song, ProjectError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectImportRequest {
@@ -82,6 +82,8 @@ pub fn import_wav_song(
         let file_name = unique_file_name(source_path, &mut used_file_names)?;
         let destination_path = audio_dir.join(&file_name);
         fs::copy(source_path, &destination_path)?;
+        let imported_relative_path = PathBuf::from("audio").join(&file_name);
+        generate_waveform_summary(&song_dir, &imported_relative_path)?;
 
         let stem = destination_path
             .file_stem()
@@ -91,7 +93,7 @@ pub fn import_wav_song(
 
         imported_files.push(ImportedAudioFile {
             source_path: source_path.clone(),
-            imported_relative_path: PathBuf::from("audio").join(&file_name),
+            imported_relative_path,
             track_id: format!("track_{track_slug}"),
             clip_id: format!("clip_{track_slug}"),
             track_name: humanize_track_name(stem),

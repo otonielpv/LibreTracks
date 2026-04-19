@@ -26,7 +26,7 @@ Estado a 19/04/2026:
 - Los tests Rust de `libretracks-core` y `libretracks-project` ya se han ejecutado correctamente en esta máquina.
 - La app desktop de Tauri ya pasa `cargo check`.
 - La app desktop ya puede importar WAVs desde un selector nativo, crear una canción básica y lanzar una primera reproducción local.
-- La app desktop ya muestra un timeline visual mínimo con regla temporal, pistas verticales, clips como bloques y cursor de reproducción.
+- La app desktop ya muestra un timeline visual mínimo con regla temporal, pistas verticales, clips como bloques, cursor de reproducción y una primera silueta de waveform por clip.
 - El transporte mantiene una base lógica para saltos entre secciones, pero la creación y edición de secciones queda aplazada hasta que exista timeline en la UI.
 - Todavía no está implementado el timeline editable ni el control de mezcla en tiempo real.
 
@@ -942,6 +942,7 @@ Nota adicional: la cuantización y los saltos musicales se mantienen a nivel ló
 [x] Mostrar pistas verticalmente
 [x] Mostrar clips como bloques
 [x] Cursor de reproducción
+[x] Mostrar waveform básica por clip
 [ ] Mostrar sección actual
 [ ] Mostrar salto programado
 [ ] Cancelar salto desde la UI
