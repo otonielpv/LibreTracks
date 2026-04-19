@@ -39,10 +39,13 @@ tests/
 
 1. Instala dependencias con `npm install`.
 2. Levanta la UI desktop en modo web con `npm run dev:desktop`.
-3. Ejecuta los tests frontend con `npm run test:desktop`.
-4. Genera build del frontend con `npm run build:desktop`.
+3. Levanta la app de escritorio completa con `npm run dev:desktop:native`.
+4. Ejecuta los tests frontend con `npm run test:desktop`.
+5. Genera build del frontend con `npm run build:desktop`.
 
-Tambien puedes validar la parte Rust con `cargo test -p libretracks-core` y `cargo test -p libretracks-project`.
+En Windows, `npm run dev:desktop:native` y `npm run check:desktop:native` preparan el `PATH` local para que Tauri encuentre `cargo` y `rustc`.
+
+Tambien puedes validar la parte Rust con `cargo test -p libretracks-core`, `cargo test -p libretracks-project` y `cargo test -p libretracks-audio`.
 
 ## Estado
 
@@ -54,4 +57,4 @@ En Rust ya existe persistencia de `song.json` e importacion basica de WAV para c
 
 Tambien existe ya un transporte minimo testeable en `libretracks-audio` con `play/pause/stop/seek`, clips activos y ganancia efectiva por pista/grupo.
 
-El siguiente objetivo es conectar esa UI con Tauri y pasar del transporte logico a reproduccion real de audio.
+La app desktop ya conecta esa UI con Tauri para importar WAVs, mostrar tracks y lanzar una primera reproduccion local con audio real.

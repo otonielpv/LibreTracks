@@ -25,8 +25,8 @@ Estado a 19/04/2026:
 - Rust ya está instalado en esta máquina.
 - Los tests Rust de `libretracks-core` y `libretracks-project` ya se han ejecutado correctamente en esta máquina.
 - La app desktop de Tauri ya pasa `cargo check`.
-- Todavía no están implementados la reproducción WAV real ni el timeline editable.
-- Sigue faltando implementar funcionalidad real en Tauri, pero el entorno nativo ya no está bloqueado por la ausencia de Rust.
+- La app desktop ya puede importar WAVs desde un selector nativo, crear una canción básica y lanzar una primera reproducción local.
+- Todavía no está implementado el timeline editable ni el control de mezcla en tiempo real.
 
 ## Objetivo de la primera etapa
 
@@ -890,9 +890,9 @@ Nota: la base está preparada, pero faltan instalar dependencias y disponer de t
 
 ```txt
 [x] Crear crate libretracks-audio
-[ ] Cargar WAV
-[ ] Reproducir un WAV
-[ ] Reproducir varios WAV
+[x] Cargar WAV
+[x] Reproducir un WAV
+[x] Reproducir varios WAV
 [ ] Sincronizar inicio
 [x] Play
 [x] Stop
@@ -903,14 +903,14 @@ Nota: la base está preparada, pero faltan instalar dependencias y disponer de t
 [x] Tests del transporte
 ```
 
-Nota: por ahora el audio engine resuelve transporte y mezcla lógica en memoria, pero todavía no saca audio real por dispositivo.
+Nota: el MVP ya saca audio real por dispositivo desde Tauri, pero la sincronía inicial sigue siendo una primera aproximación y todavía no hay mezcla interactiva en vivo.
 
 ## Milestone 5 — UI inicial
 
 ```txt
 [x] Pantalla de inicio
 [ ] Botón crear canción
-[ ] Botón importar pistas
+[x] Botón importar pistas
 [x] Lista de tracks
 [x] Botones play/stop
 [x] Sliders de volumen
@@ -919,7 +919,7 @@ Nota: por ahora el audio engine resuelve transporte y mezcla lógica en memoria,
 [ ] Abrir proyecto
 ```
 
-Nota: la UI ya muestra acciones de crear/importar/abrir como esqueleto visual, pero todavía no están conectadas con lógica real de proyecto.
+Nota: importar pistas ya está conectado a Tauri y permite probar carga y reproducción de WAVs, pero crear canción, guardar y abrir proyecto siguen pendientes.
 
 ## Milestone 6 — Timeline básico
 
