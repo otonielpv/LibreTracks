@@ -163,7 +163,7 @@ export function TransportPanel() {
         {song && (
           <p className="status-meta">
             {formatClock(positionSeconds)} / {formatClock(durationSeconds)}
-            {snapshot?.songDir ? ` • ${snapshot.songDir}` : ""}
+            {snapshot?.songDir ? ` | ${snapshot.songDir}` : ""}
           </p>
         )}
       </div>
@@ -201,7 +201,7 @@ export function TransportPanel() {
       <div className="track-header">
         <div>
           <h2>Tracks</h2>
-          <p>Importa WAVs y la cancion quedara lista para probar transporte y timeline.</p>
+          <p>Importa uno o varios WAVs y la cancion quedara lista para probar transporte y timeline.</p>
         </div>
         <div className="track-actions">
           <button disabled={!isTauriApp || isBusy} type="button">
@@ -240,7 +240,10 @@ export function TransportPanel() {
             <div className="timeline-head">
               <div>
                 <h2>Timeline</h2>
-                <p>Primera vista DAW: regla temporal, pistas verticales, clips, zoom y cursor.</p>
+                <p>
+                  Primera vista DAW: cabeceras de pista fijas, regla temporal, clips, zoom y
+                  cursor.
+                </p>
               </div>
               <div className="timeline-tools">
                 <label className="zoom-field">
@@ -258,7 +261,7 @@ export function TransportPanel() {
                   />
                 </label>
                 <strong className="timeline-meta">
-                  {tracks.length} pistas • {zoomLevel.toFixed(1)}x
+                  {tracks.length} pistas | {zoomLevel.toFixed(1)}x
                 </strong>
               </div>
             </div>
@@ -266,10 +269,10 @@ export function TransportPanel() {
             <div className="clip-inspector" role="status">
               {selectedClip ? (
                 <>
-                  <strong>Clip seleccionado: {selectedClip.trackName}</strong>
+                  <strong>Clip seleccionado: {clipDisplayName(selectedClip)}</strong>
                   <p>
-                    Inicio {formatClock(selectedClip.timelineStartSeconds)} • Duracion{" "}
-                    {formatClock(selectedClip.durationSeconds)} • Gain{" "}
+                    Inicio {formatClock(selectedClip.timelineStartSeconds)} | Duracion{" "}
+                    {formatClock(selectedClip.durationSeconds)} | Gain{" "}
                     {Math.round(selectedClip.gain * 100)}%
                   </p>
                 </>
@@ -281,57 +284,90 @@ export function TransportPanel() {
               )}
             </div>
 
-            <div className="timeline-scroll">
-              <div className="timeline-content" style={{ width: `${Math.max(zoomLevel * 100, 100)}%` }}>
-                <div className="timeline-ruler">
-                  {rulerMarks.map((mark) => (
-                    <div className="ruler-mark" key={mark.seconds} style={{ left: `${mark.percent}%` }}>
-                      <span>{mark.label}</span>
-                    </div>
-                  ))}
+            <div className="timeline-shell">
+              <div className="timeline-sidebar">
+                <div className="timeline-sidebar-spacer" aria-hidden="true" />
+                <div className="timeline-labels">
+                  {tracks.map((track) => {
+                    const trackClips = clips.filter((clip) => clip.trackId === track.id);
+                    const primaryClip = trackClips[0] ?? null;
+                    const headerLabel = primaryClip ? clipDisplayName(primaryClip) : track.name;
+
+                    return (
+                      <article
+                        aria-label={`Cabecera de pista ${headerLabel}`}
+                        className={`timeline-track-card${
+                          selectedClip?.trackId === track.id ? " is-selected" : ""
+                        }`}
+                        key={track.id}
+                        role="group"
+                      >
+                        <strong>{headerLabel}</strong>
+                        <span>
+                          {track.groupName ??
+                            `${trackClips.length} clip${trackClips.length === 1 ? "" : "s"}`}
+                        </span>
+                      </article>
+                    );
+                  })}
                 </div>
+              </div>
 
-                <div className="timeline-body">
-                  <div className="timeline-cursor" style={{ left: `${cursorPercent}%` }} />
-
-                  {tracks.map((track) => (
-                    <article className="timeline-row" key={track.id}>
-                      <div className="timeline-lane" aria-label={`Carril de ${track.name}`}>
-                        {clips
-                          .filter((clip) => clip.trackId === track.id)
-                          .map((clip) => (
-                            <button
-                              aria-label={`Clip ${clip.trackName}`}
-                              aria-pressed={selectedClipId === clip.id}
-                              className={`clip-block${selectedClipId === clip.id ? " is-selected" : ""}`}
-                              key={clip.id}
-                              style={clipStyle(clip, durationSeconds)}
-                              title={`${clip.trackName} • ${formatClock(
-                                clip.timelineStartSeconds,
-                              )} / ${formatClock(clip.durationSeconds)}`}
-                              type="button"
-                              onClick={() => {
-                                setSelectedClipId(clip.id);
-                              }}
-                            >
-                              <div className="clip-waveform" aria-hidden="true">
-                                {clip.waveformPeaks.length > 0 ? (
-                                  clip.waveformPeaks.map((peak, index) => (
-                                    <span
-                                      className="waveform-bar"
-                                      key={`${clip.id}-${index}`}
-                                      style={{ height: `${Math.max(peak * 100, 6)}%` }}
-                                    />
-                                  ))
-                                ) : (
-                                  <span className="waveform-empty" />
-                                )}
-                              </div>
-                            </button>
-                          ))}
+              <div className="timeline-scroll">
+                <div
+                  className="timeline-content"
+                  style={{ width: `${Math.max(zoomLevel * 100, 100)}%` }}
+                >
+                  <div className="timeline-ruler">
+                    {rulerMarks.map((mark) => (
+                      <div className="ruler-mark" key={mark.seconds} style={{ left: `${mark.percent}%` }}>
+                        <span>{mark.label}</span>
                       </div>
-                    </article>
-                  ))}
+                    ))}
+                  </div>
+
+                  <div className="timeline-body">
+                    <div className="timeline-cursor" style={{ left: `${cursorPercent}%` }} />
+
+                    {tracks.map((track) => (
+                      <article className="timeline-row" key={track.id}>
+                        <div className="timeline-lane" aria-label={`Carril de ${track.name}`}>
+                          {clips
+                            .filter((clip) => clip.trackId === track.id)
+                            .map((clip) => (
+                              <button
+                                aria-label={`Clip ${clipDisplayName(clip)}`}
+                                aria-pressed={selectedClipId === clip.id}
+                                className={`clip-block${selectedClipId === clip.id ? " is-selected" : ""}`}
+                                key={clip.id}
+                                style={clipStyle(clip, durationSeconds)}
+                                title={`${clipDisplayName(clip)} | ${formatClock(
+                                  clip.timelineStartSeconds,
+                                )} / ${formatClock(clip.durationSeconds)}`}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedClipId(clip.id);
+                                }}
+                              >
+                                <div className="clip-waveform" aria-hidden="true">
+                                  {clip.waveformPeaks.length > 0 ? (
+                                    clip.waveformPeaks.map((peak, index) => (
+                                      <span
+                                        className="waveform-bar"
+                                        key={`${clip.id}-${index}`}
+                                        style={{ height: `${Math.max(peak * 100, 6)}%` }}
+                                      />
+                                    ))
+                                  ) : (
+                                    <span className="waveform-empty" />
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -387,6 +423,13 @@ function clipStyle(clip: ClipSummary, durationSeconds: number) {
     left: `${left}%`,
     width: `${width}%`,
   };
+}
+
+function clipDisplayName(clip: ClipSummary) {
+  const pathSegments = clip.filePath.split(/[\\/]/);
+  const fileName = pathSegments[pathSegments.length - 1] ?? clip.trackName;
+  const stem = fileName.replace(/\.[^.]+$/, "");
+  return stem || clip.trackName;
 }
 
 function buildRulerMarks(durationSeconds: number, zoomLevel: number) {

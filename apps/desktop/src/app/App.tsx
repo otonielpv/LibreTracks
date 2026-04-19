@@ -8,8 +8,8 @@ export function App() {
           <p className="eyebrow">LibreTracks</p>
           <h1>Importa WAVs y prueba el primer reproductor multitrack</h1>
           <p className="lede">
-            La shell del escritorio ya puede importar pistas WAV, crear una cancion basica y
-            controlar el transporte desde Tauri.
+            La shell del escritorio ya puede importar una o varias pistas WAV, crear una cancion
+            basica y controlar el transporte desde Tauri.
           </p>
         </div>
         <div className="meta-card">
@@ -26,6 +26,7 @@ export function App() {
         <ul>
           <li>Persistencia de `song.json` completada.</li>
           <li>Importacion WAV completada.</li>
+          <li>Importacion multiple de WAVs ya operativa desde el selector nativo.</li>
           <li>Importacion y reproduccion WAV iniciales ya probables en Tauri.</li>
           <li>Timeline visual minimo ya integrado en el escritorio.</li>
           <li>Base de waveform por clip ya integrada para evolucionar el timeline.</li>

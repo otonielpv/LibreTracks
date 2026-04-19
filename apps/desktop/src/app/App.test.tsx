@@ -30,6 +30,7 @@ describe("App", () => {
     expect(screen.getByText("Tracks")).toBeTruthy();
     expect(await screen.findByText("Timeline")).toBeTruthy();
     expect(await screen.findByText(/primera vista daw/i)).toBeTruthy();
+    expect(await screen.findByText(/cabeceras de pista fijas/i)).toBeTruthy();
     expect(await screen.findByLabelText(/zoom horizontal del timeline/i)).toBeTruthy();
     expect((await screen.findAllByText("Click")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Guide")).length).toBeGreaterThan(0);

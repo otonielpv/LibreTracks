@@ -194,7 +194,52 @@ button:disabled {
   margin-top: 0.25rem;
 }
 
+.timeline-shell {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+}
+
+.timeline-sidebar {
+  min-width: 0;
+}
+
+.timeline-sidebar-spacer {
+  height: 3.25rem;
+}
+
+.timeline-labels {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.timeline-track-card {
+  background: linear-gradient(180deg, rgba(191, 91, 4, 0.08), rgba(255, 255, 255, 0.95));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.2rem;
+  min-height: 4rem;
+  padding: 0.85rem 1rem;
+}
+
+.timeline-track-card strong,
+.timeline-track-card span {
+  margin: 0;
+}
+
+.timeline-track-card span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.timeline-track-card.is-selected {
+  border-color: rgba(191, 91, 4, 0.45);
+  box-shadow: 0 0 0 1px rgba(191, 91, 4, 0.14), 0 8px 18px rgba(191, 91, 4, 0.08);
+}
+
 .timeline-scroll {
+  min-width: 0;
   overflow-x: auto;
   padding-bottom: 0.25rem;
 }
@@ -416,6 +461,7 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .timeline-shell,
   .group-row,
   .track-header,
   .timeline-row,

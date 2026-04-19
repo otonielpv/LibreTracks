@@ -27,6 +27,8 @@ Estado a 19/04/2026:
 - La app desktop de Tauri ya pasa `cargo check`.
 - La app desktop ya puede importar WAVs desde un selector nativo, crear una canción básica y lanzar una primera reproducción local.
 - La app desktop ya muestra un timeline visual mínimo con regla temporal, pistas verticales, clips como bloques, cursor de reproducción y una primera silueta de waveform por clip.
+- La importación actual ya permite seleccionar varios WAVs en una sola operación y crear una pista por archivo.
+- El timeline ya separa las cabeceras de pista del área temporal para que el audio arranque visualmente en el 0:00.
 - El transporte mantiene una base lógica para saltos entre secciones, pero la creación y edición de secciones queda aplazada hasta que exista timeline en la UI.
 - Todavía no está implementado el timeline editable ni el control de mezcla en tiempo real.
 
@@ -931,7 +933,7 @@ Nota: el MVP ya saca audio real por dispositivo desde Tauri, pero la sincronía 
 [ ] Abrir proyecto
 ```
 
-Nota: importar pistas ya está conectado a Tauri y permite probar carga y reproducción de WAVs, pero crear canción, guardar y abrir proyecto siguen pendientes.
+Nota: importar pistas ya está conectado a Tauri, permite seleccionar uno o varios WAVs en el mismo paso y deja probar carga y reproducción, pero crear canción, guardar y abrir proyecto siguen pendientes.
 
 Nota adicional: la cuantización y los saltos musicales se mantienen a nivel lógico en el motor, pero no deben exponerse como flujo de usuario hasta que el timeline permita crear y editar secciones.
 
@@ -945,6 +947,7 @@ Nota adicional: la cuantización y los saltos musicales se mantienen a nivel ló
 [x] Mostrar waveform básica por clip
 [x] Zoom horizontal básico
 [x] Selección de clip
+[x] Separar cabeceras de pista del timeline
 [ ] Mostrar sección actual
 [ ] Mostrar salto programado
 [ ] Cancelar salto desde la UI
