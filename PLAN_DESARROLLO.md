@@ -34,7 +34,7 @@ Estado a 19/04/2026:
 - El cursor del transporte ya se mueve directamente sobre el timeline con click/arrastre, sin depender de un slider separado.
 - La selección de secciones ya se puede marcar arrastrando directamente sobre el timeline y crearla desde ese rango.
 - El transporte mantiene una base lógica para saltos entre secciones y la UI ya puede crear rangos de sección desde el timeline, aunque la gestión musical completa de saltos sigue pendiente.
-- Todavía no está implementado el timeline editable ni el control de mezcla en tiempo real.
+- Todavía no está implementado el timeline editable completo tipo DAW ni el control de mezcla en tiempo real con flujo totalmente integrado.
 
 ## Objetivo de la primera etapa
 
@@ -909,7 +909,7 @@ Nota: la base está preparada, pero faltan instalar dependencias y disponer de t
 [x] Cargar WAV
 [x] Reproducir un WAV
 [x] Reproducir varios WAV
-[ ] Sincronizar inicio
+[x] Sincronizar inicio
 [x] Play
 [x] Stop
 [x] Pause
@@ -921,7 +921,7 @@ Nota: la base está preparada, pero faltan instalar dependencias y disponer de t
 [x] Tests del transporte
 ```
 
-Nota: el MVP ya saca audio real por dispositivo desde Tauri, pero la sincronía inicial sigue siendo una primera aproximación y todavía no hay mezcla interactiva en vivo. El transporte ya contempla saltos lógicos entre secciones para no bloquear el diseño futuro del timeline.
+Nota: el MVP ya saca audio real por dispositivo desde Tauri, arranca los `sinks` de reproducción en una misma fase para mejorar la sincronía inicial y todavía no tiene mezcla interactiva en vivo con precisión de motor dedicada. El transporte ya contempla saltos lógicos entre secciones para no bloquear el diseño futuro del timeline.
 
 ## Milestone 5 — UI inicial
 
@@ -937,9 +937,9 @@ Nota: el MVP ya saca audio real por dispositivo desde Tauri, pero la sincronía 
 [x] Abrir proyecto
 ```
 
-Nota: importar pistas ya está conectado a Tauri, permite seleccionar uno o varios WAVs en el mismo paso y deja probar carga y reproducción, pero crear canción, guardar y abrir proyecto siguen pendientes.
+Nota: la UI inicial ya permite crear, importar, guardar y abrir proyectos; ahora el siguiente salto natural es compactar más esas acciones dentro de una experiencia de timeline más tipo DAW.
 
-Nota adicional: la cuantización y los saltos musicales se mantienen a nivel lógico en el motor, pero no deben exponerse como flujo de usuario hasta que el timeline permita crear y editar secciones.
+Nota adicional: la cuantización y los saltos musicales ya están conectados a una primera UI, pero todavía queda refinarlos para que el flujo completo viva de forma más natural dentro del timeline.
 
 ## Milestone 6 — Timeline básico
 
@@ -955,20 +955,20 @@ Nota adicional: la cuantización y los saltos musicales se mantienen a nivel ló
 [x] Mover clip
 [x] Persistir posición del clip
 [x] Mostrar sección actual
-[ ] Mostrar salto programado
-[ ] Cancelar salto desde la UI
+[x] Mostrar salto programado
+[x] Cancelar salto desde la UI
 ```
 
 ## Milestone 7 — Grupos
 
 ```txt
-[ ] Crear grupo
-[ ] Asignar track a grupo
-[ ] Volumen de grupo
-[ ] Mute de grupo
-[ ] Mostrar grupos en UI
-[ ] Aplicar grupo en audio engine
-[ ] Tests de mezcla pista/grupo
+[x] Crear grupo
+[x] Asignar track a grupo
+[x] Volumen de grupo
+[x] Mute de grupo
+[x] Mostrar grupos en UI
+[x] Aplicar grupo en audio engine
+[x] Tests de mezcla pista/grupo
 ```
 
 ## Milestone 8 — Remoto básico

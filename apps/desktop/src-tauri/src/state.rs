@@ -7,7 +7,7 @@ use std::{
 use libretracks_audio::{
     AudioEngine, AudioEngineError, JumpTrigger, PlaybackState, PendingSectionJump,
 };
-use libretracks_core::{Clip, Section, Song};
+use libretracks_core::{Clip, OutputBus, Section, Song, TrackGroup};
 use libretracks_project::{
     create_song_folder, import_wav_song, load_song, load_waveform_summary, save_song,
     ImportedSong, ProjectError, ProjectImportRequest,
@@ -64,6 +64,10 @@ pub enum DesktopError {
     Decode(#[from] DecoderError),
     #[error("clip not found: {0}")]
     ClipNotFound(String),
+    #[error("track not found: {0}")]
+    TrackNotFound(String),
+    #[error("group not found: {0}")]
+    GroupNotFound(String),
     #[error("section range is invalid")]
     InvalidSectionRange,
 }
@@ -353,6 +357,135 @@ impl DesktopSession {
                 .partial_cmp(&right.start_seconds)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+
+        self.persist_song_update(song, audio)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn create_group(
+        &mut self,
+        name: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let trimmed_name = name.trim();
+        if trimmed_name.is_empty() {
+            return Err(DesktopError::AudioCommand("group name must not be empty".into()));
+        }
+
+        song.groups.push(TrackGroup {
+            id: format!("group_{}", timestamp_suffix()),
+            name: trimmed_name.to_string(),
+            volume: 1.0,
+            muted: false,
+            output_bus_id: OutputBus::Main.id(),
+        });
+
+        self.persist_song_update(song, audio)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn assign_track_to_group(
+        &mut self,
+        track_id: &str,
+        group_id: Option<&str>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+
+        if let Some(group_id) = group_id {
+            if !song.groups.iter().any(|group| group.id == group_id) {
+                return Err(DesktopError::GroupNotFound(group_id.to_string()));
+            }
+        }
+
+        let track = song
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+
+        track.group_id = group_id.map(std::string::ToString::to_string);
+
+        self.persist_song_update(song, audio)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn set_track_volume(
+        &mut self,
+        track_id: &str,
+        volume: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let track = song
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+
+        track.volume = volume.clamp(0.0, 1.0);
+
+        self.persist_song_update(song, audio)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn toggle_track_mute(
+        &mut self,
+        track_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let track = song
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+
+        track.muted = !track.muted;
+
+        self.persist_song_update(song, audio)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn set_group_volume(
+        &mut self,
+        group_id: &str,
+        volume: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let group = song
+            .groups
+            .iter_mut()
+            .find(|group| group.id == group_id)
+            .ok_or_else(|| DesktopError::GroupNotFound(group_id.to_string()))?;
+
+        group.volume = volume.clamp(0.0, 1.0);
+
+        self.persist_song_update(song, audio)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn toggle_group_mute(
+        &mut self,
+        group_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let group = song
+            .groups
+            .iter_mut()
+            .find(|group| group.id == group_id)
+            .ok_or_else(|| DesktopError::GroupNotFound(group_id.to_string()))?;
+
+        group.muted = !group.muted;
 
         self.persist_song_update(song, audio)?;
 

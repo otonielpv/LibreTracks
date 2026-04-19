@@ -66,9 +66,13 @@ impl AudioRuntime {
                 .amplify(clip.gain as f32);
 
             let sink = Sink::try_new(&self.handle)?;
+            sink.pause();
             sink.append(source);
-            sink.play();
             self.sinks.push(sink);
+        }
+
+        for sink in &self.sinks {
+            sink.play();
         }
 
         Ok(())

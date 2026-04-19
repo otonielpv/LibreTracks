@@ -31,7 +31,8 @@ export function App() {
           <li>Crear, abrir y guardar proyecto ya disponibles en la UI desktop.</li>
           <li>Timeline visual minimo ya integrado en el escritorio.</li>
           <li>Base de waveform por clip ya integrada para evolucionar el timeline.</li>
-          <li>Zoom, cursor directo y seleccion de clips ya disponibles en el timeline.</li>
+          <li>Zoom, cursor directo, secciones por arrastre y saltos basicos ya disponibles.</li>
+          <li>Mezcla por pista y grupo ya conectada al motor con controles en desktop.</li>
         </ul>
       </section>
     </main>

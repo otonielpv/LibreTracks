@@ -69,4 +69,16 @@ describe("App", () => {
     expect(await screen.findByText("Nueva Cancion")).toBeTruthy();
     expect(await screen.findByText(/proyecto creado/i)).toBeTruthy();
   });
+
+  it("creates a new group from the desktop mixer controls", async () => {
+    render(<App />);
+
+    const nameField = await screen.findByLabelText(/nombre del nuevo grupo/i);
+    fireEvent.change(nameField, { target: { value: "Vocals" } });
+
+    const createGroupButton = await screen.findByRole("button", { name: /crear grupo/i });
+    fireEvent.click(createGroupButton);
+
+    expect(await screen.findByText("Vocals")).toBeTruthy();
+  });
 });

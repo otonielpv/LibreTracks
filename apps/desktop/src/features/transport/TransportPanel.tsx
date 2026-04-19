@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  assignTrackToGroup,
+  cancelSectionJump,
   createSection,
+  createGroup,
   createSong,
   getTransportSnapshot,
   isTauriApp,
@@ -10,8 +13,13 @@ import {
   pickAndImportSong,
   playTransport,
   saveProject,
+  scheduleSectionJump,
   seekTransport,
+  setGroupVolume,
+  setTrackVolume,
   stopTransport,
+  toggleGroupMute,
+  toggleTrackMute,
   type ClipSummary,
   type SectionSummary,
   type TransportSnapshot,
@@ -41,6 +49,9 @@ export function TransportPanel() {
   const [sectionSelectionMode, setSectionSelectionMode] = useState(false);
   const [sectionDraft, setSectionDraft] = useState<SectionDraft | null>(null);
   const [timelineDrag, setTimelineDrag] = useState<TimelineDragState>(null);
+  const [groupNameDraft, setGroupNameDraft] = useState("");
+  const [jumpTargetSectionId, setJumpTargetSectionId] = useState<string | null>(null);
+  const [jumpBars, setJumpBars] = useState(4);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const timelineContentRef = useRef<HTMLDivElement | null>(null);
 
@@ -122,6 +133,17 @@ export function TransportPanel() {
 
     setClipStartDraft(selectedClip.timelineStartSeconds.toFixed(2));
   }, [selectedClip]);
+
+  useEffect(() => {
+    if (!sections.length) {
+      setJumpTargetSectionId(null);
+      return;
+    }
+
+    if (!jumpTargetSectionId || !sections.some((section) => section.id === jumpTargetSectionId)) {
+      setJumpTargetSectionId(sections[0]?.id ?? null);
+    }
+  }, [jumpTargetSectionId, sections]);
 
   const resetEditorSelections = () => {
     setSelectedClipId(null);
@@ -304,6 +326,100 @@ export function TransportPanel() {
     }
   };
 
+  const handleCreateGroup = async () => {
+    if (!groupNameDraft.trim()) {
+      setStatus("El nombre del grupo no puede estar vacio.");
+      return;
+    }
+
+    setIsBusy(true);
+
+    try {
+      const nextSnapshot = await createGroup(groupNameDraft);
+      setSnapshot(nextSnapshot);
+      setGroupNameDraft("");
+      setStatus(`Grupo creado: ${groupNameDraft.trim()}.`);
+    } catch (error) {
+      setStatus(`No se pudo crear el grupo: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleTrackVolumeChange = async (trackId: string, value: number) => {
+    try {
+      const nextSnapshot = await setTrackVolume(trackId, value / 100);
+      setSnapshot(nextSnapshot);
+    } catch (error) {
+      setStatus(`No se pudo cambiar el volumen de pista: ${String(error)}`);
+    }
+  };
+
+  const handleTrackMuteToggle = async (trackId: string) => {
+    try {
+      const nextSnapshot = await toggleTrackMute(trackId);
+      setSnapshot(nextSnapshot);
+    } catch (error) {
+      setStatus(`No se pudo cambiar el mute de pista: ${String(error)}`);
+    }
+  };
+
+  const handleGroupVolumeChange = async (groupId: string, value: number) => {
+    try {
+      const nextSnapshot = await setGroupVolume(groupId, value / 100);
+      setSnapshot(nextSnapshot);
+    } catch (error) {
+      setStatus(`No se pudo cambiar el volumen de grupo: ${String(error)}`);
+    }
+  };
+
+  const handleGroupMuteToggle = async (groupId: string) => {
+    try {
+      const nextSnapshot = await toggleGroupMute(groupId);
+      setSnapshot(nextSnapshot);
+    } catch (error) {
+      setStatus(`No se pudo cambiar el mute de grupo: ${String(error)}`);
+    }
+  };
+
+  const handleTrackGroupChange = async (trackId: string, nextGroupId: string) => {
+    try {
+      const nextSnapshot = await assignTrackToGroup(trackId, nextGroupId || null);
+      setSnapshot(nextSnapshot);
+    } catch (error) {
+      setStatus(`No se pudo asignar la pista al grupo: ${String(error)}`);
+    }
+  };
+
+  const handleScheduleJump = async (trigger: "immediate" | "section_end" | "after_bars") => {
+    if (!jumpTargetSectionId) {
+      setStatus("Selecciona primero una seccion del timeline.");
+      return;
+    }
+
+    try {
+      const nextSnapshot = await scheduleSectionJump({
+        targetSectionId: jumpTargetSectionId,
+        trigger,
+        bars: trigger === "after_bars" ? jumpBars : undefined,
+      });
+      setSnapshot(nextSnapshot);
+      setStatus("Salto de seccion programado.");
+    } catch (error) {
+      setStatus(`No se pudo programar el salto: ${String(error)}`);
+    }
+  };
+
+  const handleCancelJump = async () => {
+    try {
+      const nextSnapshot = await cancelSectionJump();
+      setSnapshot(nextSnapshot);
+      setStatus("Salto pendiente cancelado.");
+    } catch (error) {
+      setStatus(`No se pudo cancelar el salto: ${String(error)}`);
+    }
+  };
+
   const resolveTimelineSeconds = (clientX: number) => {
     const scrollElement = timelineScrollRef.current;
     const contentElement = timelineContentRef.current;
@@ -325,7 +441,7 @@ export function TransportPanel() {
     }
 
     const target = event.target as HTMLElement;
-    if (target.closest(".clip-block")) {
+    if (target.closest(".clip-block") || target.closest(".timeline-section-chip")) {
       return;
     }
 
@@ -417,15 +533,16 @@ export function TransportPanel() {
                   <span>Volumen</span>
                   <input
                     aria-label={`Volumen de grupo ${group.name}`}
-                    disabled
                     max="100"
                     min="0"
                     type="range"
                     value={Math.round(group.volume * 100)}
-                    onChange={() => undefined}
+                    onChange={(event) => {
+                      void handleGroupVolumeChange(group.id, Number(event.target.value));
+                    }}
                   />
                 </label>
-                <button disabled type="button">
+                <button type="button" onClick={() => void handleGroupMuteToggle(group.id)}>
                   {group.muted ? "Unmute" : "Mute"}
                 </button>
               </div>
@@ -433,6 +550,24 @@ export function TransportPanel() {
           ))}
         </div>
       )}
+
+      <div className="group-create-row">
+        <label className="group-create-field">
+          <span>Nuevo grupo</span>
+          <input
+            aria-label="Nombre del nuevo grupo"
+            disabled={isBusy}
+            type="text"
+            value={groupNameDraft}
+            onChange={(event) => {
+              setGroupNameDraft(event.target.value);
+            }}
+          />
+        </label>
+        <button disabled={isBusy} type="button" onClick={() => void handleCreateGroup()}>
+          Crear Grupo
+        </button>
+      </div>
 
       <div className="track-header">
         <div>
@@ -571,6 +706,50 @@ export function TransportPanel() {
                       ? `${pendingSectionJump.targetSectionName} | ${pendingSectionJump.trigger}`
                       : "Sin salto programado"}
                   </p>
+                  <div className="timeline-context-actions">
+                    <button
+                      disabled={!jumpTargetSectionId || isBusy}
+                      type="button"
+                      onClick={() => void handleScheduleJump("immediate")}
+                    >
+                      Ir ahora
+                    </button>
+                    <button
+                      disabled={!jumpTargetSectionId || isBusy}
+                      type="button"
+                      onClick={() => void handleScheduleJump("section_end")}
+                    >
+                      Al final
+                    </button>
+                    <button
+                      disabled={!jumpTargetSectionId || isBusy}
+                      type="button"
+                      onClick={() => void handleScheduleJump("after_bars")}
+                    >
+                      En compases
+                    </button>
+                    <label className="bars-field">
+                      <span>Compases</span>
+                      <input
+                        aria-label="Compases del salto"
+                        disabled={isBusy}
+                        max="16"
+                        min="1"
+                        type="number"
+                        value={jumpBars}
+                        onChange={(event) => {
+                          setJumpBars(Math.max(1, Number(event.target.value) || 1));
+                        }}
+                      />
+                    </label>
+                    <button
+                      disabled={!pendingSectionJump || isBusy}
+                      type="button"
+                      onClick={() => void handleCancelJump()}
+                    >
+                      Cancelar salto
+                    </button>
+                  </div>
                 </div>
                 <div className="timeline-context-card">
                   <strong>Seleccion de seccion</strong>
@@ -651,15 +830,20 @@ export function TransportPanel() {
                   <div className="timeline-ruler">
                     <div className="timeline-sections-layer" aria-hidden="true">
                       {sections.map((section) => (
-                        <div
+                        <button
+                          aria-pressed={jumpTargetSectionId === section.id}
                           className={`timeline-section-chip${
                             currentSection?.id === section.id ? " is-current" : ""
-                          }`}
+                          }${jumpTargetSectionId === section.id ? " is-target" : ""}`}
                           key={section.id}
                           style={sectionStyle(section, durationSeconds)}
+                          type="button"
+                          onClick={() => {
+                            setJumpTargetSectionId(section.id);
+                          }}
                         >
                           <span>{section.name}</span>
-                        </div>
+                        </button>
                       ))}
                       {activeSectionDraft && (
                         <div
@@ -743,16 +927,35 @@ export function TransportPanel() {
                   <span>Vol {Math.round(track.volume * 100)}%</span>
                   <input
                     aria-label={`Volumen de pista ${track.name}`}
-                    disabled
                     max="100"
                     min="0"
                     type="range"
                     value={Math.round(track.volume * 100)}
-                    onChange={() => undefined}
+                    onChange={(event) => {
+                      void handleTrackVolumeChange(track.id, Number(event.target.value));
+                    }}
                   />
                 </label>
 
-                <button disabled type="button">
+                <label className="track-group-field">
+                  <span>Grupo</span>
+                  <select
+                    aria-label={`Grupo de pista ${track.name}`}
+                    value={groups.find((group) => group.name === track.groupName)?.id ?? ""}
+                    onChange={(event) => {
+                      void handleTrackGroupChange(track.id, event.target.value);
+                    }}
+                  >
+                    <option value="">Sin grupo</option>
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <button type="button" onClick={() => void handleTrackMuteToggle(track.id)}>
                   {track.muted ? "Unmute" : "Mute"}
                 </button>
               </article>

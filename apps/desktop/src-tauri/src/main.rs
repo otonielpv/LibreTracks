@@ -180,6 +180,90 @@ fn create_section(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn create_group(name: String, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .create_group(&name, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn assign_track_to_group(
+    track_id: String,
+    group_id: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .assign_track_to_group(&track_id, group_id.as_deref(), &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn set_track_volume(
+    track_id: String,
+    volume: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .set_track_volume(&track_id, volume, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn toggle_track_mute(track_id: String, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .toggle_track_mute(&track_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn set_group_volume(
+    group_id: String,
+    volume: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .set_group_volume(&group_id, volume, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn toggle_group_mute(group_id: String, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .toggle_group_mute(&group_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 fn parse_jump_trigger(trigger: &str, bars: Option<u32>) -> Result<JumpTrigger, DesktopError> {
     match trigger {
         "immediate" => Ok(JumpTrigger::Immediate),
@@ -208,7 +292,13 @@ fn main() {
             schedule_section_jump,
             cancel_section_jump,
             move_clip,
-            create_section
+            create_section,
+            create_group,
+            assign_track_to_group,
+            set_track_volume,
+            toggle_track_mute,
+            set_group_volume,
+            toggle_group_mute
         ])
         .run(tauri::generate_context!())
         .expect("failed to run LibreTracks desktop application");

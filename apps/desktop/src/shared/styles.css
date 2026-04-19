@@ -232,6 +232,38 @@ button:disabled {
   gap: 0.6rem;
 }
 
+.group-create-row {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.group-create-field,
+.bars-field,
+.track-group-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.group-create-field span,
+.bars-field span,
+.track-group-field span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.group-create-field input,
+.bars-field input,
+.track-group-field select {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: inherit;
+  padding: 0.65rem 0.8rem;
+}
+
 .timeline-context {
   display: grid;
   gap: 0.75rem;
@@ -348,7 +380,6 @@ button:disabled {
 
 .timeline-sections-layer {
   inset: 1.25rem 0 0.2rem;
-  pointer-events: none;
   position: absolute;
 }
 
@@ -366,6 +397,7 @@ button:disabled {
   overflow: hidden;
   padding: 0 0.6rem;
   position: absolute;
+  text-align: left;
   top: 0;
 }
 
@@ -378,6 +410,10 @@ button:disabled {
 .timeline-section-chip.is-current {
   background: linear-gradient(135deg, rgba(191, 91, 4, 0.85), rgba(217, 119, 6, 0.95));
   color: #fff9f2;
+}
+
+.timeline-section-chip.is-target {
+  box-shadow: 0 0 0 2px rgba(20, 96, 122, 0.18);
 }
 
 .timeline-section-chip.is-draft {
@@ -563,7 +599,7 @@ button:disabled {
   border-radius: 18px;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(120px, 1fr) minmax(180px, 280px) auto;
+  grid-template-columns: minmax(120px, 1fr) minmax(180px, 240px) minmax(160px, 220px) auto;
   padding: 1rem;
 }
 
@@ -601,6 +637,7 @@ button:disabled {
   .clip-inspector-tools,
   .clip-nudge-actions,
   .timeline-context-actions,
+  .group-create-row,
   .zoom-field,
   .track-actions,
   .row-controls,

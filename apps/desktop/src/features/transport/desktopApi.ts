@@ -318,6 +318,199 @@ export async function createSection(args: {
   return invokeCommand<TransportSnapshot>("create_section", args);
 }
 
+export async function createGroup(name: string): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        groups: [
+          ...song.groups,
+          {
+            id: `group-demo-${song.groups.length + 1}`,
+            name: trimmedName,
+            volume: 1,
+            muted: false,
+          },
+        ],
+      },
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("create_group", { name });
+}
+
+export async function assignTrackToGroup(
+  trackId: string,
+  groupId: string | null,
+): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    const targetGroupName = song.groups.find((group) => group.id === groupId)?.name ?? null;
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        tracks: song.tracks.map((track) =>
+          track.id === trackId
+            ? {
+                ...track,
+                groupName: targetGroupName,
+              }
+            : track,
+        ),
+      },
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("assign_track_to_group", {
+    trackId,
+    groupId,
+  });
+}
+
+export async function setTrackVolume(
+  trackId: string,
+  volume: number,
+): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        tracks: song.tracks.map((track) =>
+          track.id === trackId
+            ? {
+                ...track,
+                volume: clamp01(volume),
+              }
+            : track,
+        ),
+      },
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("set_track_volume", {
+    trackId,
+    volume,
+  });
+}
+
+export async function toggleTrackMute(trackId: string): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        tracks: song.tracks.map((track) =>
+          track.id === trackId
+            ? {
+                ...track,
+                muted: !track.muted,
+              }
+            : track,
+        ),
+      },
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("toggle_track_mute", { trackId });
+}
+
+export async function setGroupVolume(
+  groupId: string,
+  volume: number,
+): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        groups: song.groups.map((group) =>
+          group.id === groupId
+            ? {
+                ...group,
+                volume: clamp01(volume),
+              }
+            : group,
+        ),
+      },
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("set_group_volume", {
+    groupId,
+    volume,
+  });
+}
+
+export async function toggleGroupMute(groupId: string): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        groups: song.groups.map((group) =>
+          group.id === groupId
+            ? {
+                ...group,
+                muted: !group.muted,
+              }
+            : group,
+        ),
+      },
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("toggle_group_mute", { groupId });
+}
+
 function buildDemoSnapshot(): TransportSnapshot {
   return {
     playbackState: "stopped",
@@ -405,6 +598,10 @@ function buildDemoSnapshot(): TransportSnapshot {
 
 function cloneSnapshot(snapshot: TransportSnapshot) {
   return JSON.parse(JSON.stringify(snapshot)) as TransportSnapshot;
+}
+
+function clamp01(value: number) {
+  return Math.min(Math.max(value, 0), 1);
 }
 
 function buildDemoWaveform(bucketCount: number, floor: number, ceiling: number) {
