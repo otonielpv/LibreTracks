@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+
+target/
+Cargo.lock
+
+*.log
+.DS_Store
+Thumbs.db
