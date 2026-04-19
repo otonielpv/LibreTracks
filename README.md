@@ -48,4 +48,8 @@ Tambien puedes validar la parte Rust con `cargo test -p libretracks-core` y `car
 
 Rust ya esta instalado en la maquina y los tests unitarios de `libretracks-core` y `libretracks-project` ya se han ejecutado correctamente.
 
-El frontend desktop ya puede instalar dependencias, ejecutar tests y generar build con `npm`, y la app Tauri ya pasa `cargo check`. El siguiente objetivo es conectar esa UI con Tauri y el dominio real.
+El frontend desktop ya puede instalar dependencias, ejecutar tests y generar build con `npm`, y la app Tauri ya pasa `cargo check`.
+
+En Rust ya existe persistencia de `song.json` e importacion basica de WAV para copiar archivos a `audio/`, detectar duracion y crear `Track`/`Clip` automaticamente.
+
+El siguiente objetivo es conectar esa UI con Tauri y empezar el transporte real de audio.

@@ -18,6 +18,7 @@ Estado a 19/04/2026:
 - Ya existe una app desktop React con placeholder visual y una base Tauri en Rust.
 - Ya existe el crate `libretracks-core` con modelo de dominio, validaciones y tests unitarios Rust escritos.
 - Ya existe el crate `libretracks-project` con lectura/escritura de `song.json`, estructura de carpeta de canción y tests unitarios Rust escritos.
+- `libretracks-project` ya importa WAVs al almacenamiento interno, detecta duración y crea `Track`/`Clip` automáticamente.
 - Ya hay tests frontend mínimos en `apps/desktop` ejecutándose con Vitest.
 - El frontend desktop ya arranca en modo web con Vite y responde localmente.
 - Rust ya está instalado en esta máquina.
@@ -878,9 +879,9 @@ Nota: la base está preparada, pero faltan instalar dependencias y disponer de t
 [x] Guardar song.json
 [x] Abrir song.json
 [x] Crear estructura de carpeta de canción
-[ ] Importar archivos a audio/
-[ ] Detectar duración básica de audio
-[ ] Crear tracks automáticamente desde archivos
+[x] Importar archivos a audio/
+[x] Detectar duración básica de audio
+[x] Crear tracks automáticamente desde archivos
 [x] Tests de guardar/cargar escritos en Rust
 ```
 
