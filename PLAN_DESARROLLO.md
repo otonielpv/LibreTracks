@@ -18,7 +18,8 @@ Estado a 19/04/2026:
 - Ya existe una app desktop React con placeholder visual y una base Tauri en Rust.
 - Ya existe el crate `libretracks-core` con modelo de dominio, validaciones y tests unitarios Rust escritos.
 - Ya existe el crate `libretracks-project` con lectura/escritura de `song.json`, estructura de carpeta de canción y tests unitarios Rust escritos.
-- Vitest estaba configurado, pero todavía no había tests frontend implementados.
+- Ya hay tests frontend mínimos en `apps/desktop` ejecutándose con Vitest.
+- El frontend desktop ya arranca en modo web con Vite y responde localmente.
 - Todavía no están implementados el motor de audio, la importación WAV ni el timeline editable.
 - En este entorno hay `node` y `npm`, pero no hay `cargo` ni `rustc`, así que la parte Tauri/Rust no puede compilarse todavía aquí.
 - Los tests Rust existen en código, pero todavía no se han podido ejecutar en esta máquina por falta de toolchain Rust.
@@ -547,7 +548,7 @@ Proyecto creado y funcionando.
 Estado actual:
 
 ```txt
-Parcial. La base tecnica existe, pero faltan dependencias instaladas para arrancar el frontend y falta toolchain Rust para arrancar Tauri.
+Base web arrancable. El frontend desktop ya se puede iniciar con Vite, pero falta toolchain Rust para arrancar Tauri.
 ```
 
 Incluye:
