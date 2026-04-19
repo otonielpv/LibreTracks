@@ -114,6 +114,22 @@ fn cancel_section_jump(state: State<'_, DesktopState>) -> Result<TransportSnapsh
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn move_clip(
+    clip_id: String,
+    timeline_start_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .move_clip(&clip_id, timeline_start_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 fn parse_jump_trigger(trigger: &str, bars: Option<u32>) -> Result<JumpTrigger, DesktopError> {
     match trigger {
         "immediate" => Ok(JumpTrigger::Immediate),
@@ -137,7 +153,8 @@ fn main() {
             stop_transport,
             seek_transport,
             schedule_section_jump,
-            cancel_section_jump
+            cancel_section_jump,
+            move_clip
         ])
         .run(tauri::generate_context!())
         .expect("failed to run LibreTracks desktop application");

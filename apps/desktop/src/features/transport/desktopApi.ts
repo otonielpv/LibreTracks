@@ -259,6 +259,45 @@ export async function cancelSectionJump(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("cancel_section_jump");
 }
 
+export async function moveClip(
+  clipId: string,
+  timelineStartSeconds: number,
+): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = fallbackSnapshot.song;
+    if (!song) {
+      return fallbackSnapshot;
+    }
+
+    const clips = song.clips.map((clip) =>
+      clip.id === clipId
+        ? {
+            ...clip,
+            timelineStartSeconds: Math.max(0, timelineStartSeconds),
+          }
+        : clip,
+    );
+    const movedClip = clips.find((clip) => clip.id === clipId) ?? null;
+    const durationSeconds = movedClip
+      ? Math.max(song.durationSeconds, movedClip.timelineStartSeconds + movedClip.durationSeconds)
+      : song.durationSeconds;
+
+    return {
+      ...fallbackSnapshot,
+      song: {
+        ...song,
+        durationSeconds,
+        clips,
+      },
+    };
+  }
+
+  return invokeCommand<TransportSnapshot>("move_clip", {
+    clipId,
+    timelineStartSeconds,
+  });
+}
+
 function buildDemoWaveform(bucketCount: number, floor: number, ceiling: number) {
   return Array.from({ length: bucketCount }, (_, index) => {
     const waveA = Math.sin(index * 0.33) * 0.5 + 0.5;

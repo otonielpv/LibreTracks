@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   getTransportSnapshot,
   isTauriApp,
+  moveClip,
   pauseTransport,
   pickAndImportSong,
   playTransport,
@@ -17,6 +18,7 @@ export function TransportPanel() {
   const [isBusy, setIsBusy] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1.5);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [clipStartDraft, setClipStartDraft] = useState("0.00");
 
   useEffect(() => {
     let active = true;
@@ -79,6 +81,15 @@ export function TransportPanel() {
     }
   }, [clips, selectedClipId]);
 
+  useEffect(() => {
+    if (!selectedClip) {
+      setClipStartDraft("0.00");
+      return;
+    }
+
+    setClipStartDraft(selectedClip.timelineStartSeconds.toFixed(2));
+  }, [selectedClip]);
+
   const handleImport = async () => {
     setIsBusy(true);
     setStatus("Abriendo selector de archivos WAV...");
@@ -139,6 +150,42 @@ export function TransportPanel() {
     } catch (error) {
       setStatus(`No se pudo mover el transporte: ${String(error)}`);
     }
+  };
+
+  const handleMoveSelectedClip = async (nextTimelineStartSeconds: number) => {
+    if (!selectedClip) {
+      return;
+    }
+
+    setIsBusy(true);
+
+    try {
+      const nextSnapshot = await moveClip(selectedClip.id, nextTimelineStartSeconds);
+      setSnapshot(nextSnapshot);
+      setStatus(
+        `${clipDisplayName(selectedClip)} movido a ${formatClock(
+          Math.max(0, nextTimelineStartSeconds),
+        )}.`,
+      );
+    } catch (error) {
+      setStatus(`No se pudo mover el clip: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleApplyClipStart = async () => {
+    if (!selectedClip) {
+      return;
+    }
+
+    const parsedStart = Number(clipStartDraft);
+    if (Number.isNaN(parsedStart)) {
+      setStatus("La nueva posicion del clip no es valida.");
+      return;
+    }
+
+    await handleMoveSelectedClip(parsedStart);
   };
 
   return (
@@ -275,6 +322,45 @@ export function TransportPanel() {
                     {formatClock(selectedClip.durationSeconds)} | Gain{" "}
                     {Math.round(selectedClip.gain * 100)}%
                   </p>
+                  <div className="clip-inspector-tools">
+                    <label className="clip-start-field">
+                      <span>Inicio timeline (s)</span>
+                      <input
+                        aria-label="Inicio del clip en segundos"
+                        disabled={isBusy}
+                        min="0"
+                        step="0.01"
+                        type="number"
+                        value={clipStartDraft}
+                        onChange={(event) => {
+                          setClipStartDraft(event.target.value);
+                        }}
+                      />
+                    </label>
+                    <div className="clip-nudge-actions">
+                      <button
+                        disabled={isBusy}
+                        type="button"
+                        onClick={() => {
+                          void handleMoveSelectedClip(selectedClip.timelineStartSeconds - 1);
+                        }}
+                      >
+                        -1s
+                      </button>
+                      <button
+                        disabled={isBusy}
+                        type="button"
+                        onClick={() => {
+                          void handleMoveSelectedClip(selectedClip.timelineStartSeconds + 1);
+                        }}
+                      >
+                        +1s
+                      </button>
+                      <button disabled={isBusy} type="button" onClick={() => void handleApplyClipStart()}>
+                        Aplicar
+                      </button>
+                    </div>
+                  </div>
                 </>
               ) : (
                 <>

@@ -194,6 +194,39 @@ button:disabled {
   margin-top: 0.25rem;
 }
 
+.clip-inspector-tools {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.clip-start-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.clip-start-field span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.clip-start-field input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: inherit;
+  padding: 0.65rem 0.8rem;
+  width: 10rem;
+}
+
+.clip-nudge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .timeline-shell {
   display: grid;
   gap: 0.9rem;
@@ -472,6 +505,8 @@ button:disabled {
 
   .timeline-head,
   .timeline-tools,
+  .clip-inspector-tools,
+  .clip-nudge-actions,
   .zoom-field,
   .track-actions,
   .row-controls,

@@ -9,7 +9,8 @@ use libretracks_audio::{
 };
 use libretracks_core::{Clip, Section, Song};
 use libretracks_project::{
-    import_wav_song, load_waveform_summary, ImportedSong, ProjectError, ProjectImportRequest,
+    import_wav_song, load_waveform_summary, save_song, ImportedSong, ProjectError,
+    ProjectImportRequest,
 };
 use rodio::{decoder::DecoderError, PlayError, StreamError};
 use rfd::FileDialog;
@@ -61,6 +62,8 @@ pub enum DesktopError {
     Play(#[from] PlayError),
     #[error("audio decode error: {0}")]
     Decode(#[from] DecoderError),
+    #[error("clip not found: {0}")]
+    ClipNotFound(String),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -246,6 +249,65 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         self.engine.cancel_section_jump();
+        Ok(self.snapshot())
+    }
+
+    pub fn move_clip(
+        &mut self,
+        clip_id: &str,
+        timeline_start_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+
+        let playback_state = self.engine.playback_state();
+        let position_seconds = self.current_position();
+        let pending_jump = self.engine.pending_section_jump().cloned();
+        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let clip = song
+            .clips
+            .iter_mut()
+            .find(|clip| clip.id == clip_id)
+            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
+
+        clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
+        let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
+        if clip_end > song.duration_seconds {
+            song.duration_seconds = clip_end;
+        }
+
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        save_song(&song_dir, &song)?;
+        self.engine.load_song(song)?;
+
+        let restored_position = position_seconds.min(
+            self.engine
+                .song()
+                .map(|loaded_song| loaded_song.duration_seconds)
+                .ok_or(DesktopError::NoSongLoaded)?,
+        );
+        self.engine.seek(restored_position)?;
+
+        if let Some(pending_jump) = pending_jump {
+            self.engine
+                .schedule_section_jump(&pending_jump.target_section_id, pending_jump.trigger)?;
+        }
+
+        match playback_state {
+            PlaybackState::Playing => {
+                self.engine.play()?;
+                self.restart_audio(audio)?;
+                self.started_at = Some(Instant::now());
+            }
+            PlaybackState::Paused => {
+                self.engine.pause()?;
+                self.started_at = None;
+            }
+            PlaybackState::Stopped | PlaybackState::Empty => {
+                self.started_at = None;
+            }
+        }
+
         Ok(self.snapshot())
     }
 
@@ -542,5 +604,93 @@ fn humanize(value: &str) -> String {
         "Imported Song".to_string()
     } else {
         words.join(" ")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use libretracks_audio::PlaybackState;
+    use libretracks_core::{Clip, OutputBus, Song, Track, TrackGroup};
+    use libretracks_project::{create_song_folder, load_song};
+    use tempfile::tempdir;
+
+    use super::DesktopSession;
+
+    fn demo_song() -> Song {
+        Song {
+            id: "song_move".into(),
+            title: "Move Demo".into(),
+            artist: None,
+            bpm: 120.0,
+            key: None,
+            time_signature: "4/4".into(),
+            duration_seconds: 12.0,
+            tracks: vec![Track {
+                id: "track_1".into(),
+                name: "Track 1".into(),
+                group_id: Some("group_main".into()),
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                output_bus_id: OutputBus::Main.id(),
+            }],
+            groups: vec![TrackGroup {
+                id: "group_main".into(),
+                name: "Main".into(),
+                volume: 1.0,
+                muted: false,
+                output_bus_id: OutputBus::Main.id(),
+            }],
+            clips: vec![Clip {
+                id: "clip_1".into(),
+                track_id: "track_1".into(),
+                file_path: "audio/test.wav".into(),
+                timeline_start_seconds: 1.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 4.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            }],
+            sections: vec![],
+        }
+    }
+
+    #[test]
+    fn moving_a_clip_updates_song_json_and_snapshot() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = create_song_folder(root.path(), "move-demo").expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir.clone());
+        session
+            .engine
+            .load_song(demo_song())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .move_clip("clip_1", 6.5, &audio)
+            .expect("clip should move");
+
+        assert_eq!(snapshot.playback_state, "stopped");
+        assert_eq!(
+            snapshot
+                .song
+                .expect("song summary should exist")
+                .clips
+                .first()
+                .expect("clip summary should exist")
+                .timeline_start_seconds,
+            6.5
+        );
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        assert_eq!(saved_song.clips[0].timeline_start_seconds, 6.5);
+        assert_eq!(session.engine.playback_state(), PlaybackState::Stopped);
     }
 }

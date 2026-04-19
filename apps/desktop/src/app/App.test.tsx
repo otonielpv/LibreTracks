@@ -47,4 +47,17 @@ describe("App", () => {
 
     expect(await screen.findByText(/clip seleccionado: drums/i)).toBeTruthy();
   });
+
+  it("allows moving the selected clip from the inspector", async () => {
+    render(<App />);
+
+    const clipButton = await screen.findByRole("button", { name: /clip drums/i });
+    fireEvent.click(clipButton);
+
+    const moveButton = await screen.findByRole("button", { name: /^\+1s$/i });
+    fireEvent.click(moveButton);
+
+    expect(await screen.findByDisplayValue("17.00")).toBeTruthy();
+    expect(await screen.findByText(/inicio 00:17.000/i)).toBeTruthy();
+  });
 });
