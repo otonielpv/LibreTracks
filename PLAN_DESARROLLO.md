@@ -323,6 +323,10 @@ El motor de audio debe poder:
 * Aplicar mute por pista.
 * Aplicar volumen por grupo.
 * Aplicar mute por grupo.
+* Detectar sección actual.
+* Programar salto a otra sección.
+* Ejecutar saltos instantáneos, al final de sección o tras compases.
+* Cancelar saltos programados.
 
 ## Librerías Rust candidatas
 
@@ -395,6 +399,8 @@ Crear una interfaz parecida en concepto a Ableton, pero más simple.
 * Recortar final.
 * Snap a grid.
 * Secciones.
+* Mostrar salto pendiente.
+* Mostrar destino del salto y punto de ejecución.
 * Fade in/out.
 * Duplicar clip.
 
@@ -608,6 +614,8 @@ Incluye:
 * Mover clips.
 * Recortar inicio/final.
 * Cursor de reproducción.
+* Indicador de sección actual.
+* Visualización de salto programado/cancelable.
 * Zoom básico.
 * Duración total de canción.
 * Guardado no destructivo.
@@ -900,10 +908,12 @@ Nota: la base está preparada, pero faltan instalar dependencias y disponer de t
 [x] Seek
 [x] Volumen por pista
 [x] Mute por pista
+[x] Detectar sección actual
+[x] Programar/cancelar salto lógico entre secciones
 [x] Tests del transporte
 ```
 
-Nota: el MVP ya saca audio real por dispositivo desde Tauri, pero la sincronía inicial sigue siendo una primera aproximación y todavía no hay mezcla interactiva en vivo.
+Nota: el MVP ya saca audio real por dispositivo desde Tauri, pero la sincronía inicial sigue siendo una primera aproximación y todavía no hay mezcla interactiva en vivo. El transporte ya contempla saltos lógicos entre secciones para no bloquear el diseño futuro del timeline.
 
 ## Milestone 5 — UI inicial
 
@@ -928,6 +938,9 @@ Nota: importar pistas ya está conectado a Tauri y permite probar carga y reprod
 [ ] Mostrar pistas verticalmente
 [ ] Mostrar clips como bloques
 [ ] Cursor de reproducción
+[ ] Mostrar sección actual
+[ ] Mostrar salto programado
+[ ] Cancelar salto desde la UI
 [ ] Zoom horizontal básico
 [ ] Selección de clip
 [ ] Mover clip
