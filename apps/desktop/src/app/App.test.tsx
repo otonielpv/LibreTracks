@@ -49,6 +49,24 @@ describe("App", () => {
     expect(screen.queryByText(/submezclas/i)).toBeNull();
   });
 
+  it("supports transport shortcuts from the keyboard", async () => {
+    await renderApp();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Space", key: " " });
+    });
+
+    expect(await screen.findByText(/reproduccion iniciada/i)).toBeTruthy();
+    expect(await screen.findByText("playing")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Space", key: " " });
+    });
+
+    expect(await screen.findByText(/reproduccion pausada/i)).toBeTruthy();
+    expect(await screen.findByText("paused")).toBeTruthy();
+  });
+
   it("keeps folder tracks integrated in the same timeline box", async () => {
     await renderApp();
 

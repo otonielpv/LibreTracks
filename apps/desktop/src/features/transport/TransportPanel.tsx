@@ -251,9 +251,11 @@ export function TransportPanel() {
   const [clipDrag, setClipDrag] = useState<ClipDragState>(null);
   const [rulerDrag, setRulerDrag] = useState<RulerDragState>(null);
   const [timeSelection, setTimeSelection] = useState<TimeSelection>(null);
+  const [isTimelinePanning, setIsTimelinePanning] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
   const rulerTrackRef = useRef<HTMLDivElement | null>(null);
+  const timelineShellRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -304,6 +306,72 @@ export function TransportPanel() {
       window.removeEventListener("blur", closeMenu);
     };
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+
+      if (isTypingTarget) {
+        return;
+      }
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        void runAction(async () => {
+          if (snapshot?.playbackState === "playing") {
+            const nextSnapshot = await pauseTransport();
+            setSnapshot(nextSnapshot);
+            setStatus("Reproduccion pausada.");
+            return;
+          }
+
+          const nextSnapshot = await playTransport();
+          setSnapshot(nextSnapshot);
+          setStatus("Reproduccion iniciada.");
+        });
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void runAction(
+          async () => {
+            const nextSnapshot = await saveProject();
+            setSnapshot(nextSnapshot);
+            setStatus("Proyecto guardado.");
+          },
+          { busy: true },
+        );
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        clearSelections("Selecciones limpiadas.");
+        return;
+      }
+
+      if (event.key === "Delete" && selectedClipId) {
+        event.preventDefault();
+        void runAction(async () => {
+          const nextSnapshot = await deleteClip(selectedClipId);
+          setSnapshot(nextSnapshot);
+          setSelectedClipId(null);
+          setStatus("Clip eliminado.");
+        });
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [selectedClipId, snapshot?.playbackState]);
 
   useEffect(() => {
     if (!clipDrag || !snapshot?.song || !laneAreaRef.current) {
@@ -412,14 +480,18 @@ export function TransportPanel() {
     };
   }, [rulerDrag, snapshot?.song, zoomLevel]);
 
-  async function runAction(work: () => Promise<void>) {
+  async function runAction(work: () => Promise<void>, options?: { busy?: boolean }) {
     try {
-      setIsBusy(true);
+      if (options?.busy) {
+        setIsBusy(true);
+      }
       await work();
     } catch (error) {
       setStatus(`Error: ${String(error)}`);
     } finally {
-      setIsBusy(false);
+      if (options?.busy) {
+        setIsBusy(false);
+      }
     }
   }
 
@@ -427,6 +499,7 @@ export function TransportPanel() {
   const positionSeconds = snapshot?.positionSeconds ?? 0;
   const pixelsPerSecond = zoomLevel * 18;
   const timelineWidth = Math.max((song?.durationSeconds ?? 0) * pixelsPerSecond, 1100);
+  const timelineRowWidth = HEADER_WIDTH + timelineWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
   const selectedTrack = findTrack(song, selectedTrackId);
   const selectedClip = findClip(song, selectedClipId);
@@ -457,6 +530,31 @@ export function TransportPanel() {
     setTimeSelection(null);
     setContextMenu(null);
     setStatus(message);
+  }
+
+  function beginTimelinePan(event: ReactMouseEvent) {
+    if (!timelineShellRef.current || event.button !== 1) {
+      return;
+    }
+
+    event.preventDefault();
+    const shell = timelineShellRef.current;
+    const startX = event.clientX;
+    const startScrollLeft = shell.scrollLeft;
+    setIsTimelinePanning(true);
+
+    const onMove = (moveEvent: MouseEvent) => {
+      shell.scrollLeft = startScrollLeft - (moveEvent.clientX - startX);
+    };
+
+    const onUp = () => {
+      setIsTimelinePanning(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   }
 
   function openMenu(
@@ -704,19 +802,48 @@ export function TransportPanel() {
         <div className="lt-brand">
           <span className="lt-kicker">LibreTracks Desktop</span>
           <h1>Timeline DAW</h1>
-          <p>{song ? `${song.title} · ${song.bpm} BPM · ${song.timeSignature}` : "Sesion vacia"}</p>
+          <p>{song ? `${song.title} | ${song.bpm} BPM | ${song.timeSignature}` : "Sesion vacia"}</p>
         </div>
 
         <div className="lt-transport">
-          <button type="button" onClick={() => void runAction(async () => setSnapshot(await playTransport()))}>
-            Play
-          </button>
-          <button type="button" onClick={() => void runAction(async () => setSnapshot(await pauseTransport()))}>
-            Pause
-          </button>
-          <button type="button" onClick={() => void runAction(async () => setSnapshot(await stopTransport()))}>
-            Stop
-          </button>
+          <div className="lt-transport-buttons">
+            <button
+              type="button"
+              onClick={() =>
+                void runAction(async () => {
+                  const nextSnapshot = await playTransport();
+                  setSnapshot(nextSnapshot);
+                  setStatus("Reproduccion iniciada.");
+                })
+              }
+            >
+              Play
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void runAction(async () => {
+                  const nextSnapshot = await pauseTransport();
+                  setSnapshot(nextSnapshot);
+                  setStatus("Reproduccion pausada.");
+                })
+              }
+            >
+              Pause
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void runAction(async () => {
+                  const nextSnapshot = await stopTransport();
+                  setSnapshot(nextSnapshot);
+                  setStatus("Reproduccion detenida.");
+                })
+              }
+            >
+              Stop
+            </button>
+          </div>
           <div className="lt-transport-readout">
             <strong>{formatClock(positionSeconds)}</strong>
             <span className={`transport-pill is-${snapshot?.playbackState ?? "empty"}`}>
@@ -726,18 +853,33 @@ export function TransportPanel() {
         </div>
 
         <div className="lt-session-actions">
-          <button type="button" onClick={() => void runAction(async () => setSnapshot(await createSong()))}>
+          <button
+            type="button"
+            onClick={() => void runAction(async () => setSnapshot(await createSong()), { busy: true })}
+          >
             Crear cancion
           </button>
-          <button type="button" onClick={() => void runAction(async () => setSnapshot((await openProject()) ?? snapshot))}>
+          <button
+            type="button"
+            onClick={() =>
+              void runAction(async () => setSnapshot((await openProject()) ?? snapshot), { busy: true })
+            }
+          >
             Abrir
           </button>
-          <button type="button" onClick={() => void runAction(async () => setSnapshot(await saveProject()))}>
+          <button
+            type="button"
+            onClick={() => void runAction(async () => setSnapshot(await saveProject()), { busy: true })}
+          >
             Guardar
           </button>
           <button
             type="button"
-            onClick={() => void runAction(async () => setSnapshot((await pickAndImportSong()) ?? snapshot))}
+            onClick={() =>
+              void runAction(async () => setSnapshot((await pickAndImportSong()) ?? snapshot), {
+                busy: true,
+              })
+            }
           >
             Importar WAVs
           </button>
@@ -757,8 +899,20 @@ export function TransportPanel() {
           </div>
         </div>
 
-        <div className="lt-timeline-shell">
-          <div className="lt-ruler-row">
+        <div
+          className={`lt-timeline-shell ${isTimelinePanning ? "is-panning" : ""}`}
+          ref={timelineShellRef}
+          onMouseDown={beginTimelinePan}
+          onWheel={(event) => {
+            if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+              event.currentTarget.scrollLeft += event.deltaY;
+            }
+          }}
+        >
+          <div
+            className="lt-ruler-row"
+            style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${timelineWidth}px` }}
+          >
             <div className="lt-ruler-header">
               <span>Tracks</span>
             </div>
@@ -848,7 +1002,11 @@ export function TransportPanel() {
               const childCount = trackChildrenCount(song, track.id);
 
               return (
-                <div key={track.id} className="lt-track-row">
+                <div
+                  key={track.id}
+                  className="lt-track-row"
+                  style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${timelineWidth}px` }}
+                >
                   <div
                     className={`lt-track-header ${isTrackSelected ? "is-selected" : ""} ${track.kind === "folder" ? "is-folder" : ""}`}
                     style={{ paddingLeft: 16 + track.depth * 22 }}
@@ -890,47 +1048,49 @@ export function TransportPanel() {
                         ) : null}
                         <strong>{track.name}</strong>
                       </div>
-                      <span>
+                      <span className="lt-track-meta">
                         {track.kind === "folder"
                           ? `${childCount} hijos`
-                          : `${trackClips.length} clips · pan ${track.pan.toFixed(2)}`}
+                          : `${trackClips.length} clips | pan ${track.pan.toFixed(2)}`}
                       </span>
                     </div>
 
-                    <div className="lt-track-controls">
-                      <button
-                        type="button"
-                        className={track.muted ? "is-active" : ""}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void runAction(async () => {
-                            const nextSnapshot = await updateTrack({
-                              trackId: track.id,
-                              muted: !track.muted,
+                    <div className="lt-track-control-row">
+                      <div className="lt-track-toggle-group">
+                        <button
+                          type="button"
+                          className={track.muted ? "is-active" : ""}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void runAction(async () => {
+                              const nextSnapshot = await updateTrack({
+                                trackId: track.id,
+                                muted: !track.muted,
+                              });
+                              setSnapshot(nextSnapshot);
                             });
-                            setSnapshot(nextSnapshot);
-                          });
-                        }}
-                      >
-                        M
-                      </button>
-                      <button
-                        type="button"
-                        className={track.solo ? "is-active" : ""}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void runAction(async () => {
-                            const nextSnapshot = await updateTrack({
-                              trackId: track.id,
-                              solo: !track.solo,
+                          }}
+                        >
+                          M
+                        </button>
+                        <button
+                          type="button"
+                          className={track.solo ? "is-active" : ""}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void runAction(async () => {
+                              const nextSnapshot = await updateTrack({
+                                trackId: track.id,
+                                solo: !track.solo,
+                              });
+                              setSnapshot(nextSnapshot);
                             });
-                            setSnapshot(nextSnapshot);
-                          });
-                        }}
-                      >
-                        S
-                      </button>
-                      <label>
+                          }}
+                        >
+                          S
+                        </button>
+                      </div>
+                      <label className="lt-track-volume">
                         <span>Vol</span>
                         <input
                           aria-label={`Volumen de ${track.name}`}
@@ -1083,7 +1243,13 @@ export function TransportPanel() {
           <button
             type="button"
             disabled={!snapshot?.pendingSectionJump}
-            onClick={() => void runAction(async () => setSnapshot(await cancelSectionJump()))}
+            onClick={() =>
+              void runAction(async () => {
+                const nextSnapshot = await cancelSectionJump();
+                setSnapshot(nextSnapshot);
+                setStatus("Salto cancelado.");
+              })
+            }
           >
             Cancelar salto
           </button>
@@ -1095,7 +1261,7 @@ export function TransportPanel() {
           <strong>Clip</strong>
           <span>{selectedClip.trackName}</span>
           <span>
-            {formatClock(selectedClip.timelineStartSeconds)} · {selectedClip.durationSeconds.toFixed(2)}s
+            {formatClock(selectedClip.timelineStartSeconds)} | {selectedClip.durationSeconds.toFixed(2)}s
           </span>
         </div>
       ) : null}
