@@ -54,7 +54,7 @@ Problemas ya observados en uso real:
 
 ## Avance actual
 
-Actualizado a 20/04/2026 tras los primeros hitos implementados:
+Actualizado a 20/04/2026 tras cerrar la iteracion principal del plan:
 
 - se anadio instrumentacion basica al runtime de audio para medir `restart`, `stop`, `sync_song`, numero de clips programados, numero de sinks activos y archivos abiertos
 - el hilo de audio ya registra razones explicitas de restart:
@@ -80,12 +80,37 @@ Actualizado a 20/04/2026 tras los primeros hitos implementados:
 - la cola del runtime ahora coalesce cambios consecutivos de mezcla para evitar trabajo redundante
 - existe una cache simple de audio preparado por proyecto para reducir reaperturas de WAV en reinicios cercanos
 - hay documentacion operativa inicial en `docs/audio-runtime-debug.md`
+- `DesktopSession` ya no depende de un `Instant` suelto y expone un `TransportClock` explicito con:
+  - ancla de posicion
+  - ultimo seek
+  - ultimo start
+  - ultimo salto ejecutado
+- `snapshot_with_sync` y `sync_position` ya endurecen la resincronizacion entre UI, `AudioEngine` y runtime desktop
+- los saltos pendientes ya no sobreviven por error a seeks o cambios de transporte que los dejan caducados
+- el runtime expone una estimacion del playhead interno mediante `get_audio_debug_snapshot`
+- existe cobertura de regresion para:
+  - pause que congela posicion real
+  - seek repetido durante reproduccion
+  - salto ejecutado con `transport_resync`
+  - limpieza al llegar al final de la cancion
+  - caducidad correcta de saltos pendientes
+- `docs/architecture.md` deja documentadas las responsabilidades de `libretracks-audio`, `audio_runtime.rs` y `state.rs`
+- quedan listadas rutas de evolucion y deuda tecnica activa para:
+  - `solo`
+  - fades
+  - automatizacion
+  - precarga
 
 Commits que respaldan este avance:
 
 - `08e796e` `Instrumenta el runtime de audio`
 - `f66cbc8` `Suaviza la mezcla incremental en vivo`
 - `6fa9dd9` `Cachea audio preparado para reinicios cercanos`
+- `66ffdb7` `Refuerza el reloj del transporte desktop`
+- `6e5b3a1` `Cubre saltos pendientes en cambios de transporte`
+- `f9e5ed8` `Aclara el comportamiento de seek con saltos pendientes`
+- `a53473d` `Evita rearmar saltos caducados tras cambios de transporte`
+- `f75e920` `Expone el playhead estimado del runtime`
 
 ---
 
@@ -412,7 +437,21 @@ El cursor, el estado del transporte y el audio dejan de divergir en situaciones 
 
 ### Estado
 
-- Pendiente
+- Completada en v1
+
+### Entregado en esta fase
+
+- `TransportClock` explicito en `state.rs` en lugar de depender de un `Instant` suelto
+- resumen del reloj expuesto en snapshots desktop
+- reanclaje del reloj al hacer `play`, `pause`, `seek`, saltos y resincronizaciones
+- limpieza consistente al llegar al final de la cancion
+- medicion del playhead estimado del runtime para comparar audio real aproximado frente a transporte desktop
+- regresiones para pause, seek repetido, salto ejecutado y fin de cancion
+
+### Nota
+
+Esta fase queda cerrada como `v1`.
+La comparacion entre runtime y transporte ya es visible y util para diagnostico, aunque todavia no es sample-accurate.
 
 ---
 
@@ -441,7 +480,21 @@ Los cambios musicales en tiempo real tienen comportamiento definido, estable y m
 
 ### Estado
 
-- Pendiente
+- Completada en v1
+
+### Entregado en esta fase
+
+- comportamiento definido para seeks consecutivos mientras reproduce
+- limpieza de saltos pendientes al hacer seek sobre la seccion objetivo
+- conservacion de saltos pendientes cuando un cambio `TransportOnly` sigue siendo valido
+- descarte automatico de saltos pendientes cuando el cambio de transporte los deja caducados
+- cobertura de regresion para salto inmediato, salto a final de seccion, salto en compases y seek repetido
+- visibilidad de `transport_resync` en la telemetria del runtime cuando un salto obliga a rehacer reproduccion
+
+### Nota
+
+El sistema ya tiene comportamiento estable y medible para cambios musicales en tiempo real dentro del backend actual.
+No incluye todavia tecnicas de crossfade o scheduler por bloque, pero deja la semantica protegida por tests.
 
 ---
 
@@ -468,7 +521,21 @@ Existe una decision tecnica clara: continuar sobre el backend actual o sustituir
 
 ### Estado
 
-- Pendiente
+- Decidida por ahora: no adelantar
+
+### Decision tomada
+
+- continuar sobre el backend actual basado en `rodio` mientras las metricas y regresiones sigan dando una experiencia consistente
+- no adelantar un mixer propio por bloques antes de agotar la ruta incremental ya instrumentada
+- volver a evaluar esta fase si aparecen proyectos grandes donde:
+  - el desfase entre runtime y transporte sea inaceptable
+  - los reinicios inevitables sigan siendo demasiado costosos
+  - la mezcla en vivo exija precision o control que `rodio` ya no pueda sostener
+
+### Nota
+
+Esta fase no se marca como "completada" porque describe una bifurcacion tecnica futura.
+Lo que si queda cerrado en esta iteracion es la decision de no activarla todavia.
 
 ---
 
@@ -496,7 +563,24 @@ Las mejoras del motor se pueden medir y comparar entre iteraciones.
 
 ### Estado
 
-- Pendiente
+- Completada en v1
+
+### Entregado en esta fase
+
+- bateria automatizada repartida entre `libretracks-audio` y `libretracks-desktop`
+- escenarios de regresion para:
+  - mute y mezcla incremental
+  - seeks consecutivos
+  - saltos programados
+  - limpieza de estado al final de la cancion
+  - coherencia del reloj de transporte
+- guia de `docs/audio-runtime-debug.md` con sesiones manuales reproducibles
+- criterios operativos para observar desfase entre `playhead.estimatedPositionSeconds` y `positionSeconds` del transporte
+
+### Nota
+
+Esta fase queda cerrada como `v1`.
+Todavia no existe un harness de benchmark profundo con proyectos grandes versionados, pero ya hay una base verificable de no regresion para seguir creciendo sin volver a la improvisacion inicial.
 
 ---
 
@@ -526,7 +610,25 @@ El motor queda listo para seguir creciendo sin volver a la improvisacion inicial
 
 ### Estado
 
-- Pendiente
+- Completada
+
+### Entregado en esta fase
+
+- actualizacion de la documentacion del runtime desktop
+- notas de arquitectura sobre responsabilidades de:
+  - `libretracks-audio`
+  - `audio_runtime.rs`
+  - `state.rs`
+- rutas de evolucion documentadas para:
+  - `solo`
+  - fades
+  - automatizacion
+  - precarga
+- lista explicita de deuda tecnica activa para la siguiente etapa
+
+### Nota
+
+El plan queda cerrado dejando una base tecnica mas clara, medible y mantenible.
 
 ---
 
@@ -555,14 +657,21 @@ Estos primeros hitos ya fueron realizados:
 3. Se hizo que mute y volumen fueran mas robustos durante reproduccion.
 4. Se introdujo una cache inicial para reducir reaperturas en reinicios cercanos.
 
-## Siguiente bloque recomendado
+## Cierre actual del plan
 
-Para mantener el foco, el siguiente bloque deberia concentrarse en:
+El bloque principal del plan queda cerrado en esta iteracion con el siguiente resultado:
 
-1. Endurecer reloj y transporte bajo secuencias rapidas de `play`, `pause`, `stop` y `seek`.
-2. Validar seeks consecutivos y saltos musicales con tests de regresion especificos.
-3. Medir el desfase real entre snapshot UI, `AudioEngine` y runtime desktop.
-4. Decidir con datos si el backend actual alcanza o si la Fase F debe adelantarse.
+1. El runtime ya es medible y deja rastros utiles para diagnosticar reinicios, mezcla y desfase.
+2. Los cambios `MixOnly` ya no fuerzan reinicios globales y la cache reduce parte del coste inevitable.
+3. El transporte desktop es mas robusto frente a pause, seek, saltos y final de cancion.
+4. Los cambios musicales criticos quedan protegidos por regresiones automatizadas.
+5. La documentacion deja clara la frontera entre motor logico, runtime real y coordinacion desktop.
+6. La decision actual es seguir iterando sobre el backend existente antes de activar una reescritura profunda.
+
+## Siguiente criterio de reactivacion
+
+Este plan no necesita una fase nueva inmediata.
+Solo deberia reabrirse como plan de backend profundo si las metricas y pruebas de estres futuras muestran que la ruta actual ya no alcanza.
 
 ---
 

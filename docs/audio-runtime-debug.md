@@ -70,6 +70,34 @@ Campos clave:
 - Duplicar o borrar un clip.
 - Verificar si el restart queda marcado como `timeline_window` o `structure_rebuild`.
 
+## Bateria automatizada actual
+
+La cobertura automatizada relevante para el motor queda repartida entre:
+
+- `cargo test -p libretracks-audio`
+  Valida transporte logico, secciones, cuantizacion, saltos y ganancias efectivas.
+- `cargo test -p libretracks-desktop`
+  Valida coordinacion desktop, reloj de transporte, persistencia y regresiones de snapshots.
+
+Escenarios de regresion ya cubiertos:
+
+- reloj de transporte pausado vs en marcha
+- seek que no acumula tiempo anterior
+- seek repetido durante reproduccion
+- salto pendiente que caduca tras cambios `TransportOnly`
+- salto ejecutado que reancla transporte y runtime
+- limpieza correcta al llegar al final de la cancion
+- mezcla incremental y coalescencia de `sync_song`
+
+## Objetivo operativo actual
+
+Mientras el backend siga siendo `rodio` mas coordinacion desktop, el objetivo realista es:
+
+- no introducir reinicios globales para cambios `MixOnly`
+- mantener `play`, `pause`, `stop`, `seek` y saltos en estados consistentes
+- usar `playhead.estimatedPositionSeconds` y `positionSeconds` del transporte para detectar desfases antes de redisenar el backend
+- reservar un mixer propio por bloques para el momento en que las metricas y pruebas de estres demuestren que la ruta actual ya no alcanza
+
 ## Notas
 
 - El build de escritorio puede requerir un `CARGO_TARGET_DIR` limpio si Tauri reutiliza artefactos de otro repositorio.
