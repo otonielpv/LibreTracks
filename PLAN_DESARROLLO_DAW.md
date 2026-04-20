@@ -254,10 +254,10 @@ Las secciones deben sentirse como regiones musicales del timeline, no como datos
 
 ### Estado
 
-- En progreso
+- Completada en primera iteracion funcional
 - Ya se dibujan regiones en la regla y se pueden seleccionar como destino de salto
 - Ya se pueden renombrar, borrar y ajustar rango desde contexto ligero
-- Pendiente arrastrar bordes directamente sobre la region
+- Ya se pueden arrastrar bordes directamente sobre la region del ruler
 
 ---
 

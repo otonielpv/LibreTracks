@@ -61,6 +61,16 @@ type SectionDraft = {
   endSeconds: number;
 };
 
+type SectionResizeDragState =
+  | {
+      sectionId: string;
+      edge: "start" | "end";
+      pointerId: number;
+      previewStartSeconds: number;
+      previewEndSeconds: number;
+    }
+  | null;
+
 export function TransportPanel() {
   const [snapshot, setSnapshot] = useState<TransportSnapshot | null>(null);
   const [status, setStatus] = useState("Cargando estado de la sesion...");
@@ -77,6 +87,7 @@ export function TransportPanel() {
   const [sectionEndDraft, setSectionEndDraft] = useState("0.00");
   const [sectionSelectionMode, setSectionSelectionMode] = useState(false);
   const [sectionDraft, setSectionDraft] = useState<SectionDraft | null>(null);
+  const [sectionResizeDrag, setSectionResizeDrag] = useState<SectionResizeDragState>(null);
   const [timelineDrag, setTimelineDrag] = useState<TimelineDragState>(null);
   const [clipDrag, setClipDrag] = useState<ClipDragState>(null);
   const [groupNameDraft, setGroupNameDraft] = useState("");
@@ -85,6 +96,7 @@ export function TransportPanel() {
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const timelineContentRef = useRef<HTMLDivElement | null>(null);
   const clipDragRef = useRef<ClipDragState>(null);
+  const sectionResizeDragRef = useRef<SectionResizeDragState>(null);
 
   useEffect(() => {
     let active = true;
@@ -145,6 +157,13 @@ export function TransportPanel() {
     timelineDrag?.mode === "section"
       ? normalizeRange(timelineDrag.startSeconds, timelineDrag.currentSeconds)
       : sectionDraft;
+  const activeSectionResizePreview =
+    sectionResizeDrag === null
+      ? null
+      : {
+          startSeconds: sectionResizeDrag.previewStartSeconds,
+          endSeconds: sectionResizeDrag.previewEndSeconds,
+        };
   const pendingJumpExecuteAt = song
     ? resolvePendingJumpExecuteAt(song, displayedPositionSeconds, currentSection, pendingSectionJump)
     : null;
@@ -182,6 +201,20 @@ export function TransportPanel() {
       setSelectedSectionId(null);
     }
   }, [sections, selectedSectionId]);
+
+  const updateSectionResizeDragState = (
+    nextValue:
+      | SectionResizeDragState
+      | ((currentDrag: SectionResizeDragState) => SectionResizeDragState),
+  ) => {
+    const resolvedValue =
+      typeof nextValue === "function"
+        ? nextValue(sectionResizeDragRef.current)
+        : nextValue;
+
+    sectionResizeDragRef.current = resolvedValue;
+    setSectionResizeDrag(resolvedValue);
+  };
 
   useEffect(() => {
     if (!selectedClip) {
@@ -275,6 +308,7 @@ export function TransportPanel() {
     setSelectedClipId(null);
     setSelectedSectionId(null);
     setSectionDraft(null);
+    updateSectionResizeDragState(null);
     setTimelineDrag(null);
     setClipDrag(null);
     clipDragRef.current = null;
@@ -611,6 +645,105 @@ export function TransportPanel() {
     } finally {
       setIsBusy(false);
     }
+  };
+
+  const handleSectionResizePointerDown = (
+    section: SectionSummary,
+    edge: "start" | "end",
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setSelectedClipId(null);
+    setSelectedSectionId(section.id);
+    setJumpTargetSectionId(section.id);
+    setSectionDraft(null);
+    updateSectionResizeDragState({
+      sectionId: section.id,
+      edge,
+      pointerId: event.pointerId,
+      previewStartSeconds: section.startSeconds,
+      previewEndSeconds: section.endSeconds,
+    });
+  };
+
+  const handleSectionResizePointerMove = (
+    section: SectionSummary,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    event.stopPropagation();
+    autoScrollTimeline(event.clientX);
+    updateSectionResizeDragState((currentDrag) => {
+      if (
+        currentDrag === null ||
+        currentDrag.pointerId !== event.pointerId ||
+        currentDrag.sectionId !== section.id
+      ) {
+        return currentDrag;
+      }
+
+      const pointerSeconds = roundTimelineSeconds(resolveTimelineSeconds(event.clientX));
+      if (!Number.isFinite(pointerSeconds)) {
+        return currentDrag;
+      }
+
+      if (currentDrag.edge === "start") {
+        return {
+          ...currentDrag,
+          previewStartSeconds: clamp(pointerSeconds, 0, currentDrag.previewEndSeconds - 0.05),
+        };
+      }
+
+      return {
+        ...currentDrag,
+        previewEndSeconds: clamp(pointerSeconds, currentDrag.previewStartSeconds + 0.05, durationSeconds),
+      };
+    });
+  };
+
+  const handleSectionResizePointerUp = async (
+    section: SectionSummary,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    event.stopPropagation();
+
+    const currentDrag = sectionResizeDragRef.current;
+    if (
+      currentDrag === null ||
+      currentDrag.pointerId !== event.pointerId ||
+      currentDrag.sectionId !== section.id
+    ) {
+      return;
+    }
+
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    updateSectionResizeDragState(null);
+    setIsBusy(true);
+
+    try {
+      const nextSnapshot = await updateSection({
+        sectionId: section.id,
+        name: section.name,
+        startSeconds: roundTimelineSeconds(currentDrag.previewStartSeconds),
+        endSeconds: roundTimelineSeconds(currentDrag.previewEndSeconds),
+      });
+      setSnapshot(nextSnapshot);
+      setSelectedSectionId(section.id);
+      setJumpTargetSectionId(section.id);
+      setStatus(`Seccion ajustada: ${section.name}.`);
+    } catch (error) {
+      setStatus(`No se pudo ajustar la seccion: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleSectionResizePointerCancel = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (sectionResizeDragRef.current?.pointerId !== event.pointerId) {
+      return;
+    }
+
+    updateSectionResizeDragState(null);
   };
 
   const handleApplySectionChanges = async () => {
@@ -1250,27 +1383,73 @@ export function TransportPanel() {
                 >
                   <div className="timeline-ruler">
                     <div className="timeline-sections-layer">
-                      {sections.map((section) => (
-                        <button
-                          aria-pressed={selectedSectionId === section.id}
-                          className={`timeline-section-chip${
-                            currentSection?.id === section.id ? " is-current" : ""
-                          }${jumpTargetSectionId === section.id ? " is-target" : ""}${
-                            selectedSectionId === section.id ? " is-selected" : ""
-                          }`}
-                          key={section.id}
-                          style={sectionStyle(section, durationSeconds)}
-                          type="button"
-                          onClick={() => {
-                            setSelectedClipId(null);
-                            setSelectedSectionId(section.id);
-                            setJumpTargetSectionId(section.id);
-                            setSectionDraft(null);
-                          }}
-                        >
-                          <span>{section.name}</span>
-                        </button>
-                      ))}
+                      {sections.map((section) => {
+                        const renderedSection =
+                          sectionResizeDrag?.sectionId === section.id
+                            ? {
+                                ...section,
+                                startSeconds: sectionResizeDrag.previewStartSeconds,
+                                endSeconds: sectionResizeDrag.previewEndSeconds,
+                              }
+                            : section;
+
+                        return (
+                          <div
+                            className={`timeline-section-chip${
+                              currentSection?.id === section.id ? " is-current" : ""
+                            }${jumpTargetSectionId === section.id ? " is-target" : ""}${
+                              selectedSectionId === section.id ? " is-selected" : ""
+                            }${sectionResizeDrag?.sectionId === section.id ? " is-resizing" : ""}`}
+                            key={section.id}
+                            style={sectionStyle(renderedSection, durationSeconds)}
+                          >
+                            <button
+                              aria-label={`Ajustar inicio de ${section.name}`}
+                              className="timeline-section-handle is-start"
+                              type="button"
+                              onPointerCancel={handleSectionResizePointerCancel}
+                              onPointerDown={(event) => {
+                                handleSectionResizePointerDown(section, "start", event);
+                              }}
+                              onPointerMove={(event) => {
+                                handleSectionResizePointerMove(section, event);
+                              }}
+                              onPointerUp={(event) => {
+                                void handleSectionResizePointerUp(section, event);
+                              }}
+                            />
+                            <button
+                              aria-label={section.name}
+                              aria-pressed={selectedSectionId === section.id}
+                              className="timeline-section-body"
+                              type="button"
+                              onClick={() => {
+                                setSelectedClipId(null);
+                                setSelectedSectionId(section.id);
+                                setJumpTargetSectionId(section.id);
+                                setSectionDraft(null);
+                              }}
+                            >
+                              <span>{section.name}</span>
+                            </button>
+                            <button
+                              aria-label={`Ajustar fin de ${section.name}`}
+                              className="timeline-section-handle is-end"
+                              type="button"
+                              onPointerCancel={handleSectionResizePointerCancel}
+                              onPointerDown={(event) => {
+                                handleSectionResizePointerDown(section, "end", event);
+                              }}
+                              onPointerMove={(event) => {
+                                handleSectionResizePointerMove(section, event);
+                              }}
+                              onPointerUp={(event) => {
+                                void handleSectionResizePointerUp(section, event);
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
 
                       {activeSectionDraft && (
                         <div
@@ -1305,6 +1484,13 @@ export function TransportPanel() {
                       <div
                         className="timeline-section-overlay"
                         style={sectionStyle(activeSectionDraft, durationSeconds)}
+                      />
+                    )}
+
+                    {activeSectionResizePreview && (
+                      <div
+                        className="timeline-section-overlay is-resize-preview"
+                        style={sectionStyle(activeSectionResizePreview, durationSeconds)}
                       />
                     )}
 

@@ -12,6 +12,67 @@ async function renderApp() {
   return view;
 }
 
+function dispatchPointerEvent(
+  element: Element,
+  type: "pointerdown" | "pointermove" | "pointerup",
+  options: { clientX?: number; clientY?: number; pointerId?: number } = {},
+) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+
+  Object.defineProperties(event, {
+    clientX: { configurable: true, value: options.clientX ?? 0 },
+    clientY: { configurable: true, value: options.clientY ?? 0 },
+    pointerId: { configurable: true, value: options.pointerId ?? 1 },
+  });
+
+  fireEvent(element, event);
+}
+
+function mockTimelineLayout(container: HTMLElement) {
+  const timelineScroll = container.querySelector(".timeline-scroll") as HTMLDivElement | null;
+  const timelineContent = container.querySelector(".timeline-content") as HTMLDivElement | null;
+
+  expect(timelineScroll).toBeTruthy();
+  expect(timelineContent).toBeTruthy();
+
+  Object.defineProperty(timelineScroll, "clientWidth", {
+    configurable: true,
+    value: 1000,
+  });
+  Object.defineProperty(timelineContent, "scrollWidth", {
+    configurable: true,
+    value: 1000,
+  });
+  Object.defineProperty(timelineScroll, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      left: 0,
+      right: 1000,
+      top: 0,
+      bottom: 80,
+      width: 1000,
+      height: 80,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+  });
+  Object.defineProperty(timelineContent, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      left: 0,
+      right: 1000,
+      top: 0,
+      bottom: 80,
+      width: 1000,
+      height: 80,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+  });
+}
+
 describe("App", () => {
   it("renders the main DAW shell", async () => {
     await renderApp();
@@ -267,6 +328,20 @@ describe("App", () => {
     expect(await screen.findByDisplayValue("Verse A")).toBeTruthy();
     expect(await screen.findByDisplayValue("36.00")).toBeTruthy();
     expect(await screen.findByDisplayValue("108.00")).toBeTruthy();
+  });
+
+  it("allows resizing a section directly from the timeline ruler handles", async () => {
+    const { container } = await renderApp();
+    mockTimelineLayout(container);
+
+    const startHandle = await screen.findByRole("button", { name: /ajustar inicio de verse/i });
+    await act(async () => {
+      dispatchPointerEvent(startHandle, "pointerdown", { pointerId: 3, clientX: 133 });
+      dispatchPointerEvent(startHandle, "pointermove", { pointerId: 3, clientX: 167 });
+      dispatchPointerEvent(startHandle, "pointerup", { pointerId: 3, clientX: 167 });
+    });
+
+    expect(await screen.findByDisplayValue("40.08")).toBeTruthy();
   });
 
   it("allows deleting a section from the timeline context dock", async () => {

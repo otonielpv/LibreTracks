@@ -516,10 +516,49 @@ input[type="range"] {
   top: 0;
 }
 
+.timeline-section-body,
+.timeline-section-handle {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+}
+
+.timeline-section-body {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  font: inherit;
+  min-width: 0;
+  text-align: left;
+}
+
 .timeline-section-chip span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.timeline-section-handle {
+  cursor: ew-resize;
+  flex: 0 0 auto;
+  height: 100%;
+  position: relative;
+  width: 0.6rem;
+}
+
+.timeline-section-handle::after {
+  background: currentColor;
+  border-radius: 999px;
+  content: "";
+  height: 55%;
+  left: 50%;
+  opacity: 0.55;
+  position: absolute;
+  top: 22.5%;
+  transform: translateX(-50%);
+  width: 2px;
 }
 
 .timeline-section-chip.is-current {
@@ -536,6 +575,10 @@ input[type="range"] {
   background: linear-gradient(135deg, rgba(130, 162, 185, 0.18), rgba(130, 162, 185, 0.3));
   border-style: dashed;
   color: var(--ink);
+}
+
+.timeline-section-chip.is-resizing {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
 }
 
 .timeline-jump-marker {
@@ -596,6 +639,11 @@ input[type="range"] {
   position: absolute;
   top: 0;
   z-index: 1;
+}
+
+.timeline-section-overlay.is-resize-preview {
+  background: linear-gradient(90deg, rgba(245, 159, 66, 0.08), rgba(245, 159, 66, 0.18));
+  border-color: rgba(245, 159, 66, 0.28);
 }
 
 .timeline-row {
