@@ -4,6 +4,8 @@ coverage/
 .turbo/
 
 target/
+target-desktop-native/
+target-desktop-check/
 Cargo.lock
 
 *.log
