@@ -1306,7 +1306,7 @@ fn humanize(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, thread, time::Duration};
+    use std::{fs, path::Path, thread, time::Duration};
 
     use libretracks_audio::{JumpTrigger, PlaybackState};
     use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackGroup};
@@ -1376,6 +1376,45 @@ mod tests {
             end_seconds: 8.0,
         });
         song
+    }
+
+    fn demo_song_with_three_sections() -> Song {
+        let mut song = demo_song_with_two_sections();
+        song.sections.push(Section {
+            id: "section_3".into(),
+            name: "Bridge".into(),
+            start_seconds: 8.0,
+            end_seconds: 12.0,
+        });
+        song
+    }
+
+    fn write_silent_test_wav(path: &Path, duration_seconds: u32) {
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: 44_100,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).expect("wav should be created");
+        for _ in 0..(44_100 * duration_seconds) {
+            writer.write_sample(0_i16).expect("sample should write");
+            writer.write_sample(0_i16).expect("sample should write");
+        }
+        writer.finalize().expect("wav should finalize");
+    }
+
+    fn session_with_song_dir(song_name: &str, song: Song) -> DesktopSession {
+        let root = tempdir().expect("temp dir should exist");
+        let root_path = root.keep();
+        let song_dir = create_song_folder(&root_path, song_name).expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        write_silent_test_wav(&song_dir.join("audio").join("test.wav"), 12);
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir);
+        session.engine.load_song(song).expect("song should load into engine");
+        session
     }
 
     #[test]
@@ -1453,6 +1492,117 @@ mod tests {
         assert_eq!(snapshot.transport_clock.last_start_position_seconds, None);
         assert_eq!(snapshot.transport_clock.last_jump_position_seconds, None);
         assert!(!snapshot.transport_clock.running);
+    }
+
+    #[test]
+    fn pause_freezes_position_after_real_playback() {
+        let mut session = session_with_song_dir("pause-freeze-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        let playing_snapshot = session.play(&audio).expect("play should succeed");
+        assert_eq!(playing_snapshot.playback_state, "playing");
+        thread::sleep(Duration::from_millis(35));
+
+        let paused_snapshot = session.pause(&audio).expect("pause should succeed");
+        let paused_position = paused_snapshot.position_seconds;
+
+        assert_eq!(paused_snapshot.playback_state, "paused");
+        assert!(paused_position > 0.0);
+        assert!(!paused_snapshot.transport_clock.running);
+
+        thread::sleep(Duration::from_millis(35));
+        let frozen_snapshot = session
+            .snapshot_with_sync(&audio)
+            .expect("snapshot should keep paused position");
+
+        assert_eq!(frozen_snapshot.playback_state, "paused");
+        assert!((frozen_snapshot.position_seconds - paused_position).abs() < 0.01);
+    }
+
+    #[test]
+    fn repeated_seeks_while_playing_keep_latest_seek_anchor() {
+        let mut session = session_with_song_dir("rapid-seek-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        session.play(&audio).expect("play should succeed");
+        thread::sleep(Duration::from_millis(15));
+        session.seek(2.0, &audio).expect("first seek should succeed");
+        let snapshot = session.seek(3.5, &audio).expect("second seek should succeed");
+
+        assert_eq!(snapshot.playback_state, "playing");
+        assert!(snapshot.position_seconds >= 3.5);
+        assert!(snapshot.position_seconds < 3.65);
+        assert_eq!(snapshot.transport_clock.last_seek_position_seconds, Some(3.5));
+        assert!(snapshot.transport_clock.running);
+
+        let debug_snapshot = audio.debug_snapshot().expect("debug snapshot should succeed");
+        assert_eq!(debug_snapshot.playhead.last_start_reason.as_deref(), Some("seek"));
+        assert!(debug_snapshot.playhead.running);
+        assert!(
+            debug_snapshot
+                .playhead
+                .estimated_position_seconds
+                .unwrap_or_default()
+                >= 3.5
+        );
+    }
+
+    #[test]
+    fn executing_section_jump_reanchors_transport_and_runtime() {
+        let mut session = session_with_song_dir("jump-resync-demo", demo_song_with_three_sections());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        session.seek(3.95, &audio).expect("seek should succeed");
+        session.play(&audio).expect("play should succeed");
+        session
+            .schedule_section_jump("section_3", JumpTrigger::SectionEnd, &audio)
+            .expect("jump should schedule");
+
+        thread::sleep(Duration::from_millis(70));
+        let snapshot = session
+            .snapshot_with_sync(&audio)
+            .expect("sync should execute jump");
+
+        assert_eq!(snapshot.playback_state, "playing");
+        assert!(snapshot.pending_section_jump.is_none());
+        assert!(snapshot.position_seconds >= 8.0);
+        assert!(snapshot.position_seconds < 8.3);
+        assert_eq!(
+            snapshot
+                .current_section
+                .expect("current section should exist after jump")
+                .name,
+            "Bridge"
+        );
+        assert!(snapshot.transport_clock.last_jump_position_seconds.unwrap_or_default() >= 8.0);
+
+        let debug_snapshot = audio.debug_snapshot().expect("debug snapshot should succeed");
+        assert_eq!(
+            debug_snapshot.playhead.last_start_reason.as_deref(),
+            Some("transport_resync")
+        );
+    }
+
+    #[test]
+    fn playback_stops_cleanly_when_song_end_is_reached() {
+        let mut session = session_with_song_dir("song-end-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        session.seek(11.98, &audio).expect("seek should succeed");
+        session.play(&audio).expect("play should succeed");
+
+        thread::sleep(Duration::from_millis(60));
+        let snapshot = session
+            .snapshot_with_sync(&audio)
+            .expect("sync should stop transport at song end");
+
+        assert_eq!(snapshot.playback_state, "stopped");
+        assert_eq!(snapshot.position_seconds, 0.0);
+        assert!(!snapshot.transport_clock.running);
+        assert_eq!(snapshot.transport_clock.anchor_position_seconds, 0.0);
+
+        let debug_snapshot = audio.debug_snapshot().expect("debug snapshot should succeed");
+        assert!(!debug_snapshot.playhead.running);
     }
 
     #[test]
