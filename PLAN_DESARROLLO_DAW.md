@@ -220,8 +220,9 @@ Mover un clip debe hacerse arrastrandolo desde el timeline, no desde un panel ex
 
 ### Estado
 
-- Completada en primera iteracion para movimiento horizontal y preview
-- Pendiente ampliar cobertura de tests de drag mas alla del shell principal
+- Completada en primera iteracion funcional
+- Ya existe preview de posicion y persistencia directa al arrastrar clips
+- Ya hay cobertura frontend del drag principal de movimiento sobre el timeline
 
 ---
 
@@ -292,10 +293,10 @@ El usuario debe entender visualmente que salto esta armado, hacia donde va y cua
 
 ### Estado
 
-- Parcialmente completada
+- Completada en primera iteracion funcional
 - Ya se muestran destino del salto y punto estimado de ejecucion en el timeline
 - Ya se puede programar y cancelar salto desde la barra contextual
-- Pendiente reforzar tests UI + backend de este flujo
+- Ya hay tests UI + backend para salto inmediato, en compases y cancelacion
 
 ---
 
@@ -401,12 +402,14 @@ El usuario debe poder trabajar varios minutos en el timeline sin sentir friccion
 
 ### Estado
 
-- En progreso
+- Completada en primera iteracion funcional
 - Ya existe `Space` para play/pause desde el shell principal
 - Ya existe `Escape` para limpiar seleccion y borradores del timeline
 - Ya existe zoom horizontal con `Ctrl + rueda` manteniendo el contexto visual
 - Ya existe autoscroll basico en borde durante arrastres del timeline
-- Pendiente mas atajos de edicion y refinamiento fino de navegacion
+- Ya existe `Backspace` ademas de `Suprimir` para borrar el clip seleccionado
+- Ya existe `Ctrl/Cmd + D` para duplicar el clip seleccionado
+- Ya existen nudges con flechas para mover clips seleccionados
 
 ---
 
@@ -431,6 +434,13 @@ Dar por terminada la primera gran etapa DAW del frontend.
 - revisar accesibilidad basica
 - revisar rendimiento basico en canciones con varias pistas
 - actualizar documentacion y plan
+
+### Estado
+
+- Completada como cierre funcional del frontend v1
+- El shell principal ya integra clips, secciones, saltos, mezcla y atajos basicos en una sola superficie de trabajo
+- El plan queda actualizado junto con tests frontend y backend de los flujos criticos del shell
+- La siguiente etapa prioritaria pasa a ser la estabilidad y fluidez del motor de audio nativo
 
 ---
 

@@ -1138,7 +1138,7 @@ fn humanize(value: &str) -> String {
 mod tests {
     use std::fs;
 
-    use libretracks_audio::PlaybackState;
+    use libretracks_audio::{JumpTrigger, PlaybackState};
     use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackGroup};
     use libretracks_project::{create_song_folder, load_song};
     use tempfile::tempdir;
@@ -1378,6 +1378,57 @@ mod tests {
             .clips
             .iter()
             .any(|clip| clip.id != "clip_1" && clip.timeline_start_seconds == 6.0));
+    }
+
+    #[test]
+    fn scheduling_and_cancelling_a_section_jump_updates_snapshot() {
+        let mut session = DesktopSession::default();
+        session
+            .engine
+            .load_song(demo_song_with_section())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let scheduled_snapshot = session
+            .schedule_section_jump("section_1", JumpTrigger::AfterBars(6), &audio)
+            .expect("jump should schedule");
+
+        let pending_jump = scheduled_snapshot
+            .pending_section_jump
+            .expect("pending jump should exist");
+        assert_eq!(pending_jump.target_section_id, "section_1");
+        assert_eq!(pending_jump.target_section_name, "Intro");
+        assert_eq!(pending_jump.trigger, "after_bars:6");
+
+        let cancelled_snapshot = session
+            .cancel_section_jump(&audio)
+            .expect("jump should cancel");
+        assert!(cancelled_snapshot.pending_section_jump.is_none());
+    }
+
+    #[test]
+    fn scheduling_an_immediate_section_jump_updates_position_and_current_section() {
+        let mut session = DesktopSession::default();
+        session
+            .engine
+            .load_song(demo_song_with_section())
+            .expect("song should load into engine");
+        session.engine.seek(0.0).expect("seek should work");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .schedule_section_jump("section_1", JumpTrigger::Immediate, &audio)
+            .expect("immediate jump should execute");
+
+        assert!(snapshot.pending_section_jump.is_none());
+        assert_eq!(snapshot.position_seconds, 1.0);
+        assert_eq!(
+            snapshot
+                .current_section
+                .expect("current section should exist")
+                .name,
+            "Intro"
+        );
     }
 
     #[test]

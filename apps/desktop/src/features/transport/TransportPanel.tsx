@@ -405,13 +405,35 @@ export function TransportPanel() {
         return;
       }
 
-      if (event.key === "Delete" && selectedClipId !== null) {
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedClipId !== null) {
         event.preventDefault();
         if (isBusy) {
           return;
         }
 
         void handleDeleteSelectedClip();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d" && selectedClipId !== null) {
+        event.preventDefault();
+        if (isBusy) {
+          return;
+        }
+
+        void handleDuplicateSelectedClip();
+        return;
+      }
+
+      if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && selectedClip) {
+        event.preventDefault();
+        if (isBusy) {
+          return;
+        }
+
+        const nudgeStep = event.shiftKey ? 0.1 : 1;
+        const direction = event.key === "ArrowLeft" ? -1 : 1;
+        void handleMoveSelectedClip(selectedClip.timelineStartSeconds + direction * nudgeStep);
       }
     };
 
@@ -419,7 +441,7 @@ export function TransportPanel() {
     return () => {
       window.removeEventListener("keydown", handleWindowKeyDown);
     };
-  }, [isBusy, sectionDraft, selectedClipId, selectedSectionId, snapshot?.playbackState, song, timelineDrag]);
+  }, [isBusy, sectionDraft, selectedClip, selectedClipId, selectedSectionId, snapshot?.playbackState, song, timelineDrag]);
 
   const handleCreateSong = async () => {
     setIsBusy(true);
@@ -2173,8 +2195,9 @@ function resolvePendingJumpExecuteAt(
   const secondsPerBeat = 60 / Math.max(song.bpm, 1);
   const secondsPerBar = beatsPerBar * secondsPerBeat;
   const quantizedBars = Math.max(1, bars);
-  const barIndex = Math.ceil(currentPositionSeconds / secondsPerBar / quantizedBars) * quantizedBars;
-  return Number((barIndex * secondsPerBar).toFixed(3));
+  const nextBlockIndex =
+    Math.floor(currentPositionSeconds / secondsPerBar / quantizedBars) + 1;
+  return Number((nextBlockIndex * quantizedBars * secondsPerBar).toFixed(3));
 }
 
 function extractBarsFromTrigger(trigger: PendingJumpSummary["trigger"]) {

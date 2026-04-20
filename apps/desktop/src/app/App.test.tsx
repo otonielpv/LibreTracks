@@ -240,6 +240,21 @@ describe("App", () => {
     expect(await screen.findByDisplayValue("128.00")).toBeTruthy();
   });
 
+  it("allows moving a clip directly across the timeline", async () => {
+    const { container } = await renderApp();
+    mockTimelineLayout(container);
+
+    const drumsClip = await screen.findByRole("button", { name: /clip drums/i });
+    await act(async () => {
+      dispatchPointerEvent(drumsClip, "pointerdown", { pointerId: 6, clientX: 67 });
+      dispatchPointerEvent(drumsClip, "pointermove", { pointerId: 6, clientX: 100 });
+      dispatchPointerEvent(drumsClip, "pointerup", { pointerId: 6, clientX: 100 });
+    });
+
+    expect(await screen.findByText(/drums movido/i)).toBeTruthy();
+    expect(await screen.findByDisplayValue("23.92")).toBeTruthy();
+  });
+
   it("allows duplicating the selected clip from the context dock", async () => {
     await renderApp();
 
@@ -272,6 +287,40 @@ describe("App", () => {
 
     expect(await screen.findByText(/clip eliminado: keys/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /clip keys/i })).toBeNull();
+  });
+
+  it("supports ctrl d to duplicate the selected clip", async () => {
+    await renderApp();
+
+    const drumsClip = await screen.findByRole("button", { name: /clip drums/i });
+    await act(async () => {
+      fireEvent.pointerDown(drumsClip, { pointerId: 1, clientX: 16 });
+      fireEvent.pointerUp(drumsClip, { pointerId: 1, clientX: 16 });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "d", ctrlKey: true });
+    });
+
+    expect(await screen.findByText(/drums duplicado/i)).toBeTruthy();
+    expect((await screen.findAllByRole("button", { name: /clip drums/i })).length).toBe(2);
+  });
+
+  it("supports arrow keys to nudge the selected clip", async () => {
+    await renderApp();
+
+    const drumsClip = await screen.findByRole("button", { name: /clip drums/i });
+    await act(async () => {
+      fireEvent.pointerDown(drumsClip, { pointerId: 1, clientX: 16 });
+      fireEvent.pointerUp(drumsClip, { pointerId: 1, clientX: 16 });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+    });
+
+    expect(await screen.findByText(/drums movido/i)).toBeTruthy();
+    expect(await screen.findByDisplayValue("17.00")).toBeTruthy();
   });
 
   it("supports snap beat when applying clip moves", async () => {
@@ -393,6 +442,36 @@ describe("App", () => {
 
     expect(await screen.findByText(/seccion eliminada: chorus/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Chorus" })).toBeNull();
+  });
+
+  it("allows scheduling and cancelling a section jump from the main dock", async () => {
+    await renderApp();
+
+    const chorusSection = await screen.findByRole("button", { name: "Chorus" });
+    await act(async () => {
+      fireEvent.click(chorusSection);
+    });
+
+    await act(async () => {
+      fireEvent.change(await screen.findByLabelText(/compases del salto/i), {
+        target: { value: "6" },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /en compases/i }));
+    });
+
+    expect(await screen.findByText(/salto de seccion programado/i)).toBeTruthy();
+    expect(await screen.findByText(/salto armado hacia chorus/i)).toBeTruthy();
+    expect(await screen.findByText(/ejecucion estimada en 00:20\.000/i)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /cancelar salto/i }));
+    });
+
+    expect(await screen.findByText(/salto pendiente cancelado/i)).toBeTruthy();
+    expect(await screen.findByText(/sin salto programado/i)).toBeTruthy();
   });
 
   it("creates a new group from the integrated submix controls", async () => {
