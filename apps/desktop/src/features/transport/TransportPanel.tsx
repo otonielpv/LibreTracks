@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
-  assignTrackToGroup,
   cancelSectionJump,
-  createGroup,
   createSection,
   createSong,
+  createTrack,
   deleteClip,
   deleteSection,
+  deleteTrack,
   duplicateClip,
   getTransportSnapshot,
   isTauriApp,
   moveClip,
+  moveTrack,
   openProject,
   pauseTransport,
   pickAndImportSong,
@@ -18,104 +19,246 @@ import {
   saveProject,
   scheduleSectionJump,
   seekTransport,
-  setGroupVolume,
-  setTrackVolume,
+  splitClip,
   stopTransport,
-  toggleGroupMute,
-  toggleTrackMute,
-  updateClipWindow,
   updateSection,
+  updateTrack,
   type ClipSummary,
-  type PendingJumpSummary,
   type SectionSummary,
   type SongSummary,
+  type TrackKind,
+  type TrackSummary,
   type TransportSnapshot,
 } from "./desktopApi";
 
-const TIMELINE_ZOOM_MIN = 1;
-const TIMELINE_ZOOM_MAX = 12;
-const TIMELINE_ZOOM_STEP = 0.25;
-const MIN_WAVEFORM_DIMENSION = 12;
+const HEADER_WIDTH = 260;
+const TRACK_HEIGHT = 94;
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 48;
+const ZOOM_STEP = 0.5;
 
-type TimelineDragState =
-  | {
-      mode: "seek" | "section";
-      pointerId: number;
-      startSeconds: number;
-      currentSeconds: number;
-    }
-  | null;
-
-type ClipDragState =
-  | {
-      clipId: string;
-      pointerId: number;
-      pointerStartSeconds: number;
-      originTimelineStartSeconds: number;
-      previewTimelineStartSeconds: number;
-      hasMoved: boolean;
-    }
-  | null;
-
-type ClipTrimDragState =
-  | {
-      clipId: string;
-      edge: "start" | "end";
-      pointerId: number;
-      previewTimelineStartSeconds: number;
-      previewSourceStartSeconds: number;
-      previewDurationSeconds: number;
-    }
-  | null;
-
-type SectionDraft = {
-  startSeconds: number;
-  endSeconds: number;
+type ContextMenuAction = {
+  label: string;
+  disabled?: boolean;
+  onSelect: () => void | Promise<void>;
 };
 
-type SectionResizeDragState =
-  | {
-      sectionId: string;
-      edge: "start" | "end";
-      pointerId: number;
-      previewStartSeconds: number;
-      previewEndSeconds: number;
+type ContextMenuState = {
+  x: number;
+  y: number;
+  title: string;
+  actions: ContextMenuAction[];
+} | null;
+
+type ClipDragState = {
+  clipId: string;
+  pointerId: number;
+  originSeconds: number;
+  previewSeconds: number;
+  startClientX: number;
+} | null;
+
+type RulerDragState = {
+  pointerId: number;
+  startSeconds: number;
+  currentSeconds: number;
+} | null;
+
+type TimeSelection = {
+  startSeconds: number;
+  endSeconds: number;
+} | null;
+
+function formatClock(seconds: number) {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const secondsRemainder = safeSeconds - minutes * 60;
+  return `${String(minutes).padStart(2, "0")}:${secondsRemainder.toFixed(3).padStart(6, "0")}`;
+}
+
+function formatCompactTime(seconds: number) {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = Math.floor(safeSeconds % 60);
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeSelection(selection: TimeSelection) {
+  if (!selection) {
+    return null;
+  }
+
+  return {
+    startSeconds: Math.min(selection.startSeconds, selection.endSeconds),
+    endSeconds: Math.max(selection.startSeconds, selection.endSeconds),
+  };
+}
+
+function buildRulerMarks(durationSeconds: number, zoomLevel: number) {
+  const stepSeconds =
+    zoomLevel >= 24 ? 1 : zoomLevel >= 12 ? 2 : zoomLevel >= 6 ? 4 : zoomLevel >= 3 ? 8 : 16;
+  const marks: number[] = [];
+
+  for (let current = 0; current <= durationSeconds; current += stepSeconds) {
+    marks.push(current);
+  }
+
+  if (marks.at(-1) !== durationSeconds) {
+    marks.push(durationSeconds);
+  }
+
+  return marks;
+}
+
+function cropWaveform(clip: ClipSummary) {
+  const peaks = clip.waveformMaxPeaks;
+  const minPeaks = clip.waveformMinPeaks.length ? clip.waveformMinPeaks : peaks.map((peak) => -peak);
+  if (!peaks.length || clip.sourceDurationSeconds <= 0) {
+    return {
+      min: [],
+      max: [],
+    };
+  }
+
+  const startRatio = clamp(clip.sourceStartSeconds / clip.sourceDurationSeconds, 0, 1);
+  const endRatio = clamp(
+    (clip.sourceStartSeconds + clip.durationSeconds) / clip.sourceDurationSeconds,
+    0,
+    1,
+  );
+  const startIndex = Math.floor(startRatio * peaks.length);
+  const endIndex = Math.max(startIndex + 1, Math.ceil(endRatio * peaks.length));
+
+  return {
+    min: minPeaks.slice(startIndex, endIndex),
+    max: peaks.slice(startIndex, endIndex),
+  };
+}
+
+function buildWaveformPath(clip: ClipSummary) {
+  const { min, max } = cropWaveform(clip);
+  if (!max.length || !min.length) {
+    return "";
+  }
+
+  const topPoints = max.map((peak, index) => {
+    const x = (index / Math.max(1, max.length - 1)) * 100;
+    const y = 50 - peak * 42;
+    return `${x},${y}`;
+  });
+  const bottomPoints = min
+    .map((peak, index) => {
+      const x = (index / Math.max(1, min.length - 1)) * 100;
+      const y = 50 - peak * 42;
+      return `${x},${y}`;
+    })
+    .reverse();
+
+  return `M ${topPoints.join(" L ")} L ${bottomPoints.join(" L ")} Z`;
+}
+
+function buildVisibleTracks(song: SongSummary, collapsedFolders: Set<string>) {
+  const visibility = new Map<string, boolean>();
+
+  for (const track of song.tracks) {
+    const parentId = track.parentTrackId ?? null;
+    if (!parentId) {
+      visibility.set(track.id, true);
+      continue;
     }
-  | null;
+
+    const parentVisible = visibility.get(parentId) ?? true;
+    const isParentCollapsed = collapsedFolders.has(parentId);
+    visibility.set(track.id, parentVisible && !isParentCollapsed);
+  }
+
+  return song.tracks.filter((track) => visibility.get(track.id));
+}
+
+function findPreviousFolderTrack(song: SongSummary, trackId: string) {
+  const index = song.tracks.findIndex((track) => track.id === trackId);
+  if (index <= 0) {
+    return null;
+  }
+
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const track = song.tracks[cursor];
+    if (track.kind === "folder") {
+      return track;
+    }
+  }
+
+  return null;
+}
+
+function findTrack(song: SongSummary | null, trackId: string | null) {
+  if (!song || !trackId) {
+    return null;
+  }
+
+  return song.tracks.find((track) => track.id === trackId) ?? null;
+}
+
+function findClip(song: SongSummary | null, clipId: string | null) {
+  if (!song || !clipId) {
+    return null;
+  }
+
+  return song.clips.find((clip) => clip.id === clipId) ?? null;
+}
+
+function findSection(song: SongSummary | null, sectionId: string | null) {
+  if (!song || !sectionId) {
+    return null;
+  }
+
+  return song.sections.find((section) => section.id === sectionId) ?? null;
+}
+
+function trackChildrenCount(song: SongSummary, trackId: string) {
+  return song.tracks.filter((track) => track.parentTrackId === trackId).length;
+}
+
+function rulerPointerToSeconds(
+  event: MouseEvent | ReactMouseEvent,
+  element: HTMLElement,
+  durationSeconds: number,
+  pixelsPerSecond: number,
+) {
+  const bounds = element.getBoundingClientRect();
+  const x = clamp(event.clientX - bounds.left, 0, bounds.width);
+  const visibleDuration = bounds.width / pixelsPerSecond;
+  const totalDuration = Math.max(durationSeconds, visibleDuration);
+  const seconds = (x / bounds.width) * totalDuration;
+  return clamp(seconds, 0, durationSeconds);
+}
 
 export function TransportPanel() {
   const [snapshot, setSnapshot] = useState<TransportSnapshot | null>(null);
-  const [status, setStatus] = useState("Cargando estado de la sesion...");
+  const [status, setStatus] = useState("Cargando sesion...");
   const [isBusy, setIsBusy] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(1.75);
-  const [snapEnabled, setSnapEnabled] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(7);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
-  const [clipStartDraft, setClipStartDraft] = useState("0.00");
-  const [clipSourceStartDraft, setClipSourceStartDraft] = useState("0.00");
-  const [clipDurationDraft, setClipDurationDraft] = useState("0.00");
-  const [sectionNameDraft, setSectionNameDraft] = useState("");
-  const [sectionStartDraft, setSectionStartDraft] = useState("0.00");
-  const [sectionEndDraft, setSectionEndDraft] = useState("0.00");
-  const [sectionSelectionMode, setSectionSelectionMode] = useState(false);
-  const [sectionDraft, setSectionDraft] = useState<SectionDraft | null>(null);
-  const [sectionResizeDrag, setSectionResizeDrag] = useState<SectionResizeDragState>(null);
-  const [timelineDrag, setTimelineDrag] = useState<TimelineDragState>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [clipDrag, setClipDrag] = useState<ClipDragState>(null);
-  const [clipTrimDrag, setClipTrimDrag] = useState<ClipTrimDragState>(null);
-  const [groupNameDraft, setGroupNameDraft] = useState("");
-  const [jumpTargetSectionId, setJumpTargetSectionId] = useState<string | null>(null);
-  const [jumpBars, setJumpBars] = useState(4);
-  const timelineScrollRef = useRef<HTMLDivElement | null>(null);
-  const timelineContentRef = useRef<HTMLDivElement | null>(null);
-  const clipDragRef = useRef<ClipDragState>(null);
-  const clipTrimDragRef = useRef<ClipTrimDragState>(null);
-  const sectionResizeDragRef = useRef<SectionResizeDragState>(null);
+  const [rulerDrag, setRulerDrag] = useState<RulerDragState>(null);
+  const [timeSelection, setTimeSelection] = useState<TimeSelection>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const laneAreaRef = useRef<HTMLDivElement | null>(null);
+  const rulerTrackRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
 
-    async function loadInitialState() {
+    async function loadSnapshot() {
       const nextSnapshot = await getTransportSnapshot();
       if (!active) {
         return;
@@ -124,12 +267,12 @@ export function TransportPanel() {
       setSnapshot(nextSnapshot);
       setStatus(
         nextSnapshot.isNativeRuntime
-          ? "Modo escritorio nativo listo para importar WAVs."
-          : "Modo demo web: la reproduccion real se prueba con Tauri.",
+          ? "Sesion desktop lista para edicion."
+          : "Modo demo web activo. Las acciones contextuales ya usan el nuevo flujo DAW.",
       );
     }
 
-    void loadInitialState();
+    void loadSnapshot();
 
     if (!isTauriApp) {
       return () => {
@@ -142,9 +285,8 @@ export function TransportPanel() {
       if (!active) {
         return;
       }
-
       setSnapshot(nextSnapshot);
-    }, 350);
+    }, 300);
 
     return () => {
       active = false;
@@ -152,2318 +294,861 @@ export function TransportPanel() {
     };
   }, []);
 
-  const song = snapshot?.song ?? null;
-  const groups = song?.groups ?? [];
-  const tracks = song?.tracks ?? [];
-  const clips = song?.clips ?? [];
-  const sections = song?.sections ?? [];
-  const positionSeconds = snapshot?.positionSeconds ?? 0;
-  const durationSeconds = song?.durationSeconds ?? 0;
-  const displayedPositionSeconds =
-    timelineDrag?.mode === "seek" ? timelineDrag.currentSeconds : positionSeconds;
-  const cursorPercent = durationSeconds > 0 ? (displayedPositionSeconds / durationSeconds) * 100 : 0;
-  const rulerMarks = buildRulerMarks(durationSeconds, zoomLevel);
-  const selectedClip = clips.find((clip) => clip.id === selectedClipId) ?? null;
-  const selectedSection = sections.find((section) => section.id === selectedSectionId) ?? null;
-  const currentSection = snapshot?.currentSection ?? null;
-  const pendingSectionJump = snapshot?.pendingSectionJump ?? null;
-  const activeClipTrimPreview =
-    clipTrimDrag === null
-      ? null
-      : {
-          timelineStartSeconds: clipTrimDrag.previewTimelineStartSeconds,
-          sourceStartSeconds: clipTrimDrag.previewSourceStartSeconds,
-          durationSeconds: clipTrimDrag.previewDurationSeconds,
-        };
-  const activeSectionDraft =
-    timelineDrag?.mode === "section"
-      ? normalizeRange(timelineDrag.startSeconds, timelineDrag.currentSeconds)
-      : sectionDraft;
-  const activeSectionResizePreview =
-    sectionResizeDrag === null
-      ? null
-      : {
-          startSeconds: sectionResizeDrag.previewStartSeconds,
-          endSeconds: sectionResizeDrag.previewEndSeconds,
-        };
-  const pendingJumpExecuteAt = song
-    ? resolvePendingJumpExecuteAt(song, displayedPositionSeconds, currentSection, pendingSectionJump)
-    : null;
-  const projectLocation = snapshot?.songDir ?? (song ? "Proyecto sin guardar" : "Sesion vacia");
-  const clipCount = clips.length;
-  const clipsByTrack = tracks.reduce<Record<string, ClipSummary[]>>((collection, track) => {
-    collection[track.id] = [];
-    return collection;
-  }, {});
+  useEffect(() => {
+    const closeMenu = () => setContextMenu(null);
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("blur", closeMenu);
 
-  for (const clip of clips) {
-    if (!clipsByTrack[clip.trackId]) {
-      clipsByTrack[clip.trackId] = [];
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("blur", closeMenu);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!clipDrag || !snapshot?.song || !laneAreaRef.current) {
+      return;
     }
 
-    clipsByTrack[clip.trackId].push(clip);
+    const effectSong = snapshot.song;
+
+    const onMouseMove = (event: MouseEvent) => {
+      const deltaSeconds = (event.clientX - clipDrag.startClientX) / (zoomLevel * 18);
+      const nextSeconds = snapEnabled
+        ? snapToBeat(clipDrag.originSeconds + deltaSeconds, effectSong.bpm)
+        : clipDrag.originSeconds + deltaSeconds;
+
+      setClipDrag((current) =>
+        current
+          ? {
+              ...current,
+              previewSeconds: clamp(nextSeconds, 0, effectSong.durationSeconds),
+            }
+          : current,
+      );
+    };
+
+    const onMouseUp = async (event: MouseEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      const activeDrag = clipDrag;
+      setClipDrag(null);
+      if (!activeDrag) {
+        return;
+      }
+
+      await runAction(async () => {
+        const nextSnapshot = await moveClip(activeDrag.clipId, activeDrag.previewSeconds);
+        setSnapshot(nextSnapshot);
+        const clip = findClip(nextSnapshot.song ?? null, activeDrag.clipId);
+        setStatus(`Clip movido: ${clip?.trackName ?? activeDrag.clipId}`);
+      });
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [clipDrag, snapEnabled, snapshot?.song, zoomLevel]);
+
+  useEffect(() => {
+    if (!rulerDrag || !snapshot?.song || !rulerTrackRef.current) {
+      return;
+    }
+
+    const onMouseMove = (event: MouseEvent) => {
+      const nextSeconds = rulerPointerToSeconds(
+        event,
+        rulerTrackRef.current as HTMLElement,
+        snapshot.song?.durationSeconds ?? 0,
+        zoomLevel * 18,
+      );
+      setRulerDrag((current) => (current ? { ...current, currentSeconds: nextSeconds } : current));
+    };
+
+    const onMouseUp = async (event: MouseEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      const activeDrag = rulerDrag;
+      setRulerDrag(null);
+      if (!activeDrag) {
+        return;
+      }
+
+      const normalized = normalizeSelection({
+        startSeconds: activeDrag.startSeconds,
+        endSeconds: activeDrag.currentSeconds,
+      });
+
+      if (!normalized || normalized.endSeconds - normalized.startSeconds < 0.15) {
+        await runAction(async () => {
+          const nextSnapshot = await seekTransport(activeDrag.currentSeconds);
+          setSnapshot(nextSnapshot);
+          setStatus(`Cursor movido a ${formatClock(nextSnapshot.positionSeconds)}`);
+        });
+        setTimeSelection(null);
+        return;
+      }
+
+      setTimeSelection(normalized);
+      setStatus(
+        `Rango temporal listo: ${formatClock(normalized.startSeconds)} -> ${formatClock(normalized.endSeconds)}`,
+      );
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [rulerDrag, snapshot?.song, zoomLevel]);
+
+  async function runAction(work: () => Promise<void>) {
+    try {
+      setIsBusy(true);
+      await work();
+    } catch (error) {
+      setStatus(`Error: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
   }
 
-  useEffect(() => {
-    if (!selectedClipId) {
-      return;
-    }
+  const song = snapshot?.song ?? null;
+  const positionSeconds = snapshot?.positionSeconds ?? 0;
+  const pixelsPerSecond = zoomLevel * 18;
+  const timelineWidth = Math.max((song?.durationSeconds ?? 0) * pixelsPerSecond, 1100);
+  const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
+  const selectedTrack = findTrack(song, selectedTrackId);
+  const selectedClip = findClip(song, selectedClipId);
+  const selectedSection = findSection(song, selectedSectionId);
+  const currentSelection = normalizeSelection(
+    rulerDrag
+      ? {
+          startSeconds: rulerDrag.startSeconds,
+          endSeconds: rulerDrag.currentSeconds,
+        }
+      : timeSelection,
+  );
+  const currentSelectionLeft = currentSelection
+    ? (currentSelection.startSeconds / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth
+    : 0;
+  const currentSelectionWidth = currentSelection
+    ? ((currentSelection.endSeconds - currentSelection.startSeconds) /
+        Math.max(1, song?.durationSeconds ?? 1)) *
+      timelineWidth
+    : 0;
+  const playheadOffset = (positionSeconds / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth;
+  const rulerMarks = buildRulerMarks(song?.durationSeconds ?? 0, zoomLevel);
 
-    if (!clips.some((clip) => clip.id === selectedClipId)) {
-      setSelectedClipId(null);
-    }
-  }, [clips, selectedClipId]);
-
-  useEffect(() => {
-    if (!selectedSectionId) {
-      return;
-    }
-
-    if (!sections.some((section) => section.id === selectedSectionId)) {
-      setSelectedSectionId(null);
-    }
-  }, [sections, selectedSectionId]);
-
-  const updateSectionResizeDragState = (
-    nextValue:
-      | SectionResizeDragState
-      | ((currentDrag: SectionResizeDragState) => SectionResizeDragState),
-  ) => {
-    const resolvedValue =
-      typeof nextValue === "function"
-        ? nextValue(sectionResizeDragRef.current)
-        : nextValue;
-
-    sectionResizeDragRef.current = resolvedValue;
-    setSectionResizeDrag(resolvedValue);
-  };
-
-  const updateClipTrimDragState = (
-    nextValue: ClipTrimDragState | ((currentDrag: ClipTrimDragState) => ClipTrimDragState),
-  ) => {
-    const resolvedValue =
-      typeof nextValue === "function" ? nextValue(clipTrimDragRef.current) : nextValue;
-
-    clipTrimDragRef.current = resolvedValue;
-    setClipTrimDrag(resolvedValue);
-  };
-
-  useEffect(() => {
-    if (!selectedClip) {
-      setClipStartDraft("0.00");
-      setClipSourceStartDraft("0.00");
-      setClipDurationDraft("0.00");
-      return;
-    }
-
-    const previewClipWindow =
-      clipTrimDrag?.clipId === selectedClip.id
-        ? clipTrimDrag
-        : clipDrag?.clipId === selectedClip.id
-          ? {
-              previewTimelineStartSeconds: clipDrag.previewTimelineStartSeconds,
-              previewSourceStartSeconds: selectedClip.sourceStartSeconds,
-              previewDurationSeconds: selectedClip.durationSeconds,
-            }
-          : null;
-
-    setClipStartDraft(
-      (previewClipWindow?.previewTimelineStartSeconds ?? selectedClip.timelineStartSeconds).toFixed(2),
-    );
-    setClipSourceStartDraft(
-      (previewClipWindow?.previewSourceStartSeconds ?? selectedClip.sourceStartSeconds).toFixed(2),
-    );
-    setClipDurationDraft(
-      (previewClipWindow?.previewDurationSeconds ?? selectedClip.durationSeconds).toFixed(2),
-    );
-  }, [clipDrag, clipTrimDrag, selectedClip]);
-
-  useEffect(() => {
-    if (!selectedSection) {
-      setSectionNameDraft("");
-      setSectionStartDraft("0.00");
-      setSectionEndDraft("0.00");
-      return;
-    }
-
-    setSectionNameDraft(selectedSection.name);
-    setSectionStartDraft(selectedSection.startSeconds.toFixed(2));
-    setSectionEndDraft(selectedSection.endSeconds.toFixed(2));
-  }, [selectedSection]);
-
-  useEffect(() => {
-    if (!sections.length) {
-      setJumpTargetSectionId(null);
-      return;
-    }
-
-    if (!jumpTargetSectionId || !sections.some((section) => section.id === jumpTargetSectionId)) {
-      const fallbackSectionId = selectedSectionId ?? sections[0]?.id ?? null;
-      setJumpTargetSectionId(fallbackSectionId);
-    }
-  }, [jumpTargetSectionId, sections, selectedSectionId]);
-
-  const updateTimelineZoom = (nextZoomLevel: number, anchorClientX?: number) => {
-    const clampedZoomLevel = clampZoomLevel(nextZoomLevel);
-    const scrollElement = timelineScrollRef.current;
-    const contentElement = timelineContentRef.current;
-
-    if (!scrollElement || !contentElement) {
-      setZoomLevel(clampedZoomLevel);
-      return;
-    }
-
-    const scrollRect = scrollElement.getBoundingClientRect();
-    const contentWidth =
-      contentElement.getBoundingClientRect().width ||
-      contentElement.scrollWidth ||
-      scrollElement.clientWidth ||
-      1;
-    const anchorViewportOffset =
-      anchorClientX === undefined
-        ? scrollElement.clientWidth / 2
-        : clamp(anchorClientX - scrollRect.left, 0, scrollElement.clientWidth);
-    const anchorRatio = clamp(
-      (scrollElement.scrollLeft + anchorViewportOffset) / Math.max(contentWidth, 1),
-      0,
-      1,
-    );
-
-    setZoomLevel(clampedZoomLevel);
-
-    window.requestAnimationFrame(() => {
-      const nextScrollElement = timelineScrollRef.current;
-      const nextContentElement = timelineContentRef.current;
-      if (!nextScrollElement || !nextContentElement) {
-        return;
-      }
-
-      const nextContentWidth =
-        nextContentElement.getBoundingClientRect().width ||
-        nextContentElement.scrollWidth ||
-        nextScrollElement.clientWidth ||
-        1;
-      const nextScrollLeft = anchorRatio * nextContentWidth - anchorViewportOffset;
-      nextScrollElement.scrollLeft = Math.max(0, nextScrollLeft);
-    });
-  };
-
-  const clearTimelineSelections = () => {
+  function clearSelections(message: string) {
+    setSelectedTrackId(null);
     setSelectedClipId(null);
     setSelectedSectionId(null);
-    setSectionDraft(null);
-    updateSectionResizeDragState(null);
-    setTimelineDrag(null);
-    setClipDrag(null);
-    clipDragRef.current = null;
-    updateClipTrimDragState(null);
-  };
-
-  const resetEditorSelections = () => {
-    clearTimelineSelections();
-  };
-
-  const snapTimelineSeconds = (totalSeconds: number) =>
-    maybeSnapSeconds(totalSeconds, song, snapEnabled);
-
-  useEffect(() => {
-    const handleWindowKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || isEditableTarget(event.target)) {
-        return;
-      }
-
-      if (event.code === "Space") {
-        event.preventDefault();
-        if (!song || isBusy) {
-          return;
-        }
-
-        if (snapshot?.playbackState === "playing") {
-          void handlePause();
-          return;
-        }
-
-        void handlePlay();
-        return;
-      }
-
-      if (event.key === "Escape") {
-        const hasTransientSelection =
-          selectedClipId !== null ||
-          selectedSectionId !== null ||
-          sectionDraft !== null ||
-          timelineDrag !== null ||
-          clipDragRef.current !== null ||
-          clipTrimDragRef.current !== null;
-
-        if (!hasTransientSelection) {
-          return;
-        }
-
-        event.preventDefault();
-        clearTimelineSelections();
-        setStatus("Seleccion del timeline cancelada.");
-        return;
-      }
-
-      if ((event.key === "Delete" || event.key === "Backspace") && selectedClipId !== null) {
-        event.preventDefault();
-        if (isBusy) {
-          return;
-        }
-
-        void handleDeleteSelectedClip();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d" && selectedClipId !== null) {
-        event.preventDefault();
-        if (isBusy) {
-          return;
-        }
-
-        void handleDuplicateSelectedClip();
-        return;
-      }
-
-      if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && selectedClip) {
-        event.preventDefault();
-        if (isBusy) {
-          return;
-        }
-
-        const nudgeStep = event.shiftKey ? 0.1 : 1;
-        const direction = event.key === "ArrowLeft" ? -1 : 1;
-        void handleMoveSelectedClip(selectedClip.timelineStartSeconds + direction * nudgeStep);
-      }
-    };
-
-    window.addEventListener("keydown", handleWindowKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleWindowKeyDown);
-    };
-  }, [isBusy, sectionDraft, selectedClip, selectedClipId, selectedSectionId, snapshot?.playbackState, song, timelineDrag]);
-
-  const handleCreateSong = async () => {
-    setIsBusy(true);
-    setStatus("Creando una nueva cancion vacia...");
-
-    try {
-      const nextSnapshot = await createSong();
-      setSnapshot(nextSnapshot);
-      resetEditorSelections();
-      setStatus(`Proyecto creado: ${nextSnapshot.song?.title ?? "Nueva Cancion"}.`);
-    } catch (error) {
-      setStatus(`No se pudo crear la cancion: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleSaveProject = async () => {
-    setIsBusy(true);
-    setStatus("Guardando proyecto...");
-
-    try {
-      const nextSnapshot = await saveProject();
-      setSnapshot(nextSnapshot);
-      setStatus(`Proyecto guardado${nextSnapshot.songDir ? ` en ${nextSnapshot.songDir}` : ""}.`);
-    } catch (error) {
-      setStatus(`No se pudo guardar el proyecto: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleOpenProject = async () => {
-    setIsBusy(true);
-    setStatus("Abriendo proyecto...");
-
-    try {
-      const nextSnapshot = await openProject();
-      if (!nextSnapshot) {
-        setStatus("Apertura cancelada.");
-        return;
-      }
-
-      setSnapshot(nextSnapshot);
-      resetEditorSelections();
-      setStatus(`Proyecto abierto: ${nextSnapshot.song?.title ?? "Sin titulo"}.`);
-    } catch (error) {
-      setStatus(`No se pudo abrir el proyecto: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleImport = async () => {
-    setIsBusy(true);
-    setStatus("Selecciona los WAVs que quieras importar...");
-
-    await waitForNextPaint();
-
-    try {
-      setStatus("Importando WAVs y preparando waveforms...");
-      const nextSnapshot = await pickAndImportSong();
-      if (!nextSnapshot) {
-        setStatus("Importacion cancelada.");
-        return;
-      }
-
-      setSnapshot(nextSnapshot);
-      resetEditorSelections();
-      setStatus(
-        `Cancion cargada: ${nextSnapshot.song?.title ?? "Sin titulo"}. Ya puedes pulsar Play.`,
-      );
-    } catch (error) {
-      setStatus(`No se pudo importar la cancion: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handlePlay = async () => {
-    try {
-      const nextSnapshot = await playTransport();
-      setSnapshot(nextSnapshot);
-      setStatus("Reproduccion en curso.");
-    } catch (error) {
-      setStatus(`No se pudo reproducir: ${String(error)}`);
-    }
-  };
-
-  const handlePause = async () => {
-    try {
-      const nextSnapshot = await pauseTransport();
-      setSnapshot(nextSnapshot);
-      setStatus("Reproduccion pausada.");
-    } catch (error) {
-      setStatus(`No se pudo pausar: ${String(error)}`);
-    }
-  };
-
-  const handleStop = async () => {
-    try {
-      const nextSnapshot = await stopTransport();
-      setSnapshot(nextSnapshot);
-      setStatus("Reproduccion detenida.");
-    } catch (error) {
-      setStatus(`No se pudo detener: ${String(error)}`);
-    }
-  };
-
-  const handleSeek = async (nextPositionSeconds: number) => {
-    try {
-      const nextSnapshot = await seekTransport(nextPositionSeconds);
-      setSnapshot(nextSnapshot);
-      setStatus(`Cursor movido a ${formatClock(nextPositionSeconds)}.`);
-    } catch (error) {
-      setStatus(`No se pudo mover el transporte: ${String(error)}`);
-    }
-  };
-
-  const persistClipMove = async (clip: ClipSummary, nextTimelineStartSeconds: number) => {
-    setIsBusy(true);
-
-    try {
-      const sanitizedStartSeconds = roundTimelineSeconds(
-        snapTimelineSeconds(Math.max(0, nextTimelineStartSeconds)),
-      );
-      const nextSnapshot = await moveClip(clip.id, sanitizedStartSeconds);
-      setSnapshot(nextSnapshot);
-      setSelectedClipId(clip.id);
-      setStatus(`${clipDisplayName(clip)} movido a ${formatClock(sanitizedStartSeconds)}.`);
-    } catch (error) {
-      setStatus(`No se pudo mover el clip: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleMoveSelectedClip = async (nextTimelineStartSeconds: number) => {
-    if (!selectedClip) {
-      return;
-    }
-
-    await persistClipMove(selectedClip, nextTimelineStartSeconds);
-  };
-
-  const handleDeleteSelectedClip = async () => {
-    if (!selectedClip) {
-      return;
-    }
-
-    setIsBusy(true);
-
-    try {
-      const deletedClipName = clipDisplayName(selectedClip);
-      const nextSnapshot = await deleteClip(selectedClip.id);
-      setSnapshot(nextSnapshot);
-      setSelectedClipId(null);
-      setStatus(`Clip eliminado: ${deletedClipName}.`);
-    } catch (error) {
-      setStatus(`No se pudo borrar el clip: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleApplyClipWindow = async () => {
-    if (!selectedClip) {
-      return;
-    }
-
-    const parsedTimelineStart = Number(clipStartDraft);
-    const parsedSourceStart = Number(clipSourceStartDraft);
-    const parsedDuration = Number(clipDurationDraft);
-    if (
-      Number.isNaN(parsedTimelineStart) ||
-      Number.isNaN(parsedSourceStart) ||
-      Number.isNaN(parsedDuration)
-    ) {
-      setStatus("La ventana del clip no es valida.");
-      return;
-    }
-
-    setIsBusy(true);
-
-    try {
-      const nextSnapshot = await updateClipWindow({
-        clipId: selectedClip.id,
-        timelineStartSeconds: roundTimelineSeconds(snapTimelineSeconds(parsedTimelineStart)),
-        sourceStartSeconds: roundTimelineSeconds(Math.max(0, parsedSourceStart)),
-        durationSeconds: roundTimelineSeconds(parsedDuration),
-      });
-      const updatedClip =
-        nextSnapshot.song?.clips.find((clip) => clip.id === selectedClip.id) ?? null;
-
-      setSnapshot(nextSnapshot);
-      setSelectedClipId(selectedClip.id);
-      setStatus(`Clip actualizado: ${clipDisplayName(updatedClip ?? selectedClip)}.`);
-    } catch (error) {
-      setStatus(`No se pudo recortar el clip: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleDuplicateSelectedClip = async () => {
-    if (!selectedClip) {
-      return;
-    }
-
-    setIsBusy(true);
-
-    try {
-      const duplicatedStart = roundTimelineSeconds(
-        snapTimelineSeconds(selectedClip.timelineStartSeconds + selectedClip.durationSeconds),
-      );
-      const nextSnapshot = await duplicateClip({
-        clipId: selectedClip.id,
-        timelineStartSeconds: duplicatedStart,
-      });
-      const duplicatedClip =
-        nextSnapshot.song?.clips.find(
-          (clip) =>
-            clip.id !== selectedClip.id &&
-            nearlyEqual(clip.timelineStartSeconds, duplicatedStart) &&
-            clip.trackId === selectedClip.trackId,
-        ) ?? nextSnapshot.song?.clips.at(-1) ?? null;
-
-      setSnapshot(nextSnapshot);
-      setSelectedClipId(duplicatedClip?.id ?? null);
-      setStatus(
-        `${clipDisplayName(selectedClip)} duplicado en ${formatClock(duplicatedStart)}.`,
-      );
-    } catch (error) {
-      setStatus(`No se pudo duplicar el clip: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleCreateSection = async () => {
-    if (!activeSectionDraft) {
-      return;
-    }
-
-    setIsBusy(true);
-
-    try {
-      const nextSnapshot = await createSection(activeSectionDraft);
-      const createdSection =
-        nextSnapshot.song?.sections.find(
-          (section) =>
-            nearlyEqual(section.startSeconds, activeSectionDraft.startSeconds) &&
-            nearlyEqual(section.endSeconds, activeSectionDraft.endSeconds),
-        ) ?? nextSnapshot.song?.sections.at(-1) ?? null;
-
-      setSnapshot(nextSnapshot);
-      setSectionDraft(null);
-      setSectionSelectionMode(false);
-      setSelectedSectionId(createdSection?.id ?? null);
-      setJumpTargetSectionId(createdSection?.id ?? null);
-      setStatus(
-        `Seccion creada de ${formatClock(activeSectionDraft.startSeconds)} a ${formatClock(
-          activeSectionDraft.endSeconds,
-        )}.`,
-      );
-    } catch (error) {
-      setStatus(`No se pudo crear la seccion: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleSectionResizePointerDown = (
-    section: SectionSummary,
-    edge: "start" | "end",
-    event: React.PointerEvent<HTMLButtonElement>,
-  ) => {
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    setSelectedClipId(null);
-    setSelectedSectionId(section.id);
-    setJumpTargetSectionId(section.id);
-    setSectionDraft(null);
-    updateSectionResizeDragState({
-      sectionId: section.id,
-      edge,
-      pointerId: event.pointerId,
-      previewStartSeconds: section.startSeconds,
-      previewEndSeconds: section.endSeconds,
-    });
-  };
-
-  const handleSectionResizePointerMove = (
-    section: SectionSummary,
-    event: React.PointerEvent<HTMLButtonElement>,
-  ) => {
-    event.stopPropagation();
-    autoScrollTimeline(event.clientX);
-    updateSectionResizeDragState((currentDrag) => {
-      if (
-        currentDrag === null ||
-        currentDrag.pointerId !== event.pointerId ||
-        currentDrag.sectionId !== section.id
-      ) {
-        return currentDrag;
-      }
-
-      const pointerSeconds = roundTimelineSeconds(resolveTimelineSeconds(event.clientX));
-      if (!Number.isFinite(pointerSeconds)) {
-        return currentDrag;
-      }
-
-      if (currentDrag.edge === "start") {
-        return {
-          ...currentDrag,
-          previewStartSeconds: clamp(pointerSeconds, 0, currentDrag.previewEndSeconds - 0.05),
-        };
-      }
-
-      return {
-        ...currentDrag,
-        previewEndSeconds: clamp(pointerSeconds, currentDrag.previewStartSeconds + 0.05, durationSeconds),
-      };
-    });
-  };
-
-  const handleSectionResizePointerUp = async (
-    section: SectionSummary,
-    event: React.PointerEvent<HTMLButtonElement>,
-  ) => {
-    event.stopPropagation();
-
-    const currentDrag = sectionResizeDragRef.current;
-    if (
-      currentDrag === null ||
-      currentDrag.pointerId !== event.pointerId ||
-      currentDrag.sectionId !== section.id
-    ) {
-      return;
-    }
-
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    updateSectionResizeDragState(null);
-    setIsBusy(true);
-
-    try {
-      const nextSnapshot = await updateSection({
-        sectionId: section.id,
-        name: section.name,
-        startSeconds: roundTimelineSeconds(currentDrag.previewStartSeconds),
-        endSeconds: roundTimelineSeconds(currentDrag.previewEndSeconds),
-      });
-      setSnapshot(nextSnapshot);
-      setSelectedSectionId(section.id);
-      setJumpTargetSectionId(section.id);
-      setStatus(`Seccion ajustada: ${section.name}.`);
-    } catch (error) {
-      setStatus(`No se pudo ajustar la seccion: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleSectionResizePointerCancel = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (sectionResizeDragRef.current?.pointerId !== event.pointerId) {
-      return;
-    }
-
-    updateSectionResizeDragState(null);
-  };
-
-  const handleApplySectionChanges = async () => {
-    if (!selectedSection) {
-      return;
-    }
-
-    const parsedStart = Number(sectionStartDraft);
-    const parsedEnd = Number(sectionEndDraft);
-    if (Number.isNaN(parsedStart) || Number.isNaN(parsedEnd)) {
-      setStatus("El rango de la seccion no es valido.");
-      return;
-    }
-
-    setIsBusy(true);
-
-    try {
-      const nextSnapshot = await updateSection({
-        sectionId: selectedSection.id,
-        name: sectionNameDraft,
-        startSeconds: parsedStart,
-        endSeconds: parsedEnd,
-      });
-      const updatedSection =
-        nextSnapshot.song?.sections.find((section) => section.id === selectedSection.id) ?? null;
-
-      setSnapshot(nextSnapshot);
-      setSectionDraft(null);
-      setSelectedSectionId(selectedSection.id);
-      setJumpTargetSectionId(selectedSection.id);
-      setStatus(`Seccion actualizada: ${updatedSection?.name ?? sectionNameDraft.trim()}.`);
-    } catch (error) {
-      setStatus(`No se pudo actualizar la seccion: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleDeleteSelectedSection = async () => {
-    if (!selectedSection) {
-      return;
-    }
-
-    setIsBusy(true);
-
-    try {
-      const deletedSectionName = selectedSection.name;
-      const nextSnapshot = await deleteSection(selectedSection.id);
-      const fallbackSectionId = nextSnapshot.song?.sections[0]?.id ?? null;
-
-      setSnapshot(nextSnapshot);
-      setSelectedSectionId(null);
-      setSectionDraft(null);
-      setJumpTargetSectionId(fallbackSectionId);
-      setStatus(`Seccion eliminada: ${deletedSectionName}.`);
-    } catch (error) {
-      setStatus(`No se pudo borrar la seccion: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleCreateGroup = async () => {
-    if (!groupNameDraft.trim()) {
-      setStatus("El nombre del grupo no puede estar vacio.");
-      return;
-    }
-
-    setIsBusy(true);
-
-    try {
-      const trimmedGroupName = groupNameDraft.trim();
-      const nextSnapshot = await createGroup(trimmedGroupName);
-      setSnapshot(nextSnapshot);
-      setGroupNameDraft("");
-      setStatus(`Grupo creado: ${trimmedGroupName}.`);
-    } catch (error) {
-      setStatus(`No se pudo crear el grupo: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleTrackVolumeChange = async (trackId: string, value: number) => {
-    try {
-      const nextSnapshot = await setTrackVolume(trackId, value / 100);
-      setSnapshot(nextSnapshot);
-    } catch (error) {
-      setStatus(`No se pudo cambiar el volumen de pista: ${String(error)}`);
-    }
-  };
-
-  const handleTrackMuteToggle = async (trackId: string) => {
-    try {
-      const nextSnapshot = await toggleTrackMute(trackId);
-      setSnapshot(nextSnapshot);
-    } catch (error) {
-      setStatus(`No se pudo cambiar el mute de pista: ${String(error)}`);
-    }
-  };
-
-  const handleGroupVolumeChange = async (groupId: string, value: number) => {
-    try {
-      const nextSnapshot = await setGroupVolume(groupId, value / 100);
-      setSnapshot(nextSnapshot);
-    } catch (error) {
-      setStatus(`No se pudo cambiar el volumen de grupo: ${String(error)}`);
-    }
-  };
-
-  const handleGroupMuteToggle = async (groupId: string) => {
-    try {
-      const nextSnapshot = await toggleGroupMute(groupId);
-      setSnapshot(nextSnapshot);
-    } catch (error) {
-      setStatus(`No se pudo cambiar el mute de grupo: ${String(error)}`);
-    }
-  };
-
-  const handleTrackGroupChange = async (trackId: string, nextGroupId: string) => {
-    try {
-      const nextSnapshot = await assignTrackToGroup(trackId, nextGroupId || null);
-      setSnapshot(nextSnapshot);
-    } catch (error) {
-      setStatus(`No se pudo asignar la pista al grupo: ${String(error)}`);
-    }
-  };
-
-  const handleScheduleJump = async (trigger: "immediate" | "section_end" | "after_bars") => {
-    if (!jumpTargetSectionId) {
-      setStatus("Selecciona primero una seccion del timeline.");
-      return;
-    }
-
-    try {
-      const nextSnapshot = await scheduleSectionJump({
-        targetSectionId: jumpTargetSectionId,
-        trigger,
-        bars: trigger === "after_bars" ? jumpBars : undefined,
-      });
-      setSnapshot(nextSnapshot);
-      setStatus("Salto de seccion programado.");
-    } catch (error) {
-      setStatus(`No se pudo programar el salto: ${String(error)}`);
-    }
-  };
-
-  const handleCancelJump = async () => {
-    try {
-      const nextSnapshot = await cancelSectionJump();
-      setSnapshot(nextSnapshot);
-      setStatus("Salto pendiente cancelado.");
-    } catch (error) {
-      setStatus(`No se pudo cancelar el salto: ${String(error)}`);
-    }
-  };
-
-  const resolveTimelineSeconds = (clientX: number) => {
-    const scrollElement = timelineScrollRef.current;
-    const contentElement = timelineContentRef.current;
-    if (!scrollElement || !contentElement || durationSeconds <= 0) {
-      return 0;
-    }
-
-    const scrollRect = scrollElement.getBoundingClientRect();
-    const contentRect = contentElement.getBoundingClientRect();
-    const contentWidth = contentRect.width || contentElement.scrollWidth || scrollRect.width || 1;
-    const relativeX = clientX - scrollRect.left + scrollElement.scrollLeft;
-    const ratio = clamp(relativeX / contentWidth, 0, 1);
-    return ratio * durationSeconds;
-  };
-
-  const autoScrollTimeline = (clientX: number) => {
-    const scrollElement = timelineScrollRef.current;
-    if (!scrollElement) {
-      return;
-    }
-
-    const scrollRect = scrollElement.getBoundingClientRect();
-    const edgeThreshold = 88;
-    const maxScrollStep = 36;
-
-    if (clientX <= scrollRect.left + edgeThreshold) {
-      const intensity = clamp((scrollRect.left + edgeThreshold - clientX) / edgeThreshold, 0, 1);
-      scrollElement.scrollLeft = Math.max(0, scrollElement.scrollLeft - maxScrollStep * intensity);
-      return;
-    }
-
-    if (clientX >= scrollRect.right - edgeThreshold) {
-      const intensity = clamp((clientX - (scrollRect.right - edgeThreshold)) / edgeThreshold, 0, 1);
-      scrollElement.scrollLeft += maxScrollStep * intensity;
-    }
-  };
-
-  const handleTimelinePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!song || durationSeconds <= 0) {
-      return;
-    }
-
-    const target = event.target as HTMLElement;
-    if (target.closest(".clip-block") || target.closest(".timeline-section-chip")) {
-      return;
-    }
-
-    const nextSeconds = resolveTimelineSeconds(event.clientX);
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    setSelectedClipId(null);
-    setTimelineDrag({
-      mode: sectionSelectionMode ? "section" : "seek",
-      pointerId: event.pointerId,
-      startSeconds: nextSeconds,
-      currentSeconds: nextSeconds,
-    });
-  };
-
-  const handleTimelinePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    autoScrollTimeline(event.clientX);
-    setTimelineDrag((currentDrag) => {
-      if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
-        return currentDrag;
-      }
-
-      return {
-        ...currentDrag,
-        currentSeconds: resolveTimelineSeconds(event.clientX),
-      };
-    });
-  };
-
-  const handleTimelinePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    const currentDrag = timelineDrag;
-    if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
-      return;
-    }
-
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    setTimelineDrag(null);
-
-    if (currentDrag.mode === "seek") {
-      void handleSeek(currentDrag.currentSeconds);
-      return;
-    }
-
-    const nextDraft = normalizeRange(currentDrag.startSeconds, currentDrag.currentSeconds);
-    setSectionDraft(nextDraft);
-    setSelectedSectionId(null);
-  };
-
-  const handleTimelinePointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!timelineDrag || timelineDrag.pointerId !== event.pointerId) {
-      return;
-    }
-
-    setTimelineDrag(null);
-  };
-
-  const handleTimelineWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (!event.ctrlKey) {
-      return;
-    }
-
+    setTimeSelection(null);
+    setContextMenu(null);
+    setStatus(message);
+  }
+
+  function openMenu(
+    event: ReactMouseEvent,
+    title: string,
+    actions: ContextMenuAction[],
+  ) {
     event.preventDefault();
-    const zoomDelta = event.deltaY < 0 ? TIMELINE_ZOOM_STEP : -TIMELINE_ZOOM_STEP;
-    updateTimelineZoom(zoomLevel + zoomDelta, event.clientX);
-  };
-
-  const handleClipPointerDown = (clip: ClipSummary, event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!song || durationSeconds <= 0) {
-      return;
-    }
-
     event.stopPropagation();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    const pointerStartSeconds = resolveTimelineSeconds(event.clientX);
-
-    setSelectedClipId(clip.id);
-    const nextClipDrag: ClipDragState = {
-      clipId: clip.id,
-      pointerId: event.pointerId,
-      pointerStartSeconds,
-      originTimelineStartSeconds: clip.timelineStartSeconds,
-      previewTimelineStartSeconds: clip.timelineStartSeconds,
-      hasMoved: false,
-    };
-
-    clipDragRef.current = nextClipDrag;
-    setClipDrag(nextClipDrag);
-  };
-
-  const handleClipPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-
-    const currentDrag = clipDragRef.current;
-    if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
-      return;
-    }
-
-    autoScrollTimeline(event.clientX);
-    const deltaSeconds = resolveTimelineSeconds(event.clientX) - currentDrag.pointerStartSeconds;
-    const nextTimelineStartSeconds = Math.max(0, currentDrag.originTimelineStartSeconds + deltaSeconds);
-    const nextClipDrag: ClipDragState = {
-      ...currentDrag,
-      previewTimelineStartSeconds: roundTimelineSeconds(snapTimelineSeconds(nextTimelineStartSeconds)),
-      hasMoved: currentDrag.hasMoved || Math.abs(deltaSeconds) >= 0.2,
-    };
-
-    clipDragRef.current = nextClipDrag;
-    setClipDrag(nextClipDrag);
-  };
-
-  const handleClipPointerUp = (clip: ClipSummary, event: React.PointerEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-
-    const currentDrag = clipDragRef.current;
-    if (!currentDrag || currentDrag.pointerId !== event.pointerId || currentDrag.clipId !== clip.id) {
-      return;
-    }
-
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    const releaseDeltaSeconds = resolveTimelineSeconds(event.clientX) - currentDrag.pointerStartSeconds;
-    const releaseHasMoved = currentDrag.hasMoved || Math.abs(releaseDeltaSeconds) >= 0.2;
-    const releaseTimelineStartSeconds = roundTimelineSeconds(
-      snapTimelineSeconds(Math.max(0, currentDrag.originTimelineStartSeconds + releaseDeltaSeconds)),
-    );
-    clipDragRef.current = null;
-    setClipDrag(null);
-
-    if (!releaseHasMoved) {
-      setSelectedClipId(clip.id);
-      setStatus(`Clip seleccionado: ${clipDisplayName(clip)}.`);
-      return;
-    }
-
-    void persistClipMove(clip, releaseTimelineStartSeconds);
-  };
-
-  const handleClipPointerCancel = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!clipDragRef.current || clipDragRef.current.pointerId !== event.pointerId) {
-      return;
-    }
-
-    clipDragRef.current = null;
-    setClipDrag(null);
-  };
-
-  const handleClipTrimPointerDown = (
-    clip: ClipSummary,
-    edge: "start" | "end",
-    event: React.PointerEvent<HTMLButtonElement>,
-  ) => {
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    setSelectedSectionId(null);
-    setSelectedClipId(clip.id);
-    clipDragRef.current = null;
-    setClipDrag(null);
-    updateClipTrimDragState({
-      clipId: clip.id,
-      edge,
-      pointerId: event.pointerId,
-      previewTimelineStartSeconds: clip.timelineStartSeconds,
-      previewSourceStartSeconds: clip.sourceStartSeconds,
-      previewDurationSeconds: clip.durationSeconds,
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      title,
+      actions,
     });
-  };
+  }
 
-  const handleClipTrimPointerMove = (
-    clip: ClipSummary,
-    event: React.PointerEvent<HTMLButtonElement>,
-  ) => {
-    event.stopPropagation();
-    autoScrollTimeline(event.clientX);
-    updateClipTrimDragState((currentDrag) => {
-      if (
-        currentDrag === null ||
-        currentDrag.pointerId !== event.pointerId ||
-        currentDrag.clipId !== clip.id
-      ) {
-        return currentDrag;
-      }
-
-      const pointerSeconds = roundTimelineSeconds(resolveTimelineSeconds(event.clientX));
-      if (!Number.isFinite(pointerSeconds)) {
-        return currentDrag;
-      }
-
-      const clipEndSeconds = clip.timelineStartSeconds + clip.durationSeconds;
-      if (currentDrag.edge === "start") {
-        const minTimelineStart = Math.max(0, clip.timelineStartSeconds - clip.sourceStartSeconds);
-        const nextTimelineStartSeconds = clamp(pointerSeconds, minTimelineStart, clipEndSeconds - 0.05);
-        const timelineShift = nextTimelineStartSeconds - clip.timelineStartSeconds;
-
-        return {
-          ...currentDrag,
-          previewTimelineStartSeconds: nextTimelineStartSeconds,
-          previewSourceStartSeconds: roundTimelineSeconds(
-            Math.max(0, clip.sourceStartSeconds + timelineShift),
-          ),
-          previewDurationSeconds: roundTimelineSeconds(
-            Math.max(0.05, clipEndSeconds - nextTimelineStartSeconds),
-          ),
-        };
-      }
-
-      const nextClipEndSeconds = clamp(
-        pointerSeconds,
-        clip.timelineStartSeconds + 0.05,
-        clipEndSeconds,
-      );
-
-      return {
-        ...currentDrag,
-        previewDurationSeconds: roundTimelineSeconds(
-          Math.max(0.05, nextClipEndSeconds - clip.timelineStartSeconds),
-        ),
-      };
-    });
-  };
-
-  const handleClipTrimPointerUp = async (
-    clip: ClipSummary,
-    event: React.PointerEvent<HTMLButtonElement>,
-  ) => {
-    event.stopPropagation();
-
-    const currentDrag = clipTrimDragRef.current;
-    if (
-      currentDrag === null ||
-      currentDrag.pointerId !== event.pointerId ||
-      currentDrag.clipId !== clip.id
-    ) {
+  async function handleCreateTrack(kind: TrackKind, anchorTrack: TrackSummary | null, parentTrackId?: string | null) {
+    const defaultName = kind === "folder" ? "Folder track" : "Audio track";
+    const name = window.prompt("Nombre del track", defaultName)?.trim();
+    if (!name) {
       return;
     }
 
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    updateClipTrimDragState(null);
-    setIsBusy(true);
-
-    try {
-      const nextSnapshot = await updateClipWindow({
-        clipId: clip.id,
-        timelineStartSeconds: roundTimelineSeconds(currentDrag.previewTimelineStartSeconds),
-        sourceStartSeconds: roundTimelineSeconds(currentDrag.previewSourceStartSeconds),
-        durationSeconds: roundTimelineSeconds(currentDrag.previewDurationSeconds),
+    await runAction(async () => {
+      const nextSnapshot = await createTrack({
+        name,
+        kind,
+        insertAfterTrackId: anchorTrack?.id ?? null,
+        parentTrackId: parentTrackId ?? null,
       });
       setSnapshot(nextSnapshot);
-      setSelectedClipId(clip.id);
-      setStatus(`Clip ajustado: ${clipDisplayName(clip)}.`);
-    } catch (error) {
-      setStatus(`No se pudo ajustar el clip: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
-  };
+      setStatus(`Track creado: ${name}`);
+    });
+  }
 
-  const handleClipTrimPointerCancel = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (clipTrimDragRef.current?.pointerId !== event.pointerId) {
-      return;
+  function trackContextMenu(track: TrackSummary) {
+    if (!song) {
+      return [];
     }
 
-    updateClipTrimDragState(null);
-  };
+    const previousFolder = findPreviousFolderTrack(song, track.id);
+    const parentTrack = findTrack(song, track.parentTrackId ?? null);
+    const parentOfParent = parentTrack?.parentTrackId ?? null;
 
-  const transportStateLabel = snapshot?.playbackState ?? "empty";
+    return [
+      {
+        label: "Insertar track",
+        onSelect: () => handleCreateTrack("audio", track, track.parentTrackId ?? null),
+      },
+      {
+        label: "Insertar folder track",
+        onSelect: () => handleCreateTrack("folder", track, track.parentTrackId ?? null),
+      },
+      {
+        label: "Renombrar",
+        onSelect: async () => {
+          const nextName = window.prompt("Nuevo nombre del track", track.name)?.trim();
+          if (!nextName) {
+            return;
+          }
+          await runAction(async () => {
+            const nextSnapshot = await updateTrack({ trackId: track.id, name: nextName });
+            setSnapshot(nextSnapshot);
+            setStatus(`Track renombrado: ${nextName}`);
+          });
+        },
+      },
+      {
+        label: "Borrar",
+        onSelect: async () => {
+          const clipCount = song.clips.filter((clip) => clip.trackId === track.id).length;
+          if (
+            track.kind === "audio" &&
+            clipCount > 0 &&
+            !window.confirm("Este audio track tiene clips. ¿Quieres borrarlo junto con sus clips?")
+          ) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = await deleteTrack(track.id);
+            setSnapshot(nextSnapshot);
+            setStatus(`Track borrado: ${track.name}`);
+          });
+        },
+      },
+      {
+        label: "Indentar dentro del folder anterior",
+        disabled: !previousFolder,
+        onSelect: async () => {
+          if (!previousFolder) {
+            return;
+          }
+          await runAction(async () => {
+            const nextSnapshot = await moveTrack({
+              trackId: track.id,
+              parentTrackId: previousFolder.id,
+            });
+            setSnapshot(nextSnapshot);
+            setStatus(`Track movido dentro de ${previousFolder.name}`);
+          });
+        },
+      },
+      {
+        label: "Sacar del folder",
+        disabled: !track.parentTrackId,
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await moveTrack({
+              trackId: track.id,
+              insertAfterTrackId: track.parentTrackId ?? null,
+              parentTrackId: parentOfParent,
+            });
+            setSnapshot(nextSnapshot);
+            setStatus(`Track sacado del folder: ${track.name}`);
+          });
+        },
+      },
+    ];
+  }
+
+  function clipContextMenu(clip: ClipSummary) {
+    const canSplit =
+      positionSeconds > clip.timelineStartSeconds &&
+      positionSeconds < clip.timelineStartSeconds + clip.durationSeconds;
+
+    return [
+      {
+        label: "Cortar en cursor",
+        disabled: !canSplit,
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await splitClip(clip.id, positionSeconds);
+            setSnapshot(nextSnapshot);
+            setStatus(`Clip cortado en ${formatClock(positionSeconds)}`);
+          });
+        },
+      },
+      {
+        label: "Duplicar",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await duplicateClip(
+              clip.id,
+              clip.timelineStartSeconds + clip.durationSeconds + 1,
+            );
+            setSnapshot(nextSnapshot);
+            setStatus(`Clip duplicado: ${clip.trackName}`);
+          });
+        },
+      },
+      {
+        label: "Borrar",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await deleteClip(clip.id);
+            setSnapshot(nextSnapshot);
+            setSelectedClipId(null);
+            setStatus(`Clip eliminado: ${clip.trackName}`);
+          });
+        },
+      },
+    ];
+  }
+
+  function sectionContextMenu(section: SectionSummary) {
+    return [
+      {
+        label: "Renombrar",
+        onSelect: async () => {
+          const nextName = window.prompt("Nuevo nombre de la seccion", section.name)?.trim();
+          if (!nextName) {
+            return;
+          }
+          await runAction(async () => {
+            const nextSnapshot = await updateSection(
+              section.id,
+              nextName,
+              section.startSeconds,
+              section.endSeconds,
+            );
+            setSnapshot(nextSnapshot);
+            setStatus(`Seccion renombrada: ${nextName}`);
+          });
+        },
+      },
+      {
+        label: "Borrar",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await deleteSection(section.id);
+            setSnapshot(nextSnapshot);
+            setSelectedSectionId(null);
+            setStatus(`Seccion eliminada: ${section.name}`);
+          });
+        },
+      },
+      {
+        label: "Ir ahora",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await scheduleSectionJump(section.id, "immediate");
+            setSnapshot(nextSnapshot);
+            setStatus(`Cursor enviado a ${section.name}`);
+          });
+        },
+      },
+      {
+        label: "Programar salto al final",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await scheduleSectionJump(section.id, "section_end");
+            setSnapshot(nextSnapshot);
+            setStatus(`Salto armado hacia ${section.name}`);
+          });
+        },
+      },
+      {
+        label: "Programar salto en compases",
+        onSelect: async () => {
+          const bars = Number(window.prompt("Compases para el salto", "4") ?? "4");
+          await runAction(async () => {
+            const nextSnapshot = await scheduleSectionJump(section.id, "after_bars", bars);
+            setSnapshot(nextSnapshot);
+            setStatus(`Salto en compases armado hacia ${section.name}`);
+          });
+        },
+      },
+    ];
+  }
 
   return (
-    <section className="daw-shell">
-      {isBusy && (
-        <div className="busy-overlay" role="status" aria-live="polite">
+    <div className="lt-daw-shell" ref={panelRef} onContextMenu={(event) => event.preventDefault()}>
+      {isBusy ? (
+        <div className="busy-overlay" aria-live="polite">
           <div className="busy-overlay-card">
-            <strong>LibreTracks trabajando</strong>
-            <p>{status}</p>
+            <strong>Aplicando cambios</strong>
+            <p>Sincronizando el estado del proyecto y del timeline.</p>
           </div>
         </div>
-      )}
+      ) : null}
 
-      <header className="daw-topbar">
-        <div className="brand-cluster">
-          <p className="brand-kicker">LibreTracks</p>
-          <h1>LibreTracks Timeline DAW</h1>
-          <p className="brand-subtitle">
-            Timeline primero, mezcla integrada y edicion directa sobre clips y secciones.
-          </p>
+      <header className="lt-topbar">
+        <div className="lt-brand">
+          <span className="lt-kicker">LibreTracks Desktop</span>
+          <h1>Timeline DAW</h1>
+          <p>{song ? `${song.title} · ${song.bpm} BPM · ${song.timeSignature}` : "Sesion vacia"}</p>
         </div>
 
-        <div className="transport-cluster" aria-label="Controles de transporte">
-          <div className="transport-buttons">
-            <button disabled={!song || isBusy} type="button" onClick={() => void handlePlay()}>
-              Play
-            </button>
-            <button disabled={!song || isBusy} type="button" onClick={() => void handlePause()}>
-              Pause
-            </button>
-            <button disabled={!song || isBusy} type="button" onClick={() => void handleStop()}>
-              Stop
-            </button>
-          </div>
-
-          <div className="transport-readout">
-            <strong>{formatClock(displayedPositionSeconds)}</strong>
-            <span className={`transport-pill is-${transportStateLabel}`}>{transportStateLabel}</span>
-            {song && (
-              <span className="transport-meta">
-                {song.bpm} BPM | {song.timeSignature} | {tracks.length} pistas
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="session-actions">
-          <button disabled={isBusy} type="button" onClick={() => void handleCreateSong()}>
-            Crear Cancion
+        <div className="lt-transport">
+          <button type="button" onClick={() => void runAction(async () => setSnapshot(await playTransport()))}>
+            Play
           </button>
-          <button disabled={isBusy} type="button" onClick={() => void handleImport()}>
+          <button type="button" onClick={() => void runAction(async () => setSnapshot(await pauseTransport()))}>
+            Pause
+          </button>
+          <button type="button" onClick={() => void runAction(async () => setSnapshot(await stopTransport()))}>
+            Stop
+          </button>
+          <div className="lt-transport-readout">
+            <strong>{formatClock(positionSeconds)}</strong>
+            <span className={`transport-pill is-${snapshot?.playbackState ?? "empty"}`}>
+              {snapshot?.playbackState ?? "empty"}
+            </span>
+          </div>
+        </div>
+
+        <div className="lt-session-actions">
+          <button type="button" onClick={() => void runAction(async () => setSnapshot(await createSong()))}>
+            Crear cancion
+          </button>
+          <button type="button" onClick={() => void runAction(async () => setSnapshot((await openProject()) ?? snapshot))}>
+            Abrir
+          </button>
+          <button type="button" onClick={() => void runAction(async () => setSnapshot(await saveProject()))}>
+            Guardar
+          </button>
+          <button
+            type="button"
+            onClick={() => void runAction(async () => setSnapshot((await pickAndImportSong()) ?? snapshot))}
+          >
             Importar WAVs
-          </button>
-          <button disabled={!song || isBusy} type="button" onClick={() => void handleSaveProject()}>
-            Guardar Proyecto
-          </button>
-          <button disabled={isBusy} type="button" onClick={() => void handleOpenProject()}>
-            Abrir Proyecto
           </button>
         </div>
       </header>
 
-      <div className="status-ribbon" role="status">
-        <div>
-          <strong>{song?.title ?? "Todavia no hay cancion cargada"}</strong>
-          <p>{status}</p>
+      <section className="lt-main-stage">
+        <div className="lt-timeline-topline">
+          <div>
+            <strong>Vista principal</strong>
+            <p>El timeline manda; el resto vive en menus contextuales e interacciones directas.</p>
+          </div>
+          <div className="lt-timeline-stats">
+            <span>{song?.tracks.length ?? 0} tracks</span>
+            <span>{song?.clips.length ?? 0} clips</span>
+            <span>{song?.sections.length ?? 0} secciones</span>
+          </div>
         </div>
-        <div className="status-ribbon-meta">
-          <span>{song ? `${clipCount} clips | ${sections.length} secciones` : "Sin proyecto"}</span>
-          <span>{projectLocation}</span>
-        </div>
-      </div>
 
-      {song ? (
-        <>
-          <section className="overview-strip" aria-label="Resumen de la sesion">
-            <article className="overview-card">
-              <span className="overview-label">Proyecto</span>
-              <strong>{song.title}</strong>
-              <p>
-                {song.artist || "Sin artista"} | {formatClock(positionSeconds)} /{" "}
-                {formatClock(durationSeconds)}
-              </p>
-            </article>
-
-            <article className="overview-card">
-              <span className="overview-label">Timeline</span>
-              <strong>{tracks.length} pistas activas</strong>
-              <p>{clipCount} clips, zoom {zoomLevel.toFixed(1)}x y cursor editable desde la regla.</p>
-            </article>
-
-            <article className="overview-card">
-              <span className="overview-label">Secciones</span>
-              <strong>{currentSection ? currentSection.name : "Sin seccion activa"}</strong>
-              <p>
-                {pendingSectionJump
-                  ? `Salto armado hacia ${pendingSectionJump.targetSectionName}.`
-                  : "Sin salto musical pendiente."}
-              </p>
-            </article>
-          </section>
-
-          <section className="submix-panel">
-            <div className="submix-header">
-              <div>
-                <h2>Submezclas</h2>
-                <p>Los grupos viven arriba del timeline y las pistas se asignan desde su cabecera.</p>
-              </div>
-
-              <div className="group-create-row">
-                <label className="compact-field">
-                  <span>Nuevo grupo</span>
-                  <input
-                    aria-label="Nombre del nuevo grupo"
-                    disabled={isBusy}
-                    type="text"
-                    value={groupNameDraft}
-                    onChange={(event) => {
-                      setGroupNameDraft(event.target.value);
-                    }}
-                  />
-                </label>
-                <button disabled={isBusy} type="button" onClick={() => void handleCreateGroup()}>
-                  Crear Grupo
-                </button>
-              </div>
+        <div className="lt-timeline-shell">
+          <div className="lt-ruler-row">
+            <div className="lt-ruler-header">
+              <span>Tracks</span>
             </div>
+            <div
+              className="lt-ruler-track"
+              ref={rulerTrackRef}
+              onMouseDown={(event) => {
+                if (!song || event.button !== 0 || !rulerTrackRef.current) {
+                  return;
+                }
 
-            <div className="submix-strip">
-              {groups.map((group) => (
-                <article className="submix-card" key={group.id}>
-                  <div className="submix-card-top">
-                    <div>
-                      <strong>{group.name}</strong>
-                      <p>Vol {Math.round(group.volume * 100)}%</p>
-                    </div>
-                    <button type="button" onClick={() => void handleGroupMuteToggle(group.id)}>
-                      {group.muted ? "Unmute" : "Mute"}
-                    </button>
+                const startSeconds = rulerPointerToSeconds(
+                  event,
+                  rulerTrackRef.current,
+                  song.durationSeconds,
+                  pixelsPerSecond,
+                );
+                setSelectedSectionId(null);
+                setContextMenu(null);
+                setRulerDrag({
+                  pointerId: 1,
+                  startSeconds,
+                  currentSeconds: startSeconds,
+                });
+              }}
+            >
+              <div className="lt-ruler-content" style={{ width: timelineWidth }}>
+                {rulerMarks.map((mark) => (
+                  <div
+                    key={mark}
+                    className="lt-ruler-mark"
+                    style={{ left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px` }}
+                  >
+                    <span>{formatCompactTime(mark)}</span>
                   </div>
+                ))}
 
-                  <label className="compact-slider">
-                    <span>Volumen de grupo</span>
-                    <input
-                      aria-label={`Volumen de grupo ${group.name}`}
-                      max="100"
-                      min="0"
-                      type="range"
-                      value={Math.round(group.volume * 100)}
-                      onChange={(event) => {
-                        void handleGroupVolumeChange(group.id, Number(event.target.value));
-                      }}
-                    />
-                  </label>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="timeline-stage">
-            <div className="timeline-stage-header">
-              <div>
-                <h2>Timeline principal</h2>
-                <p>
-                  Arrastra clips horizontalmente, crea regiones por rango y arma saltos sin salir
-                  de la linea de tiempo.
-                </p>
-              </div>
-
-              <div className="timeline-tools">
-                <label className="zoom-field">
-                  <span>Zoom</span>
-                  <input
-                    aria-label="Zoom horizontal del timeline"
-                    max={TIMELINE_ZOOM_MAX}
-                    min={TIMELINE_ZOOM_MIN}
-                    step={TIMELINE_ZOOM_STEP}
-                    type="range"
-                    value={zoomLevel}
-                    onChange={(event) => {
-                      updateTimelineZoom(Number(event.target.value));
+                {song?.sections.map((section) => (
+                  <button
+                    key={section.id}
+                    type="button"
+                    className={`lt-section-tag ${selectedSectionId === section.id ? "is-selected" : ""}`}
+                    style={{
+                      left: `${(section.startSeconds / Math.max(1, song.durationSeconds)) * timelineWidth}px`,
+                      width: `${((section.endSeconds - section.startSeconds) /
+                        Math.max(1, song.durationSeconds)) * timelineWidth}px`,
                     }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedSectionId(section.id);
+                      setSelectedClipId(null);
+                      setSelectedTrackId(null);
+                      setStatus(`Seccion seleccionada: ${section.name}`);
+                    }}
+                    onContextMenu={(event) => {
+                      setSelectedSectionId(section.id);
+                      openMenu(event, section.name, sectionContextMenu(section));
+                    }}
+                  >
+                    {section.name}
+                  </button>
+                ))}
+
+                {currentSelection ? (
+                  <div
+                    className="lt-time-selection"
+                    style={{ left: currentSelectionLeft, width: currentSelectionWidth }}
                   />
-                </label>
+                ) : null}
 
-                <button
-                  aria-pressed={sectionSelectionMode}
-                  className={sectionSelectionMode ? "mode-toggle is-active" : "mode-toggle"}
-                  disabled={isBusy}
-                  type="button"
-                  onClick={() => {
-                    setSectionSelectionMode((currentValue) => !currentValue);
-                    setTimelineDrag(null);
-                  }}
-                >
-                  {sectionSelectionMode ? "Modo region activo" : "Modo region"}
-                </button>
-
-                <button
-                  aria-pressed={snapEnabled}
-                  className={snapEnabled ? "mode-toggle is-active" : "mode-toggle"}
-                  disabled={isBusy || !song}
-                  type="button"
-                  onClick={() => {
-                    setSnapEnabled((currentValue) => !currentValue);
-                  }}
-                >
-                  {snapEnabled ? "Snap beat activo" : "Snap beat"}
-                </button>
-
-                <strong className="timeline-meta">
-                  {tracks.length} pistas | {clipCount} clips | {sections.length} secciones
-                </strong>
+                <div className="lt-playhead" style={{ left: playheadOffset }} />
               </div>
             </div>
+          </div>
 
-            <div className="timeline-shell">
-              <aside className="timeline-headers" aria-label="Cabeceras de pista">
-                <div className="timeline-headers-spacer" aria-hidden="true" />
+          <div className="lt-track-list" ref={laneAreaRef}>
+            {song && visibleTracks.length === 0 ? (
+              <div className="lt-empty-state">
+                <strong>No hay tracks cargados</strong>
+                <p>Crea un proyecto o importa WAVs para empezar a editar la sesion.</p>
+              </div>
+            ) : null}
 
-                {tracks.map((track) => {
-                  const trackClips = clipsByTrack[track.id] ?? [];
-                  const isTrackSelected = selectedClip?.trackId === track.id;
-                  const selectedTrackGroupId =
-                    groups.find((group) => group.name === track.groupName)?.id ?? "";
+            {song?.tracks && visibleTracks.map((track) => {
+              const trackClips = song.clips.filter((clip) => clip.trackId === track.id);
+              const isTrackSelected = selectedTrackId === track.id;
+              const childCount = trackChildrenCount(song, track.id);
 
-                  return (
-                    <article
-                      aria-label={`Cabecera de pista ${track.name}`}
-                      className={`track-header-card${isTrackSelected ? " is-selected" : ""}`}
-                      key={track.id}
-                    >
-                      <div className="track-header-top">
-                        <div>
-                          <strong>{track.name}</strong>
-                          <p>{track.groupName ?? "Sin grupo"} | {trackClips.length} clips</p>
-                        </div>
-                        <button type="button" onClick={() => void handleTrackMuteToggle(track.id)}>
-                          {track.muted ? "Unmute" : "Mute"}
-                        </button>
+              return (
+                <div key={track.id} className="lt-track-row">
+                  <div
+                    className={`lt-track-header ${isTrackSelected ? "is-selected" : ""} ${track.kind === "folder" ? "is-folder" : ""}`}
+                    style={{ paddingLeft: 16 + track.depth * 22 }}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setSelectedTrackId(track.id);
+                      setSelectedClipId(null);
+                      setSelectedSectionId(null);
+                      setStatus(`Track seleccionado: ${track.name}`);
+                    }}
+                    onContextMenu={(event) => {
+                      setSelectedTrackId(track.id);
+                      openMenu(event, track.name, trackContextMenu(track));
+                    }}
+                  >
+                    <div className="lt-track-header-main">
+                      <div className="lt-track-title-row">
+                        {track.kind === "folder" ? (
+                          <button
+                            type="button"
+                            className="lt-folder-toggle"
+                            aria-label={collapsedFolders.has(track.id) ? `Expandir ${track.name}` : `Colapsar ${track.name}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setCollapsedFolders((current) => {
+                                const next = new Set(current);
+                                if (next.has(track.id)) {
+                                  next.delete(track.id);
+                                } else {
+                                  next.add(track.id);
+                                }
+                                return next;
+                              });
+                            }}
+                          >
+                            {collapsedFolders.has(track.id) ? "+" : "-"}
+                          </button>
+                        ) : null}
+                        <strong>{track.name}</strong>
                       </div>
+                      <span>
+                        {track.kind === "folder"
+                          ? `${childCount} hijos`
+                          : `${trackClips.length} clips · pan ${track.pan.toFixed(2)}`}
+                      </span>
+                    </div>
 
-                      <label className="compact-slider">
-                        <span>Vol {Math.round(track.volume * 100)}%</span>
+                    <div className="lt-track-controls">
+                      <button
+                        type="button"
+                        className={track.muted ? "is-active" : ""}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void runAction(async () => {
+                            const nextSnapshot = await updateTrack({
+                              trackId: track.id,
+                              muted: !track.muted,
+                            });
+                            setSnapshot(nextSnapshot);
+                          });
+                        }}
+                      >
+                        M
+                      </button>
+                      <button
+                        type="button"
+                        className={track.solo ? "is-active" : ""}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void runAction(async () => {
+                            const nextSnapshot = await updateTrack({
+                              trackId: track.id,
+                              solo: !track.solo,
+                            });
+                            setSnapshot(nextSnapshot);
+                          });
+                        }}
+                      >
+                        S
+                      </button>
+                      <label>
+                        <span>Vol</span>
                         <input
-                          aria-label={`Volumen de pista ${track.name}`}
-                          max="100"
-                          min="0"
+                          aria-label={`Volumen de ${track.name}`}
                           type="range"
-                          value={Math.round(track.volume * 100)}
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          value={track.volume}
                           onChange={(event) => {
-                            void handleTrackVolumeChange(track.id, Number(event.target.value));
+                            void runAction(async () => {
+                              const nextSnapshot = await updateTrack({
+                                trackId: track.id,
+                                volume: Number(event.target.value),
+                              });
+                              setSnapshot(nextSnapshot);
+                            });
                           }}
                         />
                       </label>
+                    </div>
+                  </div>
 
-                      <label className="compact-field">
-                        <span>Grupo</span>
-                        <select
-                          aria-label={`Grupo de pista ${track.name}`}
-                          value={selectedTrackGroupId}
-                          onChange={(event) => {
-                            void handleTrackGroupChange(track.id, event.target.value);
+                  <div className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""}`}>
+                    <div className="lt-track-lane-grid" style={{ width: timelineWidth }}>
+                      {rulerMarks.map((mark) => (
+                        <div
+                          key={`${track.id}-${mark}`}
+                          className="lt-lane-grid-line"
+                          style={{
+                            left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px`,
                           }}
-                        >
-                          <option value="">Sin grupo</option>
-                          {groups.map((group) => (
-                            <option key={group.id} value={group.id}>
-                              {group.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </article>
-                  );
-                })}
-              </aside>
+                        />
+                      ))}
 
-              <div
-                ref={timelineScrollRef}
-                className="timeline-scroll"
-                onPointerCancel={handleTimelinePointerCancel}
-                onPointerDown={handleTimelinePointerDown}
-                onPointerMove={handleTimelinePointerMove}
-                onPointerUp={handleTimelinePointerUp}
-                onWheel={handleTimelineWheel}
-              >
-                <div
-                  ref={timelineContentRef}
-                  className="timeline-content"
-                  style={{ width: `${Math.max(zoomLevel * 100, 100)}%` }}
-                >
-                  <div className="timeline-ruler">
-                    <div className="timeline-sections-layer">
-                      {sections.map((section) => {
-                        const renderedSection =
-                          sectionResizeDrag?.sectionId === section.id
-                            ? {
-                                ...section,
-                                startSeconds: sectionResizeDrag.previewStartSeconds,
-                                endSeconds: sectionResizeDrag.previewEndSeconds,
-                              }
-                            : section;
+                      {track.kind === "folder" ? (
+                        <div className="lt-folder-lane-fill">
+                          <span>{childCount ? `${childCount} tracks dentro del folder` : "Folder track"}</span>
+                        </div>
+                      ) : null}
+
+                      {trackClips.map((clip) => {
+                        const previewStart =
+                          clipDrag?.clipId === clip.id ? clipDrag.previewSeconds : clip.timelineStartSeconds;
+                        const left = (previewStart / Math.max(1, song.durationSeconds)) * timelineWidth;
+                        const width =
+                          (clip.durationSeconds / Math.max(1, song.durationSeconds)) * timelineWidth;
 
                         return (
-                          <div
-                            className={`timeline-section-chip${
-                              currentSection?.id === section.id ? " is-current" : ""
-                            }${jumpTargetSectionId === section.id ? " is-target" : ""}${
-                              selectedSectionId === section.id ? " is-selected" : ""
-                            }${sectionResizeDrag?.sectionId === section.id ? " is-resizing" : ""}`}
-                            key={section.id}
-                            style={sectionStyle(renderedSection, durationSeconds)}
+                          <button
+                            key={clip.id}
+                            type="button"
+                            className={`lt-clip ${selectedClipId === clip.id ? "is-selected" : ""}`}
+                            aria-label={`Clip ${clip.trackName}`}
+                            style={{ left, width: Math.max(width, 28) }}
+                            onMouseDown={(event) => {
+                              if (event.button !== 0) {
+                                return;
+                              }
+
+                              setSelectedClipId(clip.id);
+                              setSelectedTrackId(track.id);
+                              setSelectedSectionId(null);
+                              setContextMenu(null);
+                              setClipDrag({
+                                clipId: clip.id,
+                                pointerId: 1,
+                                originSeconds: clip.timelineStartSeconds,
+                                previewSeconds: clip.timelineStartSeconds,
+                                startClientX: event.clientX,
+                              });
+                            }}
+                            onContextMenu={(event) => {
+                              setSelectedClipId(clip.id);
+                              openMenu(event, clip.trackName, clipContextMenu(clip));
+                            }}
                           >
-                            <button
-                              aria-label={`Ajustar inicio de ${section.name}`}
-                              className="timeline-section-handle is-start"
-                              type="button"
-                              onPointerCancel={handleSectionResizePointerCancel}
-                              onPointerDown={(event) => {
-                                handleSectionResizePointerDown(section, "start", event);
-                              }}
-                              onPointerMove={(event) => {
-                                handleSectionResizePointerMove(section, event);
-                              }}
-                              onPointerUp={(event) => {
-                                void handleSectionResizePointerUp(section, event);
-                              }}
-                            />
-                            <button
-                              aria-label={section.name}
-                              aria-pressed={selectedSectionId === section.id}
-                              className="timeline-section-body"
-                              type="button"
-                              onClick={() => {
-                                setSelectedClipId(null);
-                                setSelectedSectionId(section.id);
-                                setJumpTargetSectionId(section.id);
-                                setSectionDraft(null);
-                              }}
+                            <span className="lt-clip-name">{clip.trackName}</span>
+                            <svg
+                              className="lt-waveform"
+                              viewBox="0 0 100 100"
+                              preserveAspectRatio="none"
+                              aria-hidden="true"
                             >
-                              <span>{section.name}</span>
-                            </button>
-                            <button
-                              aria-label={`Ajustar fin de ${section.name}`}
-                              className="timeline-section-handle is-end"
-                              type="button"
-                              onPointerCancel={handleSectionResizePointerCancel}
-                              onPointerDown={(event) => {
-                                handleSectionResizePointerDown(section, "end", event);
-                              }}
-                              onPointerMove={(event) => {
-                                handleSectionResizePointerMove(section, event);
-                              }}
-                              onPointerUp={(event) => {
-                                void handleSectionResizePointerUp(section, event);
-                              }}
-                            />
-                          </div>
+                              <path d={buildWaveformPath(clip)} />
+                              <line x1="0" y1="50" x2="100" y2="50" />
+                            </svg>
+                          </button>
                         );
                       })}
 
-                      {activeSectionDraft && (
-                        <div
-                          className="timeline-section-chip is-draft"
-                          style={sectionStyle(activeSectionDraft, durationSeconds)}
-                        >
-                          <span>Borrador</span>
-                        </div>
-                      )}
+                      <div className="lt-playhead" style={{ left: playheadOffset }} />
                     </div>
-
-                    {pendingJumpExecuteAt !== null && (
-                      <div
-                        className="timeline-jump-marker"
-                        style={{ left: `${(pendingJumpExecuteAt / Math.max(durationSeconds, 0.001)) * 100}%` }}
-                      >
-                        <span>{formatTimelineMark(pendingJumpExecuteAt)}</span>
-                      </div>
-                    )}
-
-                    {rulerMarks.map((mark) => (
-                      <div className="ruler-mark" key={mark.seconds} style={{ left: `${mark.percent}%` }}>
-                        <span>{mark.label}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="timeline-body">
-                    <div className="timeline-cursor" style={{ left: `${cursorPercent}%` }} />
-
-                    {activeSectionDraft && (
-                      <div
-                        className="timeline-section-overlay"
-                        style={sectionStyle(activeSectionDraft, durationSeconds)}
-                      />
-                    )}
-
-                    {activeSectionResizePreview && (
-                      <div
-                        className="timeline-section-overlay is-resize-preview"
-                        style={sectionStyle(activeSectionResizePreview, durationSeconds)}
-                      />
-                    )}
-
-                    {pendingJumpExecuteAt !== null && (
-                      <div
-                        className="timeline-jump-guide"
-                        style={{ left: `${(pendingJumpExecuteAt / Math.max(durationSeconds, 0.001)) * 100}%` }}
-                      />
-                    )}
-
-                    {tracks.map((track) => (
-                      <article className="timeline-row" key={track.id}>
-                        <div className="timeline-lane" aria-label={`Carril de ${track.name}`}>
-                          {(clipsByTrack[track.id] ?? []).map((clip) => {
-                            const isDraggedClip = clipDrag?.clipId === clip.id;
-                            const isTrimmedClip = clipTrimDrag?.clipId === clip.id;
-                            const previewStartSeconds = isDraggedClip
-                              ? clipDrag.previewTimelineStartSeconds
-                              : clip.timelineStartSeconds;
-                            const renderedClip =
-                              clipTrimDrag?.clipId === clip.id
-                                ? {
-                                    ...clip,
-                                    timelineStartSeconds: clipTrimDrag.previewTimelineStartSeconds,
-                                    sourceStartSeconds: clipTrimDrag.previewSourceStartSeconds,
-                                    durationSeconds: clipTrimDrag.previewDurationSeconds,
-                                  }
-                                : clip;
-
-                            return (
-                              <div className="clip-shell" key={clip.id}>
-                                {isDraggedClip && (
-                                  <div
-                                    aria-hidden="true"
-                                    className="clip-block is-preview"
-                                    style={clipStyle(clip, durationSeconds, previewStartSeconds)}
-                                  >
-                                    <ClipFace
-                                      clip={clip}
-                                    />
-                                  </div>
-                                )}
-
-                                <div
-                                  className={`clip-block${selectedClipId === clip.id ? " is-selected" : ""}${
-                                    isDraggedClip ? " is-drag-source" : ""
-                                  }${isTrimmedClip ? " is-trimming" : ""}`}
-                                  style={clipStyle(renderedClip, durationSeconds)}
-                                >
-                                  <button
-                                    aria-label={`Recortar inicio de ${clipDisplayName(clip)}`}
-                                    className="clip-handle is-start"
-                                    type="button"
-                                    onPointerCancel={handleClipTrimPointerCancel}
-                                    onPointerDown={(event) => {
-                                      handleClipTrimPointerDown(clip, "start", event);
-                                    }}
-                                    onPointerMove={(event) => {
-                                      handleClipTrimPointerMove(clip, event);
-                                    }}
-                                    onPointerUp={(event) => {
-                                      void handleClipTrimPointerUp(clip, event);
-                                    }}
-                                  />
-                                  <button
-                                    aria-label={`Clip ${clipDisplayName(clip)}`}
-                                    aria-pressed={selectedClipId === clip.id}
-                                    className="clip-body"
-                                    title={`${clipDisplayName(clip)} | ${formatClock(
-                                      previewStartSeconds,
-                                    )} / ${formatClock(renderedClip.durationSeconds)}`}
-                                    type="button"
-                                    onPointerCancel={handleClipPointerCancel}
-                                    onPointerDown={(event) => {
-                                      handleClipPointerDown(clip, event);
-                                    }}
-                                    onPointerMove={handleClipPointerMove}
-                                    onPointerUp={(event) => {
-                                      handleClipPointerUp(clip, event);
-                                    }}
-                                  >
-                                    <ClipFace
-                                      clip={renderedClip}
-                                    />
-                                  </button>
-                                  <button
-                                    aria-label={`Recortar fin de ${clipDisplayName(clip)}`}
-                                    className="clip-handle is-end"
-                                    type="button"
-                                    onPointerCancel={handleClipTrimPointerCancel}
-                                    onPointerDown={(event) => {
-                                      handleClipTrimPointerDown(clip, "end", event);
-                                    }}
-                                    onPointerMove={(event) => {
-                                      handleClipTrimPointerMove(clip, event);
-                                    }}
-                                    onPointerUp={(event) => {
-                                      void handleClipTrimPointerUp(clip, event);
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </article>
-                    ))}
                   </div>
                 </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="context-dock" aria-label="Barra contextual inferior">
-            <article className="context-card">
-              <span className="context-label">Clip</span>
-              {selectedClip ? (
-                <>
-                  <strong>{clipDisplayName(selectedClip)}</strong>
-                  <p>
-                    Inicio{" "}
-                    {formatClock(
-                      activeClipTrimPreview && clipTrimDrag?.clipId === selectedClip.id
-                        ? activeClipTrimPreview.timelineStartSeconds
-                        : clipDrag?.clipId === selectedClip.id
-                          ? clipDrag.previewTimelineStartSeconds
-                          : selectedClip.timelineStartSeconds,
-                    )}
-                    {" | "}Duracion{" "}
-                    {formatClock(
-                      activeClipTrimPreview && clipTrimDrag?.clipId === selectedClip.id
-                        ? activeClipTrimPreview.durationSeconds
-                        : selectedClip.durationSeconds,
-                    )}{" "}
-                    | Gain{" "}
-                    {Math.round(selectedClip.gain * 100)}%
-                  </p>
-                  <div className="context-actions">
-                    <label className="compact-field">
-                      <span>Inicio timeline (s)</span>
-                      <input
-                        aria-label="Inicio del clip en segundos"
-                        disabled={isBusy}
-                        min="0"
-                        step="0.01"
-                        type="number"
-                        value={clipStartDraft}
-                        onChange={(event) => {
-                          setClipStartDraft(event.target.value);
-                        }}
-                      />
-                    </label>
-                    <label className="compact-field">
-                      <span>Entrada fuente (s)</span>
-                      <input
-                        aria-label="Entrada del clip en segundos"
-                        disabled={isBusy}
-                        min="0"
-                        step="0.01"
-                        type="number"
-                        value={clipSourceStartDraft}
-                        onChange={(event) => {
-                          setClipSourceStartDraft(event.target.value);
-                        }}
-                      />
-                    </label>
-                    <label className="compact-field">
-                      <span>Duracion (s)</span>
-                      <input
-                        aria-label="Duracion del clip en segundos"
-                        disabled={isBusy}
-                        min="0.05"
-                        step="0.01"
-                        type="number"
-                        value={clipDurationDraft}
-                        onChange={(event) => {
-                          setClipDurationDraft(event.target.value);
-                        }}
-                      />
-                    </label>
-
-                    <button
-                      disabled={isBusy}
-                      type="button"
-                      onClick={() => {
-                        void handleMoveSelectedClip(selectedClip.timelineStartSeconds - 1);
-                      }}
-                    >
-                      -1s
-                    </button>
-                    <button
-                      disabled={isBusy}
-                      type="button"
-                      onClick={() => {
-                        void handleMoveSelectedClip(selectedClip.timelineStartSeconds + 1);
-                      }}
-                    >
-                      +1s
-                    </button>
-                    <button
-                      disabled={isBusy}
-                      type="button"
-                      onClick={() => void handleApplyClipWindow()}
-                    >
-                      Aplicar clip
-                    </button>
-                    <button
-                      disabled={isBusy}
-                      type="button"
-                      onClick={() => void handleDuplicateSelectedClip()}
-                    >
-                      Duplicar clip
-                    </button>
-                    <button
-                      disabled={isBusy}
-                      type="button"
-                      onClick={() => void handleDeleteSelectedClip()}
-                    >
-                      Borrar clip
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <strong>Sin clip seleccionado</strong>
-                  <p>Haz click o arrastra un clip del timeline para editarlo directamente.</p>
-                </>
-              )}
-            </article>
-
-            <article className="context-card">
-              <span className="context-label">Seccion</span>
-              {selectedSection ? (
-                <>
-                  <strong>{selectedSection.name}</strong>
-                  <p>
-                    {formatClock(selectedSection.startSeconds)} {"->"}{" "}
-                    {formatClock(selectedSection.endSeconds)}
-                  </p>
-                  <div className="context-fields">
-                    <label className="compact-field">
-                      <span>Nombre</span>
-                      <input
-                        aria-label="Nombre de la seccion"
-                        disabled={isBusy}
-                        type="text"
-                        value={sectionNameDraft}
-                        onChange={(event) => {
-                          setSectionNameDraft(event.target.value);
-                        }}
-                      />
-                    </label>
-
-                    <label className="compact-field">
-                      <span>Inicio (s)</span>
-                      <input
-                        aria-label="Inicio de la seccion en segundos"
-                        disabled={isBusy}
-                        min="0"
-                        step="0.01"
-                        type="number"
-                        value={sectionStartDraft}
-                        onChange={(event) => {
-                          setSectionStartDraft(event.target.value);
-                        }}
-                      />
-                    </label>
-
-                    <label className="compact-field">
-                      <span>Fin (s)</span>
-                      <input
-                        aria-label="Fin de la seccion en segundos"
-                        disabled={isBusy}
-                        min="0"
-                        step="0.01"
-                        type="number"
-                        value={sectionEndDraft}
-                        onChange={(event) => {
-                          setSectionEndDraft(event.target.value);
-                        }}
-                      />
-                    </label>
-                  </div>
-                </>
-              ) : activeSectionDraft ? (
-                <>
-                  <strong>Rango en borrador</strong>
-                  <p>
-                    {formatClock(activeSectionDraft.startSeconds)} {"->"}{" "}
-                    {formatClock(activeSectionDraft.endSeconds)}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <strong>Sin seccion seleccionada</strong>
-                  <p>Activa el modo region y arrastra sobre la regla para crear una nueva.</p>
-                </>
-              )}
-
-              <div className="context-actions">
-                <button
-                  disabled={!activeSectionDraft || isBusy}
-                  type="button"
-                  onClick={() => void handleCreateSection()}
-                >
-                  Crear Seccion
-                </button>
-                <button
-                  disabled={!selectedSection || isBusy}
-                  type="button"
-                  onClick={() => void handleApplySectionChanges()}
-                >
-                  Aplicar cambios
-                </button>
-                <button
-                  disabled={!selectedSection || isBusy}
-                  type="button"
-                  onClick={() => void handleDeleteSelectedSection()}
-                >
-                  Borrar seccion
-                </button>
-                <button
-                  disabled={!sectionDraft && !timelineDrag && !selectedSection}
-                  type="button"
-                  onClick={() => {
-                    setSectionDraft(null);
-                    setTimelineDrag(null);
-                    setSelectedSectionId(null);
-                  }}
-                >
-                  Limpiar
-                </button>
-              </div>
-            </article>
-
-            <article className="context-card">
-              <span className="context-label">Salto musical</span>
-              <strong>{pendingSectionJump ? pendingSectionJump.targetSectionName : "Sin salto programado"}</strong>
-              <p>
-                {selectedSection
-                  ? `Destino seleccionado: ${selectedSection.name}.`
-                  : jumpTargetSectionId
-                    ? "La region armada se usa como destino del salto."
-                    : "Selecciona una region del timeline para armar el salto."}
-              </p>
-              <div className="context-actions">
-                <button
-                  disabled={!jumpTargetSectionId || isBusy}
-                  type="button"
-                  onClick={() => void handleScheduleJump("immediate")}
-                >
-                  Ir ahora
-                </button>
-                <button
-                  disabled={!jumpTargetSectionId || isBusy}
-                  type="button"
-                  onClick={() => void handleScheduleJump("section_end")}
-                >
-                  Al final
-                </button>
-                <button
-                  disabled={!jumpTargetSectionId || isBusy}
-                  type="button"
-                  onClick={() => void handleScheduleJump("after_bars")}
-                >
-                  En compases
-                </button>
-                <label className="compact-field compact-field-small">
-                  <span>Compases</span>
-                  <input
-                    aria-label="Compases del salto"
-                    disabled={isBusy}
-                    max="16"
-                    min="1"
-                    type="number"
-                    value={jumpBars}
-                    onChange={(event) => {
-                      setJumpBars(Math.max(1, Number(event.target.value) || 1));
-                    }}
-                  />
-                </label>
-                <button
-                  disabled={!pendingSectionJump || isBusy}
-                  type="button"
-                  onClick={() => void handleCancelJump()}
-                >
-                  Cancelar salto
-                </button>
-              </div>
-              {pendingJumpExecuteAt !== null && (
-                <p className="jump-timing">
-                  Ejecucion estimada en {formatClock(pendingJumpExecuteAt)}.
-                </p>
-              )}
-            </article>
-          </section>
-        </>
-      ) : (
-        <div className="empty-state">
-          <strong>Prepara una sesion para empezar</strong>
-          <p>
-            Usa <strong>Crear Cancion</strong> para abrir un proyecto vacio, o{" "}
-            <strong>Importar WAVs</strong> para traer pistas y trabajar directamente desde el
-            timeline.
-          </p>
+              );
+            })}
+          </div>
         </div>
-      )}
-    </section>
-  );
-}
 
-function ClipFace({
-  clip,
-}: {
-  clip: ClipSummary;
-}) {
-  return (
-    <div className="clip-face">
-      <div className="clip-info">
-        <span className="clip-name">{clipDisplayName(clip)}</span>
-        <span className="clip-time">{formatTimelineMark(clip.timelineStartSeconds)}</span>
-      </div>
-      <ClipWaveform
-        clip={clip}
-      />
+        {currentSelection ? (
+            <div className="lt-inline-menu">
+              <span>
+                Seleccion: {formatClock(currentSelection.startSeconds)} {"->"} {formatClock(currentSelection.endSeconds)}
+              </span>
+            <button
+              type="button"
+              onClick={() =>
+                void runAction(async () => {
+                  const nextSnapshot = await createSection(
+                    currentSelection.startSeconds,
+                    currentSelection.endSeconds,
+                  );
+                  setSnapshot(nextSnapshot);
+                  setTimeSelection(null);
+                  setStatus("Seccion creada desde la seleccion temporal.");
+                })
+              }
+            >
+              Crear seccion
+            </button>
+            <button type="button" onClick={() => clearSelections("Seleccion temporal cancelada.")}>
+              Cancelar seleccion
+            </button>
+          </div>
+        ) : null}
+      </section>
+
+      <footer className="lt-bottom-strip">
+        <div className="lt-bottom-status">
+          <strong>Estado</strong>
+          <p>{status}</p>
+        </div>
+        <div className="lt-bottom-controls">
+          <label className="lt-zoom-control">
+            <span>Zoom</span>
+            <input
+              aria-label="Zoom horizontal del timeline"
+              type="range"
+              min={ZOOM_MIN}
+              max={ZOOM_MAX}
+              step={ZOOM_STEP}
+              value={zoomLevel}
+              onChange={(event) => setZoomLevel(Number(event.target.value))}
+            />
+            <strong>{zoomLevel.toFixed(1)}x</strong>
+          </label>
+          <button type="button" className={snapEnabled ? "is-active" : ""} onClick={() => setSnapEnabled((current) => !current)}>
+            Snap beat
+          </button>
+          <button
+            type="button"
+            disabled={!snapshot?.pendingSectionJump}
+            onClick={() => void runAction(async () => setSnapshot(await cancelSectionJump()))}
+          >
+            Cancelar salto
+          </button>
+        </div>
+      </footer>
+
+      {selectedClip ? (
+        <div className="lt-inspector-strip">
+          <strong>Clip</strong>
+          <span>{selectedClip.trackName}</span>
+          <span>
+            {formatClock(selectedClip.timelineStartSeconds)} · {selectedClip.durationSeconds.toFixed(2)}s
+          </span>
+        </div>
+      ) : null}
+
+      {selectedTrack ? (
+        <div className="lt-inspector-strip">
+          <strong>Track</strong>
+          <span>{selectedTrack.name}</span>
+          <span>{selectedTrack.kind === "folder" ? "folder" : "audio"}</span>
+        </div>
+      ) : null}
+
+      {selectedSection ? (
+        <div className="lt-inspector-strip">
+          <strong>Seccion</strong>
+          <span>{selectedSection.name}</span>
+          <span>
+            {formatClock(selectedSection.startSeconds)} {"->"} {formatClock(selectedSection.endSeconds)}
+          </span>
+        </div>
+      ) : null}
+
+      {contextMenu ? (
+        <div
+          className="lt-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <strong>{contextMenu.title}</strong>
+          {contextMenu.actions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              disabled={action.disabled}
+              onClick={() => {
+                setContextMenu(null);
+                void action.onSelect();
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function ClipWaveform({
-  clip,
-}: {
-  clip: ClipSummary;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { height, ref, width } = useElementSize<HTMLDivElement>();
-  const canRenderDenseWaveform =
-    clip.waveformMaxPeaks.length > 0 &&
-    clip.waveformMinPeaks.length > 0 &&
-    width >= MIN_WAVEFORM_DIMENSION &&
-    height >= MIN_WAVEFORM_DIMENSION;
-
-  useEffect(() => {
-    if (!canRenderDenseWaveform || !canvasRef.current) {
-      return;
-    }
-
-    drawClipWaveformFromSummary(canvasRef.current, clip, width, height);
-  }, [canRenderDenseWaveform, clip, height, width]);
-
-  return (
-    <div ref={ref} className="clip-waveform" aria-hidden="true">
-      {canRenderDenseWaveform ? (
-        <canvas ref={canvasRef} className="clip-waveform-canvas" />
-      ) : clip.waveformPeaks.length > 0 ? (
-        <svg
-          className="clip-waveform-svg"
-          preserveAspectRatio="none"
-          viewBox="0 0 160 36"
-        >
-          <path
-            className="clip-waveform-fill"
-            d={buildWaveformSilhouettePath(clip.waveformPeaks, 160, 36)}
-          />
-          <path
-            className="clip-waveform-centerline"
-            d="M 0 18 L 160 18"
-          />
-        </svg>
-      ) : (
-        <svg
-          className="clip-waveform-svg is-empty"
-          preserveAspectRatio="none"
-          viewBox="0 0 160 36"
-        >
-          <path className="waveform-empty-line" d="M 0 18 L 160 18" />
-        </svg>
-      )}
-    </div>
-  );
-}
-
-function clipStyle(
-  clip: ClipSummary,
-  durationSeconds: number,
-  overrideTimelineStartSeconds?: number,
-) {
-  const safeDuration = Math.max(durationSeconds, 0.001);
-  const startSeconds = overrideTimelineStartSeconds ?? clip.timelineStartSeconds;
-  const left = (startSeconds / safeDuration) * 100;
-  const width = Math.max((clip.durationSeconds / safeDuration) * 100, 1.5);
-
-  return {
-    left: `${left}%`,
-    width: `${width}%`,
-  };
-}
-
-function sectionStyle(
-  section: Pick<SectionSummary, "startSeconds" | "endSeconds">,
-  durationSeconds: number,
-) {
-  const safeDuration = Math.max(durationSeconds, 0.001);
-  const startSeconds = Math.max(0, Math.min(section.startSeconds, safeDuration));
-  const endSeconds = Math.max(startSeconds, Math.min(section.endSeconds, safeDuration));
-  const left = (startSeconds / safeDuration) * 100;
-  const width = Math.max(((endSeconds - startSeconds) / safeDuration) * 100, 0.35);
-
-  return {
-    left: `${left}%`,
-    width: `${width}%`,
-  };
-}
-
-function clipDisplayName(clip: ClipSummary) {
-  const pathSegments = clip.filePath.split(/[\\/]/);
-  const fileName = pathSegments[pathSegments.length - 1] ?? clip.trackName;
-  const stem = fileName.replace(/\.[^.]+$/, "");
-  return stem || clip.trackName;
-}
-
-function useElementSize<T extends HTMLElement>() {
-  const ref = useRef<T | null>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) {
-      return;
-    }
-
-    const updateSize = () => {
-      const nextWidth = element.clientWidth;
-      const nextHeight = element.clientHeight;
-      setSize((currentSize) =>
-        currentSize.width === nextWidth && currentSize.height === nextHeight
-          ? currentSize
-          : { width: nextWidth, height: nextHeight },
-      );
-    };
-
-    updateSize();
-
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      updateSize();
-    });
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  return { ...size, ref };
-}
-function drawClipWaveformFromSummary(
-  canvas: HTMLCanvasElement,
-  clip: ClipSummary,
-  width: number,
-  height: number,
-) {
-  const devicePixelRatio = window.devicePixelRatio || 1;
-  const canvasWidth = Math.max(Math.round(width * devicePixelRatio), 1);
-  const canvasHeight = Math.max(Math.round(height * devicePixelRatio), 1);
-
-  if (canvas.width !== canvasWidth) {
-    canvas.width = canvasWidth;
-  }
-  if (canvas.height !== canvasHeight) {
-    canvas.height = canvasHeight;
+function snapToBeat(seconds: number, bpm: number) {
+  if (bpm <= 0) {
+    return seconds;
   }
 
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return;
-  }
-
-  context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-  context.clearRect(0, 0, width, height);
-
-  const safeDuration = Math.max(clip.sourceDurationSeconds, 0.001);
-  const clipStartRatio = clamp(clip.sourceStartSeconds / safeDuration, 0, 1);
-  const clipEndRatio = clamp((clip.sourceStartSeconds + clip.durationSeconds) / safeDuration, clipStartRatio, 1);
-  const bucketCount = Math.min(clip.waveformMinPeaks.length, clip.waveformMaxPeaks.length);
-  const startBucket = Math.floor(clipStartRatio * bucketCount);
-  const endBucket = Math.max(startBucket + 1, Math.ceil(clipEndRatio * bucketCount));
-  const visibleBucketCount = Math.max(endBucket - startBucket, 1);
-  const centerY = height / 2;
-  const amplitude = Math.max((height - 2) * 0.48, 1);
-
-  context.fillStyle = "rgba(94, 48, 10, 0.78)";
-
-  for (let pixelIndex = 0; pixelIndex < Math.max(Math.floor(width), 1); pixelIndex += 1) {
-    const bucketFrom = startBucket + Math.floor((pixelIndex / Math.max(width, 1)) * visibleBucketCount);
-    const bucketTo = Math.max(
-      bucketFrom + 1,
-      startBucket + Math.floor(((pixelIndex + 1) / Math.max(width, 1)) * visibleBucketCount),
-    );
-    let min = 1;
-    let max = -1;
-
-    for (let bucketIndex = bucketFrom; bucketIndex < Math.min(bucketTo, bucketCount); bucketIndex += 1) {
-      min = Math.min(min, clip.waveformMinPeaks[bucketIndex] ?? 0);
-      max = Math.max(max, clip.waveformMaxPeaks[bucketIndex] ?? 0);
-    }
-
-    const topY = centerY - max * amplitude;
-    const bottomY = centerY - min * amplitude;
-    const barHeight = Math.max(bottomY - topY, 1);
-    context.fillRect(pixelIndex, topY, 1, barHeight);
-  }
-}
-
-function buildWaveformSilhouettePath(peaks: number[], width: number, height: number) {
-  if (peaks.length === 0) {
-    return "";
-  }
-
-  const centerY = height / 2;
-  const amplitude = height * 0.42;
-  const sampledPeaks = interpolateWaveformPeaks(peaks, 4);
-  const topPoints = sampledPeaks.map((peak, index) => {
-    const ratio = sampledPeaks.length === 1 ? 0 : index / (sampledPeaks.length - 1);
-    const x = Number((ratio * width).toFixed(2));
-    const y = Number((centerY - clamp(peak, 0, 1) * amplitude).toFixed(2));
-    return `${x} ${y}`;
-  });
-  const bottomPoints = [...sampledPeaks].reverse().map((peak, reverseIndex) => {
-    const index = sampledPeaks.length - 1 - reverseIndex;
-    const ratio = sampledPeaks.length === 1 ? 0 : index / (sampledPeaks.length - 1);
-    const x = Number((ratio * width).toFixed(2));
-    const y = Number((centerY + clamp(peak, 0, 1) * amplitude).toFixed(2));
-    return `${x} ${y}`;
-  });
-
-  return `M ${topPoints[0]} L ${topPoints.slice(1).join(" L ")} L ${bottomPoints.join(" L ")} Z`;
-}
-
-function interpolateWaveformPeaks(peaks: number[], subdivisions: number) {
-  if (peaks.length <= 1 || subdivisions <= 1) {
-    return peaks;
-  }
-
-  const interpolated: number[] = [];
-
-  for (let index = 0; index < peaks.length - 1; index += 1) {
-    const currentPeak = peaks[index];
-    const nextPeak = peaks[index + 1];
-
-    for (let step = 0; step < subdivisions; step += 1) {
-      const ratio = step / subdivisions;
-      interpolated.push(currentPeak + (nextPeak - currentPeak) * ratio);
-    }
-  }
-
-  interpolated.push(peaks[peaks.length - 1]);
-  return interpolated;
-}
-
-function normalizeRange(startSeconds: number, endSeconds: number): SectionDraft {
-  return {
-    startSeconds: Math.min(startSeconds, endSeconds),
-    endSeconds: Math.max(startSeconds, endSeconds),
-  };
-}
-
-function buildRulerMarks(durationSeconds: number, zoomLevel: number) {
-  const safeDuration = Math.max(durationSeconds, 1);
-  const markCount = Math.max(8, Math.round(10 * zoomLevel));
-
-  return Array.from({ length: markCount + 1 }, (_, index) => {
-    const seconds = (safeDuration / markCount) * index;
-
-    return {
-      seconds,
-      percent: (seconds / safeDuration) * 100,
-      label: formatTimelineMark(seconds),
-    };
-  });
-}
-
-function resolvePendingJumpExecuteAt(
-  song: SongSummary,
-  currentPositionSeconds: number,
-  currentSection: SectionSummary | null,
-  pendingSectionJump: PendingJumpSummary | null,
-) {
-  if (!pendingSectionJump) {
-    return null;
-  }
-
-  if (pendingSectionJump.trigger === "immediate") {
-    return currentPositionSeconds;
-  }
-
-  if (pendingSectionJump.trigger === "section_end") {
-    return currentSection?.endSeconds ?? null;
-  }
-
-  const bars = extractBarsFromTrigger(pendingSectionJump.trigger);
-  if (!bars) {
-    return null;
-  }
-
-  const beatsPerBar = parseBeatsPerBar(song.timeSignature);
-  const secondsPerBeat = 60 / Math.max(song.bpm, 1);
-  const secondsPerBar = beatsPerBar * secondsPerBeat;
-  const quantizedBars = Math.max(1, bars);
-  const nextBlockIndex =
-    Math.floor(currentPositionSeconds / secondsPerBar / quantizedBars) + 1;
-  return Number((nextBlockIndex * quantizedBars * secondsPerBar).toFixed(3));
-}
-
-function extractBarsFromTrigger(trigger: PendingJumpSummary["trigger"]) {
-  if (!trigger.startsWith("after_bars:")) {
-    return null;
-  }
-
-  const rawBars = Number(trigger.split(":")[1]);
-  return Number.isFinite(rawBars) && rawBars > 0 ? rawBars : null;
-}
-
-function parseBeatsPerBar(timeSignature: string) {
-  const beats = Number(timeSignature.split("/")[0]);
-  return Number.isFinite(beats) && beats > 0 ? beats : 4;
-}
-
-function maybeSnapSeconds(totalSeconds: number, song: SongSummary | null, snapEnabled: boolean) {
-  if (!snapEnabled || !song) {
-    return Math.max(0, totalSeconds);
-  }
-
-  const beatStepSeconds = 60 / Math.max(song.bpm, 1);
-  return Math.max(0, Math.round(totalSeconds / beatStepSeconds) * beatStepSeconds);
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function clampZoomLevel(zoomLevel: number) {
-  return clamp(Number(zoomLevel.toFixed(2)), TIMELINE_ZOOM_MIN, TIMELINE_ZOOM_MAX);
-}
-
-function roundTimelineSeconds(totalSeconds: number) {
-  return Number(totalSeconds.toFixed(2));
-}
-
-function nearlyEqual(left: number, right: number) {
-  return Math.abs(left - right) <= 0.0001;
-}
-
-function formatTimelineMark(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = Math.round(totalSeconds % 60);
-
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function formatClock(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-  const milliseconds = Math.floor((totalSeconds % 1) * 1000);
-
-  return `${minutes.toString().padStart(2, "0")}:${seconds
-    .toString()
-    .padStart(2, "0")}.${milliseconds.toString().padStart(3, "0")}`;
-}
-
-function waitForNextPaint() {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(() => resolve(), 0);
-  });
-}
-
-function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  if (target.isContentEditable) {
-    return true;
-  }
-
-  return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+  const beatSeconds = 60 / bpm;
+  return Math.round(seconds / beatSeconds) * beatSeconds;
 }
