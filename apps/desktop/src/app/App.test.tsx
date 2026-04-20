@@ -1,13 +1,24 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { App } from "./App";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+beforeEach(() => {
+  vi.resetModules();
+});
+
+async function renderApp() {
+  const { App } = await import("./App");
+  const view = render(<App />);
+  await screen.findByText(/modo demo web/i);
+  return view;
+}
 
 describe("App", () => {
-  it("renders the main transport shell", async () => {
-    render(<App />);
+  it("renders the main DAW shell", async () => {
+    await renderApp();
 
     expect(
       screen.getByRole("heading", {
-        name: /importa wavs y prueba el primer reproductor multitrack/i,
+        name: /libretracks timeline daw/i,
       }),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: /play/i })).toBeTruthy();
@@ -16,69 +27,64 @@ describe("App", () => {
     expect(await screen.findByText(/modo demo web/i)).toBeTruthy();
   });
 
-  it("shows the default group rows once the demo snapshot is loaded", async () => {
-    render(<App />);
+  it("shows the integrated group strip once the demo snapshot is loaded", async () => {
+    await renderApp();
 
+    expect(await screen.findByText("Submezclas")).toBeTruthy();
     expect((await screen.findAllByText("Click + Guide")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Drums + Bass")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Keys + Pads")).length).toBeGreaterThan(0);
   });
 
-  it("shows the loaded track list and mixer controls", async () => {
-    render(<App />);
+  it("shows the loaded track headers and timeline controls", async () => {
+    await renderApp();
 
-    expect(screen.getByText("Tracks")).toBeTruthy();
-    expect(await screen.findByText("Timeline")).toBeTruthy();
-    expect(await screen.findByText(/cursor y secciones sobre la propia linea de tiempo/i)).toBeTruthy();
+    expect(await screen.findByText("Timeline principal")).toBeTruthy();
     expect(await screen.findByLabelText(/zoom horizontal del timeline/i)).toBeTruthy();
-    expect((await screen.findAllByText("Click")).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText("Guide")).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText("Drums")).length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Volumen de pista Click")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /importar wavs/i })).toBeTruthy();
+    expect(await screen.findByLabelText("Grupo de pista Click")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /importar wavs/i })).toBeTruthy();
   });
 
   it("allows selecting a clip in the timeline", async () => {
-    render(<App />);
+    await renderApp();
 
     const clipButton = await screen.findByRole("button", { name: /clip drums/i });
-    fireEvent.click(clipButton);
+    await act(async () => {
+      fireEvent.pointerDown(clipButton, { pointerId: 1, clientX: 16 });
+      fireEvent.pointerUp(clipButton, { pointerId: 1, clientX: 16 });
+    });
 
     expect(await screen.findByText(/clip seleccionado: drums/i)).toBeTruthy();
-  });
-
-  it("allows moving the selected clip from the inspector", async () => {
-    render(<App />);
-
-    const clipButton = await screen.findByRole("button", { name: /clip drums/i });
-    fireEvent.click(clipButton);
-
-    const moveButton = await screen.findByRole("button", { name: /^\+1s$/i });
-    fireEvent.click(moveButton);
-
-    expect(await screen.findByDisplayValue("17.00")).toBeTruthy();
-    expect(await screen.findByText(/inicio 00:17.000/i)).toBeTruthy();
+    expect(await screen.findByDisplayValue("16.00")).toBeTruthy();
   });
 
   it("creates a blank project from the transport header", async () => {
-    render(<App />);
+    await renderApp();
 
     const createButton = await screen.findByRole("button", { name: /crear cancion/i });
-    fireEvent.click(createButton);
+    await act(async () => {
+      fireEvent.click(createButton);
+    });
 
-    expect(await screen.findByText("Nueva Cancion")).toBeTruthy();
     expect(await screen.findByText(/proyecto creado/i)).toBeTruthy();
+    expect((await screen.findAllByText("Nueva Cancion")).length).toBeGreaterThan(0);
   });
 
-  it("creates a new group from the desktop mixer controls", async () => {
-    render(<App />);
+  it("creates a new group from the integrated submix controls", async () => {
+    await renderApp();
 
     const nameField = await screen.findByLabelText(/nombre del nuevo grupo/i);
-    fireEvent.change(nameField, { target: { value: "Vocals" } });
+    await act(async () => {
+      fireEvent.change(nameField, { target: { value: "Vocals" } });
+    });
 
     const createGroupButton = await screen.findByRole("button", { name: /crear grupo/i });
-    fireEvent.click(createGroupButton);
+    await act(async () => {
+      fireEvent.click(createGroupButton);
+    });
 
-    expect(await screen.findByText("Vocals")).toBeTruthy();
+    expect(await screen.findByText(/grupo creado: vocals/i)).toBeTruthy();
+    expect((await screen.findAllByText("Vocals")).length).toBeGreaterThan(0);
   });
 });

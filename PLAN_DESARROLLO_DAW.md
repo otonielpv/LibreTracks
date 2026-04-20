@@ -33,7 +33,7 @@ Esto implica un cambio de enfoque importante:
 
 ## Estado de partida
 
-Estado a 19/04/2026:
+Estado a 20/04/2026:
 
 - ya existe proyecto desktop funcional
 - ya se pueden crear, abrir y guardar proyectos
@@ -41,6 +41,9 @@ Estado a 19/04/2026:
 - ya se puede reproducir audio real
 - ya existe timeline con regla temporal, cursor y clips
 - ya se pueden mover clips de forma basica
+- ya existe shell visual DAW con timeline dominante
+- ya hay cabeceras de pista integradas con controles de mezcla basica
+- ya existe barra contextual inferior para clip, seccion y salto
 - ya se pueden crear secciones desde el timeline
 - ya se pueden programar saltos de seccion
 - ya existen grupos con volumen y mute
@@ -182,6 +185,10 @@ Cambiar la estructura del frontend para que el timeline pase a ser la pantalla p
 
 Al abrir la app, la primera impresion visual debe ser "editor musical" y no "panel con widgets".
 
+### Estado
+
+- Completada en primera iteracion
+
 ---
 
 ## Fase B - Interaccion directa de clips
@@ -209,6 +216,11 @@ Hacer que editar clips sea una accion directa en el timeline.
 ### Criterio de completado
 
 Mover un clip debe hacerse arrastrandolo desde el timeline, no desde un panel externo.
+
+### Estado
+
+- Completada en primera iteracion para movimiento horizontal y preview
+- Pendiente ampliar cobertura de tests de drag mas alla del shell principal
 
 ---
 
@@ -238,6 +250,12 @@ Convertir las secciones en entidades visibles y editables directamente sobre la 
 ### Criterio de completado
 
 Las secciones deben sentirse como regiones musicales del timeline, no como datos anexos.
+
+### Estado
+
+- En progreso
+- Ya se dibujan regiones en la regla y se pueden seleccionar como destino de salto
+- Pendiente ajustar bordes, renombrar y borrar
 
 ---
 
@@ -270,6 +288,13 @@ Llevar el flujo de saltos a una experiencia musical y visual.
 
 El usuario debe entender visualmente que salto esta armado, hacia donde va y cuando ocurrira.
 
+### Estado
+
+- Parcialmente completada
+- Ya se muestran destino del salto y punto estimado de ejecucion en el timeline
+- Ya se puede programar y cancelar salto desde la barra contextual
+- Pendiente reforzar tests UI + backend de este flujo
+
 ---
 
 ## Fase E - Mezcla integrada en cabeceras de pista
@@ -297,6 +322,11 @@ Mover mezcla y organizacion de grupos a una forma mas propia de un DAW.
 ### Criterio de completado
 
 El usuario debe poder entender y manipular mezcla basica sin bajar a paneles separados grandes.
+
+### Estado
+
+- Completada en primera iteracion del shell DAW
+- Pendiente robustecer comportamiento nativo en reproduccion para cambios de volumen y mute
 
 ---
 
@@ -434,25 +464,25 @@ Consideraremos cumplido este nuevo objetivo cuando:
 ### Milestone DAW 1 - Shell principal
 
 ```txt
-[ ] Rehacer layout principal para priorizar timeline
-[ ] Compactar barra superior de transporte
-[ ] Integrar cabeceras de pista con timeline
-[ ] Reducir cajas informativas actuales
+[x] Rehacer layout principal para priorizar timeline
+[x] Compactar barra superior de transporte
+[x] Integrar cabeceras de pista con timeline
+[x] Reducir cajas informativas actuales
 ```
 
 ### Milestone DAW 2 - Clips directos
 
 ```txt
-[ ] Arrastrar clips horizontalmente
-[ ] Mostrar preview de movimiento
-[ ] Persistir posicion al soltar
-[ ] Evitar conflicto entre click y drag
+[x] Arrastrar clips horizontalmente
+[x] Mostrar preview de movimiento
+[x] Persistir posicion al soltar
+[x] Evitar conflicto entre click y drag
 ```
 
 ### Milestone DAW 3 - Regiones de seccion
 
 ```txt
-[ ] Seleccionar seccion desde timeline
+[x] Seleccionar seccion desde timeline
 [ ] Ajustar inicio/fin de seccion
 [ ] Renombrar seccion
 [ ] Borrar seccion
@@ -461,19 +491,19 @@ Consideraremos cumplido este nuevo objetivo cuando:
 ### Milestone DAW 4 - Saltos visuales
 
 ```txt
-[ ] Mostrar destino del salto en timeline
-[ ] Mostrar punto de ejecucion
-[ ] Programar salto desde region seleccionada
-[ ] Cancelar salto desde timeline
+[x] Mostrar destino del salto en timeline
+[x] Mostrar punto de ejecucion
+[x] Programar salto desde region seleccionada
+[x] Cancelar salto desde timeline
 ```
 
 ### Milestone DAW 5 - Mezcla integrada
 
 ```txt
-[ ] Llevar volumen de pista a cabecera de pista
-[ ] Llevar mute de pista a cabecera de pista
-[ ] Mostrar grupo en cabecera
-[ ] Crear/asignar grupos desde flujo mas integrado
+[x] Llevar volumen de pista a cabecera de pista
+[x] Llevar mute de pista a cabecera de pista
+[x] Mostrar grupo en cabecera
+[x] Crear/asignar grupos desde flujo mas integrado
 ```
 
 ### Milestone DAW 6 - Edicion v1
@@ -494,4 +524,8 @@ La siguiente etapa recomendada es:
 
 > rehacer el frontal empezando por el timeline como pantalla principal y mover la manipulacion de clips al propio timeline.
 
-Ese deberia ser el siguiente trabajo grande antes de seguir anadiendo funciones nuevas.
+Ese trabajo ya esta en marcha y tiene una primera iteracion funcional cerrada.
+
+La siguiente prioridad inmediata pasa a ser:
+
+> estabilizar el runtime nativo durante importacion y mezcla para que volumen, mute e importacion multiple sean fiables mientras seguimos avanzando las fases C, F y G.

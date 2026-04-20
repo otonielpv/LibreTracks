@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   assignTrackToGroup,
   cancelSectionJump,
-  createSection,
   createGroup,
+  createSection,
   createSong,
   getTransportSnapshot,
   isTauriApp,
@@ -21,7 +21,9 @@ import {
   toggleGroupMute,
   toggleTrackMute,
   type ClipSummary,
+  type PendingJumpSummary,
   type SectionSummary,
+  type SongSummary,
   type TransportSnapshot,
 } from "./desktopApi";
 
@@ -34,6 +36,17 @@ type TimelineDragState =
     }
   | null;
 
+type ClipDragState =
+  | {
+      clipId: string;
+      pointerId: number;
+      pointerStartSeconds: number;
+      originTimelineStartSeconds: number;
+      previewTimelineStartSeconds: number;
+      hasMoved: boolean;
+    }
+  | null;
+
 type SectionDraft = {
   startSeconds: number;
   endSeconds: number;
@@ -43,17 +56,20 @@ export function TransportPanel() {
   const [snapshot, setSnapshot] = useState<TransportSnapshot | null>(null);
   const [status, setStatus] = useState("Cargando estado de la sesion...");
   const [isBusy, setIsBusy] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(1.5);
+  const [zoomLevel, setZoomLevel] = useState(1.75);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [clipStartDraft, setClipStartDraft] = useState("0.00");
   const [sectionSelectionMode, setSectionSelectionMode] = useState(false);
   const [sectionDraft, setSectionDraft] = useState<SectionDraft | null>(null);
   const [timelineDrag, setTimelineDrag] = useState<TimelineDragState>(null);
+  const [clipDrag, setClipDrag] = useState<ClipDragState>(null);
   const [groupNameDraft, setGroupNameDraft] = useState("");
   const [jumpTargetSectionId, setJumpTargetSectionId] = useState<string | null>(null);
   const [jumpBars, setJumpBars] = useState(4);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const timelineContentRef = useRef<HTMLDivElement | null>(null);
+  const clipDragRef = useRef<ClipDragState>(null);
 
   useEffect(() => {
     let active = true;
@@ -107,23 +123,50 @@ export function TransportPanel() {
   const cursorPercent = durationSeconds > 0 ? (displayedPositionSeconds / durationSeconds) * 100 : 0;
   const rulerMarks = buildRulerMarks(durationSeconds, zoomLevel);
   const selectedClip = clips.find((clip) => clip.id === selectedClipId) ?? null;
+  const selectedSection = sections.find((section) => section.id === selectedSectionId) ?? null;
   const currentSection = snapshot?.currentSection ?? null;
   const pendingSectionJump = snapshot?.pendingSectionJump ?? null;
   const activeSectionDraft =
     timelineDrag?.mode === "section"
       ? normalizeRange(timelineDrag.startSeconds, timelineDrag.currentSeconds)
       : sectionDraft;
+  const pendingJumpExecuteAt = song
+    ? resolvePendingJumpExecuteAt(song, displayedPositionSeconds, currentSection, pendingSectionJump)
+    : null;
+  const projectLocation = snapshot?.songDir ?? (song ? "Proyecto sin guardar" : "Sesion vacia");
+  const clipCount = clips.length;
+  const clipsByTrack = tracks.reduce<Record<string, ClipSummary[]>>((collection, track) => {
+    collection[track.id] = [];
+    return collection;
+  }, {});
+
+  for (const clip of clips) {
+    if (!clipsByTrack[clip.trackId]) {
+      clipsByTrack[clip.trackId] = [];
+    }
+
+    clipsByTrack[clip.trackId].push(clip);
+  }
 
   useEffect(() => {
     if (!selectedClipId) {
       return;
     }
 
-    const selectedClipStillExists = clips.some((clip) => clip.id === selectedClipId);
-    if (!selectedClipStillExists) {
+    if (!clips.some((clip) => clip.id === selectedClipId)) {
       setSelectedClipId(null);
     }
   }, [clips, selectedClipId]);
+
+  useEffect(() => {
+    if (!selectedSectionId) {
+      return;
+    }
+
+    if (!sections.some((section) => section.id === selectedSectionId)) {
+      setSelectedSectionId(null);
+    }
+  }, [sections, selectedSectionId]);
 
   useEffect(() => {
     if (!selectedClip) {
@@ -131,8 +174,13 @@ export function TransportPanel() {
       return;
     }
 
-    setClipStartDraft(selectedClip.timelineStartSeconds.toFixed(2));
-  }, [selectedClip]);
+    const previewStart =
+      clipDrag?.clipId === selectedClip.id
+        ? clipDrag.previewTimelineStartSeconds
+        : selectedClip.timelineStartSeconds;
+
+    setClipStartDraft(previewStart.toFixed(2));
+  }, [clipDrag, selectedClip]);
 
   useEffect(() => {
     if (!sections.length) {
@@ -141,14 +189,18 @@ export function TransportPanel() {
     }
 
     if (!jumpTargetSectionId || !sections.some((section) => section.id === jumpTargetSectionId)) {
-      setJumpTargetSectionId(sections[0]?.id ?? null);
+      const fallbackSectionId = selectedSectionId ?? sections[0]?.id ?? null;
+      setJumpTargetSectionId(fallbackSectionId);
     }
-  }, [jumpTargetSectionId, sections]);
+  }, [jumpTargetSectionId, sections, selectedSectionId]);
 
   const resetEditorSelections = () => {
     setSelectedClipId(null);
+    setSelectedSectionId(null);
     setSectionDraft(null);
     setTimelineDrag(null);
+    setClipDrag(null);
+    clipDragRef.current = null;
   };
 
   const handleCreateSong = async () => {
@@ -256,13 +308,29 @@ export function TransportPanel() {
     }
   };
 
-  const handleSeek = async (position: number) => {
+  const handleSeek = async (nextPositionSeconds: number) => {
     try {
-      const nextSnapshot = await seekTransport(position);
+      const nextSnapshot = await seekTransport(nextPositionSeconds);
       setSnapshot(nextSnapshot);
-      setStatus(`Cursor movido a ${formatClock(position)}.`);
+      setStatus(`Cursor movido a ${formatClock(nextPositionSeconds)}.`);
     } catch (error) {
       setStatus(`No se pudo mover el transporte: ${String(error)}`);
+    }
+  };
+
+  const persistClipMove = async (clip: ClipSummary, nextTimelineStartSeconds: number) => {
+    setIsBusy(true);
+
+    try {
+      const sanitizedStartSeconds = roundTimelineSeconds(Math.max(0, nextTimelineStartSeconds));
+      const nextSnapshot = await moveClip(clip.id, sanitizedStartSeconds);
+      setSnapshot(nextSnapshot);
+      setSelectedClipId(clip.id);
+      setStatus(`${clipDisplayName(clip)} movido a ${formatClock(sanitizedStartSeconds)}.`);
+    } catch (error) {
+      setStatus(`No se pudo mover el clip: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
     }
   };
 
@@ -271,21 +339,7 @@ export function TransportPanel() {
       return;
     }
 
-    setIsBusy(true);
-
-    try {
-      const nextSnapshot = await moveClip(selectedClip.id, nextTimelineStartSeconds);
-      setSnapshot(nextSnapshot);
-      setStatus(
-        `${clipDisplayName(selectedClip)} movido a ${formatClock(
-          Math.max(0, nextTimelineStartSeconds),
-        )}.`,
-      );
-    } catch (error) {
-      setStatus(`No se pudo mover el clip: ${String(error)}`);
-    } finally {
-      setIsBusy(false);
-    }
+    await persistClipMove(selectedClip, nextTimelineStartSeconds);
   };
 
   const handleApplyClipStart = async () => {
@@ -311,9 +365,18 @@ export function TransportPanel() {
 
     try {
       const nextSnapshot = await createSection(activeSectionDraft);
+      const createdSection =
+        nextSnapshot.song?.sections.find(
+          (section) =>
+            nearlyEqual(section.startSeconds, activeSectionDraft.startSeconds) &&
+            nearlyEqual(section.endSeconds, activeSectionDraft.endSeconds),
+        ) ?? nextSnapshot.song?.sections.at(-1) ?? null;
+
       setSnapshot(nextSnapshot);
       setSectionDraft(null);
       setSectionSelectionMode(false);
+      setSelectedSectionId(createdSection?.id ?? null);
+      setJumpTargetSectionId(createdSection?.id ?? null);
       setStatus(
         `Seccion creada de ${formatClock(activeSectionDraft.startSeconds)} a ${formatClock(
           activeSectionDraft.endSeconds,
@@ -335,10 +398,11 @@ export function TransportPanel() {
     setIsBusy(true);
 
     try {
-      const nextSnapshot = await createGroup(groupNameDraft);
+      const trimmedGroupName = groupNameDraft.trim();
+      const nextSnapshot = await createGroup(trimmedGroupName);
       setSnapshot(nextSnapshot);
       setGroupNameDraft("");
-      setStatus(`Grupo creado: ${groupNameDraft.trim()}.`);
+      setStatus(`Grupo creado: ${trimmedGroupName}.`);
     } catch (error) {
       setStatus(`No se pudo crear el grupo: ${String(error)}`);
     } finally {
@@ -427,10 +491,10 @@ export function TransportPanel() {
       return 0;
     }
 
-    const rect = scrollElement.getBoundingClientRect();
-    const contentWidth =
-      contentElement.getBoundingClientRect().width || contentElement.scrollWidth || rect.width || 1;
-    const relativeX = clientX - rect.left + scrollElement.scrollLeft;
+    const scrollRect = scrollElement.getBoundingClientRect();
+    const contentRect = contentElement.getBoundingClientRect();
+    const contentWidth = contentRect.width || contentElement.scrollWidth || scrollRect.width || 1;
+    const relativeX = clientX - scrollRect.left + scrollElement.scrollLeft;
     const ratio = clamp(relativeX / contentWidth, 0, 1);
     return ratio * durationSeconds;
   };
@@ -446,7 +510,8 @@ export function TransportPanel() {
     }
 
     const nextSeconds = resolveTimelineSeconds(event.clientX);
-    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setSelectedClipId(null);
     setTimelineDrag({
       mode: sectionSelectionMode ? "section" : "seek",
       pointerId: event.pointerId,
@@ -474,7 +539,7 @@ export function TransportPanel() {
       return;
     }
 
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
     setTimelineDrag(null);
 
     if (currentDrag.mode === "seek") {
@@ -482,7 +547,9 @@ export function TransportPanel() {
       return;
     }
 
-    setSectionDraft(normalizeRange(currentDrag.startSeconds, currentDrag.currentSeconds));
+    const nextDraft = normalizeRange(currentDrag.startSeconds, currentDrag.currentSeconds);
+    setSectionDraft(nextDraft);
+    setSelectedSectionId(null);
   };
 
   const handleTimelinePointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -493,90 +560,122 @@ export function TransportPanel() {
     setTimelineDrag(null);
   };
 
+  const handleClipPointerDown = (clip: ClipSummary, event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!song || durationSeconds <= 0) {
+      return;
+    }
+
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const pointerStartSeconds = resolveTimelineSeconds(event.clientX);
+
+    setSelectedClipId(clip.id);
+    const nextClipDrag: ClipDragState = {
+      clipId: clip.id,
+      pointerId: event.pointerId,
+      pointerStartSeconds,
+      originTimelineStartSeconds: clip.timelineStartSeconds,
+      previewTimelineStartSeconds: clip.timelineStartSeconds,
+      hasMoved: false,
+    };
+
+    clipDragRef.current = nextClipDrag;
+    setClipDrag(nextClipDrag);
+  };
+
+  const handleClipPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+
+    const currentDrag = clipDragRef.current;
+    if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaSeconds = resolveTimelineSeconds(event.clientX) - currentDrag.pointerStartSeconds;
+    const nextTimelineStartSeconds = Math.max(0, currentDrag.originTimelineStartSeconds + deltaSeconds);
+    const nextClipDrag: ClipDragState = {
+      ...currentDrag,
+      previewTimelineStartSeconds: roundTimelineSeconds(nextTimelineStartSeconds),
+      hasMoved: currentDrag.hasMoved || Math.abs(deltaSeconds) >= 0.2,
+    };
+
+    clipDragRef.current = nextClipDrag;
+    setClipDrag(nextClipDrag);
+  };
+
+  const handleClipPointerUp = (clip: ClipSummary, event: React.PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+
+    const currentDrag = clipDragRef.current;
+    if (!currentDrag || currentDrag.pointerId !== event.pointerId || currentDrag.clipId !== clip.id) {
+      return;
+    }
+
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    const releaseDeltaSeconds = resolveTimelineSeconds(event.clientX) - currentDrag.pointerStartSeconds;
+    const releaseHasMoved = currentDrag.hasMoved || Math.abs(releaseDeltaSeconds) >= 0.2;
+    const releaseTimelineStartSeconds = roundTimelineSeconds(
+      Math.max(0, currentDrag.originTimelineStartSeconds + releaseDeltaSeconds),
+    );
+    clipDragRef.current = null;
+    setClipDrag(null);
+
+    if (!releaseHasMoved) {
+      setSelectedClipId(clip.id);
+      setStatus(`Clip seleccionado: ${clipDisplayName(clip)}.`);
+      return;
+    }
+
+    void persistClipMove(clip, releaseTimelineStartSeconds);
+  };
+
+  const handleClipPointerCancel = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!clipDragRef.current || clipDragRef.current.pointerId !== event.pointerId) {
+      return;
+    }
+
+    clipDragRef.current = null;
+    setClipDrag(null);
+  };
+
+  const transportStateLabel = snapshot?.playbackState ?? "empty";
+
   return (
-    <section className="panel">
-      <div className="transport">
-        <button disabled={!song || isBusy} type="button" onClick={() => void handlePlay()}>
-          Play
-        </button>
-        <button disabled={!song || isBusy} type="button" onClick={() => void handlePause()}>
-          Pause
-        </button>
-        <button disabled={!song || isBusy} type="button" onClick={() => void handleStop()}>
-          Stop
-        </button>
-        <strong>{formatClock(displayedPositionSeconds)}</strong>
-        <span className="transport-state">{snapshot?.playbackState ?? "empty"}</span>
-      </div>
-
-      <div className="status-box">
-        <strong>{song?.title ?? "Todavia no hay cancion cargada"}</strong>
-        <p>{status}</p>
-        {song && (
-          <p className="status-meta">
-            {formatClock(positionSeconds)} / {formatClock(durationSeconds)}
-            {snapshot?.songDir ? ` | ${snapshot.songDir}` : ""}
-          </p>
-        )}
-      </div>
-
-      {groups.length > 0 && (
-        <div className="group-list">
-          {groups.map((group) => (
-            <article className="group-row" key={group.id}>
-              <div>
-                <h3>{group.name}</h3>
-                <p>Vol {Math.round(group.volume * 100)}%</p>
-              </div>
-              <div className="row-controls">
-                <label className="slider-field">
-                  <span>Volumen</span>
-                  <input
-                    aria-label={`Volumen de grupo ${group.name}`}
-                    max="100"
-                    min="0"
-                    type="range"
-                    value={Math.round(group.volume * 100)}
-                    onChange={(event) => {
-                      void handleGroupVolumeChange(group.id, Number(event.target.value));
-                    }}
-                  />
-                </label>
-                <button type="button" onClick={() => void handleGroupMuteToggle(group.id)}>
-                  {group.muted ? "Unmute" : "Mute"}
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-
-      <div className="group-create-row">
-        <label className="group-create-field">
-          <span>Nuevo grupo</span>
-          <input
-            aria-label="Nombre del nuevo grupo"
-            disabled={isBusy}
-            type="text"
-            value={groupNameDraft}
-            onChange={(event) => {
-              setGroupNameDraft(event.target.value);
-            }}
-          />
-        </label>
-        <button disabled={isBusy} type="button" onClick={() => void handleCreateGroup()}>
-          Crear Grupo
-        </button>
-      </div>
-
-      <div className="track-header">
-        <div>
-          <h2>Tracks</h2>
-          <p>
-            Crea, abre o importa proyectos; luego mueve el cursor directamente sobre el timeline.
+    <section className="daw-shell">
+      <header className="daw-topbar">
+        <div className="brand-cluster">
+          <p className="brand-kicker">LibreTracks</p>
+          <h1>LibreTracks Timeline DAW</h1>
+          <p className="brand-subtitle">
+            Timeline primero, mezcla integrada y edicion directa sobre clips y secciones.
           </p>
         </div>
-        <div className="track-actions">
+
+        <div className="transport-cluster" aria-label="Controles de transporte">
+          <div className="transport-buttons">
+            <button disabled={!song || isBusy} type="button" onClick={() => void handlePlay()}>
+              Play
+            </button>
+            <button disabled={!song || isBusy} type="button" onClick={() => void handlePause()}>
+              Pause
+            </button>
+            <button disabled={!song || isBusy} type="button" onClick={() => void handleStop()}>
+              Stop
+            </button>
+          </div>
+
+          <div className="transport-readout">
+            <strong>{formatClock(displayedPositionSeconds)}</strong>
+            <span className={`transport-pill is-${transportStateLabel}`}>{transportStateLabel}</span>
+            {song && (
+              <span className="transport-meta">
+                {song.bpm} BPM | {song.timeSignature} | {tracks.length} pistas
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="session-actions">
           <button disabled={isBusy} type="button" onClick={() => void handleCreateSong()}>
             Crear Cancion
           </button>
@@ -590,19 +689,115 @@ export function TransportPanel() {
             Abrir Proyecto
           </button>
         </div>
+      </header>
+
+      <div className="status-ribbon" role="status">
+        <div>
+          <strong>{song?.title ?? "Todavia no hay cancion cargada"}</strong>
+          <p>{status}</p>
+        </div>
+        <div className="status-ribbon-meta">
+          <span>{song ? `${clipCount} clips | ${sections.length} secciones` : "Sin proyecto"}</span>
+          <span>{projectLocation}</span>
+        </div>
       </div>
 
       {song ? (
         <>
-          <section className="timeline-panel">
-            <div className="timeline-head">
+          <section className="overview-strip" aria-label="Resumen de la sesion">
+            <article className="overview-card">
+              <span className="overview-label">Proyecto</span>
+              <strong>{song.title}</strong>
+              <p>
+                {song.artist || "Sin artista"} | {formatClock(positionSeconds)} /{" "}
+                {formatClock(durationSeconds)}
+              </p>
+            </article>
+
+            <article className="overview-card">
+              <span className="overview-label">Timeline</span>
+              <strong>{tracks.length} pistas activas</strong>
+              <p>{clipCount} clips, zoom {zoomLevel.toFixed(1)}x y cursor editable desde la regla.</p>
+            </article>
+
+            <article className="overview-card">
+              <span className="overview-label">Secciones</span>
+              <strong>{currentSection ? currentSection.name : "Sin seccion activa"}</strong>
+              <p>
+                {pendingSectionJump
+                  ? `Salto armado hacia ${pendingSectionJump.targetSectionName}.`
+                  : "Sin salto musical pendiente."}
+              </p>
+            </article>
+          </section>
+
+          <section className="submix-panel">
+            <div className="submix-header">
               <div>
-                <h2>Timeline</h2>
+                <h2>Submezclas</h2>
+                <p>Los grupos viven arriba del timeline y las pistas se asignan desde su cabecera.</p>
+              </div>
+
+              <div className="group-create-row">
+                <label className="compact-field">
+                  <span>Nuevo grupo</span>
+                  <input
+                    aria-label="Nombre del nuevo grupo"
+                    disabled={isBusy}
+                    type="text"
+                    value={groupNameDraft}
+                    onChange={(event) => {
+                      setGroupNameDraft(event.target.value);
+                    }}
+                  />
+                </label>
+                <button disabled={isBusy} type="button" onClick={() => void handleCreateGroup()}>
+                  Crear Grupo
+                </button>
+              </div>
+            </div>
+
+            <div className="submix-strip">
+              {groups.map((group) => (
+                <article className="submix-card" key={group.id}>
+                  <div className="submix-card-top">
+                    <div>
+                      <strong>{group.name}</strong>
+                      <p>Vol {Math.round(group.volume * 100)}%</p>
+                    </div>
+                    <button type="button" onClick={() => void handleGroupMuteToggle(group.id)}>
+                      {group.muted ? "Unmute" : "Mute"}
+                    </button>
+                  </div>
+
+                  <label className="compact-slider">
+                    <span>Volumen de grupo</span>
+                    <input
+                      aria-label={`Volumen de grupo ${group.name}`}
+                      max="100"
+                      min="0"
+                      type="range"
+                      value={Math.round(group.volume * 100)}
+                      onChange={(event) => {
+                        void handleGroupVolumeChange(group.id, Number(event.target.value));
+                      }}
+                    />
+                  </label>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="timeline-stage">
+            <div className="timeline-stage-header">
+              <div>
+                <h2>Timeline principal</h2>
                 <p>
-                  Cursor y secciones sobre la propia linea de tiempo: click y arrastre para mover o
-                  seleccionar.
+                  Arrastra clips horizontalmente, crea regiones por rango y arma saltos sin salir
+                  de la linea de tiempo.
                 </p>
               </div>
+
               <div className="timeline-tools">
                 <label className="zoom-field">
                   <span>Zoom</span>
@@ -610,7 +805,7 @@ export function TransportPanel() {
                     aria-label="Zoom horizontal del timeline"
                     max="4"
                     min="1"
-                    step="0.5"
+                    step="0.25"
                     type="range"
                     value={zoomLevel}
                     onChange={(event) => {
@@ -618,6 +813,7 @@ export function TransportPanel() {
                     }}
                   />
                 </label>
+
                 <button
                   aria-pressed={sectionSelectionMode}
                   className={sectionSelectionMode ? "mode-toggle is-active" : "mode-toggle"}
@@ -628,191 +824,76 @@ export function TransportPanel() {
                     setTimelineDrag(null);
                   }}
                 >
-                  {sectionSelectionMode ? "Modo seccion activo" : "Modo seccion"}
+                  {sectionSelectionMode ? "Modo region activo" : "Modo region"}
                 </button>
+
                 <strong className="timeline-meta">
-                  {tracks.length} pistas | {zoomLevel.toFixed(1)}x
+                  {tracks.length} pistas | {clipCount} clips | {sections.length} secciones
                 </strong>
               </div>
             </div>
 
-            <div className="timeline-status-grid">
-              <div className="clip-inspector" role="status">
-                {selectedClip ? (
-                  <>
-                    <strong>Clip seleccionado: {clipDisplayName(selectedClip)}</strong>
-                    <p>
-                      Inicio {formatClock(selectedClip.timelineStartSeconds)} | Duracion{" "}
-                      {formatClock(selectedClip.durationSeconds)} | Gain{" "}
-                      {Math.round(selectedClip.gain * 100)}%
-                    </p>
-                    <div className="clip-inspector-tools">
-                      <label className="clip-start-field">
-                        <span>Inicio timeline (s)</span>
+            <div className="timeline-shell">
+              <aside className="timeline-headers" aria-label="Cabeceras de pista">
+                <div className="timeline-headers-spacer" aria-hidden="true" />
+
+                {tracks.map((track) => {
+                  const trackClips = clipsByTrack[track.id] ?? [];
+                  const isTrackSelected = selectedClip?.trackId === track.id;
+                  const selectedTrackGroupId =
+                    groups.find((group) => group.name === track.groupName)?.id ?? "";
+
+                  return (
+                    <article
+                      aria-label={`Cabecera de pista ${track.name}`}
+                      className={`track-header-card${isTrackSelected ? " is-selected" : ""}`}
+                      key={track.id}
+                    >
+                      <div className="track-header-top">
+                        <div>
+                          <strong>{track.name}</strong>
+                          <p>{track.groupName ?? "Sin grupo"} | {trackClips.length} clips</p>
+                        </div>
+                        <button type="button" onClick={() => void handleTrackMuteToggle(track.id)}>
+                          {track.muted ? "Unmute" : "Mute"}
+                        </button>
+                      </div>
+
+                      <label className="compact-slider">
+                        <span>Vol {Math.round(track.volume * 100)}%</span>
                         <input
-                          aria-label="Inicio del clip en segundos"
-                          disabled={isBusy}
+                          aria-label={`Volumen de pista ${track.name}`}
+                          max="100"
                           min="0"
-                          step="0.01"
-                          type="number"
-                          value={clipStartDraft}
+                          type="range"
+                          value={Math.round(track.volume * 100)}
                           onChange={(event) => {
-                            setClipStartDraft(event.target.value);
+                            void handleTrackVolumeChange(track.id, Number(event.target.value));
                           }}
                         />
                       </label>
-                      <div className="clip-nudge-actions">
-                        <button
-                          disabled={isBusy}
-                          type="button"
-                          onClick={() => {
-                            void handleMoveSelectedClip(selectedClip.timelineStartSeconds - 1);
+
+                      <label className="compact-field">
+                        <span>Grupo</span>
+                        <select
+                          aria-label={`Grupo de pista ${track.name}`}
+                          value={selectedTrackGroupId}
+                          onChange={(event) => {
+                            void handleTrackGroupChange(track.id, event.target.value);
                           }}
                         >
-                          -1s
-                        </button>
-                        <button
-                          disabled={isBusy}
-                          type="button"
-                          onClick={() => {
-                            void handleMoveSelectedClip(selectedClip.timelineStartSeconds + 1);
-                          }}
-                        >
-                          +1s
-                        </button>
-                        <button disabled={isBusy} type="button" onClick={() => void handleApplyClipStart()}>
-                          Aplicar
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <strong>No hay clip seleccionado</strong>
-                    <p>Haz click en un clip del timeline para inspeccionarlo.</p>
-                  </>
-                )}
-              </div>
-
-              <div className="timeline-context">
-                <div className="timeline-context-card">
-                  <strong>Seccion actual</strong>
-                  <p>{currentSection ? currentSection.name : "Sin seccion activa"}</p>
-                </div>
-                <div className="timeline-context-card">
-                  <strong>Salto pendiente</strong>
-                  <p>
-                    {pendingSectionJump
-                      ? `${pendingSectionJump.targetSectionName} | ${pendingSectionJump.trigger}`
-                      : "Sin salto programado"}
-                  </p>
-                  <div className="timeline-context-actions">
-                    <button
-                      disabled={!jumpTargetSectionId || isBusy}
-                      type="button"
-                      onClick={() => void handleScheduleJump("immediate")}
-                    >
-                      Ir ahora
-                    </button>
-                    <button
-                      disabled={!jumpTargetSectionId || isBusy}
-                      type="button"
-                      onClick={() => void handleScheduleJump("section_end")}
-                    >
-                      Al final
-                    </button>
-                    <button
-                      disabled={!jumpTargetSectionId || isBusy}
-                      type="button"
-                      onClick={() => void handleScheduleJump("after_bars")}
-                    >
-                      En compases
-                    </button>
-                    <label className="bars-field">
-                      <span>Compases</span>
-                      <input
-                        aria-label="Compases del salto"
-                        disabled={isBusy}
-                        max="16"
-                        min="1"
-                        type="number"
-                        value={jumpBars}
-                        onChange={(event) => {
-                          setJumpBars(Math.max(1, Number(event.target.value) || 1));
-                        }}
-                      />
-                    </label>
-                    <button
-                      disabled={!pendingSectionJump || isBusy}
-                      type="button"
-                      onClick={() => void handleCancelJump()}
-                    >
-                      Cancelar salto
-                    </button>
-                  </div>
-                </div>
-                <div className="timeline-context-card">
-                  <strong>Seleccion de seccion</strong>
-                  <p>
-                    {activeSectionDraft
-                      ? `${formatClock(activeSectionDraft.startSeconds)} -> ${formatClock(
-                          activeSectionDraft.endSeconds,
-                        )}`
-                      : sectionSelectionMode
-                        ? "Arrastra sobre el timeline para marcar un rango."
-                        : "Activa el modo seccion para seleccionar un rango."}
-                  </p>
-                  <div className="timeline-context-actions">
-                    <button
-                      disabled={!activeSectionDraft || isBusy}
-                      type="button"
-                      onClick={() => void handleCreateSection()}
-                    >
-                      Crear Seccion
-                    </button>
-                    <button
-                      disabled={!sectionDraft && !timelineDrag}
-                      type="button"
-                      onClick={() => {
-                        setSectionDraft(null);
-                        setTimelineDrag(null);
-                      }}
-                    >
-                      Limpiar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="timeline-shell">
-              <div className="timeline-sidebar">
-                <div className="timeline-sidebar-spacer" aria-hidden="true" />
-                <div className="timeline-labels">
-                  {tracks.map((track) => {
-                    const trackClips = clips.filter((clip) => clip.trackId === track.id);
-                    const primaryClip = trackClips[0] ?? null;
-                    const headerLabel = primaryClip ? clipDisplayName(primaryClip) : track.name;
-
-                    return (
-                      <article
-                        aria-label={`Cabecera de pista ${headerLabel}`}
-                        className={`timeline-track-card${
-                          selectedClip?.trackId === track.id ? " is-selected" : ""
-                        }`}
-                        key={track.id}
-                        role="group"
-                      >
-                        <strong>{headerLabel}</strong>
-                        <span>
-                          {track.groupName ??
-                            `${trackClips.length} clip${trackClips.length === 1 ? "" : "s"}`}
-                        </span>
-                      </article>
-                    );
-                  })}
-                </div>
-              </div>
+                          <option value="">Sin grupo</option>
+                          {groups.map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </article>
+                  );
+                })}
+              </aside>
 
               <div
                 ref={timelineScrollRef}
@@ -831,20 +912,25 @@ export function TransportPanel() {
                     <div className="timeline-sections-layer" aria-hidden="true">
                       {sections.map((section) => (
                         <button
-                          aria-pressed={jumpTargetSectionId === section.id}
+                          aria-pressed={selectedSectionId === section.id}
                           className={`timeline-section-chip${
                             currentSection?.id === section.id ? " is-current" : ""
-                          }${jumpTargetSectionId === section.id ? " is-target" : ""}`}
+                          }${jumpTargetSectionId === section.id ? " is-target" : ""}${
+                            selectedSectionId === section.id ? " is-selected" : ""
+                          }`}
                           key={section.id}
                           style={sectionStyle(section, durationSeconds)}
                           type="button"
                           onClick={() => {
+                            setSelectedSectionId(section.id);
                             setJumpTargetSectionId(section.id);
+                            setSectionDraft(null);
                           }}
                         >
                           <span>{section.name}</span>
                         </button>
                       ))}
+
                       {activeSectionDraft && (
                         <div
                           className="timeline-section-chip is-draft"
@@ -854,6 +940,16 @@ export function TransportPanel() {
                         </div>
                       )}
                     </div>
+
+                    {pendingJumpExecuteAt !== null && (
+                      <div
+                        className="timeline-jump-marker"
+                        style={{ left: `${(pendingJumpExecuteAt / Math.max(durationSeconds, 0.001)) * 100}%` }}
+                      >
+                        <span>{formatTimelineMark(pendingJumpExecuteAt)}</span>
+                      </div>
+                    )}
+
                     {rulerMarks.map((mark) => (
                       <div className="ruler-mark" key={mark.seconds} style={{ left: `${mark.percent}%` }}>
                         <span>{mark.label}</span>
@@ -871,41 +967,59 @@ export function TransportPanel() {
                       />
                     )}
 
+                    {pendingJumpExecuteAt !== null && (
+                      <div
+                        className="timeline-jump-guide"
+                        style={{ left: `${(pendingJumpExecuteAt / Math.max(durationSeconds, 0.001)) * 100}%` }}
+                      />
+                    )}
+
                     {tracks.map((track) => (
                       <article className="timeline-row" key={track.id}>
                         <div className="timeline-lane" aria-label={`Carril de ${track.name}`}>
-                          {clips
-                            .filter((clip) => clip.trackId === track.id)
-                            .map((clip) => (
-                              <button
-                                aria-label={`Clip ${clipDisplayName(clip)}`}
-                                aria-pressed={selectedClipId === clip.id}
-                                className={`clip-block${selectedClipId === clip.id ? " is-selected" : ""}`}
-                                key={clip.id}
-                                style={clipStyle(clip, durationSeconds)}
-                                title={`${clipDisplayName(clip)} | ${formatClock(
-                                  clip.timelineStartSeconds,
-                                )} / ${formatClock(clip.durationSeconds)}`}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedClipId(clip.id);
-                                }}
-                              >
-                                <div className="clip-waveform" aria-hidden="true">
-                                  {clip.waveformPeaks.length > 0 ? (
-                                    clip.waveformPeaks.map((peak, index) => (
-                                      <span
-                                        className="waveform-bar"
-                                        key={`${clip.id}-${index}`}
-                                        style={{ height: `${Math.max(peak * 100, 6)}%` }}
-                                      />
-                                    ))
-                                  ) : (
-                                    <span className="waveform-empty" />
-                                  )}
-                                </div>
-                              </button>
-                            ))}
+                          {(clipsByTrack[track.id] ?? []).map((clip) => {
+                            const isDraggedClip = clipDrag?.clipId === clip.id;
+                            const previewStartSeconds = isDraggedClip
+                              ? clipDrag.previewTimelineStartSeconds
+                              : clip.timelineStartSeconds;
+
+                            return (
+                              <div className="clip-shell" key={clip.id}>
+                                {isDraggedClip && (
+                                  <div
+                                    aria-hidden="true"
+                                    className="clip-block is-preview"
+                                    style={clipStyle(clip, durationSeconds, previewStartSeconds)}
+                                  >
+                                    <ClipFace clip={clip} />
+                                  </div>
+                                )}
+
+                                <button
+                                  aria-label={`Clip ${clipDisplayName(clip)}`}
+                                  aria-pressed={selectedClipId === clip.id}
+                                  className={`clip-block${selectedClipId === clip.id ? " is-selected" : ""}${
+                                    isDraggedClip ? " is-drag-source" : ""
+                                  }`}
+                                  style={clipStyle(clip, durationSeconds)}
+                                  title={`${clipDisplayName(clip)} | ${formatClock(
+                                    previewStartSeconds,
+                                  )} / ${formatClock(clip.durationSeconds)}`}
+                                  type="button"
+                                  onPointerCancel={handleClipPointerCancel}
+                                  onPointerDown={(event) => {
+                                    handleClipPointerDown(clip, event);
+                                  }}
+                                  onPointerMove={handleClipPointerMove}
+                                  onPointerUp={(event) => {
+                                    handleClipPointerUp(clip, event);
+                                  }}
+                                >
+                                  <ClipFace clip={clip} />
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       </article>
                     ))}
@@ -915,59 +1029,180 @@ export function TransportPanel() {
             </div>
           </section>
 
-          <div className="track-list">
-            {tracks.map((track) => (
-              <article className="track-row" key={track.id}>
-                <div className="track-meta">
-                  <strong>{track.name}</strong>
-                  <span>{track.groupName ?? "Sin grupo"}</span>
-                </div>
+          <section className="context-dock" aria-label="Barra contextual inferior">
+            <article className="context-card">
+              <span className="context-label">Clip</span>
+              {selectedClip ? (
+                <>
+                  <strong>{clipDisplayName(selectedClip)}</strong>
+                  <p>
+                    Inicio {formatClock(clipDrag?.clipId === selectedClip.id ? clipDrag.previewTimelineStartSeconds : selectedClip.timelineStartSeconds)}
+                    {" | "}Duracion {formatClock(selectedClip.durationSeconds)} | Gain{" "}
+                    {Math.round(selectedClip.gain * 100)}%
+                  </p>
+                  <div className="context-actions">
+                    <label className="compact-field">
+                      <span>Inicio timeline (s)</span>
+                      <input
+                        aria-label="Inicio del clip en segundos"
+                        disabled={isBusy}
+                        min="0"
+                        step="0.01"
+                        type="number"
+                        value={clipStartDraft}
+                        onChange={(event) => {
+                          setClipStartDraft(event.target.value);
+                        }}
+                      />
+                    </label>
 
-                <label className="slider-field track-slider">
-                  <span>Vol {Math.round(track.volume * 100)}%</span>
+                    <button
+                      disabled={isBusy}
+                      type="button"
+                      onClick={() => {
+                        void handleMoveSelectedClip(selectedClip.timelineStartSeconds - 1);
+                      }}
+                    >
+                      -1s
+                    </button>
+                    <button
+                      disabled={isBusy}
+                      type="button"
+                      onClick={() => {
+                        void handleMoveSelectedClip(selectedClip.timelineStartSeconds + 1);
+                      }}
+                    >
+                      +1s
+                    </button>
+                    <button disabled={isBusy} type="button" onClick={() => void handleApplyClipStart()}>
+                      Aplicar
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <strong>Sin clip seleccionado</strong>
+                  <p>Haz click o arrastra un clip del timeline para editarlo directamente.</p>
+                </>
+              )}
+            </article>
+
+            <article className="context-card">
+              <span className="context-label">Seccion</span>
+              {selectedSection ? (
+                <>
+                  <strong>{selectedSection.name}</strong>
+                  <p>
+                    {formatClock(selectedSection.startSeconds)} {"->"}{" "}
+                    {formatClock(selectedSection.endSeconds)}
+                  </p>
+                </>
+              ) : activeSectionDraft ? (
+                <>
+                  <strong>Rango en borrador</strong>
+                  <p>
+                    {formatClock(activeSectionDraft.startSeconds)} {"->"}{" "}
+                    {formatClock(activeSectionDraft.endSeconds)}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <strong>Sin seccion seleccionada</strong>
+                  <p>Activa el modo region y arrastra sobre la regla para crear una nueva.</p>
+                </>
+              )}
+
+              <div className="context-actions">
+                <button
+                  disabled={!activeSectionDraft || isBusy}
+                  type="button"
+                  onClick={() => void handleCreateSection()}
+                >
+                  Crear Seccion
+                </button>
+                <button
+                  disabled={!sectionDraft && !timelineDrag && !selectedSection}
+                  type="button"
+                  onClick={() => {
+                    setSectionDraft(null);
+                    setTimelineDrag(null);
+                    setSelectedSectionId(null);
+                  }}
+                >
+                  Limpiar
+                </button>
+              </div>
+            </article>
+
+            <article className="context-card">
+              <span className="context-label">Salto musical</span>
+              <strong>{pendingSectionJump ? pendingSectionJump.targetSectionName : "Sin salto programado"}</strong>
+              <p>
+                {selectedSection
+                  ? `Destino seleccionado: ${selectedSection.name}.`
+                  : jumpTargetSectionId
+                    ? "La region armada se usa como destino del salto."
+                    : "Selecciona una region del timeline para armar el salto."}
+              </p>
+              <div className="context-actions">
+                <button
+                  disabled={!jumpTargetSectionId || isBusy}
+                  type="button"
+                  onClick={() => void handleScheduleJump("immediate")}
+                >
+                  Ir ahora
+                </button>
+                <button
+                  disabled={!jumpTargetSectionId || isBusy}
+                  type="button"
+                  onClick={() => void handleScheduleJump("section_end")}
+                >
+                  Al final
+                </button>
+                <button
+                  disabled={!jumpTargetSectionId || isBusy}
+                  type="button"
+                  onClick={() => void handleScheduleJump("after_bars")}
+                >
+                  En compases
+                </button>
+                <label className="compact-field compact-field-small">
+                  <span>Compases</span>
                   <input
-                    aria-label={`Volumen de pista ${track.name}`}
-                    max="100"
-                    min="0"
-                    type="range"
-                    value={Math.round(track.volume * 100)}
+                    aria-label="Compases del salto"
+                    disabled={isBusy}
+                    max="16"
+                    min="1"
+                    type="number"
+                    value={jumpBars}
                     onChange={(event) => {
-                      void handleTrackVolumeChange(track.id, Number(event.target.value));
+                      setJumpBars(Math.max(1, Number(event.target.value) || 1));
                     }}
                   />
                 </label>
-
-                <label className="track-group-field">
-                  <span>Grupo</span>
-                  <select
-                    aria-label={`Grupo de pista ${track.name}`}
-                    value={groups.find((group) => group.name === track.groupName)?.id ?? ""}
-                    onChange={(event) => {
-                      void handleTrackGroupChange(track.id, event.target.value);
-                    }}
-                  >
-                    <option value="">Sin grupo</option>
-                    {groups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <button type="button" onClick={() => void handleTrackMuteToggle(track.id)}>
-                  {track.muted ? "Unmute" : "Mute"}
+                <button
+                  disabled={!pendingSectionJump || isBusy}
+                  type="button"
+                  onClick={() => void handleCancelJump()}
+                >
+                  Cancelar salto
                 </button>
-              </article>
-            ))}
-          </div>
+              </div>
+              {pendingJumpExecuteAt !== null && (
+                <p className="jump-timing">
+                  Ejecucion estimada en {formatClock(pendingJumpExecuteAt)}.
+                </p>
+              )}
+            </article>
+          </section>
         </>
       ) : (
         <div className="empty-state">
+          <strong>Prepara una sesion para empezar</strong>
           <p>
             Usa <strong>Crear Cancion</strong> para abrir un proyecto vacio, o{" "}
-            <strong>Importar WAVs</strong> para seleccionar una o varias pistas y empezar a
-            escucharlas con <strong>Play</strong>.
+            <strong>Importar WAVs</strong> para traer pistas y trabajar directamente desde el
+            timeline.
           </p>
         </div>
       )}
@@ -975,9 +1210,38 @@ export function TransportPanel() {
   );
 }
 
-function clipStyle(clip: ClipSummary, durationSeconds: number) {
+function ClipFace({ clip }: { clip: ClipSummary }) {
+  return (
+    <>
+      <div className="clip-info">
+        <span className="clip-name">{clipDisplayName(clip)}</span>
+        <span className="clip-time">{formatTimelineMark(clip.timelineStartSeconds)}</span>
+      </div>
+      <div className="clip-waveform" aria-hidden="true">
+        {clip.waveformPeaks.length > 0 ? (
+          clip.waveformPeaks.map((peak, index) => (
+            <span
+              className="waveform-bar"
+              key={`${clip.id}-${index}`}
+              style={{ height: `${Math.max(peak * 100, 6)}%` }}
+            />
+          ))
+        ) : (
+          <span className="waveform-empty" />
+        )}
+      </div>
+    </>
+  );
+}
+
+function clipStyle(
+  clip: ClipSummary,
+  durationSeconds: number,
+  overrideTimelineStartSeconds?: number,
+) {
   const safeDuration = Math.max(durationSeconds, 0.001);
-  const left = (clip.timelineStartSeconds / safeDuration) * 100;
+  const startSeconds = overrideTimelineStartSeconds ?? clip.timelineStartSeconds;
+  const left = (startSeconds / safeDuration) * 100;
   const width = Math.max((clip.durationSeconds / safeDuration) * 100, 1.5);
 
   return {
@@ -1018,7 +1282,7 @@ function normalizeRange(startSeconds: number, endSeconds: number): SectionDraft 
 
 function buildRulerMarks(durationSeconds: number, zoomLevel: number) {
   const safeDuration = Math.max(durationSeconds, 1);
-  const markCount = Math.max(8, Math.round(8 * zoomLevel));
+  const markCount = Math.max(8, Math.round(10 * zoomLevel));
 
   return Array.from({ length: markCount + 1 }, (_, index) => {
     const seconds = (safeDuration / markCount) * index;
@@ -1031,8 +1295,61 @@ function buildRulerMarks(durationSeconds: number, zoomLevel: number) {
   });
 }
 
+function resolvePendingJumpExecuteAt(
+  song: SongSummary,
+  currentPositionSeconds: number,
+  currentSection: SectionSummary | null,
+  pendingSectionJump: PendingJumpSummary | null,
+) {
+  if (!pendingSectionJump) {
+    return null;
+  }
+
+  if (pendingSectionJump.trigger === "immediate") {
+    return currentPositionSeconds;
+  }
+
+  if (pendingSectionJump.trigger === "section_end") {
+    return currentSection?.endSeconds ?? null;
+  }
+
+  const bars = extractBarsFromTrigger(pendingSectionJump.trigger);
+  if (!bars) {
+    return null;
+  }
+
+  const beatsPerBar = parseBeatsPerBar(song.timeSignature);
+  const secondsPerBeat = 60 / Math.max(song.bpm, 1);
+  const secondsPerBar = beatsPerBar * secondsPerBeat;
+  const quantizedBars = Math.max(1, bars);
+  const barIndex = Math.ceil(currentPositionSeconds / secondsPerBar / quantizedBars) * quantizedBars;
+  return Number((barIndex * secondsPerBar).toFixed(3));
+}
+
+function extractBarsFromTrigger(trigger: PendingJumpSummary["trigger"]) {
+  if (!trigger.startsWith("after_bars:")) {
+    return null;
+  }
+
+  const rawBars = Number(trigger.split(":")[1]);
+  return Number.isFinite(rawBars) && rawBars > 0 ? rawBars : null;
+}
+
+function parseBeatsPerBar(timeSignature: string) {
+  const beats = Number(timeSignature.split("/")[0]);
+  return Number.isFinite(beats) && beats > 0 ? beats : 4;
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function roundTimelineSeconds(totalSeconds: number) {
+  return Number(totalSeconds.toFixed(2));
+}
+
+function nearlyEqual(left: number, right: number) {
+  return Math.abs(left - right) <= 0.0001;
 }
 
 function formatTimelineMark(totalSeconds: number) {
