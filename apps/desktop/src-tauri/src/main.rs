@@ -39,7 +39,10 @@ fn pick_and_import_song_from_dialog(
 }
 
 #[tauri::command]
-fn create_song(app: AppHandle, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+fn create_song(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
         .lock()
@@ -61,7 +64,9 @@ fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot, Str
 }
 
 #[tauri::command]
-fn open_project_from_dialog(state: State<'_, DesktopState>) -> Result<Option<TransportSnapshot>, String> {
+fn open_project_from_dialog(
+    state: State<'_, DesktopState>,
+) -> Result<Option<TransportSnapshot>, String> {
     let mut session = state
         .session
         .lock()
@@ -79,7 +84,9 @@ fn play_transport(state: State<'_, DesktopState>) -> Result<TransportSnapshot, S
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session.play(&state.audio).map_err(|error| error.to_string())
+    session
+        .play(&state.audio)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -89,7 +96,9 @@ fn pause_transport(state: State<'_, DesktopState>) -> Result<TransportSnapshot, 
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session.pause(&state.audio).map_err(|error| error.to_string())
+    session
+        .pause(&state.audio)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -99,7 +108,9 @@ fn stop_transport(state: State<'_, DesktopState>) -> Result<TransportSnapshot, S
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session.stop(&state.audio).map_err(|error| error.to_string())
+    session
+        .stop(&state.audio)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -181,6 +192,39 @@ fn create_section(
 }
 
 #[tauri::command]
+fn update_section(
+    section_id: String,
+    name: String,
+    start_seconds: f64,
+    end_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_section(&section_id, &name, start_seconds, end_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn delete_section(
+    section_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .delete_section(&section_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn create_group(name: String, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
@@ -225,7 +269,10 @@ fn set_track_volume(
 }
 
 #[tauri::command]
-fn toggle_track_mute(track_id: String, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+fn toggle_track_mute(
+    track_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
         .lock()
@@ -253,7 +300,10 @@ fn set_group_volume(
 }
 
 #[tauri::command]
-fn toggle_group_mute(group_id: String, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+fn toggle_group_mute(
+    group_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
         .lock()
@@ -293,6 +343,8 @@ fn main() {
             cancel_section_jump,
             move_clip,
             create_section,
+            update_section,
+            delete_section,
             create_group,
             assign_track_to_group,
             set_track_volume,

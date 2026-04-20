@@ -318,6 +318,104 @@ export async function createSection(args: {
   return invokeCommand<TransportSnapshot>("create_section", args);
 }
 
+export async function updateSection(args: {
+  sectionId: string;
+  name: string;
+  startSeconds: number;
+  endSeconds: number;
+}): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    const trimmedName = args.name.trim();
+    if (!trimmedName) {
+      throw new Error("El nombre de la seccion no puede estar vacio.");
+    }
+
+    const startSeconds = Math.max(0, Math.min(args.startSeconds, args.endSeconds));
+    const endSeconds = Math.min(song.durationSeconds, Math.max(args.startSeconds, args.endSeconds));
+    if (endSeconds - startSeconds < 0.05) {
+      throw new Error("El rango de la seccion no es valido.");
+    }
+
+    let updatedSection: SectionSummary | null = null;
+    const sections = sortSections(
+      song.sections.map((section) => {
+        if (section.id !== args.sectionId) {
+          return section;
+        }
+
+        updatedSection = {
+          ...section,
+          name: trimmedName,
+          startSeconds,
+          endSeconds,
+        };
+
+        return updatedSection;
+      }),
+    );
+
+    if (!updatedSection) {
+      throw new Error(`No existe la seccion ${args.sectionId}.`);
+    }
+
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        sections,
+      },
+      currentSection: resolveDemoCurrentSection(sections, demoSnapshot.positionSeconds),
+      pendingSectionJump:
+        demoSnapshot.pendingSectionJump?.targetSectionId === args.sectionId
+          ? {
+              ...demoSnapshot.pendingSectionJump,
+              targetSectionName: trimmedName,
+            }
+          : demoSnapshot.pendingSectionJump,
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("update_section", args);
+}
+
+export async function deleteSection(sectionId: string): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    const sections = song.sections.filter((section) => section.id !== sectionId);
+    if (sections.length === song.sections.length) {
+      throw new Error(`No existe la seccion ${sectionId}.`);
+    }
+
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        sections,
+      },
+      currentSection: resolveDemoCurrentSection(sections, demoSnapshot.positionSeconds),
+      pendingSectionJump:
+        demoSnapshot.pendingSectionJump?.targetSectionId === sectionId
+          ? null
+          : demoSnapshot.pendingSectionJump,
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("delete_section", { sectionId });
+}
+
 export async function createGroup(name: string): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     const song = demoSnapshot.song;
@@ -512,6 +610,13 @@ export async function toggleGroupMute(groupId: string): Promise<TransportSnapsho
 }
 
 function buildDemoSnapshot(): TransportSnapshot {
+  const sections: SectionSummary[] = [
+    { id: "section-intro", name: "Intro", startSeconds: 0, endSeconds: 32 },
+    { id: "section-verse", name: "Verse", startSeconds: 32, endSeconds: 96 },
+    { id: "section-chorus", name: "Chorus", startSeconds: 96, endSeconds: 160 },
+    { id: "section-outro", name: "Outro", startSeconds: 160, endSeconds: 240 },
+  ];
+
   return {
     playbackState: "stopped",
     positionSeconds: 0,
@@ -524,7 +629,7 @@ function buildDemoSnapshot(): TransportSnapshot {
       key: "D",
       timeSignature: "4/4",
       durationSeconds: 240,
-      sections: [],
+      sections,
       clips: [
         {
           id: "clip-click",
@@ -590,7 +695,7 @@ function buildDemoSnapshot(): TransportSnapshot {
         { id: "track-keys", name: "Keys", groupName: "Keys + Pads", volume: 0.72, muted: true },
       ],
     },
-    currentSection: null,
+    currentSection: resolveDemoCurrentSection(sections, 0),
     pendingSectionJump: null,
     songDir: null,
   };
@@ -602,6 +707,18 @@ function cloneSnapshot(snapshot: TransportSnapshot) {
 
 function clamp01(value: number) {
   return Math.min(Math.max(value, 0), 1);
+}
+
+function sortSections(sections: SectionSummary[]) {
+  return [...sections].sort((left, right) => left.startSeconds - right.startSeconds);
+}
+
+function resolveDemoCurrentSection(sections: SectionSummary[], positionSeconds: number) {
+  return (
+    sections.find(
+      (section) => positionSeconds >= section.startSeconds && positionSeconds < section.endSeconds,
+    ) ?? null
+  );
 }
 
 function buildDemoWaveform(bucketCount: number, floor: number, ceiling: number) {

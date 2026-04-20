@@ -5,15 +5,15 @@ use std::{
 };
 
 use libretracks_audio::{
-    AudioEngine, AudioEngineError, JumpTrigger, PlaybackState, PendingSectionJump,
+    AudioEngine, AudioEngineError, JumpTrigger, PendingSectionJump, PlaybackState,
 };
 use libretracks_core::{Clip, OutputBus, Section, Song, TrackGroup};
 use libretracks_project::{
-    create_song_folder, import_wav_song, load_song, load_waveform_summary, save_song,
-    ImportedSong, ProjectError, ProjectImportRequest,
+    create_song_folder, import_wav_song, load_song, load_waveform_summary, save_song, ImportedSong,
+    ProjectError, ProjectImportRequest,
 };
-use rodio::{decoder::DecoderError, PlayError, StreamError};
 use rfd::FileDialog;
+use rodio::{decoder::DecoderError, PlayError, StreamError};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
@@ -68,6 +68,8 @@ pub enum DesktopError {
     TrackNotFound(String),
     #[error("group not found: {0}")]
     GroupNotFound(String),
+    #[error("section not found: {0}")]
+    SectionNotFound(String),
     #[error("section range is invalid")]
     InvalidSectionRange,
 }
@@ -169,7 +171,11 @@ impl DesktopSession {
 
     pub fn save_project(&mut self) -> Result<TransportSnapshot, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
 
         save_song(song_dir, &song)?;
         Ok(self.snapshot())
@@ -191,7 +197,9 @@ impl DesktopSession {
         let song_dir = song_file
             .parent()
             .map(std::path::Path::to_path_buf)
-            .ok_or_else(|| DesktopError::AudioCommand("song.json must live inside a folder".into()))?;
+            .ok_or_else(|| {
+                DesktopError::AudioCommand("song.json must live inside a folder".into())
+            })?;
         let song = load_song(&song_dir)?;
 
         self.load_song_from_path(song, song_dir, audio)?;
@@ -226,7 +234,11 @@ impl DesktopSession {
     pub fn play(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         let current_position = self.current_position();
-        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         if current_position >= song.duration_seconds {
             self.engine.stop()?;
         }
@@ -313,7 +325,11 @@ impl DesktopSession {
         timeline_start_seconds: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         let clip = song
             .clips
             .iter_mut()
@@ -337,7 +353,11 @@ impl DesktopSession {
         end_seconds: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         let start_seconds = start_seconds.min(end_seconds).max(0.0);
         let end_seconds = end_seconds.max(start_seconds).min(song.duration_seconds);
 
@@ -363,15 +383,90 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn update_section(
+        &mut self,
+        section_id: &str,
+        name: &str,
+        start_seconds: f64,
+        end_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let trimmed_name = name.trim();
+        if trimmed_name.is_empty() {
+            return Err(DesktopError::AudioCommand(
+                "section name must not be empty".into(),
+            ));
+        }
+
+        let start_seconds = start_seconds.min(end_seconds).max(0.0);
+        let end_seconds = end_seconds.max(start_seconds).min(song.duration_seconds);
+
+        if end_seconds - start_seconds < 0.05 {
+            return Err(DesktopError::InvalidSectionRange);
+        }
+
+        let section = song
+            .sections
+            .iter_mut()
+            .find(|section| section.id == section_id)
+            .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
+
+        section.name = trimmed_name.to_string();
+        section.start_seconds = start_seconds;
+        section.end_seconds = end_seconds;
+        song.sections.sort_by(|left, right| {
+            left.start_seconds
+                .partial_cmp(&right.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn delete_section(
+        &mut self,
+        section_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let section_count = song.sections.len();
+        song.sections.retain(|section| section.id != section_id);
+
+        if song.sections.len() == section_count {
+            return Err(DesktopError::SectionNotFound(section_id.to_string()));
+        }
+
+        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn create_group(
         &mut self,
         name: &str,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         let trimmed_name = name.trim();
         if trimmed_name.is_empty() {
-            return Err(DesktopError::AudioCommand("group name must not be empty".into()));
+            return Err(DesktopError::AudioCommand(
+                "group name must not be empty".into(),
+            ));
         }
 
         song.groups.push(TrackGroup {
@@ -393,7 +488,11 @@ impl DesktopSession {
         group_id: Option<&str>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
 
         if let Some(group_id) = group_id {
             if !song.groups.iter().any(|group| group.id == group_id) {
@@ -420,7 +519,11 @@ impl DesktopSession {
         volume: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         let track = song
             .tracks
             .iter_mut()
@@ -439,7 +542,11 @@ impl DesktopSession {
         track_id: &str,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         let track = song
             .tracks
             .iter_mut()
@@ -459,7 +566,11 @@ impl DesktopSession {
         volume: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         let group = song
             .groups
             .iter_mut()
@@ -478,7 +589,11 @@ impl DesktopSession {
         group_id: &str,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         let group = song
             .groups
             .iter_mut()
@@ -547,12 +662,23 @@ impl DesktopSession {
         );
         self.engine.seek(restored_position)?;
 
-        if let Some(pending_jump) = pending_jump {
-            self.engine
-                .schedule_section_jump(&pending_jump.target_section_id, pending_jump.trigger)?;
-        }
+        let loaded_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
 
-        let loaded_song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        if let Some(pending_jump) = pending_jump {
+            let target_section_exists = loaded_song
+                .sections
+                .iter()
+                .any(|section| section.id == pending_jump.target_section_id);
+
+            if target_section_exists {
+                self.engine
+                    .schedule_section_jump(&pending_jump.target_section_id, pending_jump.trigger)?;
+            }
+        }
 
         match playback_state {
             PlaybackState::Playing => {
@@ -636,19 +762,31 @@ impl DesktopSession {
                 .engine
                 .song()
                 .map(|song| song_to_summary(song, self.song_dir.as_deref())),
-            current_section: self.engine.current_section().ok().flatten().map(section_to_summary),
+            current_section: self
+                .engine
+                .current_section()
+                .ok()
+                .flatten()
+                .map(section_to_summary),
             pending_section_jump: self
                 .engine
                 .pending_section_jump()
                 .map(pending_jump_to_summary),
-            song_dir: self.song_dir.as_ref().map(|value| value.display().to_string()),
+            song_dir: self
+                .song_dir
+                .as_ref()
+                .map(|value| value.display().to_string()),
             is_native_runtime: true,
         }
     }
 
     fn restart_audio(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         audio.play(song_dir, song, self.engine.position_seconds())?;
         Ok(())
     }
@@ -876,7 +1014,7 @@ mod tests {
     use std::fs;
 
     use libretracks_audio::PlaybackState;
-    use libretracks_core::{Clip, OutputBus, Song, Track, TrackGroup};
+    use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackGroup};
     use libretracks_project::{create_song_folder, load_song};
     use tempfile::tempdir;
 
@@ -923,6 +1061,17 @@ mod tests {
         }
     }
 
+    fn demo_song_with_section() -> Song {
+        let mut song = demo_song();
+        song.sections.push(Section {
+            id: "section_1".into(),
+            name: "Intro".into(),
+            start_seconds: 1.0,
+            end_seconds: 4.0,
+        });
+        song
+    }
+
     #[test]
     fn moving_a_clip_updates_song_json_and_snapshot() {
         let root = tempdir().expect("temp dir should exist");
@@ -961,7 +1110,8 @@ mod tests {
     #[test]
     fn creating_a_section_updates_song_json_and_snapshot() {
         let root = tempdir().expect("temp dir should exist");
-        let song_dir = create_song_folder(root.path(), "section-demo").expect("song dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "section-demo").expect("song dir should exist");
         fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
 
         let mut session = DesktopSession::default();
@@ -989,5 +1139,70 @@ mod tests {
         assert_eq!(saved_song.sections.len(), 1);
         assert_eq!(saved_song.sections[0].start_seconds, 2.0);
         assert_eq!(saved_song.sections[0].end_seconds, 5.5);
+    }
+
+    #[test]
+    fn updating_a_section_updates_song_json_and_snapshot() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "section-update-demo").expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir.clone());
+        session
+            .engine
+            .load_song(demo_song_with_section())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .update_section("section_1", "Verse", 2.5, 7.0, &audio)
+            .expect("section should update");
+
+        let updated_section = snapshot
+            .song
+            .expect("song summary should exist")
+            .sections
+            .into_iter()
+            .find(|section| section.id == "section_1")
+            .expect("updated section should exist");
+        assert_eq!(updated_section.name, "Verse");
+        assert_eq!(updated_section.start_seconds, 2.5);
+        assert_eq!(updated_section.end_seconds, 7.0);
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        assert_eq!(saved_song.sections[0].name, "Verse");
+        assert_eq!(saved_song.sections[0].start_seconds, 2.5);
+        assert_eq!(saved_song.sections[0].end_seconds, 7.0);
+    }
+
+    #[test]
+    fn deleting_a_section_updates_song_json_and_snapshot() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "section-delete-demo").expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir.clone());
+        session
+            .engine
+            .load_song(demo_song_with_section())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .delete_section("section_1", &audio)
+            .expect("section should delete");
+
+        assert!(snapshot
+            .song
+            .expect("song summary should exist")
+            .sections
+            .is_empty());
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        assert!(saved_song.sections.is_empty());
     }
 }
