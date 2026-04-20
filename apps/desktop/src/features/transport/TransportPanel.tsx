@@ -7,6 +7,7 @@ import {
   createSong,
   deleteClip,
   deleteSection,
+  duplicateClip,
   getTransportSnapshot,
   isTauriApp,
   moveClip,
@@ -22,6 +23,7 @@ import {
   stopTransport,
   toggleGroupMute,
   toggleTrackMute,
+  updateClipWindow,
   updateSection,
   type ClipSummary,
   type PendingJumpSummary,
@@ -64,9 +66,12 @@ export function TransportPanel() {
   const [status, setStatus] = useState("Cargando estado de la sesion...");
   const [isBusy, setIsBusy] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1.75);
+  const [snapEnabled, setSnapEnabled] = useState(false);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [clipStartDraft, setClipStartDraft] = useState("0.00");
+  const [clipSourceStartDraft, setClipSourceStartDraft] = useState("0.00");
+  const [clipDurationDraft, setClipDurationDraft] = useState("0.00");
   const [sectionNameDraft, setSectionNameDraft] = useState("");
   const [sectionStartDraft, setSectionStartDraft] = useState("0.00");
   const [sectionEndDraft, setSectionEndDraft] = useState("0.00");
@@ -181,6 +186,8 @@ export function TransportPanel() {
   useEffect(() => {
     if (!selectedClip) {
       setClipStartDraft("0.00");
+      setClipSourceStartDraft("0.00");
+      setClipDurationDraft("0.00");
       return;
     }
 
@@ -190,6 +197,8 @@ export function TransportPanel() {
         : selectedClip.timelineStartSeconds;
 
     setClipStartDraft(previewStart.toFixed(2));
+    setClipSourceStartDraft(selectedClip.sourceStartSeconds.toFixed(2));
+    setClipDurationDraft(selectedClip.durationSeconds.toFixed(2));
   }, [clipDrag, selectedClip]);
 
   useEffect(() => {
@@ -274,6 +283,9 @@ export function TransportPanel() {
   const resetEditorSelections = () => {
     clearTimelineSelections();
   };
+
+  const snapTimelineSeconds = (totalSeconds: number) =>
+    maybeSnapSeconds(totalSeconds, song, snapEnabled);
 
   useEffect(() => {
     const handleWindowKeyDown = (event: KeyboardEvent) => {
@@ -452,7 +464,9 @@ export function TransportPanel() {
     setIsBusy(true);
 
     try {
-      const sanitizedStartSeconds = roundTimelineSeconds(Math.max(0, nextTimelineStartSeconds));
+      const sanitizedStartSeconds = roundTimelineSeconds(
+        snapTimelineSeconds(Math.max(0, nextTimelineStartSeconds)),
+      );
       const nextSnapshot = await moveClip(clip.id, sanitizedStartSeconds);
       setSnapshot(nextSnapshot);
       setSelectedClipId(clip.id);
@@ -472,20 +486,6 @@ export function TransportPanel() {
     await persistClipMove(selectedClip, nextTimelineStartSeconds);
   };
 
-  const handleApplyClipStart = async () => {
-    if (!selectedClip) {
-      return;
-    }
-
-    const parsedStart = Number(clipStartDraft);
-    if (Number.isNaN(parsedStart)) {
-      setStatus("La nueva posicion del clip no es valida.");
-      return;
-    }
-
-    await handleMoveSelectedClip(parsedStart);
-  };
-
   const handleDeleteSelectedClip = async () => {
     if (!selectedClip) {
       return;
@@ -501,6 +501,80 @@ export function TransportPanel() {
       setStatus(`Clip eliminado: ${deletedClipName}.`);
     } catch (error) {
       setStatus(`No se pudo borrar el clip: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleApplyClipWindow = async () => {
+    if (!selectedClip) {
+      return;
+    }
+
+    const parsedTimelineStart = Number(clipStartDraft);
+    const parsedSourceStart = Number(clipSourceStartDraft);
+    const parsedDuration = Number(clipDurationDraft);
+    if (
+      Number.isNaN(parsedTimelineStart) ||
+      Number.isNaN(parsedSourceStart) ||
+      Number.isNaN(parsedDuration)
+    ) {
+      setStatus("La ventana del clip no es valida.");
+      return;
+    }
+
+    setIsBusy(true);
+
+    try {
+      const nextSnapshot = await updateClipWindow({
+        clipId: selectedClip.id,
+        timelineStartSeconds: roundTimelineSeconds(snapTimelineSeconds(parsedTimelineStart)),
+        sourceStartSeconds: roundTimelineSeconds(Math.max(0, parsedSourceStart)),
+        durationSeconds: roundTimelineSeconds(parsedDuration),
+      });
+      const updatedClip =
+        nextSnapshot.song?.clips.find((clip) => clip.id === selectedClip.id) ?? null;
+
+      setSnapshot(nextSnapshot);
+      setSelectedClipId(selectedClip.id);
+      setStatus(`Clip actualizado: ${clipDisplayName(updatedClip ?? selectedClip)}.`);
+    } catch (error) {
+      setStatus(`No se pudo recortar el clip: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleDuplicateSelectedClip = async () => {
+    if (!selectedClip) {
+      return;
+    }
+
+    setIsBusy(true);
+
+    try {
+      const duplicatedStart = roundTimelineSeconds(
+        snapTimelineSeconds(selectedClip.timelineStartSeconds + selectedClip.durationSeconds),
+      );
+      const nextSnapshot = await duplicateClip({
+        clipId: selectedClip.id,
+        timelineStartSeconds: duplicatedStart,
+      });
+      const duplicatedClip =
+        nextSnapshot.song?.clips.find(
+          (clip) =>
+            clip.id !== selectedClip.id &&
+            nearlyEqual(clip.timelineStartSeconds, duplicatedStart) &&
+            clip.trackId === selectedClip.trackId,
+        ) ?? nextSnapshot.song?.clips.at(-1) ?? null;
+
+      setSnapshot(nextSnapshot);
+      setSelectedClipId(duplicatedClip?.id ?? null);
+      setStatus(
+        `${clipDisplayName(selectedClip)} duplicado en ${formatClock(duplicatedStart)}.`,
+      );
+    } catch (error) {
+      setStatus(`No se pudo duplicar el clip: ${String(error)}`);
     } finally {
       setIsBusy(false);
     }
@@ -815,7 +889,7 @@ export function TransportPanel() {
     const nextTimelineStartSeconds = Math.max(0, currentDrag.originTimelineStartSeconds + deltaSeconds);
     const nextClipDrag: ClipDragState = {
       ...currentDrag,
-      previewTimelineStartSeconds: roundTimelineSeconds(nextTimelineStartSeconds),
+      previewTimelineStartSeconds: roundTimelineSeconds(snapTimelineSeconds(nextTimelineStartSeconds)),
       hasMoved: currentDrag.hasMoved || Math.abs(deltaSeconds) >= 0.2,
     };
 
@@ -835,7 +909,7 @@ export function TransportPanel() {
     const releaseDeltaSeconds = resolveTimelineSeconds(event.clientX) - currentDrag.pointerStartSeconds;
     const releaseHasMoved = currentDrag.hasMoved || Math.abs(releaseDeltaSeconds) >= 0.2;
     const releaseTimelineStartSeconds = roundTimelineSeconds(
-      Math.max(0, currentDrag.originTimelineStartSeconds + releaseDeltaSeconds),
+      snapTimelineSeconds(Math.max(0, currentDrag.originTimelineStartSeconds + releaseDeltaSeconds)),
     );
     clipDragRef.current = null;
     setClipDrag(null);
@@ -1054,6 +1128,18 @@ export function TransportPanel() {
                   }}
                 >
                   {sectionSelectionMode ? "Modo region activo" : "Modo region"}
+                </button>
+
+                <button
+                  aria-pressed={snapEnabled}
+                  className={snapEnabled ? "mode-toggle is-active" : "mode-toggle"}
+                  disabled={isBusy || !song}
+                  type="button"
+                  onClick={() => {
+                    setSnapEnabled((currentValue) => !currentValue);
+                  }}
+                >
+                  {snapEnabled ? "Snap beat activo" : "Snap beat"}
                 </button>
 
                 <strong className="timeline-meta">
@@ -1286,6 +1372,34 @@ export function TransportPanel() {
                         }}
                       />
                     </label>
+                    <label className="compact-field">
+                      <span>Entrada fuente (s)</span>
+                      <input
+                        aria-label="Entrada del clip en segundos"
+                        disabled={isBusy}
+                        min="0"
+                        step="0.01"
+                        type="number"
+                        value={clipSourceStartDraft}
+                        onChange={(event) => {
+                          setClipSourceStartDraft(event.target.value);
+                        }}
+                      />
+                    </label>
+                    <label className="compact-field">
+                      <span>Duracion (s)</span>
+                      <input
+                        aria-label="Duracion del clip en segundos"
+                        disabled={isBusy}
+                        min="0.05"
+                        step="0.01"
+                        type="number"
+                        value={clipDurationDraft}
+                        onChange={(event) => {
+                          setClipDurationDraft(event.target.value);
+                        }}
+                      />
+                    </label>
 
                     <button
                       disabled={isBusy}
@@ -1305,8 +1419,19 @@ export function TransportPanel() {
                     >
                       +1s
                     </button>
-                    <button disabled={isBusy} type="button" onClick={() => void handleApplyClipStart()}>
-                      Aplicar
+                    <button
+                      disabled={isBusy}
+                      type="button"
+                      onClick={() => void handleApplyClipWindow()}
+                    >
+                      Aplicar clip
+                    </button>
+                    <button
+                      disabled={isBusy}
+                      type="button"
+                      onClick={() => void handleDuplicateSelectedClip()}
+                    >
+                      Duplicar clip
                     </button>
                     <button
                       disabled={isBusy}
@@ -1634,6 +1759,15 @@ function extractBarsFromTrigger(trigger: PendingJumpSummary["trigger"]) {
 function parseBeatsPerBar(timeSignature: string) {
   const beats = Number(timeSignature.split("/")[0]);
   return Number.isFinite(beats) && beats > 0 ? beats : 4;
+}
+
+function maybeSnapSeconds(totalSeconds: number, song: SongSummary | null, snapEnabled: boolean) {
+  if (!snapEnabled || !song) {
+    return Math.max(0, totalSeconds);
+  }
+
+  const beatStepSeconds = 60 / Math.max(song.bpm, 1);
+  return Math.max(0, Math.round(totalSeconds / beatStepSeconds) * beatStepSeconds);
 }
 
 function clamp(value: number, min: number, max: number) {

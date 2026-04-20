@@ -364,7 +364,10 @@ El timeline ya no solo organiza audio: empieza a editarlo de forma no destructiv
 
 - En progreso
 - Ya se puede borrar el clip seleccionado desde la barra contextual
-- Pendiente recorte, duplicacion y snap temporal
+- Ya se puede recortar inicio y final del clip desde el contexto ligero
+- Ya se puede duplicar el clip seleccionado desde el timeline
+- Ya existe snap temporal basico opcional a beat
+- Pendiente llevar el recorte a handles laterales directos sobre el clip
 
 ---
 
@@ -540,11 +543,11 @@ Esto no cierra fases nuevas del plan por si solo, pero si protege el principio d
 ### Milestone DAW 6 - Edicion v1
 
 ```txt
-[ ] Recortar inicio de clip
-[ ] Recortar final de clip
-[ ] Duplicar clip
+[x] Recortar inicio de clip
+[x] Recortar final de clip
+[x] Duplicar clip
 [x] Borrar clip
-[ ] Snap temporal basico
+[x] Snap temporal basico
 ```
 
 ### Milestone DAW 7 - Navegacion y precision

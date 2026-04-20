@@ -114,6 +114,54 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: /clip bass/i })).toBeNull();
   });
 
+  it("allows updating the selected clip window from the context dock", async () => {
+    await renderApp();
+
+    const drumsClip = await screen.findByRole("button", { name: /clip drums/i });
+    await act(async () => {
+      fireEvent.pointerDown(drumsClip, { pointerId: 1, clientX: 16 });
+      fireEvent.pointerUp(drumsClip, { pointerId: 1, clientX: 16 });
+    });
+
+    await act(async () => {
+      fireEvent.change(await screen.findByLabelText(/inicio del clip en segundos/i), {
+        target: { value: "20.00" },
+      });
+      fireEvent.change(await screen.findByLabelText(/entrada del clip en segundos/i), {
+        target: { value: "4.00" },
+      });
+      fireEvent.change(await screen.findByLabelText(/duracion del clip en segundos/i), {
+        target: { value: "120.00" },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /aplicar clip/i }));
+    });
+
+    expect(await screen.findByText(/clip actualizado: drums/i)).toBeTruthy();
+    expect(await screen.findByDisplayValue("20.00")).toBeTruthy();
+    expect(await screen.findByDisplayValue("4.00")).toBeTruthy();
+    expect(await screen.findByDisplayValue("120.00")).toBeTruthy();
+  });
+
+  it("allows duplicating the selected clip from the context dock", async () => {
+    await renderApp();
+
+    const drumsClip = await screen.findByRole("button", { name: /clip drums/i });
+    await act(async () => {
+      fireEvent.pointerDown(drumsClip, { pointerId: 1, clientX: 16 });
+      fireEvent.pointerUp(drumsClip, { pointerId: 1, clientX: 16 });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /duplicar clip/i }));
+    });
+
+    expect(await screen.findByText(/drums duplicado/i)).toBeTruthy();
+    expect((await screen.findAllByRole("button", { name: /clip drums/i })).length).toBe(2);
+  });
+
   it("supports delete to remove the selected clip", async () => {
     await renderApp();
 
@@ -129,6 +177,32 @@ describe("App", () => {
 
     expect(await screen.findByText(/clip eliminado: keys/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /clip keys/i })).toBeNull();
+  });
+
+  it("supports snap beat when applying clip moves", async () => {
+    await renderApp();
+
+    const drumsClip = await screen.findByRole("button", { name: /clip drums/i });
+    await act(async () => {
+      fireEvent.pointerDown(drumsClip, { pointerId: 1, clientX: 16 });
+      fireEvent.pointerUp(drumsClip, { pointerId: 1, clientX: 16 });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /snap beat/i }));
+    });
+
+    await act(async () => {
+      fireEvent.change(await screen.findByLabelText(/inicio del clip en segundos/i), {
+        target: { value: "17.00" },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /aplicar clip/i }));
+    });
+
+    expect(await screen.findByDisplayValue("16.67")).toBeTruthy();
   });
 
   it("supports ctrl plus mouse wheel to zoom the timeline", async () => {
