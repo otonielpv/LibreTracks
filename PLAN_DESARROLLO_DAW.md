@@ -390,6 +390,14 @@ Mejorar sensacion de control y trabajo fino.
 
 El usuario debe poder trabajar varios minutos en el timeline sin sentir friccion fuerte.
 
+### Estado
+
+- En progreso
+- Ya existe `Space` para play/pause desde el shell principal
+- Ya existe `Escape` para limpiar seleccion y borradores del timeline
+- Ya existe zoom horizontal con `Ctrl + rueda` manteniendo el contexto visual
+- Pendiente autoscroll durante drag, borrado por teclado y mas atajos de edicion
+
 ---
 
 ## Fase H - Cierre funcional del nuevo shell
@@ -531,6 +539,16 @@ Esto no cierra fases nuevas del plan por si solo, pero si protege el principio d
 [ ] Duplicar clip
 [ ] Borrar clip
 [ ] Snap temporal basico
+```
+
+### Milestone DAW 7 - Navegacion y precision
+
+```txt
+[x] Espacio para play/pause
+[ ] Suprimir para borrar clip
+[x] Escape para cancelar seleccion
+[x] Ctrl + rueda para zoom horizontal del timeline
+[ ] Autoscroll en borde durante drag
 ```
 
 ---

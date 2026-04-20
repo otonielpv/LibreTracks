@@ -29,6 +29,10 @@ import {
   type TransportSnapshot,
 } from "./desktopApi";
 
+const TIMELINE_ZOOM_MIN = 1;
+const TIMELINE_ZOOM_MAX = 4;
+const TIMELINE_ZOOM_STEP = 0.25;
+
 type TimelineDragState =
   | {
       mode: "seek" | "section";
@@ -212,7 +216,52 @@ export function TransportPanel() {
     }
   }, [jumpTargetSectionId, sections, selectedSectionId]);
 
-  const resetEditorSelections = () => {
+  const updateTimelineZoom = (nextZoomLevel: number, anchorClientX?: number) => {
+    const clampedZoomLevel = clampZoomLevel(nextZoomLevel);
+    const scrollElement = timelineScrollRef.current;
+    const contentElement = timelineContentRef.current;
+
+    if (!scrollElement || !contentElement) {
+      setZoomLevel(clampedZoomLevel);
+      return;
+    }
+
+    const scrollRect = scrollElement.getBoundingClientRect();
+    const contentWidth =
+      contentElement.getBoundingClientRect().width ||
+      contentElement.scrollWidth ||
+      scrollElement.clientWidth ||
+      1;
+    const anchorViewportOffset =
+      anchorClientX === undefined
+        ? scrollElement.clientWidth / 2
+        : clamp(anchorClientX - scrollRect.left, 0, scrollElement.clientWidth);
+    const anchorRatio = clamp(
+      (scrollElement.scrollLeft + anchorViewportOffset) / Math.max(contentWidth, 1),
+      0,
+      1,
+    );
+
+    setZoomLevel(clampedZoomLevel);
+
+    window.requestAnimationFrame(() => {
+      const nextScrollElement = timelineScrollRef.current;
+      const nextContentElement = timelineContentRef.current;
+      if (!nextScrollElement || !nextContentElement) {
+        return;
+      }
+
+      const nextContentWidth =
+        nextContentElement.getBoundingClientRect().width ||
+        nextContentElement.scrollWidth ||
+        nextScrollElement.clientWidth ||
+        1;
+      const nextScrollLeft = anchorRatio * nextContentWidth - anchorViewportOffset;
+      nextScrollElement.scrollLeft = Math.max(0, nextScrollLeft);
+    });
+  };
+
+  const clearTimelineSelections = () => {
     setSelectedClipId(null);
     setSelectedSectionId(null);
     setSectionDraft(null);
@@ -220,6 +269,55 @@ export function TransportPanel() {
     setClipDrag(null);
     clipDragRef.current = null;
   };
+
+  const resetEditorSelections = () => {
+    clearTimelineSelections();
+  };
+
+  useEffect(() => {
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || isEditableTarget(event.target)) {
+        return;
+      }
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (!song || isBusy) {
+          return;
+        }
+
+        if (snapshot?.playbackState === "playing") {
+          void handlePause();
+          return;
+        }
+
+        void handlePlay();
+        return;
+      }
+
+      if (event.key === "Escape") {
+        const hasTransientSelection =
+          selectedClipId !== null ||
+          selectedSectionId !== null ||
+          sectionDraft !== null ||
+          timelineDrag !== null ||
+          clipDragRef.current !== null;
+
+        if (!hasTransientSelection) {
+          return;
+        }
+
+        event.preventDefault();
+        clearTimelineSelections();
+        setStatus("Seleccion del timeline cancelada.");
+      }
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [isBusy, sectionDraft, selectedClipId, selectedSectionId, snapshot?.playbackState, song, timelineDrag]);
 
   const handleCreateSong = async () => {
     setIsBusy(true);
@@ -641,6 +739,16 @@ export function TransportPanel() {
     setTimelineDrag(null);
   };
 
+  const handleTimelineWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey) {
+      return;
+    }
+
+    event.preventDefault();
+    const zoomDelta = event.deltaY < 0 ? TIMELINE_ZOOM_STEP : -TIMELINE_ZOOM_STEP;
+    updateTimelineZoom(zoomLevel + zoomDelta, event.clientX);
+  };
+
   const handleClipPointerDown = (clip: ClipSummary, event: React.PointerEvent<HTMLButtonElement>) => {
     if (!song || durationSeconds <= 0) {
       return;
@@ -893,13 +1001,13 @@ export function TransportPanel() {
                   <span>Zoom</span>
                   <input
                     aria-label="Zoom horizontal del timeline"
-                    max="4"
-                    min="1"
-                    step="0.25"
+                    max={TIMELINE_ZOOM_MAX}
+                    min={TIMELINE_ZOOM_MIN}
+                    step={TIMELINE_ZOOM_STEP}
                     type="range"
                     value={zoomLevel}
                     onChange={(event) => {
-                      setZoomLevel(Number(event.target.value));
+                      updateTimelineZoom(Number(event.target.value));
                     }}
                   />
                 </label>
@@ -992,6 +1100,7 @@ export function TransportPanel() {
                 onPointerDown={handleTimelinePointerDown}
                 onPointerMove={handleTimelinePointerMove}
                 onPointerUp={handleTimelinePointerUp}
+                onWheel={handleTimelineWheel}
               >
                 <div
                   ref={timelineContentRef}
@@ -1493,6 +1602,10 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function clampZoomLevel(zoomLevel: number) {
+  return clamp(Number(zoomLevel.toFixed(2)), TIMELINE_ZOOM_MIN, TIMELINE_ZOOM_MAX);
+}
+
 function roundTimelineSeconds(totalSeconds: number) {
   return Number(totalSeconds.toFixed(2));
 }
@@ -1522,4 +1635,16 @@ function waitForNextPaint() {
   return new Promise<void>((resolve) => {
     window.setTimeout(() => resolve(), 0);
   });
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.isContentEditable) {
+    return true;
+  }
+
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }

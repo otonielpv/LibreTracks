@@ -59,6 +59,66 @@ describe("App", () => {
     expect(await screen.findByDisplayValue("16.00")).toBeTruthy();
   });
 
+  it("supports space to play and pause", async () => {
+    await renderApp();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Space", key: " " });
+    });
+
+    expect(await screen.findByText(/reproduccion en curso/i)).toBeTruthy();
+    expect(await screen.findByText("playing")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Space", key: " " });
+    });
+
+    expect(await screen.findByText(/reproduccion pausada/i)).toBeTruthy();
+    expect(await screen.findByText("paused")).toBeTruthy();
+  });
+
+  it("supports escape to clear timeline selections", async () => {
+    await renderApp();
+
+    const clipButton = await screen.findByRole("button", { name: /clip drums/i });
+    await act(async () => {
+      fireEvent.pointerDown(clipButton, { pointerId: 1, clientX: 16 });
+      fireEvent.pointerUp(clipButton, { pointerId: 1, clientX: 16 });
+    });
+
+    expect(await screen.findByText(/clip seleccionado: drums/i)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+
+    expect(await screen.findByText(/seleccion del timeline cancelada/i)).toBeTruthy();
+    expect(await screen.findByText(/sin clip seleccionado/i)).toBeTruthy();
+  });
+
+  it("supports ctrl plus mouse wheel to zoom the timeline", async () => {
+    const { container } = await renderApp();
+
+    const zoomField = (await screen.findByLabelText(
+      /zoom horizontal del timeline/i,
+    )) as HTMLInputElement;
+    expect(zoomField.value).toBe("1.75");
+
+    const timelineScroll = container.querySelector(".timeline-scroll");
+    expect(timelineScroll).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.wheel(timelineScroll as Element, {
+        ctrlKey: true,
+        deltaY: -100,
+        clientX: 240,
+      });
+    });
+
+    expect(zoomField.value).toBe("2");
+    expect(await screen.findByText(/zoom 2\.0x/i)).toBeTruthy();
+  });
+
   it("creates a blank project from the transport header", async () => {
     await renderApp();
 
