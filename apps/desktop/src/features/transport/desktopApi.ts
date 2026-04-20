@@ -35,6 +35,7 @@ export type ClipSummary = {
   trackName: string;
   filePath: string;
   timelineStartSeconds: number;
+  sourceStartSeconds: number;
   durationSeconds: number;
   gain: number;
   waveformPeaks: number[];
@@ -257,16 +258,12 @@ export async function moveClip(
           }
         : clip,
     );
-    const movedClip = clips.find((clip) => clip.id === clipId) ?? null;
-    const durationSeconds = movedClip
-      ? Math.max(song.durationSeconds, movedClip.timelineStartSeconds + movedClip.durationSeconds)
-      : song.durationSeconds;
 
     demoSnapshot = {
       ...demoSnapshot,
       song: {
         ...song,
-        durationSeconds,
+        durationSeconds: computeSongDuration(song.sections, clips),
         clips,
       },
     };
@@ -296,6 +293,7 @@ export async function deleteClip(clipId: string): Promise<TransportSnapshot> {
       ...demoSnapshot,
       song: {
         ...song,
+        durationSeconds: computeSongDuration(song.sections, clips),
         clips,
       },
     };
@@ -304,6 +302,97 @@ export async function deleteClip(clipId: string): Promise<TransportSnapshot> {
   }
 
   return invokeCommand<TransportSnapshot>("delete_clip", { clipId });
+}
+
+export async function updateClipWindow(args: {
+  clipId: string;
+  timelineStartSeconds: number;
+  sourceStartSeconds: number;
+  durationSeconds: number;
+}): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    let updated = false;
+    const clips = song.clips.map((clip) => {
+      if (clip.id !== args.clipId) {
+        return clip;
+      }
+
+      if (
+        args.timelineStartSeconds < 0 ||
+        args.sourceStartSeconds < 0 ||
+        args.durationSeconds < 0.05
+      ) {
+        throw new Error("El rango del clip no es valido.");
+      }
+
+      updated = true;
+      return {
+        ...clip,
+        timelineStartSeconds: args.timelineStartSeconds,
+        sourceStartSeconds: args.sourceStartSeconds,
+        durationSeconds: args.durationSeconds,
+      };
+    });
+
+    if (!updated) {
+      throw new Error(`No existe el clip ${args.clipId}.`);
+    }
+
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        clips,
+        durationSeconds: computeSongDuration(song.sections, clips),
+      },
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("update_clip_window", args);
+}
+
+export async function duplicateClip(args: {
+  clipId: string;
+  timelineStartSeconds: number;
+}): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    const sourceClip = song.clips.find((clip) => clip.id === args.clipId);
+    if (!sourceClip) {
+      throw new Error(`No existe el clip ${args.clipId}.`);
+    }
+
+    const duplicatedClip: ClipSummary = {
+      ...sourceClip,
+      id: `clip-demo-${Date.now()}`,
+      timelineStartSeconds: Math.max(0, args.timelineStartSeconds),
+    };
+    const clips = [...song.clips, duplicatedClip];
+
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        clips,
+        durationSeconds: computeSongDuration(song.sections, clips),
+      },
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("duplicate_clip", args);
 }
 
 export async function createSection(args: {
@@ -331,6 +420,10 @@ export async function createSection(args: {
       song: {
         ...song,
         sections: [...song.sections, nextSection].sort((left, right) => left.startSeconds - right.startSeconds),
+        durationSeconds: computeSongDuration(
+          [...song.sections, nextSection],
+          song.clips,
+        ),
       },
       currentSection:
         demoSnapshot.positionSeconds >= startSeconds && demoSnapshot.positionSeconds < endSeconds
@@ -394,6 +487,7 @@ export async function updateSection(args: {
       song: {
         ...song,
         sections,
+        durationSeconds: computeSongDuration(sections, song.clips),
       },
       currentSection: resolveDemoCurrentSection(sections, demoSnapshot.positionSeconds),
       pendingSectionJump:
@@ -428,6 +522,7 @@ export async function deleteSection(sectionId: string): Promise<TransportSnapsho
       song: {
         ...song,
         sections,
+        durationSeconds: computeSongDuration(sections, song.clips),
       },
       currentSection: resolveDemoCurrentSection(sections, demoSnapshot.positionSeconds),
       pendingSectionJump:
@@ -663,6 +758,7 @@ function buildDemoSnapshot(): TransportSnapshot {
           trackName: "Click",
           filePath: "audio/click.wav",
           timelineStartSeconds: 0,
+          sourceStartSeconds: 0,
           durationSeconds: 240,
           gain: 1,
           waveformPeaks: buildDemoWaveform(96, 0.25, 0.85),
@@ -673,6 +769,7 @@ function buildDemoSnapshot(): TransportSnapshot {
           trackName: "Guide",
           filePath: "audio/guide.wav",
           timelineStartSeconds: 0,
+          sourceStartSeconds: 0,
           durationSeconds: 240,
           gain: 1,
           waveformPeaks: buildDemoWaveform(96, 0.2, 0.72),
@@ -683,6 +780,7 @@ function buildDemoSnapshot(): TransportSnapshot {
           trackName: "Drums",
           filePath: "audio/drums.wav",
           timelineStartSeconds: 16,
+          sourceStartSeconds: 0,
           durationSeconds: 176,
           gain: 1,
           waveformPeaks: buildDemoWaveform(96, 0.35, 1),
@@ -693,6 +791,7 @@ function buildDemoSnapshot(): TransportSnapshot {
           trackName: "Bass",
           filePath: "audio/bass.wav",
           timelineStartSeconds: 32,
+          sourceStartSeconds: 0,
           durationSeconds: 160,
           gain: 1,
           waveformPeaks: buildDemoWaveform(96, 0.28, 0.8),
@@ -703,6 +802,7 @@ function buildDemoSnapshot(): TransportSnapshot {
           trackName: "Keys",
           filePath: "audio/keys.wav",
           timelineStartSeconds: 48,
+          sourceStartSeconds: 0,
           durationSeconds: 128,
           gain: 1,
           waveformPeaks: buildDemoWaveform(96, 0.18, 0.62),
@@ -745,6 +845,15 @@ function resolveDemoCurrentSection(sections: SectionSummary[], positionSeconds: 
       (section) => positionSeconds >= section.startSeconds && positionSeconds < section.endSeconds,
     ) ?? null
   );
+}
+
+function computeSongDuration(sections: SectionSummary[], clips: ClipSummary[]) {
+  const maxSectionEnd = sections.reduce((maxValue, section) => Math.max(maxValue, section.endSeconds), 0);
+  const maxClipEnd = clips.reduce(
+    (maxValue, clip) => Math.max(maxValue, clip.timelineStartSeconds + clip.durationSeconds),
+    0,
+  );
+  return Math.max(maxSectionEnd, maxClipEnd, 1);
 }
 
 function buildDemoWaveform(bucketCount: number, floor: number, ceiling: number) {

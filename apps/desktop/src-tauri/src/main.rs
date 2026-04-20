@@ -191,6 +191,46 @@ fn delete_clip(
 }
 
 #[tauri::command]
+fn update_clip_window(
+    clip_id: String,
+    timeline_start_seconds: f64,
+    source_start_seconds: f64,
+    duration_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_clip_window(
+            &clip_id,
+            timeline_start_seconds,
+            source_start_seconds,
+            duration_seconds,
+            &state.audio,
+        )
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn duplicate_clip(
+    clip_id: String,
+    timeline_start_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .duplicate_clip(&clip_id, timeline_start_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn create_section(
     start_seconds: f64,
     end_seconds: f64,
@@ -358,6 +398,8 @@ fn main() {
             cancel_section_jump,
             move_clip,
             delete_clip,
+            update_clip_window,
+            duplicate_clip,
             create_section,
             update_section,
             delete_section,

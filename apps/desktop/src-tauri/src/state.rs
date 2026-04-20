@@ -9,8 +9,8 @@ use libretracks_audio::{
 };
 use libretracks_core::{Clip, OutputBus, Section, Song, TrackGroup};
 use libretracks_project::{
-    create_song_folder, import_wav_song, load_song, load_waveform_summary, save_song, ImportedSong,
-    ProjectError, ProjectImportRequest,
+    create_song_folder, import_wav_song, load_song, load_waveform_summary, read_wav_metadata,
+    save_song, ImportedSong, ProjectError, ProjectImportRequest,
 };
 use rfd::FileDialog;
 use rodio::{decoder::DecoderError, PlayError, StreamError};
@@ -72,6 +72,8 @@ pub enum DesktopError {
     SectionNotFound(String),
     #[error("section range is invalid")]
     InvalidSectionRange,
+    #[error("clip range is invalid")]
+    InvalidClipRange,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -146,6 +148,7 @@ pub struct ClipSummary {
     pub track_name: String,
     pub file_path: String,
     pub timeline_start_seconds: f64,
+    pub source_start_seconds: f64,
     pub duration_seconds: f64,
     pub gain: f64,
     pub waveform_peaks: Vec<f32>,
@@ -337,10 +340,7 @@ impl DesktopSession {
             .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
 
         clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
-        let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
-        if clip_end > song.duration_seconds {
-            song.duration_seconds = clip_end;
-        }
+        refresh_song_duration(&mut song);
 
         self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
 
@@ -363,6 +363,74 @@ impl DesktopSession {
         if song.clips.len() == clip_count {
             return Err(DesktopError::ClipNotFound(clip_id.to_string()));
         }
+
+        refresh_song_duration(&mut song);
+        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn update_clip_window(
+        &mut self,
+        clip_id: &str,
+        timeline_start_seconds: f64,
+        source_start_seconds: f64,
+        duration_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let clip = song
+            .clips
+            .iter_mut()
+            .find(|clip| clip.id == clip_id)
+            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
+
+        validate_clip_window(
+            &song_dir,
+            &clip.file_path,
+            timeline_start_seconds,
+            source_start_seconds,
+            duration_seconds,
+        )?;
+
+        clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
+        clip.source_start_seconds = source_start_seconds.max(0.0);
+        clip.duration_seconds = duration_seconds;
+        refresh_song_duration(&mut song);
+
+        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn duplicate_clip(
+        &mut self,
+        clip_id: &str,
+        timeline_start_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let source_clip = song
+            .clips
+            .iter()
+            .find(|clip| clip.id == clip_id)
+            .cloned()
+            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
+
+        let mut duplicated_clip = source_clip;
+        duplicated_clip.id = format!("clip_{}", timestamp_suffix());
+        duplicated_clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
+        song.clips.push(duplicated_clip);
+        refresh_song_duration(&mut song);
 
         self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
 
@@ -953,10 +1021,45 @@ fn clip_to_summary(song: &Song, clip: &Clip, song_dir: Option<&std::path::Path>)
         track_name,
         file_path: clip.file_path.clone(),
         timeline_start_seconds: clip.timeline_start_seconds,
+        source_start_seconds: clip.source_start_seconds,
         duration_seconds: clip.duration_seconds,
         gain: clip.gain,
         waveform_peaks,
     }
+}
+
+fn validate_clip_window(
+    song_dir: &std::path::Path,
+    clip_file_path: &str,
+    timeline_start_seconds: f64,
+    source_start_seconds: f64,
+    duration_seconds: f64,
+) -> Result<(), DesktopError> {
+    if timeline_start_seconds < 0.0 || source_start_seconds < 0.0 || duration_seconds < 0.05 {
+        return Err(DesktopError::InvalidClipRange);
+    }
+
+    let wav_metadata = read_wav_metadata(song_dir.join(clip_file_path))?;
+    if source_start_seconds + duration_seconds > wav_metadata.duration_seconds + 0.0001 {
+        return Err(DesktopError::InvalidClipRange);
+    }
+
+    Ok(())
+}
+
+fn refresh_song_duration(song: &mut Song) {
+    let max_clip_end = song
+        .clips
+        .iter()
+        .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
+        .fold(0.0_f64, f64::max);
+    let max_section_end = song
+        .sections
+        .iter()
+        .map(|section| section.end_seconds)
+        .fold(0.0_f64, f64::max);
+
+    song.duration_seconds = max_clip_end.max(max_section_end).max(1.0);
 }
 
 fn section_to_summary(section: &Section) -> SectionSummary {
@@ -1191,6 +1294,90 @@ mod tests {
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert!(saved_song.clips.is_empty());
         assert_eq!(session.engine.playback_state(), PlaybackState::Stopped);
+    }
+
+    #[test]
+    fn updating_a_clip_window_updates_song_json_and_snapshot() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "clip-window-demo").expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let wav_path = song_dir.join("audio").join("test.wav");
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: 44_100,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(&wav_path, spec).expect("wav should be created");
+        for _ in 0..(44_100 * 8) {
+            writer.write_sample(0_i16).expect("sample should write");
+            writer.write_sample(0_i16).expect("sample should write");
+        }
+        writer.finalize().expect("wav should finalize");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir.clone());
+        session
+            .engine
+            .load_song(demo_song())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .update_clip_window("clip_1", 2.0, 1.5, 2.25, &audio)
+            .expect("clip window should update");
+
+        let updated_clip = snapshot
+            .song
+            .expect("song summary should exist")
+            .clips
+            .into_iter()
+            .find(|clip| clip.id == "clip_1")
+            .expect("updated clip should exist");
+        assert_eq!(updated_clip.timeline_start_seconds, 2.0);
+        assert_eq!(updated_clip.source_start_seconds, 1.5);
+        assert_eq!(updated_clip.duration_seconds, 2.25);
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        assert_eq!(saved_song.clips[0].timeline_start_seconds, 2.0);
+        assert_eq!(saved_song.clips[0].source_start_seconds, 1.5);
+        assert_eq!(saved_song.clips[0].duration_seconds, 2.25);
+    }
+
+    #[test]
+    fn duplicating_a_clip_updates_song_json_and_snapshot() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "clip-duplicate-demo").expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir.clone());
+        session
+            .engine
+            .load_song(demo_song())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .duplicate_clip("clip_1", 6.0, &audio)
+            .expect("clip should duplicate");
+
+        let snapshot_song = snapshot.song.expect("song summary should exist");
+        assert_eq!(snapshot_song.clips.len(), 2);
+        assert!(snapshot_song
+            .clips
+            .iter()
+            .any(|clip| clip.id != "clip_1" && clip.timeline_start_seconds == 6.0));
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        assert_eq!(saved_song.clips.len(), 2);
+        assert!(saved_song
+            .clips
+            .iter()
+            .any(|clip| clip.id != "clip_1" && clip.timeline_start_seconds == 6.0));
     }
 
     #[test]

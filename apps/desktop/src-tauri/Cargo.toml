@@ -20,4 +20,5 @@ thiserror = "2"
 path = "../../../crates/libretracks-core"
 
 [dev-dependencies]
+hound = "3"
 tempfile = "3"
