@@ -890,14 +890,16 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         if let Some(pending_jump) = pending_jump {
-            let target_section_exists = loaded_song
+            let target_section = loaded_song
                 .sections
                 .iter()
-                .any(|section| section.id == pending_jump.target_section_id);
+                .find(|section| section.id == pending_jump.target_section_id);
 
-            if target_section_exists {
-                self.engine
-                    .schedule_section_jump(&pending_jump.target_section_id, pending_jump.trigger)?;
+            if let Some(target_section) = target_section {
+                if restored_position < target_section.start_seconds {
+                    self.engine
+                        .schedule_section_jump(&pending_jump.target_section_id, pending_jump.trigger)?;
+                }
             }
         }
 
@@ -1716,6 +1718,34 @@ mod tests {
         assert_eq!(pending_jump.target_section_id, "section_2");
         assert_eq!(pending_jump.target_section_name, "Verse");
         assert_eq!(pending_jump.trigger, "section_end");
+    }
+
+    #[test]
+    fn transport_only_updates_drop_pending_jump_when_target_moves_before_position() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = create_song_folder(root.path(), "transport-only-stale-pending-jump")
+            .expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir);
+        session
+            .engine
+            .load_song(demo_song_with_two_sections())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        session.seek(5.0, &audio).expect("seek should work");
+        session
+            .schedule_section_jump("section_2", JumpTrigger::SectionEnd, &audio)
+            .expect("jump should schedule");
+
+        let snapshot = session
+            .update_section("section_2", "Verse", 3.0, 8.0, &audio)
+            .expect("section update should succeed");
+
+        assert_eq!(snapshot.position_seconds, 5.0);
+        assert!(snapshot.pending_section_jump.is_none());
     }
 
     #[test]
