@@ -17,7 +17,7 @@ use rodio::{decoder::DecoderError, PlayError, StreamError};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
-use crate::audio_runtime::AudioController;
+use crate::audio_runtime::{AudioController, PlaybackStartReason};
 
 pub struct DesktopState {
     pub audio: AudioController,
@@ -247,7 +247,13 @@ impl DesktopSession {
         }
 
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        audio.play(song_dir, song, self.engine.position_seconds())?;
+        let start_reason = if self.engine.position_seconds() > 0.0 {
+            PlaybackStartReason::ResumePlay
+        } else {
+            PlaybackStartReason::InitialPlay
+        };
+
+        audio.play(song_dir, song, self.engine.position_seconds(), start_reason)?;
         self.engine.play()?;
         self.started_at = Some(Instant::now());
 
@@ -287,7 +293,7 @@ impl DesktopSession {
         self.started_at = None;
 
         if was_playing {
-            return self.play(audio);
+            return self.play_with_reason(audio, PlaybackStartReason::Seek);
         }
 
         Ok(self.snapshot())
@@ -306,7 +312,7 @@ impl DesktopSession {
             .schedule_section_jump(target_section_id, trigger.clone())?;
 
         if was_playing && trigger == JumpTrigger::Immediate {
-            self.restart_audio(audio)?;
+            self.restart_audio(audio, PlaybackStartReason::ImmediateJump)?;
             self.started_at = Some(Instant::now());
         }
 
@@ -342,7 +348,7 @@ impl DesktopSession {
         clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
         refresh_song_duration(&mut song);
 
-        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow)?;
 
         Ok(self.snapshot())
     }
@@ -365,7 +371,7 @@ impl DesktopSession {
         }
 
         refresh_song_duration(&mut song);
-        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
 
         Ok(self.snapshot())
     }
@@ -403,7 +409,7 @@ impl DesktopSession {
         clip.duration_seconds = duration_seconds;
         refresh_song_duration(&mut song);
 
-        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow)?;
 
         Ok(self.snapshot())
     }
@@ -432,7 +438,7 @@ impl DesktopSession {
         song.clips.push(duplicated_clip);
         refresh_song_duration(&mut song);
 
-        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
 
         Ok(self.snapshot())
     }
@@ -468,7 +474,7 @@ impl DesktopSession {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
 
         Ok(self.snapshot())
     }
@@ -515,7 +521,7 @@ impl DesktopSession {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
 
         Ok(self.snapshot())
     }
@@ -537,7 +543,7 @@ impl DesktopSession {
             return Err(DesktopError::SectionNotFound(section_id.to_string()));
         }
 
-        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
 
         Ok(self.snapshot())
     }
@@ -567,7 +573,7 @@ impl DesktopSession {
             output_bus_id: OutputBus::Main.id(),
         });
 
-        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
 
         Ok(self.snapshot())
     }
@@ -598,7 +604,7 @@ impl DesktopSession {
 
         track.group_id = group_id.map(std::string::ToString::to_string);
 
-        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
 
         Ok(self.snapshot())
     }
@@ -622,7 +628,7 @@ impl DesktopSession {
 
         track.volume = volume.clamp(0.0, 1.0);
 
-        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
 
         Ok(self.snapshot())
     }
@@ -645,7 +651,7 @@ impl DesktopSession {
 
         track.muted = !track.muted;
 
-        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
 
         Ok(self.snapshot())
     }
@@ -669,7 +675,7 @@ impl DesktopSession {
 
         group.volume = volume.clamp(0.0, 1.0);
 
-        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
 
         Ok(self.snapshot())
     }
@@ -692,7 +698,7 @@ impl DesktopSession {
 
         group.muted = !group.muted;
 
-        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
 
         Ok(self.snapshot())
     }
@@ -728,11 +734,35 @@ impl DesktopSession {
         Ok(())
     }
 
+    fn play_with_reason(
+        &mut self,
+        audio: &AudioController,
+        reason: PlaybackStartReason,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        let current_position = self.current_position();
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        if current_position >= song.duration_seconds {
+            self.engine.stop()?;
+        }
+
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        audio.play(song_dir, song, self.engine.position_seconds(), reason)?;
+        self.engine.play()?;
+        self.started_at = Some(Instant::now());
+
+        Ok(self.snapshot())
+    }
+
     fn persist_song_update(
         &mut self,
         song: Song,
         audio: &AudioController,
-        update_kind: SongUpdateKind,
+        impact: AudioChangeImpact,
     ) -> Result<(), DesktopError> {
         self.sync_position(audio)?;
 
@@ -773,9 +803,15 @@ impl DesktopSession {
         match playback_state {
             PlaybackState::Playing => {
                 self.engine.play()?;
-                match update_kind {
-                    SongUpdateKind::Timeline => self.restart_audio(audio)?,
-                    SongUpdateKind::Mix => audio.sync_song(loaded_song)?,
+                match impact {
+                    AudioChangeImpact::MixOnly => audio.sync_song(loaded_song)?,
+                    AudioChangeImpact::TransportOnly => {}
+                    AudioChangeImpact::TimelineWindow => {
+                        self.restart_audio(audio, PlaybackStartReason::TimelineWindow)?
+                    }
+                    AudioChangeImpact::StructureRebuild => {
+                        self.restart_audio(audio, PlaybackStartReason::StructureRebuild)?
+                    }
                 }
                 self.started_at = Some(Instant::now());
             }
@@ -836,7 +872,7 @@ impl DesktopSession {
         let jump_executed = (advanced_position - linear_position).abs() > 0.001;
 
         if jump_executed {
-            self.restart_audio(audio)?;
+            self.restart_audio(audio, PlaybackStartReason::TransportResync)?;
         }
 
         self.started_at = Some(Instant::now());
@@ -870,22 +906,28 @@ impl DesktopSession {
         }
     }
 
-    fn restart_audio(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
+    fn restart_audio(
+        &mut self,
+        audio: &AudioController,
+        reason: PlaybackStartReason,
+    ) -> Result<(), DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let song = self
             .engine
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        audio.play(song_dir, song, self.engine.position_seconds())?;
+        audio.play(song_dir, song, self.engine.position_seconds(), reason)?;
         Ok(())
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SongUpdateKind {
-    Timeline,
-    Mix,
+enum AudioChangeImpact {
+    MixOnly,
+    TransportOnly,
+    TimelineWindow,
+    StructureRebuild,
 }
 
 fn build_import_request(files: &[PathBuf]) -> ProjectImportRequest {

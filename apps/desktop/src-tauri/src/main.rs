@@ -3,6 +3,7 @@ mod state;
 
 use tauri::{AppHandle, State};
 
+use audio_runtime::AudioDebugSnapshot;
 use libretracks_audio::JumpTrigger;
 use state::{DesktopError, DesktopState, TransportSnapshot};
 
@@ -20,6 +21,14 @@ fn get_transport_snapshot(state: State<'_, DesktopState>) -> Result<TransportSna
 
     session
         .snapshot_with_sync(&state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_audio_debug_snapshot(state: State<'_, DesktopState>) -> Result<AudioDebugSnapshot, String> {
+    state
+        .audio
+        .debug_snapshot()
         .map_err(|error| error.to_string())
 }
 
@@ -386,6 +395,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             healthcheck,
             get_transport_snapshot,
+            get_audio_debug_snapshot,
             create_song,
             save_project,
             open_project_from_dialog,

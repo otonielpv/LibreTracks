@@ -4,11 +4,12 @@ use std::{
     path::{Path, PathBuf},
     sync::mpsc::{self, Receiver, Sender},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use libretracks_core::{Clip, Song};
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use serde::Serialize;
 
 use crate::state::DesktopError;
 
@@ -39,11 +40,228 @@ struct RuntimeClipSpec {
     initial_gain: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackStartReason {
+    InitialPlay,
+    ResumePlay,
+    Seek,
+    ImmediateJump,
+    TimelineWindow,
+    StructureRebuild,
+    TransportResync,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AudioCommandKind {
+    Play,
+    SyncSong,
+    Stop,
+    DebugSnapshot,
+    Shutdown,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioDebugSnapshot {
+    pub enabled: bool,
+    pub log_commands: bool,
+    pub command_count: u64,
+    pub last_command: Option<AudioCommandTrace>,
+    pub last_restart: Option<AudioOperationSummary>,
+    pub last_sync: Option<AudioOperationSummary>,
+    pub last_stop: Option<AudioStopSummary>,
+    pub runtime_state: AudioRuntimeStateSummary,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioCommandTrace {
+    pub kind: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioOperationSummary {
+    pub reason: Option<String>,
+    pub elapsed_ms: f64,
+    pub scheduled_clips: usize,
+    pub active_sinks: usize,
+    pub opened_files: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioStopSummary {
+    pub elapsed_ms: f64,
+    pub stopped_sinks: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioRuntimeStateSummary {
+    pub active_sinks: usize,
+    pub files_opened_last_restart: usize,
+    pub last_scheduled_clips: usize,
+}
+
+#[derive(Debug, Clone)]
+struct RestartReport {
+    elapsed: Duration,
+    scheduled_clips: usize,
+    active_sinks: usize,
+    opened_files: usize,
+}
+
+#[derive(Debug, Clone)]
+struct SyncReport {
+    elapsed: Duration,
+    updated_sinks: usize,
+    active_sinks: usize,
+}
+
+#[derive(Debug, Clone)]
+struct StopReport {
+    elapsed: Duration,
+    stopped_sinks: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AudioDebugConfig {
+    enabled: bool,
+    log_commands: bool,
+}
+
+#[derive(Debug, Clone)]
+struct AudioDebugState {
+    config: AudioDebugConfig,
+    command_count: u64,
+    last_command: Option<AudioCommandTrace>,
+    last_restart: Option<AudioOperationSummary>,
+    last_sync: Option<AudioOperationSummary>,
+    last_stop: Option<AudioStopSummary>,
+    runtime_state: AudioRuntimeStateSummary,
+}
+
+impl Default for AudioRuntimeStateSummary {
+    fn default() -> Self {
+        Self {
+            active_sinks: 0,
+            files_opened_last_restart: 0,
+            last_scheduled_clips: 0,
+        }
+    }
+}
+
+impl AudioDebugConfig {
+    fn from_env() -> Self {
+        Self {
+            enabled: env_flag("LIBRETRACKS_AUDIO_DEBUG"),
+            log_commands: env_flag("LIBRETRACKS_AUDIO_LOG_COMMANDS"),
+        }
+    }
+}
+
+impl AudioDebugState {
+    fn new(config: AudioDebugConfig) -> Self {
+        Self {
+            config,
+            command_count: 0,
+            last_command: None,
+            last_restart: None,
+            last_sync: None,
+            last_stop: None,
+            runtime_state: AudioRuntimeStateSummary::default(),
+        }
+    }
+
+    fn record_command(&mut self, kind: AudioCommandKind, reason: Option<String>) {
+        let kind_label = command_kind_label(kind);
+
+        self.command_count += 1;
+        self.last_command = Some(AudioCommandTrace {
+            kind: kind_label.to_string(),
+            reason: reason.clone(),
+        });
+
+        if self.config.log_commands {
+            match reason {
+                Some(reason) => {
+                    eprintln!("[libretracks-audio] command={kind_label} reason={reason}")
+                }
+                None => eprintln!("[libretracks-audio] command={kind_label}"),
+            }
+        }
+    }
+
+    fn record_restart(&mut self, reason: PlaybackStartReason, report: &RestartReport) {
+        self.runtime_state.active_sinks = report.active_sinks;
+        self.runtime_state.files_opened_last_restart = report.opened_files;
+        self.runtime_state.last_scheduled_clips = report.scheduled_clips;
+
+        if !self.config.enabled {
+            return;
+        }
+
+        self.last_restart = Some(AudioOperationSummary {
+            reason: Some(playback_reason_label(reason).to_string()),
+            elapsed_ms: report.elapsed.as_secs_f64() * 1000.0,
+            scheduled_clips: report.scheduled_clips,
+            active_sinks: report.active_sinks,
+            opened_files: report.opened_files,
+        });
+    }
+
+    fn record_sync(&mut self, report: &SyncReport) {
+        self.runtime_state.active_sinks = report.active_sinks;
+
+        if !self.config.enabled {
+            return;
+        }
+
+        self.last_sync = Some(AudioOperationSummary {
+            reason: Some("mix_only".to_string()),
+            elapsed_ms: report.elapsed.as_secs_f64() * 1000.0,
+            scheduled_clips: report.updated_sinks,
+            active_sinks: report.active_sinks,
+            opened_files: 0,
+        });
+    }
+
+    fn record_stop(&mut self, report: &StopReport, active_sinks_after_stop: usize) {
+        self.runtime_state.active_sinks = active_sinks_after_stop;
+
+        if !self.config.enabled {
+            return;
+        }
+
+        self.last_stop = Some(AudioStopSummary {
+            elapsed_ms: report.elapsed.as_secs_f64() * 1000.0,
+            stopped_sinks: report.stopped_sinks,
+        });
+    }
+
+    fn snapshot(&self) -> AudioDebugSnapshot {
+        AudioDebugSnapshot {
+            enabled: self.config.enabled,
+            log_commands: self.config.log_commands,
+            command_count: self.command_count,
+            last_command: self.last_command.clone(),
+            last_restart: self.last_restart.clone(),
+            last_sync: self.last_sync.clone(),
+            last_stop: self.last_stop.clone(),
+            runtime_state: self.runtime_state.clone(),
+        }
+    }
+}
+
 enum AudioCommand {
     Play {
         song_dir: PathBuf,
         song: Song,
         position_seconds: f64,
+        reason: PlaybackStartReason,
         respond_to: Sender<Result<(), String>>,
     },
     SyncSong {
@@ -52,6 +270,9 @@ enum AudioCommand {
     },
     Stop {
         respond_to: Sender<Result<(), String>>,
+    },
+    DebugSnapshot {
+        respond_to: Sender<AudioDebugSnapshot>,
     },
     Shutdown,
 }
@@ -67,22 +288,34 @@ impl AudioRuntime {
         })
     }
 
-    pub fn stop_all(&mut self) {
+    fn stop_all(&mut self) -> StopReport {
+        let started_at = Instant::now();
+        let stopped_sinks = self.sinks.len();
+
         for sink in self.sinks.drain(..) {
             sink.sink.stop();
         }
+
+        StopReport {
+            elapsed: started_at.elapsed(),
+            stopped_sinks,
+        }
     }
 
-    pub fn restart(
+    fn restart(
         &mut self,
         song_dir: &Path,
         song: &Song,
         position_seconds: f64,
-    ) -> Result<(), DesktopError> {
+    ) -> Result<RestartReport, DesktopError> {
+        let started_at = Instant::now();
         self.stop_all();
+
+        let mut opened_files = 0;
 
         for clip in build_runtime_clip_specs(song, position_seconds)? {
             let file = File::open(song_dir.join(&clip.file_path))?;
+            opened_files += 1;
             let decoder = Decoder::new(BufReader::new(file))?;
             let source = decoder
                 .skip_duration(Duration::from_secs_f64(clip.source_offset_seconds))
@@ -107,36 +340,56 @@ impl AudioRuntime {
             sink.sink.play();
         }
 
-        Ok(())
+        Ok(RestartReport {
+            elapsed: started_at.elapsed(),
+            scheduled_clips: self.sinks.len(),
+            active_sinks: self.sinks.len(),
+            opened_files,
+        })
     }
 
-    pub fn sync_song(&mut self, song: &Song) -> Result<(), DesktopError> {
+    fn sync_song(&mut self, song: &Song) -> Result<SyncReport, DesktopError> {
+        let started_at = Instant::now();
+
         for clip_sink in &self.sinks {
-            let gain = resolve_track_clip_gain(song, &clip_sink.track_id, f64::from(clip_sink.clip_gain))?;
+            let gain =
+                resolve_track_clip_gain(song, &clip_sink.track_id, f64::from(clip_sink.clip_gain))?;
             clip_sink.sink.set_volume(gain as f32);
         }
 
-        Ok(())
+        Ok(SyncReport {
+            elapsed: started_at.elapsed(),
+            updated_sinks: self.sinks.len(),
+            active_sinks: self.sinks.len(),
+        })
     }
 }
 
 impl AudioController {
     pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel();
+        let debug_config = AudioDebugConfig::from_env();
 
         thread::Builder::new()
             .name("libretracks-audio".into())
-            .spawn(move || run_audio_thread(receiver))
+            .spawn(move || run_audio_thread(receiver, debug_config))
             .expect("audio thread should start");
 
         Self { sender }
     }
 
-    pub fn play(&self, song_dir: PathBuf, song: Song, position_seconds: f64) -> Result<(), DesktopError> {
+    pub fn play(
+        &self,
+        song_dir: PathBuf,
+        song: Song,
+        position_seconds: f64,
+        reason: PlaybackStartReason,
+    ) -> Result<(), DesktopError> {
         self.request(|respond_to| AudioCommand::Play {
             song_dir,
             song,
             position_seconds,
+            reason,
             respond_to,
         })
     }
@@ -147,6 +400,18 @@ impl AudioController {
 
     pub fn stop(&self) -> Result<(), DesktopError> {
         self.request(|respond_to| AudioCommand::Stop { respond_to })
+    }
+
+    pub fn debug_snapshot(&self) -> Result<AudioDebugSnapshot, DesktopError> {
+        let (respond_to, response) = mpsc::channel();
+
+        self.sender
+            .send(AudioCommand::DebugSnapshot { respond_to })
+            .map_err(|_| DesktopError::AudioThreadUnavailable)?;
+
+        response
+            .recv()
+            .map_err(|_| DesktopError::AudioThreadUnavailable)
     }
 
     fn request(
@@ -178,8 +443,9 @@ impl Drop for AudioController {
     }
 }
 
-fn run_audio_thread(receiver: Receiver<AudioCommand>) {
+fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugConfig) {
     let mut runtime: Option<AudioRuntime> = None;
+    let mut debug_state = AudioDebugState::new(debug_config);
 
     while let Ok(command) = receiver.recv() {
         match command {
@@ -187,29 +453,63 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>) {
                 song_dir,
                 song,
                 position_seconds,
+                reason,
                 respond_to,
             } => {
+                debug_state.record_command(
+                    AudioCommandKind::Play,
+                    Some(playback_reason_label(reason).to_string()),
+                );
+
                 let result = ensure_runtime(&mut runtime)
                     .and_then(|runtime| runtime.restart(&song_dir, &song, position_seconds))
+                    .map(|report| {
+                        debug_state.record_restart(reason, &report);
+                    })
                     .map_err(|error| error.to_string());
 
                 let _ = respond_to.send(result);
             }
             AudioCommand::SyncSong { song, respond_to } => {
+                debug_state
+                    .record_command(AudioCommandKind::SyncSong, Some("mix_only".to_string()));
+
                 let result = ensure_runtime(&mut runtime)
                     .and_then(|runtime| runtime.sync_song(&song))
+                    .map(|report| {
+                        debug_state.record_sync(&report);
+                    })
                     .map_err(|error| error.to_string());
 
                 let _ = respond_to.send(result);
             }
             AudioCommand::Stop { respond_to } => {
-                if let Some(runtime) = runtime.as_mut() {
-                    runtime.stop_all();
-                }
+                debug_state.record_command(AudioCommandKind::Stop, None);
+
+                let report = if let Some(runtime) = runtime.as_mut() {
+                    runtime.stop_all()
+                } else {
+                    StopReport {
+                        elapsed: Duration::ZERO,
+                        stopped_sinks: 0,
+                    }
+                };
+
+                debug_state.record_stop(
+                    &report,
+                    runtime.as_ref().map_or(0, |runtime| runtime.sinks.len()),
+                );
 
                 let _ = respond_to.send(Ok(()));
             }
-            AudioCommand::Shutdown => break,
+            AudioCommand::DebugSnapshot { respond_to } => {
+                debug_state.record_command(AudioCommandKind::DebugSnapshot, None);
+                let _ = respond_to.send(debug_state.snapshot());
+            }
+            AudioCommand::Shutdown => {
+                debug_state.record_command(AudioCommandKind::Shutdown, None);
+                break;
+            }
         }
     }
 }
@@ -258,7 +558,11 @@ fn resolve_clip_initial_gain(song: &Song, clip: &Clip) -> Result<f64, DesktopErr
     Ok(resolve_track_clip_gain(song, &clip.track_id, clip.gain)?)
 }
 
-fn resolve_track_clip_gain(song: &Song, track_id: &str, clip_gain: f64) -> Result<f64, DesktopError> {
+fn resolve_track_clip_gain(
+    song: &Song,
+    track_id: &str,
+    clip_gain: f64,
+) -> Result<f64, DesktopError> {
     let track = song
         .tracks
         .iter()
@@ -289,11 +593,50 @@ fn resolve_track_clip_gain(song: &Song, track_id: &str, clip_gain: f64) -> Resul
     Ok(track.volume * group_gain * clip_gain)
 }
 
+fn env_flag(name: &str) -> bool {
+    std::env::var(name)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn playback_reason_label(reason: PlaybackStartReason) -> &'static str {
+    match reason {
+        PlaybackStartReason::InitialPlay => "initial_play",
+        PlaybackStartReason::ResumePlay => "resume_play",
+        PlaybackStartReason::Seek => "seek",
+        PlaybackStartReason::ImmediateJump => "immediate_jump",
+        PlaybackStartReason::TimelineWindow => "timeline_window",
+        PlaybackStartReason::StructureRebuild => "structure_rebuild",
+        PlaybackStartReason::TransportResync => "transport_resync",
+    }
+}
+
+fn command_kind_label(kind: AudioCommandKind) -> &'static str {
+    match kind {
+        AudioCommandKind::Play => "play",
+        AudioCommandKind::SyncSong => "sync_song",
+        AudioCommandKind::Stop => "stop",
+        AudioCommandKind::DebugSnapshot => "debug_snapshot",
+        AudioCommandKind::Shutdown => "shutdown",
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use libretracks_core::{OutputBus, Song, Track, TrackGroup};
 
-    use super::{build_runtime_clip_specs, resolve_track_clip_gain};
+    use super::{
+        build_runtime_clip_specs, env_flag, playback_reason_label, resolve_track_clip_gain,
+        AudioCommandKind, AudioDebugConfig, AudioDebugState, PlaybackStartReason, RestartReport,
+        StopReport, SyncReport,
+    };
 
     fn demo_song() -> Song {
         Song {
@@ -397,5 +740,72 @@ mod tests {
 
         assert_eq!(click_gain, 0.0);
         assert!((drums_gain - 0.315).abs() < 0.0001);
+    }
+
+    #[test]
+    fn playback_reason_labels_are_stable_for_debug_metrics() {
+        assert_eq!(playback_reason_label(PlaybackStartReason::Seek), "seek");
+        assert_eq!(
+            playback_reason_label(PlaybackStartReason::StructureRebuild),
+            "structure_rebuild"
+        );
+    }
+
+    #[test]
+    fn debug_state_tracks_last_operations_when_enabled() {
+        let mut debug_state = AudioDebugState::new(AudioDebugConfig {
+            enabled: true,
+            log_commands: false,
+        });
+
+        debug_state.record_command(AudioCommandKind::Play, Some("initial_play".into()));
+        debug_state.record_restart(
+            PlaybackStartReason::InitialPlay,
+            &RestartReport {
+                elapsed: Duration::from_millis(12),
+                scheduled_clips: 3,
+                active_sinks: 3,
+                opened_files: 3,
+            },
+        );
+        debug_state.record_sync(&SyncReport {
+            elapsed: Duration::from_millis(2),
+            updated_sinks: 3,
+            active_sinks: 3,
+        });
+        debug_state.record_stop(
+            &StopReport {
+                elapsed: Duration::from_millis(1),
+                stopped_sinks: 3,
+            },
+            0,
+        );
+
+        let snapshot = debug_state.snapshot();
+        assert!(snapshot.enabled);
+        assert_eq!(snapshot.command_count, 1);
+        assert_eq!(
+            snapshot
+                .last_restart
+                .expect("restart summary should exist")
+                .scheduled_clips,
+            3
+        );
+        assert_eq!(snapshot.runtime_state.active_sinks, 0);
+        assert_eq!(
+            snapshot
+                .last_stop
+                .expect("stop summary should exist")
+                .stopped_sinks,
+            3
+        );
+    }
+
+    #[test]
+    fn env_flag_accepts_common_truthy_values() {
+        let key = "LIBRETRACKS_AUDIO_ENV_FLAG_TEST";
+        std::env::set_var(key, "YES");
+        assert!(env_flag(key));
+        std::env::remove_var(key);
     }
 }

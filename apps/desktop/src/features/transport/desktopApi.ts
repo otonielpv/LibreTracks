@@ -65,6 +65,41 @@ export type TransportSnapshot = {
   isNativeRuntime: boolean;
 };
 
+export type AudioCommandTrace = {
+  kind: string;
+  reason?: string | null;
+};
+
+export type AudioOperationSummary = {
+  reason?: string | null;
+  elapsedMs: number;
+  scheduledClips: number;
+  activeSinks: number;
+  openedFiles: number;
+};
+
+export type AudioStopSummary = {
+  elapsedMs: number;
+  stoppedSinks: number;
+};
+
+export type AudioRuntimeStateSummary = {
+  activeSinks: number;
+  filesOpenedLastRestart: number;
+  lastScheduledClips: number;
+};
+
+export type AudioDebugSnapshot = {
+  enabled: boolean;
+  logCommands: boolean;
+  commandCount: number;
+  lastCommand?: AudioCommandTrace | null;
+  lastRestart?: AudioOperationSummary | null;
+  lastSync?: AudioOperationSummary | null;
+  lastStop?: AudioStopSummary | null;
+  runtimeState: AudioRuntimeStateSummary;
+};
+
 const tauriWindow = window as Window & {
   __TAURI_INTERNALS__?: unknown;
 };
@@ -84,6 +119,27 @@ export async function getTransportSnapshot(): Promise<TransportSnapshot> {
   }
 
   return invokeCommand<TransportSnapshot>("get_transport_snapshot");
+}
+
+export async function getAudioDebugSnapshot(): Promise<AudioDebugSnapshot> {
+  if (!isTauriApp) {
+    return {
+      enabled: false,
+      logCommands: false,
+      commandCount: 0,
+      lastCommand: null,
+      lastRestart: null,
+      lastSync: null,
+      lastStop: null,
+      runtimeState: {
+        activeSinks: 0,
+        filesOpenedLastRestart: 0,
+        lastScheduledClips: 0,
+      },
+    };
+  }
+
+  return invokeCommand<AudioDebugSnapshot>("get_audio_debug_snapshot");
 }
 
 export async function createSong(): Promise<TransportSnapshot> {
