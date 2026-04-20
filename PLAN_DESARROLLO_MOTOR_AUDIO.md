@@ -52,6 +52,43 @@ Problemas ya observados en uso real:
 
 ---
 
+## Avance actual
+
+Actualizado a 20/04/2026 tras los primeros hitos implementados:
+
+- se anadio instrumentacion basica al runtime de audio para medir `restart`, `stop`, `sync_song`, numero de clips programados, numero de sinks activos y archivos abiertos
+- el hilo de audio ya registra razones explicitas de restart:
+  - `initial_play`
+  - `resume_play`
+  - `seek`
+  - `immediate_jump`
+  - `timeline_window`
+  - `structure_rebuild`
+  - `transport_resync`
+- existe un snapshot de depuracion accesible desde Tauri mediante `get_audio_debug_snapshot`
+- existen logs opt-in mediante:
+  - `LIBRETRACKS_AUDIO_DEBUG`
+  - `LIBRETRACKS_AUDIO_LOG_COMMANDS`
+- `persist_song_update` ya no trata todos los cambios por igual y clasifica el impacto del cambio como:
+  - `MixOnly`
+  - `TransportOnly`
+  - `TimelineWindow`
+  - `StructureRebuild`
+- cambios de mezcla ya no disparan restart global del runtime
+- el runtime mantiene estado estable por clip activo y aplica mezcla incremental sobre sinks ya vivos
+- cambios de volumen y mute usan rampas cortas para reducir clicks y transiciones bruscas
+- la cola del runtime ahora coalesce cambios consecutivos de mezcla para evitar trabajo redundante
+- existe una cache simple de audio preparado por proyecto para reducir reaperturas de WAV en reinicios cercanos
+- hay documentacion operativa inicial en `docs/audio-runtime-debug.md`
+
+Commits que respaldan este avance:
+
+- `08e796e` `Instrumenta el runtime de audio`
+- `f66cbc8` `Suaviza la mezcla incremental en vivo`
+- `6fa9dd9` `Cachea audio preparado para reinicios cercanos`
+
+---
+
 ## Objetivo principal
 
 ### Objetivo UX
@@ -224,7 +261,15 @@ Podemos describir con datos donde se va el tiempo y que operaciones disparan cor
 
 ### Estado
 
-- Pendiente
+- Completada
+
+### Entregado en esta fase
+
+- instrumentacion basica del runtime desktop
+- razones de restart visibles y medibles
+- snapshot de debug accesible desde Tauri
+- logs opt-in para comandos del hilo de audio
+- guia inicial de pruebas manuales reproducibles en `docs/audio-runtime-debug.md`
 
 ---
 
@@ -252,7 +297,15 @@ Cada comando desktop tiene una politica explicita de impacto sobre el runtime.
 
 ### Estado
 
-- Pendiente
+- Completada
+
+### Entregado en esta fase
+
+- clasificacion formal de impacto de cambios en `state.rs`
+- `persist_song_update` ya decide entre mezcla incremental, cambio de transporte, ventana de timeline o rebuild estructural
+- operaciones del editor ya no comparten una politica unica de restart
+- cambios de mezcla no reinician reproduccion
+- cambios de secciones ya pueden seguir una ruta de `TransportOnly` cuando no requieren reconstruccion
 
 ---
 
@@ -277,7 +330,20 @@ La mezcla basica en vivo se siente directa y no interrumpe el flujo de reproducc
 
 ### Estado
 
-- Pendiente
+- Completada en v1
+
+### Entregado en esta fase
+
+- estado runtime estable por clip activo
+- mezcla desacoplada del recreado completo de sinks
+- rampas cortas de volumen para mute y cambios de nivel
+- coalescencia de `sync_song` consecutivos en la cola del runtime
+- cobertura de tests para mezcla incremental y coalescencia
+
+### Nota
+
+Esta fase queda cerrada como `v1`.
+Todavia no introduce un mixer propio ni fades avanzados por bloque, pero ya elimina varios reinicios evitables y corrige la base de mezcla viva.
 
 ---
 
@@ -305,7 +371,20 @@ Los reinicios inevitables son mas rapidos y su coste queda acotado.
 
 ### Estado
 
-- Pendiente
+- Parcial en v1
+
+### Entregado en esta fase
+
+- cache simple de buffers de audio por proyecto y `file_path`
+- invalidacion al cambiar de proyecto
+- metricas de buffers cacheados expuestas en el snapshot de debug
+- reduccion de reaperturas de WAVs en reinicios cercanos
+
+### Pendiente dentro de esta fase
+
+- separar mas claramente metadata, waveform y preparacion de reproduccion
+- medir memoria frente a latencia con escenarios mas grandes
+- evaluar si conviene cache de regiones o readers mas finos
 
 ---
 
@@ -469,12 +548,21 @@ El motor queda listo para seguir creciendo sin volver a la improvisacion inicial
 
 ## Primeros hitos recomendados
 
-Para no dispersarnos, el siguiente bloque de trabajo deberia concentrarse en:
+Estos primeros hitos ya fueron realizados:
 
-1. Instrumentar y medir el runtime actual.
-2. Separar claramente cambios de mezcla frente a cambios que exigen restart.
-3. Hacer que mute y volumen sean robustos durante reproduccion.
-4. Medir otra vez antes de decidir si hace falta un backend de audio mas profundo.
+1. Se instrumento y midio el runtime actual.
+2. Se separaron claramente cambios de mezcla frente a cambios que exigen restart.
+3. Se hizo que mute y volumen fueran mas robustos durante reproduccion.
+4. Se introdujo una cache inicial para reducir reaperturas en reinicios cercanos.
+
+## Siguiente bloque recomendado
+
+Para mantener el foco, el siguiente bloque deberia concentrarse en:
+
+1. Endurecer reloj y transporte bajo secuencias rapidas de `play`, `pause`, `stop` y `seek`.
+2. Validar seeks consecutivos y saltos musicales con tests de regresion especificos.
+3. Medir el desfase real entre snapshot UI, `AudioEngine` y runtime desktop.
+4. Decidir con datos si el backend actual alcanza o si la Fase F debe adelantarse.
 
 ---
 
