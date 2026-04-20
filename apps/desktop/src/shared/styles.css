@@ -728,8 +728,6 @@ input[type="range"] {
   border-radius: 14px;
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
   color: #2a1202;
-  display: flex;
-  gap: 0.44rem;
   inset-block: var(--timeline-clip-inset);
   min-width: 3rem;
   overflow: hidden;
@@ -738,21 +736,32 @@ input[type="range"] {
 }
 
 .clip-body {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  flex: 1 1 auto;
-  gap: 0.3rem;
+  display: block;
+  height: 100%;
   min-width: 0;
-  padding: 0.34rem 0.28rem;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
   text-align: left;
+  width: 100%;
 }
 
 .clip-handle {
   cursor: ew-resize;
-  flex: 0 0 auto;
-  height: 100%;
+  bottom: 0;
   position: relative;
-  width: 0.55rem;
+  position: absolute;
+  top: 0;
+  width: 0.72rem;
+  z-index: 3;
+}
+
+.clip-handle.is-start {
+  left: 0;
+}
+
+.clip-handle.is-end {
+  right: 0;
 }
 
 .clip-handle::after {
@@ -766,6 +775,22 @@ input[type="range"] {
   top: 26%;
   transform: translateX(-50%);
   width: 2px;
+}
+
+.clip-face {
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+.clip-face::after {
+  background: linear-gradient(180deg, rgba(255, 240, 220, 0.2), rgba(255, 240, 220, 0));
+  content: "";
+  inset: 0 0 auto;
+  height: 2.2rem;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
 }
 
 .clip-block.is-selected {
@@ -800,6 +825,12 @@ input[type="range"] {
   display: flex;
   gap: 0.5rem;
   justify-content: space-between;
+  left: 0.86rem;
+  pointer-events: none;
+  position: absolute;
+  right: 0.86rem;
+  top: 0.36rem;
+  z-index: 2;
 }
 
 .clip-name,
@@ -822,10 +853,10 @@ input[type="range"] {
 
 .clip-waveform {
   display: block;
-  flex: 1 1 auto;
-  min-height: 0;
+  inset: 0;
+  min-height: 100%;
   overflow: hidden;
-  position: relative;
+  position: absolute;
   width: 100%;
 }
 

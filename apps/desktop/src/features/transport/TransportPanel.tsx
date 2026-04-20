@@ -2094,7 +2094,7 @@ function ClipFace({
   clip: ClipSummary;
 }) {
   return (
-    <>
+    <div className="clip-face">
       <div className="clip-info">
         <span className="clip-name">{clipDisplayName(clip)}</span>
         <span className="clip-time">{formatTimelineMark(clip.timelineStartSeconds)}</span>
@@ -2102,7 +2102,7 @@ function ClipFace({
       <ClipWaveform
         clip={clip}
       />
-    </>
+    </div>
   );
 }
 
