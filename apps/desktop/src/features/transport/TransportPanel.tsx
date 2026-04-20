@@ -257,9 +257,12 @@ export function TransportPanel() {
 
   const handleImport = async () => {
     setIsBusy(true);
-    setStatus("Abriendo selector de archivos WAV...");
+    setStatus("Selecciona los WAVs que quieras importar...");
+
+    await waitForNextPaint();
 
     try {
+      setStatus("Importando WAVs y preparando waveforms...");
       const nextSnapshot = await pickAndImportSong();
       if (!nextSnapshot) {
         setStatus("Importacion cancelada.");
@@ -642,6 +645,15 @@ export function TransportPanel() {
 
   return (
     <section className="daw-shell">
+      {isBusy && (
+        <div className="busy-overlay" role="status" aria-live="polite">
+          <div className="busy-overlay-card">
+            <strong>LibreTracks trabajando</strong>
+            <p>{status}</p>
+          </div>
+        </div>
+      )}
+
       <header className="daw-topbar">
         <div className="brand-cluster">
           <p className="brand-kicker">LibreTracks</p>
@@ -1367,4 +1379,10 @@ function formatClock(totalSeconds: number) {
   return `${minutes.toString().padStart(2, "0")}:${seconds
     .toString()
     .padStart(2, "0")}.${milliseconds.toString().padStart(3, "0")}`;
+}
+
+function waitForNextPaint() {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(() => resolve(), 0);
+  });
 }

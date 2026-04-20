@@ -92,6 +92,39 @@ input[type="range"] {
 .daw-shell {
   display: grid;
   gap: 1rem;
+  position: relative;
+}
+
+.busy-overlay {
+  align-items: center;
+  background: rgba(3, 10, 18, 0.56);
+  border-radius: 24px;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: absolute;
+  z-index: 20;
+}
+
+.busy-overlay-card {
+  background: rgba(9, 21, 33, 0.96);
+  border: 1px solid rgba(245, 159, 66, 0.28);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  max-width: 30rem;
+  padding: 1rem 1.15rem;
+  width: 100%;
+}
+
+.busy-overlay-card strong,
+.busy-overlay-card p {
+  margin: 0;
+}
+
+.busy-overlay-card p {
+  color: var(--muted);
+  margin-top: 0.3rem;
 }
 
 .daw-topbar,

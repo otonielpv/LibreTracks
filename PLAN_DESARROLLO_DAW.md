@@ -459,6 +459,21 @@ Consideraremos cumplido este nuevo objetivo cuando:
 
 ---
 
+## Estabilizacion urgente 20/04/2026
+
+Antes de seguir cerrando fases visuales habia un bloqueo critico en el runtime nativo que ya no podiamos posponer.
+
+```txt
+[x] Corregir reproduccion nativa para programar clips futuros y no solo los activos al pulsar Play
+[x] Evitar reinicio global del audio al cambiar volumen o mute de pista/grupo
+[x] Mantener cambios de mezcla sobre el conjunto sin parar toda la reproduccion
+[x] Mostrar feedback visual de trabajo durante importacion multiple de WAVs
+```
+
+Esto no cierra fases nuevas del plan por si solo, pero si protege el principio de "no romper el audio" para poder seguir con C, F y G.
+
+---
+
 ## Primera lista de tareas concretas
 
 ### Milestone DAW 1 - Shell principal

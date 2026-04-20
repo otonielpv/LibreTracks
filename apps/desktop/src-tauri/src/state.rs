@@ -225,14 +225,14 @@ impl DesktopSession {
 
     pub fn play(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
-        let song = self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
-        if self.current_position() >= song.duration_seconds {
+        let current_position = self.current_position();
+        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        if current_position >= song.duration_seconds {
             self.engine.stop()?;
         }
 
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let active_clips = self.engine.active_clips()?;
-        audio.play(song_dir, active_clips)?;
+        audio.play(song_dir, song, self.engine.position_seconds())?;
         self.engine.play()?;
         self.started_at = Some(Instant::now());
 
@@ -326,7 +326,7 @@ impl DesktopSession {
             song.duration_seconds = clip_end;
         }
 
-        self.persist_song_update(song, audio)?;
+        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
 
         Ok(self.snapshot())
     }
@@ -358,7 +358,7 @@ impl DesktopSession {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        self.persist_song_update(song, audio)?;
+        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
 
         Ok(self.snapshot())
     }
@@ -382,7 +382,7 @@ impl DesktopSession {
             output_bus_id: OutputBus::Main.id(),
         });
 
-        self.persist_song_update(song, audio)?;
+        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
 
         Ok(self.snapshot())
     }
@@ -409,7 +409,7 @@ impl DesktopSession {
 
         track.group_id = group_id.map(std::string::ToString::to_string);
 
-        self.persist_song_update(song, audio)?;
+        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
 
         Ok(self.snapshot())
     }
@@ -429,7 +429,7 @@ impl DesktopSession {
 
         track.volume = volume.clamp(0.0, 1.0);
 
-        self.persist_song_update(song, audio)?;
+        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
 
         Ok(self.snapshot())
     }
@@ -448,7 +448,7 @@ impl DesktopSession {
 
         track.muted = !track.muted;
 
-        self.persist_song_update(song, audio)?;
+        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
 
         Ok(self.snapshot())
     }
@@ -468,7 +468,7 @@ impl DesktopSession {
 
         group.volume = volume.clamp(0.0, 1.0);
 
-        self.persist_song_update(song, audio)?;
+        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
 
         Ok(self.snapshot())
     }
@@ -487,7 +487,7 @@ impl DesktopSession {
 
         group.muted = !group.muted;
 
-        self.persist_song_update(song, audio)?;
+        self.persist_song_update(song, audio, SongUpdateKind::Mix)?;
 
         Ok(self.snapshot())
     }
@@ -527,6 +527,7 @@ impl DesktopSession {
         &mut self,
         song: Song,
         audio: &AudioController,
+        update_kind: SongUpdateKind,
     ) -> Result<(), DesktopError> {
         self.sync_position(audio)?;
 
@@ -551,10 +552,15 @@ impl DesktopSession {
                 .schedule_section_jump(&pending_jump.target_section_id, pending_jump.trigger)?;
         }
 
+        let loaded_song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+
         match playback_state {
             PlaybackState::Playing => {
                 self.engine.play()?;
-                self.restart_audio(audio)?;
+                match update_kind {
+                    SongUpdateKind::Timeline => self.restart_audio(audio)?,
+                    SongUpdateKind::Mix => audio.sync_song(loaded_song)?,
+                }
                 self.started_at = Some(Instant::now());
             }
             PlaybackState::Paused => {
@@ -642,10 +648,16 @@ impl DesktopSession {
 
     fn restart_audio(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let active_clips = self.engine.active_clips()?;
-        audio.play(song_dir, active_clips)?;
+        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        audio.play(song_dir, song, self.engine.position_seconds())?;
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SongUpdateKind {
+    Timeline,
+    Mix,
 }
 
 fn build_import_request(files: &[PathBuf]) -> ProjectImportRequest {
