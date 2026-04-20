@@ -18,8 +18,8 @@
   --mint-soft: rgba(71, 214, 163, 0.18);
   --danger: #ff8a7a;
   --shadow: 0 22px 48px rgba(0, 0, 0, 0.34);
-  --timeline-track-height: 5.25rem;
-  --timeline-clip-inset: 0.38rem;
+  --timeline-track-height: 5.7rem;
+  --timeline-clip-inset: 0.12rem;
 }
 
 * {
@@ -429,10 +429,11 @@ input[type="range"] {
   border: 1px solid var(--line);
   border-radius: 18px;
   display: grid;
-  gap: 0.45rem;
-  min-height: var(--timeline-track-height);
-  padding: 0.72rem 0.8rem;
+  gap: 0.32rem;
+  height: var(--timeline-track-height);
+  padding: 0.62rem 0.78rem;
   align-content: center;
+  overflow: hidden;
 }
 
 .track-header-card.is-selected {
@@ -441,9 +442,9 @@ input[type="range"] {
 }
 
 .track-header-top {
-  align-items: start;
+  align-items: center;
   display: flex;
-  gap: 0.75rem;
+  gap: 0.55rem;
   justify-content: space-between;
 }
 
@@ -454,25 +455,34 @@ input[type="range"] {
 
 .track-header-top p {
   color: var(--muted);
-  font-size: 0.78rem;
-  margin-top: 0.14rem;
+  font-size: 0.74rem;
+  margin-top: 0.1rem;
 }
 
 .track-header-card button {
-  padding: 0.48rem 0.72rem;
+  font-size: 0.82rem;
+  padding: 0.42rem 0.68rem;
 }
 
 .track-header-card .compact-slider {
-  gap: 0.22rem;
+  gap: 0.16rem;
 }
 
 .track-header-card .compact-slider span {
-  font-size: 0.76rem;
+  font-size: 0.72rem;
 }
 
 .track-header-card input,
 .track-header-card select {
-  padding: 0.42rem 0.58rem;
+  padding: 0.34rem 0.54rem;
+}
+
+.track-header-card .compact-field {
+  gap: 0.16rem;
+}
+
+.track-header-card .compact-field span {
+  font-size: 0.72rem;
 }
 
 .timeline-scroll {
@@ -669,6 +679,7 @@ input[type="range"] {
 
 .timeline-row {
   display: grid;
+  min-height: var(--timeline-track-height);
 }
 
 .timeline-lane {
@@ -708,7 +719,7 @@ input[type="range"] {
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
   color: #2a1202;
   display: flex;
-  gap: 0.5rem;
+  gap: 0.44rem;
   inset-block: var(--timeline-clip-inset);
   min-width: 3rem;
   overflow: hidden;
@@ -719,9 +730,9 @@ input[type="range"] {
 .clip-body {
   display: grid;
   flex: 1 1 auto;
-  gap: 0.35rem;
+  gap: 0.24rem;
   min-width: 0;
-  padding: 0.45rem 0.28rem;
+  padding: 0.36rem 0.26rem;
   text-align: left;
 }
 
@@ -802,7 +813,7 @@ input[type="range"] {
   align-items: stretch;
   display: flex;
   inset-inline: 0;
-  min-height: 2rem;
+  min-height: 100%;
 }
 
 .clip-waveform-svg {
@@ -813,15 +824,14 @@ input[type="range"] {
 }
 
 .clip-waveform-fill {
-  fill: rgba(42, 18, 2, 0.2);
+  fill: rgba(86, 44, 8, 0.42);
 }
 
-.clip-waveform-line {
+.clip-waveform-centerline {
   fill: none;
-  stroke: rgba(42, 18, 2, 0.78);
+  stroke: rgba(58, 28, 5, 0.88);
   stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.6;
+  stroke-width: 1.15;
 }
 
 .waveform-empty-line {
