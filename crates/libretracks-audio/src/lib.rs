@@ -123,7 +123,20 @@ impl AudioEngine {
             return Err(AudioEngineError::PositionOutOfRange);
         }
 
+        let should_clear_pending_jump = self
+            .pending_section_jump
+            .as_ref()
+            .map(|pending_jump| {
+                find_section(song, &pending_jump.target_section_id)
+                    .map(|target_section| position_seconds >= target_section.start_seconds)
+            })
+            .transpose()?
+            .unwrap_or(false);
+
         self.position_seconds = position_seconds;
+        if should_clear_pending_jump {
+            self.pending_section_jump = None;
+        }
         Ok(())
     }
 
@@ -574,6 +587,42 @@ mod tests {
 
         assert!((position - 9.0).abs() < 0.0001);
         assert!(engine.pending_section_jump().is_none());
+    }
+
+    #[test]
+    fn seek_to_pending_jump_target_clears_pending_jump() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(6.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        engine
+            .schedule_section_jump("section_outro", JumpTrigger::SectionEnd)
+            .expect("jump should schedule");
+        assert!(engine.pending_section_jump().is_some());
+
+        engine.seek(12.0).expect("seek to target should work");
+
+        assert_eq!(engine.position_seconds(), 12.0);
+        assert!(engine.pending_section_jump().is_none());
+    }
+
+    #[test]
+    fn seek_before_pending_jump_target_keeps_pending_jump() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(6.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        engine
+            .schedule_section_jump("section_outro", JumpTrigger::AfterBars(2))
+            .expect("jump should schedule");
+        assert!(engine.pending_section_jump().is_some());
+
+        engine.seek(8.0).expect("seek before target should work");
+
+        assert_eq!(engine.position_seconds(), 8.0);
+        assert!(engine.pending_section_jump().is_some());
     }
 
     #[test]

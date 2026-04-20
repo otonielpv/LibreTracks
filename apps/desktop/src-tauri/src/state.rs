@@ -1745,6 +1745,27 @@ mod tests {
     }
 
     #[test]
+    fn seek_to_pending_jump_target_clears_pending_jump_in_snapshot() {
+        let mut session = DesktopSession::default();
+        session
+            .engine
+            .load_song(demo_song_with_two_sections())
+            .expect("song should load into engine");
+        session.engine.seek(1.5).expect("seek should work");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        session
+            .schedule_section_jump("section_2", JumpTrigger::SectionEnd, &audio)
+            .expect("jump should schedule");
+
+        let snapshot = session.seek(4.0, &audio).expect("seek should clear pending jump");
+
+        assert_eq!(snapshot.position_seconds, 4.0);
+        assert!(snapshot.pending_section_jump.is_none());
+        assert_eq!(snapshot.transport_clock.last_seek_position_seconds, Some(4.0));
+    }
+
+    #[test]
     fn updating_a_section_updates_song_json_and_snapshot() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir =
