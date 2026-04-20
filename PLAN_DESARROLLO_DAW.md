@@ -362,12 +362,12 @@ El timeline ya no solo organiza audio: empieza a editarlo de forma no destructiv
 
 ### Estado
 
-- En progreso
+- Completada en primera iteracion funcional
 - Ya se puede borrar el clip seleccionado desde la barra contextual
 - Ya se puede recortar inicio y final del clip desde el contexto ligero
+- Ya se pueden recortar clips directamente desde sus handles laterales
 - Ya se puede duplicar el clip seleccionado desde el timeline
 - Ya existe snap temporal basico opcional a beat
-- Pendiente llevar el recorte a handles laterales directos sobre el clip
 
 ---
 

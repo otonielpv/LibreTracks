@@ -206,6 +206,40 @@ describe("App", () => {
     expect(await screen.findByDisplayValue("120.00")).toBeTruthy();
   });
 
+  it("allows trimming a clip start directly from timeline handles", async () => {
+    const { container } = await renderApp();
+    mockTimelineLayout(container);
+
+    const startHandle = await screen.findByRole("button", { name: /recortar inicio de drums/i });
+    await act(async () => {
+      dispatchPointerEvent(startHandle, "pointerdown", { pointerId: 4, clientX: 67 });
+      dispatchPointerEvent(startHandle, "pointermove", { pointerId: 4, clientX: 100 });
+      dispatchPointerEvent(startHandle, "pointerup", { pointerId: 4, clientX: 100 });
+    });
+
+    expect(await screen.findByText(/clip ajustado: drums/i)).toBeTruthy();
+    expect(await screen.findByDisplayValue("24.00")).toBeTruthy();
+    expect(await screen.findByDisplayValue("8.00")).toBeTruthy();
+    expect(await screen.findByDisplayValue("168.00")).toBeTruthy();
+  });
+
+  it("allows trimming a clip end directly from timeline handles", async () => {
+    const { container } = await renderApp();
+    mockTimelineLayout(container);
+
+    const endHandle = await screen.findByRole("button", { name: /recortar fin de drums/i });
+    await act(async () => {
+      dispatchPointerEvent(endHandle, "pointerdown", { pointerId: 5, clientX: 800 });
+      dispatchPointerEvent(endHandle, "pointermove", { pointerId: 5, clientX: 600 });
+      dispatchPointerEvent(endHandle, "pointerup", { pointerId: 5, clientX: 600 });
+    });
+
+    expect(await screen.findByText(/clip ajustado: drums/i)).toBeTruthy();
+    expect(await screen.findByDisplayValue("16.00")).toBeTruthy();
+    expect(await screen.findByDisplayValue("0.00")).toBeTruthy();
+    expect(await screen.findByDisplayValue("128.00")).toBeTruthy();
+  });
+
   it("allows duplicating the selected clip from the context dock", async () => {
     await renderApp();
 

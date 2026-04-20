@@ -56,6 +56,17 @@ type ClipDragState =
     }
   | null;
 
+type ClipTrimDragState =
+  | {
+      clipId: string;
+      edge: "start" | "end";
+      pointerId: number;
+      previewTimelineStartSeconds: number;
+      previewSourceStartSeconds: number;
+      previewDurationSeconds: number;
+    }
+  | null;
+
 type SectionDraft = {
   startSeconds: number;
   endSeconds: number;
@@ -90,12 +101,14 @@ export function TransportPanel() {
   const [sectionResizeDrag, setSectionResizeDrag] = useState<SectionResizeDragState>(null);
   const [timelineDrag, setTimelineDrag] = useState<TimelineDragState>(null);
   const [clipDrag, setClipDrag] = useState<ClipDragState>(null);
+  const [clipTrimDrag, setClipTrimDrag] = useState<ClipTrimDragState>(null);
   const [groupNameDraft, setGroupNameDraft] = useState("");
   const [jumpTargetSectionId, setJumpTargetSectionId] = useState<string | null>(null);
   const [jumpBars, setJumpBars] = useState(4);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const timelineContentRef = useRef<HTMLDivElement | null>(null);
   const clipDragRef = useRef<ClipDragState>(null);
+  const clipTrimDragRef = useRef<ClipTrimDragState>(null);
   const sectionResizeDragRef = useRef<SectionResizeDragState>(null);
 
   useEffect(() => {
@@ -153,6 +166,14 @@ export function TransportPanel() {
   const selectedSection = sections.find((section) => section.id === selectedSectionId) ?? null;
   const currentSection = snapshot?.currentSection ?? null;
   const pendingSectionJump = snapshot?.pendingSectionJump ?? null;
+  const activeClipTrimPreview =
+    clipTrimDrag === null
+      ? null
+      : {
+          timelineStartSeconds: clipTrimDrag.previewTimelineStartSeconds,
+          sourceStartSeconds: clipTrimDrag.previewSourceStartSeconds,
+          durationSeconds: clipTrimDrag.previewDurationSeconds,
+        };
   const activeSectionDraft =
     timelineDrag?.mode === "section"
       ? normalizeRange(timelineDrag.startSeconds, timelineDrag.currentSeconds)
@@ -216,6 +237,16 @@ export function TransportPanel() {
     setSectionResizeDrag(resolvedValue);
   };
 
+  const updateClipTrimDragState = (
+    nextValue: ClipTrimDragState | ((currentDrag: ClipTrimDragState) => ClipTrimDragState),
+  ) => {
+    const resolvedValue =
+      typeof nextValue === "function" ? nextValue(clipTrimDragRef.current) : nextValue;
+
+    clipTrimDragRef.current = resolvedValue;
+    setClipTrimDrag(resolvedValue);
+  };
+
   useEffect(() => {
     if (!selectedClip) {
       setClipStartDraft("0.00");
@@ -224,15 +255,27 @@ export function TransportPanel() {
       return;
     }
 
-    const previewStart =
-      clipDrag?.clipId === selectedClip.id
-        ? clipDrag.previewTimelineStartSeconds
-        : selectedClip.timelineStartSeconds;
+    const previewClipWindow =
+      clipTrimDrag?.clipId === selectedClip.id
+        ? clipTrimDrag
+        : clipDrag?.clipId === selectedClip.id
+          ? {
+              previewTimelineStartSeconds: clipDrag.previewTimelineStartSeconds,
+              previewSourceStartSeconds: selectedClip.sourceStartSeconds,
+              previewDurationSeconds: selectedClip.durationSeconds,
+            }
+          : null;
 
-    setClipStartDraft(previewStart.toFixed(2));
-    setClipSourceStartDraft(selectedClip.sourceStartSeconds.toFixed(2));
-    setClipDurationDraft(selectedClip.durationSeconds.toFixed(2));
-  }, [clipDrag, selectedClip]);
+    setClipStartDraft(
+      (previewClipWindow?.previewTimelineStartSeconds ?? selectedClip.timelineStartSeconds).toFixed(2),
+    );
+    setClipSourceStartDraft(
+      (previewClipWindow?.previewSourceStartSeconds ?? selectedClip.sourceStartSeconds).toFixed(2),
+    );
+    setClipDurationDraft(
+      (previewClipWindow?.previewDurationSeconds ?? selectedClip.durationSeconds).toFixed(2),
+    );
+  }, [clipDrag, clipTrimDrag, selectedClip]);
 
   useEffect(() => {
     if (!selectedSection) {
@@ -312,6 +355,7 @@ export function TransportPanel() {
     setTimelineDrag(null);
     setClipDrag(null);
     clipDragRef.current = null;
+    updateClipTrimDragState(null);
   };
 
   const resetEditorSelections = () => {
@@ -348,7 +392,8 @@ export function TransportPanel() {
           selectedSectionId !== null ||
           sectionDraft !== null ||
           timelineDrag !== null ||
-          clipDragRef.current !== null;
+          clipDragRef.current !== null ||
+          clipTrimDragRef.current !== null;
 
         if (!hasTransientSelection) {
           return;
@@ -1089,6 +1134,124 @@ export function TransportPanel() {
     setClipDrag(null);
   };
 
+  const handleClipTrimPointerDown = (
+    clip: ClipSummary,
+    edge: "start" | "end",
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setSelectedSectionId(null);
+    setSelectedClipId(clip.id);
+    clipDragRef.current = null;
+    setClipDrag(null);
+    updateClipTrimDragState({
+      clipId: clip.id,
+      edge,
+      pointerId: event.pointerId,
+      previewTimelineStartSeconds: clip.timelineStartSeconds,
+      previewSourceStartSeconds: clip.sourceStartSeconds,
+      previewDurationSeconds: clip.durationSeconds,
+    });
+  };
+
+  const handleClipTrimPointerMove = (
+    clip: ClipSummary,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    event.stopPropagation();
+    autoScrollTimeline(event.clientX);
+    updateClipTrimDragState((currentDrag) => {
+      if (
+        currentDrag === null ||
+        currentDrag.pointerId !== event.pointerId ||
+        currentDrag.clipId !== clip.id
+      ) {
+        return currentDrag;
+      }
+
+      const pointerSeconds = roundTimelineSeconds(resolveTimelineSeconds(event.clientX));
+      if (!Number.isFinite(pointerSeconds)) {
+        return currentDrag;
+      }
+
+      const clipEndSeconds = clip.timelineStartSeconds + clip.durationSeconds;
+      if (currentDrag.edge === "start") {
+        const minTimelineStart = Math.max(0, clip.timelineStartSeconds - clip.sourceStartSeconds);
+        const nextTimelineStartSeconds = clamp(pointerSeconds, minTimelineStart, clipEndSeconds - 0.05);
+        const timelineShift = nextTimelineStartSeconds - clip.timelineStartSeconds;
+
+        return {
+          ...currentDrag,
+          previewTimelineStartSeconds: nextTimelineStartSeconds,
+          previewSourceStartSeconds: roundTimelineSeconds(
+            Math.max(0, clip.sourceStartSeconds + timelineShift),
+          ),
+          previewDurationSeconds: roundTimelineSeconds(
+            Math.max(0.05, clipEndSeconds - nextTimelineStartSeconds),
+          ),
+        };
+      }
+
+      const nextClipEndSeconds = clamp(
+        pointerSeconds,
+        clip.timelineStartSeconds + 0.05,
+        clipEndSeconds,
+      );
+
+      return {
+        ...currentDrag,
+        previewDurationSeconds: roundTimelineSeconds(
+          Math.max(0.05, nextClipEndSeconds - clip.timelineStartSeconds),
+        ),
+      };
+    });
+  };
+
+  const handleClipTrimPointerUp = async (
+    clip: ClipSummary,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    event.stopPropagation();
+
+    const currentDrag = clipTrimDragRef.current;
+    if (
+      currentDrag === null ||
+      currentDrag.pointerId !== event.pointerId ||
+      currentDrag.clipId !== clip.id
+    ) {
+      return;
+    }
+
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    updateClipTrimDragState(null);
+    setIsBusy(true);
+
+    try {
+      const nextSnapshot = await updateClipWindow({
+        clipId: clip.id,
+        timelineStartSeconds: roundTimelineSeconds(currentDrag.previewTimelineStartSeconds),
+        sourceStartSeconds: roundTimelineSeconds(currentDrag.previewSourceStartSeconds),
+        durationSeconds: roundTimelineSeconds(currentDrag.previewDurationSeconds),
+      });
+      setSnapshot(nextSnapshot);
+      setSelectedClipId(clip.id);
+      setStatus(`Clip ajustado: ${clipDisplayName(clip)}.`);
+    } catch (error) {
+      setStatus(`No se pudo ajustar el clip: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleClipTrimPointerCancel = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (clipTrimDragRef.current?.pointerId !== event.pointerId) {
+      return;
+    }
+
+    updateClipTrimDragState(null);
+  };
+
   const transportStateLabel = snapshot?.playbackState ?? "empty";
 
   return (
@@ -1506,9 +1669,19 @@ export function TransportPanel() {
                         <div className="timeline-lane" aria-label={`Carril de ${track.name}`}>
                           {(clipsByTrack[track.id] ?? []).map((clip) => {
                             const isDraggedClip = clipDrag?.clipId === clip.id;
+                            const isTrimmedClip = clipTrimDrag?.clipId === clip.id;
                             const previewStartSeconds = isDraggedClip
                               ? clipDrag.previewTimelineStartSeconds
                               : clip.timelineStartSeconds;
+                            const renderedClip =
+                              clipTrimDrag?.clipId === clip.id
+                                ? {
+                                    ...clip,
+                                    timelineStartSeconds: clipTrimDrag.previewTimelineStartSeconds,
+                                    sourceStartSeconds: clipTrimDrag.previewSourceStartSeconds,
+                                    durationSeconds: clipTrimDrag.previewDurationSeconds,
+                                  }
+                                : clip;
 
                             return (
                               <div className="clip-shell" key={clip.id}>
@@ -1522,28 +1695,62 @@ export function TransportPanel() {
                                   </div>
                                 )}
 
-                                <button
-                                  aria-label={`Clip ${clipDisplayName(clip)}`}
-                                  aria-pressed={selectedClipId === clip.id}
+                                <div
                                   className={`clip-block${selectedClipId === clip.id ? " is-selected" : ""}${
                                     isDraggedClip ? " is-drag-source" : ""
-                                  }`}
-                                  style={clipStyle(clip, durationSeconds)}
-                                  title={`${clipDisplayName(clip)} | ${formatClock(
-                                    previewStartSeconds,
-                                  )} / ${formatClock(clip.durationSeconds)}`}
-                                  type="button"
-                                  onPointerCancel={handleClipPointerCancel}
-                                  onPointerDown={(event) => {
-                                    handleClipPointerDown(clip, event);
-                                  }}
-                                  onPointerMove={handleClipPointerMove}
-                                  onPointerUp={(event) => {
-                                    handleClipPointerUp(clip, event);
-                                  }}
+                                  }${isTrimmedClip ? " is-trimming" : ""}`}
+                                  style={clipStyle(renderedClip, durationSeconds)}
                                 >
-                                  <ClipFace clip={clip} />
-                                </button>
+                                  <button
+                                    aria-label={`Recortar inicio de ${clipDisplayName(clip)}`}
+                                    className="clip-handle is-start"
+                                    type="button"
+                                    onPointerCancel={handleClipTrimPointerCancel}
+                                    onPointerDown={(event) => {
+                                      handleClipTrimPointerDown(clip, "start", event);
+                                    }}
+                                    onPointerMove={(event) => {
+                                      handleClipTrimPointerMove(clip, event);
+                                    }}
+                                    onPointerUp={(event) => {
+                                      void handleClipTrimPointerUp(clip, event);
+                                    }}
+                                  />
+                                  <button
+                                    aria-label={`Clip ${clipDisplayName(clip)}`}
+                                    aria-pressed={selectedClipId === clip.id}
+                                    className="clip-body"
+                                    title={`${clipDisplayName(clip)} | ${formatClock(
+                                      previewStartSeconds,
+                                    )} / ${formatClock(renderedClip.durationSeconds)}`}
+                                    type="button"
+                                    onPointerCancel={handleClipPointerCancel}
+                                    onPointerDown={(event) => {
+                                      handleClipPointerDown(clip, event);
+                                    }}
+                                    onPointerMove={handleClipPointerMove}
+                                    onPointerUp={(event) => {
+                                      handleClipPointerUp(clip, event);
+                                    }}
+                                  >
+                                    <ClipFace clip={renderedClip} />
+                                  </button>
+                                  <button
+                                    aria-label={`Recortar fin de ${clipDisplayName(clip)}`}
+                                    className="clip-handle is-end"
+                                    type="button"
+                                    onPointerCancel={handleClipTrimPointerCancel}
+                                    onPointerDown={(event) => {
+                                      handleClipTrimPointerDown(clip, "end", event);
+                                    }}
+                                    onPointerMove={(event) => {
+                                      handleClipTrimPointerMove(clip, event);
+                                    }}
+                                    onPointerUp={(event) => {
+                                      void handleClipTrimPointerUp(clip, event);
+                                    }}
+                                  />
+                                </div>
                               </div>
                             );
                           })}
@@ -1563,8 +1770,21 @@ export function TransportPanel() {
                 <>
                   <strong>{clipDisplayName(selectedClip)}</strong>
                   <p>
-                    Inicio {formatClock(clipDrag?.clipId === selectedClip.id ? clipDrag.previewTimelineStartSeconds : selectedClip.timelineStartSeconds)}
-                    {" | "}Duracion {formatClock(selectedClip.durationSeconds)} | Gain{" "}
+                    Inicio{" "}
+                    {formatClock(
+                      activeClipTrimPreview && clipTrimDrag?.clipId === selectedClip.id
+                        ? activeClipTrimPreview.timelineStartSeconds
+                        : clipDrag?.clipId === selectedClip.id
+                          ? clipDrag.previewTimelineStartSeconds
+                          : selectedClip.timelineStartSeconds,
+                    )}
+                    {" | "}Duracion{" "}
+                    {formatClock(
+                      activeClipTrimPreview && clipTrimDrag?.clipId === selectedClip.id
+                        ? activeClipTrimPreview.durationSeconds
+                        : selectedClip.durationSeconds,
+                    )}{" "}
+                    | Gain{" "}
                     {Math.round(selectedClip.gain * 100)}%
                   </p>
                   <div className="context-actions">
