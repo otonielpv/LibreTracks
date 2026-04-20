@@ -79,6 +79,7 @@ pub struct AudioDebugSnapshot {
     pub last_sync: Option<AudioOperationSummary>,
     pub last_stop: Option<AudioStopSummary>,
     pub runtime_state: AudioRuntimeStateSummary,
+    pub playhead: AudioPlayheadEstimate,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -112,6 +113,17 @@ pub struct AudioRuntimeStateSummary {
     pub files_opened_last_restart: usize,
     pub last_scheduled_clips: usize,
     pub cached_audio_buffers: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioPlayheadEstimate {
+    pub running: bool,
+    pub anchor_position_seconds: Option<f64>,
+    pub estimated_position_seconds: Option<f64>,
+    pub song_duration_seconds: Option<f64>,
+    pub anchor_age_ms: Option<f64>,
+    pub last_start_reason: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -151,6 +163,10 @@ struct AudioDebugState {
     last_sync: Option<AudioOperationSummary>,
     last_stop: Option<AudioStopSummary>,
     runtime_state: AudioRuntimeStateSummary,
+    playback_anchor_position_seconds: Option<f64>,
+    playback_anchor_started_at: Option<Instant>,
+    playback_song_duration_seconds: Option<f64>,
+    last_start_reason: Option<PlaybackStartReason>,
 }
 
 impl Default for AudioRuntimeStateSummary {
@@ -183,6 +199,10 @@ impl AudioDebugState {
             last_sync: None,
             last_stop: None,
             runtime_state: AudioRuntimeStateSummary::default(),
+            playback_anchor_position_seconds: None,
+            playback_anchor_started_at: None,
+            playback_song_duration_seconds: None,
+            last_start_reason: None,
         }
     }
 
@@ -205,11 +225,22 @@ impl AudioDebugState {
         }
     }
 
-    fn record_restart(&mut self, reason: PlaybackStartReason, report: &RestartReport) {
+    fn record_restart(
+        &mut self,
+        reason: PlaybackStartReason,
+        position_seconds: f64,
+        song_duration_seconds: f64,
+        report: &RestartReport,
+    ) {
         self.runtime_state.active_sinks = report.active_sinks;
         self.runtime_state.files_opened_last_restart = report.opened_files;
         self.runtime_state.last_scheduled_clips = report.scheduled_clips;
         self.runtime_state.cached_audio_buffers = report.cached_buffers;
+        self.playback_anchor_position_seconds =
+            Some(position_seconds.clamp(0.0, song_duration_seconds));
+        self.playback_anchor_started_at = Some(Instant::now());
+        self.playback_song_duration_seconds = Some(song_duration_seconds.max(0.0));
+        self.last_start_reason = Some(reason);
 
         if !self.config.enabled {
             return;
@@ -242,6 +273,8 @@ impl AudioDebugState {
 
     fn record_stop(&mut self, report: &StopReport, active_sinks_after_stop: usize) {
         self.runtime_state.active_sinks = active_sinks_after_stop;
+        self.playback_anchor_position_seconds = self.estimated_position_seconds();
+        self.playback_anchor_started_at = None;
 
         if !self.config.enabled {
             return;
@@ -263,7 +296,36 @@ impl AudioDebugState {
             last_sync: self.last_sync.clone(),
             last_stop: self.last_stop.clone(),
             runtime_state: self.runtime_state.clone(),
+            playhead: self.playhead_estimate(),
         }
+    }
+
+    fn playhead_estimate(&self) -> AudioPlayheadEstimate {
+        AudioPlayheadEstimate {
+            running: self.playback_anchor_started_at.is_some(),
+            anchor_position_seconds: self.playback_anchor_position_seconds,
+            estimated_position_seconds: self.estimated_position_seconds(),
+            song_duration_seconds: self.playback_song_duration_seconds,
+            anchor_age_ms: self
+                .playback_anchor_started_at
+                .map(|started_at| started_at.elapsed().as_secs_f64() * 1000.0),
+            last_start_reason: self
+                .last_start_reason
+                .map(|reason| playback_reason_label(reason).to_string()),
+        }
+    }
+
+    fn estimated_position_seconds(&self) -> Option<f64> {
+        let anchor_position = self.playback_anchor_position_seconds?;
+        let estimated_position = match self.playback_anchor_started_at {
+            Some(started_at) => anchor_position + started_at.elapsed().as_secs_f64(),
+            None => anchor_position,
+        };
+
+        Some(match self.playback_song_duration_seconds {
+            Some(song_duration_seconds) => estimated_position.clamp(0.0, song_duration_seconds),
+            None => estimated_position.max(0.0),
+        })
     }
 }
 
@@ -490,7 +552,12 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
                 let result = ensure_runtime(&mut runtime)
                     .and_then(|runtime| runtime.restart(&song_dir, &song, position_seconds))
                     .map(|report| {
-                        debug_state.record_restart(reason, &report);
+                        debug_state.record_restart(
+                            reason,
+                            position_seconds,
+                            song.duration_seconds,
+                            &report,
+                        );
                     })
                     .map_err(|error| error.to_string());
 
@@ -775,6 +842,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::mpsc;
     use std::sync::Arc;
+    use std::thread;
     use std::time::Duration;
 
     use libretracks_core::{OutputBus, Song, Track, TrackGroup};
@@ -912,6 +980,8 @@ mod tests {
         debug_state.record_command(AudioCommandKind::Play, Some("initial_play".into()));
         debug_state.record_restart(
             PlaybackStartReason::InitialPlay,
+            1.25,
+            20.0,
             &RestartReport {
                 elapsed: Duration::from_millis(12),
                 scheduled_clips: 3,
@@ -943,6 +1013,10 @@ mod tests {
                 .scheduled_clips,
             3
         );
+        assert_eq!(
+            snapshot.playhead.last_start_reason.as_deref(),
+            Some("initial_play")
+        );
         assert_eq!(snapshot.runtime_state.active_sinks, 0);
         assert_eq!(
             snapshot
@@ -951,6 +1025,69 @@ mod tests {
                 .stopped_sinks,
             3
         );
+        assert!(!snapshot.playhead.running);
+        assert!(snapshot.playhead.estimated_position_seconds.unwrap_or_default() >= 1.25);
+    }
+
+    #[test]
+    fn debug_state_estimates_playhead_while_running_and_freezes_after_stop() {
+        let mut debug_state = AudioDebugState::new(AudioDebugConfig {
+            enabled: true,
+            log_commands: false,
+        });
+
+        debug_state.record_restart(
+            PlaybackStartReason::Seek,
+            2.0,
+            10.0,
+            &RestartReport {
+                elapsed: Duration::from_millis(4),
+                scheduled_clips: 2,
+                active_sinks: 2,
+                opened_files: 1,
+                cached_buffers: 1,
+            },
+        );
+
+        thread::sleep(Duration::from_millis(20));
+        let running_snapshot = debug_state.snapshot();
+        let running_position = running_snapshot
+            .playhead
+            .estimated_position_seconds
+            .expect("running playhead should exist");
+
+        assert!(running_snapshot.playhead.running);
+        assert!(running_snapshot.playhead.anchor_age_ms.unwrap_or_default() >= 10.0);
+        assert!(running_position > 2.0);
+        assert_eq!(
+            running_snapshot.playhead.last_start_reason.as_deref(),
+            Some("seek")
+        );
+
+        debug_state.record_stop(
+            &StopReport {
+                elapsed: Duration::from_millis(1),
+                stopped_sinks: 2,
+            },
+            0,
+        );
+
+        let stopped_snapshot = debug_state.snapshot();
+        let stopped_position = stopped_snapshot
+            .playhead
+            .estimated_position_seconds
+            .expect("stopped playhead should remain visible");
+
+        thread::sleep(Duration::from_millis(20));
+        let frozen_snapshot = debug_state.snapshot();
+        let frozen_position = frozen_snapshot
+            .playhead
+            .estimated_position_seconds
+            .expect("frozen playhead should remain visible");
+
+        assert!(!stopped_snapshot.playhead.running);
+        assert!(stopped_snapshot.playhead.anchor_age_ms.is_none());
+        assert!((frozen_position - stopped_position).abs() < 0.001);
     }
 
     #[test]

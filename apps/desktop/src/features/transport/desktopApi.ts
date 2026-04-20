@@ -100,6 +100,15 @@ export type AudioRuntimeStateSummary = {
   cachedAudioBuffers: number;
 };
 
+export type AudioPlayheadEstimate = {
+  running: boolean;
+  anchorPositionSeconds?: number | null;
+  estimatedPositionSeconds?: number | null;
+  songDurationSeconds?: number | null;
+  anchorAgeMs?: number | null;
+  lastStartReason?: string | null;
+};
+
 export type AudioDebugSnapshot = {
   enabled: boolean;
   logCommands: boolean;
@@ -109,6 +118,7 @@ export type AudioDebugSnapshot = {
   lastSync?: AudioOperationSummary | null;
   lastStop?: AudioStopSummary | null;
   runtimeState: AudioRuntimeStateSummary;
+  playhead: AudioPlayheadEstimate;
 };
 
 const tauriWindow = window as Window & {
@@ -147,6 +157,14 @@ export async function getAudioDebugSnapshot(): Promise<AudioDebugSnapshot> {
         filesOpenedLastRestart: 0,
         lastScheduledClips: 0,
         cachedAudioBuffers: 0,
+      },
+      playhead: {
+        running: false,
+        anchorPositionSeconds: null,
+        estimatedPositionSeconds: null,
+        songDurationSeconds: null,
+        anchorAgeMs: null,
+        lastStartReason: null,
       },
     };
   }

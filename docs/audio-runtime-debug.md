@@ -29,6 +29,9 @@ Campos clave:
 - `lastRestart`: tiempo del ultimo restart, clips programados, sinks activos y archivos abiertos.
 - `lastSync`: tiempo del ultimo ajuste incremental de mezcla.
 - `lastStop`: tiempo y numero de sinks detenidos.
+- `playhead`: estimacion interna del playhead vista desde el hilo de audio.
+  Incluye `running`, `anchorPositionSeconds`, `estimatedPositionSeconds`, `songDurationSeconds`, `anchorAgeMs` y `lastStartReason`.
+  No es sample-accurate, pero sirve para comparar el runtime con el snapshot del transporte desktop y detectar desfases.
 - `runtimeState`: estado resumido del runtime tras la ultima operacion relevante.
   Incluye `cachedAudioBuffers` para ver cuantas fuentes siguen preparadas en memoria para el proyecto actual.
 
@@ -51,13 +54,15 @@ Campos clave:
 
 - Ejecutar varios seeks consecutivos durante reproduccion.
 - Confirmar que `lastRestart.reason` pase a `seek`.
-- Comparar `elapsedMs` entre proyectos pequeños y grandes.
+- Comparar `playhead.estimatedPositionSeconds` frente a `get_transport_snapshot.positionSeconds` para medir el desfase observado.
+- Comparar `elapsedMs` entre proyectos pequenos y grandes.
 
 ### 4. Saltos musicales
 
 - Programar un salto inmediato.
 - Programar un salto a final de seccion.
 - Confirmar que el salto inmediato registre `immediate_jump` y que un resync del transporte registre `transport_resync` si hubo reconstruccion.
+- Revisar si `playhead.lastStartReason` cambia a `transport_resync` cuando el runtime tiene que rehacerse tras ejecutar un salto en marcha.
 
 ### 5. Cambios de timeline
 
