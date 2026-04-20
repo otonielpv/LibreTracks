@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$nativeTargetDir = Join-Path $repoRoot "target-desktop-native"
 $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
 $toolchainRoot = Join-Path $env:USERPROFILE ".rustup\toolchains"
 $toolchainBin = $null
@@ -32,6 +33,10 @@ if ($pathSegments.Count -gt 0) {
 }
 
 Set-Location $repoRoot
+
+# Use a repo-local target dir dedicated to the native desktop workflow.
+# This avoids Tauri reusing stale build artifacts from other workspaces.
+$env:CARGO_TARGET_DIR = $nativeTargetDir
 
 switch ($Mode) {
   "dev" {
