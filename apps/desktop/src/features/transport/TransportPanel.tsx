@@ -5,6 +5,7 @@ import {
   createGroup,
   createSection,
   createSong,
+  deleteClip,
   deleteSection,
   getTransportSnapshot,
   isTauriApp,
@@ -310,6 +311,16 @@ export function TransportPanel() {
         event.preventDefault();
         clearTimelineSelections();
         setStatus("Seleccion del timeline cancelada.");
+        return;
+      }
+
+      if (event.key === "Delete" && selectedClipId !== null) {
+        event.preventDefault();
+        if (isBusy) {
+          return;
+        }
+
+        void handleDeleteSelectedClip();
       }
     };
 
@@ -473,6 +484,26 @@ export function TransportPanel() {
     }
 
     await handleMoveSelectedClip(parsedStart);
+  };
+
+  const handleDeleteSelectedClip = async () => {
+    if (!selectedClip) {
+      return;
+    }
+
+    setIsBusy(true);
+
+    try {
+      const deletedClipName = clipDisplayName(selectedClip);
+      const nextSnapshot = await deleteClip(selectedClip.id);
+      setSnapshot(nextSnapshot);
+      setSelectedClipId(null);
+      setStatus(`Clip eliminado: ${deletedClipName}.`);
+    } catch (error) {
+      setStatus(`No se pudo borrar el clip: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   const handleCreateSection = async () => {
@@ -1276,6 +1307,13 @@ export function TransportPanel() {
                     </button>
                     <button disabled={isBusy} type="button" onClick={() => void handleApplyClipStart()}>
                       Aplicar
+                    </button>
+                    <button
+                      disabled={isBusy}
+                      type="button"
+                      onClick={() => void handleDeleteSelectedClip()}
+                    >
+                      Borrar clip
                     </button>
                   </div>
                 </>

@@ -360,6 +360,12 @@ Empezar la edicion real de material en timeline.
 
 El timeline ya no solo organiza audio: empieza a editarlo de forma no destructiva.
 
+### Estado
+
+- En progreso
+- Ya se puede borrar el clip seleccionado desde la barra contextual
+- Pendiente recorte, duplicacion y snap temporal
+
 ---
 
 ## Fase G - Navegacion y precision
@@ -537,7 +543,7 @@ Esto no cierra fases nuevas del plan por si solo, pero si protege el principio d
 [ ] Recortar inicio de clip
 [ ] Recortar final de clip
 [ ] Duplicar clip
-[ ] Borrar clip
+[x] Borrar clip
 [ ] Snap temporal basico
 ```
 
@@ -545,7 +551,7 @@ Esto no cierra fases nuevas del plan por si solo, pero si protege el principio d
 
 ```txt
 [x] Espacio para play/pause
-[ ] Suprimir para borrar clip
+[x] Suprimir para borrar clip
 [x] Escape para cancelar seleccion
 [x] Ctrl + rueda para zoom horizontal del timeline
 [ ] Autoscroll en borde durante drag

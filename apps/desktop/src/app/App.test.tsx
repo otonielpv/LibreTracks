@@ -96,6 +96,41 @@ describe("App", () => {
     expect(await screen.findByText(/sin clip seleccionado/i)).toBeTruthy();
   });
 
+  it("allows deleting a clip from the timeline context dock", async () => {
+    await renderApp();
+
+    const bassClip = await screen.findByRole("button", { name: /clip bass/i });
+    await act(async () => {
+      fireEvent.pointerDown(bassClip, { pointerId: 1, clientX: 32 });
+      fireEvent.pointerUp(bassClip, { pointerId: 1, clientX: 32 });
+    });
+
+    const deleteButton = await screen.findByRole("button", { name: /borrar clip/i });
+    await act(async () => {
+      fireEvent.click(deleteButton);
+    });
+
+    expect(await screen.findByText(/clip eliminado: bass/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /clip bass/i })).toBeNull();
+  });
+
+  it("supports delete to remove the selected clip", async () => {
+    await renderApp();
+
+    const keysClip = await screen.findByRole("button", { name: /clip keys/i });
+    await act(async () => {
+      fireEvent.pointerDown(keysClip, { pointerId: 1, clientX: 48 });
+      fireEvent.pointerUp(keysClip, { pointerId: 1, clientX: 48 });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "Delete" });
+    });
+
+    expect(await screen.findByText(/clip eliminado: keys/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /clip keys/i })).toBeNull();
+  });
+
   it("supports ctrl plus mouse wheel to zoom the timeline", async () => {
     const { container } = await renderApp();
 
