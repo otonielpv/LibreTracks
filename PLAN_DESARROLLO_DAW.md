@@ -405,7 +405,8 @@ El usuario debe poder trabajar varios minutos en el timeline sin sentir friccion
 - Ya existe `Space` para play/pause desde el shell principal
 - Ya existe `Escape` para limpiar seleccion y borradores del timeline
 - Ya existe zoom horizontal con `Ctrl + rueda` manteniendo el contexto visual
-- Pendiente autoscroll durante drag, borrado por teclado y mas atajos de edicion
+- Ya existe autoscroll basico en borde durante arrastres del timeline
+- Pendiente mas atajos de edicion y refinamiento fino de navegacion
 
 ---
 
@@ -557,7 +558,7 @@ Esto no cierra fases nuevas del plan por si solo, pero si protege el principio d
 [x] Suprimir para borrar clip
 [x] Escape para cancelar seleccion
 [x] Ctrl + rueda para zoom horizontal del timeline
-[ ] Autoscroll en borde durante drag
+[x] Autoscroll en borde durante drag
 ```
 
 ---

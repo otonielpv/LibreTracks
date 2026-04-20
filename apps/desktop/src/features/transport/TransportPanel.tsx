@@ -783,6 +783,28 @@ export function TransportPanel() {
     return ratio * durationSeconds;
   };
 
+  const autoScrollTimeline = (clientX: number) => {
+    const scrollElement = timelineScrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+
+    const scrollRect = scrollElement.getBoundingClientRect();
+    const edgeThreshold = 88;
+    const maxScrollStep = 36;
+
+    if (clientX <= scrollRect.left + edgeThreshold) {
+      const intensity = clamp((scrollRect.left + edgeThreshold - clientX) / edgeThreshold, 0, 1);
+      scrollElement.scrollLeft = Math.max(0, scrollElement.scrollLeft - maxScrollStep * intensity);
+      return;
+    }
+
+    if (clientX >= scrollRect.right - edgeThreshold) {
+      const intensity = clamp((clientX - (scrollRect.right - edgeThreshold)) / edgeThreshold, 0, 1);
+      scrollElement.scrollLeft += maxScrollStep * intensity;
+    }
+  };
+
   const handleTimelinePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!song || durationSeconds <= 0) {
       return;
@@ -805,6 +827,7 @@ export function TransportPanel() {
   };
 
   const handleTimelinePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    autoScrollTimeline(event.clientX);
     setTimelineDrag((currentDrag) => {
       if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
         return currentDrag;
@@ -885,6 +908,7 @@ export function TransportPanel() {
       return;
     }
 
+    autoScrollTimeline(event.clientX);
     const deltaSeconds = resolveTimelineSeconds(event.clientX) - currentDrag.pointerStartSeconds;
     const nextTimelineStartSeconds = Math.max(0, currentDrag.originTimelineStartSeconds + deltaSeconds);
     const nextClipDrag: ClipDragState = {
