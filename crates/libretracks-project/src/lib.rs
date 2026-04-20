@@ -5,8 +5,8 @@ mod song_store;
 mod waveform;
 
 pub use importer::{
-    import_wav_song, read_wav_metadata, ImportedAudioFile, ImportedSong, ProjectImportRequest,
-    WavMetadata,
+    append_wav_files_to_song, import_wav_song, read_wav_metadata, ImportedAudioFile, ImportedSong,
+    ProjectImportRequest, WavMetadata,
 };
 pub use song_store::{
     create_song_folder, load_song, save_song, song_file_path, ProjectError, SONG_FILE_NAME,
@@ -24,8 +24,9 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        create_song_folder, import_wav_song, load_song, load_waveform_summary, read_wav_metadata,
-        save_song, song_file_path, waveform_file_path, ProjectError, ProjectImportRequest,
+        append_wav_files_to_song, create_song_folder, import_wav_song, load_song,
+        load_waveform_summary, read_wav_metadata, save_song, song_file_path, waveform_file_path,
+        ProjectError, ProjectImportRequest,
     };
 
     fn demo_song() -> Song {
@@ -230,6 +231,42 @@ mod tests {
             ProjectError::UnsupportedAudioFormat { .. } => {}
             other => panic!("unexpected error: {other}"),
         }
+    }
+
+    #[test]
+    fn appends_wav_files_without_replacing_existing_tracks() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = create_song_folder(root.path(), "append-demo").expect("song dir should exist");
+        let existing_audio_path = song_dir.join("audio").join("click.wav");
+        write_test_wav(&existing_audio_path, 44_100, 2, 2);
+
+        let mut song = demo_song();
+        song.duration_seconds = 4.0;
+        save_song(&song_dir, &song).expect("song should save");
+
+        let imports_dir = root.path().join("imports");
+        fs::create_dir_all(&imports_dir).expect("imports dir should exist");
+        let duplicate_click_path = imports_dir.join("click.wav");
+        write_test_wav(&duplicate_click_path, 44_100, 2, 3);
+
+        let appended_song = append_wav_files_to_song(&song_dir, &song, &[duplicate_click_path])
+            .expect("append should succeed");
+
+        assert_eq!(appended_song.tracks.len(), 2);
+        assert_eq!(appended_song.clips.len(), 2);
+        assert!(appended_song.tracks.iter().any(|track| track.id == "track_click"));
+        assert!(appended_song
+            .tracks
+            .iter()
+            .any(|track| track.id == "track_click-1" && track.name == "Click 1"));
+        assert!(appended_song
+            .clips
+            .iter()
+            .any(|clip| clip.track_id == "track_click-1" && clip.file_path == "audio/click-1.wav"));
+        assert!(song_dir.join("audio").join("click.wav").exists());
+        assert!(song_dir.join("audio").join("click-1.wav").exists());
+        assert!(waveform_file_path(&song_dir, "audio/click-1.wav").exists());
+        assert!((appended_song.duration_seconds - 4.0).abs() < 0.001);
     }
 
     #[test]

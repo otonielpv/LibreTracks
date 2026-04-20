@@ -9,8 +9,9 @@ use libretracks_audio::{
 };
 use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
 use libretracks_project::{
-    create_song_folder, import_wav_song, load_song, load_waveform_summary, read_wav_metadata,
-    save_song, ImportedSong, ProjectError, ProjectImportRequest,
+    append_wav_files_to_song, create_song_folder, import_wav_song, load_song,
+    load_waveform_summary, read_wav_metadata, save_song, ImportedSong, ProjectError,
+    ProjectImportRequest,
 };
 use rfd::FileDialog;
 use rodio::{decoder::DecoderError, PlayError, StreamError};
@@ -317,6 +318,10 @@ impl DesktopSession {
             return Ok(None);
         };
 
+        if self.song_dir.is_some() && self.engine.song().is_some() {
+            return Ok(Some(self.import_audio_files_into_current_song(&files, audio)?));
+        }
+
         let import_root = project_root(app);
         let request = build_import_request(&files);
         let folder_name = format!("{}-{}", slugify(&request.title), timestamp_suffix());
@@ -325,6 +330,23 @@ impl DesktopSession {
         self.load_imported_song(imported_song, audio)?;
 
         Ok(Some(self.snapshot()))
+    }
+
+    fn import_audio_files_into_current_song(
+        &mut self,
+        files: &[PathBuf],
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let updated_song = append_wav_files_to_song(&song_dir, &song, files)?;
+
+        self.persist_song_update(updated_song, audio, AudioChangeImpact::StructureRebuild)?;
+        Ok(self.snapshot())
     }
 
     pub fn play(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
@@ -1530,7 +1552,7 @@ mod tests {
 
     use libretracks_audio::{JumpTrigger, PlaybackState};
     use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
-    use libretracks_project::{create_song_folder, load_song};
+    use libretracks_project::{create_song_folder, load_song, save_song};
     use tempfile::tempdir;
 
     use super::{DesktopSession, TransportClock};
@@ -1852,6 +1874,39 @@ mod tests {
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.clips[0].timeline_start_seconds, 6.5);
         assert_eq!(session.engine.playback_state(), PlaybackState::Stopped);
+    }
+
+    #[test]
+    fn importing_wavs_into_a_loaded_song_appends_tracks_instead_of_replacing_them() {
+        let mut session = session_with_song_dir("append-import-demo", demo_song());
+        let song_dir = session
+            .song_dir
+            .clone()
+            .expect("song dir should exist for loaded session");
+        save_song(&song_dir, &demo_song()).expect("seed song should save");
+
+        let imports_root = tempdir().expect("temp dir should exist");
+        let imported_click = imports_root.path().join("click.wav");
+        write_silent_test_wav(&imported_click, 6);
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .import_audio_files_into_current_song(&[imported_click], &audio)
+            .expect("import should append tracks");
+
+        let snapshot_song = snapshot.song.expect("song summary should exist");
+        assert_eq!(snapshot_song.tracks.len(), 2);
+        assert_eq!(snapshot_song.clips.len(), 2);
+        assert!(snapshot_song.tracks.iter().any(|track| track.id == "track_1"));
+        assert!(snapshot_song
+            .tracks
+            .iter()
+            .any(|track| track.id == "track_click" || track.id == "track_click-1"));
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        assert_eq!(saved_song.tracks.len(), 2);
+        assert_eq!(saved_song.clips.len(), 2);
+        assert!(saved_song.clips.iter().any(|clip| clip.file_path.starts_with("audio/click")));
     }
 
     #[test]

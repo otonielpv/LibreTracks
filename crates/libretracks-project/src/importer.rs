@@ -150,6 +150,74 @@ pub fn import_wav_song(
     })
 }
 
+pub fn append_wav_files_to_song(
+    song_dir: impl AsRef<Path>,
+    song: &Song,
+    wav_files: &[PathBuf],
+) -> Result<Song, ProjectError> {
+    if wav_files.is_empty() {
+        return Err(ProjectError::EmptyImportSet);
+    }
+
+    let song_dir = song_dir.as_ref();
+    let audio_dir = song_dir.join("audio");
+    fs::create_dir_all(&audio_dir)?;
+
+    let mut next_song = song.clone();
+    let mut used_file_names = collect_used_file_names(song_dir, song)?;
+    let mut used_track_ids: HashSet<String> =
+        song.tracks.iter().map(|track| track.id.clone()).collect();
+    let mut used_clip_ids: HashSet<String> = song.clips.iter().map(|clip| clip.id.clone()).collect();
+
+    for source_path in wav_files {
+        ensure_wav_extension(source_path)?;
+        let metadata = read_wav_metadata(source_path)?;
+
+        let file_name = unique_file_name(source_path, &mut used_file_names)?;
+        let destination_path = audio_dir.join(&file_name);
+        fs::copy(source_path, &destination_path)?;
+        let imported_relative_path = PathBuf::from("audio").join(&file_name);
+        generate_waveform_summary(song_dir, &imported_relative_path)?;
+
+        let stem = destination_path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| ProjectError::InvalidFileName(source_path.clone()))?;
+        let track_slug = slugify(stem);
+        let track_id = unique_entity_id("track", &track_slug, &mut used_track_ids);
+        let clip_id = unique_entity_id("clip", &track_slug, &mut used_clip_ids);
+
+        next_song.tracks.push(Track {
+            id: track_id.clone(),
+            name: humanize_track_name(stem),
+            kind: TrackKind::Audio,
+            parent_track_id: None,
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            output_bus_id: OutputBus::Main.id(),
+        });
+
+        next_song.clips.push(Clip {
+            id: clip_id,
+            track_id,
+            file_path: imported_relative_path.to_string_lossy().replace('\\', "/"),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: metadata.duration_seconds,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+        });
+
+        next_song.duration_seconds = next_song.duration_seconds.max(metadata.duration_seconds);
+    }
+
+    validate_song(&next_song)?;
+    Ok(next_song)
+}
+
 fn ensure_wav_extension(path: &Path) -> Result<(), ProjectError> {
     let extension = path.extension().and_then(|value| value.to_str()).unwrap_or_default();
     if extension.eq_ignore_ascii_case("wav") {
@@ -187,6 +255,50 @@ fn unique_file_name(
 
         if used_file_names.insert(candidate.clone()) {
             return Ok(candidate);
+        }
+
+        index += 1;
+    }
+}
+
+fn collect_used_file_names(song_dir: &Path, song: &Song) -> Result<HashSet<String>, ProjectError> {
+    let mut used_file_names = HashSet::new();
+
+    for clip in &song.clips {
+        if let Some(file_name) = Path::new(&clip.file_path)
+            .file_name()
+            .and_then(|value| value.to_str())
+        {
+            used_file_names.insert(file_name.to_string());
+        }
+    }
+
+    let audio_dir = song_dir.join("audio");
+    if audio_dir.exists() {
+        for entry in fs::read_dir(audio_dir)? {
+            let entry = entry?;
+            if let Some(file_name) = entry.file_name().to_str() {
+                used_file_names.insert(file_name.to_string());
+            }
+        }
+    }
+
+    Ok(used_file_names)
+}
+
+fn unique_entity_id(prefix: &str, slug: &str, used_ids: &mut HashSet<String>) -> String {
+    let mut index = 0_u32;
+
+    loop {
+        let suffix = if index == 0 {
+            String::new()
+        } else {
+            format!("-{index}")
+        };
+        let candidate = format!("{prefix}_{slug}{suffix}");
+
+        if used_ids.insert(candidate.clone()) {
+            return candidate;
         }
 
         index += 1;
