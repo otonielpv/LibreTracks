@@ -64,6 +64,13 @@ export type TransportSnapshot = {
   song?: SongSummary | null;
   currentSection?: SectionSummary | null;
   pendingSectionJump?: PendingJumpSummary | null;
+  transportClock?: {
+    anchorPositionSeconds: number;
+    running: boolean;
+    lastSeekPositionSeconds?: number | null;
+    lastStartPositionSeconds?: number | null;
+    lastJumpPositionSeconds?: number | null;
+  };
   songDir?: string | null;
   isNativeRuntime: boolean;
 };

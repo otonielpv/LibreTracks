@@ -33,11 +33,93 @@ impl Default for DesktopState {
     }
 }
 
-#[derive(Default)]
 pub struct DesktopSession {
     pub engine: AudioEngine,
-    pub started_at: Option<Instant>,
+    transport_clock: TransportClock,
     pub song_dir: Option<PathBuf>,
+}
+
+#[derive(Debug, Default)]
+struct TransportClock {
+    anchor_position_seconds: f64,
+    anchor_started_at: Option<Instant>,
+    last_seek_position_seconds: Option<f64>,
+    last_start_position_seconds: Option<f64>,
+    last_jump_position_seconds: Option<f64>,
+}
+
+impl Default for DesktopSession {
+    fn default() -> Self {
+        Self {
+            engine: AudioEngine::default(),
+            transport_clock: TransportClock::default(),
+            song_dir: None,
+        }
+    }
+}
+
+impl TransportClock {
+    fn current_position(&self, playback_state: PlaybackState, song_duration: Option<f64>) -> f64 {
+        let unclamped_position = if playback_state == PlaybackState::Playing {
+            self.anchor_position_seconds + self.elapsed_since_anchor()
+        } else {
+            self.anchor_position_seconds
+        };
+
+        let bounded_position = unclamped_position.max(0.0);
+        match song_duration {
+            Some(song_duration) => bounded_position.min(song_duration),
+            None => bounded_position,
+        }
+    }
+
+    fn elapsed_since_anchor(&self) -> f64 {
+        self.anchor_started_at
+            .map(|started_at| started_at.elapsed().as_secs_f64())
+            .unwrap_or(0.0)
+    }
+
+    fn start_from(&mut self, position_seconds: f64) {
+        self.anchor_position_seconds = position_seconds.max(0.0);
+        self.anchor_started_at = Some(Instant::now());
+        self.last_start_position_seconds = Some(self.anchor_position_seconds);
+    }
+
+    fn reanchor_playing(&mut self, position_seconds: f64) {
+        self.anchor_position_seconds = position_seconds.max(0.0);
+        self.anchor_started_at = Some(Instant::now());
+    }
+
+    fn note_jump_while_playing(&mut self, position_seconds: f64) {
+        self.last_jump_position_seconds = Some(position_seconds.max(0.0));
+        self.reanchor_playing(position_seconds);
+    }
+
+    fn pause_at(&mut self, position_seconds: f64) {
+        self.anchor_position_seconds = position_seconds.max(0.0);
+        self.anchor_started_at = None;
+    }
+
+    fn seek_to(&mut self, position_seconds: f64) {
+        self.anchor_position_seconds = position_seconds.max(0.0);
+        self.anchor_started_at = None;
+        self.last_seek_position_seconds = Some(self.anchor_position_seconds);
+    }
+
+    fn stop(&mut self) {
+        self.anchor_position_seconds = 0.0;
+        self.anchor_started_at = None;
+    }
+
+    fn summary(&self) -> TransportClockSummary {
+        TransportClockSummary {
+            anchor_position_seconds: self.anchor_position_seconds,
+            running: self.anchor_started_at.is_some(),
+            last_seek_position_seconds: self.last_seek_position_seconds,
+            last_start_position_seconds: self.last_start_position_seconds,
+            last_jump_position_seconds: self.last_jump_position_seconds,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -84,8 +166,19 @@ pub struct TransportSnapshot {
     pub song: Option<SongSummary>,
     pub current_section: Option<SectionSummary>,
     pub pending_section_jump: Option<PendingJumpSummary>,
+    pub transport_clock: TransportClockSummary,
     pub song_dir: Option<String>,
     pub is_native_runtime: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TransportClockSummary {
+    pub anchor_position_seconds: f64,
+    pub running: bool,
+    pub last_seek_position_seconds: Option<f64>,
+    pub last_start_position_seconds: Option<f64>,
+    pub last_jump_position_seconds: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -258,7 +351,7 @@ impl DesktopSession {
 
         audio.play(song_dir, song, self.engine.position_seconds(), start_reason)?;
         self.engine.play()?;
-        self.started_at = Some(Instant::now());
+        self.transport_clock.start_from(self.engine.position_seconds());
 
         Ok(self.snapshot())
     }
@@ -269,7 +362,7 @@ impl DesktopSession {
         audio.stop()?;
 
         self.engine.pause()?;
-        self.started_at = None;
+        self.transport_clock.pause_at(self.engine.position_seconds());
 
         Ok(self.snapshot())
     }
@@ -278,7 +371,7 @@ impl DesktopSession {
         audio.stop()?;
 
         self.engine.stop()?;
-        self.started_at = None;
+        self.transport_clock.stop();
 
         Ok(self.snapshot())
     }
@@ -293,7 +386,7 @@ impl DesktopSession {
         audio.stop()?;
 
         self.engine.seek(position_seconds)?;
-        self.started_at = None;
+        self.transport_clock.seek_to(self.engine.position_seconds());
 
         if was_playing {
             return self.play_with_reason(audio, PlaybackStartReason::Seek);
@@ -314,9 +407,14 @@ impl DesktopSession {
         self.engine
             .schedule_section_jump(target_section_id, trigger.clone())?;
 
-        if was_playing && trigger == JumpTrigger::Immediate {
-            self.restart_audio(audio, PlaybackStartReason::ImmediateJump)?;
-            self.started_at = Some(Instant::now());
+        if trigger == JumpTrigger::Immediate {
+            if was_playing {
+                self.restart_audio(audio, PlaybackStartReason::ImmediateJump)?;
+                self.transport_clock
+                    .note_jump_while_playing(self.engine.position_seconds());
+            } else {
+                self.transport_clock.seek_to(self.engine.position_seconds());
+            }
         }
 
         Ok(self.snapshot())
@@ -730,7 +828,7 @@ impl DesktopSession {
     ) -> Result<(), DesktopError> {
         audio.stop()?;
 
-        self.started_at = None;
+        self.transport_clock.stop();
         self.song_dir = Some(song_dir);
         self.engine.load_song(song)?;
 
@@ -756,7 +854,7 @@ impl DesktopSession {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         audio.play(song_dir, song, self.engine.position_seconds(), reason)?;
         self.engine.play()?;
-        self.started_at = Some(Instant::now());
+        self.transport_clock.start_from(self.engine.position_seconds());
 
         Ok(self.snapshot())
     }
@@ -816,14 +914,15 @@ impl DesktopSession {
                         self.restart_audio(audio, PlaybackStartReason::StructureRebuild)?
                     }
                 }
-                self.started_at = Some(Instant::now());
+                self.transport_clock
+                    .reanchor_playing(self.engine.position_seconds());
             }
             PlaybackState::Paused => {
                 self.engine.pause()?;
-                self.started_at = None;
+                self.transport_clock.pause_at(self.engine.position_seconds());
             }
             PlaybackState::Stopped | PlaybackState::Empty => {
-                self.started_at = None;
+                self.transport_clock.pause_at(self.engine.position_seconds());
             }
         }
 
@@ -831,20 +930,10 @@ impl DesktopSession {
     }
 
     fn current_position(&self) -> f64 {
-        let base = self.engine.position_seconds();
-        if self.engine.playback_state() != PlaybackState::Playing {
-            return base;
-        }
-
-        let elapsed = self
-            .started_at
-            .map(|started_at| started_at.elapsed().as_secs_f64())
-            .unwrap_or(0.0);
-
-        match self.engine.song() {
-            Some(song) => (base + elapsed).min(song.duration_seconds),
-            None => base,
-        }
+        self.transport_clock.current_position(
+            self.engine.playback_state(),
+            self.engine.song().map(|song| song.duration_seconds),
+        )
     }
 
     fn sync_position(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
@@ -852,33 +941,32 @@ impl DesktopSession {
             return Ok(());
         }
 
-        let base_position = self.engine.position_seconds();
-        let elapsed = self
-            .started_at
-            .map(|started_at| started_at.elapsed().as_secs_f64())
-            .unwrap_or(0.0);
-        let linear_position = base_position + elapsed;
         let song_duration = self
             .engine
             .song()
             .map(|song| song.duration_seconds)
             .ok_or(DesktopError::NoSongLoaded)?;
+        let linear_position = self
+            .transport_clock
+            .current_position(PlaybackState::Playing, Some(song_duration));
 
         if linear_position >= song_duration {
             audio.stop()?;
             self.engine.stop()?;
-            self.started_at = None;
+            self.transport_clock.stop();
             return Ok(());
         }
 
+        let elapsed = self.transport_clock.elapsed_since_anchor();
         let advanced_position = self.engine.advance_transport(elapsed)?;
         let jump_executed = (advanced_position - linear_position).abs() > 0.001;
 
         if jump_executed {
             self.restart_audio(audio, PlaybackStartReason::TransportResync)?;
+            self.transport_clock.note_jump_while_playing(advanced_position);
+        } else {
+            self.transport_clock.reanchor_playing(advanced_position);
         }
-
-        self.started_at = Some(Instant::now());
 
         Ok(())
     }
@@ -901,6 +989,7 @@ impl DesktopSession {
                 .engine
                 .pending_section_jump()
                 .map(pending_jump_to_summary),
+            transport_clock: self.transport_clock.summary(),
             song_dir: self
                 .song_dir
                 .as_ref()
@@ -1215,14 +1304,14 @@ fn humanize(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, thread, time::Duration};
 
     use libretracks_audio::{JumpTrigger, PlaybackState};
     use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackGroup};
     use libretracks_project::{create_song_folder, load_song};
     use tempfile::tempdir;
 
-    use super::DesktopSession;
+    use super::{DesktopSession, TransportClock};
 
     fn demo_song() -> Song {
         Song {
@@ -1274,6 +1363,83 @@ mod tests {
             end_seconds: 4.0,
         });
         song
+    }
+
+    #[test]
+    fn transport_clock_advances_only_while_running() {
+        let mut clock = TransportClock::default();
+        clock.start_from(1.25);
+
+        thread::sleep(Duration::from_millis(20));
+        let running_position = clock.current_position(PlaybackState::Playing, Some(8.0));
+        assert!(running_position > 1.25);
+
+        clock.pause_at(running_position);
+        thread::sleep(Duration::from_millis(20));
+
+        let paused_position = clock.current_position(PlaybackState::Paused, Some(8.0));
+        assert!((paused_position - running_position).abs() < 0.02);
+    }
+
+    #[test]
+    fn transport_clock_seek_reanchors_without_accumulating_old_elapsed_time() {
+        let mut clock = TransportClock::default();
+        clock.start_from(0.5);
+
+        thread::sleep(Duration::from_millis(12));
+        let advanced_position = clock.current_position(PlaybackState::Playing, Some(8.0));
+        assert!(advanced_position > 0.5);
+
+        clock.seek_to(3.0);
+        thread::sleep(Duration::from_millis(12));
+
+        let seek_position = clock.current_position(PlaybackState::Paused, Some(8.0));
+        assert!((seek_position - 3.0).abs() < 0.001);
+
+        clock.start_from(seek_position);
+        thread::sleep(Duration::from_millis(12));
+        let resumed_position = clock.current_position(PlaybackState::Playing, Some(8.0));
+        assert!(resumed_position > 3.0);
+        assert!(resumed_position < 3.2);
+    }
+
+    #[test]
+    fn snapshot_exposes_transport_clock_summary_after_immediate_jump() {
+        let mut session = DesktopSession::default();
+        session
+            .engine
+            .load_song(demo_song_with_section())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .schedule_section_jump("section_1", JumpTrigger::Immediate, &audio)
+            .expect("immediate jump should execute");
+
+        assert_eq!(snapshot.transport_clock.anchor_position_seconds, 1.0);
+        assert_eq!(snapshot.transport_clock.last_seek_position_seconds, Some(1.0));
+        assert_eq!(snapshot.transport_clock.last_start_position_seconds, None);
+        assert_eq!(snapshot.transport_clock.last_jump_position_seconds, None);
+        assert!(!snapshot.transport_clock.running);
+    }
+
+    #[test]
+    fn snapshot_exposes_transport_clock_summary_after_seek() {
+        let mut session = DesktopSession::default();
+        session
+            .engine
+            .load_song(demo_song())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session.seek(2.75, &audio).expect("seek should succeed");
+
+        assert_eq!(snapshot.position_seconds, 2.75);
+        assert_eq!(snapshot.transport_clock.anchor_position_seconds, 2.75);
+        assert_eq!(snapshot.transport_clock.last_seek_position_seconds, Some(2.75));
+        assert_eq!(snapshot.transport_clock.last_start_position_seconds, None);
+        assert_eq!(snapshot.transport_clock.last_jump_position_seconds, None);
+        assert!(!snapshot.transport_clock.running);
     }
 
     #[test]
