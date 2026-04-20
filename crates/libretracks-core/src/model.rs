@@ -20,9 +20,15 @@ pub struct Song {
     pub time_signature: String,
     pub duration_seconds: f64,
     pub tracks: Vec<Track>,
-    pub groups: Vec<TrackGroup>,
     pub clips: Vec<Clip>,
     pub sections: Vec<Section>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TrackKind {
+    Audio,
+    Folder,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -30,21 +36,12 @@ pub struct Song {
 pub struct Track {
     pub id: String,
     pub name: String,
-    pub group_id: Option<String>,
+    pub kind: TrackKind,
+    pub parent_track_id: Option<String>,
     pub volume: f64,
     pub pan: f64,
     pub muted: bool,
     pub solo: bool,
-    pub output_bus_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct TrackGroup {
-    pub id: String,
-    pub name: String,
-    pub volume: f64,
-    pub muted: bool,
     pub output_bus_id: String,
 }
 

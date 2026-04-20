@@ -1,6 +1,6 @@
 //! Motor de audio y transporte.
 
-use libretracks_core::{validate_song, Clip, DomainError, Section, Song, Track, TrackGroup};
+use libretracks_core::{validate_song, Clip, DomainError, Section, Song, Track, TrackKind};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -240,25 +240,7 @@ impl AudioEngine {
 
     pub fn effective_track_gain(&self, track_id: &str) -> Result<f64, AudioEngineError> {
         let song = self.ensure_song_loaded()?;
-        let track = find_track(song, track_id)?;
-
-        if track.muted {
-            return Ok(0.0);
-        }
-
-        let group_gain = match track.group_id.as_deref() {
-            Some(group_id) => {
-                let group = find_group(song, group_id)?;
-                if group.muted {
-                    0.0
-                } else {
-                    group.volume
-                }
-            }
-            None => 1.0,
-        };
-
-        Ok(track.volume * group_gain)
+        effective_track_gain(song, track_id)
     }
 
     fn ensure_song_loaded(&self) -> Result<&Song, AudioEngineError> {
@@ -276,13 +258,6 @@ fn find_track<'a>(song: &'a Song, track_id: &str) -> Result<&'a Track, AudioEngi
         .iter()
         .find(|track| track.id == track_id)
         .ok_or_else(|| AudioEngineError::TrackNotFound(track_id.to_string()))
-}
-
-fn find_group<'a>(song: &'a Song, group_id: &str) -> Result<&'a TrackGroup, AudioEngineError> {
-    song.groups
-        .iter()
-        .find(|group| group.id == group_id)
-        .ok_or_else(|| AudioEngineError::TrackNotFound(group_id.to_string()))
 }
 
 fn find_section<'a>(song: &'a Song, section_id: &str) -> Result<&'a Section, AudioEngineError> {
@@ -347,9 +322,35 @@ fn parse_time_signature(time_signature: &str) -> Result<(u32, u32), AudioEngineE
     Ok((numerator, denominator))
 }
 
+fn effective_track_gain(song: &Song, track_id: &str) -> Result<f64, AudioEngineError> {
+    let track = find_track(song, track_id)?;
+    if track.muted {
+        return Ok(0.0);
+    }
+
+    let mut gain = track.volume;
+    let mut cursor = track.parent_track_id.as_deref();
+
+    while let Some(parent_track_id) = cursor {
+        let parent_track = find_track(song, parent_track_id)?;
+        if parent_track.kind != TrackKind::Folder {
+            return Err(AudioEngineError::TrackNotFound(parent_track_id.to_string()));
+        }
+
+        if parent_track.muted {
+            return Ok(0.0);
+        }
+
+        gain *= parent_track.volume;
+        cursor = parent_track.parent_track_id.as_deref();
+    }
+
+    Ok(gain)
+}
+
 #[cfg(test)]
 mod tests {
-    use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackGroup};
+    use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
 
     use crate::{AudioEngine, JumpTrigger, PlaybackState};
 
@@ -364,9 +365,21 @@ mod tests {
             duration_seconds: 20.0,
             tracks: vec![
                 Track {
+                    id: "folder_monitor".into(),
+                    name: "Click + Guide".into(),
+                    kind: TrackKind::Folder,
+                    parent_track_id: None,
+                    volume: 0.5,
+                    pan: 0.0,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Monitor.id(),
+                },
+                Track {
                     id: "track_click".into(),
                     name: "Click".into(),
-                    group_id: Some("group_monitor".into()),
+                    kind: TrackKind::Audio,
+                    parent_track_id: Some("folder_monitor".into()),
                     volume: 0.8,
                     pan: 0.0,
                     muted: false,
@@ -374,29 +387,25 @@ mod tests {
                     output_bus_id: OutputBus::Monitor.id(),
                 },
                 Track {
-                    id: "track_drums".into(),
-                    name: "Drums".into(),
-                    group_id: Some("group_main".into()),
-                    volume: 0.5,
+                    id: "folder_main".into(),
+                    name: "Drums + Bass".into(),
+                    kind: TrackKind::Folder,
+                    parent_track_id: None,
+                    volume: 0.7,
                     pan: 0.0,
                     muted: false,
                     solo: false,
                     output_bus_id: OutputBus::Main.id(),
                 },
-            ],
-            groups: vec![
-                TrackGroup {
-                    id: "group_monitor".into(),
-                    name: "Click + Guide".into(),
+                Track {
+                    id: "track_drums".into(),
+                    name: "Drums".into(),
+                    kind: TrackKind::Audio,
+                    parent_track_id: Some("folder_main".into()),
                     volume: 0.5,
+                    pan: 0.0,
                     muted: false,
-                    output_bus_id: OutputBus::Monitor.id(),
-                },
-                TrackGroup {
-                    id: "group_main".into(),
-                    name: "Drums + Bass".into(),
-                    volume: 0.7,
-                    muted: false,
+                    solo: false,
                     output_bus_id: OutputBus::Main.id(),
                 },
             ],
@@ -651,9 +660,9 @@ mod tests {
     }
 
     #[test]
-    fn group_mute_mutes_its_tracks() {
+    fn muted_folder_mutes_its_tracks() {
         let mut song = demo_song();
-        song.groups[0].muted = true;
+        song.tracks[0].muted = true;
 
         let mut engine = AudioEngine::new();
         engine.load_song(song).expect("song should load");
@@ -662,7 +671,7 @@ mod tests {
     }
 
     #[test]
-    fn final_gain_is_track_times_group() {
+    fn final_gain_inherits_folder_gain() {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
 

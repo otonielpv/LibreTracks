@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use libretracks_core::{Clip, Song};
+use libretracks_core::{Clip, Song, TrackKind};
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use serde::Serialize;
 
@@ -782,24 +782,29 @@ fn resolve_track_clip_gain(
         return Ok(0.0);
     }
 
-    let group_gain = match track.group_id.as_deref() {
-        Some(group_id) => {
-            let group = song
-                .groups
-                .iter()
-                .find(|group| group.id == group_id)
-                .ok_or_else(|| DesktopError::GroupNotFound(group_id.to_string()))?;
+    let mut gain = track.volume;
+    let mut cursor = track.parent_track_id.as_deref();
 
-            if group.muted {
-                0.0
-            } else {
-                group.volume
-            }
+    while let Some(parent_track_id) = cursor {
+        let parent_track = song
+            .tracks
+            .iter()
+            .find(|track| track.id == parent_track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(parent_track_id.to_string()))?;
+
+        if parent_track.kind != TrackKind::Folder {
+            return Err(DesktopError::TrackNotFound(parent_track_id.to_string()));
         }
-        None => 1.0,
-    };
 
-    Ok(track.volume * group_gain * clip_gain)
+        if parent_track.muted {
+            return Ok(0.0);
+        }
+
+        gain *= parent_track.volume;
+        cursor = parent_track.parent_track_id.as_deref();
+    }
+
+    Ok(gain * clip_gain)
 }
 
 fn env_flag(name: &str) -> bool {
@@ -845,7 +850,7 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use libretracks_core::{OutputBus, Song, Track, TrackGroup};
+    use libretracks_core::{OutputBus, Song, Track, TrackKind};
     use rodio::Sink;
     use tempfile::tempdir;
 
@@ -867,9 +872,21 @@ mod tests {
             duration_seconds: 20.0,
             tracks: vec![
                 Track {
+                    id: "folder_monitor".into(),
+                    name: "Monitor".into(),
+                    kind: TrackKind::Folder,
+                    parent_track_id: None,
+                    volume: 0.5,
+                    pan: 0.0,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Monitor.id(),
+                },
+                Track {
                     id: "track_click".into(),
                     name: "Click".into(),
-                    group_id: Some("group_monitor".into()),
+                    kind: TrackKind::Audio,
+                    parent_track_id: Some("folder_monitor".into()),
                     volume: 0.8,
                     pan: 0.0,
                     muted: false,
@@ -877,29 +894,25 @@ mod tests {
                     output_bus_id: OutputBus::Monitor.id(),
                 },
                 Track {
-                    id: "track_drums".into(),
-                    name: "Drums".into(),
-                    group_id: Some("group_main".into()),
-                    volume: 0.5,
+                    id: "folder_main".into(),
+                    name: "Main".into(),
+                    kind: TrackKind::Folder,
+                    parent_track_id: None,
+                    volume: 0.7,
                     pan: 0.0,
                     muted: false,
                     solo: false,
                     output_bus_id: OutputBus::Main.id(),
                 },
-            ],
-            groups: vec![
-                TrackGroup {
-                    id: "group_monitor".into(),
-                    name: "Monitor".into(),
+                Track {
+                    id: "track_drums".into(),
+                    name: "Drums".into(),
+                    kind: TrackKind::Audio,
+                    parent_track_id: Some("folder_main".into()),
                     volume: 0.5,
+                    pan: 0.0,
                     muted: false,
-                    output_bus_id: OutputBus::Monitor.id(),
-                },
-                TrackGroup {
-                    id: "group_main".into(),
-                    name: "Main".into(),
-                    volume: 0.7,
-                    muted: false,
+                    solo: false,
                     output_bus_id: OutputBus::Main.id(),
                 },
             ],

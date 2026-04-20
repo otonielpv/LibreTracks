@@ -7,7 +7,7 @@ use std::{
 use libretracks_audio::{
     AudioEngine, AudioEngineError, JumpTrigger, PendingSectionJump, PlaybackState,
 };
-use libretracks_core::{Clip, OutputBus, Section, Song, TrackGroup};
+use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
 use libretracks_project::{
     create_song_folder, import_wav_song, load_song, load_waveform_summary, read_wav_metadata,
     save_song, ImportedSong, ProjectError, ProjectImportRequest,
@@ -148,14 +148,16 @@ pub enum DesktopError {
     ClipNotFound(String),
     #[error("track not found: {0}")]
     TrackNotFound(String),
-    #[error("group not found: {0}")]
-    GroupNotFound(String),
     #[error("section not found: {0}")]
     SectionNotFound(String),
     #[error("section range is invalid")]
     InvalidSectionRange,
     #[error("clip range is invalid")]
     InvalidClipRange,
+    #[error("track parent is invalid")]
+    InvalidTrackParent,
+    #[error("clip split point is invalid")]
+    InvalidSplitPoint,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -194,7 +196,6 @@ pub struct SongSummary {
     pub sections: Vec<SectionSummary>,
     pub clips: Vec<ClipSummary>,
     pub tracks: Vec<TrackSummary>,
-    pub groups: Vec<GroupSummary>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -202,18 +203,14 @@ pub struct SongSummary {
 pub struct TrackSummary {
     pub id: String,
     pub name: String,
-    pub group_name: Option<String>,
+    pub kind: String,
+    pub parent_track_id: Option<String>,
+    pub depth: usize,
+    pub has_children: bool,
     pub volume: f64,
+    pub pan: f64,
     pub muted: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GroupSummary {
-    pub id: String,
-    pub name: String,
-    pub volume: f64,
-    pub muted: bool,
+    pub solo: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -649,9 +646,12 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn create_group(
+    pub fn create_track(
         &mut self,
         name: &str,
+        kind: TrackKind,
+        insert_after_track_id: Option<&str>,
+        parent_track_id: Option<&str>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
@@ -662,27 +662,42 @@ impl DesktopSession {
         let trimmed_name = name.trim();
         if trimmed_name.is_empty() {
             return Err(DesktopError::AudioCommand(
-                "group name must not be empty".into(),
+                "track name must not be empty".into(),
             ));
         }
 
-        song.groups.push(TrackGroup {
-            id: format!("group_{}", timestamp_suffix()),
-            name: trimmed_name.to_string(),
-            volume: 1.0,
-            muted: false,
-            output_bus_id: OutputBus::Main.id(),
-        });
+        let output_bus_id = parent_track_id
+            .and_then(|parent_id| {
+                song.tracks
+                    .iter()
+                    .find(|track| track.id == parent_id)
+                    .map(|track| track.output_bus_id.clone())
+            })
+            .unwrap_or_else(|| OutputBus::Main.id());
 
-        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
+        let track = Track {
+            id: format!("track_{}", timestamp_suffix()),
+            name: trimmed_name.to_string(),
+            kind,
+            parent_track_id: parent_track_id.map(str::to_string),
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            output_bus_id,
+        };
+
+        insert_track(&mut song.tracks, track, insert_after_track_id, parent_track_id)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
 
         Ok(self.snapshot())
     }
 
-    pub fn assign_track_to_group(
+    pub fn move_track(
         &mut self,
         track_id: &str,
-        group_id: Option<&str>,
+        insert_after_track_id: Option<&str>,
+        parent_track_id: Option<&str>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
@@ -691,50 +706,70 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
-        if let Some(group_id) = group_id {
-            if !song.groups.iter().any(|group| group.id == group_id) {
-                return Err(DesktopError::GroupNotFound(group_id.to_string()));
+        reparent_track(
+            &mut song.tracks,
+            track_id,
+            insert_after_track_id,
+            parent_track_id,
+        )?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn update_track(
+        &mut self,
+        track_id: &str,
+        name: Option<&str>,
+        volume: Option<f64>,
+        pan: Option<f64>,
+        muted: Option<bool>,
+        solo: Option<bool>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let track = song
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+
+        if let Some(name) = name {
+            let trimmed_name = name.trim();
+            if trimmed_name.is_empty() {
+                return Err(DesktopError::AudioCommand(
+                    "track name must not be empty".into(),
+                ));
             }
+            track.name = trimmed_name.to_string();
         }
 
-        let track = song
-            .tracks
-            .iter_mut()
-            .find(|track| track.id == track_id)
-            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+        if let Some(volume) = volume {
+            track.volume = volume.clamp(0.0, 1.0);
+        }
 
-        track.group_id = group_id.map(std::string::ToString::to_string);
+        if let Some(pan) = pan {
+            track.pan = pan.clamp(-1.0, 1.0);
+        }
 
-        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
+        if let Some(muted) = muted {
+            track.muted = muted;
+        }
 
-        Ok(self.snapshot())
-    }
-
-    pub fn set_track_volume(
-        &mut self,
-        track_id: &str,
-        volume: f64,
-        audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        let track = song
-            .tracks
-            .iter_mut()
-            .find(|track| track.id == track_id)
-            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
-
-        track.volume = volume.clamp(0.0, 1.0);
+        if let Some(solo) = solo {
+            track.solo = solo;
+        }
 
         self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
 
         Ok(self.snapshot())
     }
 
-    pub fn toggle_track_mute(
+    pub fn delete_track(
         &mut self,
         track_id: &str,
         audio: &AudioController,
@@ -744,23 +779,23 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let track = song
-            .tracks
-            .iter_mut()
-            .find(|track| track.id == track_id)
-            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+        let deleted_track =
+            delete_track_and_repair_hierarchy(&mut song.tracks, track_id)?;
 
-        track.muted = !track.muted;
+        if deleted_track.kind == TrackKind::Audio {
+            song.clips.retain(|clip| clip.track_id != track_id);
+            refresh_song_duration(&mut song);
+        }
 
-        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
 
         Ok(self.snapshot())
     }
 
-    pub fn set_group_volume(
+    pub fn split_clip(
         &mut self,
-        group_id: &str,
-        volume: f64,
+        clip_id: &str,
+        split_seconds: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
@@ -768,38 +803,36 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let group = song
-            .groups
-            .iter_mut()
-            .find(|group| group.id == group_id)
-            .ok_or_else(|| DesktopError::GroupNotFound(group_id.to_string()))?;
+        let clip_index = song
+            .clips
+            .iter()
+            .position(|clip| clip.id == clip_id)
+            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
+        let clip = song.clips[clip_index].clone();
+        let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
 
-        group.volume = volume.clamp(0.0, 1.0);
+        if split_seconds <= clip.timeline_start_seconds || split_seconds >= clip_end {
+            return Err(DesktopError::InvalidSplitPoint);
+        }
 
-        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
+        let left_duration = split_seconds - clip.timeline_start_seconds;
+        let right_duration = clip_end - split_seconds;
 
-        Ok(self.snapshot())
-    }
+        let left_clip = Clip {
+            id: format!("clip_{}", timestamp_suffix()),
+            duration_seconds: left_duration,
+            ..clip.clone()
+        };
+        let right_clip = Clip {
+            id: format!("clip_{}", timestamp_suffix() + 1),
+            timeline_start_seconds: split_seconds,
+            source_start_seconds: clip.source_start_seconds + left_duration,
+            duration_seconds: right_duration,
+            ..clip
+        };
 
-    pub fn toggle_group_mute(
-        &mut self,
-        group_id: &str,
-        audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        let group = song
-            .groups
-            .iter_mut()
-            .find(|group| group.id == group_id)
-            .ok_or_else(|| DesktopError::GroupNotFound(group_id.to_string()))?;
-
-        group.muted = !group.muted;
-
-        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
+        song.clips.splice(clip_index..=clip_index, [left_clip, right_clip]);
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
 
         Ok(self.snapshot())
     }
@@ -1049,7 +1082,6 @@ fn build_empty_song(song_id: String, title: String) -> Song {
         time_signature: "4/4".into(),
         duration_seconds: 60.0,
         tracks: vec![],
-        groups: vec![],
         clips: vec![],
         sections: vec![],
     }
@@ -1095,6 +1127,201 @@ fn playback_state_label(state: PlaybackState) -> &'static str {
     }
 }
 
+fn track_kind_label(kind: TrackKind) -> &'static str {
+    match kind {
+        TrackKind::Audio => "audio",
+        TrackKind::Folder => "folder",
+    }
+}
+
+fn track_depth(song: &Song, track_id: &str) -> usize {
+    let mut depth = 0_usize;
+    let mut cursor = song
+        .tracks
+        .iter()
+        .find(|track| track.id == track_id)
+        .and_then(|track| track.parent_track_id.as_deref());
+
+    while let Some(parent_track_id) = cursor {
+        depth += 1;
+        cursor = song
+            .tracks
+            .iter()
+            .find(|track| track.id == parent_track_id)
+            .and_then(|track| track.parent_track_id.as_deref());
+    }
+
+    depth
+}
+
+fn insert_track(
+    tracks: &mut Vec<Track>,
+    track: Track,
+    insert_after_track_id: Option<&str>,
+    parent_track_id: Option<&str>,
+) -> Result<(), DesktopError> {
+    validate_track_parent(tracks, &track.id, parent_track_id)?;
+    let insert_index = resolve_insert_index(tracks, insert_after_track_id, parent_track_id)?;
+    tracks.insert(insert_index, track);
+    Ok(())
+}
+
+fn reparent_track(
+    tracks: &mut Vec<Track>,
+    track_id: &str,
+    insert_after_track_id: Option<&str>,
+    parent_track_id: Option<&str>,
+) -> Result<(), DesktopError> {
+    let (start, end) = track_subtree_bounds(tracks, track_id)?;
+    let mut moving_block = tracks.drain(start..end).collect::<Vec<_>>();
+    let root_track = moving_block
+        .first_mut()
+        .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+
+    validate_track_parent(tracks, track_id, parent_track_id)?;
+    if is_descendant_of(tracks, parent_track_id, track_id) {
+        return Err(DesktopError::InvalidTrackParent);
+    }
+
+    root_track.parent_track_id = parent_track_id.map(str::to_string);
+    let insert_index = resolve_insert_index(tracks, insert_after_track_id, parent_track_id)?;
+    tracks.splice(insert_index..insert_index, moving_block);
+    Ok(())
+}
+
+fn delete_track_and_repair_hierarchy(
+    tracks: &mut Vec<Track>,
+    track_id: &str,
+) -> Result<Track, DesktopError> {
+    let track_index = tracks
+        .iter()
+        .position(|track| track.id == track_id)
+        .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+    let deleted_track = tracks.remove(track_index);
+
+    if deleted_track.kind == TrackKind::Folder {
+        for track in tracks.iter_mut() {
+            if track.parent_track_id.as_deref() == Some(track_id) {
+                track.parent_track_id = deleted_track.parent_track_id.clone();
+            }
+        }
+    }
+
+    Ok(deleted_track)
+}
+
+fn resolve_insert_index(
+    tracks: &[Track],
+    insert_after_track_id: Option<&str>,
+    parent_track_id: Option<&str>,
+) -> Result<usize, DesktopError> {
+    if let Some(insert_after_track_id) = insert_after_track_id {
+        let (_, end) = track_subtree_bounds(tracks, insert_after_track_id)?;
+        return Ok(end);
+    }
+
+    if let Some(parent_track_id) = parent_track_id {
+        let (_, end) = track_subtree_bounds(tracks, parent_track_id)?;
+        return Ok(end);
+    }
+
+    Ok(tracks.len())
+}
+
+fn validate_track_parent(
+    tracks: &[Track],
+    track_id: &str,
+    parent_track_id: Option<&str>,
+) -> Result<(), DesktopError> {
+    let Some(parent_track_id) = parent_track_id else {
+        return Ok(());
+    };
+
+    if parent_track_id == track_id {
+        return Err(DesktopError::InvalidTrackParent);
+    }
+
+    let parent_track = tracks
+        .iter()
+        .find(|track| track.id == parent_track_id)
+        .ok_or(DesktopError::InvalidTrackParent)?;
+
+    if parent_track.kind != TrackKind::Folder {
+        return Err(DesktopError::InvalidTrackParent);
+    }
+
+    Ok(())
+}
+
+fn is_descendant_of(tracks: &[Track], candidate_parent_id: Option<&str>, track_id: &str) -> bool {
+    let Some(candidate_parent_id) = candidate_parent_id else {
+        return false;
+    };
+
+    if candidate_parent_id == track_id {
+        return true;
+    }
+
+    let mut cursor = tracks
+        .iter()
+        .find(|track| track.id == candidate_parent_id)
+        .and_then(|track| track.parent_track_id.as_deref());
+
+    while let Some(parent_track_id) = cursor {
+        if parent_track_id == track_id {
+            return true;
+        }
+
+        cursor = tracks
+            .iter()
+            .find(|track| track.id == parent_track_id)
+            .and_then(|track| track.parent_track_id.as_deref());
+    }
+
+    false
+}
+
+fn track_subtree_bounds(tracks: &[Track], track_id: &str) -> Result<(usize, usize), DesktopError> {
+    let start = tracks
+        .iter()
+        .position(|track| track.id == track_id)
+        .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+    let root_depth = track_depth_from_tracks(tracks, track_id)?;
+    let mut end = start + 1;
+
+    while end < tracks.len() {
+        let next_depth = track_depth_from_tracks(tracks, &tracks[end].id)?;
+        if next_depth <= root_depth {
+            break;
+        }
+        end += 1;
+    }
+
+    Ok((start, end))
+}
+
+fn track_depth_from_tracks(tracks: &[Track], track_id: &str) -> Result<usize, DesktopError> {
+    let mut depth = 0_usize;
+    let mut cursor = tracks
+        .iter()
+        .find(|track| track.id == track_id)
+        .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?
+        .parent_track_id
+        .as_deref();
+
+    while let Some(parent_track_id) = cursor {
+        depth += 1;
+        cursor = tracks
+            .iter()
+            .find(|track| track.id == parent_track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(parent_track_id.to_string()))?
+            .parent_track_id
+            .as_deref();
+    }
+
+    Ok(depth)
+}
+
 fn song_to_summary(song: &Song, song_dir: Option<&std::path::Path>) -> SongSummary {
     SongSummary {
         id: song.id.clone(),
@@ -1116,24 +1343,17 @@ fn song_to_summary(song: &Song, song_dir: Option<&std::path::Path>) -> SongSumma
             .map(|track| TrackSummary {
                 id: track.id.clone(),
                 name: track.name.clone(),
-                group_name: track.group_id.as_ref().and_then(|group_id| {
-                    song.groups
-                        .iter()
-                        .find(|group| &group.id == group_id)
-                        .map(|group| group.name.clone())
-                }),
+                kind: track_kind_label(track.kind).to_string(),
+                parent_track_id: track.parent_track_id.clone(),
+                depth: track_depth(song, &track.id),
+                has_children: song
+                    .tracks
+                    .iter()
+                    .any(|child| child.parent_track_id.as_deref() == Some(track.id.as_str())),
                 volume: track.volume,
+                pan: track.pan,
                 muted: track.muted,
-            })
-            .collect(),
-        groups: song
-            .groups
-            .iter()
-            .map(|group| GroupSummary {
-                id: group.id.clone(),
-                name: group.name.clone(),
-                volume: group.volume,
-                muted: group.muted,
+                solo: track.solo,
             })
             .collect(),
     }
@@ -1309,7 +1529,7 @@ mod tests {
     use std::{fs, path::Path, thread, time::Duration};
 
     use libretracks_audio::{JumpTrigger, PlaybackState};
-    use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackGroup};
+    use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
     use libretracks_project::{create_song_folder, load_song};
     use tempfile::tempdir;
 
@@ -1327,18 +1547,12 @@ mod tests {
             tracks: vec![Track {
                 id: "track_1".into(),
                 name: "Track 1".into(),
-                group_id: Some("group_main".into()),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
                 volume: 1.0,
                 pan: 0.0,
                 muted: false,
                 solo: false,
-                output_bus_id: OutputBus::Main.id(),
-            }],
-            groups: vec![TrackGroup {
-                id: "group_main".into(),
-                name: "Main".into(),
-                volume: 1.0,
-                muted: false,
                 output_bus_id: OutputBus::Main.id(),
             }],
             clips: vec![Clip {

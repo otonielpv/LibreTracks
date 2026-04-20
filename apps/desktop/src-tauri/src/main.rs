@@ -5,6 +5,7 @@ use tauri::{AppHandle, State};
 
 use audio_runtime::AudioDebugSnapshot;
 use libretracks_audio::JumpTrigger;
+use libretracks_core::TrackKind;
 use state::{DesktopError, DesktopState, TransportSnapshot};
 
 #[tauri::command]
@@ -289,21 +290,34 @@ fn delete_section(
 }
 
 #[tauri::command]
-fn create_group(name: String, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+fn create_track(
+    name: String,
+    kind: TrackKind,
+    insert_after_track_id: Option<String>,
+    parent_track_id: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .create_group(&name, &state.audio)
+        .create_track(
+            &name,
+            kind,
+            insert_after_track_id.as_deref(),
+            parent_track_id.as_deref(),
+            &state.audio,
+        )
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn assign_track_to_group(
+fn move_track(
     track_id: String,
-    group_id: Option<String>,
+    insert_after_track_id: Option<String>,
+    parent_track_id: Option<String>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -312,14 +326,23 @@ fn assign_track_to_group(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .assign_track_to_group(&track_id, group_id.as_deref(), &state.audio)
+        .move_track(
+            &track_id,
+            insert_after_track_id.as_deref(),
+            parent_track_id.as_deref(),
+            &state.audio,
+        )
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn set_track_volume(
+fn update_track(
     track_id: String,
-    volume: f64,
+    name: Option<String>,
+    volume: Option<f64>,
+    pan: Option<f64>,
+    muted: Option<bool>,
+    solo: Option<bool>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -328,12 +351,20 @@ fn set_track_volume(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .set_track_volume(&track_id, volume, &state.audio)
+        .update_track(
+            &track_id,
+            name.as_deref(),
+            volume,
+            pan,
+            muted,
+            solo,
+            &state.audio,
+        )
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn toggle_track_mute(
+fn delete_track(
     track_id: String,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
@@ -343,14 +374,14 @@ fn toggle_track_mute(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .toggle_track_mute(&track_id, &state.audio)
+        .delete_track(&track_id, &state.audio)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn set_group_volume(
-    group_id: String,
-    volume: f64,
+fn split_clip(
+    clip_id: String,
+    split_seconds: f64,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -359,22 +390,7 @@ fn set_group_volume(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .set_group_volume(&group_id, volume, &state.audio)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn toggle_group_mute(
-    group_id: String,
-    state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-
-    session
-        .toggle_group_mute(&group_id, &state.audio)
+        .split_clip(&clip_id, split_seconds, &state.audio)
         .map_err(|error| error.to_string())
 }
 
@@ -410,15 +426,14 @@ fn main() {
             delete_clip,
             update_clip_window,
             duplicate_clip,
+            split_clip,
             create_section,
             update_section,
             delete_section,
-            create_group,
-            assign_track_to_group,
-            set_track_volume,
-            toggle_track_mute,
-            set_group_volume,
-            toggle_group_mute
+            create_track,
+            move_track,
+            update_track,
+            delete_track
         ])
         .run(tauri::generate_context!())
         .expect("failed to run LibreTracks desktop application");

@@ -5,10 +5,11 @@ use std::{
 
 use libretracks_core::{validate_song, DomainError, Song};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 
 pub const SONG_FILE_NAME: &str = "song.json";
-const SONG_FORMAT_VERSION: u32 = 1;
+const SONG_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
@@ -28,6 +29,8 @@ pub enum ProjectError {
     Io(#[from] std::io::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("Este proyecto usa el formato anterior de grupos y no es compatible con la version actual")]
+    LegacyGroupFormatUnsupported,
     #[error("wav error: {0}")]
     Wav(#[from] hound::Error),
 }
@@ -80,6 +83,8 @@ pub fn save_song(song_dir: impl AsRef<Path>, song: &Song) -> Result<PathBuf, Pro
 
 pub fn load_song(song_dir: impl AsRef<Path>) -> Result<Song, ProjectError> {
     let json = fs::read_to_string(song_file_path(song_dir))?;
+    let raw_document: Value = serde_json::from_str(&json)?;
+    reject_legacy_group_format(&raw_document)?;
     let document: SongDocument = serde_json::from_str(&json)?;
 
     if document.version != SONG_FORMAT_VERSION {
@@ -89,4 +94,29 @@ pub fn load_song(song_dir: impl AsRef<Path>) -> Result<Song, ProjectError> {
     validate_song(&document.song)?;
 
     Ok(document.song)
+}
+
+fn reject_legacy_group_format(document: &Value) -> Result<(), ProjectError> {
+    let Some(object) = document.as_object() else {
+        return Ok(());
+    };
+
+    if object.contains_key("groups") {
+        return Err(ProjectError::LegacyGroupFormatUnsupported);
+    }
+
+    let Some(tracks) = object.get("tracks").and_then(Value::as_array) else {
+        return Ok(());
+    };
+
+    if tracks.iter().any(|track| {
+        track
+            .as_object()
+            .map(|track| track.contains_key("groupId") || track.contains_key("group_id"))
+            .unwrap_or(false)
+    }) {
+        return Err(ProjectError::LegacyGroupFormatUnsupported);
+    }
+
+    Ok(())
 }

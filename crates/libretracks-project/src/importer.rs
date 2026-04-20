@@ -5,7 +5,7 @@ use std::{
 };
 
 use hound::WavReader;
-use libretracks_core::{validate_song, Clip, OutputBus, Song, Track};
+use libretracks_core::{validate_song, Clip, OutputBus, Song, Track, TrackKind};
 
 use crate::{create_song_folder, generate_waveform_summary, save_song, ProjectError};
 
@@ -114,7 +114,8 @@ pub fn import_wav_song(
             .map(|file| Track {
                 id: file.track_id.clone(),
                 name: file.track_name.clone(),
-                group_id: None,
+                kind: TrackKind::Audio,
+                parent_track_id: None,
                 volume: 1.0,
                 pan: 0.0,
                 muted: false,
@@ -122,7 +123,6 @@ pub fn import_wav_song(
                 output_bus_id: OutputBus::Main.id(),
             })
             .collect(),
-        groups: vec![],
         clips: imported_files
             .iter()
             .map(|file| Clip {

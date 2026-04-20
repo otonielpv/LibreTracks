@@ -20,7 +20,7 @@ mod tests {
     use std::{fs, path::Path};
 
     use hound::{SampleFormat, WavSpec, WavWriter};
-    use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackGroup};
+    use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
     use tempfile::tempdir;
 
     use crate::{
@@ -40,18 +40,12 @@ mod tests {
             tracks: vec![Track {
                 id: "track_click".into(),
                 name: "Click".into(),
-                group_id: Some("group_monitor".into()),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
                 volume: 1.0,
                 pan: 0.0,
                 muted: false,
                 solo: false,
-                output_bus_id: OutputBus::Monitor.id(),
-            }],
-            groups: vec![TrackGroup {
-                id: "group_monitor".into(),
-                name: "Click + Guide".into(),
-                volume: 1.0,
-                muted: false,
                 output_bus_id: OutputBus::Monitor.id(),
             }],
             clips: vec![Clip {
@@ -108,7 +102,7 @@ mod tests {
         save_song(&song_dir, &demo_song()).expect("song should save");
 
         let json = fs::read_to_string(song_file_path(&song_dir)).expect("song file should exist");
-        assert!(json.contains("\"version\": 1"));
+        assert!(json.contains("\"version\": 2"));
         assert!(json.contains("\"timeSignature\""));
         assert!(json.contains("\"timelineStartSeconds\""));
     }
@@ -236,5 +230,53 @@ mod tests {
             ProjectError::UnsupportedAudioFormat { .. } => {}
             other => panic!("unexpected error: {other}"),
         }
+    }
+
+    #[test]
+    fn rejects_legacy_group_projects_with_a_clear_error() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "legacy-groups").expect("folder should be created");
+
+        fs::write(
+            song_file_path(&song_dir),
+            r#"{
+  "version": 1,
+  "id": "legacy",
+  "title": "Legacy Song",
+  "artist": null,
+  "bpm": 120.0,
+  "key": null,
+  "timeSignature": "4/4",
+  "durationSeconds": 10.0,
+  "tracks": [
+    {
+      "id": "track_1",
+      "name": "Track 1",
+      "groupId": "group_1",
+      "volume": 1.0,
+      "pan": 0.0,
+      "muted": false,
+      "solo": false,
+      "outputBusId": "main"
+    }
+  ],
+  "groups": [
+    {
+      "id": "group_1",
+      "name": "Old Group",
+      "volume": 1.0,
+      "muted": false,
+      "outputBusId": "main"
+    }
+  ],
+  "clips": [],
+  "sections": []
+}"#,
+        )
+        .expect("legacy song should be written");
+
+        let error = load_song(&song_dir).expect_err("legacy song should be rejected");
+        assert!(matches!(error, ProjectError::LegacyGroupFormatUnsupported));
     }
 }
