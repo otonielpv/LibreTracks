@@ -1365,6 +1365,17 @@ mod tests {
         song
     }
 
+    fn demo_song_with_two_sections() -> Song {
+        let mut song = demo_song_with_section();
+        song.sections.push(Section {
+            id: "section_2".into(),
+            name: "Verse".into(),
+            start_seconds: 4.0,
+            end_seconds: 8.0,
+        });
+        song
+    }
+
     #[test]
     fn transport_clock_advances_only_while_running() {
         let mut clock = TransportClock::default();
@@ -1674,6 +1685,63 @@ mod tests {
                 .name,
             "Intro"
         );
+    }
+
+    #[test]
+    fn transport_only_updates_preserve_pending_jump_when_target_survives() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "transport-only-pending-jump").expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir);
+        session
+            .engine
+            .load_song(demo_song_with_two_sections())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        session
+            .schedule_section_jump("section_2", JumpTrigger::SectionEnd, &audio)
+            .expect("jump should schedule");
+
+        let snapshot = session
+            .update_section("section_1", "Intro B", 1.0, 3.5, &audio)
+            .expect("section update should succeed");
+
+        let pending_jump = snapshot
+            .pending_section_jump
+            .expect("pending jump should survive transport-only change");
+        assert_eq!(pending_jump.target_section_id, "section_2");
+        assert_eq!(pending_jump.target_section_name, "Verse");
+        assert_eq!(pending_jump.trigger, "section_end");
+    }
+
+    #[test]
+    fn deleting_target_section_clears_pending_jump() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "delete-target-pending-jump").expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir);
+        session
+            .engine
+            .load_song(demo_song_with_two_sections())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        session
+            .schedule_section_jump("section_2", JumpTrigger::AfterBars(2), &audio)
+            .expect("jump should schedule");
+
+        let snapshot = session
+            .delete_section("section_2", &audio)
+            .expect("target section should delete");
+
+        assert!(snapshot.pending_section_jump.is_none());
     }
 
     #[test]
