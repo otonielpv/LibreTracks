@@ -174,4 +174,29 @@ describe("App", () => {
     expect(await screen.findByText(/track creado: nueva pista/i)).toBeTruthy();
     expect(screen.getByText("Nueva pista")).toBeTruthy();
   });
+
+  it("allows dragging a track into a folder track", async () => {
+    const { container } = await renderApp();
+
+    const keysHeader = screen.getByText("Keys").closest(".lt-track-header");
+    const guideHeader = screen.getByText("Guide").closest(".lt-track-header");
+    expect(keysHeader).toBeTruthy();
+    expect(guideHeader).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.dragStart(keysHeader as HTMLElement, {
+        dataTransfer: {
+          setData: vi.fn(),
+          effectAllowed: "move",
+        },
+      } as unknown as Event);
+    });
+
+    await act(async () => {
+      fireEvent.dragOver((guideHeader as HTMLElement).closest(".lt-track-row") as HTMLElement);
+      fireEvent.drop((guideHeader as HTMLElement).closest(".lt-track-row") as HTMLElement);
+    });
+
+    expect(await screen.findByText(/track movido dentro de guide/i)).toBeTruthy();
+  });
 });

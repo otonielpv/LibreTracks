@@ -64,6 +64,11 @@ type RulerDragState = {
   currentSeconds: number;
 } | null;
 
+type TrackDropState = {
+  targetTrackId: string;
+  mode: "after" | "inside-folder";
+} | null;
+
 type TimeSelection = {
   startSeconds: number;
   endSeconds: number;
@@ -252,10 +257,19 @@ export function TransportPanel() {
   const [rulerDrag, setRulerDrag] = useState<RulerDragState>(null);
   const [timeSelection, setTimeSelection] = useState<TimeSelection>(null);
   const [isTimelinePanning, setIsTimelinePanning] = useState(false);
+  const [displayPositionSeconds, setDisplayPositionSeconds] = useState(0);
+  const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
+  const [trackDropState, setTrackDropState] = useState<TrackDropState>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
   const rulerTrackRef = useRef<HTMLDivElement | null>(null);
   const timelineShellRef = useRef<HTMLDivElement | null>(null);
+  const playbackVisualAnchorRef = useRef({
+    anchorPositionSeconds: 0,
+    anchorReceivedAtMs: 0,
+    durationSeconds: 0,
+    running: false,
+  });
 
   useEffect(() => {
     let active = true;
@@ -295,6 +309,59 @@ export function TransportPanel() {
       window.clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    const songDurationSeconds = snapshot?.song?.durationSeconds ?? 0;
+    const anchorPositionSeconds =
+      snapshot?.playbackState === "playing" && snapshot.transportClock?.running
+        ? snapshot.transportClock.anchorPositionSeconds
+        : snapshot?.positionSeconds ?? 0;
+
+    playbackVisualAnchorRef.current = {
+      anchorPositionSeconds,
+      anchorReceivedAtMs: performance.now(),
+      durationSeconds: songDurationSeconds,
+      running: snapshot?.playbackState === "playing" && Boolean(snapshot.transportClock?.running),
+    };
+
+    if (snapshot?.playbackState !== "playing") {
+      setDisplayPositionSeconds(snapshot?.positionSeconds ?? 0);
+    }
+  }, [
+    snapshot?.playbackState,
+    snapshot?.positionSeconds,
+    snapshot?.song?.durationSeconds,
+    snapshot?.transportClock?.anchorPositionSeconds,
+    snapshot?.transportClock?.running,
+  ]);
+
+  useEffect(() => {
+    if (snapshot?.playbackState !== "playing") {
+      return;
+    }
+
+    let animationFrameId = 0;
+
+    const tick = () => {
+      const anchor = playbackVisualAnchorRef.current;
+      const elapsedSeconds = anchor.running
+        ? (performance.now() - anchor.anchorReceivedAtMs) / 1000
+        : 0;
+      const nextPositionSeconds = Math.min(
+        anchor.durationSeconds || Number.MAX_SAFE_INTEGER,
+        anchor.anchorPositionSeconds + elapsedSeconds,
+      );
+
+      setDisplayPositionSeconds(nextPositionSeconds);
+      animationFrameId = window.requestAnimationFrame(tick);
+    };
+
+    animationFrameId = window.requestAnimationFrame(tick);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [snapshot?.playbackState]);
 
   useEffect(() => {
     const closeMenu = () => setContextMenu(null);
@@ -496,7 +563,7 @@ export function TransportPanel() {
   }
 
   const song = snapshot?.song ?? null;
-  const positionSeconds = snapshot?.positionSeconds ?? 0;
+  const positionSeconds = displayPositionSeconds;
   const pixelsPerSecond = zoomLevel * 18;
   const timelineWidth = Math.max((song?.durationSeconds ?? 0) * pixelsPerSecond, 1100);
   const timelineRowWidth = HEADER_WIDTH + timelineWidth;
@@ -555,6 +622,37 @@ export function TransportPanel() {
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+  }
+
+  function resolveTrackDropMode(track: TrackSummary) {
+    return track.kind === "folder" ? "inside-folder" : "after";
+  }
+
+  async function handleTrackDrop(targetTrack: TrackSummary) {
+    if (!draggingTrackId || draggingTrackId === targetTrack.id) {
+      setDraggingTrackId(null);
+      setTrackDropState(null);
+      return;
+    }
+
+    const dropMode = resolveTrackDropMode(targetTrack);
+
+    await runAction(async () => {
+      const nextSnapshot = await moveTrack({
+        trackId: draggingTrackId,
+        insertAfterTrackId: dropMode === "after" ? targetTrack.id : null,
+        parentTrackId: dropMode === "inside-folder" ? targetTrack.id : targetTrack.parentTrackId ?? null,
+      });
+      setSnapshot(nextSnapshot);
+      setStatus(
+        dropMode === "inside-folder"
+          ? `Track movido dentro de ${targetTrack.name}.`
+          : `Track reordenado debajo de ${targetTrack.name}.`,
+      );
+    });
+
+    setDraggingTrackId(null);
+    setTrackDropState(null);
   }
 
   function openMenu(
@@ -679,8 +777,8 @@ export function TransportPanel() {
 
   function clipContextMenu(clip: ClipSummary) {
     const canSplit =
-      positionSeconds > clip.timelineStartSeconds &&
-      positionSeconds < clip.timelineStartSeconds + clip.durationSeconds;
+      displayPositionSeconds > clip.timelineStartSeconds &&
+      displayPositionSeconds < clip.timelineStartSeconds + clip.durationSeconds;
 
     return [
       {
@@ -688,9 +786,9 @@ export function TransportPanel() {
         disabled: !canSplit,
         onSelect: async () => {
           await runAction(async () => {
-            const nextSnapshot = await splitClip(clip.id, positionSeconds);
+            const nextSnapshot = await splitClip(clip.id, displayPositionSeconds);
             setSnapshot(nextSnapshot);
-            setStatus(`Clip cortado en ${formatClock(positionSeconds)}`);
+            setStatus(`Clip cortado en ${formatClock(displayPositionSeconds)}`);
           });
         },
       },
@@ -1000,18 +1098,51 @@ export function TransportPanel() {
               const trackClips = song.clips.filter((clip) => clip.trackId === track.id);
               const isTrackSelected = selectedTrackId === track.id;
               const childCount = trackChildrenCount(song, track.id);
+              const isDropTarget = trackDropState?.targetTrackId === track.id;
+              const dropMode = isDropTarget ? trackDropState?.mode : null;
 
               return (
                 <div
                   key={track.id}
-                  className="lt-track-row"
+                  className={`lt-track-row ${isDropTarget ? "is-drop-target" : ""}`}
                   style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${timelineWidth}px` }}
+                  onDragOver={(event) => {
+                    if (!draggingTrackId || draggingTrackId === track.id) {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    setTrackDropState({
+                      targetTrackId: track.id,
+                      mode: resolveTrackDropMode(track),
+                    });
+                  }}
+                  onDragLeave={() => {
+                    setTrackDropState((current) =>
+                      current?.targetTrackId === track.id ? null : current,
+                    );
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    void handleTrackDrop(track);
+                  }}
                 >
                   <div
-                    className={`lt-track-header ${isTrackSelected ? "is-selected" : ""} ${track.kind === "folder" ? "is-folder" : ""}`}
+                    className={`lt-track-header ${isTrackSelected ? "is-selected" : ""} ${track.kind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""}`}
                     style={{ paddingLeft: 16 + track.depth * 22 }}
                     role="button"
                     tabIndex={0}
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", track.id);
+                      setDraggingTrackId(track.id);
+                      setTrackDropState(null);
+                    }}
+                    onDragEnd={() => {
+                      setDraggingTrackId(null);
+                      setTrackDropState(null);
+                    }}
                     onClick={() => {
                       setSelectedTrackId(track.id);
                       setSelectedClipId(null);
@@ -1053,6 +1184,11 @@ export function TransportPanel() {
                           ? `${childCount} hijos`
                           : `${trackClips.length} clips | pan ${track.pan.toFixed(2)}`}
                       </span>
+                      {isDropTarget ? (
+                        <span className="lt-track-drop-hint">
+                          {dropMode === "inside-folder" ? "Soltar para meter en folder" : "Soltar para reordenar"}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="lt-track-control-row">
