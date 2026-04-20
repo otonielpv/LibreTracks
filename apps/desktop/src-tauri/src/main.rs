@@ -176,6 +176,21 @@ fn move_clip(
 }
 
 #[tauri::command]
+fn delete_clip(
+    clip_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .delete_clip(&clip_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn create_section(
     start_seconds: f64,
     end_seconds: f64,
@@ -342,6 +357,7 @@ fn main() {
             schedule_section_jump,
             cancel_section_jump,
             move_clip,
+            delete_clip,
             create_section,
             update_section,
             delete_section,

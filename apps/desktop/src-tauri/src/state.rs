@@ -347,6 +347,28 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn delete_clip(
+        &mut self,
+        clip_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let clip_count = song.clips.len();
+        song.clips.retain(|clip| clip.id != clip_id);
+
+        if song.clips.len() == clip_count {
+            return Err(DesktopError::ClipNotFound(clip_id.to_string()));
+        }
+
+        self.persist_song_update(song, audio, SongUpdateKind::Timeline)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn create_section(
         &mut self,
         start_seconds: f64,
@@ -1139,6 +1161,36 @@ mod tests {
         assert_eq!(saved_song.sections.len(), 1);
         assert_eq!(saved_song.sections[0].start_seconds, 2.0);
         assert_eq!(saved_song.sections[0].end_seconds, 5.5);
+    }
+
+    #[test]
+    fn deleting_a_clip_updates_song_json_and_snapshot() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "clip-delete-demo").expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir.clone());
+        session
+            .engine
+            .load_song(demo_song())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .delete_clip("clip_1", &audio)
+            .expect("clip should delete");
+
+        assert!(snapshot
+            .song
+            .expect("song summary should exist")
+            .clips
+            .is_empty());
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        assert!(saved_song.clips.is_empty());
+        assert_eq!(session.engine.playback_state(), PlaybackState::Stopped);
     }
 
     #[test]

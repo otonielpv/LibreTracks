@@ -280,6 +280,32 @@ export async function moveClip(
   });
 }
 
+export async function deleteClip(clipId: string): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const song = demoSnapshot.song;
+    if (!song) {
+      return cloneSnapshot(demoSnapshot);
+    }
+
+    const clips = song.clips.filter((clip) => clip.id !== clipId);
+    if (clips.length === song.clips.length) {
+      throw new Error(`No existe el clip ${clipId}.`);
+    }
+
+    demoSnapshot = {
+      ...demoSnapshot,
+      song: {
+        ...song,
+        clips,
+      },
+    };
+
+    return cloneSnapshot(demoSnapshot);
+  }
+
+  return invokeCommand<TransportSnapshot>("delete_clip", { clipId });
+}
+
 export async function createSection(args: {
   startSeconds: number;
   endSeconds: number;
