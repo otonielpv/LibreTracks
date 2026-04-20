@@ -5,6 +5,7 @@ import {
   createGroup,
   createSection,
   createSong,
+  deleteSection,
   getTransportSnapshot,
   isTauriApp,
   moveClip,
@@ -20,6 +21,7 @@ import {
   stopTransport,
   toggleGroupMute,
   toggleTrackMute,
+  updateSection,
   type ClipSummary,
   type PendingJumpSummary,
   type SectionSummary,
@@ -60,6 +62,9 @@ export function TransportPanel() {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [clipStartDraft, setClipStartDraft] = useState("0.00");
+  const [sectionNameDraft, setSectionNameDraft] = useState("");
+  const [sectionStartDraft, setSectionStartDraft] = useState("0.00");
+  const [sectionEndDraft, setSectionEndDraft] = useState("0.00");
   const [sectionSelectionMode, setSectionSelectionMode] = useState(false);
   const [sectionDraft, setSectionDraft] = useState<SectionDraft | null>(null);
   const [timelineDrag, setTimelineDrag] = useState<TimelineDragState>(null);
@@ -181,6 +186,19 @@ export function TransportPanel() {
 
     setClipStartDraft(previewStart.toFixed(2));
   }, [clipDrag, selectedClip]);
+
+  useEffect(() => {
+    if (!selectedSection) {
+      setSectionNameDraft("");
+      setSectionStartDraft("0.00");
+      setSectionEndDraft("0.00");
+      return;
+    }
+
+    setSectionNameDraft(selectedSection.name);
+    setSectionStartDraft(selectedSection.startSeconds.toFixed(2));
+    setSectionEndDraft(selectedSection.endSeconds.toFixed(2));
+  }, [selectedSection]);
 
   useEffect(() => {
     if (!sections.length) {
@@ -387,6 +405,66 @@ export function TransportPanel() {
       );
     } catch (error) {
       setStatus(`No se pudo crear la seccion: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleApplySectionChanges = async () => {
+    if (!selectedSection) {
+      return;
+    }
+
+    const parsedStart = Number(sectionStartDraft);
+    const parsedEnd = Number(sectionEndDraft);
+    if (Number.isNaN(parsedStart) || Number.isNaN(parsedEnd)) {
+      setStatus("El rango de la seccion no es valido.");
+      return;
+    }
+
+    setIsBusy(true);
+
+    try {
+      const nextSnapshot = await updateSection({
+        sectionId: selectedSection.id,
+        name: sectionNameDraft,
+        startSeconds: parsedStart,
+        endSeconds: parsedEnd,
+      });
+      const updatedSection =
+        nextSnapshot.song?.sections.find((section) => section.id === selectedSection.id) ?? null;
+
+      setSnapshot(nextSnapshot);
+      setSectionDraft(null);
+      setSelectedSectionId(selectedSection.id);
+      setJumpTargetSectionId(selectedSection.id);
+      setStatus(`Seccion actualizada: ${updatedSection?.name ?? sectionNameDraft.trim()}.`);
+    } catch (error) {
+      setStatus(`No se pudo actualizar la seccion: ${String(error)}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleDeleteSelectedSection = async () => {
+    if (!selectedSection) {
+      return;
+    }
+
+    setIsBusy(true);
+
+    try {
+      const deletedSectionName = selectedSection.name;
+      const nextSnapshot = await deleteSection(selectedSection.id);
+      const fallbackSectionId = nextSnapshot.song?.sections[0]?.id ?? null;
+
+      setSnapshot(nextSnapshot);
+      setSelectedSectionId(null);
+      setSectionDraft(null);
+      setJumpTargetSectionId(fallbackSectionId);
+      setStatus(`Seccion eliminada: ${deletedSectionName}.`);
+    } catch (error) {
+      setStatus(`No se pudo borrar la seccion: ${String(error)}`);
     } finally {
       setIsBusy(false);
     }
@@ -921,7 +999,7 @@ export function TransportPanel() {
                   style={{ width: `${Math.max(zoomLevel * 100, 100)}%` }}
                 >
                   <div className="timeline-ruler">
-                    <div className="timeline-sections-layer" aria-hidden="true">
+                    <div className="timeline-sections-layer">
                       {sections.map((section) => (
                         <button
                           aria-pressed={selectedSectionId === section.id}
@@ -934,6 +1012,7 @@ export function TransportPanel() {
                           style={sectionStyle(section, durationSeconds)}
                           type="button"
                           onClick={() => {
+                            setSelectedClipId(null);
                             setSelectedSectionId(section.id);
                             setJumpTargetSectionId(section.id);
                             setSectionDraft(null);
@@ -1108,6 +1187,50 @@ export function TransportPanel() {
                     {formatClock(selectedSection.startSeconds)} {"->"}{" "}
                     {formatClock(selectedSection.endSeconds)}
                   </p>
+                  <div className="context-fields">
+                    <label className="compact-field">
+                      <span>Nombre</span>
+                      <input
+                        aria-label="Nombre de la seccion"
+                        disabled={isBusy}
+                        type="text"
+                        value={sectionNameDraft}
+                        onChange={(event) => {
+                          setSectionNameDraft(event.target.value);
+                        }}
+                      />
+                    </label>
+
+                    <label className="compact-field">
+                      <span>Inicio (s)</span>
+                      <input
+                        aria-label="Inicio de la seccion en segundos"
+                        disabled={isBusy}
+                        min="0"
+                        step="0.01"
+                        type="number"
+                        value={sectionStartDraft}
+                        onChange={(event) => {
+                          setSectionStartDraft(event.target.value);
+                        }}
+                      />
+                    </label>
+
+                    <label className="compact-field">
+                      <span>Fin (s)</span>
+                      <input
+                        aria-label="Fin de la seccion en segundos"
+                        disabled={isBusy}
+                        min="0"
+                        step="0.01"
+                        type="number"
+                        value={sectionEndDraft}
+                        onChange={(event) => {
+                          setSectionEndDraft(event.target.value);
+                        }}
+                      />
+                    </label>
+                  </div>
                 </>
               ) : activeSectionDraft ? (
                 <>
@@ -1131,6 +1254,20 @@ export function TransportPanel() {
                   onClick={() => void handleCreateSection()}
                 >
                   Crear Seccion
+                </button>
+                <button
+                  disabled={!selectedSection || isBusy}
+                  type="button"
+                  onClick={() => void handleApplySectionChanges()}
+                >
+                  Aplicar cambios
+                </button>
+                <button
+                  disabled={!selectedSection || isBusy}
+                  type="button"
+                  onClick={() => void handleDeleteSelectedSection()}
+                >
+                  Borrar seccion
                 </button>
                 <button
                   disabled={!sectionDraft && !timelineDrag && !selectedSection}

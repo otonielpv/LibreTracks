@@ -71,6 +71,52 @@ describe("App", () => {
     expect((await screen.findAllByText("Nueva Cancion")).length).toBeGreaterThan(0);
   });
 
+  it("allows editing a section from the timeline context dock", async () => {
+    await renderApp();
+
+    const verseSection = await screen.findByRole("button", { name: "Verse" });
+    await act(async () => {
+      fireEvent.click(verseSection);
+    });
+
+    const nameField = await screen.findByLabelText(/nombre de la seccion/i);
+    const startField = await screen.findByLabelText(/inicio de la seccion en segundos/i);
+    const endField = await screen.findByLabelText(/fin de la seccion en segundos/i);
+
+    await act(async () => {
+      fireEvent.change(nameField, { target: { value: "Verse A" } });
+      fireEvent.change(startField, { target: { value: "36.00" } });
+      fireEvent.change(endField, { target: { value: "108.00" } });
+    });
+
+    const applyButton = await screen.findByRole("button", { name: /aplicar cambios/i });
+    await act(async () => {
+      fireEvent.click(applyButton);
+    });
+
+    expect(await screen.findByText(/seccion actualizada: verse a/i)).toBeTruthy();
+    expect(await screen.findByDisplayValue("Verse A")).toBeTruthy();
+    expect(await screen.findByDisplayValue("36.00")).toBeTruthy();
+    expect(await screen.findByDisplayValue("108.00")).toBeTruthy();
+  });
+
+  it("allows deleting a section from the timeline context dock", async () => {
+    await renderApp();
+
+    const chorusSection = await screen.findByRole("button", { name: "Chorus" });
+    await act(async () => {
+      fireEvent.click(chorusSection);
+    });
+
+    const deleteButton = await screen.findByRole("button", { name: /borrar seccion/i });
+    await act(async () => {
+      fireEvent.click(deleteButton);
+    });
+
+    expect(await screen.findByText(/seccion eliminada: chorus/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Chorus" })).toBeNull();
+  });
+
   it("creates a new group from the integrated submix controls", async () => {
     await renderApp();
 

@@ -732,6 +732,12 @@ input[type="range"] {
   color: var(--muted);
 }
 
+.context-fields {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .context-actions {
   align-items: end;
   display: flex;
@@ -769,6 +775,7 @@ input[type="range"] {
   .daw-topbar,
   .timeline-shell,
   .context-dock,
+  .context-fields,
   .overview-strip {
     grid-template-columns: 1fr;
   }

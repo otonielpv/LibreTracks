@@ -45,6 +45,7 @@ Estado a 20/04/2026:
 - ya hay cabeceras de pista integradas con controles de mezcla basica
 - ya existe barra contextual inferior para clip, seccion y salto
 - ya se pueden crear secciones desde el timeline
+- ya se pueden renombrar, borrar y ajustar rangos de seccion desde la barra contextual
 - ya se pueden programar saltos de seccion
 - ya existen grupos con volumen y mute
 
@@ -255,7 +256,8 @@ Las secciones deben sentirse como regiones musicales del timeline, no como datos
 
 - En progreso
 - Ya se dibujan regiones en la regla y se pueden seleccionar como destino de salto
-- Pendiente ajustar bordes, renombrar y borrar
+- Ya se pueden renombrar, borrar y ajustar rango desde contexto ligero
+- Pendiente arrastrar bordes directamente sobre la region
 
 ---
 
@@ -498,9 +500,9 @@ Esto no cierra fases nuevas del plan por si solo, pero si protege el principio d
 
 ```txt
 [x] Seleccionar seccion desde timeline
-[ ] Ajustar inicio/fin de seccion
-[ ] Renombrar seccion
-[ ] Borrar seccion
+[x] Ajustar inicio/fin de seccion
+[x] Renombrar seccion
+[x] Borrar seccion
 ```
 
 ### Milestone DAW 4 - Saltos visuales
