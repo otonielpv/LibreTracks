@@ -2092,15 +2092,28 @@ function ClipFace({ clip }: { clip: ClipSummary }) {
       </div>
       <div className="clip-waveform" aria-hidden="true">
         {clip.waveformPeaks.length > 0 ? (
-          clip.waveformPeaks.map((peak, index) => (
-            <span
-              className="waveform-bar"
-              key={`${clip.id}-${index}`}
-              style={{ height: `${Math.max(peak * 100, 6)}%` }}
+          <svg
+            className="clip-waveform-svg"
+            preserveAspectRatio="none"
+            viewBox="0 0 160 36"
+          >
+            <path
+              className="clip-waveform-fill"
+              d={buildWaveformAreaPath(clip.waveformPeaks, 160, 36)}
             />
-          ))
+            <path
+              className="clip-waveform-line"
+              d={buildWaveformLinePath(clip.waveformPeaks, 160, 36)}
+            />
+          </svg>
         ) : (
-          <span className="waveform-empty" />
+          <svg
+            className="clip-waveform-svg is-empty"
+            preserveAspectRatio="none"
+            viewBox="0 0 160 36"
+          >
+            <path className="waveform-empty-line" d="M 0 18 L 160 18" />
+          </svg>
         )}
       </div>
     </>
@@ -2144,6 +2157,48 @@ function clipDisplayName(clip: ClipSummary) {
   const fileName = pathSegments[pathSegments.length - 1] ?? clip.trackName;
   const stem = fileName.replace(/\.[^.]+$/, "");
   return stem || clip.trackName;
+}
+
+function buildWaveformLinePath(peaks: number[], width: number, height: number) {
+  if (peaks.length === 0) {
+    return "";
+  }
+
+  const centerY = height / 2;
+  const amplitude = height * 0.44;
+
+  return peaks
+    .map((peak, index) => {
+      const ratio = peaks.length === 1 ? 0 : index / (peaks.length - 1);
+      const x = Number((ratio * width).toFixed(2));
+      const y = Number((centerY - clamp(peak, 0, 1) * amplitude).toFixed(2));
+      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
+    })
+    .join(" ");
+}
+
+function buildWaveformAreaPath(peaks: number[], width: number, height: number) {
+  if (peaks.length === 0) {
+    return "";
+  }
+
+  const centerY = height / 2;
+  const amplitude = height * 0.44;
+  const topPoints = peaks.map((peak, index) => {
+    const ratio = peaks.length === 1 ? 0 : index / (peaks.length - 1);
+    const x = Number((ratio * width).toFixed(2));
+    const y = Number((centerY - clamp(peak, 0, 1) * amplitude).toFixed(2));
+    return `${x} ${y}`;
+  });
+  const bottomPoints = [...peaks].reverse().map((peak, reverseIndex) => {
+    const index = peaks.length - 1 - reverseIndex;
+    const ratio = peaks.length === 1 ? 0 : index / (peaks.length - 1);
+    const x = Number((ratio * width).toFixed(2));
+    const y = Number((centerY + clamp(peak, 0, 1) * amplitude).toFixed(2));
+    return `${x} ${y}`;
+  });
+
+  return `M ${topPoints[0]} L ${topPoints.slice(1).join(" L ")} L ${bottomPoints.join(" L ")} Z`;
 }
 
 function normalizeRange(startSeconds: number, endSeconds: number): SectionDraft {

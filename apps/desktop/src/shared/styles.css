@@ -18,6 +18,8 @@
   --mint-soft: rgba(71, 214, 163, 0.18);
   --danger: #ff8a7a;
   --shadow: 0 22px 48px rgba(0, 0, 0, 0.34);
+  --timeline-track-height: 5.25rem;
+  --timeline-clip-inset: 0.38rem;
 }
 
 * {
@@ -427,9 +429,10 @@ input[type="range"] {
   border: 1px solid var(--line);
   border-radius: 18px;
   display: grid;
-  gap: 0.75rem;
-  min-height: 6.2rem;
-  padding: 0.95rem;
+  gap: 0.45rem;
+  min-height: var(--timeline-track-height);
+  padding: 0.72rem 0.8rem;
+  align-content: center;
 }
 
 .track-header-card.is-selected {
@@ -451,7 +454,25 @@ input[type="range"] {
 
 .track-header-top p {
   color: var(--muted);
-  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  margin-top: 0.14rem;
+}
+
+.track-header-card button {
+  padding: 0.48rem 0.72rem;
+}
+
+.track-header-card .compact-slider {
+  gap: 0.22rem;
+}
+
+.track-header-card .compact-slider span {
+  font-size: 0.76rem;
+}
+
+.track-header-card input,
+.track-header-card select {
+  padding: 0.42rem 0.58rem;
 }
 
 .timeline-scroll {
@@ -659,10 +680,10 @@ input[type="range"] {
       transparent calc(12.5% - 1px),
       rgba(130, 162, 185, 0.14) calc(12.5% - 1px),
       rgba(130, 162, 185, 0.14) 12.5%
-    );
+  );
   border: 1px solid var(--line);
   border-radius: 18px;
-  min-height: 6.2rem;
+  min-height: var(--timeline-track-height);
   overflow: hidden;
   position: relative;
 }
@@ -688,7 +709,7 @@ input[type="range"] {
   color: #2a1202;
   display: flex;
   gap: 0.5rem;
-  inset-block: 0.55rem;
+  inset-block: var(--timeline-clip-inset);
   min-width: 3rem;
   overflow: hidden;
   position: absolute;
@@ -698,9 +719,9 @@ input[type="range"] {
 .clip-body {
   display: grid;
   flex: 1 1 auto;
-  gap: 0.5rem;
+  gap: 0.35rem;
   min-width: 0;
-  padding: 0.55rem 0.25rem;
+  padding: 0.45rem 0.28rem;
   text-align: left;
 }
 
@@ -778,25 +799,36 @@ input[type="range"] {
 }
 
 .clip-waveform {
-  align-items: center;
+  align-items: stretch;
   display: flex;
-  gap: 1px;
   inset-inline: 0;
-  min-height: 2.1rem;
+  min-height: 2rem;
 }
 
-.waveform-bar {
-  background: rgba(42, 18, 2, 0.68);
-  border-radius: 999px;
-  flex: 1 1 0;
-  min-width: 1px;
-}
-
-.waveform-empty {
-  background: rgba(42, 18, 2, 0.18);
-  border-radius: 999px;
-  height: 35%;
+.clip-waveform-svg {
+  display: block;
+  height: 100%;
+  overflow: visible;
   width: 100%;
+}
+
+.clip-waveform-fill {
+  fill: rgba(42, 18, 2, 0.2);
+}
+
+.clip-waveform-line {
+  fill: none;
+  stroke: rgba(42, 18, 2, 0.78);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.waveform-empty-line {
+  fill: none;
+  stroke: rgba(42, 18, 2, 0.26);
+  stroke-linecap: round;
+  stroke-width: 2;
 }
 
 .context-dock {
