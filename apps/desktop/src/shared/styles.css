@@ -18,7 +18,7 @@
   --mint-soft: rgba(71, 214, 163, 0.18);
   --danger: #ff8a7a;
   --shadow: 0 22px 48px rgba(0, 0, 0, 0.34);
-  --timeline-track-height: 5.7rem;
+  --timeline-track-height: 8.4rem;
   --timeline-clip-inset: 0.12rem;
 }
 
@@ -411,7 +411,7 @@ input[type="range"] {
 .timeline-shell {
   display: grid;
   gap: 0.9rem;
-  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
 }
 
 .timeline-headers {
@@ -429,11 +429,12 @@ input[type="range"] {
   border: 1px solid var(--line);
   border-radius: 18px;
   display: grid;
-  gap: 0.32rem;
+  gap: 0.5rem;
   height: var(--timeline-track-height);
-  padding: 0.62rem 0.78rem;
-  align-content: center;
-  overflow: hidden;
+  grid-template-rows: auto auto auto;
+  padding: 0.72rem 0.82rem;
+  align-content: start;
+  overflow: visible;
 }
 
 .track-header-card.is-selected {
@@ -442,10 +443,14 @@ input[type="range"] {
 }
 
 .track-header-top {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   gap: 0.55rem;
   justify-content: space-between;
+}
+
+.track-header-top > div {
+  min-width: 0;
 }
 
 .track-header-top strong,
@@ -456,12 +461,17 @@ input[type="range"] {
 .track-header-top p {
   color: var(--muted);
   font-size: 0.74rem;
+  line-height: 1.2;
   margin-top: 0.1rem;
 }
 
 .track-header-card button {
   font-size: 0.82rem;
   padding: 0.42rem 0.68rem;
+}
+
+.track-header-top button {
+  flex: 0 0 auto;
 }
 
 .track-header-card .compact-slider {
@@ -729,10 +739,11 @@ input[type="range"] {
 
 .clip-body {
   display: grid;
+  grid-template-rows: auto 1fr;
   flex: 1 1 auto;
-  gap: 0.24rem;
+  gap: 0.3rem;
   min-width: 0;
-  padding: 0.36rem 0.26rem;
+  padding: 0.34rem 0.28rem;
   text-align: left;
 }
 
@@ -810,10 +821,18 @@ input[type="range"] {
 }
 
 .clip-waveform {
-  align-items: stretch;
-  display: flex;
-  inset-inline: 0;
-  min-height: 100%;
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.clip-waveform-canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
 }
 
 .clip-waveform-svg {

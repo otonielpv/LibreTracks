@@ -36,9 +36,12 @@ export type ClipSummary = {
   filePath: string;
   timelineStartSeconds: number;
   sourceStartSeconds: number;
+  sourceDurationSeconds: number;
   durationSeconds: number;
   gain: number;
   waveformPeaks: number[];
+  waveformMinPeaks: number[];
+  waveformMaxPeaks: number[];
 };
 
 export type SongSummary = {
@@ -789,6 +792,12 @@ export async function toggleGroupMute(groupId: string): Promise<TransportSnapsho
 }
 
 function buildDemoSnapshot(): TransportSnapshot {
+  const clickWaveform = buildDemoWaveform(2048, 0.25, 0.85);
+  const guideWaveform = buildDemoWaveform(2048, 0.2, 0.72);
+  const drumsWaveform = buildDemoWaveform(2048, 0.35, 1);
+  const bassWaveform = buildDemoWaveform(2048, 0.28, 0.8);
+  const keysWaveform = buildDemoWaveform(2048, 0.18, 0.62);
+
   const sections: SectionSummary[] = [
     { id: "section-intro", name: "Intro", startSeconds: 0, endSeconds: 32 },
     { id: "section-verse", name: "Verse", startSeconds: 32, endSeconds: 96 },
@@ -817,9 +826,12 @@ function buildDemoSnapshot(): TransportSnapshot {
           filePath: "audio/click.wav",
           timelineStartSeconds: 0,
           sourceStartSeconds: 0,
+          sourceDurationSeconds: 240,
           durationSeconds: 240,
           gain: 1,
-          waveformPeaks: buildDemoWaveform(96, 0.25, 0.85),
+          waveformPeaks: clickWaveform.peaks,
+          waveformMinPeaks: clickWaveform.minPeaks,
+          waveformMaxPeaks: clickWaveform.maxPeaks,
         },
         {
           id: "clip-guide",
@@ -828,9 +840,12 @@ function buildDemoSnapshot(): TransportSnapshot {
           filePath: "audio/guide.wav",
           timelineStartSeconds: 0,
           sourceStartSeconds: 0,
+          sourceDurationSeconds: 240,
           durationSeconds: 240,
           gain: 1,
-          waveformPeaks: buildDemoWaveform(96, 0.2, 0.72),
+          waveformPeaks: guideWaveform.peaks,
+          waveformMinPeaks: guideWaveform.minPeaks,
+          waveformMaxPeaks: guideWaveform.maxPeaks,
         },
         {
           id: "clip-drums",
@@ -839,9 +854,12 @@ function buildDemoSnapshot(): TransportSnapshot {
           filePath: "audio/drums.wav",
           timelineStartSeconds: 16,
           sourceStartSeconds: 0,
+          sourceDurationSeconds: 176,
           durationSeconds: 176,
           gain: 1,
-          waveformPeaks: buildDemoWaveform(96, 0.35, 1),
+          waveformPeaks: drumsWaveform.peaks,
+          waveformMinPeaks: drumsWaveform.minPeaks,
+          waveformMaxPeaks: drumsWaveform.maxPeaks,
         },
         {
           id: "clip-bass",
@@ -850,9 +868,12 @@ function buildDemoSnapshot(): TransportSnapshot {
           filePath: "audio/bass.wav",
           timelineStartSeconds: 32,
           sourceStartSeconds: 0,
+          sourceDurationSeconds: 160,
           durationSeconds: 160,
           gain: 1,
-          waveformPeaks: buildDemoWaveform(96, 0.28, 0.8),
+          waveformPeaks: bassWaveform.peaks,
+          waveformMinPeaks: bassWaveform.minPeaks,
+          waveformMaxPeaks: bassWaveform.maxPeaks,
         },
         {
           id: "clip-keys",
@@ -861,9 +882,12 @@ function buildDemoSnapshot(): TransportSnapshot {
           filePath: "audio/keys.wav",
           timelineStartSeconds: 48,
           sourceStartSeconds: 0,
+          sourceDurationSeconds: 128,
           durationSeconds: 128,
           gain: 1,
-          waveformPeaks: buildDemoWaveform(96, 0.18, 0.62),
+          waveformPeaks: keysWaveform.peaks,
+          waveformMinPeaks: keysWaveform.minPeaks,
+          waveformMaxPeaks: keysWaveform.maxPeaks,
         },
       ],
       groups: [
@@ -915,10 +939,16 @@ function computeSongDuration(sections: SectionSummary[], clips: ClipSummary[]) {
 }
 
 function buildDemoWaveform(bucketCount: number, floor: number, ceiling: number) {
-  return Array.from({ length: bucketCount }, (_, index) => {
+  const peaks = Array.from({ length: bucketCount }, (_, index) => {
     const waveA = Math.sin(index * 0.33) * 0.5 + 0.5;
     const waveB = Math.cos(index * 0.12) * 0.5 + 0.5;
     const blend = (waveA * 0.7 + waveB * 0.3) * (ceiling - floor);
     return Number((floor + blend).toFixed(3));
   });
+
+  return {
+    peaks,
+    minPeaks: peaks.map((peak) => Number((-peak).toFixed(3))),
+    maxPeaks: peaks,
+  };
 }

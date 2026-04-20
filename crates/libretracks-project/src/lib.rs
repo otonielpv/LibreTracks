@@ -207,7 +207,10 @@ mod tests {
         let waveform =
             load_waveform_summary(&imported.song_dir, "audio/drums.wav").expect("waveform should load");
         assert_eq!(waveform.bucket_count, waveform.peaks.len());
-        assert_eq!(waveform.bucket_count, 96);
+        assert_eq!(waveform.bucket_count, waveform.min_peaks.len());
+        assert_eq!(waveform.bucket_count, waveform.max_peaks.len());
+        assert!(waveform.bucket_count >= 2048);
+        assert!(waveform.duration_seconds > 0.0);
     }
 
     #[test]

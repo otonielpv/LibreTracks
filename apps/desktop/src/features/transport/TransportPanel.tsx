@@ -35,6 +35,7 @@ import {
 const TIMELINE_ZOOM_MIN = 1;
 const TIMELINE_ZOOM_MAX = 4;
 const TIMELINE_ZOOM_STEP = 0.25;
+const MIN_WAVEFORM_DIMENSION = 12;
 
 type TimelineDragState =
   | {
@@ -1713,7 +1714,9 @@ export function TransportPanel() {
                                     className="clip-block is-preview"
                                     style={clipStyle(clip, durationSeconds, previewStartSeconds)}
                                   >
-                                    <ClipFace clip={clip} />
+                                    <ClipFace
+                                      clip={clip}
+                                    />
                                   </div>
                                 )}
 
@@ -1755,7 +1758,9 @@ export function TransportPanel() {
                                       handleClipPointerUp(clip, event);
                                     }}
                                   >
-                                    <ClipFace clip={renderedClip} />
+                                    <ClipFace
+                                      clip={renderedClip}
+                                    />
                                   </button>
                                   <button
                                     aria-label={`Recortar fin de ${clipDisplayName(clip)}`}
@@ -2083,40 +2088,74 @@ export function TransportPanel() {
   );
 }
 
-function ClipFace({ clip }: { clip: ClipSummary }) {
+function ClipFace({
+  clip,
+}: {
+  clip: ClipSummary;
+}) {
   return (
     <>
       <div className="clip-info">
         <span className="clip-name">{clipDisplayName(clip)}</span>
         <span className="clip-time">{formatTimelineMark(clip.timelineStartSeconds)}</span>
       </div>
-      <div className="clip-waveform" aria-hidden="true">
-        {clip.waveformPeaks.length > 0 ? (
-          <svg
-            className="clip-waveform-svg"
-            preserveAspectRatio="none"
-            viewBox="0 0 160 36"
-          >
-            <path
-              className="clip-waveform-fill"
-              d={buildWaveformSilhouettePath(clip.waveformPeaks, 160, 36)}
-            />
-            <path
-              className="clip-waveform-centerline"
-              d="M 0 18 L 160 18"
-            />
-          </svg>
-        ) : (
-          <svg
-            className="clip-waveform-svg is-empty"
-            preserveAspectRatio="none"
-            viewBox="0 0 160 36"
-          >
-            <path className="waveform-empty-line" d="M 0 18 L 160 18" />
-          </svg>
-        )}
-      </div>
+      <ClipWaveform
+        clip={clip}
+      />
     </>
+  );
+}
+
+function ClipWaveform({
+  clip,
+}: {
+  clip: ClipSummary;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const { height, ref, width } = useElementSize<HTMLDivElement>();
+  const canRenderDenseWaveform =
+    clip.waveformMaxPeaks.length > 0 &&
+    clip.waveformMinPeaks.length > 0 &&
+    width >= MIN_WAVEFORM_DIMENSION &&
+    height >= MIN_WAVEFORM_DIMENSION;
+
+  useEffect(() => {
+    if (!canRenderDenseWaveform || !canvasRef.current) {
+      return;
+    }
+
+    drawClipWaveformFromSummary(canvasRef.current, clip, width, height);
+  }, [canRenderDenseWaveform, clip, height, width]);
+
+  return (
+    <div ref={ref} className="clip-waveform" aria-hidden="true">
+      {canRenderDenseWaveform ? (
+        <canvas ref={canvasRef} className="clip-waveform-canvas" />
+      ) : clip.waveformPeaks.length > 0 ? (
+        <svg
+          className="clip-waveform-svg"
+          preserveAspectRatio="none"
+          viewBox="0 0 160 36"
+        >
+          <path
+            className="clip-waveform-fill"
+            d={buildWaveformSilhouettePath(clip.waveformPeaks, 160, 36)}
+          />
+          <path
+            className="clip-waveform-centerline"
+            d="M 0 18 L 160 18"
+          />
+        </svg>
+      ) : (
+        <svg
+          className="clip-waveform-svg is-empty"
+          preserveAspectRatio="none"
+          viewBox="0 0 160 36"
+        >
+          <path className="waveform-empty-line" d="M 0 18 L 160 18" />
+        </svg>
+      )}
+    </div>
   );
 }
 
@@ -2159,6 +2198,102 @@ function clipDisplayName(clip: ClipSummary) {
   return stem || clip.trackName;
 }
 
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) {
+      return;
+    }
+
+    const updateSize = () => {
+      const nextWidth = element.clientWidth;
+      const nextHeight = element.clientHeight;
+      setSize((currentSize) =>
+        currentSize.width === nextWidth && currentSize.height === nextHeight
+          ? currentSize
+          : { width: nextWidth, height: nextHeight },
+      );
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateSize();
+    });
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  return { ...size, ref };
+}
+function drawClipWaveformFromSummary(
+  canvas: HTMLCanvasElement,
+  clip: ClipSummary,
+  width: number,
+  height: number,
+) {
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  const canvasWidth = Math.max(Math.round(width * devicePixelRatio), 1);
+  const canvasHeight = Math.max(Math.round(height * devicePixelRatio), 1);
+
+  if (canvas.width !== canvasWidth) {
+    canvas.width = canvasWidth;
+  }
+  if (canvas.height !== canvasHeight) {
+    canvas.height = canvasHeight;
+  }
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return;
+  }
+
+  context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  context.clearRect(0, 0, width, height);
+
+  const safeDuration = Math.max(clip.sourceDurationSeconds, 0.001);
+  const clipStartRatio = clamp(clip.sourceStartSeconds / safeDuration, 0, 1);
+  const clipEndRatio = clamp((clip.sourceStartSeconds + clip.durationSeconds) / safeDuration, clipStartRatio, 1);
+  const bucketCount = Math.min(clip.waveformMinPeaks.length, clip.waveformMaxPeaks.length);
+  const startBucket = Math.floor(clipStartRatio * bucketCount);
+  const endBucket = Math.max(startBucket + 1, Math.ceil(clipEndRatio * bucketCount));
+  const visibleBucketCount = Math.max(endBucket - startBucket, 1);
+  const centerY = height / 2;
+  const amplitude = Math.max((height - 2) * 0.48, 1);
+
+  context.fillStyle = "rgba(94, 48, 10, 0.78)";
+
+  for (let pixelIndex = 0; pixelIndex < Math.max(Math.floor(width), 1); pixelIndex += 1) {
+    const bucketFrom = startBucket + Math.floor((pixelIndex / Math.max(width, 1)) * visibleBucketCount);
+    const bucketTo = Math.max(
+      bucketFrom + 1,
+      startBucket + Math.floor(((pixelIndex + 1) / Math.max(width, 1)) * visibleBucketCount),
+    );
+    let min = 1;
+    let max = -1;
+
+    for (let bucketIndex = bucketFrom; bucketIndex < Math.min(bucketTo, bucketCount); bucketIndex += 1) {
+      min = Math.min(min, clip.waveformMinPeaks[bucketIndex] ?? 0);
+      max = Math.max(max, clip.waveformMaxPeaks[bucketIndex] ?? 0);
+    }
+
+    const topY = centerY - max * amplitude;
+    const bottomY = centerY - min * amplitude;
+    const barHeight = Math.max(bottomY - topY, 1);
+    context.fillRect(pixelIndex, topY, 1, barHeight);
+  }
+}
+
 function buildWaveformSilhouettePath(peaks: number[], width: number, height: number) {
   if (peaks.length === 0) {
     return "";
@@ -2166,33 +2301,43 @@ function buildWaveformSilhouettePath(peaks: number[], width: number, height: num
 
   const centerY = height / 2;
   const amplitude = height * 0.42;
-  const bucketWidth = peaks.length === 0 ? width : width / peaks.length;
-  const topCommands: string[] = [`M 0 ${centerY}`];
-
-  peaks.forEach((peak, index) => {
-    const normalizedPeak = clamp(peak, 0, 1);
-    const startX = Number((index * bucketWidth).toFixed(2));
-    const endX = Number(((index + 1) * bucketWidth).toFixed(2));
-    const topY = Number((centerY - normalizedPeak * amplitude).toFixed(2));
-
-    topCommands.push(`L ${startX} ${topY}`);
-    topCommands.push(`L ${endX} ${topY}`);
+  const sampledPeaks = interpolateWaveformPeaks(peaks, 4);
+  const topPoints = sampledPeaks.map((peak, index) => {
+    const ratio = sampledPeaks.length === 1 ? 0 : index / (sampledPeaks.length - 1);
+    const x = Number((ratio * width).toFixed(2));
+    const y = Number((centerY - clamp(peak, 0, 1) * amplitude).toFixed(2));
+    return `${x} ${y}`;
+  });
+  const bottomPoints = [...sampledPeaks].reverse().map((peak, reverseIndex) => {
+    const index = sampledPeaks.length - 1 - reverseIndex;
+    const ratio = sampledPeaks.length === 1 ? 0 : index / (sampledPeaks.length - 1);
+    const x = Number((ratio * width).toFixed(2));
+    const y = Number((centerY + clamp(peak, 0, 1) * amplitude).toFixed(2));
+    return `${x} ${y}`;
   });
 
-  topCommands.push(`L ${width} ${centerY}`);
+  return `M ${topPoints[0]} L ${topPoints.slice(1).join(" L ")} L ${bottomPoints.join(" L ")} Z`;
+}
 
-  const bottomCommands: string[] = [];
-  for (let index = peaks.length - 1; index >= 0; index -= 1) {
-    const normalizedPeak = clamp(peaks[index], 0, 1);
-    const startX = Number((index * bucketWidth).toFixed(2));
-    const endX = Number(((index + 1) * bucketWidth).toFixed(2));
-    const bottomY = Number((centerY + normalizedPeak * amplitude).toFixed(2));
-
-    bottomCommands.push(`L ${endX} ${bottomY}`);
-    bottomCommands.push(`L ${startX} ${bottomY}`);
+function interpolateWaveformPeaks(peaks: number[], subdivisions: number) {
+  if (peaks.length <= 1 || subdivisions <= 1) {
+    return peaks;
   }
 
-  return `${topCommands.join(" ")} ${bottomCommands.join(" ")} Z`;
+  const interpolated: number[] = [];
+
+  for (let index = 0; index < peaks.length - 1; index += 1) {
+    const currentPeak = peaks[index];
+    const nextPeak = peaks[index + 1];
+
+    for (let step = 0; step < subdivisions; step += 1) {
+      const ratio = step / subdivisions;
+      interpolated.push(currentPeak + (nextPeak - currentPeak) * ratio);
+    }
+  }
+
+  interpolated.push(peaks[peaks.length - 1]);
+  return interpolated;
 }
 
 function normalizeRange(startSeconds: number, endSeconds: number): SectionDraft {

@@ -149,9 +149,12 @@ pub struct ClipSummary {
     pub file_path: String,
     pub timeline_start_seconds: f64,
     pub source_start_seconds: f64,
+    pub source_duration_seconds: f64,
     pub duration_seconds: f64,
     pub gain: f64,
     pub waveform_peaks: Vec<f32>,
+    pub waveform_min_peaks: Vec<f32>,
+    pub waveform_max_peaks: Vec<f32>,
 }
 
 impl DesktopSession {
@@ -1052,10 +1055,41 @@ fn clip_to_summary(song: &Song, clip: &Clip, song_dir: Option<&std::path::Path>)
         .find(|track| track.id == clip.track_id)
         .map(|track| track.name.clone())
         .unwrap_or_else(|| clip.track_id.clone());
-    let waveform_peaks = song_dir
+    let (waveform_peaks, waveform_min_peaks, waveform_max_peaks, source_duration_seconds) = song_dir
         .and_then(|dir| load_waveform_summary(dir, &clip.file_path).ok())
-        .map(|summary| summary.peaks)
-        .unwrap_or_default();
+        .map(|summary| {
+            let source_duration_seconds = if summary.duration_seconds > 0.0 {
+                summary.duration_seconds
+            } else {
+                clip.source_start_seconds + clip.duration_seconds
+            };
+            let waveform_peaks = summary.peaks.clone();
+            let waveform_min_peaks = if summary.min_peaks.len() == summary.bucket_count {
+                summary.min_peaks.clone()
+            } else {
+                waveform_peaks.iter().map(|peak| -*peak).collect()
+            };
+            let waveform_max_peaks = if summary.max_peaks.len() == summary.bucket_count {
+                summary.max_peaks.clone()
+            } else {
+                waveform_peaks.clone()
+            };
+
+            (
+                waveform_peaks,
+                waveform_min_peaks,
+                waveform_max_peaks,
+                source_duration_seconds,
+            )
+        })
+        .unwrap_or_else(|| {
+            (
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                clip.source_start_seconds + clip.duration_seconds,
+            )
+        });
 
     ClipSummary {
         id: clip.id.clone(),
@@ -1064,9 +1098,12 @@ fn clip_to_summary(song: &Song, clip: &Clip, song_dir: Option<&std::path::Path>)
         file_path: clip.file_path.clone(),
         timeline_start_seconds: clip.timeline_start_seconds,
         source_start_seconds: clip.source_start_seconds,
+        source_duration_seconds,
         duration_seconds: clip.duration_seconds,
         gain: clip.gain,
         waveform_peaks,
+        waveform_min_peaks,
+        waveform_max_peaks,
     }
 }
 
