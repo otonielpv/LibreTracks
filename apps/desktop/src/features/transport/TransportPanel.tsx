@@ -33,7 +33,7 @@ import {
 } from "./desktopApi";
 
 const TIMELINE_ZOOM_MIN = 1;
-const TIMELINE_ZOOM_MAX = 4;
+const TIMELINE_ZOOM_MAX = 12;
 const TIMELINE_ZOOM_STEP = 0.25;
 const MIN_WAVEFORM_DIMENSION = 12;
 
