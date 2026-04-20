@@ -30,6 +30,7 @@ Campos clave:
 - `lastSync`: tiempo del ultimo ajuste incremental de mezcla.
 - `lastStop`: tiempo y numero de sinks detenidos.
 - `runtimeState`: estado resumido del runtime tras la ultima operacion relevante.
+  Incluye `cachedAudioBuffers` para ver cuantas fuentes siguen preparadas en memoria para el proyecto actual.
 
 ## Sesiones manuales recomendadas
 

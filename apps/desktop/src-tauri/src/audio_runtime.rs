@@ -1,8 +1,9 @@
 use std::{
-    fs::File,
-    io::BufReader,
+    collections::HashMap,
+    io::{BufReader, Cursor},
     path::{Path, PathBuf},
     sync::mpsc::{self, Receiver, Sender},
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
@@ -16,6 +17,8 @@ use crate::state::DesktopError;
 pub struct AudioRuntime {
     _stream: OutputStream,
     handle: OutputStreamHandle,
+    cached_song_dir: Option<PathBuf>,
+    audio_file_cache: HashMap<PathBuf, Arc<[u8]>>,
     sinks: Vec<ClipSink>,
 }
 
@@ -108,6 +111,7 @@ pub struct AudioRuntimeStateSummary {
     pub active_sinks: usize,
     pub files_opened_last_restart: usize,
     pub last_scheduled_clips: usize,
+    pub cached_audio_buffers: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -116,6 +120,7 @@ struct RestartReport {
     scheduled_clips: usize,
     active_sinks: usize,
     opened_files: usize,
+    cached_buffers: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -154,6 +159,7 @@ impl Default for AudioRuntimeStateSummary {
             active_sinks: 0,
             files_opened_last_restart: 0,
             last_scheduled_clips: 0,
+            cached_audio_buffers: 0,
         }
     }
 }
@@ -203,6 +209,7 @@ impl AudioDebugState {
         self.runtime_state.active_sinks = report.active_sinks;
         self.runtime_state.files_opened_last_restart = report.opened_files;
         self.runtime_state.last_scheduled_clips = report.scheduled_clips;
+        self.runtime_state.cached_audio_buffers = report.cached_buffers;
 
         if !self.config.enabled {
             return;
@@ -288,6 +295,8 @@ impl AudioRuntime {
         Ok(Self {
             _stream: stream,
             handle,
+            cached_song_dir: None,
+            audio_file_cache: HashMap::new(),
             sinks: Vec::new(),
         })
     }
@@ -314,13 +323,21 @@ impl AudioRuntime {
     ) -> Result<RestartReport, DesktopError> {
         let started_at = Instant::now();
         self.stop_all();
+        prepare_audio_cache(
+            &mut self.cached_song_dir,
+            &mut self.audio_file_cache,
+            song_dir,
+        );
 
         let mut opened_files = 0;
 
         for clip in build_runtime_clip_specs(song, position_seconds)? {
-            let file = File::open(song_dir.join(&clip.file_path))?;
-            opened_files += 1;
-            let decoder = Decoder::new(BufReader::new(file))?;
+            let audio_data = load_audio_data(
+                &mut self.audio_file_cache,
+                song_dir.join(&clip.file_path),
+                &mut opened_files,
+            )?;
+            let decoder = Decoder::new(BufReader::new(Cursor::new(audio_data)))?;
             let source = decoder
                 .skip_duration(Duration::from_secs_f64(clip.source_offset_seconds))
                 .take_duration(Duration::from_secs_f64(clip.play_duration_seconds));
@@ -350,6 +367,7 @@ impl AudioRuntime {
             scheduled_clips: self.sinks.len(),
             active_sinks: self.sinks.len(),
             opened_files,
+            cached_buffers: self.audio_file_cache.len(),
         })
     }
 
@@ -534,6 +552,35 @@ fn ensure_runtime(runtime: &mut Option<AudioRuntime>) -> Result<&mut AudioRuntim
     }
 
     Ok(runtime.as_mut().expect("runtime should exist"))
+}
+
+fn prepare_audio_cache(
+    cached_song_dir: &mut Option<PathBuf>,
+    audio_file_cache: &mut HashMap<PathBuf, Arc<[u8]>>,
+    song_dir: &Path,
+) {
+    if cached_song_dir.as_deref() == Some(song_dir) {
+        return;
+    }
+
+    audio_file_cache.clear();
+    *cached_song_dir = Some(song_dir.to_path_buf());
+}
+
+fn load_audio_data(
+    audio_file_cache: &mut HashMap<PathBuf, Arc<[u8]>>,
+    file_path: PathBuf,
+    opened_files: &mut usize,
+) -> Result<Arc<[u8]>, DesktopError> {
+    if let Some(cached_data) = audio_file_cache.get(&file_path) {
+        return Ok(Arc::clone(cached_data));
+    }
+
+    let bytes: Arc<[u8]> = std::fs::read(&file_path)?.into();
+    audio_file_cache.insert(file_path, Arc::clone(&bytes));
+    *opened_files += 1;
+
+    Ok(bytes)
 }
 
 fn next_audio_command(
@@ -723,17 +770,22 @@ fn command_kind_label(kind: AudioCommandKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::{Path, PathBuf};
     use std::sync::mpsc;
+    use std::sync::Arc;
     use std::time::Duration;
 
     use libretracks_core::{OutputBus, Song, Track, TrackGroup};
     use rodio::Sink;
+    use tempfile::tempdir;
 
     use super::{
         apply_mix_ramp, build_runtime_clip_specs, coalesce_sync_song_commands, env_flag,
-        playback_reason_label, resolve_track_clip_gain, AudioCommand, AudioCommandKind,
-        AudioDebugConfig, AudioDebugSnapshot, AudioDebugState, ClipSink, PlaybackStartReason,
-        RestartReport, StopReport, SyncReport,
+        load_audio_data, playback_reason_label, prepare_audio_cache, resolve_track_clip_gain,
+        AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState,
+        ClipSink, PlaybackStartReason, RestartReport, StopReport, SyncReport,
     };
 
     fn demo_song() -> Song {
@@ -865,6 +917,7 @@ mod tests {
                 scheduled_clips: 3,
                 active_sinks: 3,
                 opened_files: 3,
+                cached_buffers: 2,
             },
         );
         debug_state.record_sync(&SyncReport {
@@ -970,5 +1023,41 @@ mod tests {
             deferred_command,
             Some(AudioCommand::DebugSnapshot { .. })
         ));
+    }
+
+    #[test]
+    fn audio_cache_resets_when_project_changes() {
+        let mut cached_song_dir = Some(PathBuf::from("song-a"));
+        let mut audio_file_cache =
+            HashMap::from([(PathBuf::from("song-a/audio.wav"), Arc::from([0, 1, 2]))]);
+
+        prepare_audio_cache(
+            &mut cached_song_dir,
+            &mut audio_file_cache,
+            Path::new("song-b"),
+        );
+
+        assert_eq!(cached_song_dir.as_deref(), Some(Path::new("song-b")));
+        assert!(audio_file_cache.is_empty());
+    }
+
+    #[test]
+    fn load_audio_data_uses_cache_after_first_read() {
+        let temp_dir = tempdir().expect("temp dir should exist");
+        let audio_path = temp_dir.path().join("clip.wav");
+        fs::write(&audio_path, [1_u8, 2, 3, 4]).expect("test audio file should be written");
+
+        let mut audio_file_cache = HashMap::new();
+        let mut opened_files = 0;
+
+        let first_load =
+            load_audio_data(&mut audio_file_cache, audio_path.clone(), &mut opened_files)
+                .expect("first load should work");
+        let second_load = load_audio_data(&mut audio_file_cache, audio_path, &mut opened_files)
+            .expect("second load should work");
+
+        assert_eq!(opened_files, 1);
+        assert_eq!(first_load.as_ref(), &[1, 2, 3, 4]);
+        assert!(Arc::ptr_eq(&first_load, &second_load));
     }
 }

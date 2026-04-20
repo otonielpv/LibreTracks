@@ -87,6 +87,7 @@ export type AudioRuntimeStateSummary = {
   activeSinks: number;
   filesOpenedLastRestart: number;
   lastScheduledClips: number;
+  cachedAudioBuffers: number;
 };
 
 export type AudioDebugSnapshot = {
@@ -135,6 +136,7 @@ export async function getAudioDebugSnapshot(): Promise<AudioDebugSnapshot> {
         activeSinks: 0,
         filesOpenedLastRestart: 0,
         lastScheduledClips: 0,
+        cachedAudioBuffers: 0,
       },
     };
   }
