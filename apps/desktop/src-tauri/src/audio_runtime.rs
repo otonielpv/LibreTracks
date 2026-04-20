@@ -24,8 +24,9 @@ pub struct AudioController {
 }
 
 struct ClipSink {
+    clip_id: String,
     track_id: String,
-    clip_gain: f32,
+    current_gain: f32,
     sink: Sink,
 }
 
@@ -37,8 +38,11 @@ struct RuntimeClipSpec {
     delay_seconds: f64,
     source_offset_seconds: f64,
     play_duration_seconds: f64,
-    initial_gain: f64,
+    initial_volume: f64,
 }
+
+const MIX_RAMP_STEPS: u32 = 4;
+const MIX_RAMP_DURATION: Duration = Duration::from_millis(12);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -319,19 +323,20 @@ impl AudioRuntime {
             let decoder = Decoder::new(BufReader::new(file))?;
             let source = decoder
                 .skip_duration(Duration::from_secs_f64(clip.source_offset_seconds))
-                .take_duration(Duration::from_secs_f64(clip.play_duration_seconds))
-                .amplify(clip.initial_gain as f32);
+                .take_duration(Duration::from_secs_f64(clip.play_duration_seconds));
 
             let sink = Sink::try_new(&self.handle)?;
             sink.pause();
+            sink.set_volume(clip.initial_volume as f32);
             if clip.delay_seconds > 0.0 {
                 sink.append(source.delay(Duration::from_secs_f64(clip.delay_seconds)));
             } else {
                 sink.append(source);
             }
             self.sinks.push(ClipSink {
+                clip_id: clip.clip_id,
                 track_id: clip.track_id,
-                clip_gain: clip.initial_gain as f32,
+                current_gain: clip.initial_volume as f32,
                 sink,
             });
         }
@@ -350,16 +355,18 @@ impl AudioRuntime {
 
     fn sync_song(&mut self, song: &Song) -> Result<SyncReport, DesktopError> {
         let started_at = Instant::now();
+        let mut target_gains = Vec::with_capacity(self.sinks.len());
 
         for clip_sink in &self.sinks {
-            let gain =
-                resolve_track_clip_gain(song, &clip_sink.track_id, f64::from(clip_sink.clip_gain))?;
-            clip_sink.sink.set_volume(gain as f32);
+            let gain = resolve_clip_sink_target_gain(song, clip_sink)?;
+            target_gains.push(gain as f32);
         }
+
+        let updated_sinks = apply_mix_ramp(&mut self.sinks, &target_gains);
 
         Ok(SyncReport {
             elapsed: started_at.elapsed(),
-            updated_sinks: self.sinks.len(),
+            updated_sinks,
             active_sinks: self.sinks.len(),
         })
     }
@@ -446,8 +453,9 @@ impl Drop for AudioController {
 fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugConfig) {
     let mut runtime: Option<AudioRuntime> = None;
     let mut debug_state = AudioDebugState::new(debug_config);
+    let mut deferred_command: Option<AudioCommand> = None;
 
-    while let Ok(command) = receiver.recv() {
+    while let Some(command) = next_audio_command(&receiver, &mut deferred_command) {
         match command {
             AudioCommand::Play {
                 song_dir,
@@ -471,6 +479,10 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
                 let _ = respond_to.send(result);
             }
             AudioCommand::SyncSong { song, respond_to } => {
+                let (song, respond_tos, next_deferred) =
+                    coalesce_sync_song_commands(&receiver, song, respond_to);
+                deferred_command = next_deferred;
+
                 debug_state
                     .record_command(AudioCommandKind::SyncSong, Some("mix_only".to_string()));
 
@@ -481,7 +493,9 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
                     })
                     .map_err(|error| error.to_string());
 
-                let _ = respond_to.send(result);
+                for respond_to in respond_tos {
+                    let _ = respond_to.send(result.clone());
+                }
             }
             AudioCommand::Stop { respond_to } => {
                 debug_state.record_command(AudioCommandKind::Stop, None);
@@ -522,6 +536,40 @@ fn ensure_runtime(runtime: &mut Option<AudioRuntime>) -> Result<&mut AudioRuntim
     Ok(runtime.as_mut().expect("runtime should exist"))
 }
 
+fn next_audio_command(
+    receiver: &Receiver<AudioCommand>,
+    deferred_command: &mut Option<AudioCommand>,
+) -> Option<AudioCommand> {
+    match deferred_command.take() {
+        Some(command) => Some(command),
+        None => receiver.recv().ok(),
+    }
+}
+
+fn coalesce_sync_song_commands(
+    receiver: &Receiver<AudioCommand>,
+    mut latest_song: Song,
+    initial_respond_to: Sender<Result<(), String>>,
+) -> (Song, Vec<Sender<Result<(), String>>>, Option<AudioCommand>) {
+    let mut respond_tos = vec![initial_respond_to];
+    let mut deferred_command = None;
+
+    while let Ok(command) = receiver.try_recv() {
+        match command {
+            AudioCommand::SyncSong { song, respond_to } => {
+                latest_song = song;
+                respond_tos.push(respond_to);
+            }
+            other => {
+                deferred_command = Some(other);
+                break;
+            }
+        }
+    }
+
+    (latest_song, respond_tos, deferred_command)
+}
+
 fn build_runtime_clip_specs(
     song: &Song,
     position_seconds: f64,
@@ -547,15 +595,62 @@ fn build_runtime_clip_specs(
             delay_seconds: (clip.timeline_start_seconds - position_seconds).max(0.0),
             source_offset_seconds: clip.source_start_seconds + elapsed_inside_clip,
             play_duration_seconds: remaining_duration,
-            initial_gain: resolve_clip_initial_gain(song, clip)?,
+            initial_volume: resolve_clip_initial_volume(song, clip)?,
         });
     }
 
     Ok(specs)
 }
 
-fn resolve_clip_initial_gain(song: &Song, clip: &Clip) -> Result<f64, DesktopError> {
+fn resolve_clip_initial_volume(song: &Song, clip: &Clip) -> Result<f64, DesktopError> {
     Ok(resolve_track_clip_gain(song, &clip.track_id, clip.gain)?)
+}
+
+fn resolve_clip_sink_target_gain(song: &Song, clip_sink: &ClipSink) -> Result<f64, DesktopError> {
+    let clip = song
+        .clips
+        .iter()
+        .find(|clip| clip.id == clip_sink.clip_id)
+        .ok_or_else(|| DesktopError::ClipNotFound(clip_sink.clip_id.clone()))?;
+
+    resolve_track_clip_gain(song, &clip_sink.track_id, clip.gain)
+}
+
+fn apply_mix_ramp(sinks: &mut [ClipSink], target_gains: &[f32]) -> usize {
+    let changed_sinks = sinks
+        .iter()
+        .zip(target_gains)
+        .filter(|(clip_sink, target_gain)| (clip_sink.current_gain - **target_gain).abs() > 0.0005)
+        .count();
+
+    if changed_sinks == 0 {
+        return 0;
+    }
+
+    let starting_gains: Vec<f32> = sinks
+        .iter()
+        .map(|clip_sink| clip_sink.current_gain)
+        .collect();
+    let step_sleep =
+        Duration::from_secs_f64(MIX_RAMP_DURATION.as_secs_f64() / f64::from(MIX_RAMP_STEPS));
+
+    for step in 1..=MIX_RAMP_STEPS {
+        let ratio = step as f32 / MIX_RAMP_STEPS as f32;
+
+        for ((clip_sink, start_gain), target_gain) in
+            sinks.iter_mut().zip(&starting_gains).zip(target_gains)
+        {
+            let next_gain = *start_gain + (*target_gain - *start_gain) * ratio;
+            clip_sink.sink.set_volume(next_gain);
+            clip_sink.current_gain = next_gain;
+        }
+
+        if step < MIX_RAMP_STEPS {
+            thread::sleep(step_sleep);
+        }
+    }
+
+    changed_sinks
 }
 
 fn resolve_track_clip_gain(
@@ -628,14 +723,17 @@ fn command_kind_label(kind: AudioCommandKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::mpsc;
     use std::time::Duration;
 
     use libretracks_core::{OutputBus, Song, Track, TrackGroup};
+    use rodio::Sink;
 
     use super::{
-        build_runtime_clip_specs, env_flag, playback_reason_label, resolve_track_clip_gain,
-        AudioCommandKind, AudioDebugConfig, AudioDebugState, PlaybackStartReason, RestartReport,
-        StopReport, SyncReport,
+        apply_mix_ramp, build_runtime_clip_specs, coalesce_sync_song_commands, env_flag,
+        playback_reason_label, resolve_track_clip_gain, AudioCommand, AudioCommandKind,
+        AudioDebugConfig, AudioDebugSnapshot, AudioDebugState, ClipSink, PlaybackStartReason,
+        RestartReport, StopReport, SyncReport,
     };
 
     fn demo_song() -> Song {
@@ -726,6 +824,7 @@ mod tests {
         assert_eq!(specs[1].clip_id, "clip_drums");
         assert!((specs[1].delay_seconds - 9.0).abs() < 0.0001);
         assert!((specs[1].play_duration_seconds - 4.0).abs() < 0.0001);
+        assert!((specs[1].initial_volume - 0.315).abs() < 0.0001);
     }
 
     #[test]
@@ -807,5 +906,69 @@ mod tests {
         std::env::set_var(key, "YES");
         assert!(env_flag(key));
         std::env::remove_var(key);
+    }
+
+    #[test]
+    fn apply_mix_ramp_updates_only_changed_sinks() {
+        let (sink_1, _) = Sink::new_idle();
+        let (sink_2, _) = Sink::new_idle();
+        sink_1.set_volume(0.4);
+        sink_2.set_volume(0.2);
+
+        let mut sinks = vec![
+            ClipSink {
+                clip_id: "clip_1".into(),
+                track_id: "track_1".into(),
+                current_gain: 0.4,
+                sink: sink_1,
+            },
+            ClipSink {
+                clip_id: "clip_2".into(),
+                track_id: "track_2".into(),
+                current_gain: 0.2,
+                sink: sink_2,
+            },
+        ];
+
+        let changed_sinks = apply_mix_ramp(&mut sinks, &[0.4, 0.8]);
+
+        assert_eq!(changed_sinks, 1);
+        assert!((sinks[0].current_gain - 0.4).abs() < 0.0001);
+        assert!((sinks[1].current_gain - 0.8).abs() < 0.0001);
+    }
+
+    #[test]
+    fn coalesces_consecutive_mix_sync_commands() {
+        let (sender, receiver) = mpsc::channel();
+        let (respond_to_1, _) = mpsc::channel();
+        let (respond_to_2, _) = mpsc::channel();
+        let (respond_to_3, _) = mpsc::channel::<AudioDebugSnapshot>();
+
+        let mut song_a = demo_song();
+        song_a.tracks[0].volume = 0.2;
+        let mut song_b = demo_song();
+        song_b.tracks[0].volume = 0.7;
+
+        sender
+            .send(AudioCommand::SyncSong {
+                song: song_b.clone(),
+                respond_to: respond_to_2,
+            })
+            .expect("second sync command should queue");
+        sender
+            .send(AudioCommand::DebugSnapshot {
+                respond_to: respond_to_3,
+            })
+            .expect("debug command should queue");
+
+        let (latest_song, respond_tos, deferred_command) =
+            coalesce_sync_song_commands(&receiver, song_a, respond_to_1);
+
+        assert_eq!(latest_song.tracks[0].volume, 0.7);
+        assert_eq!(respond_tos.len(), 2);
+        assert!(matches!(
+            deferred_command,
+            Some(AudioCommand::DebugSnapshot { .. })
+        ));
     }
 }
