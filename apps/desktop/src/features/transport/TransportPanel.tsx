@@ -1,11 +1,12 @@
 import { Profiler, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
+  assignSectionMarkerDigit,
   cancelSectionJump,
-  createSection,
+  createSectionMarker,
   createSong,
   createTrack,
   deleteClip,
-  deleteSection,
+  deleteSectionMarker,
   deleteTrack,
   duplicateClip,
   getSongView,
@@ -23,7 +24,7 @@ import {
   seekTransport,
   splitClip,
   stopTransport,
-  updateSection,
+  updateSectionMarker,
   updateSongTempo,
   updateTrack,
   type ClipSummary,
@@ -259,7 +260,15 @@ function findSection(song: SongView | null, sectionId: string | null) {
     return null;
   }
 
-  return song.sections.find((section) => section.id === sectionId) ?? null;
+  return song.derivedSections.find((section) => section.id === sectionId) ?? null;
+}
+
+function findSectionMarker(song: SongView | null, markerId: string | null) {
+  if (!song || !markerId) {
+    return null;
+  }
+
+  return song.sectionMarkers.find((marker) => marker.id === markerId) ?? null;
 }
 
 function trackChildrenCount(song: SongView, trackId: string) {
@@ -1406,21 +1415,23 @@ export function TransportPanel() {
   }
 
   function sectionContextMenu(section: SectionSummary) {
+    const marker = findSectionMarker(song, section.id);
+    const canEditMarker = Boolean(marker);
+
     return [
       {
         label: "Renombrar",
+        disabled: !canEditMarker,
         onSelect: async () => {
+          if (!marker) {
+            return;
+          }
           const nextName = window.prompt("Nuevo nombre de la seccion", section.name)?.trim();
           if (!nextName) {
             return;
           }
           await runAction(async () => {
-            const nextSnapshot = await updateSection(
-              section.id,
-              nextName,
-              section.startSeconds,
-              section.endSeconds,
-            );
+            const nextSnapshot = await updateSectionMarker(section.id, nextName, marker.startSeconds);
             setSnapshot(nextSnapshot);
             setStatus(`Seccion renombrada: ${nextName}`);
           });
@@ -1428,12 +1439,45 @@ export function TransportPanel() {
       },
       {
         label: "Borrar",
+        disabled: !canEditMarker,
         onSelect: async () => {
+          if (!marker) {
+            return;
+          }
           await runAction(async () => {
-            const nextSnapshot = await deleteSection(section.id);
+            const nextSnapshot = await deleteSectionMarker(section.id);
             setSnapshot(nextSnapshot);
             setSelectedSectionId(null);
             setStatus(`Seccion eliminada: ${section.name}`);
+          });
+        },
+      },
+      {
+        label: marker?.digit == null ? "Asignar digito" : `Cambiar digito (${marker.digit})`,
+        disabled: !canEditMarker,
+        onSelect: async () => {
+          if (!marker) {
+            return;
+          }
+          const value = window.prompt("Digito 0-9 (vacio para liberar)", marker.digit?.toString() ?? "");
+          if (value === null) {
+            return;
+          }
+          const trimmed = value.trim();
+          const nextDigit = trimmed === "" ? null : Number(trimmed);
+          if (nextDigit !== null && (!Number.isInteger(nextDigit) || nextDigit < 0 || nextDigit > 9)) {
+            setStatus("Digito invalido. Usa un valor entre 0 y 9.");
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = await assignSectionMarkerDigit(section.id, nextDigit);
+            setSnapshot(nextSnapshot);
+            setStatus(
+              nextDigit === null
+                ? `Digito liberado para ${section.name}.`
+                : `Digito ${nextDigit} asignado a ${section.name}.`,
+            );
           });
         },
       },
@@ -1628,7 +1672,7 @@ export function TransportPanel() {
           <div className="lt-timeline-stats">
             <span>{song?.tracks.length ?? 0} tracks</span>
             <span>{song?.clips.length ?? 0} clips</span>
-            <span>{song?.sections.length ?? 0} secciones</span>
+            <span>{song?.sectionMarkers.length ?? 0} marcas</span>
           </div>
         </div>
 
@@ -1689,7 +1733,7 @@ export function TransportPanel() {
                   </div>
                 ))}
 
-                {song?.sections.map((section) => (
+                {song?.derivedSections.map((section) => (
                   <button
                     key={section.id}
                     type="button"
@@ -2013,17 +2057,14 @@ export function TransportPanel() {
               type="button"
               onClick={() =>
                 void runAction(async () => {
-                  const nextSnapshot = await createSection(
-                    currentSelection.startSeconds,
-                    currentSelection.endSeconds,
-                  );
+                  const nextSnapshot = await createSectionMarker(currentSelection.startSeconds);
                   setSnapshot(nextSnapshot);
                   setTimeSelection(null);
-                  setStatus("Seccion creada desde la seleccion temporal.");
+                  setStatus("Marca creada desde la seleccion temporal.");
                 })
               }
             >
-              Crear seccion
+              Crear marca
             </button>
             <button type="button" onClick={() => clearSelections("Seleccion temporal cancelada.")}>
               Cancelar seleccion

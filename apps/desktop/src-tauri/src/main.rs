@@ -294,22 +294,6 @@ fn duplicate_clip(
 }
 
 #[tauri::command]
-fn create_section(
-    start_seconds: f64,
-    end_seconds: f64,
-    state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-
-    session
-        .create_section(start_seconds, end_seconds, &state.audio)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
 fn create_section_marker(
     start_seconds: f64,
     state: State<'_, DesktopState>,
@@ -321,24 +305,6 @@ fn create_section_marker(
 
     session
         .create_section_marker(start_seconds, &state.audio)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn update_section(
-    section_id: String,
-    name: String,
-    start_seconds: f64,
-    end_seconds: f64,
-    state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-
-    session
-        .update_section(&section_id, &name, start_seconds, end_seconds, &state.audio)
         .map_err(|error| error.to_string())
 }
 
@@ -356,21 +322,6 @@ fn update_section_marker(
 
     session
         .update_section_marker(&section_id, &name, start_seconds, &state.audio)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn delete_section(
-    section_id: String,
-    state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-
-    session
-        .delete_section(&section_id, &state.audio)
         .map_err(|error| error.to_string())
 }
 
@@ -564,11 +515,8 @@ fn main() {
             update_clip_window,
             duplicate_clip,
             split_clip,
-            create_section,
             create_section_marker,
-            update_section,
             update_section_marker,
-            delete_section,
             delete_section_marker,
             assign_section_marker_digit,
             update_song_tempo,

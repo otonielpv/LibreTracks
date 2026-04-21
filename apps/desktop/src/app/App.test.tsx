@@ -143,7 +143,7 @@ describe("App", () => {
     expect(screen.getByRole("slider", { name: /volumen de drums/i })).toBeTruthy();
   });
 
-  it("creates a time selection from the ruler and turns it into a section", async () => {
+  it("creates a time selection from the ruler and turns it into a marker", async () => {
     const { container } = await renderApp();
     mockRulerBounds(container);
 
@@ -154,13 +154,13 @@ describe("App", () => {
       fireEvent.mouseUp(window, { button: 0, clientX: 420 });
     });
 
-    expect(await screen.findByRole("button", { name: /crear seccion/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /crear marca/i })).toBeTruthy();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /crear seccion/i }));
+      fireEvent.click(screen.getByRole("button", { name: /crear marca/i }));
     });
 
-    expect(await screen.findByText(/seccion creada desde la seleccion temporal/i)).toBeTruthy();
+    expect(await screen.findByText(/marca creada desde la seleccion temporal/i)).toBeTruthy();
     expect(screen.getByText("Seccion 5")).toBeTruthy();
   });
 

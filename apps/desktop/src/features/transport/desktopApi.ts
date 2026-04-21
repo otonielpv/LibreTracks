@@ -65,7 +65,6 @@ export type SongView = {
   key?: string | null;
   timeSignature: string;
   durationSeconds: number;
-  sections: SectionSummary[];
   sectionMarkers: SectionMarkerSummary[];
   derivedSections: SectionSummary[];
   clips: ClipSummary[];
@@ -299,7 +298,6 @@ export async function createSong(): Promise<TransportSnapshot> {
       key: null,
       timeSignature: "4/4",
       durationSeconds: 60,
-      sections: [],
       sectionMarkers: [],
       derivedSections: [],
       clips: [],
@@ -419,10 +417,7 @@ export async function scheduleSectionJump(
   bars?: number,
 ): Promise<TransportSnapshot> {
   if (!isTauriApp) {
-    const targetSection =
-      demoSong.sectionMarkers.find((section) => section.id === targetSectionId) ??
-      demoSong.sections.find((section) => section.id === targetSectionId) ??
-      null;
+    const targetSection = demoSong.sectionMarkers.find((section) => section.id === targetSectionId) ?? null;
     if (targetSection) {
       if (trigger === "immediate") {
         demoClock.anchorPositionSeconds = targetSection.startSeconds;
@@ -592,73 +587,6 @@ export async function splitClip(
   }
 
   return invokeCommand<TransportSnapshot>("split_clip", { clipId, splitSeconds });
-}
-
-export async function createSection(
-  startSeconds: number,
-  endSeconds: number,
-): Promise<TransportSnapshot> {
-  if (!isTauriApp) {
-    const markerStartSeconds = Math.min(startSeconds, endSeconds);
-    updateDemoSong((song) => ({
-      ...song,
-      sectionMarkers: [...song.sectionMarkers, {
-        id: `section-demo-${Date.now()}`,
-        name: `Seccion ${song.sectionMarkers.length + 1}`,
-        startSeconds: markerStartSeconds,
-        digit: null,
-      }],
-    }));
-    return buildDemoSnapshot();
-  }
-
-  return invokeCommand<TransportSnapshot>("create_section", { startSeconds, endSeconds });
-}
-
-export async function updateSection(
-  sectionId: string,
-  name: string,
-  startSeconds: number,
-  endSeconds: number,
-): Promise<TransportSnapshot> {
-  if (!isTauriApp) {
-    const markerStartSeconds = Math.min(startSeconds, endSeconds);
-    updateDemoSong((song) => ({
-      ...song,
-      sectionMarkers: song.sectionMarkers.map((section) =>
-        section.id === sectionId
-          ? {
-              ...section,
-              name,
-              startSeconds: markerStartSeconds,
-            }
-          : section,
-      ),
-    }));
-    return buildDemoSnapshot();
-  }
-
-  return invokeCommand<TransportSnapshot>("update_section", {
-    sectionId,
-    name,
-    startSeconds,
-    endSeconds,
-  });
-}
-
-export async function deleteSection(sectionId: string): Promise<TransportSnapshot> {
-  if (!isTauriApp) {
-    updateDemoSong((song) => ({
-      ...song,
-      sectionMarkers: song.sectionMarkers.filter((section) => section.id !== sectionId),
-    }));
-    if (demoPendingJump?.targetMarkerId === sectionId) {
-      demoPendingJump = null;
-    }
-    return buildDemoSnapshot();
-  }
-
-  return invokeCommand<TransportSnapshot>("delete_section", { sectionId });
 }
 
 export async function createSectionMarker(startSeconds: number): Promise<TransportSnapshot> {
@@ -891,12 +819,7 @@ function normalizeSong(song: SongView): SongView {
       0,
     ),
   );
-  const sectionMarkers = [...(song.sectionMarkers ?? song.sections.map((section) => ({
-    id: section.id,
-    name: section.name,
-    startSeconds: section.startSeconds,
-    digit: null,
-  })))]
+  const sectionMarkers = [...song.sectionMarkers]
     .sort((left, right) => left.startSeconds - right.startSeconds);
   const derivedSections = buildDerivedSections(sectionMarkers, durationSeconds);
 
@@ -907,7 +830,6 @@ function normalizeSong(song: SongView): SongView {
     clips: normalizedClips,
     sectionMarkers,
     derivedSections,
-    sections: derivedSections,
   };
 }
 
@@ -1197,12 +1119,6 @@ function buildDemoSong(): SongView {
         durationSeconds: 140,
         gain: 0.86,
       },
-    ],
-    sections: [
-      { id: "section-intro", name: "Intro", startSeconds: 0, endSeconds: 24 },
-      { id: "section-verse", name: "Verse", startSeconds: 24, endSeconds: 72 },
-      { id: "section-bridge", name: "Bridge", startSeconds: 72, endSeconds: 108 },
-      { id: "section-outro", name: "Outro", startSeconds: 108, endSeconds: 156 },
     ],
     sectionMarkers: [
       { id: "section-intro", name: "Intro", startSeconds: 0, digit: 1 },

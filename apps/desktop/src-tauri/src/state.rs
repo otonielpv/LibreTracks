@@ -209,7 +209,6 @@ pub struct SongView {
     pub key: Option<String>,
     pub time_signature: String,
     pub duration_seconds: f64,
-    pub sections: Vec<SectionSummary>,
     pub section_markers: Vec<SectionMarkerSummary>,
     pub derived_sections: Vec<SectionSummary>,
     pub clips: Vec<ClipSummary>,
@@ -770,15 +769,6 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn create_section(
-        &mut self,
-        start_seconds: f64,
-        _end_seconds: f64,
-        audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        self.create_section_marker(start_seconds, audio)
-    }
-
     pub fn update_section_marker(
         &mut self,
         section_id: &str,
@@ -819,17 +809,6 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn update_section(
-        &mut self,
-        section_id: &str,
-        name: &str,
-        start_seconds: f64,
-        _end_seconds: f64,
-        audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        self.update_section_marker(section_id, name, start_seconds, audio)
-    }
-
     pub fn delete_section_marker(
         &mut self,
         section_id: &str,
@@ -850,14 +829,6 @@ impl DesktopSession {
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
 
         Ok(self.snapshot())
-    }
-
-    pub fn delete_section(
-        &mut self,
-        section_id: &str,
-        audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        self.delete_section_marker(section_id, audio)
     }
 
     pub fn assign_section_marker_digit(
@@ -1755,7 +1726,6 @@ fn song_to_view(song: &Song, waveform_cache: &WaveformMemoryCache, project_revis
         key: song.key.clone(),
         time_signature: song.time_signature.clone(),
         duration_seconds: song.duration_seconds,
-        sections: derived_sections.clone(),
         section_markers: song
             .section_markers
             .iter()
@@ -2536,7 +2506,7 @@ mod tests {
     }
 
     #[test]
-    fn creating_a_section_updates_song_json_and_snapshot() {
+    fn creating_a_section_marker_updates_song_json_and_snapshot() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir =
             create_song_folder(root.path(), "section-demo").expect("song dir should exist");
@@ -2551,8 +2521,8 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session
-            .create_section(2.0, 5.5, &audio)
-            .expect("section should be created");
+            .create_section_marker(2.0, &audio)
+            .expect("section marker should be created");
         let song_view = session
             .song_view()
             .expect("song view should build")
@@ -2757,8 +2727,8 @@ mod tests {
             .expect("jump should schedule");
 
         let snapshot = session
-            .update_section("section_1", "Intro B", 1.0, 3.5, &audio)
-            .expect("section update should succeed");
+            .update_section_marker("section_1", "Intro B", 1.0, &audio)
+            .expect("section marker update should succeed");
 
         let pending_jump = snapshot
             .pending_section_jump
@@ -2789,8 +2759,8 @@ mod tests {
             .expect("jump should schedule");
 
         let snapshot = session
-            .update_section("section_2", "Verse", 3.0, 8.0, &audio)
-            .expect("section update should succeed");
+            .update_section_marker("section_2", "Verse", 3.0, &audio)
+            .expect("section marker update should succeed");
 
         assert_eq!(snapshot.position_seconds, 5.0);
         assert!(snapshot.pending_section_jump.is_none());
@@ -2816,8 +2786,8 @@ mod tests {
             .expect("jump should schedule");
 
         let snapshot = session
-            .delete_section("section_2", &audio)
-            .expect("target section should delete");
+            .delete_section_marker("section_2", &audio)
+            .expect("target section marker should delete");
 
         assert!(snapshot.pending_section_jump.is_none());
     }
@@ -2844,7 +2814,7 @@ mod tests {
     }
 
     #[test]
-    fn updating_a_section_updates_song_json_and_snapshot() {
+    fn updating_a_section_marker_updates_song_json_and_snapshot() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir =
             create_song_folder(root.path(), "section-update-demo").expect("song dir should exist");
@@ -2859,8 +2829,8 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session
-            .update_section("section_1", "Verse", 2.5, 7.0, &audio)
-            .expect("section should update");
+            .update_section_marker("section_1", "Verse", 2.5, &audio)
+            .expect("section marker should update");
         let updated_section = session
             .song_view()
             .expect("song view should build")
@@ -2879,7 +2849,7 @@ mod tests {
     }
 
     #[test]
-    fn deleting_a_section_updates_song_json_and_snapshot() {
+    fn deleting_a_section_marker_updates_song_json_and_snapshot() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir =
             create_song_folder(root.path(), "section-delete-demo").expect("song dir should exist");
@@ -2894,8 +2864,8 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session
-            .delete_section("section_1", &audio)
-            .expect("section should delete");
+            .delete_section_marker("section_1", &audio)
+            .expect("section marker should delete");
         let song_view = session
             .song_view()
             .expect("song view should build")
