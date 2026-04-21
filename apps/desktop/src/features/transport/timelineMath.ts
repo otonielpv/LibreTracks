@@ -1,4 +1,5 @@
 export const BASE_PIXELS_PER_SECOND = 18;
+export const TIMELINE_TIMEBASE_HZ = 48_000;
 
 export type TimelineGridParams = {
   durationSeconds: number;
@@ -31,6 +32,13 @@ export type TimelineGrid = {
   visibleEndSeconds: number;
 };
 
+export type MusicalPosition = {
+  barNumber: number;
+  beatInBar: number;
+  subBeat: number;
+  display: string;
+};
+
 export function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -47,10 +55,55 @@ export function parseTimeSignature(timeSignature: string) {
 }
 
 export function getBeatDurationSeconds(bpm: number, timeSignature: string) {
+  return timebaseFramesToSeconds(getBeatFrames(bpm, timeSignature));
+}
+
+export function secondsToTimebaseFrames(
+  seconds: number,
+  timebaseHz = TIMELINE_TIMEBASE_HZ,
+) {
+  return Math.max(0, Math.round(Math.max(0, seconds) * clampPositive(timebaseHz, 1)));
+}
+
+export function timebaseFramesToSeconds(
+  frames: number,
+  timebaseHz = TIMELINE_TIMEBASE_HZ,
+) {
+  return Math.max(0, frames) / clampPositive(timebaseHz, 1);
+}
+
+export function getBeatFrames(
+  bpm: number,
+  timeSignature: string,
+  timebaseHz = TIMELINE_TIMEBASE_HZ,
+) {
   const safeBpm = clampPositive(bpm, 120);
   const { beatUnit } = parseTimeSignature(timeSignature);
-  const quarterNoteSeconds = 60 / safeBpm;
-  return quarterNoteSeconds * (4 / beatUnit);
+  const quarterNoteFrames = (clampPositive(timebaseHz, 1) * 60) / safeBpm;
+  return Math.max(1, Math.round(quarterNoteFrames * (4 / beatUnit)));
+}
+
+export function getMusicalPosition(
+  seconds: number,
+  bpm: number,
+  timeSignature: string,
+  timebaseHz = TIMELINE_TIMEBASE_HZ,
+): MusicalPosition {
+  const { beatsPerBar } = parseTimeSignature(timeSignature);
+  const beatFrames = getBeatFrames(bpm, timeSignature, timebaseHz);
+  const totalFrames = secondsToTimebaseFrames(seconds, timebaseHz);
+  const totalWholeBeats = Math.floor(totalFrames / beatFrames);
+  const beatOffsetFrames = totalFrames - totalWholeBeats * beatFrames;
+  const barNumber = Math.floor(totalWholeBeats / beatsPerBar) + 1;
+  const beatInBar = (totalWholeBeats % beatsPerBar) + 1;
+  const subBeat = Math.min(99, Math.floor((beatOffsetFrames * 100) / beatFrames));
+
+  return {
+    barNumber,
+    beatInBar,
+    subBeat,
+    display: `${barNumber}.${beatInBar}.${String(subBeat).padStart(2, "0")}`,
+  };
 }
 
 export function getPixelsPerSecond(zoomLevel: number) {
@@ -124,7 +177,8 @@ export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGr
   const safeDuration = Math.max(0, params.durationSeconds);
   const safePixelsPerSecond = clampPositive(params.pixelsPerSecond, 1);
   const { beatsPerBar } = parseTimeSignature(params.timeSignature);
-  const beatDuration = getBeatDurationSeconds(params.bpm, params.timeSignature);
+  const beatFrames = getBeatFrames(params.bpm, params.timeSignature);
+  const beatDuration = timebaseFramesToSeconds(beatFrames);
   const beatPixels = beatDuration * safePixelsPerSecond;
   const barPixels = beatPixels * beatsPerBar;
   const subdivisionPerBeat = 1;
@@ -140,10 +194,13 @@ export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGr
     0,
     Math.max(safeDuration, visibleStartSeconds),
   );
-  const startBeatIndex = Math.max(0, Math.floor(visibleStartSeconds / beatDuration) - 1);
+  const safeDurationFrames = secondsToTimebaseFrames(safeDuration);
+  const visibleStartFrames = secondsToTimebaseFrames(visibleStartSeconds);
+  const visibleEndFrames = secondsToTimebaseFrames(visibleEndSeconds);
+  const startBeatIndex = Math.max(0, Math.floor(visibleStartFrames / beatFrames) - 1);
   const endBeatIndex = Math.max(
     startBeatIndex,
-    Math.ceil(visibleEndSeconds / beatDuration) + 1,
+    Math.ceil(visibleEndFrames / beatFrames) + 1,
   );
 
   const bars: number[] = [];
@@ -151,10 +208,11 @@ export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGr
   const markers: TimelineGrid["markers"] = [];
 
   for (let beatIndex = startBeatIndex; beatIndex <= endBeatIndex; beatIndex += 1) {
-    const seconds = beatIndex * beatDuration;
-    if (seconds < visibleStartSeconds - beatDuration || seconds > safeDuration + 0.0001) {
+    const frame = beatIndex * beatFrames;
+    if (frame < visibleStartFrames - beatFrames || frame > safeDurationFrames + beatFrames) {
       continue;
     }
+    const seconds = timebaseFramesToSeconds(frame);
 
     const barNumber = Math.floor(beatIndex / beatsPerBar) + 1;
     const beatInBar = (beatIndex % beatsPerBar) + 1;
@@ -193,6 +251,7 @@ export function snapToTimelineGrid(
   _zoomLevel: number,
   _pixelsPerSecond: number,
 ) {
-  const snapIntervalSeconds = getBeatDurationSeconds(bpm, timeSignature);
-  return Math.round(seconds / snapIntervalSeconds) * snapIntervalSeconds;
+  const beatFrames = getBeatFrames(bpm, timeSignature);
+  const positionFrames = secondsToTimebaseFrames(seconds);
+  return timebaseFramesToSeconds(Math.round(positionFrames / beatFrames) * beatFrames);
 }

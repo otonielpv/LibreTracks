@@ -26,6 +26,8 @@ use tauri::{AppHandle, Manager};
 
 use crate::audio_runtime::{AudioController, PlaybackStartReason};
 
+const TIMELINE_TIMEBASE_HZ: u32 = 48_000;
+
 pub struct DesktopState {
     pub audio: AudioController,
     pub session: Mutex<DesktopSession>,
@@ -1939,20 +1941,22 @@ fn empty_musical_position_summary() -> MusicalPositionSummary {
 }
 
 fn musical_position_summary(song: &Song, position_seconds: f64) -> MusicalPositionSummary {
-    let Ok((numerator, _denominator)) = parse_time_signature(&song.time_signature) else {
+    let Ok((numerator, denominator)) = parse_time_signature(&song.time_signature) else {
         return empty_musical_position_summary();
     };
     if song.bpm <= 0.0 {
         return empty_musical_position_summary();
     }
 
-    let beat_duration_seconds = 60.0 / song.bpm;
-    let safe_position = position_seconds.max(0.0);
-    let total_beats = safe_position / beat_duration_seconds;
     let beats_per_bar = numerator.max(1);
-    let bar_number = (total_beats / f64::from(beats_per_bar)).floor() as u32 + 1;
-    let beat_in_bar = (total_beats.floor() as u32 % beats_per_bar) + 1;
-    let sub_beat = ((total_beats.fract()) * 100.0).floor() as u32;
+    let beat_frames = beat_frames_for_signature(song.bpm, denominator, TIMELINE_TIMEBASE_HZ);
+    let total_frames = seconds_to_timebase_frames(position_seconds, TIMELINE_TIMEBASE_HZ);
+    let total_whole_beats = total_frames / beat_frames;
+    let beat_offset_frames = total_frames % beat_frames;
+    let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
+    let beat_in_bar = (total_whole_beats % u64::from(beats_per_bar)) as u32 + 1;
+    let sub_beat = (((u128::from(beat_offset_frames)) * 100) / u128::from(beat_frames))
+        .min(99) as u32;
 
     MusicalPositionSummary {
         bar_number,
@@ -1960,6 +1964,19 @@ fn musical_position_summary(song: &Song, position_seconds: f64) -> MusicalPositi
         sub_beat,
         display: format!("{bar_number}.{beat_in_bar}.{sub_beat:02}"),
     }
+}
+
+fn seconds_to_timebase_frames(seconds: f64, sample_rate: u32) -> u64 {
+    (seconds.max(0.0) * f64::from(sample_rate.max(1))).round() as u64
+}
+
+fn beat_frames_for_signature(bpm: f64, denominator: u32, sample_rate: u32) -> u64 {
+    let safe_bpm = bpm.max(1.0);
+    let safe_denominator = denominator.max(1);
+    let quarter_note_frames = (f64::from(sample_rate.max(1)) * 60.0) / safe_bpm;
+    (quarter_note_frames * (4.0 / f64::from(safe_denominator)))
+        .round()
+        .max(1.0) as u64
 }
 
 fn parse_time_signature(time_signature: &str) -> Result<(u32, u32), DesktopError> {
@@ -2048,7 +2065,7 @@ mod tests {
     };
     use tempfile::tempdir;
 
-    use super::{DesktopSession, TransportClock};
+    use super::{musical_position_summary, DesktopSession, TransportClock};
 
     fn demo_song() -> Song {
         Song {
@@ -2099,6 +2116,31 @@ mod tests {
             digit: Some(1),
         });
         song
+    }
+
+    #[test]
+    fn musical_position_summary_uses_time_signature_beat_unit() {
+        let mut song = demo_song();
+        song.time_signature = "6/8".into();
+        song.bpm = 120.0;
+
+        let summary = musical_position_summary(&song, 0.25);
+
+        assert_eq!(summary.bar_number, 1);
+        assert_eq!(summary.beat_in_bar, 2);
+        assert_eq!(summary.display, "1.2.00");
+    }
+
+    #[test]
+    fn musical_position_summary_remains_stable_for_long_positions() {
+        let song = demo_song();
+
+        let summary = musical_position_summary(&song, 3600.125);
+
+        assert_eq!(summary.bar_number, 1801);
+        assert_eq!(summary.beat_in_bar, 1);
+        assert_eq!(summary.sub_beat, 25);
+        assert_eq!(summary.display, "1801.1.25");
     }
 
     fn demo_song_with_two_sections() -> Song {

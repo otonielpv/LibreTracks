@@ -44,6 +44,7 @@ import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
 import {
   BASE_PIXELS_PER_SECOND,
   clampCameraX,
+  getMusicalPosition,
   getMaxCameraX,
   screenXToSeconds,
   secondsToScreenX,
@@ -156,14 +157,7 @@ function formatTimelineHeaderMusicalPosition(barNumber: number, beatInBar: numbe
 }
 
 function formatMusicalPosition(seconds: number, bpm: number, timeSignature: string) {
-  const [numeratorRaw] = timeSignature.split("/");
-  const beatsPerBar = Math.max(1, Number(numeratorRaw) || 4);
-  const beatDurationSeconds = bpm > 0 ? 60 / bpm : 0.5;
-  const totalBeats = Math.max(0, seconds) / beatDurationSeconds;
-  const barNumber = Math.floor(totalBeats / beatsPerBar) + 1;
-  const beatInBar = (Math.floor(totalBeats) % beatsPerBar) + 1;
-  const subBeat = Math.floor((totalBeats % 1) * 100);
-  return `${barNumber}.${beatInBar}.${String(subBeat).padStart(2, "0")}`;
+  return getMusicalPosition(seconds, bpm, timeSignature).display;
 }
 
 function clamp(value: number, min: number, max: number) {

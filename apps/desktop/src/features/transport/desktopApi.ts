@@ -1,3 +1,5 @@
+import { getMusicalPosition } from "./timelineMath";
+
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
 export type TrackKind = "audio" | "folder";
 export type JumpTriggerLabel = "immediate" | "section_end" | `after_bars:${number}`;
@@ -883,20 +885,7 @@ function buildDerivedSections(markers: SectionMarkerSummary[], durationSeconds: 
 }
 
 function buildMusicalPosition(positionSeconds: number, bpm: number, timeSignature: string) {
-  const [numeratorRaw] = timeSignature.split("/");
-  const beatsPerBar = Math.max(1, Number(numeratorRaw) || 4);
-  const beatDurationSeconds = bpm > 0 ? 60 / bpm : 0.5;
-  const totalBeats = Math.max(0, positionSeconds) / beatDurationSeconds;
-  const barNumber = Math.floor(totalBeats / beatsPerBar) + 1;
-  const beatInBar = (Math.floor(totalBeats) % beatsPerBar) + 1;
-  const subBeat = Math.floor((totalBeats % 1) * 100);
-
-  return {
-    barNumber,
-    beatInBar,
-    subBeat,
-    display: `${barNumber}.${beatInBar}.${String(subBeat).padStart(2, "0")}`,
-  };
+  return getMusicalPosition(positionSeconds, bpm, timeSignature);
 }
 
 function insertTrack(
