@@ -38,12 +38,22 @@ import {
   type WaveformSummaryDto,
   reportUiRenderMetric,
 } from "./desktopApi";
+import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import { ImportAudioModal } from "./ImportAudioModal";
 import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
+import {
+  BASE_PIXELS_PER_SECOND,
+  clampCameraX,
+  getMaxCameraX,
+  screenXToSeconds,
+  secondsToScreenX,
+  zoomCameraAtViewportX,
+} from "./timelineMath";
 
 const HEADER_WIDTH = 260;
 const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
 const TRACK_HEIGHT = 94;
+const RULER_HEIGHT = 64;
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 48;
 const ZOOM_STEP = 0.25;
@@ -94,6 +104,12 @@ type TrackDragState = {
   startClientY: number;
   currentClientY: number;
   isDragging: boolean;
+} | null;
+
+type TimelinePanState = {
+  pointerId: number;
+  startClientX: number;
+  originCameraX: number;
 } | null;
 
 type TimeSelection = {
@@ -177,53 +193,6 @@ function keyboardDigit(eventCode: string) {
   }
 
   return null;
-}
-
-function cropWaveform(clip: ClipSummary, waveform: WaveformSummaryDto | undefined) {
-  const peaks = waveform?.maxPeaks ?? [];
-  const minPeaks = waveform?.minPeaks?.length ? waveform.minPeaks : peaks.map((peak) => -peak);
-  if (!peaks.length || clip.sourceDurationSeconds <= 0) {
-    return {
-      min: [],
-      max: [],
-    };
-  }
-
-  const startRatio = clamp(clip.sourceStartSeconds / clip.sourceDurationSeconds, 0, 1);
-  const endRatio = clamp(
-    (clip.sourceStartSeconds + clip.durationSeconds) / clip.sourceDurationSeconds,
-    0,
-    1,
-  );
-  const startIndex = Math.floor(startRatio * peaks.length);
-  const endIndex = Math.max(startIndex + 1, Math.ceil(endRatio * peaks.length));
-
-  return {
-    min: minPeaks.slice(startIndex, endIndex),
-    max: peaks.slice(startIndex, endIndex),
-  };
-}
-
-function buildWaveformPath(clip: ClipSummary, waveform: WaveformSummaryDto | undefined) {
-  const { min, max } = cropWaveform(clip, waveform);
-  if (!max.length || !min.length) {
-    return "";
-  }
-
-  const topPoints = max.map((peak, index) => {
-    const x = (index / Math.max(1, max.length - 1)) * 100;
-    const y = 50 - clamp(peak, -1, 1) * 47;
-    return `${x},${y}`;
-  });
-  const bottomPoints = min
-    .map((peak, index) => {
-      const x = (index / Math.max(1, min.length - 1)) * 100;
-      const y = 50 - clamp(peak, -1, 1) * 47;
-      return `${x},${y}`;
-    })
-    .reverse();
-
-  return `M ${topPoints.join(" L ")} L ${bottomPoints.join(" L ")} Z`;
 }
 
 function buildVisibleTracks(song: SongView, collapsedFolders: Set<string>) {
@@ -358,14 +327,16 @@ function rulerPointerToSeconds(
   event: MouseEvent | ReactMouseEvent,
   element: HTMLElement,
   durationSeconds: number,
+  cameraX: number,
   pixelsPerSecond: number,
 ) {
   const bounds = element.getBoundingClientRect();
   const x = clamp(event.clientX - bounds.left, 0, bounds.width);
-  const visibleDuration = bounds.width / pixelsPerSecond;
-  const totalDuration = Math.max(durationSeconds, visibleDuration);
-  const seconds = (x / bounds.width) * totalDuration;
-  return clamp(seconds, 0, durationSeconds);
+  return clamp(
+    screenXToSeconds(x, cameraX, pixelsPerSecond),
+    0,
+    Math.max(0, durationSeconds),
+  );
 }
 
 export function TransportPanel() {
@@ -374,7 +345,6 @@ export function TransportPanel() {
   const [waveformCache, setWaveformCache] = useState<Record<string, WaveformSummaryDto>>({});
   const [clipsByTrack, setClipsByTrack] = useState<Record<string, ClipSummary[]>>({});
   const [tracksById, setTracksById] = useState<Record<string, TrackSummary>>({});
-  const [clipWaveformPaths, setClipWaveformPaths] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("Cargando sesion...");
   const [isBusy, setIsBusy] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -395,7 +365,9 @@ export function TransportPanel() {
   const [timeSelection, setTimeSelection] = useState<TimeSelection>(null);
   const [displayPositionSeconds, setDisplayPositionSeconds] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
+  const [cameraX, setCameraX] = useState(0);
   const [trackDrag, setTrackDrag] = useState<TrackDragState>(null);
+  const [timelinePan, setTimelinePan] = useState<TimelinePanState>(null);
   const [volumeDrafts, setVolumeDrafts] = useState<Record<string, number>>({});
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [trackDropState, setTrackDropState] = useState<TrackDropState>(null);
@@ -410,7 +382,6 @@ export function TransportPanel() {
     running: false,
   });
   const displayPositionSecondsRef = useRef(0);
-  const pendingZoomAnchorRef = useRef<{ seconds: number; viewOffsetX: number } | null>(null);
   const suppressTrackClickRef = useRef(false);
   const pendingRulerPressRef = useRef<PendingRulerPress>(null);
   const renderMetricTimeoutRef = useRef<number | null>(null);
@@ -621,24 +592,20 @@ export function TransportPanel() {
     if (!song) {
       setClipsByTrack({});
       setTracksById({});
-      setClipWaveformPaths({});
       return;
     }
 
     const nextTracksById = Object.fromEntries(song.tracks.map((track) => [track.id, track]));
     const nextClipsByTrack = Object.fromEntries(song.tracks.map((track) => [track.id, [] as ClipSummary[]]));
-    const nextClipWaveformPaths: Record<string, string> = {};
 
     for (const clip of song.clips) {
       nextClipsByTrack[clip.trackId] ??= [];
       nextClipsByTrack[clip.trackId].push(clip);
-      nextClipWaveformPaths[clip.id] = buildWaveformPath(clip, waveformCache[clip.waveformKey]);
     }
 
     setTracksById(nextTracksById);
     setClipsByTrack(nextClipsByTrack);
-    setClipWaveformPaths(nextClipWaveformPaths);
-  }, [song, waveformCache]);
+  }, [song]);
 
   useEffect(() => {
     songDurationSecondsRef.current = song?.durationSeconds ?? 0;
@@ -898,16 +865,17 @@ export function TransportPanel() {
     }
 
     const effectSong = song;
+    const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
 
     const onMouseMove = (event: MouseEvent) => {
-      const deltaSeconds = (event.clientX - clipDrag.startClientX) / (zoomLevel * 18);
+      const deltaSeconds = (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
       const nextSeconds = snapEnabled
         ? snapToTimelineGrid(
             clipDrag.originSeconds + deltaSeconds,
             effectSong.bpm,
             effectSong.timeSignature,
             zoomLevel,
-            zoomLevel * 18,
+            effectPixelsPerSecond,
           )
         : clipDrag.originSeconds + deltaSeconds;
 
@@ -954,16 +922,26 @@ export function TransportPanel() {
       return;
     }
 
+    const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
+    const effectLaneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
+    const effectCameraX = clampCameraX(
+      cameraX,
+      song.durationSeconds,
+      effectPixelsPerSecond,
+      effectLaneViewportWidth,
+    );
+
     const onMouseMove = (event: MouseEvent) => {
       const rawSeconds = rulerPointerToSeconds(
         event,
         rulerTrackRef.current as HTMLElement,
         song.durationSeconds,
-        zoomLevel * 18,
+        effectCameraX,
+        effectPixelsPerSecond,
       );
       const nextSeconds =
         snapEnabled
-          ? snapToTimelineGrid(rawSeconds, song.bpm, song.timeSignature, zoomLevel, zoomLevel * 18)
+          ? snapToTimelineGrid(rawSeconds, song.bpm, song.timeSignature, zoomLevel, effectPixelsPerSecond)
           : rawSeconds;
       const pendingPress = pendingRulerPressRef.current;
       if (pendingPress && !rulerDrag) {
@@ -999,7 +977,8 @@ export function TransportPanel() {
         event,
         rulerTrackRef.current as HTMLElement,
         song.durationSeconds,
-        zoomLevel * 18,
+        effectCameraX,
+        effectPixelsPerSecond,
       );
       const pointerSeconds =
         snapEnabled
@@ -1008,7 +987,7 @@ export function TransportPanel() {
               song.bpm,
               song.timeSignature,
               zoomLevel,
-              zoomLevel * 18,
+              effectPixelsPerSecond,
             )
           : rawPointerSeconds;
 
@@ -1074,7 +1053,7 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [rulerDrag, snapEnabled, song, zoomLevel]);
+  }, [cameraX, rulerDrag, snapEnabled, song, timelineViewportWidth, zoomLevel]);
 
   useEffect(() => {
     if (!playheadDrag || !song || !rulerTrackRef.current) {
@@ -1082,13 +1061,22 @@ export function TransportPanel() {
     }
 
     const effectSong = song;
+    const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
+    const effectLaneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
+    const effectCameraX = clampCameraX(
+      cameraX,
+      effectSong.durationSeconds,
+      effectPixelsPerSecond,
+      effectLaneViewportWidth,
+    );
 
     const onMouseMove = (event: MouseEvent) => {
       const rawSeconds = rulerPointerToSeconds(
         event,
         rulerTrackRef.current as HTMLElement,
         effectSong.durationSeconds,
-        zoomLevel * 18,
+        effectCameraX,
+        effectPixelsPerSecond,
       );
       const nextSeconds =
         snapEnabled
@@ -1097,7 +1085,7 @@ export function TransportPanel() {
               effectSong.bpm,
               effectSong.timeSignature,
               zoomLevel,
-              zoomLevel * 18,
+              effectPixelsPerSecond,
             )
           : rawSeconds;
       setPlayheadDrag((current) =>
@@ -1137,7 +1125,7 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [playheadDrag, snapEnabled, song, zoomLevel]);
+  }, [cameraX, playheadDrag, snapEnabled, song, timelineViewportWidth, zoomLevel]);
 
   useEffect(() => {
     if (!trackDrag || !song) {
@@ -1224,8 +1212,11 @@ export function TransportPanel() {
   function syncLivePosition(positionSeconds: number) {
     const durationSeconds = song?.durationSeconds ?? 0;
     const clampedPosition = clamp(positionSeconds, 0, durationSeconds || Number.MAX_SAFE_INTEGER);
-    const durationForOffset = Math.max(1, durationSeconds);
-    const playheadOffset = (clampedPosition / durationForOffset) * timelineWidth;
+    const playheadOffset = secondsToScreenX(
+      clampedPosition,
+      clampedTimelineCameraX,
+      pixelsPerSecond,
+    );
 
     displayPositionSecondsRef.current = clampedPosition;
     panelRef.current?.style.setProperty("--lt-playhead-left", `${playheadOffset}px`);
@@ -1251,9 +1242,19 @@ export function TransportPanel() {
 
   const laneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
   const fitAllZoomLevel = song?.durationSeconds
-    ? clamp(laneViewportWidth / (Math.max(song.durationSeconds, 1) * 18), ZOOM_MIN, ZOOM_MAX)
+    ? clamp(
+        laneViewportWidth / (Math.max(song.durationSeconds, 1) * BASE_PIXELS_PER_SECOND),
+        ZOOM_MIN,
+        ZOOM_MAX,
+      )
     : ZOOM_MIN;
   const effectiveZoomMin = song ? fitAllZoomLevel : ZOOM_MIN;
+  const pixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
+  const maxTimelineCameraX = getMaxCameraX(song?.durationSeconds ?? 0, pixelsPerSecond, laneViewportWidth);
+  const clampedTimelineCameraX = clamp(cameraX, 0, maxTimelineCameraX);
+  const visibleDurationSeconds = laneViewportWidth / Math.max(1, pixelsPerSecond);
+  const viewportStartSeconds = clampedTimelineCameraX / Math.max(1, pixelsPerSecond);
+  const viewportEndSeconds = viewportStartSeconds + visibleDurationSeconds;
   const positionSeconds = playheadDrag?.currentSeconds ?? displayPositionSeconds;
   const musicalPositionLabel =
     snapshot?.musicalPosition?.display ??
@@ -1262,9 +1263,7 @@ export function TransportPanel() {
     song?.tempoMetadata.source === "auto_import"
       ? `Detectado en importacion${song.tempoMetadata.confidence != null ? ` (${Math.round(song.tempoMetadata.confidence * 100)}%)` : ""}`
       : "Manual";
-  const pixelsPerSecond = zoomLevel * 18;
-  const timelineWidth = Math.max((song?.durationSeconds ?? 0) * pixelsPerSecond, laneViewportWidth);
-  const timelineRowWidth = HEADER_WIDTH + timelineWidth;
+  const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
   const selectedTrack = selectedTrackId ? tracksById[selectedTrackId] ?? null : null;
   const selectedClip = findClip(song, selectedClipId);
@@ -1278,16 +1277,14 @@ export function TransportPanel() {
       : timeSelection,
   );
   const currentSelectionLeft = currentSelection
-    ? (currentSelection.startSeconds / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth
+    ? secondsToScreenX(currentSelection.startSeconds, clampedTimelineCameraX, pixelsPerSecond)
     : 0;
   const currentSelectionWidth = currentSelection
-    ? ((currentSelection.endSeconds - currentSelection.startSeconds) /
-        Math.max(1, song?.durationSeconds ?? 1)) *
-      timelineWidth
+    ? (currentSelection.endSeconds - currentSelection.startSeconds) * pixelsPerSecond
     : 0;
   const draggedPlayheadOffset =
     playheadDrag && song
-      ? (playheadDrag.currentSeconds / Math.max(1, song.durationSeconds)) * timelineWidth
+      ? secondsToScreenX(playheadDrag.currentSeconds, clampedTimelineCameraX, pixelsPerSecond)
       : null;
   const timelineGrid = useTimelineGrid({
     durationSeconds: song?.durationSeconds ?? 0,
@@ -1295,6 +1292,8 @@ export function TransportPanel() {
     timeSignature: song?.timeSignature ?? "4/4",
     zoomLevel,
     pixelsPerSecond,
+    viewportStartSeconds,
+    viewportEndSeconds,
   });
   const timelineHeaderMarkers = useMemo(
     () =>
@@ -1305,6 +1304,10 @@ export function TransportPanel() {
       ),
     [timelineGrid.barLabelStep, timelineGrid.markers, timelineGrid.showBeatLabels],
   );
+  const previewClipSeconds = clipDrag
+    ? { [clipDrag.clipId]: clipDrag.previewSeconds }
+    : {};
+  const playheadColor = playheadDrag ? "#ffe2ab" : "#57f1db";
 
   async function scheduleMarkerJumpWithGlobalMode(markerId: string, markerName: string) {
     const trigger =
@@ -1330,26 +1333,29 @@ export function TransportPanel() {
   }, [effectiveZoomMin]);
 
   useEffect(() => {
-    if (!pendingZoomAnchorRef.current || !timelineShellRef.current) {
+    if (cameraX !== clampedTimelineCameraX) {
+      setCameraX(clampedTimelineCameraX);
+    }
+  }, [cameraX, clampedTimelineCameraX]);
+
+  useEffect(() => {
+    const shell = timelineShellRef.current;
+    if (!shell) {
       return;
     }
 
-    const pendingAnchor = pendingZoomAnchorRef.current;
-    pendingZoomAnchorRef.current = null;
-
-    const shell = timelineShellRef.current;
-    const laneOffsetX = clamp(
-      pendingAnchor.viewOffsetX - HEADER_WIDTH,
-      0,
-      Math.max(0, shell.clientWidth - HEADER_WIDTH),
-    );
-    const nextScrollLeft = pendingAnchor.seconds * pixelsPerSecond - laneOffsetX;
-    shell.scrollLeft = clamp(nextScrollLeft, 0, Math.max(0, timelineRowWidth - shell.clientWidth));
-  }, [pixelsPerSecond, timelineRowWidth]);
+    shell.scrollLeft = clampedTimelineCameraX;
+  }, [clampedTimelineCameraX]);
 
   useEffect(() => {
     syncLivePosition(playheadDrag?.currentSeconds ?? displayPositionSecondsRef.current);
-  }, [playheadDrag?.currentSeconds, timelineWidth, song?.durationSeconds, displayPositionSeconds]);
+  }, [
+    clampedTimelineCameraX,
+    displayPositionSeconds,
+    pixelsPerSecond,
+    playheadDrag?.currentSeconds,
+    song?.durationSeconds,
+  ]);
 
   function clearSelections(message: string) {
     setSelectedTrackId(null);
@@ -1360,22 +1366,21 @@ export function TransportPanel() {
     setStatus(message);
   }
 
-  function applyZoom(nextZoomLevel: number) {
-    const shell = timelineShellRef.current;
+  function applyZoom(nextZoomLevel: number, anchorViewportX = laneViewportWidth / 2) {
     const clampedZoom = clamp(nextZoomLevel, effectiveZoomMin, ZOOM_MAX);
+    const nextPixelsPerSecond = clampedZoom * BASE_PIXELS_PER_SECOND;
+    const durationSeconds = song?.durationSeconds ?? 0;
+    const nextCameraX = zoomCameraAtViewportX({
+      durationSeconds,
+      viewportWidth: laneViewportWidth,
+      viewportX: clamp(anchorViewportX, 0, laneViewportWidth),
+      currentCameraX: clampedTimelineCameraX,
+      previousPixelsPerSecond: pixelsPerSecond,
+      nextPixelsPerSecond,
+    });
 
-    if (!shell) {
-      setZoomLevel(clampedZoom);
-      return;
-    }
-
-    const laneCenterOffsetX = Math.max(0, (shell.clientWidth - HEADER_WIDTH) / 2);
-
-    pendingZoomAnchorRef.current = {
-      seconds: displayPositionSecondsRef.current,
-      viewOffsetX: HEADER_WIDTH + laneCenterOffsetX,
-    };
     setZoomLevel(clampedZoom);
+    setCameraX(nextCameraX);
   }
 
   async function handleTrackDrop(trackId: string, dropState: NonNullable<TrackDropState>) {
@@ -1921,6 +1926,7 @@ export function TransportPanel() {
       <section className="lt-main-stage">
         <div className="lt-timeline-topline">
           <div>
+            <h1>Timeline DAW</h1>
             <strong>Vista principal</strong>
             <p>El timeline manda; el resto vive en menus contextuales e interacciones directas.</p>
           </div>
@@ -1935,20 +1941,41 @@ export function TransportPanel() {
           className="lt-timeline-shell"
           ref={timelineShellRef}
           onWheel={(event) => {
-            if (event.ctrlKey || event.metaKey) {
-              event.preventDefault();
-              applyZoom(zoomLevel + (event.deltaY < 0 ? ZOOM_WHEEL_STEP : -ZOOM_WHEEL_STEP));
+            if (!song) {
               return;
             }
 
-            if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
-              event.currentTarget.scrollLeft += event.deltaY;
+            if (event.ctrlKey || event.metaKey) {
+              event.preventDefault();
+              const bounds = event.currentTarget.getBoundingClientRect();
+              const anchorViewportX = clamp(
+                event.clientX - bounds.left - HEADER_WIDTH,
+                0,
+                laneViewportWidth,
+              );
+              applyZoom(
+                zoomLevel + (event.deltaY < 0 ? ZOOM_WHEEL_STEP : -ZOOM_WHEEL_STEP),
+                anchorViewportX,
+              );
+              return;
             }
+
+            event.preventDefault();
+            const horizontalDelta =
+              Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+            setCameraX((current) =>
+              clampCameraX(
+                current + horizontalDelta,
+                song.durationSeconds,
+                pixelsPerSecond,
+                laneViewportWidth,
+              ),
+            );
           }}
         >
           <div
             className="lt-ruler-row"
-            style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${timelineWidth}px` }}
+            style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${laneViewportWidth}px` }}
           >
             <div className="lt-ruler-header">
               <span>Tracks</span>
@@ -1966,6 +1993,7 @@ export function TransportPanel() {
                   event,
                   rulerTrackRef.current,
                   song.durationSeconds,
+                  clampedTimelineCameraX,
                   pixelsPerSecond,
                 );
                 setSelectedSectionId(null);
@@ -1976,66 +2004,77 @@ export function TransportPanel() {
                 };
               }}
             >
-              <div className="lt-ruler-content" style={{ width: timelineWidth }}>
-                {timelineGrid.showBeatGridLines
-                  ? timelineGrid.beats.map((mark) => (
-                  <div
-                    key={`beat-${mark.toFixed(4)}`}
-                    className="lt-lane-grid-line is-beat"
-                    style={{ left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px` }}
-                  />
-                  ))
-                  : null}
+              <div className="lt-ruler-content" style={{ width: laneViewportWidth }}>
+                <TimelineRulerCanvas
+                  width={laneViewportWidth}
+                  height={RULER_HEIGHT}
+                  cameraX={clampedTimelineCameraX}
+                  pixelsPerSecond={pixelsPerSecond}
+                  timelineGrid={timelineGrid}
+                  selection={currentSelection}
+                  playheadSecondsRef={displayPositionSecondsRef}
+                  previewPlayheadSeconds={playheadDrag?.currentSeconds ?? null}
+                  playheadColor={playheadColor}
+                >
+                  {timelineHeaderMarkers.map((marker) => {
+                    const markerLeft = secondsToScreenX(
+                      marker.seconds,
+                      clampedTimelineCameraX,
+                      pixelsPerSecond,
+                    );
 
-                {timelineGrid.bars.map((mark, index) => (
-                  <div
-                    key={`bar-${mark.toFixed(4)}`}
-                    className="lt-lane-grid-line is-bar"
-                    style={{ left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px` }}
-                  />
-                ))}
+                    return (
+                      <div
+                        key={`marker-${marker.seconds.toFixed(4)}`}
+                        className={`lt-ruler-mark ${marker.isBarStart ? "is-bar" : "is-beat"}`}
+                        style={{ left: markerLeft }}
+                      >
+                        <strong>{formatTimelineHeaderMusicalPosition(marker.barNumber, marker.beatInBar)}</strong>
+                        <small>{formatTimelineHeaderTime(marker.seconds)}</small>
+                      </div>
+                    );
+                  })}
 
-                {timelineHeaderMarkers.map((marker) => (
-                  <div
-                    key={`marker-${marker.seconds.toFixed(4)}`}
-                    className={`lt-ruler-mark ${marker.isBarStart ? "is-bar" : "is-beat"}`}
-                    style={{ left: `${(marker.seconds / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px` }}
-                  >
-                    <strong>{formatTimelineHeaderMusicalPosition(marker.barNumber, marker.beatInBar)}</strong>
-                    <small>{formatTimelineHeaderTime(marker.seconds)}</small>
-                  </div>
-                ))}
+                  {song?.derivedSections.map((section) => {
+                    const sectionLeft = secondsToScreenX(
+                      section.startSeconds,
+                      clampedTimelineCameraX,
+                      pixelsPerSecond,
+                    );
+                    const sectionWidth = (section.endSeconds - section.startSeconds) * pixelsPerSecond;
 
-                {song?.derivedSections.map((section) => (
-                  <button
-                    key={section.id}
-                    type="button"
-                    className={`lt-section-tag ${selectedSectionId === section.id ? "is-selected" : ""}`}
-                    style={{
-                      left: `${(section.startSeconds / Math.max(1, song.durationSeconds)) * timelineWidth}px`,
-                      width: `${((section.endSeconds - section.startSeconds) /
-                        Math.max(1, song.durationSeconds)) * timelineWidth}px`,
-                    }}
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setSelectedSectionId(section.id);
-                      setSelectedClipId(null);
-                      setSelectedTrackId(null);
-                      setStatus(`Seccion seleccionada: ${section.name}`);
-                    }}
-                    onContextMenu={(event) => {
-                      event.stopPropagation();
-                      setSelectedSectionId(section.id);
-                      openMenu(event, section.name, sectionContextMenu(section));
-                    }}
-                  >
-                    {section.name}
-                  </button>
-                ))}
+                    if (sectionLeft + sectionWidth < 0 || sectionLeft > laneViewportWidth) {
+                      return null;
+                    }
+
+                    return (
+                      <button
+                        key={section.id}
+                        type="button"
+                        className={`lt-section-tag ${selectedSectionId === section.id ? "is-selected" : ""}`}
+                        style={{ left: sectionLeft, width: sectionWidth }}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedSectionId(section.id);
+                          setSelectedClipId(null);
+                          setSelectedTrackId(null);
+                          setStatus(`Seccion seleccionada: ${section.name}`);
+                        }}
+                        onContextMenu={(event) => {
+                          event.stopPropagation();
+                          setSelectedSectionId(section.id);
+                          openMenu(event, section.name, sectionContextMenu(section));
+                        }}
+                      >
+                        {section.name}
+                      </button>
+                    );
+                  })}
+                </TimelineRulerCanvas>
 
                 {currentSelection ? (
                   <div
@@ -2065,7 +2104,26 @@ export function TransportPanel() {
             </div>
           </div>
 
-          <div className="lt-track-list" ref={laneAreaRef}>
+          <div className="lt-track-list" ref={laneAreaRef} style={{ width: timelineRowWidth }}>
+            {song ? (
+              <TimelineTrackCanvas
+                width={laneViewportWidth}
+                height={visibleTracks.length * TRACK_HEIGHT}
+                trackHeight={TRACK_HEIGHT}
+                song={song}
+                visibleTracks={visibleTracks}
+                clipsByTrack={clipsByTrack}
+                waveformCache={waveformCache}
+                cameraX={clampedTimelineCameraX}
+                pixelsPerSecond={pixelsPerSecond}
+                timelineGrid={timelineGrid}
+                selectedClipId={selectedClipId}
+                previewClipSeconds={previewClipSeconds}
+                playheadSecondsRef={displayPositionSecondsRef}
+                previewPlayheadSeconds={playheadDrag?.currentSeconds ?? null}
+                playheadColor={playheadColor}
+              />
+            ) : null}
 
             {song?.tracks && visibleTracks.map((track) => {
               const trackClips = clipsByTrack[track.id] ?? [];
@@ -2079,7 +2137,7 @@ export function TransportPanel() {
                   key={track.id}
                   className={`lt-track-row ${isDropTarget ? `is-drop-target is-drop-${dropMode}` : ""}`}
                   data-track-id={track.id}
-                  style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${timelineWidth}px` }}
+                  style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${laneViewportWidth}px` }}
                 >
                   <div
                     className={`lt-track-header ${isTrackSelected ? "is-selected" : ""} ${track.solo ? "is-solo" : ""} ${track.kind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${draggingTrackId === track.id ? "is-dragging" : ""}`}
@@ -2238,86 +2296,96 @@ export function TransportPanel() {
                     </div>
                   </div>
 
-                  <div className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""}`}>
-                    <div className="lt-track-lane-grid" style={{ width: timelineWidth }}>
-                      {timelineGrid.showBeatGridLines
-                        ? timelineGrid.beats.map((mark) => (
-                        <div
-                          key={`${track.id}-beat-${mark.toFixed(4)}`}
-                          className="lt-lane-grid-line is-beat"
-                          style={{ left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px` }}
-                        />
-                        ))
-                        : null}
+                  <div
+                    className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""}`}
+                    onMouseDown={(event) => {
+                      if (event.button !== 0 || isInteractiveTimelineTarget(event.target)) {
+                        return;
+                      }
 
-                      {timelineGrid.bars.map((mark) => (
-                        <div
-                          key={`${track.id}-bar-${mark.toFixed(4)}`}
-                          className="lt-lane-grid-line is-bar"
-                          style={{ left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px` }}
-                        />
-                      ))}
+                      event.preventDefault();
+                      setContextMenu(null);
+                      const panOriginCameraX = timelineShellRef.current?.scrollLeft ?? clampedTimelineCameraX;
+                      const activePan: NonNullable<TimelinePanState> = {
+                        pointerId: 1,
+                        startClientX: event.clientX,
+                        originCameraX: panOriginCameraX,
+                      };
+                      setTimelinePan(activePan);
 
-                      {track.kind === "folder" ? (
-                        <div className="lt-folder-lane-fill">
-                          <span>{childCount ? `${childCount} tracks dentro del folder` : "Folder track"}</span>
-                        </div>
-                      ) : null}
-
-                      {trackClips.map((clip) => {
-                        const previewStart =
-                          clipDrag?.clipId === clip.id ? clipDrag.previewSeconds : clip.timelineStartSeconds;
-                        const left = (previewStart / Math.max(1, song.durationSeconds)) * timelineWidth;
-                        const width =
-                          (clip.durationSeconds / Math.max(1, song.durationSeconds)) * timelineWidth;
-
-                        return (
-                          <button
-                            key={clip.id}
-                            type="button"
-                            className={`lt-clip ${selectedClipId === clip.id ? "is-selected" : ""}`}
-                            aria-label={`Clip ${clip.trackName}`}
-                            style={{ left, width: Math.max(width, 28) }}
-                            onMouseDown={(event) => {
-                              if (event.button !== 0) {
-                                return;
-                              }
-
-                              setSelectedClipId(clip.id);
-                              setSelectedTrackId(track.id);
-                              setSelectedSectionId(null);
-                              setContextMenu(null);
-                              setClipDrag({
-                                clipId: clip.id,
-                                pointerId: 1,
-                                originSeconds: clip.timelineStartSeconds,
-                                previewSeconds: clip.timelineStartSeconds,
-                                startClientX: event.clientX,
-                              });
-                            }}
-                            onContextMenu={(event) => {
-                              setSelectedClipId(clip.id);
-                              openMenu(event, clip.trackName, clipContextMenu(clip));
-                            }}
-                          >
-                            <span className="lt-clip-name">{clip.trackName}</span>
-                            <svg
-                              className="lt-waveform"
-                              viewBox="0 0 100 100"
-                              preserveAspectRatio="none"
-                              aria-hidden="true"
-                            >
-                              <path d={clipWaveformPaths[clip.id] ?? ""} />
-                            </svg>
-                          </button>
+                      const onMouseMove = (windowEvent: MouseEvent) => {
+                        const deltaX = activePan.startClientX - windowEvent.clientX;
+                        setCameraX(
+                          clampCameraX(
+                            activePan.originCameraX + deltaX,
+                            song.durationSeconds,
+                            pixelsPerSecond,
+                            laneViewportWidth,
+                          ),
                         );
-                      })}
+                      };
 
-                      <div
-                        className="lt-playhead"
-                        style={draggedPlayheadOffset === null ? undefined : { left: draggedPlayheadOffset }}
-                      />
-                    </div>
+                      const onMouseUp = (windowEvent: MouseEvent) => {
+                        if (windowEvent.button !== 0) {
+                          return;
+                        }
+
+                        setTimelinePan(null);
+                        window.removeEventListener("mousemove", onMouseMove);
+                        window.removeEventListener("mouseup", onMouseUp);
+                      };
+
+                      window.addEventListener("mousemove", onMouseMove);
+                      window.addEventListener("mouseup", onMouseUp);
+                    }}
+                  >
+                    {trackClips.map((clip) => {
+                      const previewStart =
+                        clipDrag?.clipId === clip.id ? clipDrag.previewSeconds : clip.timelineStartSeconds;
+                      const left = secondsToScreenX(
+                        previewStart,
+                        clampedTimelineCameraX,
+                        pixelsPerSecond,
+                      );
+                      const width = clip.durationSeconds * pixelsPerSecond;
+
+                      if (left + width < 0 || left > laneViewportWidth) {
+                        return null;
+                      }
+
+                      return (
+                        <button
+                          key={clip.id}
+                          type="button"
+                          className={`lt-clip ${selectedClipId === clip.id ? "is-selected" : ""}`}
+                          aria-label={`Clip ${clip.trackName}`}
+                          style={{ left, width: Math.max(width, 28) }}
+                          onMouseDown={(event) => {
+                            if (event.button !== 0) {
+                              return;
+                            }
+
+                            setSelectedClipId(clip.id);
+                            setSelectedTrackId(track.id);
+                            setSelectedSectionId(null);
+                            setContextMenu(null);
+                            setClipDrag({
+                              clipId: clip.id,
+                              pointerId: 1,
+                              originSeconds: clip.timelineStartSeconds,
+                              previewSeconds: clip.timelineStartSeconds,
+                              startClientX: event.clientX,
+                            });
+                          }}
+                          onContextMenu={(event) => {
+                            setSelectedClipId(clip.id);
+                            openMenu(event, clip.trackName, clipContextMenu(clip));
+                          }}
+                        >
+                          <span className="lt-clip-name">{clip.trackName}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               );

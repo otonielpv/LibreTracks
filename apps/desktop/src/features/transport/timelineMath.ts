@@ -1,0 +1,198 @@
+export const BASE_PIXELS_PER_SECOND = 18;
+
+export type TimelineGridParams = {
+  durationSeconds: number;
+  bpm: number;
+  timeSignature: string;
+  zoomLevel: number;
+  pixelsPerSecond: number;
+  viewportStartSeconds: number;
+  viewportEndSeconds: number;
+};
+
+export type TimelineGrid = {
+  bars: number[];
+  beats: number[];
+  subdivisions: number[];
+  markers: Array<{
+    seconds: number;
+    barNumber: number;
+    beatInBar: number;
+    isBarStart: boolean;
+  }>;
+  beatsPerBar: number;
+  beatDurationSeconds: number;
+  showBeatLabels: boolean;
+  showBeatGridLines: boolean;
+  barLabelStep: number;
+  subdivisionPerBeat: number;
+  snapIntervalSeconds: number;
+  visibleStartSeconds: number;
+  visibleEndSeconds: number;
+};
+
+export function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function clampPositive(value: number, fallback: number) {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+export function parseTimeSignature(timeSignature: string) {
+  const [numeratorRaw, denominatorRaw] = timeSignature.split("/");
+  const beatsPerBar = Math.max(1, Number.parseInt(numeratorRaw ?? "4", 10) || 4);
+  const beatUnit = Math.max(1, Number.parseInt(denominatorRaw ?? "4", 10) || 4);
+  return { beatsPerBar, beatUnit };
+}
+
+export function getBeatDurationSeconds(bpm: number, timeSignature: string) {
+  const safeBpm = clampPositive(bpm, 120);
+  const { beatUnit } = parseTimeSignature(timeSignature);
+  const quarterNoteSeconds = 60 / safeBpm;
+  return quarterNoteSeconds * (4 / beatUnit);
+}
+
+export function getPixelsPerSecond(zoomLevel: number) {
+  return zoomLevel * BASE_PIXELS_PER_SECOND;
+}
+
+export function secondsToScreenX(
+  seconds: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+) {
+  return seconds * pixelsPerSecond - cameraX;
+}
+
+export function screenXToSeconds(
+  screenX: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+) {
+  return (cameraX + screenX) / clampPositive(pixelsPerSecond, 1);
+}
+
+export function getContentWidth(durationSeconds: number, pixelsPerSecond: number) {
+  return Math.max(0, durationSeconds) * clampPositive(pixelsPerSecond, 1);
+}
+
+export function getMaxCameraX(
+  durationSeconds: number,
+  pixelsPerSecond: number,
+  viewportWidth: number,
+) {
+  return Math.max(0, getContentWidth(durationSeconds, pixelsPerSecond) - Math.max(0, viewportWidth));
+}
+
+export function clampCameraX(
+  nextCameraX: number,
+  durationSeconds: number,
+  pixelsPerSecond: number,
+  viewportWidth: number,
+) {
+  return clamp(
+    nextCameraX,
+    0,
+    getMaxCameraX(durationSeconds, pixelsPerSecond, viewportWidth),
+  );
+}
+
+export function zoomCameraAtViewportX(params: {
+  durationSeconds: number;
+  viewportWidth: number;
+  viewportX: number;
+  currentCameraX: number;
+  previousPixelsPerSecond: number;
+  nextPixelsPerSecond: number;
+}) {
+  const anchorSeconds = screenXToSeconds(
+    params.viewportX,
+    params.currentCameraX,
+    params.previousPixelsPerSecond,
+  );
+  const unclampedCameraX = anchorSeconds * params.nextPixelsPerSecond - params.viewportX;
+  return clampCameraX(
+    unclampedCameraX,
+    params.durationSeconds,
+    params.nextPixelsPerSecond,
+    params.viewportWidth,
+  );
+}
+
+export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGrid {
+  const safeDuration = Math.max(0, params.durationSeconds);
+  const safePixelsPerSecond = clampPositive(params.pixelsPerSecond, 1);
+  const { beatsPerBar } = parseTimeSignature(params.timeSignature);
+  const beatDuration = getBeatDurationSeconds(params.bpm, params.timeSignature);
+  const beatPixels = beatDuration * safePixelsPerSecond;
+  const barPixels = beatPixels * beatsPerBar;
+  const subdivisionPerBeat = 1;
+  const snapIntervalSeconds = beatDuration;
+  const showBeatLabels = beatPixels >= 78 && params.zoomLevel >= 6.5;
+  const showBeatGridLines = beatPixels >= 16;
+  const barLabelStep =
+    showBeatLabels ? 1 : barPixels >= 240 ? 1 : barPixels >= 120 ? 2 : barPixels >= 64 ? 4 : 8;
+
+  const visibleStartSeconds = clamp(params.viewportStartSeconds, 0, safeDuration);
+  const visibleEndSeconds = clamp(
+    Math.max(visibleStartSeconds, params.viewportEndSeconds),
+    0,
+    Math.max(safeDuration, visibleStartSeconds),
+  );
+  const startBeatIndex = Math.max(0, Math.floor(visibleStartSeconds / beatDuration) - 1);
+  const endBeatIndex = Math.max(
+    startBeatIndex,
+    Math.ceil(visibleEndSeconds / beatDuration) + 1,
+  );
+
+  const bars: number[] = [];
+  const beats: number[] = [];
+  const markers: TimelineGrid["markers"] = [];
+
+  for (let beatIndex = startBeatIndex; beatIndex <= endBeatIndex; beatIndex += 1) {
+    const seconds = beatIndex * beatDuration;
+    if (seconds < visibleStartSeconds - beatDuration || seconds > safeDuration + 0.0001) {
+      continue;
+    }
+
+    const barNumber = Math.floor(beatIndex / beatsPerBar) + 1;
+    const beatInBar = (beatIndex % beatsPerBar) + 1;
+    const isBarStart = beatInBar === 1;
+
+    markers.push({ seconds, barNumber, beatInBar, isBarStart });
+
+    if (isBarStart) {
+      bars.push(seconds);
+    } else {
+      beats.push(seconds);
+    }
+  }
+
+  return {
+    bars,
+    beats,
+    subdivisions: [],
+    markers,
+    beatsPerBar,
+    beatDurationSeconds: beatDuration,
+    showBeatLabels,
+    showBeatGridLines,
+    barLabelStep,
+    subdivisionPerBeat,
+    snapIntervalSeconds,
+    visibleStartSeconds,
+    visibleEndSeconds,
+  };
+}
+
+export function snapToTimelineGrid(
+  seconds: number,
+  bpm: number,
+  timeSignature: string,
+  _zoomLevel: number,
+  _pixelsPerSecond: number,
+) {
+  const snapIntervalSeconds = getBeatDurationSeconds(bpm, timeSignature);
+  return Math.round(seconds / snapIntervalSeconds) * snapIntervalSeconds;
+}

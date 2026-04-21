@@ -300,10 +300,16 @@ body {
   background: #2a2a2a;
 }
 
+.lt-timeline-topline h1,
 .lt-timeline-topline strong {
   font-size: 1.8rem;
   line-height: 1;
   letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.lt-timeline-topline h1 {
+  font: 900 1.8rem/1 Inter, sans-serif;
 }
 
 .lt-timeline-topline p,
@@ -324,7 +330,7 @@ body {
   flex: 1;
   min-height: 0;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
   background: #0e0e0e;
   display: flex;
   flex-direction: column;
@@ -334,6 +340,7 @@ body {
   flex: 1;
   min-height: 0;
   background: #0e0e0e;
+  position: relative;
 }
 
 .lt-ruler-row,
@@ -361,13 +368,38 @@ body {
   position: relative;
   height: 4rem;
   background: #2a2a2a;
+  overflow: hidden;
 }
 
-.lt-ruler-content,
-.lt-track-lane-grid {
+.lt-ruler-content {
   position: relative;
   height: 100%;
   background: transparent;
+  overflow: hidden;
+}
+
+.lt-ruler-canvas,
+.lt-ruler-canvas-overlay,
+.lt-track-canvas,
+.lt-track-canvas-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.lt-ruler-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.lt-track-canvas-layer {
+  position: absolute;
+  top: 0;
+  left: 260px;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .lt-ruler-mark {
@@ -538,24 +570,9 @@ body {
 .lt-track-lane {
   position: relative;
   height: 84px;
-  background: #0e0e0e;
-}
-
-.lt-lane-grid-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-}
-
-.lt-lane-grid-line.is-beat {
-  background: rgb(186 202 197 / 0.14);
-}
-
-.lt-lane-grid-line.is-bar {
-  width: 1px;
-  background: rgb(186 202 197 / 0.32);
-  box-shadow: 0 0 0 1px rgb(19 19 19 / 0.25);
+  background: transparent;
+  overflow: hidden;
+  z-index: 1;
 }
 
 .lt-folder-lane-fill {
@@ -577,9 +594,9 @@ body {
   top: 8px;
   height: 68px;
   border-radius: 2px;
-  border: 1px solid rgb(12 12 12 / 0.28);
-  background: linear-gradient(180deg, rgb(210 212 209 / 0.92), rgb(182 185 180 / 0.92));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2);
+  border: 1px solid rgb(12 12 12 / 0.18);
+  background: transparent;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
   padding: 0;
   overflow: hidden;
 }
@@ -594,6 +611,9 @@ body {
   left: 6px;
   top: 4px;
   z-index: 1;
+  padding: 0.15rem 0.25rem;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.34);
   max-width: calc(100% - 12px);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -630,6 +650,13 @@ body {
   box-shadow: 0 0 8px rgb(87 241 219 / 0.55);
 }
 
+.lt-playhead.is-handle {
+  width: 12px;
+  margin-left: -6px;
+  background: transparent;
+  box-shadow: none;
+}
+
 .lt-playhead::before {
   content: "";
   position: absolute;
@@ -646,11 +673,38 @@ body {
   background: #ffe2ab;
 }
 
+.lt-playhead.is-dragging::before {
+  border-top-color: #ffe2ab;
+}
+
 .lt-time-selection {
   position: absolute;
   top: 0;
   bottom: 0;
   background: rgb(87 241 219 / 0.10);
+  z-index: 3;
+}
+
+.lt-section-tag {
+  position: absolute;
+  top: 2rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: 2px;
+  background: rgb(87 241 219 / 0.12);
+  color: #e5e2e1;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 0.45rem;
+}
+
+.lt-section-tag.is-selected {
+  background: rgb(255 226 171 / 0.18);
+  color: #ffe2ab;
 }
 
 .lt-inline-menu {
