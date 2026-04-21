@@ -210,8 +210,29 @@ describe("App", () => {
     expect(context).toBeTruthy();
     expect(within(context as HTMLElement).getByRole("button", { name: /ir ahora/i })).toBeTruthy();
     expect(
-      within(context as HTMLElement).getByRole("button", { name: /programar salto al final/i }),
+      within(context as HTMLElement).getByRole("button", { name: /disparar con modo global/i }),
     ).toBeTruthy();
+  });
+
+  it("triggers marker jump with digit keys and cancels with escape", async () => {
+    await renderApp();
+
+    const modeSelect = await screen.findByRole("combobox", { name: /modo global de salto/i });
+    await act(async () => {
+      fireEvent.change(modeSelect, { target: { value: "section_end" } });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Digit2", key: "2" });
+    });
+
+    expect(await screen.findByText(/salto armado al final de seccion hacia verse/i)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Escape", key: "Escape" });
+    });
+
+    expect(await screen.findByText(/salto cancelado/i)).toBeTruthy();
   });
 
   it("pans the timeline by dragging over an empty lane", async () => {

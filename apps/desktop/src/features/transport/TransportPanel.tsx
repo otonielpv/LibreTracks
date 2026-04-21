@@ -2279,6 +2279,11 @@ export function TransportPanel() {
               />
             </label>
           ) : null}
+          {snapshot?.pendingSectionJump ? (
+            <span>
+              Armado: {snapshot.pendingSectionJump.targetMarkerName} | {snapshot.pendingSectionJump.trigger}
+            </span>
+          ) : null}
           <button
             type="button"
             disabled={!snapshot?.pendingSectionJump}
