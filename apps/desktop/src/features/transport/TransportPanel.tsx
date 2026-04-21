@@ -80,6 +80,7 @@ type ClipDragState = {
   originSeconds: number;
   previewSeconds: number;
   startClientX: number;
+  hasMoved: boolean;
 } | null;
 
 type RulerDragState = {
@@ -277,7 +278,7 @@ function isInteractiveTimelineTarget(target: EventTarget | null) {
   return target instanceof HTMLElement
     ? Boolean(
         target.closest(
-          ".lt-clip, .lt-section-tag, .lt-track-header, .lt-inline-menu, .lt-context-menu, button, input, select, textarea, label",
+          ".lt-section-tag, .lt-track-header, .lt-inline-menu, .lt-context-menu, button, input, select, textarea, label",
         ),
       )
     : false;
@@ -331,6 +332,29 @@ function rulerPointerToSeconds(
     0,
     Math.max(0, durationSeconds),
   );
+}
+
+function lanePointerToClip(
+  clips: ClipSummary[],
+  element: HTMLElement,
+  clientX: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+) {
+  const bounds = element.getBoundingClientRect();
+  const pointerX = clamp(clientX - bounds.left, 0, bounds.width);
+
+  for (let index = clips.length - 1; index >= 0; index -= 1) {
+    const clip = clips[index];
+    const clipLeft = secondsToScreenX(clip.timelineStartSeconds, cameraX, pixelsPerSecond);
+    const clipWidth = Math.max(clip.durationSeconds * pixelsPerSecond, 28);
+
+    if (pointerX >= clipLeft && pointerX <= clipLeft + clipWidth) {
+      return clip;
+    }
+  }
+
+  return null;
 }
 
 export function TransportPanel() {
@@ -860,27 +884,27 @@ export function TransportPanel() {
 
     const effectSong = song;
     const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
+    let activeDrag = clipDrag;
 
     const onMouseMove = (event: MouseEvent) => {
-      const deltaSeconds = (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
+      const exceededThreshold = Math.abs(event.clientX - activeDrag.startClientX) > DRAG_THRESHOLD_PX;
+      const deltaSeconds = (event.clientX - activeDrag.startClientX) / effectPixelsPerSecond;
       const nextSeconds = snapEnabled
         ? snapToTimelineGrid(
-            clipDrag.originSeconds + deltaSeconds,
+            activeDrag.originSeconds + deltaSeconds,
             effectSong.bpm,
             effectSong.timeSignature,
             zoomLevel,
             effectPixelsPerSecond,
           )
-        : clipDrag.originSeconds + deltaSeconds;
+        : activeDrag.originSeconds + deltaSeconds;
 
-      setClipDrag((current) =>
-        current
-          ? {
-              ...current,
-              previewSeconds: clamp(nextSeconds, 0, effectSong.durationSeconds),
-            }
-          : current,
-      );
+      activeDrag = {
+        ...activeDrag,
+        hasMoved: activeDrag.hasMoved || exceededThreshold,
+        previewSeconds: clamp(nextSeconds, 0, effectSong.durationSeconds),
+      };
+      setClipDrag(activeDrag);
     };
 
     const onMouseUp = async (event: MouseEvent) => {
@@ -888,9 +912,15 @@ export function TransportPanel() {
         return;
       }
 
-      const activeDrag = clipDrag;
       setClipDrag(null);
       if (!activeDrag) {
+        return;
+      }
+
+      const movedEnough =
+        activeDrag.hasMoved ||
+        Math.abs(event.clientX - activeDrag.startClientX) > DRAG_THRESHOLD_PX;
+      if (!movedEnough) {
         return;
       }
 
@@ -1615,6 +1645,103 @@ export function TransportPanel() {
     ];
   }
 
+  function handleTrackLaneMouseDown(
+    event: ReactMouseEvent<HTMLDivElement>,
+    track: TrackSummary,
+    trackClips: ClipSummary[],
+  ) {
+    if (event.button !== 0 || isInteractiveTimelineTarget(event.target)) {
+      return;
+    }
+
+    const hitClip = lanePointerToClip(
+      trackClips,
+      event.currentTarget,
+      event.clientX,
+      clampedTimelineCameraX,
+      pixelsPerSecond,
+    );
+
+    if (hitClip) {
+      event.preventDefault();
+      setSelectedClipId(hitClip.id);
+      setSelectedTrackId(track.id);
+      setSelectedSectionId(null);
+      setContextMenu(null);
+      setClipDrag({
+        clipId: hitClip.id,
+        pointerId: 1,
+        originSeconds: hitClip.timelineStartSeconds,
+        previewSeconds: hitClip.timelineStartSeconds,
+        startClientX: event.clientX,
+        hasMoved: false,
+      });
+      return;
+    }
+
+    event.preventDefault();
+    setContextMenu(null);
+    const panOriginCameraX = timelineShellRef.current?.scrollLeft ?? clampedTimelineCameraX;
+    const activePan: NonNullable<TimelinePanState> = {
+      pointerId: 1,
+      startClientX: event.clientX,
+      originCameraX: panOriginCameraX,
+    };
+    setTimelinePan(activePan);
+
+    const onMouseMove = (windowEvent: MouseEvent) => {
+      const deltaX = activePan.startClientX - windowEvent.clientX;
+      setCameraX(
+        clampCameraX(
+          activePan.originCameraX + deltaX,
+          song?.durationSeconds ?? 0,
+          pixelsPerSecond,
+          laneViewportWidth,
+        ),
+      );
+    };
+
+    const onMouseUp = (windowEvent: MouseEvent) => {
+      if (windowEvent.button !== 0) {
+        return;
+      }
+
+      setTimelinePan(null);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }
+
+  function handleTrackLaneContextMenu(
+    event: ReactMouseEvent<HTMLDivElement>,
+    track: TrackSummary,
+    trackClips: ClipSummary[],
+  ) {
+    const hitClip = lanePointerToClip(
+      trackClips,
+      event.currentTarget,
+      event.clientX,
+      clampedTimelineCameraX,
+      pixelsPerSecond,
+    );
+
+    if (hitClip) {
+      setSelectedClipId(hitClip.id);
+      setSelectedTrackId(track.id);
+      setSelectedSectionId(null);
+      openMenu(event, hitClip.trackName, clipContextMenu(hitClip));
+      return;
+    }
+
+    setSelectedClipId(null);
+    setSelectedTrackId(track.id);
+    setSelectedSectionId(null);
+    openMenu(event, track.name, trackContextMenu(track));
+  }
+
   function sectionContextMenu(section: SectionSummary) {
     const marker = findSectionMarker(song, section.id);
     const canEditMarker = Boolean(marker);
@@ -2292,95 +2419,10 @@ export function TransportPanel() {
 
                   <div
                     className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""}`}
-                    onMouseDown={(event) => {
-                      if (event.button !== 0 || isInteractiveTimelineTarget(event.target)) {
-                        return;
-                      }
-
-                      event.preventDefault();
-                      setContextMenu(null);
-                      const panOriginCameraX = timelineShellRef.current?.scrollLeft ?? clampedTimelineCameraX;
-                      const activePan: NonNullable<TimelinePanState> = {
-                        pointerId: 1,
-                        startClientX: event.clientX,
-                        originCameraX: panOriginCameraX,
-                      };
-                      setTimelinePan(activePan);
-
-                      const onMouseMove = (windowEvent: MouseEvent) => {
-                        const deltaX = activePan.startClientX - windowEvent.clientX;
-                        setCameraX(
-                          clampCameraX(
-                            activePan.originCameraX + deltaX,
-                            song.durationSeconds,
-                            pixelsPerSecond,
-                            laneViewportWidth,
-                          ),
-                        );
-                      };
-
-                      const onMouseUp = (windowEvent: MouseEvent) => {
-                        if (windowEvent.button !== 0) {
-                          return;
-                        }
-
-                        setTimelinePan(null);
-                        window.removeEventListener("mousemove", onMouseMove);
-                        window.removeEventListener("mouseup", onMouseUp);
-                      };
-
-                      window.addEventListener("mousemove", onMouseMove);
-                      window.addEventListener("mouseup", onMouseUp);
-                    }}
-                  >
-                    {trackClips.map((clip) => {
-                      const previewStart =
-                        clipDrag?.clipId === clip.id ? clipDrag.previewSeconds : clip.timelineStartSeconds;
-                      const left = secondsToScreenX(
-                        previewStart,
-                        clampedTimelineCameraX,
-                        pixelsPerSecond,
-                      );
-                      const width = clip.durationSeconds * pixelsPerSecond;
-
-                      if (left + width < 0 || left > laneViewportWidth) {
-                        return null;
-                      }
-
-                      return (
-                        <button
-                          key={clip.id}
-                          type="button"
-                          className={`lt-clip ${selectedClipId === clip.id ? "is-selected" : ""}`}
-                          aria-label={`Clip ${clip.trackName}`}
-                          style={{ left, width: Math.max(width, 28) }}
-                          onMouseDown={(event) => {
-                            if (event.button !== 0) {
-                              return;
-                            }
-
-                            setSelectedClipId(clip.id);
-                            setSelectedTrackId(track.id);
-                            setSelectedSectionId(null);
-                            setContextMenu(null);
-                            setClipDrag({
-                              clipId: clip.id,
-                              pointerId: 1,
-                              originSeconds: clip.timelineStartSeconds,
-                              previewSeconds: clip.timelineStartSeconds,
-                              startClientX: event.clientX,
-                            });
-                          }}
-                          onContextMenu={(event) => {
-                            setSelectedClipId(clip.id);
-                            openMenu(event, clip.trackName, clipContextMenu(clip));
-                          }}
-                        >
-                          <span className="lt-clip-name">{clip.trackName}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                    aria-label={`Lane ${track.name}`}
+                    onMouseDown={(event) => handleTrackLaneMouseDown(event, track, trackClips)}
+                    onContextMenu={(event) => handleTrackLaneContextMenu(event, track, trackClips)}
+                  />
                 </div>
               );
             })}

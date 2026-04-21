@@ -447,6 +447,22 @@ export function TimelineTrackCanvas({
           clipTop,
           clipHeight,
         );
+
+        if (visibleWidth >= 52) {
+          context.save();
+          context.beginPath();
+          context.rect(clippedLeft, clipTop, visibleWidth, clipHeight);
+          context.clip();
+          context.fillStyle = "rgba(255, 255, 255, 0.34)";
+          context.beginPath();
+          context.roundRect(clippedLeft + 6, clipTop + 4, Math.min(visibleWidth - 12, 96), 18, 2);
+          context.fill();
+          context.fillStyle = "rgba(36, 38, 36, 0.95)";
+          context.font = '600 10px "Space Grotesk", sans-serif';
+          context.textBaseline = "middle";
+          context.fillText(clip.trackName, clippedLeft + 12, clipTop + 13);
+          context.restore();
+        }
       }
     });
   }, [

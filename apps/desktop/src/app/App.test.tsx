@@ -71,6 +71,29 @@ function mockTimelineShellMetrics(container: HTMLElement, width = 1400) {
   return shell as HTMLDivElement;
 }
 
+function mockLaneBounds(container: HTMLElement, width = 1140) {
+  const lanes = Array.from(container.querySelectorAll(".lt-track-lane")) as HTMLDivElement[];
+  expect(lanes.length).toBeGreaterThan(0);
+
+  lanes.forEach((lane, index) => {
+    const top = 120 + index * 84;
+    Object.defineProperty(lane, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        left: 260,
+        right: 260 + width,
+        top,
+        bottom: top + 78,
+        width,
+        height: 78,
+        x: 260,
+        y: top,
+        toJSON: () => ({}),
+      }),
+    });
+  });
+}
+
 function mockTrackRowDragGeometry(container: HTMLElement) {
   const rows = Array.from(container.querySelectorAll(".lt-track-row")) as HTMLDivElement[];
   expect(rows.length).toBeGreaterThan(0);
@@ -167,6 +190,7 @@ describe("App", () => {
   it("opens the clip context menu and allows splitting at the cursor", async () => {
     const { container } = await renderApp();
     mockRulerBounds(container);
+    mockLaneBounds(container);
 
     const ruler = container.querySelector(".lt-ruler-track") as HTMLElement;
     await act(async () => {
@@ -177,9 +201,13 @@ describe("App", () => {
       fireEvent.mouseUp(window, { button: 0, clientX: 320 });
     });
 
-    const drumsClip = await screen.findByRole("button", { name: /clip drums/i });
+    const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
+    expect(drumsRow).toBeTruthy();
+    const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(drumsLane).toBeTruthy();
+
     await act(async () => {
-      fireEvent.contextMenu(drumsClip, { clientX: 280, clientY: 200 });
+      fireEvent.contextMenu(drumsLane as HTMLElement, { clientX: 320, clientY: 200 });
     });
 
     const splitAction = await screen.findByRole("button", { name: /cortar en cursor/i });
@@ -190,7 +218,7 @@ describe("App", () => {
     });
 
     expect(await screen.findByText(/clip cortado/i)).toBeTruthy();
-    expect((await screen.findAllByRole("button", { name: /clip drums/i })).length).toBeGreaterThan(1);
+    expect(screen.getByText("2 clips | pan 0.00")).toBeTruthy();
   });
 
   it("shows the section context menu on right click", async () => {
