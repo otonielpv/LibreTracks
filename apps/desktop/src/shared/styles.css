@@ -363,27 +363,55 @@ body {
 .lt-track-lane-grid {
   position: relative;
   height: 100%;
-  background-image: linear-gradient(to right, rgb(60 74 70 / 0.12) 1px, transparent 1px);
-  background-size: 32px 100%;
+  background: transparent;
 }
 
 .lt-ruler-mark {
   position: absolute;
-  bottom: 0.2rem;
   display: flex;
-  align-items: flex-end;
-  width: 4rem;
-  height: 1rem;
+  flex-direction: column;
+  gap: 0.08rem;
+  top: 0.28rem;
+  min-width: 3.6rem;
+  padding-left: 0.3rem;
+  pointer-events: none;
+}
+
+.lt-ruler-mark strong,
+.lt-ruler-mark small {
+  display: block;
+  white-space: nowrap;
   color: #bacac5;
-  font: 600 10px/1 "Space Grotesk", sans-serif;
+  font-family: "Space Grotesk", sans-serif;
+  line-height: 1;
+}
+
+.lt-ruler-mark strong {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.lt-ruler-mark small {
+  font-size: 10px;
+  color: rgb(186 202 197 / 0.68);
+}
+
+.lt-ruler-mark.is-bar strong {
+  color: #e5e2e1;
+}
+
+.lt-ruler-mark.is-bar small {
+  color: #57f1db;
 }
 
 .lt-track-header {
   position: relative;
   height: 84px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.55rem;
   padding: 0.5rem 0.75rem;
   background: #2a2a2a;
 }
@@ -437,6 +465,7 @@ body {
 .lt-track-control-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
 }
 
@@ -507,7 +536,16 @@ body {
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgb(186 202 197 / 0.18);
+}
+
+.lt-lane-grid-line.is-beat {
+  background: rgb(186 202 197 / 0.14);
+}
+
+.lt-lane-grid-line.is-bar {
+  width: 1px;
+  background: rgb(186 202 197 / 0.32);
+  box-shadow: 0 0 0 1px rgb(19 19 19 / 0.25);
 }
 
 .lt-folder-lane-fill {
@@ -570,6 +608,7 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
+  left: var(--lt-playhead-left, 0px);
   width: 1px;
   background: #57f1db;
   z-index: 20;

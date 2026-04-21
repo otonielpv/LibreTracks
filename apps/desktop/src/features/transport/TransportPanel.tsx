@@ -1,4 +1,4 @@
-import { Profiler, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Profiler, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   assignSectionMarkerDigit,
   cancelSectionJump,
@@ -118,6 +118,17 @@ function formatCompactTime(seconds: number) {
   const minutes = Math.floor(safeSeconds / 60);
   const remainder = Math.floor(safeSeconds % 60);
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+function formatTimelineHeaderTime(seconds: number) {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const secondsRemainder = safeSeconds - minutes * 60;
+  return `${minutes}:${secondsRemainder.toFixed(3).padStart(6, "0")}`;
+}
+
+function formatTimelineHeaderMusicalPosition(barNumber: number, beatInBar: number) {
+  return `${barNumber}.${beatInBar}.00`;
 }
 
 function formatMusicalPosition(seconds: number, bpm: number, timeSignature: string) {
@@ -1180,6 +1191,15 @@ export function TransportPanel() {
     zoomLevel,
     pixelsPerSecond,
   });
+  const timelineHeaderMarkers = useMemo(
+    () =>
+      timelineGrid.markers.filter((marker) =>
+        timelineGrid.showBeatLabels
+          ? true
+          : marker.isBarStart && (marker.barNumber - 1) % timelineGrid.barLabelStep === 0,
+      ),
+    [timelineGrid.barLabelStep, timelineGrid.markers, timelineGrid.showBeatLabels],
+  );
 
   async function scheduleMarkerJumpWithGlobalMode(markerId: string, markerName: string) {
     const trigger =
@@ -1887,35 +1907,32 @@ export function TransportPanel() {
               }}
             >
               <div className="lt-ruler-content" style={{ width: timelineWidth }}>
-                {timelineGrid.subdivisions.map((mark) => (
-                  <div
-                    key={`sub-${mark.toFixed(4)}`}
-                    className="lt-lane-grid-line"
-                    style={{
-                      left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px`,
-                      opacity: 0.1,
-                    }}
-                  />
-                ))}
-
-                {timelineGrid.beats.map((mark) => (
+                {timelineGrid.showBeatGridLines
+                  ? timelineGrid.beats.map((mark) => (
                   <div
                     key={`beat-${mark.toFixed(4)}`}
-                    className="lt-lane-grid-line"
-                    style={{
-                      left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px`,
-                      opacity: 0.18,
-                    }}
+                    className="lt-lane-grid-line is-beat"
+                    style={{ left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px` }}
                   />
-                ))}
+                  ))
+                  : null}
 
                 {timelineGrid.bars.map((mark, index) => (
                   <div
                     key={`bar-${mark.toFixed(4)}`}
-                    className="lt-ruler-mark"
+                    className="lt-lane-grid-line is-bar"
                     style={{ left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px` }}
+                  />
+                ))}
+
+                {timelineHeaderMarkers.map((marker) => (
+                  <div
+                    key={`marker-${marker.seconds.toFixed(4)}`}
+                    className={`lt-ruler-mark ${marker.isBarStart ? "is-bar" : "is-beat"}`}
+                    style={{ left: `${(marker.seconds / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px` }}
                   >
-                    <span>{`|${index + 1}`}</span>
+                    <strong>{formatTimelineHeaderMusicalPosition(marker.barNumber, marker.beatInBar)}</strong>
+                    <small>{formatTimelineHeaderTime(marker.seconds)}</small>
                   </div>
                 ))}
 
@@ -2153,36 +2170,21 @@ export function TransportPanel() {
 
                   <div className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""}`}>
                     <div className="lt-track-lane-grid" style={{ width: timelineWidth }}>
-                      {timelineGrid.subdivisions.map((mark) => (
-                        <div
-                          key={`${track.id}-sub-${mark.toFixed(4)}`}
-                          className="lt-lane-grid-line"
-                          style={{
-                            left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px`,
-                            opacity: 0.1,
-                          }}
-                        />
-                      ))}
-
-                      {timelineGrid.beats.map((mark) => (
+                      {timelineGrid.showBeatGridLines
+                        ? timelineGrid.beats.map((mark) => (
                         <div
                           key={`${track.id}-beat-${mark.toFixed(4)}`}
-                          className="lt-lane-grid-line"
-                          style={{
-                            left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px`,
-                            opacity: 0.18,
-                          }}
+                          className="lt-lane-grid-line is-beat"
+                          style={{ left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px` }}
                         />
-                      ))}
+                        ))
+                        : null}
 
                       {timelineGrid.bars.map((mark) => (
                         <div
                           key={`${track.id}-bar-${mark.toFixed(4)}`}
-                          className="lt-lane-grid-line"
-                          style={{
-                            left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px`,
-                            opacity: 0.5,
-                          }}
+                          className="lt-lane-grid-line is-bar"
+                          style={{ left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px` }}
                         />
                       ))}
 
