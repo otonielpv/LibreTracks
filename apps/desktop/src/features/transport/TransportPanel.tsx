@@ -1060,6 +1060,10 @@ export function TransportPanel() {
   const musicalPositionLabel = song
     ? formatMusicalPosition(positionSeconds, song.bpm, song.timeSignature)
     : "1.1.00";
+  const tempoSourceLabel =
+    song?.tempoMetadata.source === "auto_import"
+      ? `Detectado en importacion${song.tempoMetadata.confidence != null ? ` (${Math.round(song.tempoMetadata.confidence * 100)}%)` : ""}`
+      : "Manual";
   const pixelsPerSecond = zoomLevel * 18;
   const timelineWidth = Math.max((song?.durationSeconds ?? 0) * pixelsPerSecond, laneViewportWidth);
   const timelineRowWidth = HEADER_WIDTH + timelineWidth;
@@ -1581,6 +1585,7 @@ export function TransportPanel() {
                 event.currentTarget.blur();
               }}
             />
+            <small title={song?.tempoMetadata.referenceFilePath ?? undefined}>{tempoSourceLabel} (editable)</small>
           </label>
           <div className="lt-transport-buttons">
             <button

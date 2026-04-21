@@ -868,6 +868,12 @@ impl DesktopSession {
         bpm: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        if !bpm.is_finite() || bpm <= 0.0 {
+            return Err(DesktopError::AudioCommand(
+                "song bpm must be greater than zero".into(),
+            ));
+        }
+
         let mut song = self
             .engine
             .song()
