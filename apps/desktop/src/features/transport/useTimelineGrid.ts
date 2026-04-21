@@ -102,10 +102,10 @@ export function useTimelineGrid({
     const barPixels = beatPixels * beatsPerBar;
     const subdivisionPerBeat = 1;
     const snapIntervalSeconds = beatDuration;
-    const showBeatLabels = beatPixels >= 72 || zoomLevel >= 1;
-    const showBeatGridLines = beatPixels >= 14;
+    const showBeatLabels = beatPixels >= 78 && zoomLevel >= 6.5;
+    const showBeatGridLines = beatPixels >= 16;
     const barLabelStep =
-      showBeatLabels ? 1 : barPixels >= 160 ? 1 : barPixels >= 88 ? 2 : barPixels >= 44 ? 4 : 8;
+      showBeatLabels ? 1 : barPixels >= 240 ? 1 : barPixels >= 120 ? 2 : barPixels >= 64 ? 4 : 8;
 
     const marks = buildGridMarks(
       safeDuration,

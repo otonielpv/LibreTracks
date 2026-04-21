@@ -385,7 +385,6 @@ export function TransportPanel() {
   const [rulerDrag, setRulerDrag] = useState<RulerDragState>(null);
   const [playheadDrag, setPlayheadDrag] = useState<PlayheadDragState>(null);
   const [timeSelection, setTimeSelection] = useState<TimeSelection>(null);
-  const [isTimelinePanning, setIsTimelinePanning] = useState(false);
   const [displayPositionSeconds, setDisplayPositionSeconds] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const [trackDrag, setTrackDrag] = useState<TrackDragState>(null);
@@ -1255,40 +1254,6 @@ export function TransportPanel() {
     setStatus(message);
   }
 
-  function beginTimelinePan(event: ReactMouseEvent) {
-    if (!timelineShellRef.current) {
-      return;
-    }
-
-    const canPanWithPrimaryButton =
-      event.button === 0 &&
-      !isInteractiveTimelineTarget(event.target) &&
-      !(event.target instanceof HTMLElement && event.target.closest(".lt-ruler-track"));
-
-    if (event.button !== 1 && !canPanWithPrimaryButton) {
-      return;
-    }
-
-    event.preventDefault();
-    const shell = timelineShellRef.current;
-    const startX = event.clientX;
-    const startScrollLeft = shell.scrollLeft;
-    setIsTimelinePanning(true);
-
-    const onMove = (moveEvent: MouseEvent) => {
-      shell.scrollLeft = startScrollLeft - (moveEvent.clientX - startX);
-    };
-
-    const onUp = () => {
-      setIsTimelinePanning(false);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }
-
   function applyZoom(nextZoomLevel: number) {
     const shell = timelineShellRef.current;
     const clampedZoom = clamp(nextZoomLevel, effectiveZoomMin, ZOOM_MAX);
@@ -1861,9 +1826,8 @@ export function TransportPanel() {
         </div>
 
         <div
-          className={`lt-timeline-shell ${isTimelinePanning ? "is-panning" : ""}`}
+          className="lt-timeline-shell"
           ref={timelineShellRef}
-          onMouseDown={beginTimelinePan}
           onWheel={(event) => {
             if (event.ctrlKey || event.metaKey) {
               event.preventDefault();
