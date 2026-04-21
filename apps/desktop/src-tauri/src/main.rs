@@ -317,6 +317,7 @@ fn create_track(
 fn move_track(
     track_id: String,
     insert_after_track_id: Option<String>,
+    insert_before_track_id: Option<String>,
     parent_track_id: Option<String>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
@@ -329,6 +330,7 @@ fn move_track(
         .move_track(
             &track_id,
             insert_after_track_id.as_deref(),
+            insert_before_track_id.as_deref(),
             parent_track_id.as_deref(),
             &state.audio,
         )

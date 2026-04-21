@@ -719,6 +719,7 @@ impl DesktopSession {
         &mut self,
         track_id: &str,
         insert_after_track_id: Option<&str>,
+        insert_before_track_id: Option<&str>,
         parent_track_id: Option<&str>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
@@ -732,6 +733,7 @@ impl DesktopSession {
             &mut song.tracks,
             track_id,
             insert_after_track_id,
+            insert_before_track_id,
             parent_track_id,
         )?;
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
@@ -1183,7 +1185,8 @@ fn insert_track(
     parent_track_id: Option<&str>,
 ) -> Result<(), DesktopError> {
     validate_track_parent(tracks, &track.id, parent_track_id)?;
-    let insert_index = resolve_insert_index(tracks, insert_after_track_id, parent_track_id)?;
+    let insert_index =
+        resolve_insert_index(tracks, insert_after_track_id, None, parent_track_id)?;
     tracks.insert(insert_index, track);
     Ok(())
 }
@@ -1192,6 +1195,7 @@ fn reparent_track(
     tracks: &mut Vec<Track>,
     track_id: &str,
     insert_after_track_id: Option<&str>,
+    insert_before_track_id: Option<&str>,
     parent_track_id: Option<&str>,
 ) -> Result<(), DesktopError> {
     let (start, end) = track_subtree_bounds(tracks, track_id)?;
@@ -1206,7 +1210,12 @@ fn reparent_track(
     }
 
     root_track.parent_track_id = parent_track_id.map(str::to_string);
-    let insert_index = resolve_insert_index(tracks, insert_after_track_id, parent_track_id)?;
+    let insert_index = resolve_insert_index(
+        tracks,
+        insert_after_track_id,
+        insert_before_track_id,
+        parent_track_id,
+    )?;
     tracks.splice(insert_index..insert_index, moving_block);
     Ok(())
 }
@@ -1235,11 +1244,17 @@ fn delete_track_and_repair_hierarchy(
 fn resolve_insert_index(
     tracks: &[Track],
     insert_after_track_id: Option<&str>,
+    insert_before_track_id: Option<&str>,
     parent_track_id: Option<&str>,
 ) -> Result<usize, DesktopError> {
     if let Some(insert_after_track_id) = insert_after_track_id {
         let (_, end) = track_subtree_bounds(tracks, insert_after_track_id)?;
         return Ok(end);
+    }
+
+    if let Some(insert_before_track_id) = insert_before_track_id {
+        let (start, _) = track_subtree_bounds(tracks, insert_before_track_id)?;
+        return Ok(start);
     }
 
     if let Some(parent_track_id) = parent_track_id {
@@ -1653,6 +1668,66 @@ mod tests {
         session
     }
 
+    fn hierarchy_song() -> Song {
+        Song {
+            id: "song_hierarchy".into(),
+            title: "Hierarchy Demo".into(),
+            artist: None,
+            bpm: 120.0,
+            key: None,
+            time_signature: "4/4".into(),
+            duration_seconds: 12.0,
+            tracks: vec![
+                Track {
+                    id: "track_folder_a".into(),
+                    name: "Folder A".into(),
+                    kind: TrackKind::Folder,
+                    parent_track_id: None,
+                    volume: 1.0,
+                    pan: 0.0,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Main.id(),
+                },
+                Track {
+                    id: "track_child_a".into(),
+                    name: "Child A".into(),
+                    kind: TrackKind::Audio,
+                    parent_track_id: Some("track_folder_a".into()),
+                    volume: 1.0,
+                    pan: 0.0,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Main.id(),
+                },
+                Track {
+                    id: "track_folder_b".into(),
+                    name: "Folder B".into(),
+                    kind: TrackKind::Folder,
+                    parent_track_id: None,
+                    volume: 1.0,
+                    pan: 0.0,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Main.id(),
+                },
+                Track {
+                    id: "track_child_b".into(),
+                    name: "Child B".into(),
+                    kind: TrackKind::Audio,
+                    parent_track_id: Some("track_folder_b".into()),
+                    volume: 1.0,
+                    pan: 0.0,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Main.id(),
+                },
+            ],
+            clips: vec![],
+            sections: vec![],
+        }
+    }
+
     #[test]
     fn transport_clock_advances_only_while_running() {
         let mut clock = TransportClock::default();
@@ -1780,6 +1855,26 @@ mod tests {
                 .estimated_position_seconds
                 .unwrap_or_default()
                 >= 3.5
+        );
+    }
+
+    #[test]
+    fn move_track_supports_inserting_before_another_track() {
+        let mut tracks = hierarchy_song().tracks;
+
+        super::reparent_track(
+            &mut tracks,
+            "track_folder_b",
+            None,
+            Some("track_folder_a"),
+            None,
+        )
+        .expect("folder should move before another folder");
+
+        let ordered_ids = tracks.iter().map(|track| track.id.as_str()).collect::<Vec<_>>();
+        assert_eq!(
+            ordered_ids,
+            vec!["track_folder_b", "track_child_b", "track_folder_a", "track_child_a"]
         );
     }
 

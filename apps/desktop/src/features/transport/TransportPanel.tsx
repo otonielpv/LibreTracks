@@ -32,10 +32,11 @@ import {
 } from "./desktopApi";
 
 const HEADER_WIDTH = 260;
+const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
 const TRACK_HEIGHT = 94;
-const ZOOM_MIN = 1;
+const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 48;
-const ZOOM_STEP = 0.5;
+const ZOOM_STEP = 0.25;
 
 type ContextMenuAction = {
   label: string;
@@ -66,7 +67,16 @@ type RulerDragState = {
 
 type TrackDropState = {
   targetTrackId: string;
-  mode: "after" | "inside-folder";
+  mode: "before" | "after" | "inside-folder";
+} | null;
+
+type TrackDragState = {
+  trackId: string;
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  currentClientY: number;
+  isDragging: boolean;
 } | null;
 
 type TimeSelection = {
@@ -228,6 +238,60 @@ function trackChildrenCount(song: SongSummary, trackId: string) {
   return song.tracks.filter((track) => track.parentTrackId === trackId).length;
 }
 
+function isTrackDescendant(song: SongSummary, candidateTrackId: string | null, trackId: string) {
+  let cursor = candidateTrackId;
+
+  while (cursor) {
+    if (cursor === trackId) {
+      return true;
+    }
+
+    cursor = findTrack(song, cursor)?.parentTrackId ?? null;
+  }
+
+  return false;
+}
+
+function isInteractiveTrackControl(target: EventTarget | null) {
+  return target instanceof HTMLElement
+    ? Boolean(target.closest("button, input, select, textarea, label"))
+    : false;
+}
+
+function resolveTrackDropState(
+  song: SongSummary,
+  draggingTrackId: string,
+  clientX: number,
+  clientY: number,
+): TrackDropState {
+  const hoveredRow = document.elementFromPoint(clientX, clientY)?.closest(".lt-track-row") as
+    | HTMLElement
+    | null;
+  const targetTrackId = hoveredRow?.dataset.trackId ?? null;
+  if (!hoveredRow || !targetTrackId || targetTrackId === draggingTrackId) {
+    return null;
+  }
+
+  const targetTrack = findTrack(song, targetTrackId);
+  if (!targetTrack || isTrackDescendant(song, targetTrackId, draggingTrackId)) {
+    return null;
+  }
+
+  const bounds = hoveredRow.getBoundingClientRect();
+  const verticalRatio = bounds.height > 0 ? (clientY - bounds.top) / bounds.height : 0.5;
+  const mode =
+    targetTrack.kind === "folder" && verticalRatio >= 0.3 && verticalRatio <= 0.7
+      ? "inside-folder"
+      : verticalRatio < 0.5
+        ? "before"
+        : "after";
+
+  return {
+    targetTrackId,
+    mode,
+  };
+}
+
 function rulerPointerToSeconds(
   event: MouseEvent | ReactMouseEvent,
   element: HTMLElement,
@@ -258,6 +322,8 @@ export function TransportPanel() {
   const [timeSelection, setTimeSelection] = useState<TimeSelection>(null);
   const [isTimelinePanning, setIsTimelinePanning] = useState(false);
   const [displayPositionSeconds, setDisplayPositionSeconds] = useState(0);
+  const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
+  const [trackDrag, setTrackDrag] = useState<TrackDragState>(null);
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [trackDropState, setTrackDropState] = useState<TrackDropState>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -270,6 +336,8 @@ export function TransportPanel() {
     durationSeconds: 0,
     running: false,
   });
+  const pendingZoomAnchorRef = useRef<{ seconds: number; viewOffsetX: number } | null>(null);
+  const suppressTrackClickRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -307,6 +375,30 @@ export function TransportPanel() {
     return () => {
       active = false;
       window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    const shell = timelineShellRef.current;
+    if (!shell) {
+      return;
+    }
+
+    const updateViewportWidth = () => {
+      setTimelineViewportWidth(shell.clientWidth || DEFAULT_TIMELINE_VIEWPORT_WIDTH);
+    };
+
+    updateViewportWidth();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(updateViewportWidth);
+      observer.observe(shell);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", updateViewportWidth);
+    return () => {
+      window.removeEventListener("resize", updateViewportWidth);
     };
   }, []);
 
@@ -547,6 +639,73 @@ export function TransportPanel() {
     };
   }, [rulerDrag, snapshot?.song, zoomLevel]);
 
+  useEffect(() => {
+    if (!trackDrag || !snapshot?.song) {
+      return;
+    }
+
+    const effectSong = snapshot.song;
+
+    const onMouseMove = (event: MouseEvent) => {
+      const exceededThreshold =
+        Math.abs(event.clientX - trackDrag.startClientX) > 5 ||
+        Math.abs(event.clientY - trackDrag.startClientY) > 5;
+      const isDraggingNow = trackDrag.isDragging || exceededThreshold;
+
+      setTrackDrag((current) =>
+        current
+          ? {
+              ...current,
+              currentClientY: event.clientY,
+              isDragging: current.isDragging || exceededThreshold,
+            }
+          : current,
+      );
+
+      if (!isDraggingNow) {
+        return;
+      }
+
+      setDraggingTrackId(trackDrag.trackId);
+      setTrackDropState(
+        resolveTrackDropState(effectSong, trackDrag.trackId, event.clientX, event.clientY),
+      );
+    };
+
+    const onMouseUp = (event: MouseEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      const movedEnough =
+        Math.abs(event.clientX - trackDrag.startClientX) > 5 ||
+        Math.abs(event.clientY - trackDrag.startClientY) > 5;
+      const shouldTreatAsDrag = trackDrag.isDragging || movedEnough;
+      const dropState = shouldTreatAsDrag
+        ? resolveTrackDropState(effectSong, trackDrag.trackId, event.clientX, event.clientY)
+        : null;
+
+      setTrackDrag(null);
+      setDraggingTrackId(null);
+      setTrackDropState(null);
+      suppressTrackClickRef.current = shouldTreatAsDrag;
+
+      if (!dropState) {
+        return;
+      }
+
+      void handleTrackDrop(trackDrag.trackId, dropState);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [snapshot?.song, trackDrag]);
+
   async function runAction(work: () => Promise<void>, options?: { busy?: boolean }) {
     try {
       if (options?.busy) {
@@ -563,9 +722,14 @@ export function TransportPanel() {
   }
 
   const song = snapshot?.song ?? null;
+  const laneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
+  const fitAllZoomLevel = song?.durationSeconds
+    ? clamp(laneViewportWidth / (Math.max(song.durationSeconds, 1) * 18), ZOOM_MIN, ZOOM_MAX)
+    : ZOOM_MIN;
+  const effectiveZoomMin = song ? fitAllZoomLevel : ZOOM_MIN;
   const positionSeconds = displayPositionSeconds;
   const pixelsPerSecond = zoomLevel * 18;
-  const timelineWidth = Math.max((song?.durationSeconds ?? 0) * pixelsPerSecond, 1100);
+  const timelineWidth = Math.max((song?.durationSeconds ?? 0) * pixelsPerSecond, laneViewportWidth);
   const timelineRowWidth = HEADER_WIDTH + timelineWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
   const selectedTrack = findTrack(song, selectedTrackId);
@@ -589,6 +753,28 @@ export function TransportPanel() {
     : 0;
   const playheadOffset = (positionSeconds / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth;
   const rulerMarks = buildRulerMarks(song?.durationSeconds ?? 0, zoomLevel);
+
+  useEffect(() => {
+    setZoomLevel((current) => (current < effectiveZoomMin ? effectiveZoomMin : current));
+  }, [effectiveZoomMin]);
+
+  useEffect(() => {
+    if (!pendingZoomAnchorRef.current || !timelineShellRef.current) {
+      return;
+    }
+
+    const pendingAnchor = pendingZoomAnchorRef.current;
+    pendingZoomAnchorRef.current = null;
+
+    const shell = timelineShellRef.current;
+    const laneOffsetX = clamp(
+      pendingAnchor.viewOffsetX - HEADER_WIDTH,
+      0,
+      Math.max(0, shell.clientWidth - HEADER_WIDTH),
+    );
+    const nextScrollLeft = pendingAnchor.seconds * pixelsPerSecond - laneOffsetX;
+    shell.scrollLeft = clamp(nextScrollLeft, 0, Math.max(0, timelineRowWidth - shell.clientWidth));
+  }, [pixelsPerSecond, timelineRowWidth]);
 
   function clearSelections(message: string) {
     setSelectedTrackId(null);
@@ -624,35 +810,67 @@ export function TransportPanel() {
     window.addEventListener("mouseup", onUp);
   }
 
-  function resolveTrackDropMode(track: TrackSummary) {
-    return track.kind === "folder" ? "inside-folder" : "after";
-  }
+  function applyZoom(nextZoomLevel: number, anchorClientX?: number) {
+    const shell = timelineShellRef.current;
+    const clampedZoom = clamp(nextZoomLevel, effectiveZoomMin, ZOOM_MAX);
 
-  async function handleTrackDrop(targetTrack: TrackSummary) {
-    if (!draggingTrackId || draggingTrackId === targetTrack.id) {
-      setDraggingTrackId(null);
-      setTrackDropState(null);
+    if (!shell) {
+      setZoomLevel(clampedZoom);
       return;
     }
 
-    const dropMode = resolveTrackDropMode(targetTrack);
+    const bounds = shell.getBoundingClientRect();
+    const viewOffsetX =
+      anchorClientX !== undefined ? anchorClientX - bounds.left : bounds.width / 2;
+    const laneOffsetX = clamp(viewOffsetX - HEADER_WIDTH, 0, Math.max(0, bounds.width - HEADER_WIDTH));
+    const anchorSeconds = (shell.scrollLeft + laneOffsetX) / Math.max(pixelsPerSecond, 0.0001);
+
+    pendingZoomAnchorRef.current = {
+      seconds: anchorSeconds,
+      viewOffsetX,
+    };
+    setZoomLevel(clampedZoom);
+  }
+
+  async function handleTrackDrop(trackId: string, dropState: NonNullable<TrackDropState>) {
+    const targetTrack = findTrack(song, dropState.targetTrackId);
+    if (!song || !targetTrack || trackId === targetTrack.id) {
+      return;
+    }
+
+    const moveArgs =
+      dropState.mode === "inside-folder"
+        ? {
+            trackId,
+            insertAfterTrackId: null,
+            insertBeforeTrackId: null,
+            parentTrackId: targetTrack.id,
+          }
+        : dropState.mode === "before"
+          ? {
+              trackId,
+              insertAfterTrackId: null,
+              insertBeforeTrackId: targetTrack.id,
+              parentTrackId: targetTrack.parentTrackId ?? null,
+            }
+          : {
+              trackId,
+              insertAfterTrackId: targetTrack.id,
+              insertBeforeTrackId: null,
+              parentTrackId: targetTrack.parentTrackId ?? null,
+            };
 
     await runAction(async () => {
-      const nextSnapshot = await moveTrack({
-        trackId: draggingTrackId,
-        insertAfterTrackId: dropMode === "after" ? targetTrack.id : null,
-        parentTrackId: dropMode === "inside-folder" ? targetTrack.id : targetTrack.parentTrackId ?? null,
-      });
+      const nextSnapshot = await moveTrack(moveArgs);
       setSnapshot(nextSnapshot);
       setStatus(
-        dropMode === "inside-folder"
+        dropState.mode === "inside-folder"
           ? `Track movido dentro de ${targetTrack.name}.`
-          : `Track reordenado debajo de ${targetTrack.name}.`,
+          : dropState.mode === "before"
+            ? `Track reordenado encima de ${targetTrack.name}.`
+            : `Track reordenado debajo de ${targetTrack.name}.`,
       );
     });
-
-    setDraggingTrackId(null);
-    setTrackDropState(null);
   }
 
   function openMenu(
@@ -1002,6 +1220,15 @@ export function TransportPanel() {
           ref={timelineShellRef}
           onMouseDown={beginTimelinePan}
           onWheel={(event) => {
+            if (event.ctrlKey || event.metaKey) {
+              event.preventDefault();
+              applyZoom(
+                zoomLevel + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP),
+                event.clientX,
+              );
+              return;
+            }
+
             if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
               event.currentTarget.scrollLeft += event.deltaY;
             }
@@ -1104,46 +1331,36 @@ export function TransportPanel() {
               return (
                 <div
                   key={track.id}
-                  className={`lt-track-row ${isDropTarget ? "is-drop-target" : ""}`}
+                  className={`lt-track-row ${isDropTarget ? `is-drop-target is-drop-${dropMode}` : ""}`}
+                  data-track-id={track.id}
                   style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${timelineWidth}px` }}
-                  onDragOver={(event) => {
-                    if (!draggingTrackId || draggingTrackId === track.id) {
-                      return;
-                    }
-
-                    event.preventDefault();
-                    setTrackDropState({
-                      targetTrackId: track.id,
-                      mode: resolveTrackDropMode(track),
-                    });
-                  }}
-                  onDragLeave={() => {
-                    setTrackDropState((current) =>
-                      current?.targetTrackId === track.id ? null : current,
-                    );
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    void handleTrackDrop(track);
-                  }}
                 >
                   <div
-                    className={`lt-track-header ${isTrackSelected ? "is-selected" : ""} ${track.kind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""}`}
+                    className={`lt-track-header ${isTrackSelected ? "is-selected" : ""} ${track.kind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${draggingTrackId === track.id ? "is-dragging" : ""}`}
                     style={{ paddingLeft: 16 + track.depth * 22 }}
                     role="button"
                     tabIndex={0}
-                    draggable
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("text/plain", track.id);
-                      setDraggingTrackId(track.id);
-                      setTrackDropState(null);
-                    }}
-                    onDragEnd={() => {
-                      setDraggingTrackId(null);
-                      setTrackDropState(null);
+                    onMouseDown={(event) => {
+                      if (event.button !== 0 || isInteractiveTrackControl(event.target)) {
+                        return;
+                      }
+
+                      setContextMenu(null);
+                      setTrackDrag({
+                        trackId: track.id,
+                        pointerId: 1,
+                        startClientX: event.clientX,
+                        startClientY: event.clientY,
+                        currentClientY: event.clientY,
+                        isDragging: false,
+                      });
                     }}
                     onClick={() => {
+                      if (suppressTrackClickRef.current) {
+                        suppressTrackClickRef.current = false;
+                        return;
+                      }
+
                       setSelectedTrackId(track.id);
                       setSelectedClipId(null);
                       setSelectedSectionId(null);
@@ -1186,7 +1403,11 @@ export function TransportPanel() {
                       </span>
                       {isDropTarget ? (
                         <span className="lt-track-drop-hint">
-                          {dropMode === "inside-folder" ? "Soltar para meter en folder" : "Soltar para reordenar"}
+                          {dropMode === "inside-folder"
+                            ? "Soltar para meter en folder"
+                            : dropMode === "before"
+                              ? "Soltar para subir antes de este track"
+                              : "Soltar para bajar despues de este track"}
                         </span>
                       ) : null}
                     </div>
@@ -1365,11 +1586,11 @@ export function TransportPanel() {
             <input
               aria-label="Zoom horizontal del timeline"
               type="range"
-              min={ZOOM_MIN}
+              min={effectiveZoomMin}
               max={ZOOM_MAX}
               step={ZOOM_STEP}
               value={zoomLevel}
-              onChange={(event) => setZoomLevel(Number(event.target.value))}
+              onChange={(event) => applyZoom(Number(event.target.value))}
             />
             <strong>{zoomLevel.toFixed(1)}x</strong>
           </label>

@@ -37,6 +37,66 @@ function mockRulerBounds(container: HTMLElement) {
   });
 }
 
+function mockTimelineShellMetrics(container: HTMLElement, width = 1400) {
+  const shell = container.querySelector(".lt-timeline-shell") as HTMLDivElement | null;
+  expect(shell).toBeTruthy();
+
+  Object.defineProperty(shell, "clientWidth", {
+    configurable: true,
+    value: width,
+  });
+
+  Object.defineProperty(shell, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      left: 0,
+      right: width,
+      top: 0,
+      bottom: 500,
+      width,
+      height: 500,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+  });
+
+  return shell;
+}
+
+function mockTrackRowDragGeometry(container: HTMLElement) {
+  const rows = Array.from(container.querySelectorAll(".lt-track-row")) as HTMLDivElement[];
+  expect(rows.length).toBeGreaterThan(0);
+
+  rows.forEach((row, index) => {
+    const top = 120 + index * 84;
+    Object.defineProperty(row, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        left: 0,
+        right: 1400,
+        top,
+        bottom: top + 78,
+        width: 1400,
+        height: 78,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      }),
+    });
+  });
+
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    value: vi.fn((_x: number, y: number) => {
+      return rows.find((_, index) => {
+        const top = 120 + index * 84;
+        return y >= top && y <= top + 78;
+      }) ?? null;
+    }),
+  });
+}
+
 describe("App", () => {
   it("renders the timeline-centric DAW shell", async () => {
     await renderApp();
@@ -156,6 +216,24 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: /expandir rhythm/i })).toBeTruthy();
   });
 
+  it("supports ctrl plus wheel zoom on the timeline shell", async () => {
+    const { container } = await renderApp();
+    const shell = mockTimelineShellMetrics(container, 1500);
+
+    await act(async () => {
+      fireEvent(window, new Event("resize"));
+    });
+
+    const zoomSlider = screen.getByRole("slider", { name: /zoom horizontal del timeline/i });
+    expect(Number(zoomSlider.getAttribute("min"))).toBeLessThan(1);
+
+    await act(async () => {
+      fireEvent.wheel(shell, { deltaY: -100, ctrlKey: true, clientX: 900 });
+    });
+
+    expect(screen.getByText("7.3x")).toBeTruthy();
+  });
+
   it("creates a new audio track from the track context menu", async () => {
     vi.spyOn(window, "prompt").mockReturnValue("Nueva pista");
     await renderApp();
@@ -175,26 +253,39 @@ describe("App", () => {
     expect(screen.getByText("Nueva pista")).toBeTruthy();
   });
 
-  it("allows dragging a track into a folder track", async () => {
+  it("reorders tracks vertically from the header drag handle", async () => {
     const { container } = await renderApp();
+    mockTrackRowDragGeometry(container);
 
     const keysHeader = screen.getByText("Keys").closest(".lt-track-header");
-    const guideHeader = screen.getByText("Guide").closest(".lt-track-header");
     expect(keysHeader).toBeTruthy();
-    expect(guideHeader).toBeTruthy();
 
     await act(async () => {
-      fireEvent.dragStart(keysHeader as HTMLElement, {
-        dataTransfer: {
-          setData: vi.fn(),
-          effectAllowed: "move",
-        },
-      } as unknown as Event);
+      fireEvent.mouseDown(keysHeader as HTMLElement, { button: 0, clientX: 80, clientY: 470 });
     });
 
     await act(async () => {
-      fireEvent.dragOver((guideHeader as HTMLElement).closest(".lt-track-row") as HTMLElement);
-      fireEvent.drop((guideHeader as HTMLElement).closest(".lt-track-row") as HTMLElement);
+      fireEvent.mouseMove(window, { button: 0, clientX: 80, clientY: 380 });
+      fireEvent.mouseUp(window, { button: 0, clientX: 80, clientY: 380 });
+    });
+
+    expect(await screen.findByText(/track reordenado encima de guide/i)).toBeTruthy();
+  });
+
+  it("allows dragging a track into a folder track", async () => {
+    const { container } = await renderApp();
+    mockTrackRowDragGeometry(container);
+
+    const keysHeader = screen.getByText("Keys").closest(".lt-track-header");
+    expect(keysHeader).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.mouseDown(keysHeader as HTMLElement, { button: 0, clientX: 80, clientY: 470 });
+    });
+
+    await act(async () => {
+      fireEvent.mouseMove(window, { button: 0, clientX: 80, clientY: 410 });
+      fireEvent.mouseUp(window, { button: 0, clientX: 80, clientY: 410 });
     });
 
     expect(await screen.findByText(/track movido dentro de guide/i)).toBeTruthy();

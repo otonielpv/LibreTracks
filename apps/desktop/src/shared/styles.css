@@ -1261,6 +1261,7 @@ input[type="range"] {
   border: 0;
   border-right: 1px solid rgba(116, 143, 165, 0.16);
   border-radius: 0;
+  cursor: grab;
   display: grid;
   gap: 0.45rem;
   grid-template-columns: minmax(0, 1fr);
@@ -1282,6 +1283,11 @@ input[type="range"] {
 
 .lt-track-header.is-drop-target {
   box-shadow: inset 0 0 0 1px rgba(133, 202, 245, 0.34);
+}
+
+.lt-track-header.is-dragging {
+  cursor: grabbing;
+  opacity: 0.72;
 }
 
 .lt-track-header-main,
@@ -1373,6 +1379,21 @@ input[type="range"] {
   background:
     linear-gradient(180deg, rgba(21, 41, 59, 0.96), rgba(13, 24, 35, 0.98)),
     linear-gradient(90deg, rgba(87, 152, 199, 0.18), transparent 55%);
+}
+
+.lt-track-row.is-drop-before .lt-track-header,
+.lt-track-row.is-drop-before .lt-track-lane {
+  box-shadow: inset 0 3px 0 rgba(143, 210, 255, 0.78);
+}
+
+.lt-track-row.is-drop-after .lt-track-header,
+.lt-track-row.is-drop-after .lt-track-lane {
+  box-shadow: inset 0 -3px 0 rgba(143, 210, 255, 0.78);
+}
+
+.lt-track-row.is-drop-inside-folder .lt-track-header,
+.lt-track-row.is-drop-inside-folder .lt-track-lane {
+  box-shadow: inset 0 0 0 2px rgba(143, 210, 255, 0.48);
 }
 
 .lt-track-lane.is-folder {

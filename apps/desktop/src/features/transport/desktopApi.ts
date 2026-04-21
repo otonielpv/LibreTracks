@@ -554,12 +554,19 @@ export async function createTrack(args: {
 export async function moveTrack(args: {
   trackId: string;
   insertAfterTrackId?: string | null;
+  insertBeforeTrackId?: string | null;
   parentTrackId?: string | null;
 }): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     updateDemoSong((song) => ({
       ...song,
-      tracks: moveTrackInList(song.tracks, args.trackId, args.insertAfterTrackId ?? null, args.parentTrackId ?? null),
+      tracks: moveTrackInList(
+        song.tracks,
+        args.trackId,
+        args.insertAfterTrackId ?? null,
+        args.insertBeforeTrackId ?? null,
+        args.parentTrackId ?? null,
+      ),
     }));
     return buildDemoSnapshot();
   }
@@ -687,6 +694,7 @@ function moveTrackInList(
   tracks: TrackSummary[],
   trackId: string,
   insertAfterTrackId: string | null,
+  insertBeforeTrackId: string | null,
   parentTrackId: string | null,
 ) {
   const nextTracks = [...tracks];
@@ -706,7 +714,12 @@ function moveTrackInList(
     ...block[0],
     parentTrackId,
   };
-  const insertIndex = resolveInsertIndex(nextTracks, insertAfterTrackId, parentTrackId);
+  const insertIndex = resolveInsertIndex(
+    nextTracks,
+    insertAfterTrackId,
+    insertBeforeTrackId,
+    parentTrackId,
+  );
   nextTracks.splice(insertIndex, 0, ...block);
   return nextTracks;
 }
@@ -714,24 +727,43 @@ function moveTrackInList(
 function resolveInsertIndex(
   tracks: TrackSummary[],
   insertAfterTrackId: string | null,
+  insertBeforeTrackId: string | null,
   parentTrackId: string | null,
 ) {
-  const anchorTrackId = insertAfterTrackId ?? parentTrackId;
-  if (!anchorTrackId) {
-    return tracks.length;
+  if (insertAfterTrackId) {
+    const anchorIndex = tracks.findIndex((track) => track.id === insertAfterTrackId);
+    if (anchorIndex === -1) {
+      return tracks.length;
+    }
+
+    const anchorDepth = tracks[anchorIndex].depth;
+    let end = anchorIndex + 1;
+    while (end < tracks.length && tracks[end].depth > anchorDepth) {
+      end += 1;
+    }
+    return end;
   }
 
-  const anchorIndex = tracks.findIndex((track) => track.id === anchorTrackId);
-  if (anchorIndex === -1) {
-    return tracks.length;
+  if (insertBeforeTrackId) {
+    const anchorIndex = tracks.findIndex((track) => track.id === insertBeforeTrackId);
+    return anchorIndex === -1 ? tracks.length : anchorIndex;
   }
 
-  const anchorDepth = tracks[anchorIndex].depth;
-  let end = anchorIndex + 1;
-  while (end < tracks.length && tracks[end].depth > anchorDepth) {
-    end += 1;
+  if (parentTrackId) {
+    const anchorIndex = tracks.findIndex((track) => track.id === parentTrackId);
+    if (anchorIndex === -1) {
+      return tracks.length;
+    }
+
+    const anchorDepth = tracks[anchorIndex].depth;
+    let end = anchorIndex + 1;
+    while (end < tracks.length && tracks[end].depth > anchorDepth) {
+      end += 1;
+    }
+    return end;
   }
-  return end;
+
+  return tracks.length;
 }
 
 function clamp(value: number, min: number, max: number) {
