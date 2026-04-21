@@ -5,58 +5,6 @@ type ImportAudioModalProps = {
   onImport: () => Promise<void>;
 };
 
-type DemoFile = {
-  id: string;
-  name: string;
-  format: string;
-  duration: string;
-  size: string;
-  selectable: boolean;
-};
-
-const DEMO_FILES: DemoFile[] = [
-  {
-    id: "lead-vocal",
-    name: "Lead_Vocal_Take1.wav",
-    format: "44.1/24",
-    duration: "03:45.210",
-    size: "38.2 MB",
-    selectable: true,
-  },
-  {
-    id: "bv-left",
-    name: "Backing_Vocals_L.wav",
-    format: "44.1/24",
-    duration: "03:45.210",
-    size: "38.2 MB",
-    selectable: true,
-  },
-  {
-    id: "bv-right",
-    name: "Backing_Vocals_R.wav",
-    format: "44.1/24",
-    duration: "03:45.210",
-    size: "38.2 MB",
-    selectable: true,
-  },
-  {
-    id: "synth-bass",
-    name: "Synth_Bass_Drop.wav",
-    format: "48.0/24",
-    duration: "00:12.400",
-    size: "5.1 MB",
-    selectable: true,
-  },
-  {
-    id: "notes",
-    name: "Project_Notes.txt",
-    format: "--",
-    duration: "--",
-    size: "4 KB",
-    selectable: false,
-  },
-];
-
 export function ImportAudioModal({ isOpen, isImporting, onClose, onImport }: ImportAudioModalProps) {
   if (!isOpen) {
     return null;
@@ -77,7 +25,7 @@ export function ImportAudioModal({ isOpen, isImporting, onClose, onImport }: Imp
 
         <div className="lt-import-simple-body">
           <span className="material-symbols-outlined lt-import-simple-icon">folder_open</span>
-          <p className="lt-import-simple-title">Selecciona archivos WAV desde tu ordenador</p>
+          <h2 className="lt-import-simple-title">Selecciona archivos WAV desde tu ordenador</h2>
           <p className="lt-import-simple-hint">
             Se abrirá el explorador de archivos del sistema. Puedes seleccionar uno o varios archivos WAV.
           </p>

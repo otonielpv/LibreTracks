@@ -27,6 +27,16 @@ body {
   font-family: Inter, sans-serif;
 }
 
+.lt-app-shell {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #131313;
+  color: #e5e2e1;
+  font-family: Inter, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
 .material-symbols-outlined {
   font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
   font-size: 18px;
@@ -266,6 +276,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   flex: 1;
   overflow: hidden;
 }
@@ -312,6 +323,7 @@ body {
 .lt-timeline-shell {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   background: #0e0e0e;
   display: flex;
@@ -320,6 +332,8 @@ body {
 
 .lt-track-list {
   flex: 1;
+  min-height: 0;
+  background: #0e0e0e;
 }
 
 .lt-ruler-row,
@@ -776,6 +790,12 @@ body {
   box-shadow: 0 0 32px rgb(229 226 225 / 0.08);
 }
 
+.lt-import-dialog--simple {
+  width: min(560px, calc(100vw - 2rem));
+  height: auto;
+  max-height: min(420px, calc(100vh - 2rem));
+}
+
 .lt-import-header {
   display: flex;
   align-items: center;
@@ -790,6 +810,10 @@ body {
   gap: 0.55rem;
   font: 600 1.1rem/1 Inter, sans-serif;
   color: #e5e2e1;
+}
+
+.lt-import-header:has(.lt-import-dialog--simple) {
+  padding-block: 0.9rem;
 }
 
 .lt-import-header-title .material-symbols-outlined {
@@ -972,6 +996,49 @@ body {
   gap: 0.75rem;
   background: #201f1f;
   padding: 0.8rem 0.95rem;
+}
+
+.lt-import-simple-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1.4rem 1.25rem 1.15rem;
+  background: #131313;
+}
+
+.lt-import-simple-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  background: rgb(87 241 219 / 0.12);
+  color: #57f1db;
+  font-size: 1.5rem;
+}
+
+.lt-import-simple-title {
+  margin: 0;
+  color: #e5e2e1;
+  font: 700 1.15rem/1.2 Inter, sans-serif;
+}
+
+.lt-import-simple-hint {
+  margin: 0;
+  max-width: 38ch;
+  color: #bacac5;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.lt-import-dialog--simple .lt-import-submit {
+  margin-top: 0.15rem;
+}
+
+.lt-import-dialog--simple .lt-import-footer {
+  border-top: 1px solid rgb(186 202 197 / 0.08);
 }
 
 .lt-import-preview-toggle {
