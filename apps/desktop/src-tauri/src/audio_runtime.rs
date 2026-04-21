@@ -2,7 +2,11 @@ use std::{
     fs::File,
     io::ErrorKind,
     path::{Path, PathBuf},
-    sync::mpsc::{self, Receiver, Sender},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc::{self, Receiver, Sender},
+        Arc,
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -54,6 +58,7 @@ pub enum PlaybackStartReason {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AudioCommandKind {
     Play,
+    Seek,
     SyncSong,
     Stop,
     DebugSnapshot,
@@ -169,6 +174,12 @@ enum AudioCommand {
         reason: PlaybackStartReason,
         respond_to: Sender<Result<(), String>>,
     },
+    Seek {
+        song: Song,
+        position_seconds: f64,
+        reason: PlaybackStartReason,
+        respond_to: Sender<Result<(), String>>,
+    },
     SyncSong {
         song: Song,
         respond_to: Sender<Result<(), String>>,
@@ -186,6 +197,7 @@ struct PlaybackSession {
     backend: PlaybackBackend,
     reader_sender: Option<Sender<ReaderCommand>>,
     reader_handle: Option<JoinHandle<DiskReaderReport>>,
+    seek_generation: Arc<AtomicU64>,
 }
 
 enum PlaybackBackend {
@@ -195,6 +207,11 @@ enum PlaybackBackend {
 
 enum ReaderCommand {
     UpdateSong(Song),
+    Seek {
+        song: Song,
+        position_seconds: f64,
+        generation: u64,
+    },
     Stop,
 }
 
@@ -217,8 +234,16 @@ struct PlaybackClipPlan {
 
 struct DiskReaderState {
     mixer: Mixer,
-    producer: Producer<f32>,
+    song_dir: PathBuf,
+    producer: Producer<OutputSample>,
     command_receiver: Receiver<ReaderCommand>,
+    current_generation: u64,
+}
+
+#[derive(Clone, Copy)]
+struct OutputSample {
+    generation: u64,
+    value: f32,
 }
 
 struct Mixer {
@@ -391,6 +416,21 @@ impl AudioDebugState {
         });
     }
 
+    fn record_seek(
+        &mut self,
+        reason: PlaybackStartReason,
+        position_seconds: f64,
+        song_duration_seconds: f64,
+        active_sinks: usize,
+    ) {
+        self.runtime_state.active_sinks = active_sinks;
+        self.playback_anchor_position_seconds =
+            Some(position_seconds.clamp(0.0, song_duration_seconds));
+        self.playback_anchor_started_at = Some(Instant::now());
+        self.playback_song_duration_seconds = Some(song_duration_seconds.max(0.0));
+        self.last_start_reason = Some(reason);
+    }
+
     fn record_stop(&mut self, report: &StopReport, active_sinks_after_stop: usize) {
         self.runtime_state.active_sinks = active_sinks_after_stop;
         self.playback_anchor_position_seconds = self.estimated_position_seconds();
@@ -508,6 +548,14 @@ impl AudioRuntime {
             active_sinks: usize::from(self.session.is_some()),
         })
     }
+
+    fn seek(&mut self, song: &Song, position_seconds: f64) -> Result<usize, String> {
+        let updated_sinks = match self.session.as_mut() {
+            Some(session) => usize::from(session.seek(song.clone(), position_seconds)?),
+            None => 0,
+        };
+        Ok(updated_sinks)
+    }
 }
 
 impl AudioController {
@@ -532,6 +580,20 @@ impl AudioController {
     ) -> Result<(), DesktopError> {
         self.request(|respond_to| AudioCommand::Play {
             song_dir,
+            song,
+            position_seconds,
+            reason,
+            respond_to,
+        })
+    }
+
+    pub fn seek(
+        &self,
+        song: Song,
+        position_seconds: f64,
+        reason: PlaybackStartReason,
+    ) -> Result<(), DesktopError> {
+        self.request(|respond_to| AudioCommand::Seek {
             song,
             position_seconds,
             reason,
@@ -602,6 +664,7 @@ impl PlaybackSession {
                 backend: PlaybackBackend::Null,
                 reader_sender: None,
                 reader_handle: None,
+                seek_generation: Arc::new(AtomicU64::new(0)),
             });
         };
 
@@ -613,8 +676,9 @@ impl PlaybackSession {
         let output_channels = usize::from(config.channels.max(1));
         let output_sample_rate = config.sample_rate.0.max(1);
         let ring_capacity_samples = PCM_RING_CAPACITY_FRAMES.saturating_mul(output_channels.max(1));
-        let (producer, consumer) = RingBuffer::<f32>::new(ring_capacity_samples);
+        let (producer, consumer) = RingBuffer::<OutputSample>::new(ring_capacity_samples);
         let (reader_sender, reader_receiver) = mpsc::channel();
+        let seek_generation = Arc::new(AtomicU64::new(0));
 
         let reader_handle = spawn_disk_reader(DiskReaderState {
             mixer: Mixer::new(
@@ -625,17 +689,26 @@ impl PlaybackSession {
                 output_channels,
                 debug_config,
             ),
+            song_dir: song_dir.clone(),
             producer,
             command_receiver: reader_receiver,
+            current_generation: 0,
         });
 
-        let stream = build_output_stream(&device, &config, sample_format, consumer)?;
+        let stream = build_output_stream(
+            &device,
+            &config,
+            sample_format,
+            consumer,
+            seek_generation.clone(),
+        )?;
         stream.play().map_err(|error| error.to_string())?;
 
         Ok(Self {
             backend: PlaybackBackend::Cpal { _stream: stream },
             reader_sender: Some(reader_sender),
             reader_handle: Some(reader_handle),
+            seek_generation,
         })
     }
 
@@ -648,6 +721,26 @@ impl PlaybackSession {
         }
 
         Ok(false)
+    }
+
+    fn seek(&mut self, song: Song, position_seconds: f64) -> Result<bool, String> {
+        let generation = self
+            .seek_generation
+            .fetch_add(1, Ordering::AcqRel)
+            .saturating_add(1);
+
+        if let Some(reader_sender) = &self.reader_sender {
+            reader_sender
+                .send(ReaderCommand::Seek {
+                    song,
+                    position_seconds,
+                    generation,
+                })
+                .map_err(|_| "disk reader thread is unavailable".to_string())?;
+            return Ok(true);
+        }
+
+        Ok(matches!(self.backend, PlaybackBackend::Null))
     }
 
     fn stop(mut self) -> DiskReaderReport {
@@ -877,18 +970,27 @@ fn build_output_stream(
     device: &Device,
     config: &StreamConfig,
     sample_format: SampleFormat,
-    consumer: Consumer<f32>,
+    consumer: Consumer<OutputSample>,
+    seek_generation: Arc<AtomicU64>,
 ) -> Result<Stream, String> {
     let error_callback = |error| eprintln!("[libretracks-audio] cpal stream error: {error}");
 
     match sample_format {
         SampleFormat::F32 => {
             let mut consumer = consumer;
+            let seek_generation = seek_generation.clone();
+            let mut active_generation = seek_generation.load(Ordering::Acquire);
             device
                 .build_output_stream(
                     config,
                     move |data: &mut [f32], _| {
-                        drain_consumer_samples(data, &mut consumer, |sample| sample)
+                        drain_consumer_samples(
+                            data,
+                            &mut consumer,
+                            &seek_generation,
+                            &mut active_generation,
+                            |sample| sample,
+                        )
                     },
                     error_callback,
                     None,
@@ -897,13 +999,19 @@ fn build_output_stream(
         }
         SampleFormat::I16 => {
             let mut consumer = consumer;
+            let seek_generation = seek_generation.clone();
+            let mut active_generation = seek_generation.load(Ordering::Acquire);
             device
                 .build_output_stream(
                     config,
                     move |data: &mut [i16], _| {
-                        drain_consumer_samples(data, &mut consumer, |sample| {
-                            (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16
-                        })
+                        drain_consumer_samples(
+                            data,
+                            &mut consumer,
+                            &seek_generation,
+                            &mut active_generation,
+                            |sample| (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16,
+                        )
                     },
                     error_callback,
                     None,
@@ -912,13 +1020,21 @@ fn build_output_stream(
         }
         SampleFormat::U16 => {
             let mut consumer = consumer;
+            let seek_generation = seek_generation.clone();
+            let mut active_generation = seek_generation.load(Ordering::Acquire);
             device
                 .build_output_stream(
                     config,
                     move |data: &mut [u16], _| {
-                        drain_consumer_samples(data, &mut consumer, |sample| {
-                            (((sample.clamp(-1.0, 1.0) * 0.5) + 0.5) * u16::MAX as f32) as u16
-                        })
+                        drain_consumer_samples(
+                            data,
+                            &mut consumer,
+                            &seek_generation,
+                            &mut active_generation,
+                            |sample| {
+                                (((sample.clamp(-1.0, 1.0) * 0.5) + 0.5) * u16::MAX as f32) as u16
+                            },
+                        )
                     },
                     error_callback,
                     None,
@@ -931,13 +1047,24 @@ fn build_output_stream(
 
 fn drain_consumer_samples<T>(
     data: &mut [T],
-    consumer: &mut Consumer<f32>,
+    consumer: &mut Consumer<OutputSample>,
+    seek_generation: &Arc<AtomicU64>,
+    active_generation: &mut u64,
     convert: impl Fn(f32) -> T,
 ) where
     T: Copy,
 {
+    let latest_generation = seek_generation.load(Ordering::Acquire);
+    if latest_generation != *active_generation {
+        while consumer.pop().is_ok() {}
+        *active_generation = latest_generation;
+    }
+
     for output in data {
-        let sample = consumer.pop().unwrap_or(0.0);
+        let sample = match consumer.pop() {
+            Ok(sample) if sample.generation == *active_generation => sample.value,
+            Ok(_) | Err(_) => 0.0,
+        };
         *output = convert(sample);
     }
 }
@@ -969,6 +1096,30 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
                             position_seconds,
                             song.duration_seconds,
                             &report,
+                        );
+                    });
+
+                let _ = respond_to.send(result);
+            }
+            AudioCommand::Seek {
+                song,
+                position_seconds,
+                reason,
+                respond_to,
+            } => {
+                debug_state.record_command(
+                    AudioCommandKind::Seek,
+                    Some(playback_reason_label(reason).to_string()),
+                );
+
+                let result = ensure_runtime(&mut runtime)
+                    .seek(&song, position_seconds)
+                    .map(|active_sinks| {
+                        debug_state.record_seek(
+                            reason,
+                            position_seconds,
+                            song.duration_seconds,
+                            active_sinks.max(1),
                         );
                     });
 
@@ -1081,7 +1232,7 @@ fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
         }
 
         let block = state.mixer.render_next_block(block_frames);
-        if !push_block_into_ring(&mut state.producer, &block) {
+        if !push_block_into_ring(&mut state.producer, &block, state.current_generation) {
             break;
         }
     }
@@ -1096,6 +1247,24 @@ impl DiskReaderState {
         while let Ok(command) = self.command_receiver.try_recv() {
             match command {
                 ReaderCommand::UpdateSong(song) => self.mixer.apply_song_update(song),
+                ReaderCommand::Seek {
+                    song,
+                    position_seconds,
+                    generation,
+                } => {
+                    let output_sample_rate = self.mixer.output_sample_rate;
+                    let output_channels = self.mixer.output_channels;
+                    let debug_config = self.mixer.debug_config;
+                    self.mixer = Mixer::new(
+                        &self.song_dir,
+                        song,
+                        position_seconds,
+                        output_sample_rate,
+                        output_channels,
+                        debug_config,
+                    );
+                    self.current_generation = generation;
+                }
                 ReaderCommand::Stop => should_stop = true,
             }
         }
@@ -1259,9 +1428,15 @@ fn interpolated_gain(
     start_gain + (target_gain - start_gain) * gain_ratio
 }
 
-fn push_block_into_ring(producer: &mut Producer<f32>, block: &[f32]) -> bool {
+fn push_block_into_ring(producer: &mut Producer<OutputSample>, block: &[f32], generation: u64) -> bool {
     for &sample in block {
-        if producer.push(sample).is_err() {
+        if producer
+            .push(OutputSample {
+                generation,
+                value: sample,
+            })
+            .is_err()
+        {
             return false;
         }
     }
@@ -1433,6 +1608,7 @@ fn playback_reason_label(reason: PlaybackStartReason) -> &'static str {
 fn command_kind_label(kind: AudioCommandKind) -> &'static str {
     match kind {
         AudioCommandKind::Play => "play",
+        AudioCommandKind::Seek => "seek",
         AudioCommandKind::SyncSong => "sync_song",
         AudioCommandKind::Stop => "stop",
         AudioCommandKind::DebugSnapshot => "debug_snapshot",
@@ -1445,7 +1621,11 @@ mod tests {
     use std::{
         fs,
         path::{Path, PathBuf},
-        sync::mpsc,
+        sync::{
+            atomic::{AtomicU64, Ordering},
+            mpsc,
+            Arc,
+        },
         thread,
         time::Duration,
     };
@@ -1458,7 +1638,8 @@ mod tests {
         build_playback_plans, coalesce_sync_song_commands, drain_consumer_samples, env_flag,
         interpolated_gain, playback_reason_label, probe_audio_file, scheduled_clip_count,
         AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState,
-        PlaybackClipPlan, PlaybackStartReason, RestartReport, StopReport, SyncReport,
+        OutputSample, PlaybackClipPlan, PlaybackStartReason, RestartReport, StopReport,
+        SyncReport,
     };
 
     fn demo_song() -> Song {
@@ -1549,6 +1730,7 @@ mod tests {
             playback_reason_label(PlaybackStartReason::StructureRebuild),
             "structure_rebuild"
         );
+        assert_eq!(super::command_kind_label(AudioCommandKind::Seek), "seek");
         assert_eq!(super::command_kind_label(AudioCommandKind::Stop), "stop");
     }
 
@@ -1776,14 +1958,65 @@ mod tests {
 
     #[test]
     fn ring_consumer_writes_silence_when_buffer_runs_empty() {
-        let (mut producer, mut consumer) = RingBuffer::<f32>::new(4);
-        producer.push(0.25).expect("sample should push");
-        producer.push(-0.5).expect("sample should push");
+        let (mut producer, mut consumer) = RingBuffer::<OutputSample>::new(4);
+        let seek_generation = Arc::new(AtomicU64::new(0));
+        let mut active_generation = 0;
+        producer
+            .push(OutputSample {
+                generation: 0,
+                value: 0.25,
+            })
+            .expect("sample should push");
+        producer
+            .push(OutputSample {
+                generation: 0,
+                value: -0.5,
+            })
+            .expect("sample should push");
 
         let mut output = [0.0_f32; 4];
-        drain_consumer_samples(&mut output, &mut consumer, |sample| sample);
+        drain_consumer_samples(
+            &mut output,
+            &mut consumer,
+            &seek_generation,
+            &mut active_generation,
+            |sample| sample,
+        );
 
         assert_eq!(output, [0.25, -0.5, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn ring_consumer_flushes_stale_generation_on_seek() {
+        let (mut producer, mut consumer) = RingBuffer::<OutputSample>::new(4);
+        let seek_generation = Arc::new(AtomicU64::new(0));
+        let mut active_generation = 0;
+
+        producer
+            .push(OutputSample {
+                generation: 0,
+                value: 0.75,
+            })
+            .expect("stale sample should push");
+        seek_generation.store(1, Ordering::Release);
+        producer
+            .push(OutputSample {
+                generation: 1,
+                value: 0.5,
+            })
+            .expect("fresh sample should push");
+
+        let mut output = [0.0_f32; 2];
+        drain_consumer_samples(
+            &mut output,
+            &mut consumer,
+            &seek_generation,
+            &mut active_generation,
+            |sample| sample,
+        );
+
+        assert_eq!(output, [0.0, 0.0]);
+        assert_eq!(active_generation, 1);
     }
 
     #[test]

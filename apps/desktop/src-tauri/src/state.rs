@@ -121,6 +121,12 @@ impl TransportClock {
         self.last_seek_position_seconds = Some(self.anchor_position_seconds);
     }
 
+    fn seek_while_playing(&mut self, position_seconds: f64) {
+        self.anchor_position_seconds = position_seconds.max(0.0);
+        self.anchor_started_at = Some(Instant::now());
+        self.last_seek_position_seconds = Some(self.anchor_position_seconds);
+    }
+
     fn stop(&mut self) {
         self.anchor_position_seconds = 0.0;
         self.anchor_started_at = None;
@@ -580,15 +586,15 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
-
-        audio.stop()?;
-
         self.engine.seek(position_seconds)?;
-        self.transport_clock.seek_to(self.engine.position_seconds());
-
         if was_playing {
-            return self.play_with_reason(audio, PlaybackStartReason::Seek);
+            self.reposition_audio(audio, PlaybackStartReason::Seek)?;
+            self.transport_clock
+                .seek_while_playing(self.engine.position_seconds());
+            return Ok(self.snapshot());
         }
+
+        self.transport_clock.seek_to(self.engine.position_seconds());
 
         Ok(self.snapshot())
     }
@@ -607,7 +613,7 @@ impl DesktopSession {
 
         if trigger == JumpTrigger::Immediate {
             if was_playing {
-                self.restart_audio(audio, PlaybackStartReason::ImmediateJump)?;
+                self.reposition_audio(audio, PlaybackStartReason::ImmediateJump)?;
                 self.transport_clock
                     .note_jump_while_playing(self.engine.position_seconds());
             } else {
@@ -1135,31 +1141,6 @@ impl DesktopSession {
         Ok(())
     }
 
-    fn play_with_reason(
-        &mut self,
-        audio: &AudioController,
-        reason: PlaybackStartReason,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        self.sync_position(audio)?;
-        let current_position = self.current_position();
-        let song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        if current_position >= song.duration_seconds {
-            self.engine.stop()?;
-        }
-
-        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        audio.play(song_dir, song, self.engine.position_seconds(), reason)?;
-        self.engine.play()?;
-        self.transport_clock
-            .start_from(self.engine.position_seconds());
-
-        Ok(self.snapshot())
-    }
-
     fn persist_song_update(
         &mut self,
         song: Song,
@@ -1272,7 +1253,7 @@ impl DesktopSession {
         let jump_executed = (advanced_position - linear_position).abs() > 0.001;
 
         if jump_executed {
-            self.restart_audio(audio, PlaybackStartReason::TransportResync)?;
+            self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
             self.transport_clock
                 .note_jump_while_playing(advanced_position);
         } else {
@@ -1413,6 +1394,20 @@ impl DesktopSession {
             .get(waveform_key)
             .expect("waveform cache entry should exist")
             .summary)
+    }
+
+    fn reposition_audio(
+        &mut self,
+        audio: &AudioController,
+        reason: PlaybackStartReason,
+    ) -> Result<(), DesktopError> {
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        audio.seek(song, self.engine.position_seconds(), reason)?;
+        Ok(())
     }
 
     fn restart_audio(
@@ -2395,6 +2390,7 @@ mod tests {
         let debug_snapshot = audio
             .debug_snapshot()
             .expect("debug snapshot should succeed");
+        assert_eq!(debug_snapshot.command_count, 4);
         assert_eq!(
             debug_snapshot.playhead.last_start_reason.as_deref(),
             Some("seek")
