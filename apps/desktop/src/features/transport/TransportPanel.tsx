@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Profiler, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   cancelSectionJump,
   createSection,
@@ -8,7 +8,9 @@ import {
   deleteSection,
   deleteTrack,
   duplicateClip,
+  getSongView,
   getTransportSnapshot,
+  getWaveformSummaries,
   isTauriApp,
   moveClip,
   moveTrack,
@@ -25,10 +27,12 @@ import {
   updateTrack,
   type ClipSummary,
   type SectionSummary,
-  type SongSummary,
+  type SongView,
   type TrackKind,
   type TrackSummary,
   type TransportSnapshot,
+  type WaveformSummaryDto,
+  reportUiRenderMetric,
 } from "./desktopApi";
 
 const HEADER_WIDTH = 260;
@@ -135,9 +139,9 @@ function buildRulerMarks(durationSeconds: number, zoomLevel: number) {
   return marks;
 }
 
-function cropWaveform(clip: ClipSummary) {
-  const peaks = clip.waveformMaxPeaks;
-  const minPeaks = clip.waveformMinPeaks.length ? clip.waveformMinPeaks : peaks.map((peak) => -peak);
+function cropWaveform(clip: ClipSummary, waveform: WaveformSummaryDto | undefined) {
+  const peaks = waveform?.maxPeaks ?? [];
+  const minPeaks = waveform?.minPeaks?.length ? waveform.minPeaks : peaks.map((peak) => -peak);
   if (!peaks.length || clip.sourceDurationSeconds <= 0) {
     return {
       min: [],
@@ -160,8 +164,8 @@ function cropWaveform(clip: ClipSummary) {
   };
 }
 
-function buildWaveformPath(clip: ClipSummary) {
-  const { min, max } = cropWaveform(clip);
+function buildWaveformPath(clip: ClipSummary, waveform: WaveformSummaryDto | undefined) {
+  const { min, max } = cropWaveform(clip, waveform);
   if (!max.length || !min.length) {
     return "";
   }
@@ -182,7 +186,7 @@ function buildWaveformPath(clip: ClipSummary) {
   return `M ${topPoints.join(" L ")} L ${bottomPoints.join(" L ")} Z`;
 }
 
-function buildVisibleTracks(song: SongSummary, collapsedFolders: Set<string>) {
+function buildVisibleTracks(song: SongView, collapsedFolders: Set<string>) {
   const visibility = new Map<string, boolean>();
 
   for (const track of song.tracks) {
@@ -200,7 +204,7 @@ function buildVisibleTracks(song: SongSummary, collapsedFolders: Set<string>) {
   return song.tracks.filter((track) => visibility.get(track.id));
 }
 
-function findPreviousFolderTrack(song: SongSummary, trackId: string) {
+function findPreviousFolderTrack(song: SongView, trackId: string) {
   const index = song.tracks.findIndex((track) => track.id === trackId);
   if (index <= 0) {
     return null;
@@ -216,7 +220,7 @@ function findPreviousFolderTrack(song: SongSummary, trackId: string) {
   return null;
 }
 
-function findTrack(song: SongSummary | null, trackId: string | null) {
+function findTrack(song: SongView | null, trackId: string | null) {
   if (!song || !trackId) {
     return null;
   }
@@ -224,7 +228,7 @@ function findTrack(song: SongSummary | null, trackId: string | null) {
   return song.tracks.find((track) => track.id === trackId) ?? null;
 }
 
-function findClip(song: SongSummary | null, clipId: string | null) {
+function findClip(song: SongView | null, clipId: string | null) {
   if (!song || !clipId) {
     return null;
   }
@@ -232,7 +236,7 @@ function findClip(song: SongSummary | null, clipId: string | null) {
   return song.clips.find((clip) => clip.id === clipId) ?? null;
 }
 
-function findSection(song: SongSummary | null, sectionId: string | null) {
+function findSection(song: SongView | null, sectionId: string | null) {
   if (!song || !sectionId) {
     return null;
   }
@@ -240,11 +244,11 @@ function findSection(song: SongSummary | null, sectionId: string | null) {
   return song.sections.find((section) => section.id === sectionId) ?? null;
 }
 
-function trackChildrenCount(song: SongSummary, trackId: string) {
+function trackChildrenCount(song: SongView, trackId: string) {
   return song.tracks.filter((track) => track.parentTrackId === trackId).length;
 }
 
-function isTrackDescendant(song: SongSummary, candidateTrackId: string | null, trackId: string) {
+function isTrackDescendant(song: SongView, candidateTrackId: string | null, trackId: string) {
   let cursor = candidateTrackId;
 
   while (cursor) {
@@ -275,7 +279,7 @@ function isInteractiveTimelineTarget(target: EventTarget | null) {
 }
 
 function resolveTrackDropState(
-  song: SongSummary,
+  song: SongView,
   draggingTrackId: string,
   clientX: number,
   clientY: number,
@@ -324,6 +328,11 @@ function rulerPointerToSeconds(
 
 export function TransportPanel() {
   const [snapshot, setSnapshot] = useState<TransportSnapshot | null>(null);
+  const [song, setSong] = useState<SongView | null>(null);
+  const [waveformCache, setWaveformCache] = useState<Record<string, WaveformSummaryDto>>({});
+  const [clipsByTrack, setClipsByTrack] = useState<Record<string, ClipSummary[]>>({});
+  const [tracksById, setTracksById] = useState<Record<string, TrackSummary>>({});
+  const [clipWaveformPaths, setClipWaveformPaths] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("Cargando sesion...");
   const [isBusy, setIsBusy] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(7);
@@ -421,7 +430,98 @@ export function TransportPanel() {
   }, []);
 
   useEffect(() => {
-    const songDurationSeconds = snapshot?.song?.durationSeconds ?? 0;
+    let active = true;
+
+    async function loadSong() {
+      if (!snapshot || snapshot.projectRevision === 0) {
+        setSong(null);
+        return;
+      }
+
+      const nextSong = await getSongView();
+      if (!active) {
+        return;
+      }
+
+      setSong(nextSong);
+    }
+
+    void loadSong();
+
+    return () => {
+      active = false;
+    };
+  }, [snapshot?.projectRevision]);
+
+  useEffect(() => {
+    if (!song) {
+      setWaveformCache({});
+      return;
+    }
+
+    setWaveformCache({});
+  }, [song?.projectRevision]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadMissingWaveforms() {
+      if (!song) {
+        return;
+      }
+
+      const missingWaveformKeys = song.clips
+        .map((clip) => clip.waveformKey)
+        .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index)
+        .filter((waveformKey) => !waveformCache[waveformKey]);
+
+      if (!missingWaveformKeys.length) {
+        return;
+      }
+
+      const summaries = await getWaveformSummaries(missingWaveformKeys);
+      if (!active) {
+        return;
+      }
+
+      setWaveformCache((current) => ({
+        ...current,
+        ...Object.fromEntries(summaries.map((summary) => [summary.waveformKey, summary])),
+      }));
+    }
+
+    void loadMissingWaveforms();
+
+    return () => {
+      active = false;
+    };
+  }, [song, waveformCache]);
+
+  useEffect(() => {
+    if (!song) {
+      setClipsByTrack({});
+      setTracksById({});
+      setClipWaveformPaths({});
+      return;
+    }
+
+    const nextTracksById = Object.fromEntries(song.tracks.map((track) => [track.id, track]));
+    const nextClipsByTrack = Object.fromEntries(song.tracks.map((track) => [track.id, [] as ClipSummary[]]));
+    const nextClipWaveformPaths: Record<string, string> = {};
+
+    for (const clip of song.clips) {
+      nextClipsByTrack[clip.trackId] ??= [];
+      nextClipsByTrack[clip.trackId].push(clip);
+      nextClipWaveformPaths[clip.id] = buildWaveformPath(clip, waveformCache[clip.waveformKey]);
+    }
+
+    setTracksById(nextTracksById);
+    setClipsByTrack(nextClipsByTrack);
+    setClipWaveformPaths(nextClipWaveformPaths);
+  }, [song, waveformCache]);
+
+  useEffect(() => {
+    const songDurationSeconds = song?.durationSeconds ?? 0;
     const anchorPositionSeconds =
       snapshot?.playbackState === "playing" && snapshot.transportClock?.running
         ? snapshot.transportClock.anchorPositionSeconds
@@ -440,25 +540,25 @@ export function TransportPanel() {
   }, [
     snapshot?.playbackState,
     snapshot?.positionSeconds,
-    snapshot?.song?.durationSeconds,
+    song?.durationSeconds,
     snapshot?.transportClock?.anchorPositionSeconds,
     snapshot?.transportClock?.running,
   ]);
 
   useEffect(() => {
-    if (!snapshot?.song) {
+    if (!song) {
       setVolumeDrafts({});
       return;
     }
 
     setVolumeDrafts((current) => {
-      const validTrackIds = new Set(snapshot.song?.tracks.map((track) => track.id));
+      const validTrackIds = new Set(song.tracks.map((track) => track.id));
       const next = Object.fromEntries(
         Object.entries(current).filter(([trackId]) => validTrackIds.has(trackId)),
       );
       return Object.keys(next).length === Object.keys(current).length ? current : next;
     });
-  }, [snapshot?.song]);
+  }, [song]);
 
   useEffect(() => {
     if (snapshot?.playbackState !== "playing") {
@@ -576,11 +676,11 @@ export function TransportPanel() {
   }, [selectedClipId, snapshot?.playbackState]);
 
   useEffect(() => {
-    if (!clipDrag || !snapshot?.song || !laneAreaRef.current) {
+    if (!clipDrag || !song || !laneAreaRef.current) {
       return;
     }
 
-    const effectSong = snapshot.song;
+    const effectSong = song;
 
     const onMouseMove = (event: MouseEvent) => {
       const deltaSeconds = (event.clientX - clipDrag.startClientX) / (zoomLevel * 18);
@@ -612,7 +712,7 @@ export function TransportPanel() {
       await runAction(async () => {
         const nextSnapshot = await moveClip(activeDrag.clipId, activeDrag.previewSeconds);
         setSnapshot(nextSnapshot);
-        const clip = findClip(nextSnapshot.song ?? null, activeDrag.clipId);
+        const clip = findClip(song, activeDrag.clipId);
         setStatus(`Clip movido: ${clip?.trackName ?? activeDrag.clipId}`);
       });
     };
@@ -624,10 +724,10 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [clipDrag, snapEnabled, snapshot?.song, zoomLevel]);
+  }, [clipDrag, snapEnabled, song, zoomLevel]);
 
   useEffect(() => {
-    if (!rulerDrag || !snapshot?.song || !rulerTrackRef.current) {
+    if (!rulerDrag || !song || !rulerTrackRef.current) {
       return;
     }
 
@@ -635,7 +735,7 @@ export function TransportPanel() {
       const nextSeconds = rulerPointerToSeconds(
         event,
         rulerTrackRef.current as HTMLElement,
-        snapshot.song?.durationSeconds ?? 0,
+        song.durationSeconds,
         zoomLevel * 18,
       );
       setRulerDrag((current) => (current ? { ...current, currentSeconds: nextSeconds } : current));
@@ -680,14 +780,14 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [rulerDrag, snapshot?.song, zoomLevel]);
+  }, [rulerDrag, song, zoomLevel]);
 
   useEffect(() => {
-    if (!playheadDrag || !snapshot?.song || !rulerTrackRef.current) {
+    if (!playheadDrag || !song || !rulerTrackRef.current) {
       return;
     }
 
-    const effectSong = snapshot.song;
+    const effectSong = song;
 
     const onMouseMove = (event: MouseEvent) => {
       const nextSeconds = rulerPointerToSeconds(
@@ -731,14 +831,14 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [playheadDrag, snapshot?.song, zoomLevel]);
+  }, [playheadDrag, song, zoomLevel]);
 
   useEffect(() => {
-    if (!trackDrag || !snapshot?.song) {
+    if (!trackDrag || !song) {
       return;
     }
 
-    const effectSong = snapshot.song;
+    const effectSong = song;
 
     const onMouseMove = (event: MouseEvent) => {
       const exceededThreshold =
@@ -798,7 +898,7 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [snapshot?.song, trackDrag]);
+  }, [song, trackDrag]);
 
   async function runAction(work: () => Promise<void>, options?: { busy?: boolean }) {
     try {
@@ -815,7 +915,6 @@ export function TransportPanel() {
     }
   }
 
-  const song = snapshot?.song ?? null;
   const laneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
   const fitAllZoomLevel = song?.durationSeconds
     ? clamp(laneViewportWidth / (Math.max(song.durationSeconds, 1) * 18), ZOOM_MIN, ZOOM_MAX)
@@ -826,7 +925,7 @@ export function TransportPanel() {
   const timelineWidth = Math.max((song?.durationSeconds ?? 0) * pixelsPerSecond, laneViewportWidth);
   const timelineRowWidth = HEADER_WIDTH + timelineWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
-  const selectedTrack = findTrack(song, selectedTrackId);
+  const selectedTrack = selectedTrackId ? tracksById[selectedTrackId] ?? null : null;
   const selectedClip = findClip(song, selectedClipId);
   const selectedSection = findSection(song, selectedSectionId);
   const currentSelection = normalizeSelection(
@@ -932,7 +1031,7 @@ export function TransportPanel() {
   }
 
   async function handleTrackDrop(trackId: string, dropState: NonNullable<TrackDropState>) {
-    const targetTrack = findTrack(song, dropState.targetTrackId);
+    const targetTrack = tracksById[dropState.targetTrackId] ?? null;
     if (!song || !targetTrack || trackId === targetTrack.id) {
       return;
     }
@@ -1234,8 +1333,17 @@ export function TransportPanel() {
     ];
   }
 
+  function handlePanelRender(
+    _id: string,
+    _phase: "mount" | "update" | "nested-update",
+    actualDuration: number,
+  ) {
+    void reportUiRenderMetric(actualDuration);
+  }
+
   return (
-    <div className="lt-daw-shell" ref={panelRef} onContextMenu={(event) => event.preventDefault()}>
+    <Profiler id="transport-panel" onRender={handlePanelRender}>
+      <div className="lt-daw-shell" ref={panelRef} onContextMenu={(event) => event.preventDefault()}>
       {isBusy ? (
         <div className="busy-overlay" aria-live="polite">
           <div className="busy-overlay-card">
@@ -1472,7 +1580,7 @@ export function TransportPanel() {
             ) : null}
 
             {song?.tracks && visibleTracks.map((track) => {
-              const trackClips = song.clips.filter((clip) => clip.trackId === track.id);
+              const trackClips = clipsByTrack[track.id] ?? [];
               const isTrackSelected = selectedTrackId === track.id;
               const childCount = trackChildrenCount(song, track.id);
               const isDropTarget = trackDropState?.targetTrackId === track.id;
@@ -1692,7 +1800,7 @@ export function TransportPanel() {
                               preserveAspectRatio="none"
                               aria-hidden="true"
                             >
-                              <path d={buildWaveformPath(clip)} />
+                              <path d={clipWaveformPaths[clip.id] ?? ""} />
                               <line x1="0" y1="50" x2="100" y2="50" />
                             </svg>
                           </button>
@@ -1824,7 +1932,8 @@ export function TransportPanel() {
           ))}
         </div>
       ) : null}
-    </div>
+      </div>
+    </Profiler>
   );
 }
 

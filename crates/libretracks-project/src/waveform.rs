@@ -28,6 +28,14 @@ pub struct WaveformSummary {
     pub max_peaks: Vec<f32>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyzedWav {
+    pub duration_seconds: f64,
+    pub sample_rate: u32,
+    pub channels: u16,
+    pub waveform: WaveformSummary,
+}
+
 pub fn waveform_file_path(
     song_dir: impl AsRef<Path>,
     audio_relative_path: impl AsRef<Path>,
@@ -45,6 +53,73 @@ pub fn waveform_file_path(
         .join(format!("{file_stem}.waveform.json"))
 }
 
+pub fn waveform_file_path_for_source(source_path: impl AsRef<Path>) -> PathBuf {
+    let source_path = source_path.as_ref();
+    let file_stem = source_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("waveform");
+
+    source_path
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or_else(|| Path::new("."))
+        .join("cache")
+        .join("waveforms")
+        .join(format!("{file_stem}.waveform.json"))
+}
+
+pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectError> {
+    let path = path.as_ref();
+    let mut reader = WavReader::open(path)?;
+    let spec = reader.spec();
+    let frame_count = reader.duration() as usize;
+    let duration_seconds = frame_count as f64 / f64::from(spec.sample_rate.max(1));
+    let waveform = match spec.sample_format {
+        SampleFormat::Float => collect_float_waveform_streaming(
+            &mut reader,
+            frame_count,
+            spec.channels,
+            spec.sample_rate,
+        )?,
+        SampleFormat::Int => collect_int_waveform_streaming(
+            &mut reader,
+            frame_count,
+            spec.channels,
+            spec.bits_per_sample,
+            spec.sample_rate,
+        )?,
+    };
+
+    Ok(AnalyzedWav {
+        duration_seconds,
+        sample_rate: spec.sample_rate,
+        channels: spec.channels,
+        waveform: WaveformSummary {
+            version: WAVEFORM_FORMAT_VERSION,
+            duration_seconds,
+            bucket_count: waveform.bucket_count,
+            peaks: waveform.peaks,
+            min_peaks: waveform.min_peaks,
+            max_peaks: waveform.max_peaks,
+        },
+    })
+}
+
+pub fn write_waveform_summary(
+    output_path: impl AsRef<Path>,
+    summary: &WaveformSummary,
+) -> Result<(), ProjectError> {
+    let path = output_path.as_ref();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let json = serde_json::to_string_pretty(summary)?;
+    fs::write(path, json)?;
+    Ok(())
+}
+
 pub fn generate_waveform_summary(
     song_dir: impl AsRef<Path>,
     audio_relative_path: impl AsRef<Path>,
@@ -52,36 +127,10 @@ pub fn generate_waveform_summary(
     let song_dir = song_dir.as_ref();
     let audio_relative_path = audio_relative_path.as_ref();
     let source_path = song_dir.join(audio_relative_path);
-
-    let mut reader = WavReader::open(&source_path)?;
-    let spec = reader.spec();
-    let duration_seconds = reader.duration() as f64 / f64::from(spec.sample_rate.max(1));
-    let waveform = match spec.sample_format {
-        SampleFormat::Float => collect_float_waveform(&mut reader, spec.channels, spec.sample_rate)?,
-        SampleFormat::Int => collect_int_waveform(
-            &mut reader,
-            spec.channels,
-            spec.bits_per_sample,
-            spec.sample_rate,
-        )?,
-    };
-
-    let summary = WaveformSummary {
-        version: WAVEFORM_FORMAT_VERSION,
-        duration_seconds,
-        bucket_count: waveform.bucket_count,
-        peaks: waveform.peaks,
-        min_peaks: waveform.min_peaks,
-        max_peaks: waveform.max_peaks,
-    };
+    let summary = analyze_wav_file(&source_path)?.waveform;
 
     let path = waveform_file_path(song_dir, audio_relative_path);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    let json = serde_json::to_string_pretty(&summary)?;
-    fs::write(path, json)?;
+    write_waveform_summary(path, &summary)?;
 
     Ok(summary)
 }
@@ -92,7 +141,8 @@ pub fn load_waveform_summary(
 ) -> Result<WaveformSummary, ProjectError> {
     let song_dir = song_dir.as_ref();
     let audio_relative_path = audio_relative_path.as_ref();
-    let json = fs::read_to_string(waveform_file_path(song_dir, audio_relative_path))?;
+    let path = waveform_file_path(song_dir, audio_relative_path);
+    let json = fs::read_to_string(&path)?;
     let summary: WaveformSummary = serde_json::from_str(&json)?;
 
     if summary.version < WAVEFORM_FORMAT_VERSION
@@ -101,7 +151,7 @@ pub fn load_waveform_summary(
         || summary.min_peaks.len() != summary.bucket_count
         || summary.max_peaks.len() != summary.bucket_count
     {
-        return generate_waveform_summary(song_dir, audio_relative_path);
+        return Err(ProjectError::InvalidWaveformSummary(path));
     }
 
     Ok(summary)
@@ -115,107 +165,131 @@ struct BucketizedWaveform {
     max_peaks: Vec<f32>,
 }
 
-fn collect_float_waveform(
+struct WaveformBuckets {
+    frame_count: usize,
+    bucket_count: usize,
+    min_peaks: Vec<f32>,
+    max_peaks: Vec<f32>,
+    touched: Vec<bool>,
+}
+
+impl WaveformBuckets {
+    fn new(frame_count: usize, sample_rate: u32) -> Self {
+        let bucket_count = if frame_count == 0 {
+            WAVEFORM_BUCKET_COUNT_MIN
+        } else {
+            desired_bucket_count(frame_count, sample_rate)
+        };
+
+        Self {
+            frame_count,
+            bucket_count,
+            min_peaks: vec![1.0; bucket_count],
+            max_peaks: vec![-1.0; bucket_count],
+            touched: vec![false; bucket_count],
+        }
+    }
+
+    fn push_frame(&mut self, frame_index: usize, sample: f32) {
+        if self.bucket_count == 0 {
+            return;
+        }
+
+        let bucket_index = if self.frame_count == 0 {
+            0
+        } else {
+            ((frame_index * self.bucket_count) / self.frame_count).min(self.bucket_count - 1)
+        };
+
+        self.min_peaks[bucket_index] = self.min_peaks[bucket_index].min(sample);
+        self.max_peaks[bucket_index] = self.max_peaks[bucket_index].max(sample);
+        self.touched[bucket_index] = true;
+    }
+
+    fn finish(mut self) -> BucketizedWaveform {
+        let mut peaks = Vec::with_capacity(self.bucket_count);
+
+        for bucket_index in 0..self.bucket_count {
+            if !self.touched[bucket_index] {
+                self.min_peaks[bucket_index] = 0.0;
+                self.max_peaks[bucket_index] = 0.0;
+            }
+
+            peaks.push(
+                self.min_peaks[bucket_index]
+                    .abs()
+                    .max(self.max_peaks[bucket_index].abs()),
+            );
+        }
+
+        BucketizedWaveform {
+            bucket_count: self.bucket_count,
+            peaks,
+            min_peaks: self.min_peaks,
+            max_peaks: self.max_peaks,
+        }
+    }
+}
+
+fn collect_float_waveform_streaming(
     reader: &mut WavReader<std::io::BufReader<std::fs::File>>,
+    frame_count: usize,
     channels: u16,
     sample_rate: u32,
 ) -> Result<BucketizedWaveform, ProjectError> {
-    let mut samples = Vec::new();
+    let channel_count = usize::from(channels.max(1));
+    let mut buckets = WaveformBuckets::new(frame_count, sample_rate);
+    let mut channel_index = 0;
+    let mut frame_index = 0usize;
+    let mut frame_sum = 0.0_f32;
 
     for sample in reader.samples::<f32>() {
-        samples.push(sample?.clamp(-1.0, 1.0));
+        frame_sum += sample?.clamp(-1.0, 1.0);
+        channel_index += 1;
+
+        if channel_index == channel_count {
+            buckets.push_frame(frame_index, (frame_sum / channel_count as f32).clamp(-1.0, 1.0));
+            frame_sum = 0.0;
+            channel_index = 0;
+            frame_index += 1;
+        }
     }
 
-    Ok(collapse_to_mono_waveform(&samples, channels, sample_rate))
+    Ok(buckets.finish())
 }
 
-fn collect_int_waveform(
+fn collect_int_waveform_streaming(
     reader: &mut WavReader<std::io::BufReader<std::fs::File>>,
+    frame_count: usize,
     channels: u16,
     bits_per_sample: u16,
     sample_rate: u32,
 ) -> Result<BucketizedWaveform, ProjectError> {
-    let mut samples = Vec::new();
+    let channel_count = usize::from(channels.max(1));
+    let mut buckets = WaveformBuckets::new(frame_count, sample_rate);
     let max_value = ((1_i64 << (bits_per_sample.saturating_sub(1))) - 1).max(1) as f32;
+    let mut channel_index = 0;
+    let mut frame_index = 0usize;
+    let mut frame_sum = 0.0_f32;
 
     for sample in reader.samples::<i32>() {
         let value = (sample? as f32 / max_value).clamp(-1.0, 1.0);
-        samples.push(value);
+        frame_sum += value;
+        channel_index += 1;
+
+        if channel_index == channel_count {
+            buckets.push_frame(frame_index, (frame_sum / channel_count as f32).clamp(-1.0, 1.0));
+            frame_sum = 0.0;
+            channel_index = 0;
+            frame_index += 1;
+        }
     }
 
-    Ok(collapse_to_mono_waveform(&samples, channels, sample_rate))
-}
-
-fn collapse_to_mono_waveform(
-    samples: &[f32],
-    channels: u16,
-    sample_rate: u32,
-) -> BucketizedWaveform {
-    let channel_count = usize::from(channels.max(1));
-    let frame_count = samples.len() / channel_count;
-    if frame_count == 0 {
-        return BucketizedWaveform {
-            bucket_count: WAVEFORM_BUCKET_COUNT_MIN,
-            peaks: vec![0.0; WAVEFORM_BUCKET_COUNT_MIN],
-            min_peaks: vec![0.0; WAVEFORM_BUCKET_COUNT_MIN],
-            max_peaks: vec![0.0; WAVEFORM_BUCKET_COUNT_MIN],
-        };
-    }
-
-    let mut mono_frames = Vec::with_capacity(frame_count);
-    for frame_index in 0..frame_count {
-        let start = frame_index * channel_count;
-        let end = start + channel_count;
-        let sum = samples[start..end].iter().copied().sum::<f32>();
-        mono_frames.push((sum / channel_count as f32).clamp(-1.0, 1.0));
-    }
-
-    bucketize_waveform(&mono_frames, desired_bucket_count(frame_count, sample_rate))
+    Ok(buckets.finish())
 }
 
 fn desired_bucket_count(frame_count: usize, sample_rate: u32) -> usize {
     let duration_seconds = frame_count as f64 / f64::from(sample_rate.max(1));
     let target = (duration_seconds * WAVEFORM_BUCKETS_PER_SECOND as f64).ceil() as usize;
     target.clamp(WAVEFORM_BUCKET_COUNT_MIN, WAVEFORM_BUCKET_COUNT_MAX)
-}
-
-fn bucketize_waveform(frames: &[f32], bucket_count: usize) -> BucketizedWaveform {
-    if frames.is_empty() {
-        return BucketizedWaveform {
-            bucket_count,
-            peaks: vec![0.0; bucket_count],
-            min_peaks: vec![0.0; bucket_count],
-            max_peaks: vec![0.0; bucket_count],
-        };
-    }
-
-    let mut min_peaks = Vec::with_capacity(bucket_count);
-    let mut max_peaks = Vec::with_capacity(bucket_count);
-    let mut peaks = Vec::with_capacity(bucket_count);
-
-    for bucket in 0..bucket_count {
-        let start = (bucket * frames.len()) / bucket_count;
-        let end = ((bucket + 1) * frames.len()) / bucket_count;
-        let slice = &frames[start.min(frames.len())..end.min(frames.len())];
-
-        let (min_peak, max_peak, peak) = if slice.is_empty() {
-            (0.0, 0.0, 0.0)
-        } else {
-            let min_peak = slice.iter().copied().fold(1.0_f32, f32::min);
-            let max_peak = slice.iter().copied().fold(-1.0_f32, f32::max);
-            let peak = min_peak.abs().max(max_peak.abs());
-            (min_peak, max_peak, peak)
-        };
-
-        min_peaks.push(min_peak);
-        max_peaks.push(max_peak);
-        peaks.push(peak);
-    }
-
-    BucketizedWaveform {
-        bucket_count,
-        peaks,
-        min_peaks,
-        max_peaks,
-    }
 }

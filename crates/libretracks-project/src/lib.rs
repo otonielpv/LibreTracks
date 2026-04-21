@@ -5,14 +5,15 @@ mod song_store;
 mod waveform;
 
 pub use importer::{
-    append_wav_files_to_song, import_wav_song, read_wav_metadata, ImportedAudioFile, ImportedSong,
-    ProjectImportRequest, WavMetadata,
+    append_wav_files_to_song, import_wav_song, read_wav_metadata, AppendWavFilesResult,
+    ImportOperationMetrics, ImportedAudioFile, ImportedSong, ProjectImportRequest, WavMetadata,
 };
 pub use song_store::{
     create_song_folder, load_song, save_song, song_file_path, ProjectError, SONG_FILE_NAME,
 };
 pub use waveform::{
-    generate_waveform_summary, load_waveform_summary, waveform_file_path, WaveformSummary,
+    analyze_wav_file, generate_waveform_summary, load_waveform_summary, waveform_file_path,
+    waveform_file_path_for_source, write_waveform_summary, AnalyzedWav, WaveformSummary,
 };
 
 #[cfg(test)]
@@ -24,9 +25,9 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        append_wav_files_to_song, create_song_folder, import_wav_song, load_song,
-        load_waveform_summary, read_wav_metadata, save_song, song_file_path, waveform_file_path,
-        ProjectError, ProjectImportRequest,
+        analyze_wav_file, append_wav_files_to_song, create_song_folder, import_wav_song,
+        load_song, load_waveform_summary, read_wav_metadata, save_song, song_file_path,
+        waveform_file_path, ProjectError, ProjectImportRequest,
     };
 
     fn demo_song() -> Song {
@@ -149,6 +150,32 @@ mod tests {
         writer.finalize().expect("wav should finalize");
     }
 
+    fn write_float_test_wav(
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+        duration_seconds: u32,
+    ) {
+        let spec = WavSpec {
+            channels,
+            sample_rate,
+            bits_per_sample: 32,
+            sample_format: SampleFormat::Float,
+        };
+
+        let mut writer = WavWriter::create(path, spec).expect("wav should be created");
+        let total_frames = sample_rate * duration_seconds;
+
+        for frame in 0..total_frames {
+            let sample = if frame % 2 == 0 { 0.5_f32 } else { -0.25_f32 };
+            for _ in 0..channels {
+                writer.write_sample(sample).expect("sample should be written");
+            }
+        }
+
+        writer.finalize().expect("wav should finalize");
+    }
+
     #[test]
     fn reads_wav_metadata_and_duration() {
         let root = tempdir().expect("temp dir should exist");
@@ -209,6 +236,40 @@ mod tests {
     }
 
     #[test]
+    fn analyzes_float_stereo_wav_without_buffering_the_full_file_shape() {
+        let root = tempdir().expect("temp dir should exist");
+        let wav_path = root.path().join("pads.wav");
+        write_float_test_wav(&wav_path, 48_000, 2, 2);
+
+        let analysis = analyze_wav_file(&wav_path).expect("analysis should succeed");
+
+        assert_eq!(analysis.channels, 2);
+        assert_eq!(analysis.sample_rate, 48_000);
+        assert!((analysis.duration_seconds - 2.0).abs() < 0.001);
+        assert_eq!(analysis.waveform.bucket_count, analysis.waveform.max_peaks.len());
+        assert_eq!(analysis.waveform.bucket_count, analysis.waveform.min_peaks.len());
+    }
+
+    #[test]
+    fn load_waveform_summary_rejects_invalid_cache_instead_of_regenerating_inside_the_reader() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "invalid-waveform-cache").expect("song dir should exist");
+        let wav_path = song_dir.join("audio").join("click.wav");
+        write_test_wav(&wav_path, 44_100, 2, 1);
+
+        fs::write(
+            waveform_file_path(&song_dir, "audio/click.wav"),
+            r#"{"version":1,"durationSeconds":0.0,"bucketCount":0,"peaks":[],"minPeaks":[],"maxPeaks":[]}"#,
+        )
+        .expect("invalid waveform should be written");
+
+        let error =
+            load_waveform_summary(&song_dir, "audio/click.wav").expect_err("invalid waveform should fail");
+        assert!(matches!(error, ProjectError::InvalidWaveformSummary(_)));
+    }
+
+    #[test]
     fn rejects_non_wav_imports() {
         let root = tempdir().expect("temp dir should exist");
         let text_path = root.path().join("notes.txt");
@@ -252,21 +313,23 @@ mod tests {
         let appended_song = append_wav_files_to_song(&song_dir, &song, &[duplicate_click_path])
             .expect("append should succeed");
 
-        assert_eq!(appended_song.tracks.len(), 2);
-        assert_eq!(appended_song.clips.len(), 2);
-        assert!(appended_song.tracks.iter().any(|track| track.id == "track_click"));
+        assert_eq!(appended_song.song.tracks.len(), 2);
+        assert_eq!(appended_song.song.clips.len(), 2);
+        assert!(appended_song.song.tracks.iter().any(|track| track.id == "track_click"));
         assert!(appended_song
+            .song
             .tracks
             .iter()
             .any(|track| track.id == "track_click-1" && track.name == "Click 1"));
         assert!(appended_song
+            .song
             .clips
             .iter()
             .any(|clip| clip.track_id == "track_click-1" && clip.file_path == "audio/click-1.wav"));
         assert!(song_dir.join("audio").join("click.wav").exists());
         assert!(song_dir.join("audio").join("click-1.wav").exists());
         assert!(waveform_file_path(&song_dir, "audio/click-1.wav").exists());
-        assert!((appended_song.duration_seconds - 4.0).abs() < 0.001);
+        assert!((appended_song.song.duration_seconds - 4.0).abs() < 0.001);
     }
 
     #[test]

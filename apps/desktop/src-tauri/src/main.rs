@@ -6,7 +6,10 @@ use tauri::{AppHandle, State};
 use audio_runtime::AudioDebugSnapshot;
 use libretracks_audio::JumpTrigger;
 use libretracks_core::TrackKind;
-use state::{DesktopError, DesktopState, TransportSnapshot};
+use state::{
+    DesktopError, DesktopPerformanceSnapshot, DesktopState, SongView, TransportSnapshot,
+    WaveformSummaryDto,
+};
 
 #[tauri::command]
 fn healthcheck() -> &'static str {
@@ -26,11 +29,61 @@ fn get_transport_snapshot(state: State<'_, DesktopState>) -> Result<TransportSna
 }
 
 #[tauri::command]
+fn get_song_view(state: State<'_, DesktopState>) -> Result<Option<SongView>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session.song_view().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_waveform_summaries(
+    waveform_keys: Vec<String>,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<WaveformSummaryDto>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .load_waveforms(&waveform_keys)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_audio_debug_snapshot(state: State<'_, DesktopState>) -> Result<AudioDebugSnapshot, String> {
     state
         .audio
         .debug_snapshot()
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_desktop_performance_snapshot(
+    state: State<'_, DesktopState>,
+) -> Result<DesktopPerformanceSnapshot, String> {
+    let session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    Ok(session.performance_snapshot())
+}
+
+#[tauri::command]
+fn report_ui_render_metric(
+    render_millis: f64,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session.report_ui_render_metric(render_millis);
+    Ok(())
 }
 
 #[tauri::command]
@@ -413,7 +466,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             healthcheck,
             get_transport_snapshot,
+            get_song_view,
+            get_waveform_summaries,
             get_audio_debug_snapshot,
+            get_desktop_performance_snapshot,
+            report_ui_render_metric,
             create_song,
             save_project,
             open_project_from_dialog,

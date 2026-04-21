@@ -14,6 +14,7 @@ async function renderApp() {
   const { App } = await import("./App");
   const view = render(<App />);
   await screen.findByText(/modo demo web activo/i);
+  await screen.findByText("Rhythm");
   return view;
 }
 
@@ -67,7 +68,7 @@ function mockTimelineShellMetrics(container: HTMLElement, width = 1400) {
     value: 0,
   });
 
-  return shell;
+  return shell as HTMLDivElement;
 }
 
 function mockTrackRowDragGeometry(container: HTMLElement) {

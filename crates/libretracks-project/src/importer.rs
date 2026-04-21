@@ -1,13 +1,18 @@
 use std::{
-    collections::HashSet,
+    collections::{HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    thread,
+    time::Instant,
 };
 
-use hound::WavReader;
 use libretracks_core::{validate_song, Clip, OutputBus, Song, Track, TrackKind};
 
-use crate::{create_song_folder, generate_waveform_summary, save_song, ProjectError};
+use crate::{
+    analyze_wav_file, create_song_folder, save_song, waveform_file_path_for_source,
+    write_waveform_summary, ProjectError,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectImportRequest {
@@ -42,19 +47,33 @@ pub struct ImportedSong {
     pub song_dir: PathBuf,
     pub song: Song,
     pub imported_files: Vec<ImportedAudioFile>,
+    pub metrics: ImportOperationMetrics,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AppendWavFilesResult {
+    pub song: Song,
+    pub metrics: ImportOperationMetrics,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ImportOperationMetrics {
+    pub copy_millis: u128,
+    pub wav_analysis_millis: u128,
+    pub waveform_write_millis: u128,
+    pub song_save_millis: u128,
+    pub analysis_workers: usize,
 }
 
 pub fn read_wav_metadata(path: impl AsRef<Path>) -> Result<WavMetadata, ProjectError> {
     let path = path.as_ref();
     ensure_wav_extension(path)?;
-
-    let reader = WavReader::open(path)?;
-    let spec = reader.spec();
+    let analysis = analyze_wav_file(path)?;
 
     Ok(WavMetadata {
-        channels: spec.channels,
-        sample_rate: spec.sample_rate,
-        duration_seconds: reader.duration() as f64 / f64::from(spec.sample_rate),
+        channels: analysis.channels,
+        sample_rate: analysis.sample_rate,
+        duration_seconds: analysis.duration_seconds,
     })
 }
 
@@ -68,36 +87,32 @@ pub fn import_wav_song(
     }
 
     let song_dir = create_song_folder(root, folder_name)?;
-    let audio_dir = song_dir.join("audio");
+    let mut metrics = ImportOperationMetrics::default();
+    let planned_files = plan_import_files(&song_dir, &request.wav_files, &mut HashSet::new())?;
+    metrics.copy_millis = copy_import_files(&planned_files)?;
+    let (analyzed_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
+    merge_import_metrics(&mut metrics, &analysis_metrics);
 
-    let mut imported_files = Vec::with_capacity(request.wav_files.len());
-    let mut used_file_names = HashSet::new();
+    let mut imported_files = Vec::with_capacity(analyzed_files.len());
     let mut duration_seconds = 0.0_f64;
 
-    for source_path in &request.wav_files {
-        ensure_wav_extension(source_path)?;
-        let metadata = read_wav_metadata(source_path)?;
-        duration_seconds = duration_seconds.max(metadata.duration_seconds);
+    for analyzed_file in &analyzed_files {
+        duration_seconds = duration_seconds.max(analyzed_file.metadata.duration_seconds);
 
-        let file_name = unique_file_name(source_path, &mut used_file_names)?;
-        let destination_path = audio_dir.join(&file_name);
-        fs::copy(source_path, &destination_path)?;
-        let imported_relative_path = PathBuf::from("audio").join(&file_name);
-        generate_waveform_summary(&song_dir, &imported_relative_path)?;
-
-        let stem = destination_path
+        let stem = analyzed_file
+            .destination_path
             .file_stem()
             .and_then(|value| value.to_str())
-            .ok_or_else(|| ProjectError::InvalidFileName(source_path.clone()))?;
+            .ok_or_else(|| ProjectError::InvalidFileName(analyzed_file.source_path.clone()))?;
         let track_slug = slugify(stem);
 
         imported_files.push(ImportedAudioFile {
-            source_path: source_path.clone(),
-            imported_relative_path,
+            source_path: analyzed_file.source_path.clone(),
+            imported_relative_path: analyzed_file.imported_relative_path.clone(),
             track_id: format!("track_{track_slug}"),
             clip_id: format!("clip_{track_slug}"),
             track_name: humanize_track_name(stem),
-            duration_seconds: metadata.duration_seconds,
+            duration_seconds: analyzed_file.metadata.duration_seconds,
         });
     }
 
@@ -141,12 +156,15 @@ pub fn import_wav_song(
     };
 
     validate_song(&song)?;
+    let save_started_at = Instant::now();
     save_song(&song_dir, &song)?;
+    metrics.song_save_millis = save_started_at.elapsed().as_millis();
 
     Ok(ImportedSong {
         song_dir,
         song,
         imported_files,
+        metrics,
     })
 }
 
@@ -154,35 +172,29 @@ pub fn append_wav_files_to_song(
     song_dir: impl AsRef<Path>,
     song: &Song,
     wav_files: &[PathBuf],
-) -> Result<Song, ProjectError> {
+) -> Result<AppendWavFilesResult, ProjectError> {
     if wav_files.is_empty() {
         return Err(ProjectError::EmptyImportSet);
     }
 
     let song_dir = song_dir.as_ref();
-    let audio_dir = song_dir.join("audio");
-    fs::create_dir_all(&audio_dir)?;
-
     let mut next_song = song.clone();
     let mut used_file_names = collect_used_file_names(song_dir, song)?;
     let mut used_track_ids: HashSet<String> =
         song.tracks.iter().map(|track| track.id.clone()).collect();
     let mut used_clip_ids: HashSet<String> = song.clips.iter().map(|clip| clip.id.clone()).collect();
+    let mut metrics = ImportOperationMetrics::default();
+    let planned_files = plan_import_files(song_dir, wav_files, &mut used_file_names)?;
+    metrics.copy_millis = copy_import_files(&planned_files)?;
+    let (analyzed_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
+    merge_import_metrics(&mut metrics, &analysis_metrics);
 
-    for source_path in wav_files {
-        ensure_wav_extension(source_path)?;
-        let metadata = read_wav_metadata(source_path)?;
-
-        let file_name = unique_file_name(source_path, &mut used_file_names)?;
-        let destination_path = audio_dir.join(&file_name);
-        fs::copy(source_path, &destination_path)?;
-        let imported_relative_path = PathBuf::from("audio").join(&file_name);
-        generate_waveform_summary(song_dir, &imported_relative_path)?;
-
-        let stem = destination_path
+    for analyzed_file in analyzed_files {
+        let stem = analyzed_file
+            .destination_path
             .file_stem()
             .and_then(|value| value.to_str())
-            .ok_or_else(|| ProjectError::InvalidFileName(source_path.clone()))?;
+            .ok_or_else(|| ProjectError::InvalidFileName(analyzed_file.source_path.clone()))?;
         let track_slug = slugify(stem);
         let track_id = unique_entity_id("track", &track_slug, &mut used_track_ids);
         let clip_id = unique_entity_id("clip", &track_slug, &mut used_clip_ids);
@@ -202,20 +214,28 @@ pub fn append_wav_files_to_song(
         next_song.clips.push(Clip {
             id: clip_id,
             track_id,
-            file_path: imported_relative_path.to_string_lossy().replace('\\', "/"),
+            file_path: analyzed_file
+                .imported_relative_path
+                .to_string_lossy()
+                .replace('\\', "/"),
             timeline_start_seconds: 0.0,
             source_start_seconds: 0.0,
-            duration_seconds: metadata.duration_seconds,
+            duration_seconds: analyzed_file.metadata.duration_seconds,
             gain: 1.0,
             fade_in_seconds: None,
             fade_out_seconds: None,
         });
 
-        next_song.duration_seconds = next_song.duration_seconds.max(metadata.duration_seconds);
+        next_song.duration_seconds = next_song
+            .duration_seconds
+            .max(analyzed_file.metadata.duration_seconds);
     }
 
     validate_song(&next_song)?;
-    Ok(next_song)
+    Ok(AppendWavFilesResult {
+        song: next_song,
+        metrics,
+    })
 }
 
 fn ensure_wav_extension(path: &Path) -> Result<(), ProjectError> {
@@ -259,6 +279,168 @@ fn unique_file_name(
 
         index += 1;
     }
+}
+
+#[derive(Debug, Clone)]
+struct PlannedImportFile {
+    index: usize,
+    source_path: PathBuf,
+    destination_path: PathBuf,
+    imported_relative_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+struct AnalyzedImportFile {
+    index: usize,
+    source_path: PathBuf,
+    destination_path: PathBuf,
+    imported_relative_path: PathBuf,
+    metadata: WavMetadata,
+}
+
+fn plan_import_files(
+    song_dir: &Path,
+    wav_files: &[PathBuf],
+    used_file_names: &mut HashSet<String>,
+) -> Result<Vec<PlannedImportFile>, ProjectError> {
+    let audio_dir = song_dir.join("audio");
+    fs::create_dir_all(&audio_dir)?;
+
+    wav_files
+        .iter()
+        .enumerate()
+        .map(|(index, source_path)| {
+            ensure_wav_extension(source_path)?;
+            let file_name = unique_file_name(source_path, used_file_names)?;
+            let destination_path = audio_dir.join(&file_name);
+            Ok(PlannedImportFile {
+                index,
+                source_path: source_path.clone(),
+                imported_relative_path: PathBuf::from("audio").join(&file_name),
+                destination_path,
+            })
+        })
+        .collect()
+}
+
+fn copy_import_files(planned_files: &[PlannedImportFile]) -> Result<u128, ProjectError> {
+    let started_at = Instant::now();
+
+    for planned_file in planned_files {
+        fs::copy(&planned_file.source_path, &planned_file.destination_path)?;
+    }
+
+    Ok(started_at.elapsed().as_millis())
+}
+
+fn analyze_import_files_in_parallel(
+    planned_files: Vec<PlannedImportFile>,
+) -> Result<(Vec<AnalyzedImportFile>, ImportOperationMetrics), ProjectError> {
+    if planned_files.is_empty() {
+        return Ok((Vec::new(), ImportOperationMetrics::default()));
+    }
+
+    let worker_count = planned_files
+        .len()
+        .min(thread::available_parallelism().map(|count| count.get()).unwrap_or(1))
+        .min(4);
+    let queue = Arc::new(Mutex::new(VecDeque::from(planned_files)));
+    let results = Arc::new(Mutex::new(Vec::new()));
+    let first_error = Arc::new(Mutex::new(None));
+
+    thread::scope(|scope| {
+        for _ in 0..worker_count {
+            let queue = Arc::clone(&queue);
+            let results = Arc::clone(&results);
+            let first_error = Arc::clone(&first_error);
+
+            scope.spawn(move || loop {
+                let next_file = {
+                    let mut queue = queue.lock().expect("import queue lock should not poison");
+                    queue.pop_front()
+                };
+
+                let Some(next_file) = next_file else {
+                    break;
+                };
+
+                let analysis_started_at = Instant::now();
+                let analysis = match analyze_wav_file(&next_file.destination_path) {
+                    Ok(analysis) => analysis,
+                    Err(error) => {
+                        let mut first_error =
+                            first_error.lock().expect("error lock should not poison");
+                        if first_error.is_none() {
+                            *first_error = Some(error);
+                        }
+                        break;
+                    }
+                };
+                let wav_analysis_millis = analysis_started_at.elapsed().as_millis();
+
+                let waveform_write_started_at = Instant::now();
+                let waveform_path = waveform_file_path_for_source(&next_file.destination_path);
+                if let Err(error) = write_waveform_summary(&waveform_path, &analysis.waveform) {
+                    let mut first_error = first_error.lock().expect("error lock should not poison");
+                    if first_error.is_none() {
+                        *first_error = Some(error);
+                    }
+                    break;
+                }
+                let waveform_write_millis = waveform_write_started_at.elapsed().as_millis();
+
+                let metadata = WavMetadata {
+                    channels: analysis.channels,
+                    sample_rate: analysis.sample_rate,
+                    duration_seconds: analysis.duration_seconds,
+                };
+
+                results
+                    .lock()
+                    .expect("results lock should not poison")
+                    .push((next_file, metadata, wav_analysis_millis, waveform_write_millis));
+            });
+        }
+    });
+
+    if let Some(error) = first_error.lock().expect("error lock should not poison").take() {
+        return Err(error);
+    }
+
+    let mut metrics = ImportOperationMetrics {
+        analysis_workers: worker_count,
+        ..ImportOperationMetrics::default()
+    };
+    let mut analyzed_files = Vec::new();
+    let mut collected_results = results
+        .lock()
+        .expect("results lock should not poison")
+        .drain(..)
+        .collect::<Vec<_>>();
+    collected_results.sort_by_key(|(planned, _, _, _)| planned.index);
+
+    for (planned_file, metadata, wav_analysis_millis, waveform_write_millis) in collected_results {
+        metrics.wav_analysis_millis += wav_analysis_millis;
+        metrics.waveform_write_millis += waveform_write_millis;
+        analyzed_files.push(AnalyzedImportFile {
+            index: planned_file.index,
+            source_path: planned_file.source_path,
+            destination_path: planned_file.destination_path,
+            imported_relative_path: planned_file.imported_relative_path,
+            metadata,
+        });
+    }
+
+    analyzed_files.sort_by_key(|file| file.index);
+    Ok((analyzed_files, metrics))
+}
+
+fn merge_import_metrics(target: &mut ImportOperationMetrics, source: &ImportOperationMetrics) {
+    target.copy_millis += source.copy_millis;
+    target.wav_analysis_millis += source.wav_analysis_millis;
+    target.waveform_write_millis += source.waveform_write_millis;
+    target.song_save_millis += source.song_save_millis;
+    target.analysis_workers = target.analysis_workers.max(source.analysis_workers);
 }
 
 fn collect_used_file_names(song_dir: &Path, song: &Song) -> Result<HashSet<String>, ProjectError> {

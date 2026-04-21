@@ -33,17 +33,15 @@ export type ClipSummary = {
   trackId: string;
   trackName: string;
   filePath: string;
+  waveformKey: string;
   timelineStartSeconds: number;
   sourceStartSeconds: number;
   sourceDurationSeconds: number;
   durationSeconds: number;
   gain: number;
-  waveformPeaks: number[];
-  waveformMinPeaks: number[];
-  waveformMaxPeaks: number[];
 };
 
-export type SongSummary = {
+export type SongView = {
   id: string;
   title: string;
   artist?: string | null;
@@ -54,12 +52,37 @@ export type SongSummary = {
   sections: SectionSummary[];
   clips: ClipSummary[];
   tracks: TrackSummary[];
+  projectRevision: number;
+};
+
+export type WaveformSummaryDto = {
+  waveformKey: string;
+  version: number;
+  durationSeconds: number;
+  bucketCount: number;
+  minPeaks: number[];
+  maxPeaks: number[];
+};
+
+export type DesktopPerformanceSnapshot = {
+  copyMillis: number;
+  wavAnalysisMillis: number;
+  waveformWriteMillis: number;
+  songSaveMillis: number;
+  transportSnapshotBuildMillis: number;
+  songViewBuildMillis: number;
+  waveformCacheHits: number;
+  waveformCacheMisses: number;
+  transportSnapshotBytes: number;
+  songViewBytes: number;
+  lastReactRenderMillis: number;
+  projectRevision: number;
+  cachedWaveforms: number;
 };
 
 export type TransportSnapshot = {
   playbackState: PlaybackState;
   positionSeconds: number;
-  song?: SongSummary | null;
   currentSection?: SectionSummary | null;
   pendingSectionJump?: PendingJumpSummary | null;
   transportClock?: {
@@ -69,6 +92,7 @@ export type TransportSnapshot = {
     lastStartPositionSeconds?: number | null;
     lastJumpPositionSeconds?: number | null;
   };
+  projectRevision: number;
   songDir?: string | null;
   isNativeRuntime: boolean;
 };
@@ -88,8 +112,10 @@ type DemoClock = {
 };
 
 let demoSong = buildDemoSong();
+let demoWaveforms = buildDemoWaveforms();
 let demoPlaybackState: PlaybackState = "stopped";
 let demoPendingJump: PendingJumpSummary | null = null;
+let demoProjectRevision = demoSong.projectRevision;
 let demoClock: DemoClock = {
   anchorPositionSeconds: 0,
   anchorStartedAt: null,
@@ -134,9 +160,18 @@ function syncDemoPlayback() {
   }
 }
 
-function updateDemoSong(mutator: (song: SongSummary) => SongSummary) {
+function updateDemoSong(mutator: (song: SongView) => SongView) {
   syncDemoPlayback();
   demoSong = normalizeSong(mutator(cloneSnapshot(demoSong)));
+  demoProjectRevision += 1;
+  demoSong.projectRevision = demoProjectRevision;
+  demoWaveforms = Object.fromEntries(
+    demoSong.clips
+      .map((clip) => clip.waveformKey)
+      .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index)
+      .map((waveformKey) => [waveformKey, demoWaveforms[waveformKey]])
+      .filter((entry): entry is [string, WaveformSummaryDto] => Boolean(entry[1])),
+  );
   demoClock.anchorPositionSeconds = Math.min(demoClock.anchorPositionSeconds, demoSong.durationSeconds);
 }
 
@@ -147,7 +182,6 @@ function buildDemoSnapshot(): TransportSnapshot {
   return {
     playbackState: demoPlaybackState,
     positionSeconds,
-    song: cloneSnapshot(demoSong),
     currentSection:
       demoSong.sections.find(
         (section) => positionSeconds >= section.startSeconds && positionSeconds < section.endSeconds,
@@ -160,6 +194,7 @@ function buildDemoSnapshot(): TransportSnapshot {
       lastStartPositionSeconds: demoClock.lastStartPositionSeconds,
       lastJumpPositionSeconds: demoClock.lastJumpPositionSeconds,
     },
+    projectRevision: demoProjectRevision,
     songDir: "demo://session",
     isNativeRuntime: false,
   };
@@ -171,6 +206,57 @@ export async function getTransportSnapshot(): Promise<TransportSnapshot> {
   }
 
   return invokeCommand<TransportSnapshot>("get_transport_snapshot");
+}
+
+export async function getSongView(): Promise<SongView | null> {
+  if (!isTauriApp) {
+    return cloneSnapshot(demoSong);
+  }
+
+  return invokeCommand<SongView | null>("get_song_view");
+}
+
+export async function getWaveformSummaries(
+  waveformKeys: string[],
+): Promise<WaveformSummaryDto[]> {
+  if (!isTauriApp) {
+    return waveformKeys
+      .map((waveformKey) => demoWaveforms[waveformKey])
+      .filter((summary): summary is WaveformSummaryDto => Boolean(summary))
+      .map((summary) => cloneSnapshot(summary));
+  }
+
+  return invokeCommand<WaveformSummaryDto[]>("get_waveform_summaries", { waveformKeys });
+}
+
+export async function getDesktopPerformanceSnapshot(): Promise<DesktopPerformanceSnapshot> {
+  if (!isTauriApp) {
+    return {
+      copyMillis: 0,
+      wavAnalysisMillis: 0,
+      waveformWriteMillis: 0,
+      songSaveMillis: 0,
+      transportSnapshotBuildMillis: 0,
+      songViewBuildMillis: 0,
+      waveformCacheHits: 0,
+      waveformCacheMisses: 0,
+      transportSnapshotBytes: 0,
+      songViewBytes: 0,
+      lastReactRenderMillis: 0,
+      projectRevision: demoProjectRevision,
+      cachedWaveforms: Object.keys(demoWaveforms).length,
+    };
+  }
+
+  return invokeCommand<DesktopPerformanceSnapshot>("get_desktop_performance_snapshot");
+}
+
+export async function reportUiRenderMetric(renderMillis: number): Promise<void> {
+  if (!isTauriApp) {
+    return;
+  }
+
+  await invokeCommand("report_ui_render_metric", { renderMillis });
 }
 
 export async function createSong(): Promise<TransportSnapshot> {
@@ -186,7 +272,10 @@ export async function createSong(): Promise<TransportSnapshot> {
       sections: [],
       clips: [],
       tracks: [],
+      projectRevision: demoProjectRevision + 1,
     });
+    demoWaveforms = {};
+    demoProjectRevision = demoSong.projectRevision;
     demoPlaybackState = "stopped";
     demoPendingJump = null;
     demoClock = {
@@ -213,6 +302,8 @@ export async function saveProject(): Promise<TransportSnapshot> {
 export async function openProject(): Promise<TransportSnapshot | null> {
   if (!isTauriApp) {
     demoSong = buildDemoSong();
+    demoWaveforms = buildDemoWaveforms();
+    demoProjectRevision = demoSong.projectRevision;
     demoPlaybackState = "stopped";
     demoPendingJump = null;
     demoClock.anchorPositionSeconds = 0;
@@ -613,7 +704,7 @@ export async function deleteTrack(trackId: string): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("delete_track", { trackId });
 }
 
-function deleteTrackFromSong(song: SongSummary, trackId: string): SongSummary {
+function deleteTrackFromSong(song: SongView, trackId: string): SongView {
   const track = song.tracks.find((entry) => entry.id === trackId);
   if (!track) {
     return song;
@@ -632,7 +723,7 @@ function deleteTrackFromSong(song: SongSummary, trackId: string): SongSummary {
   };
 }
 
-function normalizeSong(song: SongSummary): SongSummary {
+function normalizeSong(song: SongView): SongView {
   const tracks = song.tracks.map((track) => ({
     ...track,
     parentTrackId: track.parentTrackId ?? null,
@@ -685,7 +776,7 @@ function insertTrack(
 ) {
   const nextTracks = [...tracks];
   track.parentTrackId = parentTrackId;
-  const insertIndex = resolveInsertIndex(nextTracks, insertAfterTrackId, parentTrackId);
+  const insertIndex = resolveInsertIndex(nextTracks, insertAfterTrackId, null, parentTrackId);
   nextTracks.splice(insertIndex, 0, track);
   return nextTracks;
 }
@@ -770,12 +861,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function buildDemoSong(): SongSummary {
-  const rhythmWave = buildWaveform(176, "smooth");
-  const bassWave = buildWaveform(176, "pulse");
-  const clickWave = buildWaveform(176, "ticks");
-  const vocalWave = buildWaveform(176, "phrases");
-
+function buildDemoSong(): SongView {
   return normalizeSong({
     id: "song-demo",
     title: "LibreTracks Session",
@@ -876,56 +962,48 @@ function buildDemoSong(): SongSummary {
         trackId: "track-drums",
         trackName: "Drums",
         filePath: "audio/drums.wav",
+        waveformKey: "audio/drums.wav",
         timelineStartSeconds: 0,
         sourceStartSeconds: 0,
         sourceDurationSeconds: 180,
         durationSeconds: 180,
         gain: 1,
-        waveformPeaks: rhythmWave.max,
-        waveformMinPeaks: rhythmWave.min,
-        waveformMaxPeaks: rhythmWave.max,
       },
       {
         id: "clip-bass",
         trackId: "track-bass",
         trackName: "Bass",
         filePath: "audio/bass.wav",
+        waveformKey: "audio/bass.wav",
         timelineStartSeconds: 8,
         sourceStartSeconds: 0,
         sourceDurationSeconds: 164,
         durationSeconds: 164,
         gain: 0.94,
-        waveformPeaks: bassWave.max,
-        waveformMinPeaks: bassWave.min,
-        waveformMaxPeaks: bassWave.max,
       },
       {
         id: "clip-click",
         trackId: "track-click",
         trackName: "Click",
         filePath: "audio/click.wav",
+        waveformKey: "audio/click.wav",
         timelineStartSeconds: 0,
         sourceStartSeconds: 0,
         sourceDurationSeconds: 180,
         durationSeconds: 180,
         gain: 1,
-        waveformPeaks: clickWave.max,
-        waveformMinPeaks: clickWave.min,
-        waveformMaxPeaks: clickWave.max,
       },
       {
         id: "clip-vocal",
         trackId: "track-vocal",
         trackName: "Guide Vox",
         filePath: "audio/guide.wav",
+        waveformKey: "audio/guide.wav",
         timelineStartSeconds: 12,
         sourceStartSeconds: 0,
         sourceDurationSeconds: 140,
         durationSeconds: 140,
         gain: 0.86,
-        waveformPeaks: vocalWave.max,
-        waveformMinPeaks: vocalWave.min,
-        waveformMaxPeaks: vocalWave.max,
       },
     ],
     sections: [
@@ -934,7 +1012,50 @@ function buildDemoSong(): SongSummary {
       { id: "section-bridge", name: "Bridge", startSeconds: 72, endSeconds: 108 },
       { id: "section-outro", name: "Outro", startSeconds: 108, endSeconds: 156 },
     ],
+    projectRevision: 1,
   });
+}
+
+function buildDemoWaveforms(): Record<string, WaveformSummaryDto> {
+  const rhythmWave = buildWaveform(176, "smooth");
+  const bassWave = buildWaveform(176, "pulse");
+  const clickWave = buildWaveform(176, "ticks");
+  const vocalWave = buildWaveform(176, "phrases");
+
+  return {
+    "audio/drums.wav": {
+      waveformKey: "audio/drums.wav",
+      version: 2,
+      durationSeconds: 180,
+      bucketCount: rhythmWave.max.length,
+      minPeaks: rhythmWave.min,
+      maxPeaks: rhythmWave.max,
+    },
+    "audio/bass.wav": {
+      waveformKey: "audio/bass.wav",
+      version: 2,
+      durationSeconds: 164,
+      bucketCount: bassWave.max.length,
+      minPeaks: bassWave.min,
+      maxPeaks: bassWave.max,
+    },
+    "audio/click.wav": {
+      waveformKey: "audio/click.wav",
+      version: 2,
+      durationSeconds: 180,
+      bucketCount: clickWave.max.length,
+      minPeaks: clickWave.min,
+      maxPeaks: clickWave.max,
+    },
+    "audio/guide.wav": {
+      waveformKey: "audio/guide.wav",
+      version: 2,
+      durationSeconds: 140,
+      bucketCount: vocalWave.max.length,
+      minPeaks: vocalWave.min,
+      maxPeaks: vocalWave.max,
+    },
+  };
 }
 
 function buildWaveform(sampleCount: number, mode: "smooth" | "pulse" | "ticks" | "phrases") {

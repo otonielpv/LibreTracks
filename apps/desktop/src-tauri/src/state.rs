@@ -1,4 +1,7 @@
 use std::{
+    collections::HashMap,
+    fs,
+    path::Path,
     path::PathBuf,
     sync::Mutex,
     time::{Instant, SystemTime, UNIX_EPOCH},
@@ -9,13 +12,14 @@ use libretracks_audio::{
 };
 use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
 use libretracks_project::{
-    append_wav_files_to_song, create_song_folder, import_wav_song, load_song,
-    load_waveform_summary, read_wav_metadata, save_song, ImportedSong, ProjectError,
-    ProjectImportRequest,
+    append_wav_files_to_song, create_song_folder, generate_waveform_summary, import_wav_song,
+    load_song, load_waveform_summary, read_wav_metadata, save_song, waveform_file_path,
+    ImportedSong, ImportOperationMetrics, ProjectError, ProjectImportRequest, WaveformSummary,
 };
 use rfd::FileDialog;
 use rodio::{decoder::DecoderError, PlayError, StreamError};
 use serde::Serialize;
+use serde_json::to_vec;
 use tauri::{AppHandle, Manager};
 
 use crate::audio_runtime::{AudioController, PlaybackStartReason};
@@ -38,6 +42,9 @@ pub struct DesktopSession {
     pub engine: AudioEngine,
     transport_clock: TransportClock,
     pub song_dir: Option<PathBuf>,
+    project_revision: u64,
+    waveform_cache: WaveformMemoryCache,
+    perf_metrics: DesktopPerformanceMetrics,
 }
 
 #[derive(Debug, Default)]
@@ -55,6 +62,9 @@ impl Default for DesktopSession {
             engine: AudioEngine::default(),
             transport_clock: TransportClock::default(),
             song_dir: None,
+            project_revision: 0,
+            waveform_cache: WaveformMemoryCache::default(),
+            perf_metrics: DesktopPerformanceMetrics::default(),
         }
     }
 }
@@ -166,10 +176,10 @@ pub enum DesktopError {
 pub struct TransportSnapshot {
     pub playback_state: String,
     pub position_seconds: f64,
-    pub song: Option<SongSummary>,
     pub current_section: Option<SectionSummary>,
     pub pending_section_jump: Option<PendingJumpSummary>,
     pub transport_clock: TransportClockSummary,
+    pub project_revision: u64,
     pub song_dir: Option<String>,
     pub is_native_runtime: bool,
 }
@@ -186,7 +196,7 @@ pub struct TransportClockSummary {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SongSummary {
+pub struct SongView {
     pub id: String,
     pub title: String,
     pub artist: Option<String>,
@@ -197,6 +207,7 @@ pub struct SongSummary {
     pub sections: Vec<SectionSummary>,
     pub clips: Vec<ClipSummary>,
     pub tracks: Vec<TrackSummary>,
+    pub project_revision: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -238,14 +249,76 @@ pub struct ClipSummary {
     pub track_id: String,
     pub track_name: String,
     pub file_path: String,
+    pub waveform_key: String,
     pub timeline_start_seconds: f64,
     pub source_start_seconds: f64,
     pub source_duration_seconds: f64,
     pub duration_seconds: f64,
     pub gain: f64,
-    pub waveform_peaks: Vec<f32>,
-    pub waveform_min_peaks: Vec<f32>,
-    pub waveform_max_peaks: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WaveformSummaryDto {
+    pub waveform_key: String,
+    pub version: u32,
+    pub duration_seconds: f64,
+    pub bucket_count: usize,
+    pub min_peaks: Vec<f32>,
+    pub max_peaks: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopPerformanceSnapshot {
+    pub copy_millis: u128,
+    pub wav_analysis_millis: u128,
+    pub waveform_write_millis: u128,
+    pub song_save_millis: u128,
+    pub transport_snapshot_build_millis: u128,
+    pub song_view_build_millis: u128,
+    pub waveform_cache_hits: u64,
+    pub waveform_cache_misses: u64,
+    pub transport_snapshot_bytes: usize,
+    pub song_view_bytes: usize,
+    pub last_react_render_millis: f64,
+    pub project_revision: u64,
+    pub cached_waveforms: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+struct DesktopPerformanceMetrics {
+    copy_millis: u128,
+    wav_analysis_millis: u128,
+    waveform_write_millis: u128,
+    song_save_millis: u128,
+    transport_snapshot_build_millis: u128,
+    song_view_build_millis: u128,
+    waveform_cache_hits: u64,
+    waveform_cache_misses: u64,
+    transport_snapshot_bytes: usize,
+    song_view_bytes: usize,
+    last_react_render_millis: f64,
+}
+
+#[derive(Debug, Clone, Default)]
+struct WaveformMemoryCache {
+    song_dir: Option<PathBuf>,
+    entries: HashMap<String, CachedWaveformSummary>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedWaveformSummary {
+    token: WaveformCacheToken,
+    summary: WaveformSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WaveformCacheToken {
+    audio_size: u64,
+    audio_modified_millis: u128,
+    waveform_size: u64,
+    waveform_modified_millis: u128,
 }
 
 impl DesktopSession {
@@ -260,7 +333,9 @@ impl DesktopSession {
         let song_dir = create_song_folder(project_root(app).join("songs"), &folder_name)?;
         let song = build_empty_song(song_id, title);
 
+        let save_started_at = Instant::now();
         save_song(&song_dir, &song)?;
+        self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
         self.load_song_from_path(song, song_dir, audio)?;
 
         Ok(self.snapshot())
@@ -274,7 +349,9 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
+        let save_started_at = Instant::now();
         save_song(song_dir, &song)?;
+        self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
         Ok(self.snapshot())
     }
 
@@ -344,9 +421,75 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         let updated_song = append_wav_files_to_song(&song_dir, &song, files)?;
-
-        self.persist_song_update(updated_song, audio, AudioChangeImpact::StructureRebuild)?;
+        self.record_import_metrics(&updated_song.metrics);
+        self.persist_song_update(updated_song.song, audio, AudioChangeImpact::StructureRebuild)?;
         Ok(self.snapshot())
+    }
+
+    pub fn song_view(&mut self) -> Result<Option<SongView>, DesktopError> {
+        let started_at = Instant::now();
+        let song_view = self
+            .engine
+            .song()
+            .map(|song| song_to_view(song, &self.waveform_cache, self.project_revision));
+        self.perf_metrics.song_view_build_millis = started_at.elapsed().as_millis();
+        self.perf_metrics.song_view_bytes = song_view
+            .as_ref()
+            .map(|view| to_vec(view).map(|bytes| bytes.len()))
+            .transpose()
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?
+            .unwrap_or(0);
+        Ok(song_view)
+    }
+
+    pub fn load_waveforms(
+        &mut self,
+        waveform_keys: &[String],
+    ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let valid_waveform_keys = self
+            .engine
+            .song()
+            .ok_or(DesktopError::NoSongLoaded)?
+            .clips
+            .iter()
+            .map(|clip| waveform_key_for_file_path(&clip.file_path))
+            .collect::<std::collections::HashSet<_>>();
+        let mut summaries = Vec::new();
+
+        for waveform_key in waveform_keys {
+            if !valid_waveform_keys.contains(waveform_key) {
+                continue;
+            }
+
+            let summary =
+                self.load_waveform_summary_cached(&song_dir, waveform_key, true)?;
+            summaries.push(waveform_summary_to_dto(waveform_key, summary));
+        }
+
+        Ok(summaries)
+    }
+
+    pub fn performance_snapshot(&self) -> DesktopPerformanceSnapshot {
+        DesktopPerformanceSnapshot {
+            copy_millis: self.perf_metrics.copy_millis,
+            wav_analysis_millis: self.perf_metrics.wav_analysis_millis,
+            waveform_write_millis: self.perf_metrics.waveform_write_millis,
+            song_save_millis: self.perf_metrics.song_save_millis,
+            transport_snapshot_build_millis: self.perf_metrics.transport_snapshot_build_millis,
+            song_view_build_millis: self.perf_metrics.song_view_build_millis,
+            waveform_cache_hits: self.perf_metrics.waveform_cache_hits,
+            waveform_cache_misses: self.perf_metrics.waveform_cache_misses,
+            transport_snapshot_bytes: self.perf_metrics.transport_snapshot_bytes,
+            song_view_bytes: self.perf_metrics.song_view_bytes,
+            last_react_render_millis: self.perf_metrics.last_react_render_millis,
+            project_revision: self.project_revision,
+            cached_waveforms: self.waveform_cache.entries.len(),
+        }
+    }
+
+    pub fn report_ui_render_metric(&mut self, render_millis: f64) {
+        self.perf_metrics.last_react_render_millis = render_millis.max(0.0);
     }
 
     pub fn play(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
@@ -874,6 +1017,7 @@ impl DesktopSession {
         imported_song: ImportedSong,
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
+        self.record_import_metrics(&imported_song.metrics);
         self.load_song_from_path(imported_song.song, imported_song.song_dir, audio)
     }
 
@@ -886,8 +1030,15 @@ impl DesktopSession {
         audio.stop()?;
 
         self.transport_clock.stop();
-        self.song_dir = Some(song_dir);
+        self.song_dir = Some(song_dir.clone());
         self.engine.load_song(song)?;
+        self.project_revision = self.project_revision.saturating_add(1);
+        let loaded_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        self.prime_waveform_cache(&song_dir, &loaded_song)?;
 
         Ok(())
     }
@@ -929,8 +1080,12 @@ impl DesktopSession {
         let pending_jump = self.engine.pending_section_jump().cloned();
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
 
+        let save_started_at = Instant::now();
         save_song(&song_dir, &song)?;
+        self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
         self.engine.load_song(song)?;
+        self.project_revision = self.project_revision.saturating_add(1);
+        self.prune_waveform_cache_for_current_song();
 
         let restored_position = position_seconds.min(
             self.engine
@@ -1030,14 +1185,11 @@ impl DesktopSession {
         Ok(())
     }
 
-    fn snapshot(&self) -> TransportSnapshot {
-        TransportSnapshot {
+    fn snapshot(&mut self) -> TransportSnapshot {
+        let started_at = Instant::now();
+        let snapshot = TransportSnapshot {
             playback_state: playback_state_label(self.engine.playback_state()).to_string(),
             position_seconds: self.current_position(),
-            song: self
-                .engine
-                .song()
-                .map(|song| song_to_summary(song, self.song_dir.as_deref())),
             current_section: self
                 .engine
                 .current_section()
@@ -1049,12 +1201,115 @@ impl DesktopSession {
                 .pending_section_jump()
                 .map(pending_jump_to_summary),
             transport_clock: self.transport_clock.summary(),
+            project_revision: self.project_revision,
             song_dir: self
                 .song_dir
                 .as_ref()
                 .map(|value| value.display().to_string()),
             is_native_runtime: true,
+        };
+        self.perf_metrics.transport_snapshot_build_millis = started_at.elapsed().as_millis();
+        self.perf_metrics.transport_snapshot_bytes =
+            to_vec(&snapshot).map(|bytes| bytes.len()).unwrap_or_default();
+        snapshot
+    }
+
+    fn record_import_metrics(&mut self, metrics: &ImportOperationMetrics) {
+        self.perf_metrics.copy_millis = metrics.copy_millis;
+        self.perf_metrics.wav_analysis_millis = metrics.wav_analysis_millis;
+        self.perf_metrics.waveform_write_millis = metrics.waveform_write_millis;
+        self.perf_metrics.song_save_millis = metrics.song_save_millis;
+    }
+
+    fn prime_waveform_cache(&mut self, song_dir: &Path, song: &Song) -> Result<(), DesktopError> {
+        self.waveform_cache.reset(song_dir);
+
+        for clip in &song.clips {
+            let waveform_key = waveform_key_for_file_path(&clip.file_path);
+            let _ = self.load_waveform_summary_cached(song_dir, &waveform_key, true)?;
         }
+
+        Ok(())
+    }
+
+    fn prune_waveform_cache_for_current_song(&mut self) {
+        let Some(song_dir) = self.song_dir.as_ref() else {
+            self.waveform_cache.entries.clear();
+            return;
+        };
+        if self.waveform_cache.song_dir.as_deref() != Some(song_dir.as_path()) {
+            self.waveform_cache.reset(song_dir);
+        }
+
+        let Some(song) = self.engine.song() else {
+            self.waveform_cache.entries.clear();
+            return;
+        };
+
+        let valid_keys = song
+            .clips
+            .iter()
+            .map(|clip| waveform_key_for_file_path(&clip.file_path))
+            .collect::<std::collections::HashSet<_>>();
+        self.waveform_cache
+            .entries
+            .retain(|key, _| valid_keys.contains(key));
+    }
+
+    fn load_waveform_summary_cached(
+        &mut self,
+        song_dir: &Path,
+        waveform_key: &str,
+        allow_regenerate: bool,
+    ) -> Result<&WaveformSummary, DesktopError> {
+        self.waveform_cache.reset_if_song_changed(song_dir);
+        if let Ok(token) = build_waveform_cache_token(song_dir, waveform_key) {
+            if self
+                .waveform_cache
+                .entries
+                .get(waveform_key)
+                .is_some_and(|entry| entry.token == token)
+            {
+                self.perf_metrics.waveform_cache_hits += 1;
+                return Ok(&self
+                    .waveform_cache
+                    .entries
+                    .get(waveform_key)
+                    .expect("waveform cache entry should exist")
+                    .summary);
+            }
+        }
+
+        self.perf_metrics.waveform_cache_misses += 1;
+        let summary = match load_waveform_summary(song_dir, waveform_key) {
+            Ok(summary) => summary,
+            Err(error)
+                if allow_regenerate
+                    && matches!(
+                        error,
+                        ProjectError::Io(_) | ProjectError::InvalidWaveformSummary(_)
+                    ) =>
+            {
+                generate_waveform_summary(song_dir, waveform_key)?
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let refreshed_token = build_waveform_cache_token(song_dir, waveform_key)?;
+
+        self.waveform_cache.entries.insert(
+            waveform_key.to_string(),
+            CachedWaveformSummary {
+                token: refreshed_token,
+                summary,
+            },
+        );
+
+        Ok(&self
+            .waveform_cache
+            .entries
+            .get(waveform_key)
+            .expect("waveform cache entry should exist")
+            .summary)
     }
 
     fn restart_audio(
@@ -1359,8 +1614,21 @@ fn track_depth_from_tracks(tracks: &[Track], track_id: &str) -> Result<usize, De
     Ok(depth)
 }
 
-fn song_to_summary(song: &Song, song_dir: Option<&std::path::Path>) -> SongSummary {
-    SongSummary {
+impl WaveformMemoryCache {
+    fn reset(&mut self, song_dir: &Path) {
+        self.song_dir = Some(song_dir.to_path_buf());
+        self.entries.clear();
+    }
+
+    fn reset_if_song_changed(&mut self, song_dir: &Path) {
+        if self.song_dir.as_deref() != Some(song_dir) {
+            self.reset(song_dir);
+        }
+    }
+}
+
+fn song_to_view(song: &Song, waveform_cache: &WaveformMemoryCache, project_revision: u64) -> SongView {
+    SongView {
         id: song.id.clone(),
         title: song.title.clone(),
         artist: song.artist.clone(),
@@ -1372,7 +1640,7 @@ fn song_to_summary(song: &Song, song_dir: Option<&std::path::Path>) -> SongSumma
         clips: song
             .clips
             .iter()
-            .map(|clip| clip_to_summary(song, clip, song_dir))
+            .map(|clip| clip_to_summary(song, clip, waveform_cache))
             .collect(),
         tracks: song
             .tracks
@@ -1393,66 +1661,75 @@ fn song_to_summary(song: &Song, song_dir: Option<&std::path::Path>) -> SongSumma
                 solo: track.solo,
             })
             .collect(),
+        project_revision,
     }
 }
 
-fn clip_to_summary(song: &Song, clip: &Clip, song_dir: Option<&std::path::Path>) -> ClipSummary {
+fn clip_to_summary(song: &Song, clip: &Clip, waveform_cache: &WaveformMemoryCache) -> ClipSummary {
     let track_name = song
         .tracks
         .iter()
         .find(|track| track.id == clip.track_id)
         .map(|track| track.name.clone())
         .unwrap_or_else(|| clip.track_id.clone());
-    let (waveform_peaks, waveform_min_peaks, waveform_max_peaks, source_duration_seconds) = song_dir
-        .and_then(|dir| load_waveform_summary(dir, &clip.file_path).ok())
-        .map(|summary| {
-            let source_duration_seconds = if summary.duration_seconds > 0.0 {
-                summary.duration_seconds
-            } else {
-                clip.source_start_seconds + clip.duration_seconds
-            };
-            let waveform_peaks = summary.peaks.clone();
-            let waveform_min_peaks = if summary.min_peaks.len() == summary.bucket_count {
-                summary.min_peaks.clone()
-            } else {
-                waveform_peaks.iter().map(|peak| -*peak).collect()
-            };
-            let waveform_max_peaks = if summary.max_peaks.len() == summary.bucket_count {
-                summary.max_peaks.clone()
-            } else {
-                waveform_peaks.clone()
-            };
-
-            (
-                waveform_peaks,
-                waveform_min_peaks,
-                waveform_max_peaks,
-                source_duration_seconds,
-            )
-        })
-        .unwrap_or_else(|| {
-            (
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                clip.source_start_seconds + clip.duration_seconds,
-            )
-        });
+    let waveform_key = waveform_key_for_file_path(&clip.file_path);
+    let source_duration_seconds = waveform_cache
+        .entries
+        .get(&waveform_key)
+        .map(|cached| cached.summary.duration_seconds)
+        .filter(|duration| *duration > 0.0)
+        .unwrap_or(clip.source_start_seconds + clip.duration_seconds);
 
     ClipSummary {
         id: clip.id.clone(),
         track_id: clip.track_id.clone(),
         track_name,
         file_path: clip.file_path.clone(),
+        waveform_key,
         timeline_start_seconds: clip.timeline_start_seconds,
         source_start_seconds: clip.source_start_seconds,
         source_duration_seconds,
         duration_seconds: clip.duration_seconds,
         gain: clip.gain,
-        waveform_peaks,
-        waveform_min_peaks,
-        waveform_max_peaks,
     }
+}
+
+fn waveform_key_for_file_path(file_path: &str) -> String {
+    file_path.replace('\\', "/")
+}
+
+fn waveform_summary_to_dto(waveform_key: &str, summary: &WaveformSummary) -> WaveformSummaryDto {
+    WaveformSummaryDto {
+        waveform_key: waveform_key.to_string(),
+        version: summary.version,
+        duration_seconds: summary.duration_seconds,
+        bucket_count: summary.bucket_count,
+        min_peaks: summary.min_peaks.clone(),
+        max_peaks: summary.max_peaks.clone(),
+    }
+}
+
+fn build_waveform_cache_token(
+    song_dir: &Path,
+    waveform_key: &str,
+) -> Result<WaveformCacheToken, DesktopError> {
+    let audio_metadata = fs::metadata(song_dir.join(waveform_key))?;
+    let waveform_metadata = fs::metadata(waveform_file_path(song_dir, waveform_key))?;
+
+    Ok(WaveformCacheToken {
+        audio_size: audio_metadata.len(),
+        audio_modified_millis: modified_millis(&audio_metadata)?,
+        waveform_size: waveform_metadata.len(),
+        waveform_modified_millis: modified_millis(&waveform_metadata)?,
+    })
+}
+
+fn modified_millis(metadata: &fs::Metadata) -> Result<u128, DesktopError> {
+    Ok(metadata
+        .modified()?
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis())
 }
 
 fn validate_clip_window(
@@ -1567,7 +1844,7 @@ mod tests {
 
     use libretracks_audio::{JumpTrigger, PlaybackState};
     use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
-    use libretracks_project::{create_song_folder, load_song, save_song};
+    use libretracks_project::{create_song_folder, generate_waveform_summary, load_song, save_song};
     use tempfile::tempdir;
 
     use super::{DesktopSession, TransportClock};
@@ -1953,18 +2230,13 @@ mod tests {
         let snapshot = session
             .move_clip("clip_1", 6.5, &audio)
             .expect("clip should move");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
 
         assert_eq!(snapshot.playback_state, "stopped");
-        assert_eq!(
-            snapshot
-                .song
-                .expect("song summary should exist")
-                .clips
-                .first()
-                .expect("clip summary should exist")
-                .timeline_start_seconds,
-            6.5
-        );
+        assert_eq!(song_view.clips.first().expect("clip summary should exist").timeline_start_seconds, 6.5);
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.clips[0].timeline_start_seconds, 6.5);
@@ -1988,8 +2260,11 @@ mod tests {
         let snapshot = session
             .import_audio_files_into_current_song(&[imported_click], &audio)
             .expect("import should append tracks");
-
-        let snapshot_song = snapshot.song.expect("song summary should exist");
+        let snapshot_song = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+        assert_eq!(snapshot.project_revision, snapshot_song.project_revision);
         assert_eq!(snapshot_song.tracks.len(), 2);
         assert_eq!(snapshot_song.clips.len(), 2);
         assert!(snapshot_song.tracks.iter().any(|track| track.id == "track_1"));
@@ -2002,6 +2277,51 @@ mod tests {
         assert_eq!(saved_song.tracks.len(), 2);
         assert_eq!(saved_song.clips.len(), 2);
         assert!(saved_song.clips.iter().any(|clip| clip.file_path.starts_with("audio/click")));
+    }
+
+    #[test]
+    fn project_revision_changes_after_mutating_the_song_structure() {
+        let mut session = session_with_song_dir("project-revision-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+        let initial_snapshot = session.snapshot();
+
+        let updated_snapshot = session
+            .move_clip("clip_1", 4.25, &audio)
+            .expect("clip should move");
+
+        assert!(updated_snapshot.project_revision > initial_snapshot.project_revision);
+    }
+
+    #[test]
+    fn waveform_requests_reuse_the_in_memory_cache_after_song_load() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "waveform-cache-demo").expect("song dir should exist");
+        let wav_path = song_dir.join("audio").join("test.wav");
+        write_silent_test_wav(&wav_path, 6);
+        generate_waveform_summary(&song_dir, "audio/test.wav").expect("waveform should generate");
+        save_song(&song_dir, &demo_song()).expect("song should save");
+
+        let mut session = DesktopSession::default();
+        let audio = crate::audio_runtime::AudioController::default();
+        session
+            .load_song_from_path(demo_song(), song_dir, &audio)
+            .expect("song should load");
+
+        let perf_after_load = session.performance_snapshot();
+        let first_waveform = session
+            .load_waveforms(&["audio/test.wav".to_string()])
+            .expect("waveform should load");
+        let perf_after_first_request = session.performance_snapshot();
+        let second_waveform = session
+            .load_waveforms(&["audio/test.wav".to_string()])
+            .expect("waveform should load from cache");
+        let perf_after_second_request = session.performance_snapshot();
+
+        assert_eq!(first_waveform.len(), 1);
+        assert_eq!(second_waveform.len(), 1);
+        assert!(perf_after_load.waveform_cache_misses > 0);
+        assert!(perf_after_second_request.waveform_cache_hits > perf_after_first_request.waveform_cache_hits);
     }
 
     #[test]
@@ -2022,15 +2342,13 @@ mod tests {
         let snapshot = session
             .create_section(2.0, 5.5, &audio)
             .expect("section should be created");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
 
-        assert_eq!(
-            snapshot
-                .song
-                .expect("song summary should exist")
-                .sections
-                .len(),
-            1
-        );
+        assert_eq!(snapshot.project_revision, song_view.project_revision);
+        assert_eq!(song_view.sections.len(), 1);
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.sections.len(), 1);
@@ -2056,12 +2374,13 @@ mod tests {
         let snapshot = session
             .delete_clip("clip_1", &audio)
             .expect("clip should delete");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
 
-        assert!(snapshot
-            .song
-            .expect("song summary should exist")
-            .clips
-            .is_empty());
+        assert_eq!(snapshot.project_revision, song_view.project_revision);
+        assert!(song_view.clips.is_empty());
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert!(saved_song.clips.is_empty());
@@ -2100,14 +2419,16 @@ mod tests {
         let snapshot = session
             .update_clip_window("clip_1", 2.0, 1.5, 2.25, &audio)
             .expect("clip window should update");
-
-        let updated_clip = snapshot
-            .song
+        let updated_clip = session
+            .song_view()
+            .expect("song view should build")
             .expect("song summary should exist")
             .clips
             .into_iter()
             .find(|clip| clip.id == "clip_1")
             .expect("updated clip should exist");
+
+        assert!(snapshot.project_revision > 0);
         assert_eq!(updated_clip.timeline_start_seconds, 2.0);
         assert_eq!(updated_clip.source_start_seconds, 1.5);
         assert_eq!(updated_clip.duration_seconds, 2.25);
@@ -2136,8 +2457,11 @@ mod tests {
         let snapshot = session
             .duplicate_clip("clip_1", 6.0, &audio)
             .expect("clip should duplicate");
-
-        let snapshot_song = snapshot.song.expect("song summary should exist");
+        let snapshot_song = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+        assert_eq!(snapshot.project_revision, snapshot_song.project_revision);
         assert_eq!(snapshot_song.clips.len(), 2);
         assert!(snapshot_song
             .clips
@@ -2327,14 +2651,15 @@ mod tests {
         let snapshot = session
             .update_section("section_1", "Verse", 2.5, 7.0, &audio)
             .expect("section should update");
-
-        let updated_section = snapshot
-            .song
+        let updated_section = session
+            .song_view()
+            .expect("song view should build")
             .expect("song summary should exist")
             .sections
             .into_iter()
             .find(|section| section.id == "section_1")
             .expect("updated section should exist");
+        assert!(snapshot.project_revision > 0);
         assert_eq!(updated_section.name, "Verse");
         assert_eq!(updated_section.start_seconds, 2.5);
         assert_eq!(updated_section.end_seconds, 7.0);
@@ -2363,12 +2688,13 @@ mod tests {
         let snapshot = session
             .delete_section("section_1", &audio)
             .expect("section should delete");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
 
-        assert!(snapshot
-            .song
-            .expect("song summary should exist")
-            .sections
-            .is_empty());
+        assert_eq!(snapshot.project_revision, song_view.project_revision);
+        assert!(song_view.sections.is_empty());
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert!(saved_song.sections.is_empty());
