@@ -1,13 +1,9 @@
 use std::{
-    collections::HashSet,
     fs::File,
+    io::ErrorKind,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicBool, AtomicU32, Ordering},
-        mpsc::{self, Receiver, Sender},
-        Arc,
-    },
-    thread,
+    sync::mpsc::{self, Receiver, Sender},
+    thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
@@ -16,10 +12,13 @@ use cpal::{
     Device, SampleFormat, Stream, StreamConfig,
 };
 use libretracks_core::{Song, TrackKind};
+use rtrb::{Consumer, Producer, RingBuffer};
 use serde::Serialize;
 use symphonia::core::{
-    codecs::{DecoderOptions, CODEC_TYPE_NULL},
-    formats::FormatOptions,
+    audio::{AudioBufferRef, SampleBuffer},
+    codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL},
+    errors::Error as SymphoniaError,
+    formats::{FormatOptions, FormatReader},
     io::MediaSourceStream,
     meta::MetadataOptions,
     probe::Hint,
@@ -27,11 +26,13 @@ use symphonia::core::{
 
 use crate::state::DesktopError;
 
-const DEFAULT_DUMMY_GAIN: f32 = 0.12;
-const DEFAULT_DUMMY_FREQUENCY_HZ: f32 = 440.0;
+const PCM_RING_CAPACITY_FRAMES: usize = 16_384;
+const DISK_RENDER_BLOCK_FRAMES: usize = 1_024;
+const DISK_READER_IDLE_SLEEP: Duration = Duration::from_millis(2);
+const SOURCE_BUFFER_COMPACT_THRESHOLD_FRAMES: u64 = 4_096;
 
 pub struct AudioRuntime {
-    backend: AudioBackend,
+    session: Option<PlaybackSession>,
 }
 
 pub struct AudioController {
@@ -160,33 +161,6 @@ struct AudioDebugState {
     last_start_reason: Option<PlaybackStartReason>,
 }
 
-#[derive(Default)]
-struct RenderShared {
-    running: AtomicBool,
-    gain_bits: AtomicU32,
-    frequency_bits: AtomicU32,
-}
-
-enum AudioBackend {
-    Cpal(CpalBackend),
-    Null(NullBackend),
-}
-
-struct CpalBackend {
-    _stream: Stream,
-    shared: Arc<RenderShared>,
-    _channels: usize,
-    _sample_rate: u32,
-}
-
-struct NullBackend {
-    shared: Arc<RenderShared>,
-}
-
-struct AssetProbeReport {
-    opened_files: usize,
-}
-
 enum AudioCommand {
     Play {
         song_dir: PathBuf,
@@ -206,6 +180,79 @@ enum AudioCommand {
         respond_to: Sender<AudioDebugSnapshot>,
     },
     Shutdown,
+}
+
+struct PlaybackSession {
+    backend: PlaybackBackend,
+    reader_sender: Option<Sender<ReaderCommand>>,
+    reader_handle: Option<JoinHandle<DiskReaderReport>>,
+}
+
+enum PlaybackBackend {
+    Cpal { _stream: Stream },
+    Null,
+}
+
+enum ReaderCommand {
+    UpdateSong(Song),
+    Stop,
+}
+
+#[derive(Default)]
+struct DiskReaderReport;
+
+#[derive(Debug, Clone)]
+struct PlaybackClipPlan {
+    clip_id: String,
+    track_id: String,
+    file_path: PathBuf,
+    timeline_start_frame: u64,
+    duration_frames: u64,
+    source_start_seconds: f64,
+}
+
+struct DiskReaderState {
+    song: Song,
+    output_sample_rate: u32,
+    output_channels: usize,
+    timeline_cursor_frame: u64,
+    remaining_song_frames: u64,
+    next_plan_index: usize,
+    plans: Vec<PlaybackClipPlan>,
+    active_readers: Vec<StreamingClipReader>,
+    producer: Producer<f32>,
+    command_receiver: Receiver<ReaderCommand>,
+    debug_config: AudioDebugConfig,
+    opened_files: usize,
+}
+
+struct StreamingClipReader {
+    plan: PlaybackClipPlan,
+    format: Box<dyn FormatReader>,
+    decoder: Box<dyn Decoder>,
+    track_id: u32,
+    source_sample_rate: u32,
+    source_channels: usize,
+    output_sample_rate: u32,
+    decoded_samples: Vec<f32>,
+    decoded_start_frame: u64,
+    next_source_frame: f64,
+    eof: bool,
+}
+
+struct OpenAudioSource {
+    format: Box<dyn FormatReader>,
+    decoder: Box<dyn Decoder>,
+    track_id: u32,
+    sample_rate: u32,
+    channels: usize,
+}
+
+impl PlaybackClipPlan {
+    fn timeline_end_frame(&self) -> u64 {
+        self.timeline_start_frame
+            .saturating_add(self.duration_frames)
+    }
 }
 
 impl Default for AudioRuntimeStateSummary {
@@ -302,7 +349,7 @@ impl AudioDebugState {
         }
 
         self.last_sync = Some(AudioOperationSummary {
-            reason: Some("dummy_callback".to_string()),
+            reason: Some("disk_stream".to_string()),
             elapsed_ms: report.elapsed.as_secs_f64() * 1000.0,
             scheduled_clips: report.updated_sinks,
             active_sinks: report.active_sinks,
@@ -367,15 +414,16 @@ impl AudioDebugState {
 
 impl AudioRuntime {
     fn new() -> Self {
-        Self {
-            backend: AudioBackend::new(),
-        }
+        Self { session: None }
     }
 
     fn stop_all(&mut self) -> StopReport {
         let started_at = Instant::now();
-        let stopped_sinks = usize::from(self.backend.is_running());
-        self.backend.stop();
+        let stopped_sinks = usize::from(self.session.is_some());
+
+        if let Some(session) = self.session.take() {
+            let _ = session.stop();
+        }
 
         StopReport {
             elapsed: started_at.elapsed(),
@@ -389,40 +437,42 @@ impl AudioRuntime {
         song: &Song,
         position_seconds: f64,
         debug_config: AudioDebugConfig,
-    ) -> RestartReport {
+    ) -> Result<RestartReport, String> {
         let started_at = Instant::now();
-        self.backend.stop();
+        self.stop_all();
 
         let scheduled_clips = scheduled_clip_count(song, position_seconds);
-        let probe_report =
-            probe_scheduled_audio_assets(song_dir, song, position_seconds, debug_config);
-        let target_gain = dummy_gain_for_song(song);
+        let session = PlaybackSession::start(
+            song_dir.to_path_buf(),
+            song.clone(),
+            position_seconds,
+            debug_config,
+        )?;
+        let cached_buffers = usize::from(matches!(session.backend, PlaybackBackend::Cpal { .. }));
 
-        self.backend
-            .start_dummy_tone(DEFAULT_DUMMY_FREQUENCY_HZ, target_gain);
+        self.session = Some(session);
 
-        RestartReport {
+        Ok(RestartReport {
             elapsed: started_at.elapsed(),
             scheduled_clips,
-            active_sinks: usize::from(self.backend.is_running()),
-            opened_files: probe_report.opened_files,
-            cached_buffers: 0,
-        }
+            active_sinks: 1,
+            opened_files: 0,
+            cached_buffers,
+        })
     }
 
-    fn sync_song(&mut self, song: &Song) -> SyncReport {
+    fn sync_song(&mut self, song: &Song) -> Result<SyncReport, String> {
         let started_at = Instant::now();
-        let updated_sinks = usize::from(
-            self.backend
-                .set_gain(dummy_gain_for_song(song))
-                .unwrap_or(false),
-        );
+        let updated_sinks = match self.session.as_mut() {
+            Some(session) => usize::from(session.update_song(song.clone())?),
+            None => 0,
+        };
 
-        SyncReport {
+        Ok(SyncReport {
             elapsed: started_at.elapsed(),
             updated_sinks,
-            active_sinks: usize::from(self.backend.is_running()),
-        }
+            active_sinks: usize::from(self.session.is_some()),
+        })
     }
 }
 
@@ -504,109 +554,313 @@ impl Drop for AudioController {
     }
 }
 
-impl AudioBackend {
-    fn new() -> Self {
-        match CpalBackend::new() {
-            Ok(backend) => Self::Cpal(backend),
-            Err(error) => {
-                eprintln!("[libretracks-audio] falling back to null backend: {error}");
-                Self::Null(NullBackend::new())
-            }
-        }
-    }
-
-    fn start_dummy_tone(&mut self, frequency_hz: f32, gain: f32) {
-        let shared = self.shared();
-        store_f32(&shared.frequency_bits, frequency_hz.max(1.0));
-        store_f32(&shared.gain_bits, gain.max(0.0));
-        shared.running.store(true, Ordering::Relaxed);
-    }
-
-    fn stop(&mut self) {
-        let shared = self.shared();
-        shared.running.store(false, Ordering::Relaxed);
-        store_f32(&shared.gain_bits, 0.0);
-    }
-
-    fn set_gain(&mut self, gain: f32) -> Option<bool> {
-        if !self.is_running() {
-            return None;
-        }
-
-        let shared = self.shared();
-        let current_gain = load_f32(&shared.gain_bits);
-        let changed = (current_gain - gain).abs() > 0.0005;
-        if changed {
-            store_f32(&shared.gain_bits, gain.max(0.0));
-        }
-
-        Some(changed)
-    }
-
-    fn is_running(&self) -> bool {
-        self.shared().running.load(Ordering::Relaxed)
-    }
-
-    fn shared(&self) -> &Arc<RenderShared> {
-        match self {
-            AudioBackend::Cpal(backend) => &backend.shared,
-            AudioBackend::Null(backend) => &backend.shared,
-        }
-    }
-}
-
-impl CpalBackend {
-    fn new() -> Result<Self, String> {
+impl PlaybackSession {
+    fn start(
+        song_dir: PathBuf,
+        song: Song,
+        position_seconds: f64,
+        debug_config: AudioDebugConfig,
+    ) -> Result<Self, String> {
         let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .ok_or_else(|| "no default output device available".to_string())?;
+        let Some(device) = host.default_output_device() else {
+            eprintln!("[libretracks-audio] no default output device available, using null backend");
+            return Ok(Self {
+                backend: PlaybackBackend::Null,
+                reader_sender: None,
+                reader_handle: None,
+            });
+        };
+
         let supported_config = device
             .default_output_config()
             .map_err(|error| error.to_string())?;
         let sample_format = supported_config.sample_format();
         let config: StreamConfig = supported_config.into();
-        let channels = usize::from(config.channels.max(1));
-        let sample_rate = config.sample_rate.0.max(1);
-        let shared = Arc::new(RenderShared::default());
-        let stream = build_output_stream(&device, &config, sample_format, Arc::clone(&shared))?;
+        let output_channels = usize::from(config.channels.max(1));
+        let output_sample_rate = config.sample_rate.0.max(1);
+        let ring_capacity_samples = PCM_RING_CAPACITY_FRAMES.saturating_mul(output_channels.max(1));
+        let (producer, consumer) = RingBuffer::<f32>::new(ring_capacity_samples);
+        let (reader_sender, reader_receiver) = mpsc::channel();
+
+        let reader_handle = spawn_disk_reader(DiskReaderState {
+            song: song.clone(),
+            output_sample_rate,
+            output_channels,
+            timeline_cursor_frame: 0,
+            remaining_song_frames: seconds_to_frames(
+                (song.duration_seconds - position_seconds).max(0.0),
+                output_sample_rate,
+            ),
+            next_plan_index: 0,
+            plans: build_playback_plans(&song_dir, &song, position_seconds, output_sample_rate),
+            active_readers: Vec::new(),
+            producer,
+            command_receiver: reader_receiver,
+            debug_config,
+            opened_files: 0,
+        });
+
+        let stream = build_output_stream(&device, &config, sample_format, consumer)?;
         stream.play().map_err(|error| error.to_string())?;
 
         Ok(Self {
-            _stream: stream,
-            shared,
-            _channels: channels,
-            _sample_rate: sample_rate,
+            backend: PlaybackBackend::Cpal { _stream: stream },
+            reader_sender: Some(reader_sender),
+            reader_handle: Some(reader_handle),
         })
+    }
+
+    fn update_song(&mut self, song: Song) -> Result<bool, String> {
+        if let Some(reader_sender) = &self.reader_sender {
+            reader_sender
+                .send(ReaderCommand::UpdateSong(song))
+                .map_err(|_| "disk reader thread is unavailable".to_string())?;
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    fn stop(mut self) -> DiskReaderReport {
+        if let Some(reader_sender) = self.reader_sender.take() {
+            let _ = reader_sender.send(ReaderCommand::Stop);
+        }
+
+        self.reader_handle
+            .take()
+            .and_then(|handle| handle.join().ok())
+            .unwrap_or_default()
     }
 }
 
-impl NullBackend {
-    fn new() -> Self {
-        Self {
-            shared: Arc::new(RenderShared::default()),
+impl StreamingClipReader {
+    fn open(plan: PlaybackClipPlan, output_sample_rate: u32) -> Result<Self, String> {
+        let source = open_audio_source(&plan.file_path)?;
+        let source_start_seconds = source_start_seconds_floor(plan.source_start_seconds);
+
+        Ok(Self {
+            plan,
+            format: source.format,
+            decoder: source.decoder,
+            track_id: source.track_id,
+            source_sample_rate: source.sample_rate.max(1),
+            source_channels: source.channels.max(1),
+            output_sample_rate: output_sample_rate.max(1),
+            decoded_samples: Vec::new(),
+            decoded_start_frame: 0,
+            next_source_frame: source.sample_rate as f64 * source_start_seconds,
+            eof: false,
+        })
+    }
+
+    fn mix_into(
+        &mut self,
+        buffer: &mut [f32],
+        offset_frames: usize,
+        frame_count: usize,
+        output_channels: usize,
+        gain: f32,
+    ) -> Result<(), String> {
+        let frame_step = self.source_sample_rate as f64 / self.output_sample_rate as f64;
+
+        for frame_offset in 0..frame_count {
+            let source_frame = self.next_source_frame.round().max(0.0) as u64;
+            if !self.ensure_source_frame_available(source_frame)? {
+                self.eof = true;
+                break;
+            }
+
+            if gain.abs() > 0.000_001 {
+                let buffer_base = (offset_frames + frame_offset) * output_channels;
+                for channel in 0..output_channels {
+                    buffer[buffer_base + channel] +=
+                        self.read_sample(source_frame, channel, output_channels) * gain;
+                }
+            }
+
+            self.next_source_frame += frame_step;
+            self.compact_decoded_prefix();
+        }
+
+        Ok(())
+    }
+
+    fn ensure_source_frame_available(&mut self, target_frame: u64) -> Result<bool, String> {
+        loop {
+            let decoded_frames = self.decoded_samples.len() / self.source_channels;
+            if target_frame < self.decoded_start_frame + decoded_frames as u64 {
+                return Ok(true);
+            }
+
+            if self.eof {
+                return Ok(false);
+            }
+
+            if !self.decode_next_packet()? {
+                self.eof = true;
+                return Ok(false);
+            }
         }
     }
+
+    fn decode_next_packet(&mut self) -> Result<bool, String> {
+        loop {
+            let packet = match self.format.next_packet() {
+                Ok(packet) => packet,
+                Err(SymphoniaError::IoError(error)) if error.kind() == ErrorKind::UnexpectedEof => {
+                    return Ok(false)
+                }
+                Err(error) => return Err(error.to_string()),
+            };
+
+            if packet.track_id() != self.track_id {
+                continue;
+            }
+
+            let decoded = match self.decoder.decode(&packet) {
+                Ok(decoded) => decoded,
+                Err(SymphoniaError::DecodeError(_)) => continue,
+                Err(SymphoniaError::IoError(error)) if error.kind() == ErrorKind::UnexpectedEof => {
+                    return Ok(false)
+                }
+                Err(error) => return Err(error.to_string()),
+            };
+
+            append_decoded_samples(&mut self.decoded_samples, decoded);
+            return Ok(true);
+        }
+    }
+
+    fn read_sample(&self, source_frame: u64, channel: usize, output_channels: usize) -> f32 {
+        let frame_index = (source_frame.saturating_sub(self.decoded_start_frame)) as usize;
+        let sample_index = frame_index.saturating_mul(self.source_channels);
+
+        if sample_index >= self.decoded_samples.len() {
+            return 0.0;
+        }
+
+        if output_channels == 1 && self.source_channels > 1 {
+            let left = self.decoded_samples[sample_index];
+            let right = self.decoded_samples[sample_index + 1.min(self.source_channels - 1)];
+            return (left + right) * 0.5;
+        }
+
+        let source_channel = if self.source_channels == 1 {
+            0
+        } else {
+            channel.min(self.source_channels - 1)
+        };
+
+        self.decoded_samples[sample_index + source_channel]
+    }
+
+    fn compact_decoded_prefix(&mut self) {
+        let target_frame = self.next_source_frame.floor().max(0.0) as u64;
+        if target_frame <= self.decoded_start_frame {
+            return;
+        }
+
+        let frames_to_drop = target_frame - self.decoded_start_frame;
+        if frames_to_drop < SOURCE_BUFFER_COMPACT_THRESHOLD_FRAMES {
+            return;
+        }
+
+        let available_frames = (self.decoded_samples.len() / self.source_channels) as u64;
+        let dropped_frames = frames_to_drop.min(available_frames);
+        let dropped_samples = dropped_frames as usize * self.source_channels;
+        self.decoded_samples.drain(0..dropped_samples);
+        self.decoded_start_frame += dropped_frames;
+    }
+}
+
+fn append_decoded_samples(target: &mut Vec<f32>, decoded: AudioBufferRef<'_>) {
+    let mut sample_buffer = SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
+    sample_buffer.copy_interleaved_ref(decoded);
+    target.extend_from_slice(sample_buffer.samples());
+}
+
+fn source_start_seconds_floor(seconds: f64) -> f64 {
+    if seconds.is_finite() && seconds > 0.0 {
+        seconds
+    } else {
+        0.0
+    }
+}
+
+fn open_audio_source(file_path: &Path) -> Result<OpenAudioSource, String> {
+    let file = File::open(file_path).map_err(|error| error.to_string())?;
+    let mut hint = Hint::new();
+    if let Some(extension) = file_path.extension().and_then(|value| value.to_str()) {
+        hint.with_extension(extension);
+    }
+
+    let media_source_stream = MediaSourceStream::new(Box::new(file), Default::default());
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            media_source_stream,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .map_err(|error| error.to_string())?;
+
+    let format = probed.format;
+    let track = format
+        .default_track()
+        .or_else(|| {
+            format
+                .tracks()
+                .iter()
+                .find(|track| track.codec_params.codec != CODEC_TYPE_NULL)
+        })
+        .ok_or_else(|| "no decodable audio track found".to_string())?;
+
+    let sample_rate = track
+        .codec_params
+        .sample_rate
+        .ok_or_else(|| "audio track sample rate is unavailable".to_string())?;
+    let channels = track
+        .codec_params
+        .channels
+        .map(|channels| channels.count())
+        .unwrap_or(1);
+    let track_id = track.id;
+    let decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+        .map_err(|error| error.to_string())?;
+
+    Ok(OpenAudioSource {
+        format,
+        decoder,
+        track_id,
+        sample_rate,
+        channels,
+    })
+}
+
+fn spawn_disk_reader(state: DiskReaderState) -> JoinHandle<DiskReaderReport> {
+    thread::Builder::new()
+        .name("libretracks-disk-reader".into())
+        .spawn(move || run_disk_reader(state))
+        .expect("disk reader thread should start")
 }
 
 fn build_output_stream(
     device: &Device,
     config: &StreamConfig,
     sample_format: SampleFormat,
-    shared: Arc<RenderShared>,
+    consumer: Consumer<f32>,
 ) -> Result<Stream, String> {
-    let channels = usize::from(config.channels.max(1));
-    let sample_rate = config.sample_rate.0.max(1) as f32;
     let error_callback = |error| eprintln!("[libretracks-audio] cpal stream error: {error}");
 
     match sample_format {
         SampleFormat::F32 => {
-            let mut phase = 0.0_f32;
+            let mut consumer = consumer;
             device
                 .build_output_stream(
                     config,
                     move |data: &mut [f32], _| {
-                        write_output_buffer_f32(data, channels, sample_rate, &shared, &mut phase);
+                        drain_consumer_samples(data, &mut consumer, |sample| sample)
                     },
                     error_callback,
                     None,
@@ -614,12 +868,14 @@ fn build_output_stream(
                 .map_err(|error| error.to_string())
         }
         SampleFormat::I16 => {
-            let mut phase = 0.0_f32;
+            let mut consumer = consumer;
             device
                 .build_output_stream(
                     config,
                     move |data: &mut [i16], _| {
-                        write_output_buffer_i16(data, channels, sample_rate, &shared, &mut phase);
+                        drain_consumer_samples(data, &mut consumer, |sample| {
+                            (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16
+                        })
                     },
                     error_callback,
                     None,
@@ -627,12 +883,14 @@ fn build_output_stream(
                 .map_err(|error| error.to_string())
         }
         SampleFormat::U16 => {
-            let mut phase = 0.0_f32;
+            let mut consumer = consumer;
             device
                 .build_output_stream(
                     config,
                     move |data: &mut [u16], _| {
-                        write_output_buffer_u16(data, channels, sample_rate, &shared, &mut phase);
+                        drain_consumer_samples(data, &mut consumer, |sample| {
+                            (((sample.clamp(-1.0, 1.0) * 0.5) + 0.5) * u16::MAX as f32) as u16
+                        })
                     },
                     error_callback,
                     None,
@@ -643,69 +901,16 @@ fn build_output_stream(
     }
 }
 
-fn write_output_buffer_f32(
-    data: &mut [f32],
-    channels: usize,
-    sample_rate: f32,
-    shared: &RenderShared,
-    phase: &mut f32,
-) {
-    render_mono_samples(data, channels, sample_rate, shared, phase, |sample| sample);
-}
-
-fn write_output_buffer_i16(
-    data: &mut [i16],
-    channels: usize,
-    sample_rate: f32,
-    shared: &RenderShared,
-    phase: &mut f32,
-) {
-    render_mono_samples(data, channels, sample_rate, shared, phase, |sample| {
-        (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16
-    });
-}
-
-fn write_output_buffer_u16(
-    data: &mut [u16],
-    channels: usize,
-    sample_rate: f32,
-    shared: &RenderShared,
-    phase: &mut f32,
-) {
-    render_mono_samples(data, channels, sample_rate, shared, phase, |sample| {
-        (((sample.clamp(-1.0, 1.0) * 0.5) + 0.5) * u16::MAX as f32) as u16
-    });
-}
-
-fn render_mono_samples<T>(
+fn drain_consumer_samples<T>(
     data: &mut [T],
-    channels: usize,
-    sample_rate: f32,
-    shared: &RenderShared,
-    phase: &mut f32,
+    consumer: &mut Consumer<f32>,
     convert: impl Fn(f32) -> T,
 ) where
     T: Copy,
 {
-    let running = shared.running.load(Ordering::Relaxed);
-    let gain = load_f32(&shared.gain_bits);
-    let frequency_hz = load_f32(&shared.frequency_bits).max(1.0);
-    let phase_step = frequency_hz / sample_rate.max(1.0);
-
-    for frame in data.chunks_mut(channels.max(1)) {
-        let sample = if running {
-            let value = (*phase * std::f32::consts::TAU).sin() * gain;
-            *phase = (*phase + phase_step).fract();
-            value
-        } else {
-            *phase = 0.0;
-            0.0
-        };
-
-        let converted = convert(sample);
-        for output in frame {
-            *output = converted;
-        }
+    for output in data {
+        let sample = consumer.pop().unwrap_or(0.0);
+        *output = convert(sample);
     }
 }
 
@@ -728,20 +933,18 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
                     Some(playback_reason_label(reason).to_string()),
                 );
 
-                let report = ensure_runtime(&mut runtime).restart(
-                    &song_dir,
-                    &song,
-                    position_seconds,
-                    debug_config,
-                );
-                debug_state.record_restart(
-                    reason,
-                    position_seconds,
-                    song.duration_seconds,
-                    &report,
-                );
+                let result = ensure_runtime(&mut runtime)
+                    .restart(&song_dir, &song, position_seconds, debug_config)
+                    .map(|report| {
+                        debug_state.record_restart(
+                            reason,
+                            position_seconds,
+                            song.duration_seconds,
+                            &report,
+                        );
+                    });
 
-                let _ = respond_to.send(Ok(()));
+                let _ = respond_to.send(result);
             }
             AudioCommand::SyncSong { song, respond_to } => {
                 let (song, respond_tos, next_deferred) =
@@ -751,11 +954,12 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
                 debug_state
                     .record_command(AudioCommandKind::SyncSong, Some("mix_only".to_string()));
 
-                let report = ensure_runtime(&mut runtime).sync_song(&song);
-                debug_state.record_sync(&report);
+                let result = ensure_runtime(&mut runtime).sync_song(&song).map(|report| {
+                    debug_state.record_sync(&report);
+                });
 
                 for respond_to in respond_tos {
-                    let _ = respond_to.send(Ok(()));
+                    let _ = respond_to.send(result.clone());
                 }
             }
             AudioCommand::Stop { respond_to } => {
@@ -780,6 +984,9 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
             }
             AudioCommand::Shutdown => {
                 debug_state.record_command(AudioCommandKind::Shutdown, None);
+                if let Some(runtime) = runtime.as_mut() {
+                    runtime.stop_all();
+                }
                 break;
             }
         }
@@ -824,6 +1031,169 @@ fn coalesce_sync_song_commands(
     (latest_song, respond_tos, deferred_command)
 }
 
+fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
+    while state.timeline_cursor_frame < state.remaining_song_frames {
+        if state.consume_commands() {
+            break;
+        }
+
+        let free_frames = state.producer.slots() / state.output_channels.max(1);
+        if free_frames == 0 {
+            thread::sleep(DISK_READER_IDLE_SLEEP);
+            continue;
+        }
+
+        let remaining_frames = (state.remaining_song_frames - state.timeline_cursor_frame) as usize;
+        let block_frames = DISK_RENDER_BLOCK_FRAMES
+            .min(free_frames)
+            .min(remaining_frames);
+        if block_frames == 0 {
+            break;
+        }
+
+        state.activate_due_readers(state.timeline_cursor_frame + block_frames as u64);
+        let block = state.render_block(block_frames);
+        if !push_block_into_ring(&mut state.producer, &block) {
+            break;
+        }
+
+        state.timeline_cursor_frame += block_frames as u64;
+    }
+
+    DiskReaderReport
+}
+
+impl DiskReaderState {
+    fn consume_commands(&mut self) -> bool {
+        let mut should_stop = false;
+
+        while let Ok(command) = self.command_receiver.try_recv() {
+            match command {
+                ReaderCommand::UpdateSong(song) => self.song = song,
+                ReaderCommand::Stop => should_stop = true,
+            }
+        }
+
+        should_stop
+    }
+
+    fn activate_due_readers(&mut self, window_end_frame: u64) {
+        while self.next_plan_index < self.plans.len()
+            && self.plans[self.next_plan_index].timeline_start_frame < window_end_frame
+        {
+            let plan = self.plans[self.next_plan_index].clone();
+            self.next_plan_index += 1;
+
+            match StreamingClipReader::open(plan, self.output_sample_rate) {
+                Ok(reader) => {
+                    self.opened_files += 1;
+                    self.active_readers.push(reader);
+                }
+                Err(error) => {
+                    if self.debug_config.enabled || self.debug_config.log_commands {
+                        eprintln!("[libretracks-audio] failed to open clip reader: {error}");
+                    }
+                }
+            }
+        }
+    }
+
+    fn render_block(&mut self, block_frames: usize) -> Vec<f32> {
+        let block_start = self.timeline_cursor_frame;
+        let block_end = block_start + block_frames as u64;
+        let mut mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
+
+        for reader in &mut self.active_readers {
+            let overlap_start = block_start.max(reader.plan.timeline_start_frame);
+            let overlap_end = block_end.min(reader.plan.timeline_end_frame());
+            if overlap_end <= overlap_start {
+                continue;
+            }
+
+            let offset_frames = (overlap_start - block_start) as usize;
+            let overlap_frames = (overlap_end - overlap_start) as usize;
+            let gain =
+                resolve_clip_runtime_gain(&self.song, &reader.plan.clip_id, &reader.plan.track_id);
+
+            if let Err(error) = reader.mix_into(
+                &mut mixed,
+                offset_frames,
+                overlap_frames,
+                self.output_channels,
+                gain as f32,
+            ) {
+                reader.eof = true;
+                if self.debug_config.enabled || self.debug_config.log_commands {
+                    eprintln!("[libretracks-audio] clip decode failed: {error}");
+                }
+            }
+        }
+
+        self.active_readers
+            .retain(|reader| !reader.eof && block_end < reader.plan.timeline_end_frame());
+
+        mixed
+    }
+}
+
+fn push_block_into_ring(producer: &mut Producer<f32>, block: &[f32]) -> bool {
+    for &sample in block {
+        if producer.push(sample).is_err() {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn build_playback_plans(
+    song_dir: &Path,
+    song: &Song,
+    position_seconds: f64,
+    output_sample_rate: u32,
+) -> Vec<PlaybackClipPlan> {
+    let mut plans = Vec::new();
+
+    for clip in &song.clips {
+        let clip_end_seconds = clip.timeline_start_seconds + clip.duration_seconds;
+        if clip_end_seconds <= position_seconds {
+            continue;
+        }
+
+        let elapsed_inside_clip = (position_seconds - clip.timeline_start_seconds).max(0.0);
+        let remaining_duration = (clip.duration_seconds - elapsed_inside_clip).max(0.0);
+        if remaining_duration <= 0.0 {
+            continue;
+        }
+
+        plans.push(PlaybackClipPlan {
+            clip_id: clip.id.clone(),
+            track_id: clip.track_id.clone(),
+            file_path: song_dir.join(&clip.file_path),
+            timeline_start_frame: seconds_to_frames(
+                (clip.timeline_start_seconds - position_seconds).max(0.0),
+                output_sample_rate,
+            ),
+            duration_frames: seconds_to_frames(remaining_duration, output_sample_rate),
+            source_start_seconds: clip.source_start_seconds + elapsed_inside_clip,
+        });
+    }
+
+    plans.sort_by_key(|plan| plan.timeline_start_frame);
+    plans
+}
+
+fn resolve_clip_runtime_gain(song: &Song, clip_id: &str, track_id: &str) -> f64 {
+    let clip_gain = song
+        .clips
+        .iter()
+        .find(|clip| clip.id == clip_id)
+        .map(|clip| clip.gain)
+        .unwrap_or(0.0);
+
+    resolve_track_clip_gain(song, track_id, clip_gain).unwrap_or(0.0)
+}
+
 fn scheduled_clip_count(song: &Song, position_seconds: f64) -> usize {
     song.clips
         .iter()
@@ -831,101 +1201,26 @@ fn scheduled_clip_count(song: &Song, position_seconds: f64) -> usize {
         .count()
 }
 
-fn probe_scheduled_audio_assets(
-    song_dir: &Path,
-    song: &Song,
-    position_seconds: f64,
-    debug_config: AudioDebugConfig,
-) -> AssetProbeReport {
-    let mut unique_paths = HashSet::new();
-    let mut opened_files = 0;
-
-    for clip in song
-        .clips
-        .iter()
-        .filter(|clip| clip.timeline_start_seconds + clip.duration_seconds > position_seconds)
-    {
-        let full_path = song_dir.join(&clip.file_path);
-        if !unique_paths.insert(full_path.clone()) {
-            continue;
-        }
-
-        if probe_audio_file(&full_path).is_ok() {
-            opened_files += 1;
-            continue;
-        }
-
-        if debug_config.enabled || debug_config.log_commands {
-            eprintln!(
-                "[libretracks-audio] symphonia probe skipped for {}",
-                full_path.display()
-            );
-        }
-    }
-
-    AssetProbeReport { opened_files }
-}
-
 fn probe_audio_file(file_path: &Path) -> Result<(), String> {
-    let file = File::open(file_path).map_err(|error| error.to_string())?;
-    let mut hint = Hint::new();
-    if let Some(extension) = file_path.extension().and_then(|value| value.to_str()) {
-        hint.with_extension(extension);
-    }
+    let mut reader = StreamingClipReader::open(
+        PlaybackClipPlan {
+            clip_id: "probe".into(),
+            track_id: "probe".into(),
+            file_path: file_path.to_path_buf(),
+            timeline_start_frame: 0,
+            duration_frames: 1,
+            source_start_seconds: 0.0,
+        },
+        44_100,
+    )?;
 
-    let media_source_stream = MediaSourceStream::new(Box::new(file), Default::default());
-    let mut probed = symphonia::default::get_probe()
-        .format(
-            &hint,
-            media_source_stream,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        )
-        .map_err(|error| error.to_string())?;
-
-    let track = probed
-        .format
-        .default_track()
-        .or_else(|| {
-            probed
-                .format
-                .tracks()
-                .iter()
-                .find(|track| track.codec_params.codec != CODEC_TYPE_NULL)
+    reader
+        .ensure_source_frame_available(0)
+        .and_then(|available| {
+            available
+                .then_some(())
+                .ok_or_else(|| "empty audio stream".to_string())
         })
-        .ok_or_else(|| "no decodable audio track found".to_string())?;
-
-    let track_id = track.id;
-    let mut decoder = symphonia::default::get_codecs()
-        .make(&track.codec_params, &DecoderOptions::default())
-        .map_err(|error| error.to_string())?;
-
-    loop {
-        let packet = probed
-            .format
-            .next_packet()
-            .map_err(|error| error.to_string())?;
-        if packet.track_id() != track_id {
-            continue;
-        }
-
-        decoder.decode(&packet).map_err(|error| error.to_string())?;
-        return Ok(());
-    }
-}
-
-fn dummy_gain_for_song(song: &Song) -> f32 {
-    let has_audible_clip = song.clips.iter().any(|clip| {
-        resolve_track_clip_gain(song, &clip.track_id, clip.gain)
-            .map(|gain| gain > 0.0)
-            .unwrap_or(false)
-    });
-
-    if has_audible_clip {
-        DEFAULT_DUMMY_GAIN
-    } else {
-        0.0
-    }
 }
 
 fn resolve_track_clip_gain(
@@ -968,12 +1263,8 @@ fn resolve_track_clip_gain(
     Ok(gain * clip_gain)
 }
 
-fn store_f32(target: &AtomicU32, value: f32) {
-    target.store(value.to_bits(), Ordering::Relaxed);
-}
-
-fn load_f32(source: &AtomicU32) -> f32 {
-    f32::from_bits(source.load(Ordering::Relaxed))
+fn seconds_to_frames(seconds: f64, sample_rate: u32) -> u64 {
+    (seconds.max(0.0) * sample_rate.max(1) as f64).round() as u64
 }
 
 fn env_flag(name: &str) -> bool {
@@ -1011,16 +1302,23 @@ fn command_kind_label(kind: AudioCommandKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf, sync::mpsc, thread, time::Duration};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        sync::mpsc,
+        thread,
+        time::Duration,
+    };
 
     use libretracks_core::{Clip, OutputBus, Song, TempoMetadata, TempoSource, Track};
+    use rtrb::RingBuffer;
     use tempfile::tempdir;
 
     use super::{
-        coalesce_sync_song_commands, dummy_gain_for_song, env_flag, playback_reason_label,
-        probe_audio_file, scheduled_clip_count, AudioCommand, AudioCommandKind, AudioDebugConfig,
-        AudioDebugSnapshot, AudioDebugState, PlaybackStartReason, RestartReport, StopReport,
-        SyncReport,
+        build_playback_plans, coalesce_sync_song_commands, drain_consumer_samples, env_flag,
+        playback_reason_label, probe_audio_file, scheduled_clip_count, AudioCommand,
+        AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState,
+        PlaybackStartReason, RestartReport, StopReport, SyncReport,
     };
 
     fn demo_song() -> Song {
@@ -1133,8 +1431,8 @@ mod tests {
                 elapsed: Duration::from_millis(12),
                 scheduled_clips: 3,
                 active_sinks: 1,
-                opened_files: 2,
-                cached_buffers: 0,
+                opened_files: 0,
+                cached_buffers: 1,
             },
         );
         debug_state.record_sync(&SyncReport {
@@ -1197,8 +1495,8 @@ mod tests {
                 elapsed: Duration::from_millis(4),
                 scheduled_clips: 2,
                 active_sinks: 1,
-                opened_files: 1,
-                cached_buffers: 0,
+                opened_files: 0,
+                cached_buffers: 1,
             },
         );
 
@@ -1293,12 +1591,29 @@ mod tests {
     }
 
     #[test]
-    fn dummy_gain_drops_to_zero_when_track_is_muted() {
-        let mut song = demo_song();
-        song.tracks[1].muted = true;
+    fn playback_plans_trim_running_clips_against_current_position() {
+        let plans = build_playback_plans(Path::new("song"), &demo_song(), 1.0, 48_000);
 
-        assert_eq!(dummy_gain_for_song(&song), 0.0);
-        assert!(dummy_gain_for_song(&demo_song()) > 0.0);
+        assert_eq!(plans.len(), 2);
+        assert_eq!(plans[0].clip_id, "clip_intro");
+        assert_eq!(plans[0].timeline_start_frame, 0);
+        assert_eq!(plans[0].duration_frames, 48_000 * 4);
+        assert!((plans[0].source_start_seconds - 1.0).abs() < 0.000_001);
+
+        assert_eq!(plans[1].clip_id, "clip_late");
+        assert_eq!(plans[1].timeline_start_frame, 48_000 * 9);
+    }
+
+    #[test]
+    fn ring_consumer_writes_silence_when_buffer_runs_empty() {
+        let (mut producer, mut consumer) = RingBuffer::<f32>::new(4);
+        producer.push(0.25).expect("sample should push");
+        producer.push(-0.5).expect("sample should push");
+
+        let mut output = [0.0_f32; 4];
+        drain_consumer_samples(&mut output, &mut consumer, |sample| sample);
+
+        assert_eq!(output, [0.25, -0.5, 0.0, 0.0]);
     }
 
     #[test]
