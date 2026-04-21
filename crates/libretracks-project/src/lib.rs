@@ -21,7 +21,9 @@ mod tests {
     use std::{fs, path::Path};
 
     use hound::{SampleFormat, WavSpec, WavWriter};
-    use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
+    use libretracks_core::{
+        Clip, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track, TrackKind,
+    };
     use tempfile::tempdir;
 
     use crate::{
@@ -36,6 +38,11 @@ mod tests {
             title: "Digno y Santo".into(),
             artist: Some("Ejemplo".into()),
             bpm: 72.0,
+            tempo_metadata: TempoMetadata {
+                source: TempoSource::Manual,
+                confidence: None,
+                reference_file_path: None,
+            },
             key: Some("D".into()),
             time_signature: "4/4".into(),
             duration_seconds: 240.0,
@@ -61,11 +68,11 @@ mod tests {
                 fade_in_seconds: None,
                 fade_out_seconds: None,
             }],
-            sections: vec![Section {
+            section_markers: vec![SectionMarker {
                 id: "section_intro".into(),
                 name: "Intro".into(),
                 start_seconds: 0.0,
-                end_seconds: 16.0,
+                digit: Some(1),
             }],
         }
     }
@@ -104,9 +111,10 @@ mod tests {
         save_song(&song_dir, &demo_song()).expect("song should save");
 
         let json = fs::read_to_string(song_file_path(&song_dir)).expect("song file should exist");
-        assert!(json.contains("\"version\": 2"));
+        assert!(json.contains("\"version\": 3"));
         assert!(json.contains("\"timeSignature\""));
         assert!(json.contains("\"timelineStartSeconds\""));
+        assert!(json.contains("\"sectionMarkers\""));
     }
 
     #[test]
@@ -204,7 +212,7 @@ mod tests {
             song_id: "song_002".into(),
             title: "Import Demo".into(),
             artist: Some("LibreTracks".into()),
-            bpm: 120.0,
+            bpm: Some(120.0),
             key: None,
             time_signature: "4/4".into(),
             wav_files: vec![drums_path.clone(), bass_path.clone()],
@@ -216,7 +224,7 @@ mod tests {
         assert_eq!(imported.song.title, "Import Demo");
         assert_eq!(imported.song.tracks.len(), 2);
         assert_eq!(imported.song.clips.len(), 2);
-        assert!(imported.song.sections.is_empty());
+        assert!(imported.song.section_markers.is_empty());
         assert!((imported.song.duration_seconds - 3.0).abs() < 0.001);
         assert!(imported.song_dir.join("audio").join("drums.wav").exists());
         assert!(imported.song_dir.join("audio").join("bass.wav").exists());
@@ -279,7 +287,7 @@ mod tests {
             song_id: "song_003".into(),
             title: "Bad Import".into(),
             artist: None,
-            bpm: 100.0,
+            bpm: Some(100.0),
             key: None,
             time_signature: "4/4".into(),
             wav_files: vec![text_path],
@@ -378,5 +386,51 @@ mod tests {
 
         let error = load_song(&song_dir).expect_err("legacy song should be rejected");
         assert!(matches!(error, ProjectError::LegacyGroupFormatUnsupported));
+    }
+
+    #[test]
+    fn migrates_v2_sections_to_v3_markers_on_load() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = create_song_folder(root.path(), "migrate-v2").expect("folder should be created");
+
+        fs::write(
+            song_file_path(&song_dir),
+            r#"{
+  "version": 2,
+  "id": "legacy-song",
+  "title": "Legacy Song",
+  "artist": null,
+  "bpm": 98.0,
+  "key": null,
+  "timeSignature": "4/4",
+  "durationSeconds": 90.0,
+  "tracks": [],
+  "clips": [],
+  "sections": [
+    {
+      "id": "section_verse",
+      "name": "Verse",
+      "startSeconds": 32.0,
+      "endSeconds": 48.0
+    },
+    {
+      "id": "section_intro",
+      "name": "Intro",
+      "startSeconds": 8.0,
+      "endSeconds": 16.0
+    }
+  ]
+}"#,
+        )
+        .expect("legacy song should be written");
+
+        let migrated = load_song(&song_dir).expect("legacy song should migrate");
+
+        assert_eq!(migrated.section_markers.len(), 2);
+        assert_eq!(migrated.section_markers[0].id, "section_intro");
+        assert_eq!(migrated.section_markers[0].start_seconds, 8.0);
+        assert_eq!(migrated.section_markers[0].digit, None);
+        assert_eq!(migrated.section_markers[1].id, "section_verse");
+        assert_eq!(migrated.tempo_metadata.source, TempoSource::Manual);
     }
 }

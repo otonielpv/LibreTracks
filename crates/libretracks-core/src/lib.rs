@@ -2,13 +2,17 @@ pub mod model;
 pub mod validation;
 
 pub use model::{
-    Clip, OutputBus, Project, Section, Song, Track, TrackKind,
+    Clip, DerivedSection, OutputBus, Project, SectionMarker, Song, TempoMetadata, TempoSource,
+    Track, TrackKind,
 };
 pub use validation::{validate_song, DomainError};
 
 #[cfg(test)]
 mod tests {
-    use crate::{validate_song, Clip, OutputBus, Section, Song, Track, TrackKind};
+    use crate::{
+        validate_song, Clip, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track,
+        TrackKind,
+    };
 
     fn valid_song() -> Song {
         Song {
@@ -16,6 +20,11 @@ mod tests {
             title: "Digno y Santo".into(),
             artist: Some("Ejemplo".into()),
             bpm: 72.0,
+            tempo_metadata: TempoMetadata {
+                source: TempoSource::Manual,
+                confidence: None,
+                reference_file_path: None,
+            },
             key: Some("D".into()),
             time_signature: "4/4".into(),
             duration_seconds: 240.0,
@@ -54,11 +63,11 @@ mod tests {
                 fade_in_seconds: None,
                 fade_out_seconds: None,
             }],
-            sections: vec![Section {
+            section_markers: vec![SectionMarker {
                 id: "section_intro".into(),
                 name: "Intro".into(),
                 start_seconds: 0.0,
-                end_seconds: 16.0,
+                digit: Some(1),
             }],
         }
     }
@@ -95,5 +104,50 @@ mod tests {
         assert!(json.contains("\"title\": \"Digno y Santo\""));
         assert!(json.contains("\"tracks\""));
         assert!(json.contains("\"kind\": \"audio\""));
+        assert!(json.contains("\"sectionMarkers\""));
+    }
+
+    #[test]
+    fn rejects_duplicate_marker_digits() {
+        let mut song = valid_song();
+        song.section_markers.push(SectionMarker {
+            id: "section_verse".into(),
+            name: "Verse".into(),
+            start_seconds: 32.0,
+            digit: Some(1),
+        });
+
+        let error = validate_song(&song).expect_err("song should be invalid");
+        assert!(error.to_string().contains("duplicated"));
+    }
+
+    #[test]
+    fn derives_sections_from_markers() {
+        let mut song = valid_song();
+        song.section_markers = vec![
+            SectionMarker {
+                id: "section_verse".into(),
+                name: "Verse".into(),
+                start_seconds: 16.0,
+                digit: Some(2),
+            },
+            SectionMarker {
+                id: "section_outro".into(),
+                name: "Outro".into(),
+                start_seconds: 48.0,
+                digit: Some(3),
+            },
+        ];
+
+        let sections = song.derived_sections();
+
+        assert_eq!(sections.len(), 3);
+        assert_eq!(sections[0].name, "Inicio");
+        assert_eq!(sections[0].start_seconds, 0.0);
+        assert_eq!(sections[0].end_seconds, 16.0);
+        assert_eq!(sections[1].name, "Verse");
+        assert_eq!(sections[1].end_seconds, 48.0);
+        assert_eq!(sections[2].name, "Outro");
+        assert_eq!(sections[2].end_seconds, 240.0);
     }
 }

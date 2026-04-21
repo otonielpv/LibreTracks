@@ -10,7 +10,10 @@ use std::{
 use libretracks_audio::{
     AudioEngine, AudioEngineError, JumpTrigger, PendingSectionJump, PlaybackState,
 };
-use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
+use libretracks_core::{
+    Clip, DerivedSection, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track,
+    TrackKind,
+};
 use libretracks_project::{
     append_wav_files_to_song, create_song_folder, generate_waveform_summary, import_wav_song,
     load_song, load_waveform_summary, read_wav_metadata, save_song, waveform_file_path,
@@ -178,6 +181,7 @@ pub struct TransportSnapshot {
     pub position_seconds: f64,
     pub current_section: Option<SectionSummary>,
     pub pending_section_jump: Option<PendingJumpSummary>,
+    pub musical_position: MusicalPositionSummary,
     pub transport_clock: TransportClockSummary,
     pub project_revision: u64,
     pub song_dir: Option<String>,
@@ -201,10 +205,13 @@ pub struct SongView {
     pub title: String,
     pub artist: Option<String>,
     pub bpm: f64,
+    pub tempo_metadata: TempoMetadataSummary,
     pub key: Option<String>,
     pub time_signature: String,
     pub duration_seconds: f64,
     pub sections: Vec<SectionSummary>,
+    pub section_markers: Vec<SectionMarkerSummary>,
+    pub derived_sections: Vec<SectionSummary>,
     pub clips: Vec<ClipSummary>,
     pub tracks: Vec<TrackSummary>,
     pub project_revision: u64,
@@ -237,9 +244,37 @@ pub struct SectionSummary {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingJumpSummary {
-    pub target_section_id: String,
-    pub target_section_name: String,
+    pub target_marker_id: String,
+    pub target_marker_name: String,
+    pub target_digit: Option<u8>,
     pub trigger: String,
+    pub execute_at_seconds: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionMarkerSummary {
+    pub id: String,
+    pub name: String,
+    pub start_seconds: f64,
+    pub digit: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TempoMetadataSummary {
+    pub source: String,
+    pub confidence: Option<f64>,
+    pub reference_file_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicalPositionSummary {
+    pub bar_number: u32,
+    pub beat_in_bar: u32,
+    pub sub_beat: u32,
+    pub display: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -706,10 +741,9 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn create_section(
+    pub fn create_section_marker(
         &mut self,
         start_seconds: f64,
-        end_seconds: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
@@ -717,21 +751,64 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let start_seconds = start_seconds.min(end_seconds).max(0.0);
-        let end_seconds = end_seconds.max(start_seconds).min(song.duration_seconds);
-
-        if end_seconds - start_seconds < 0.05 {
-            return Err(DesktopError::InvalidSectionRange);
-        }
-
-        let section_number = song.sections.len() + 1;
-        song.sections.push(Section {
+        let start_seconds = start_seconds.max(0.0).min((song.duration_seconds - 0.0001).max(0.0));
+        let section_number = song.section_markers.len() + 1;
+        song.section_markers.push(SectionMarker {
             id: format!("section_{}", timestamp_suffix()),
             name: format!("Seccion {section_number}"),
             start_seconds,
-            end_seconds,
+            digit: None,
         });
-        song.sections.sort_by(|left, right| {
+        song.section_markers.sort_by(|left, right| {
+            left.start_seconds
+                .partial_cmp(&right.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn create_section(
+        &mut self,
+        start_seconds: f64,
+        _end_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.create_section_marker(start_seconds, audio)
+    }
+
+    pub fn update_section_marker(
+        &mut self,
+        section_id: &str,
+        name: &str,
+        start_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let trimmed_name = name.trim();
+        if trimmed_name.is_empty() {
+            return Err(DesktopError::AudioCommand(
+                "section name must not be empty".into(),
+            ));
+        }
+
+        let start_seconds = start_seconds.max(0.0).min((song.duration_seconds - 0.0001).max(0.0));
+
+        let section = song
+            .section_markers
+            .iter_mut()
+            .find(|section| section.id == section_id)
+            .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
+
+        section.name = trimmed_name.to_string();
+        section.start_seconds = start_seconds;
+        song.section_markers.sort_by(|left, right| {
             left.start_seconds
                 .partial_cmp(&right.start_seconds)
                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -747,7 +824,15 @@ impl DesktopSession {
         section_id: &str,
         name: &str,
         start_seconds: f64,
-        end_seconds: f64,
+        _end_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.update_section_marker(section_id, name, start_seconds, audio)
+    }
+
+    pub fn delete_section_marker(
+        &mut self,
+        section_id: &str,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
@@ -755,34 +840,12 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let trimmed_name = name.trim();
-        if trimmed_name.is_empty() {
-            return Err(DesktopError::AudioCommand(
-                "section name must not be empty".into(),
-            ));
+        let section_count = song.section_markers.len();
+        song.section_markers.retain(|section| section.id != section_id);
+
+        if song.section_markers.len() == section_count {
+            return Err(DesktopError::SectionNotFound(section_id.to_string()));
         }
-
-        let start_seconds = start_seconds.min(end_seconds).max(0.0);
-        let end_seconds = end_seconds.max(start_seconds).min(song.duration_seconds);
-
-        if end_seconds - start_seconds < 0.05 {
-            return Err(DesktopError::InvalidSectionRange);
-        }
-
-        let section = song
-            .sections
-            .iter_mut()
-            .find(|section| section.id == section_id)
-            .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
-
-        section.name = trimmed_name.to_string();
-        section.start_seconds = start_seconds;
-        section.end_seconds = end_seconds;
-        song.sections.sort_by(|left, right| {
-            left.start_seconds
-                .partial_cmp(&right.start_seconds)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
 
@@ -794,17 +857,57 @@ impl DesktopSession {
         section_id: &str,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        self.delete_section_marker(section_id, audio)
+    }
+
+    pub fn assign_section_marker_digit(
+        &mut self,
+        section_id: &str,
+        digit: Option<u8>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
             .engine
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let section_count = song.sections.len();
-        song.sections.retain(|section| section.id != section_id);
 
-        if song.sections.len() == section_count {
-            return Err(DesktopError::SectionNotFound(section_id.to_string()));
+        if let Some(digit) = digit {
+            for marker in song.section_markers.iter_mut() {
+                if marker.id != section_id && marker.digit == Some(digit) {
+                    marker.digit = None;
+                }
+            }
         }
+
+        let marker = song
+            .section_markers
+            .iter_mut()
+            .find(|section| section.id == section_id)
+            .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
+        marker.digit = digit;
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn update_song_tempo(
+        &mut self,
+        bpm: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        song.bpm = bpm;
+        song.tempo_metadata = TempoMetadata {
+            source: TempoSource::Manual,
+            confidence: None,
+            reference_file_path: None,
+        };
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
 
@@ -1102,15 +1205,14 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         if let Some(pending_jump) = pending_jump {
-            let target_section = loaded_song
-                .sections
-                .iter()
-                .find(|section| section.id == pending_jump.target_section_id);
+            let target_section = loaded_song.section_marker_by_id(&pending_jump.target_marker_id);
 
             if let Some(target_section) = target_section {
-                if restored_position < target_section.start_seconds {
+                if restored_position < target_section.start_seconds
+                    && restored_position < pending_jump.execute_at_seconds
+                {
                     self.engine
-                        .schedule_section_jump(&pending_jump.target_section_id, pending_jump.trigger)?;
+                        .schedule_section_jump(&pending_jump.target_marker_id, pending_jump.trigger)?;
                 }
             }
         }
@@ -1195,11 +1297,16 @@ impl DesktopSession {
                 .current_section()
                 .ok()
                 .flatten()
-                .map(section_to_summary),
+                .map(|section| derived_section_to_summary(&section)),
             pending_section_jump: self
                 .engine
                 .pending_section_jump()
                 .map(pending_jump_to_summary),
+            musical_position: self
+                .engine
+                .song()
+                .map(|song| musical_position_summary(song, self.current_position()))
+                .unwrap_or_else(empty_musical_position_summary),
             transport_clock: self.transport_clock.summary(),
             project_revision: self.project_revision,
             song_dir: self
@@ -1344,7 +1451,7 @@ fn build_import_request(files: &[PathBuf]) -> ProjectImportRequest {
         song_id,
         title,
         artist: None,
-        bpm: 120.0,
+        bpm: None,
         key: None,
         time_signature: "4/4".into(),
         wav_files: files.to_vec(),
@@ -1357,12 +1464,17 @@ fn build_empty_song(song_id: String, title: String) -> Song {
         title,
         artist: None,
         bpm: 120.0,
+        tempo_metadata: TempoMetadata {
+            source: TempoSource::Manual,
+            confidence: None,
+            reference_file_path: None,
+        },
         key: None,
         time_signature: "4/4".into(),
         duration_seconds: 60.0,
         tracks: vec![],
         clips: vec![],
-        sections: vec![],
+        section_markers: vec![],
     }
 }
 
@@ -1628,15 +1740,28 @@ impl WaveformMemoryCache {
 }
 
 fn song_to_view(song: &Song, waveform_cache: &WaveformMemoryCache, project_revision: u64) -> SongView {
+    let derived_sections = song
+        .derived_sections()
+        .iter()
+        .map(derived_section_to_summary)
+        .collect::<Vec<_>>();
+
     SongView {
         id: song.id.clone(),
         title: song.title.clone(),
         artist: song.artist.clone(),
         bpm: song.bpm,
+        tempo_metadata: tempo_metadata_to_summary(&song.tempo_metadata),
         key: song.key.clone(),
         time_signature: song.time_signature.clone(),
         duration_seconds: song.duration_seconds,
-        sections: song.sections.iter().map(section_to_summary).collect(),
+        sections: derived_sections.clone(),
+        section_markers: song
+            .section_markers
+            .iter()
+            .map(section_marker_to_summary)
+            .collect(),
+        derived_sections,
         clips: song
             .clips
             .iter()
@@ -1758,7 +1883,7 @@ fn refresh_song_duration(song: &mut Song) {
         .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
         .fold(0.0_f64, f64::max);
     let max_section_end = song
-        .sections
+        .derived_sections()
         .iter()
         .map(|section| section.end_seconds)
         .fold(0.0_f64, f64::max);
@@ -1766,21 +1891,95 @@ fn refresh_song_duration(song: &mut Song) {
     song.duration_seconds = max_clip_end.max(max_section_end).max(1.0);
 }
 
-fn section_to_summary(section: &Section) -> SectionSummary {
+fn derived_section_to_summary(section: &DerivedSection) -> SectionSummary {
     SectionSummary {
-        id: section.id.clone(),
+        id: section
+            .marker_id
+            .clone()
+            .unwrap_or_else(|| "derived_intro".to_string()),
         name: section.name.clone(),
         start_seconds: section.start_seconds,
         end_seconds: section.end_seconds,
     }
 }
 
+fn section_marker_to_summary(section: &SectionMarker) -> SectionMarkerSummary {
+    SectionMarkerSummary {
+        id: section.id.clone(),
+        name: section.name.clone(),
+        start_seconds: section.start_seconds,
+        digit: section.digit,
+    }
+}
+
 fn pending_jump_to_summary(pending_jump: &PendingSectionJump) -> PendingJumpSummary {
     PendingJumpSummary {
-        target_section_id: pending_jump.target_section_id.clone(),
-        target_section_name: pending_jump.target_section_name.clone(),
+        target_marker_id: pending_jump.target_marker_id.clone(),
+        target_marker_name: pending_jump.target_marker_name.clone(),
+        target_digit: pending_jump.target_digit,
         trigger: pending_jump_trigger_label(&pending_jump.trigger),
+        execute_at_seconds: pending_jump.execute_at_seconds,
     }
+}
+
+fn tempo_metadata_to_summary(metadata: &TempoMetadata) -> TempoMetadataSummary {
+    TempoMetadataSummary {
+        source: match metadata.source {
+            TempoSource::Manual => "manual".to_string(),
+            TempoSource::AutoImport => "auto_import".to_string(),
+        },
+        confidence: metadata.confidence,
+        reference_file_path: metadata.reference_file_path.clone(),
+    }
+}
+
+fn empty_musical_position_summary() -> MusicalPositionSummary {
+    MusicalPositionSummary {
+        bar_number: 1,
+        beat_in_bar: 1,
+        sub_beat: 0,
+        display: "1.1.00".to_string(),
+    }
+}
+
+fn musical_position_summary(song: &Song, position_seconds: f64) -> MusicalPositionSummary {
+    let Ok((numerator, _denominator)) = parse_time_signature(&song.time_signature) else {
+        return empty_musical_position_summary();
+    };
+    if song.bpm <= 0.0 {
+        return empty_musical_position_summary();
+    }
+
+    let beat_duration_seconds = 60.0 / song.bpm;
+    let safe_position = position_seconds.max(0.0);
+    let total_beats = safe_position / beat_duration_seconds;
+    let beats_per_bar = numerator.max(1);
+    let bar_number = (total_beats / f64::from(beats_per_bar)).floor() as u32 + 1;
+    let beat_in_bar = (total_beats.floor() as u32 % beats_per_bar) + 1;
+    let sub_beat = ((total_beats.fract()) * 100.0).floor() as u32;
+
+    MusicalPositionSummary {
+        bar_number,
+        beat_in_bar,
+        sub_beat,
+        display: format!("{bar_number}.{beat_in_bar}.{sub_beat:02}"),
+    }
+}
+
+fn parse_time_signature(time_signature: &str) -> Result<(u32, u32), DesktopError> {
+    let (numerator, denominator) = time_signature
+        .split_once('/')
+        .ok_or_else(|| DesktopError::AudioCommand("time signature is invalid".into()))?;
+    let numerator = numerator
+        .parse::<u32>()
+        .map_err(|_| DesktopError::AudioCommand("time signature is invalid".into()))?;
+    let denominator = denominator
+        .parse::<u32>()
+        .map_err(|_| DesktopError::AudioCommand("time signature is invalid".into()))?;
+    if numerator == 0 || denominator == 0 {
+        return Err(DesktopError::AudioCommand("time signature is invalid".into()));
+    }
+    Ok((numerator, denominator))
 }
 
 fn pending_jump_trigger_label(trigger: &JumpTrigger) -> String {
@@ -1843,7 +2042,9 @@ mod tests {
     use std::{fs, path::Path, thread, time::Duration};
 
     use libretracks_audio::{JumpTrigger, PlaybackState};
-    use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
+    use libretracks_core::{
+        Clip, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track, TrackKind,
+    };
     use libretracks_project::{create_song_folder, generate_waveform_summary, load_song, save_song};
     use tempfile::tempdir;
 
@@ -1855,6 +2056,11 @@ mod tests {
             title: "Move Demo".into(),
             artist: None,
             bpm: 120.0,
+            tempo_metadata: TempoMetadata {
+                source: TempoSource::Manual,
+                confidence: None,
+                reference_file_path: None,
+            },
             key: None,
             time_signature: "4/4".into(),
             duration_seconds: 12.0,
@@ -1880,39 +2086,39 @@ mod tests {
                 fade_in_seconds: None,
                 fade_out_seconds: None,
             }],
-            sections: vec![],
+            section_markers: vec![],
         }
     }
 
     fn demo_song_with_section() -> Song {
         let mut song = demo_song();
-        song.sections.push(Section {
+        song.section_markers.push(SectionMarker {
             id: "section_1".into(),
             name: "Intro".into(),
             start_seconds: 1.0,
-            end_seconds: 4.0,
+            digit: Some(1),
         });
         song
     }
 
     fn demo_song_with_two_sections() -> Song {
         let mut song = demo_song_with_section();
-        song.sections.push(Section {
+        song.section_markers.push(SectionMarker {
             id: "section_2".into(),
             name: "Verse".into(),
             start_seconds: 4.0,
-            end_seconds: 8.0,
+            digit: Some(2),
         });
         song
     }
 
     fn demo_song_with_three_sections() -> Song {
         let mut song = demo_song_with_two_sections();
-        song.sections.push(Section {
+        song.section_markers.push(SectionMarker {
             id: "section_3".into(),
             name: "Bridge".into(),
             start_seconds: 8.0,
-            end_seconds: 12.0,
+            digit: Some(3),
         });
         song
     }
@@ -1951,6 +2157,11 @@ mod tests {
             title: "Hierarchy Demo".into(),
             artist: None,
             bpm: 120.0,
+            tempo_metadata: TempoMetadata {
+                source: TempoSource::Manual,
+                confidence: None,
+                reference_file_path: None,
+            },
             key: None,
             time_signature: "4/4".into(),
             duration_seconds: 12.0,
@@ -2001,7 +2212,7 @@ mod tests {
                 },
             ],
             clips: vec![],
-            sections: vec![],
+            section_markers: vec![],
         }
     }
 
@@ -2348,12 +2559,11 @@ mod tests {
             .expect("song summary should exist");
 
         assert_eq!(snapshot.project_revision, song_view.project_revision);
-        assert_eq!(song_view.sections.len(), 1);
+        assert_eq!(song_view.section_markers.len(), 1);
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert_eq!(saved_song.sections.len(), 1);
-        assert_eq!(saved_song.sections[0].start_seconds, 2.0);
-        assert_eq!(saved_song.sections[0].end_seconds, 5.5);
+        assert_eq!(saved_song.section_markers.len(), 1);
+        assert_eq!(saved_song.section_markers[0].start_seconds, 2.0);
     }
 
     #[test]
@@ -2492,8 +2702,8 @@ mod tests {
         let pending_jump = scheduled_snapshot
             .pending_section_jump
             .expect("pending jump should exist");
-        assert_eq!(pending_jump.target_section_id, "section_1");
-        assert_eq!(pending_jump.target_section_name, "Intro");
+        assert_eq!(pending_jump.target_marker_id, "section_1");
+        assert_eq!(pending_jump.target_marker_name, "Intro");
         assert_eq!(pending_jump.trigger, "after_bars:6");
 
         let cancelled_snapshot = session
@@ -2553,8 +2763,8 @@ mod tests {
         let pending_jump = snapshot
             .pending_section_jump
             .expect("pending jump should survive transport-only change");
-        assert_eq!(pending_jump.target_section_id, "section_2");
-        assert_eq!(pending_jump.target_section_name, "Verse");
+        assert_eq!(pending_jump.target_marker_id, "section_2");
+        assert_eq!(pending_jump.target_marker_name, "Verse");
         assert_eq!(pending_jump.trigger, "section_end");
     }
 
@@ -2655,19 +2865,17 @@ mod tests {
             .song_view()
             .expect("song view should build")
             .expect("song summary should exist")
-            .sections
+            .section_markers
             .into_iter()
             .find(|section| section.id == "section_1")
             .expect("updated section should exist");
         assert!(snapshot.project_revision > 0);
         assert_eq!(updated_section.name, "Verse");
         assert_eq!(updated_section.start_seconds, 2.5);
-        assert_eq!(updated_section.end_seconds, 7.0);
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert_eq!(saved_song.sections[0].name, "Verse");
-        assert_eq!(saved_song.sections[0].start_seconds, 2.5);
-        assert_eq!(saved_song.sections[0].end_seconds, 7.0);
+        assert_eq!(saved_song.section_markers[0].name, "Verse");
+        assert_eq!(saved_song.section_markers[0].start_seconds, 2.5);
     }
 
     #[test]
@@ -2694,9 +2902,9 @@ mod tests {
             .expect("song summary should exist");
 
         assert_eq!(snapshot.project_revision, song_view.project_revision);
-        assert!(song_view.sections.is_empty());
+        assert!(song_view.section_markers.is_empty());
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert!(saved_song.sections.is_empty());
+        assert!(saved_song.section_markers.is_empty());
     }
 }

@@ -1,6 +1,8 @@
 //! Motor de audio y transporte.
 
-use libretracks_core::{validate_song, Clip, DomainError, Section, Song, Track, TrackKind};
+use libretracks_core::{
+    validate_song, Clip, DerivedSection, DomainError, Song, Track, TrackKind,
+};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,11 +31,13 @@ pub enum JumpTrigger {
     AfterBars(u32),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PendingSectionJump {
-    pub target_section_id: String,
-    pub target_section_name: String,
+    pub target_marker_id: String,
+    pub target_marker_name: String,
+    pub target_digit: Option<u8>,
     pub trigger: JumpTrigger,
+    pub execute_at_seconds: f64,
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -46,8 +50,8 @@ pub enum AudioEngineError {
     PositionOutOfRange,
     #[error("track not found: {0}")]
     TrackNotFound(String),
-    #[error("section not found: {0}")]
-    SectionNotFound(String),
+    #[error("section marker not found: {0}")]
+    SectionMarkerNotFound(String),
     #[error("time signature is invalid: {0}")]
     InvalidTimeSignature(String),
 }
@@ -127,8 +131,10 @@ impl AudioEngine {
             .pending_section_jump
             .as_ref()
             .map(|pending_jump| {
-                find_section(song, &pending_jump.target_section_id)
-                    .map(|target_section| position_seconds >= target_section.start_seconds)
+                find_marker(song, &pending_jump.target_marker_id).map(|target_marker| {
+                    position_seconds >= target_marker.start_seconds
+                        || position_seconds >= pending_jump.execute_at_seconds
+                })
             })
             .transpose()?
             .unwrap_or(false);
@@ -140,9 +146,9 @@ impl AudioEngine {
         Ok(())
     }
 
-    pub fn current_section(&self) -> Result<Option<&Section>, AudioEngineError> {
+    pub fn current_section(&self) -> Result<Option<DerivedSection>, AudioEngineError> {
         let song = self.ensure_song_loaded()?;
-        Ok(section_at(song, self.position_seconds))
+        Ok(song.derived_section_at(self.position_seconds))
     }
 
     pub fn schedule_section_jump(
@@ -151,18 +157,22 @@ impl AudioEngine {
         trigger: JumpTrigger,
     ) -> Result<Option<PendingSectionJump>, AudioEngineError> {
         let song = self.ensure_song_loaded()?;
-        let target_section = find_section(song, target_section_id)?;
+        let target_marker = find_marker(song, target_section_id)?;
 
         if trigger == JumpTrigger::Immediate {
-            self.position_seconds = target_section.start_seconds;
+            self.position_seconds = target_marker.start_seconds;
             self.pending_section_jump = None;
             return Ok(None);
         }
 
+        let execute_at_seconds = jump_execute_at(song, self.position_seconds, &trigger)?;
+
         let pending_jump = PendingSectionJump {
-            target_section_id: target_section.id.clone(),
-            target_section_name: target_section.name.clone(),
+            target_marker_id: target_marker.id.clone(),
+            target_marker_name: target_marker.name.clone(),
+            target_digit: target_marker.digit,
             trigger,
+            execute_at_seconds,
         };
 
         self.pending_section_jump = Some(pending_jump.clone());
@@ -182,12 +192,12 @@ impl AudioEngine {
         let mut next_position = (self.position_seconds + delta_seconds).min(song.duration_seconds);
 
         if let Some(pending_jump) = self.pending_section_jump.clone() {
-            let execute_at = jump_execute_at(&song, self.position_seconds, &pending_jump.trigger)?;
+            let execute_at = pending_jump.execute_at_seconds;
 
             if execute_at <= next_position {
                 let overshoot = next_position - execute_at;
-                let target_section = find_section(&song, &pending_jump.target_section_id)?;
-                next_position = (target_section.start_seconds + overshoot).min(song.duration_seconds);
+                let target_marker = find_marker(&song, &pending_jump.target_marker_id)?;
+                next_position = (target_marker.start_seconds + overshoot).min(song.duration_seconds);
                 self.pending_section_jump = None;
             }
         }
@@ -260,17 +270,12 @@ fn find_track<'a>(song: &'a Song, track_id: &str) -> Result<&'a Track, AudioEngi
         .ok_or_else(|| AudioEngineError::TrackNotFound(track_id.to_string()))
 }
 
-fn find_section<'a>(song: &'a Song, section_id: &str) -> Result<&'a Section, AudioEngineError> {
-    song.sections
-        .iter()
-        .find(|section| section.id == section_id)
-        .ok_or_else(|| AudioEngineError::SectionNotFound(section_id.to_string()))
-}
-
-fn section_at(song: &Song, position_seconds: f64) -> Option<&Section> {
-    song.sections.iter().find(|section| {
-        position_seconds >= section.start_seconds && position_seconds < section.end_seconds
-    })
+fn find_marker<'a>(
+    song: &'a Song,
+    marker_id: &str,
+) -> Result<&'a libretracks_core::SectionMarker, AudioEngineError> {
+    song.section_marker_by_id(marker_id)
+        .ok_or_else(|| AudioEngineError::SectionMarkerNotFound(marker_id.to_string()))
 }
 
 fn jump_execute_at(
@@ -281,15 +286,15 @@ fn jump_execute_at(
     match trigger {
         JumpTrigger::Immediate => Ok(current_position),
         JumpTrigger::SectionEnd => {
-            let current_section = section_at(song, current_position)
-                .ok_or_else(|| AudioEngineError::SectionNotFound("current".into()))?;
+            let current_section = song
+                .derived_section_at(current_position)
+                .ok_or_else(|| AudioEngineError::SectionMarkerNotFound("current".into()))?;
             Ok(current_section.end_seconds)
         }
         JumpTrigger::AfterBars(bars) => {
             let bar_duration = song_bar_duration_seconds(song)?;
-            let quantization_window = bar_duration * f64::from(*bars);
-            let next_window_index = (current_position / quantization_window).floor() + 1.0;
-            Ok((next_window_index * quantization_window).min(song.duration_seconds))
+            let current_bar_index = (current_position / bar_duration).floor();
+            Ok(((current_bar_index + f64::from(*bars)) * bar_duration).min(song.duration_seconds))
         }
     }
 }
@@ -350,7 +355,9 @@ fn effective_track_gain(song: &Song, track_id: &str) -> Result<f64, AudioEngineE
 
 #[cfg(test)]
 mod tests {
-    use libretracks_core::{Clip, OutputBus, Section, Song, Track, TrackKind};
+    use libretracks_core::{
+        Clip, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track, TrackKind,
+    };
 
     use crate::{AudioEngine, JumpTrigger, PlaybackState};
 
@@ -360,9 +367,14 @@ mod tests {
             title: "Digno y Santo".into(),
             artist: Some("Ejemplo".into()),
             bpm: 72.0,
+            tempo_metadata: TempoMetadata {
+                source: TempoSource::Manual,
+                confidence: None,
+                reference_file_path: None,
+            },
             key: Some("D".into()),
             time_signature: "4/4".into(),
-            duration_seconds: 20.0,
+            duration_seconds: 24.0,
             tracks: vec![
                 Track {
                     id: "folder_monitor".into(),
@@ -433,18 +445,24 @@ mod tests {
                     fade_out_seconds: None,
                 },
             ],
-            sections: vec![
-                Section {
+            section_markers: vec![
+                SectionMarker {
                     id: "section_intro".into(),
                     name: "Intro".into(),
                     start_seconds: 0.0,
-                    end_seconds: 8.0,
+                    digit: Some(1),
                 },
-                Section {
+                SectionMarker {
+                    id: "section_break".into(),
+                    name: "Break".into(),
+                    start_seconds: 8.0,
+                    digit: None,
+                },
+                SectionMarker {
                     id: "section_outro".into(),
                     name: "Outro".into(),
                     start_seconds: 12.0,
-                    end_seconds: 20.0,
+                    digit: Some(2),
                 },
             ],
         }
@@ -530,7 +548,7 @@ mod tests {
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
-        assert_eq!(scheduled.target_section_name, "Outro");
+        assert_eq!(scheduled.target_marker_name, "Outro");
 
         let position = engine
             .advance_transport(3.0)
@@ -541,7 +559,7 @@ mod tests {
     }
 
     #[test]
-    fn jump_after_bars_uses_global_quantization_grid() {
+    fn jump_after_bars_counts_from_the_current_bar() {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
         engine.seek(1.0).expect("seek should work");
@@ -560,7 +578,7 @@ mod tests {
     }
 
     #[test]
-    fn four_bar_jump_waits_for_the_next_four_bar_boundary() {
+    fn four_bar_jump_uses_the_local_bar_count_even_near_song_end() {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
         engine.seek(7.0).expect("seek should work");
@@ -571,10 +589,10 @@ mod tests {
             .expect("jump should schedule");
 
         let position = engine
-            .advance_transport(7.0)
+            .advance_transport(14.0)
             .expect("transport should advance");
 
-        assert!((position - 12.6666666667).abs() < 0.0001);
+        assert!((position - 13.0).abs() < 0.0001);
         assert!(engine.pending_section_jump().is_none());
     }
 
@@ -645,7 +663,7 @@ mod tests {
             .expect("section should resolve")
             .expect("section should exist");
 
-        assert_eq!(section.id, "section_outro");
+        assert_eq!(section.marker_id.as_deref(), Some("section_outro"));
     }
 
     #[test]

@@ -34,8 +34,17 @@ pub enum DomainError {
     UnknownTrack { clip_id: String, track_id: String },
     #[error("clip {clip_id} cannot target folder track {track_id}")]
     ClipTargetsFolderTrack { clip_id: String, track_id: String },
-    #[error("section {section_id} has invalid range")]
-    InvalidSectionRange { section_id: String },
+    #[error("section marker {marker_id} has invalid position")]
+    InvalidSectionMarkerPosition { marker_id: String },
+    #[error("section markers are out of order: {previous_marker_id} before {marker_id}")]
+    SectionMarkersOutOfOrder {
+        previous_marker_id: String,
+        marker_id: String,
+    },
+    #[error("section marker {marker_id} has invalid digit {digit}")]
+    InvalidSectionMarkerDigit { marker_id: String, digit: u8 },
+    #[error("section marker digit is duplicated: {digit}")]
+    DuplicateSectionMarkerDigit { digit: u8 },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -125,12 +134,41 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
         }
     }
 
-    for section in &song.sections {
-        if section.end_seconds <= section.start_seconds {
-            return Err(DomainError::InvalidSectionRange {
-                section_id: section.id.clone(),
+    let mut previous_marker_id: Option<&str> = None;
+    let mut previous_marker_start_seconds: Option<f64> = None;
+    let mut used_digits = HashSet::new();
+
+    for marker in &song.section_markers {
+        if !(0.0..song.duration_seconds).contains(&marker.start_seconds) {
+            return Err(DomainError::InvalidSectionMarkerPosition {
+                marker_id: marker.id.clone(),
             });
         }
+
+        if let Some(previous_start_seconds) = previous_marker_start_seconds {
+            if marker.start_seconds <= previous_start_seconds {
+                return Err(DomainError::SectionMarkersOutOfOrder {
+                    previous_marker_id: previous_marker_id.unwrap_or_default().to_string(),
+                    marker_id: marker.id.clone(),
+                });
+            }
+        }
+
+        if let Some(digit) = marker.digit {
+            if digit > 9 {
+                return Err(DomainError::InvalidSectionMarkerDigit {
+                    marker_id: marker.id.clone(),
+                    digit,
+                });
+            }
+
+            if !used_digits.insert(digit) {
+                return Err(DomainError::DuplicateSectionMarkerDigit { digit });
+            }
+        }
+
+        previous_marker_id = Some(marker.id.as_str());
+        previous_marker_start_seconds = Some(marker.start_seconds);
     }
 
     Ok(())

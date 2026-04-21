@@ -850,7 +850,7 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use libretracks_core::{OutputBus, Song, Track, TrackKind};
+    use libretracks_core::{OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind};
     use rodio::Sink;
     use tempfile::tempdir;
 
@@ -867,6 +867,11 @@ mod tests {
             title: "Audio Runtime".into(),
             artist: None,
             bpm: 120.0,
+            tempo_metadata: TempoMetadata {
+                source: TempoSource::Manual,
+                confidence: None,
+                reference_file_path: None,
+            },
             key: None,
             time_signature: "4/4".into(),
             duration_seconds: 20.0,
@@ -940,7 +945,7 @@ mod tests {
                     fade_out_seconds: None,
                 },
             ],
-            sections: vec![],
+            section_markers: vec![],
         }
     }
 

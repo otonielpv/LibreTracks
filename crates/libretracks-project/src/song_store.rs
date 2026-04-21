@@ -3,13 +3,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use libretracks_core::{validate_song, DomainError, Song};
+use libretracks_core::{
+    validate_song, Clip, DomainError, SectionMarker, Song, TempoMetadata, TempoSource, Track,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
 pub const SONG_FILE_NAME: &str = "song.json";
-const SONG_FORMAT_VERSION: u32 = 2;
+const SONG_FORMAT_VERSION: u32 = 3;
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
@@ -43,6 +45,31 @@ struct SongDocument {
     version: u32,
     #[serde(flatten)]
     song: Song,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacySongDocumentV2 {
+    version: u32,
+    id: String,
+    title: String,
+    artist: Option<String>,
+    bpm: f64,
+    key: Option<String>,
+    time_signature: String,
+    duration_seconds: f64,
+    tracks: Vec<Track>,
+    clips: Vec<Clip>,
+    sections: Vec<LegacySectionV2>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacySectionV2 {
+    id: String,
+    name: String,
+    start_seconds: f64,
+    end_seconds: f64,
 }
 
 pub fn song_file_path(song_dir: impl AsRef<Path>) -> PathBuf {
@@ -87,15 +114,65 @@ pub fn load_song(song_dir: impl AsRef<Path>) -> Result<Song, ProjectError> {
     let json = fs::read_to_string(song_file_path(song_dir))?;
     let raw_document: Value = serde_json::from_str(&json)?;
     reject_legacy_group_format(&raw_document)?;
-    let document: SongDocument = serde_json::from_str(&json)?;
-
-    if document.version != SONG_FORMAT_VERSION {
-        return Err(ProjectError::UnsupportedVersion(document.version));
+    match document_version(&raw_document)? {
+        SONG_FORMAT_VERSION => {
+            let document: SongDocument = serde_json::from_str(&json)?;
+            validate_song(&document.song)?;
+            Ok(document.song)
+        }
+        2 => {
+            let legacy_document: LegacySongDocumentV2 = serde_json::from_str(&json)?;
+            migrate_v2_song(legacy_document)
+        }
+        version => Err(ProjectError::UnsupportedVersion(version)),
     }
+}
 
-    validate_song(&document.song)?;
+fn document_version(document: &Value) -> Result<u32, ProjectError> {
+    document
+        .get("version")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or(ProjectError::UnsupportedVersion(0))
+}
 
-    Ok(document.song)
+fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError> {
+    let mut section_markers = document
+        .sections
+        .into_iter()
+        .map(|section| SectionMarker {
+            id: section.id,
+            name: section.name,
+            start_seconds: section.start_seconds,
+            digit: None,
+        })
+        .collect::<Vec<_>>();
+    section_markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let song = Song {
+        id: document.id,
+        title: document.title,
+        artist: document.artist,
+        bpm: document.bpm,
+        tempo_metadata: TempoMetadata {
+            source: TempoSource::Manual,
+            confidence: None,
+            reference_file_path: None,
+        },
+        key: document.key,
+        time_signature: document.time_signature,
+        duration_seconds: document.duration_seconds,
+        tracks: document.tracks,
+        clips: document.clips,
+        section_markers,
+    };
+
+    validate_song(&song)?;
+    Ok(song)
 }
 
 fn reject_legacy_group_format(document: &Value) -> Result<(), ProjectError> {

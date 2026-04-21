@@ -7,7 +7,9 @@ use std::{
     time::Instant,
 };
 
-use libretracks_core::{validate_song, Clip, OutputBus, Song, Track, TrackKind};
+use libretracks_core::{
+    validate_song, Clip, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
+};
 
 use crate::{
     analyze_wav_file, create_song_folder, save_song, waveform_file_path_for_source,
@@ -19,7 +21,7 @@ pub struct ProjectImportRequest {
     pub song_id: String,
     pub title: String,
     pub artist: Option<String>,
-    pub bpm: f64,
+    pub bpm: Option<f64>,
     pub key: Option<String>,
     pub time_signature: String,
     pub wav_files: Vec<PathBuf>,
@@ -120,7 +122,16 @@ pub fn import_wav_song(
         id: request.song_id.clone(),
         title: request.title.clone(),
         artist: request.artist.clone(),
-        bpm: request.bpm,
+        bpm: request.bpm.unwrap_or(120.0),
+        tempo_metadata: TempoMetadata {
+            source: if request.bpm.is_some() {
+                TempoSource::Manual
+            } else {
+                TempoSource::AutoImport
+            },
+            confidence: None,
+            reference_file_path: None,
+        },
         key: request.key.clone(),
         time_signature: request.time_signature.clone(),
         duration_seconds,
@@ -152,7 +163,7 @@ pub fn import_wav_song(
                 fade_out_seconds: None,
             })
             .collect(),
-        sections: vec![],
+        section_markers: vec![],
     };
 
     validate_song(&song)?;
