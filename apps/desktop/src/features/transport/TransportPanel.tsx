@@ -1779,6 +1779,23 @@ export function TransportPanel() {
         </div>
       </header>
 
+      <div className="lt-shell-body">
+        <aside className="lt-side-nav" aria-label="Navegacion principal">
+          <button type="button" className="is-active" aria-label="Browser">
+            Browser
+          </button>
+          <button type="button" aria-label="Markers">
+            Markers
+          </button>
+          <button type="button" aria-label="Library">
+            Library
+          </button>
+          <button type="button" aria-label="Settings">
+            Settings
+          </button>
+        </aside>
+
+        <div className="lt-workspace">
       <section className="lt-main-stage">
         <div className="lt-timeline-topline">
           <div>
@@ -2328,7 +2345,7 @@ export function TransportPanel() {
         </div>
       ) : null}
 
-      {contextMenu ? (
+        {contextMenu ? (
         <div
           className="lt-context-menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -2350,6 +2367,8 @@ export function TransportPanel() {
           ))}
         </div>
       ) : null}
+        </div>
+      </div>
       </div>
     </Profiler>
   );
