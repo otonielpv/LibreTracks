@@ -120,6 +120,15 @@ export type TransportSnapshot = {
   isNativeRuntime: boolean;
 };
 
+export type TransportLifecycleEventKind = "play" | "pause" | "stop" | "seek";
+
+export type TransportLifecycleEvent = {
+  kind: TransportLifecycleEventKind;
+  snapshot: TransportSnapshot;
+  anchorPositionSeconds: number;
+  emittedAtUnixMs: number;
+};
+
 const tauriWindow = window as Window & {
   __TAURI_INTERNALS__?: unknown;
 };
@@ -150,6 +159,19 @@ let demoClock: DemoClock = {
 async function invokeCommand<T>(command: string, args?: Record<string, unknown>) {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(command, args);
+}
+
+export async function listenToTransportLifecycle(
+  handler: (event: TransportLifecycleEvent) => void,
+): Promise<() => void> {
+  if (!isTauriApp) {
+    return () => {};
+  }
+
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<TransportLifecycleEvent>("transport:lifecycle", (event) => {
+    handler(event.payload);
+  });
 }
 
 function cloneSnapshot<T>(value: T): T {

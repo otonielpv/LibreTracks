@@ -13,6 +13,7 @@ import {
   getTransportSnapshot,
   getWaveformSummaries,
   isTauriApp,
+  listenToTransportLifecycle,
   moveClip,
   moveTrack,
   openProject,
@@ -31,6 +32,7 @@ import {
   type SectionSummary,
   type SongView,
   type TrackKind,
+  type TransportLifecycleEvent,
   type TrackSummary,
   type TransportSnapshot,
   type WaveformSummaryDto,
@@ -105,6 +107,12 @@ type PendingRulerPress = {
 } | null;
 
 type GlobalJumpMode = "immediate" | "after_bars" | "section_end";
+
+type TransportAnchorMeta = {
+  snapshotKey: string;
+  anchorPositionSeconds: number;
+  emittedAtUnixMs: number;
+};
 
 function formatClock(seconds: number) {
   const safeSeconds = Math.max(0, seconds);
@@ -408,9 +416,57 @@ export function TransportPanel() {
   const renderMetricTimeoutRef = useRef<number | null>(null);
   const pendingRenderMetricRef = useRef(0);
   const transportReadoutValueRef = useRef<HTMLElement | null>(null);
+  const songDurationSecondsRef = useRef(0);
+  const transportAnchorMetaRef = useRef<TransportAnchorMeta | null>(null);
+
+  function transportSnapshotKey(nextSnapshot: TransportSnapshot) {
+    return [
+      nextSnapshot.playbackState,
+      nextSnapshot.positionSeconds.toFixed(6),
+      nextSnapshot.transportClock?.anchorPositionSeconds?.toFixed(6) ?? "none",
+      nextSnapshot.transportClock?.running ? "1" : "0",
+      String(nextSnapshot.projectRevision),
+    ].join("|");
+  }
+
+  function applyTransportVisualAnchor(
+    nextSnapshot: TransportSnapshot,
+    anchorMeta: TransportAnchorMeta | null = null,
+  ) {
+    const isRunning =
+      nextSnapshot.playbackState === "playing" && Boolean(nextSnapshot.transportClock?.running);
+    const fallbackAnchorPositionSeconds = isRunning
+      ? nextSnapshot.transportClock?.anchorPositionSeconds ?? nextSnapshot.positionSeconds
+      : nextSnapshot.positionSeconds;
+    const baseAnchorPositionSeconds = anchorMeta?.anchorPositionSeconds ?? fallbackAnchorPositionSeconds;
+    const emittedLatencySeconds =
+      isRunning && anchorMeta
+        ? Math.max(0, (Date.now() - anchorMeta.emittedAtUnixMs) / 1000)
+        : 0;
+    const durationSeconds = songDurationSecondsRef.current;
+    const maxDuration = durationSeconds > 0 ? durationSeconds : Number.MAX_SAFE_INTEGER;
+    const anchorPositionSeconds = clamp(
+      baseAnchorPositionSeconds + emittedLatencySeconds,
+      0,
+      maxDuration,
+    );
+
+    playbackVisualAnchorRef.current = {
+      anchorPositionSeconds,
+      anchorReceivedAtMs: performance.now(),
+      durationSeconds,
+      running: isRunning,
+    };
+
+    if (!isRunning) {
+      displayPositionSecondsRef.current = nextSnapshot.positionSeconds;
+      setDisplayPositionSeconds(nextSnapshot.positionSeconds);
+    }
+  }
 
   useEffect(() => {
     let active = true;
+    let unlisten: (() => void) | null = null;
 
     async function loadSnapshot() {
       const nextSnapshot = await getTransportSnapshot();
@@ -418,6 +474,7 @@ export function TransportPanel() {
         return;
       }
 
+      applyTransportVisualAnchor(nextSnapshot);
       setSnapshot(nextSnapshot);
       setStatus(
         nextSnapshot.isNativeRuntime
@@ -434,17 +491,29 @@ export function TransportPanel() {
       };
     }
 
-    const interval = window.setInterval(async () => {
-      const nextSnapshot = await getTransportSnapshot();
+    void listenToTransportLifecycle((event: TransportLifecycleEvent) => {
       if (!active) {
         return;
       }
-      setSnapshot(nextSnapshot);
-    }, 300);
+
+      transportAnchorMetaRef.current = {
+        snapshotKey: transportSnapshotKey(event.snapshot),
+        anchorPositionSeconds: event.anchorPositionSeconds,
+        emittedAtUnixMs: event.emittedAtUnixMs,
+      };
+      setSnapshot(event.snapshot);
+    }).then((nextUnlisten) => {
+      if (!active) {
+        nextUnlisten();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
 
     return () => {
       active = false;
-      window.clearInterval(interval);
+      unlisten?.();
     };
   }, []);
 
@@ -572,24 +641,30 @@ export function TransportPanel() {
   }, [song, waveformCache]);
 
   useEffect(() => {
+    songDurationSecondsRef.current = song?.durationSeconds ?? 0;
+  }, [song?.durationSeconds]);
+
+  useEffect(() => {
     const songDurationSeconds = song?.durationSeconds ?? 0;
-    const anchorPositionSeconds =
-      snapshot?.playbackState === "playing" && snapshot.transportClock?.running
-        ? snapshot.transportClock.anchorPositionSeconds
-        : snapshot?.positionSeconds ?? 0;
+    songDurationSecondsRef.current = songDurationSeconds;
 
-    playbackVisualAnchorRef.current = {
-      anchorPositionSeconds,
-      anchorReceivedAtMs: performance.now(),
-      durationSeconds: songDurationSeconds,
-      running: snapshot?.playbackState === "playing" && Boolean(snapshot.transportClock?.running),
-    };
-
-    if (snapshot?.playbackState !== "playing") {
-      displayPositionSecondsRef.current = snapshot?.positionSeconds ?? 0;
-      setDisplayPositionSeconds(snapshot?.positionSeconds ?? 0);
+    if (!snapshot) {
+      return;
     }
+
+    const snapshotKey = transportSnapshotKey(snapshot);
+    const anchorMeta =
+      transportAnchorMetaRef.current?.snapshotKey === snapshotKey
+        ? transportAnchorMetaRef.current
+        : null;
+
+    if (anchorMeta) {
+      transportAnchorMetaRef.current = null;
+    }
+
+    applyTransportVisualAnchor(snapshot, anchorMeta);
   }, [
+    snapshot,
     snapshot?.playbackState,
     snapshot?.positionSeconds,
     song?.durationSeconds,
@@ -642,6 +717,37 @@ export function TransportPanel() {
         anchor.anchorPositionSeconds + elapsedSeconds,
       );
 
+      if (anchor.durationSeconds > 0 && nextPositionSeconds >= anchor.durationSeconds) {
+        const stoppedSnapshot =
+          snapshot?.playbackState === "playing"
+            ? {
+                ...snapshot,
+                playbackState: "stopped" as const,
+                positionSeconds: 0,
+                transportClock: snapshot.transportClock
+                  ? {
+                      ...snapshot.transportClock,
+                      anchorPositionSeconds: 0,
+                      running: false,
+                    }
+                  : snapshot.transportClock,
+              }
+            : null;
+
+        playbackVisualAnchorRef.current = {
+          anchorPositionSeconds: 0,
+          anchorReceivedAtMs: performance.now(),
+          durationSeconds: anchor.durationSeconds,
+          running: false,
+        };
+        displayPositionSecondsRef.current = 0;
+        setDisplayPositionSeconds(0);
+        if (stoppedSnapshot) {
+          setSnapshot(stoppedSnapshot);
+        }
+        return;
+      }
+
       syncLivePosition(nextPositionSeconds);
       animationFrameId = window.requestAnimationFrame(tick);
     };
@@ -651,7 +757,7 @@ export function TransportPanel() {
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [playheadDrag, snapshot?.playbackState]);
+  }, [playheadDrag, snapshot]);
 
   useEffect(() => {
     const closeMenu = (event: PointerEvent) => {

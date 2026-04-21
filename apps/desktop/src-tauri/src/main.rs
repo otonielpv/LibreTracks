@@ -1,7 +1,10 @@
 mod audio_runtime;
 mod state;
 
-use tauri::{AppHandle, State};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, State};
 
 use audio_runtime::AudioDebugSnapshot;
 use libretracks_audio::JumpTrigger;
@@ -10,6 +13,42 @@ use state::{
     DesktopError, DesktopPerformanceSnapshot, DesktopState, SongView, TransportSnapshot,
     WaveformSummaryDto,
 };
+
+const TRANSPORT_LIFECYCLE_EVENT: &str = "transport:lifecycle";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TransportLifecycleEventPayload {
+    kind: String,
+    snapshot: TransportSnapshot,
+    anchor_position_seconds: f64,
+    emitted_at_unix_ms: u64,
+}
+
+fn transport_anchor_position(snapshot: &TransportSnapshot) -> f64 {
+    if snapshot.playback_state == "playing" && snapshot.transport_clock.running {
+        snapshot.transport_clock.anchor_position_seconds
+    } else {
+        snapshot.position_seconds
+    }
+}
+
+fn emit_transport_lifecycle_event(app: &AppHandle, kind: &str, snapshot: &TransportSnapshot) {
+    let emitted_at_unix_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+    let payload = TransportLifecycleEventPayload {
+        kind: kind.to_string(),
+        snapshot: snapshot.clone(),
+        anchor_position_seconds: transport_anchor_position(snapshot),
+        emitted_at_unix_ms,
+    };
+
+    if let Err(error) = app.emit(TRANSPORT_LIFECYCLE_EVENT, payload) {
+        eprintln!("[libretracks-transport] failed to emit lifecycle event: {error}");
+    }
+}
 
 #[tauri::command]
 fn healthcheck() -> &'static str {
@@ -141,43 +180,53 @@ fn open_project_from_dialog(
 }
 
 #[tauri::command]
-fn play_transport(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+fn play_transport(app: AppHandle, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session
+    let snapshot = session
         .play(&state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    emit_transport_lifecycle_event(&app, "play", &snapshot);
+    Ok(snapshot)
 }
 
 #[tauri::command]
-fn pause_transport(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+fn pause_transport(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session
+    let snapshot = session
         .pause(&state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    emit_transport_lifecycle_event(&app, "pause", &snapshot);
+    Ok(snapshot)
 }
 
 #[tauri::command]
-fn stop_transport(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+fn stop_transport(app: AppHandle, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session
+    let snapshot = session
         .stop(&state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    emit_transport_lifecycle_event(&app, "stop", &snapshot);
+    Ok(snapshot)
 }
 
 #[tauri::command]
 fn seek_transport(
+    app: AppHandle,
     position_seconds: f64,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
@@ -186,9 +235,11 @@ fn seek_transport(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session
+    let snapshot = session
         .seek(position_seconds, &state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    emit_transport_lifecycle_event(&app, "seek", &snapshot);
+    Ok(snapshot)
 }
 
 #[tauri::command]
