@@ -36,6 +36,7 @@ import {
   type WaveformSummaryDto,
   reportUiRenderMetric,
 } from "./desktopApi";
+import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
 
 const HEADER_WIDTH = 260;
 const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
@@ -158,34 +159,6 @@ function buildRulerMarks(durationSeconds: number, zoomLevel: number) {
   }
 
   return marks;
-}
-
-function buildMusicalGridMarks(durationSeconds: number, bpm: number, timeSignature: string) {
-  if (durationSeconds <= 0 || bpm <= 0) {
-    return { bars: [] as number[], beats: [] as number[] };
-  }
-
-  const [numeratorRaw] = timeSignature.split("/");
-  const beatsPerBar = Math.max(1, Number(numeratorRaw) || 4);
-  const beatDurationSeconds = 60 / bpm;
-  const bars: number[] = [];
-  const beats: number[] = [];
-  const totalBeats = Math.ceil(durationSeconds / beatDurationSeconds);
-
-  for (let beatIndex = 0; beatIndex <= totalBeats; beatIndex += 1) {
-    const markSeconds = beatIndex * beatDurationSeconds;
-    if (markSeconds > durationSeconds + 0.0001) {
-      break;
-    }
-
-    if (beatIndex % beatsPerBar === 0) {
-      bars.push(markSeconds);
-    } else {
-      beats.push(markSeconds);
-    }
-  }
-
-  return { bars, beats };
 }
 
 function keyboardDigit(eventCode: string) {
@@ -826,7 +799,13 @@ export function TransportPanel() {
     const onMouseMove = (event: MouseEvent) => {
       const deltaSeconds = (event.clientX - clipDrag.startClientX) / (zoomLevel * 18);
       const nextSeconds = snapEnabled
-        ? snapToBeat(clipDrag.originSeconds + deltaSeconds, effectSong.bpm)
+        ? snapToTimelineGrid(
+            clipDrag.originSeconds + deltaSeconds,
+            effectSong.bpm,
+            effectSong.timeSignature,
+            zoomLevel,
+            zoomLevel * 18,
+          )
         : clipDrag.originSeconds + deltaSeconds;
 
       setClipDrag((current) =>
@@ -873,12 +852,16 @@ export function TransportPanel() {
     }
 
     const onMouseMove = (event: MouseEvent) => {
-      const nextSeconds = rulerPointerToSeconds(
+      const rawSeconds = rulerPointerToSeconds(
         event,
         rulerTrackRef.current as HTMLElement,
         song.durationSeconds,
         zoomLevel * 18,
       );
+      const nextSeconds =
+        snapEnabled
+          ? snapToTimelineGrid(rawSeconds, song.bpm, song.timeSignature, zoomLevel, zoomLevel * 18)
+          : rawSeconds;
       const pendingPress = pendingRulerPressRef.current;
       if (pendingPress && !rulerDrag) {
         const movedEnough = Math.abs(event.clientX - pendingPress.startClientX) > DRAG_THRESHOLD_PX;
@@ -909,12 +892,22 @@ export function TransportPanel() {
       pendingRulerPressRef.current = null;
       const activeDrag = rulerDrag;
       setRulerDrag(null);
-      const pointerSeconds = rulerPointerToSeconds(
+      const rawPointerSeconds = rulerPointerToSeconds(
         event,
         rulerTrackRef.current as HTMLElement,
         song.durationSeconds,
         zoomLevel * 18,
       );
+      const pointerSeconds =
+        snapEnabled
+          ? snapToTimelineGrid(
+              rawPointerSeconds,
+              song.bpm,
+              song.timeSignature,
+              zoomLevel,
+              zoomLevel * 18,
+            )
+          : rawPointerSeconds;
 
       if (!activeDrag) {
         if (!pendingPress) {
@@ -978,7 +971,7 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [rulerDrag, song, zoomLevel]);
+  }, [rulerDrag, snapEnabled, song, zoomLevel]);
 
   useEffect(() => {
     if (!playheadDrag || !song || !rulerTrackRef.current) {
@@ -988,12 +981,22 @@ export function TransportPanel() {
     const effectSong = song;
 
     const onMouseMove = (event: MouseEvent) => {
-      const nextSeconds = rulerPointerToSeconds(
+      const rawSeconds = rulerPointerToSeconds(
         event,
         rulerTrackRef.current as HTMLElement,
         effectSong.durationSeconds,
         zoomLevel * 18,
       );
+      const nextSeconds =
+        snapEnabled
+          ? snapToTimelineGrid(
+              rawSeconds,
+              effectSong.bpm,
+              effectSong.timeSignature,
+              zoomLevel,
+              zoomLevel * 18,
+            )
+          : rawSeconds;
       setPlayheadDrag((current) =>
         current
           ? {
@@ -1031,7 +1034,7 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [playheadDrag, song, zoomLevel]);
+  }, [playheadDrag, snapEnabled, song, zoomLevel]);
 
   useEffect(() => {
     if (!trackDrag || !song) {
@@ -1184,11 +1187,13 @@ export function TransportPanel() {
       ? (playheadDrag.currentSeconds / Math.max(1, song.durationSeconds)) * timelineWidth
       : null;
   const rulerMarks = buildRulerMarks(song?.durationSeconds ?? 0, zoomLevel);
-  const musicalGridMarks = buildMusicalGridMarks(
-    song?.durationSeconds ?? 0,
-    song?.bpm ?? 120,
-    song?.timeSignature ?? "4/4",
-  );
+  const timelineGrid = useTimelineGrid({
+    durationSeconds: song?.durationSeconds ?? 0,
+    bpm: song?.bpm ?? 120,
+    timeSignature: song?.timeSignature ?? "4/4",
+    zoomLevel,
+    pixelsPerSecond,
+  });
 
   async function scheduleMarkerJumpWithGlobalMode(markerId: string, markerName: string) {
     const trigger =
@@ -1866,7 +1871,18 @@ export function TransportPanel() {
                   </div>
                 ))}
 
-                {musicalGridMarks.beats.map((mark) => (
+                {timelineGrid.subdivisions.map((mark) => (
+                  <div
+                    key={`sub-${mark.toFixed(4)}`}
+                    className="lt-lane-grid-line"
+                    style={{
+                      left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px`,
+                      opacity: 0.1,
+                    }}
+                  />
+                ))}
+
+                {timelineGrid.beats.map((mark) => (
                   <div
                     key={`beat-${mark.toFixed(4)}`}
                     className="lt-lane-grid-line"
@@ -1877,7 +1893,7 @@ export function TransportPanel() {
                   />
                 ))}
 
-                {musicalGridMarks.bars.map((mark, index) => (
+                {timelineGrid.bars.map((mark, index) => (
                   <div
                     key={`bar-${mark.toFixed(4)}`}
                     className="lt-ruler-mark"
@@ -2134,7 +2150,18 @@ export function TransportPanel() {
                         />
                       ))}
 
-                      {musicalGridMarks.beats.map((mark) => (
+                      {timelineGrid.subdivisions.map((mark) => (
+                        <div
+                          key={`${track.id}-sub-${mark.toFixed(4)}`}
+                          className="lt-lane-grid-line"
+                          style={{
+                            left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px`,
+                            opacity: 0.1,
+                          }}
+                        />
+                      ))}
+
+                      {timelineGrid.beats.map((mark) => (
                         <div
                           key={`${track.id}-beat-${mark.toFixed(4)}`}
                           className="lt-lane-grid-line"
@@ -2145,7 +2172,7 @@ export function TransportPanel() {
                         />
                       ))}
 
-                      {musicalGridMarks.bars.map((mark) => (
+                      {timelineGrid.bars.map((mark) => (
                         <div
                           key={`${track.id}-bar-${mark.toFixed(4)}`}
                           className="lt-lane-grid-line"
@@ -2269,7 +2296,7 @@ export function TransportPanel() {
             <strong>{zoomLevel.toFixed(1)}x</strong>
           </label>
           <button type="button" className={snapEnabled ? "is-active" : ""} onClick={() => setSnapEnabled((current) => !current)}>
-            Snap beat
+            Snap to Grid ({timelineGrid.subdivisionPerBeat}/1)
           </button>
           <label className="lt-zoom-control">
             <span>Modo salto</span>
@@ -2372,13 +2399,4 @@ export function TransportPanel() {
       </div>
     </Profiler>
   );
-}
-
-function snapToBeat(seconds: number, bpm: number) {
-  if (bpm <= 0) {
-    return seconds;
-  }
-
-  const beatSeconds = 60 / bpm;
-  return Math.round(seconds / beatSeconds) * beatSeconds;
 }
