@@ -17,10 +17,9 @@ use libretracks_core::{
 use libretracks_project::{
     append_wav_files_to_song, create_song_folder, generate_waveform_summary, import_wav_song,
     load_song, load_waveform_summary, read_wav_metadata, save_song, waveform_file_path,
-    ImportedSong, ImportOperationMetrics, ProjectError, ProjectImportRequest, WaveformSummary,
+    ImportOperationMetrics, ImportedSong, ProjectError, ProjectImportRequest, WaveformSummary,
 };
 use rfd::FileDialog;
-use rodio::{decoder::DecoderError, PlayError, StreamError};
 use serde::Serialize;
 use serde_json::to_vec;
 use tauri::{AppHandle, Manager};
@@ -152,12 +151,6 @@ pub enum DesktopError {
     Project(#[from] ProjectError),
     #[error("audio engine error: {0}")]
     Audio(#[from] AudioEngineError),
-    #[error("audio stream error: {0}")]
-    Stream(#[from] StreamError),
-    #[error("audio playback error: {0}")]
-    Play(#[from] PlayError),
-    #[error("audio decode error: {0}")]
-    Decode(#[from] DecoderError),
     #[error("clip not found: {0}")]
     ClipNotFound(String),
     #[error("track not found: {0}")]
@@ -430,7 +423,9 @@ impl DesktopSession {
         };
 
         if self.song_dir.is_some() && self.engine.song().is_some() {
-            return Ok(Some(self.import_audio_files_into_current_song(&files, audio)?));
+            return Ok(Some(
+                self.import_audio_files_into_current_song(&files, audio)?,
+            ));
         }
 
         let import_root = project_root(app);
@@ -456,7 +451,11 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
         let updated_song = append_wav_files_to_song(&song_dir, &song, files)?;
         self.record_import_metrics(&updated_song.metrics);
-        self.persist_song_update(updated_song.song, audio, AudioChangeImpact::StructureRebuild)?;
+        self.persist_song_update(
+            updated_song.song,
+            audio,
+            AudioChangeImpact::StructureRebuild,
+        )?;
         Ok(self.snapshot())
     }
 
@@ -496,8 +495,7 @@ impl DesktopSession {
                 continue;
             }
 
-            let summary =
-                self.load_waveform_summary_cached(&song_dir, waveform_key, true)?;
+            let summary = self.load_waveform_summary_cached(&song_dir, waveform_key, true)?;
             summaries.push(waveform_summary_to_dto(waveform_key, summary));
         }
 
@@ -547,7 +545,8 @@ impl DesktopSession {
 
         audio.play(song_dir, song, self.engine.position_seconds(), start_reason)?;
         self.engine.play()?;
-        self.transport_clock.start_from(self.engine.position_seconds());
+        self.transport_clock
+            .start_from(self.engine.position_seconds());
 
         Ok(self.snapshot())
     }
@@ -558,7 +557,8 @@ impl DesktopSession {
         audio.stop()?;
 
         self.engine.pause()?;
-        self.transport_clock.pause_at(self.engine.position_seconds());
+        self.transport_clock
+            .pause_at(self.engine.position_seconds());
 
         Ok(self.snapshot())
     }
@@ -750,7 +750,9 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let start_seconds = start_seconds.max(0.0).min((song.duration_seconds - 0.0001).max(0.0));
+        let start_seconds = start_seconds
+            .max(0.0)
+            .min((song.duration_seconds - 0.0001).max(0.0));
         let section_number = song.section_markers.len() + 1;
         song.section_markers.push(SectionMarker {
             id: format!("section_{}", timestamp_suffix()),
@@ -788,7 +790,9 @@ impl DesktopSession {
             ));
         }
 
-        let start_seconds = start_seconds.max(0.0).min((song.duration_seconds - 0.0001).max(0.0));
+        let start_seconds = start_seconds
+            .max(0.0)
+            .min((song.duration_seconds - 0.0001).max(0.0));
 
         let section = song
             .section_markers
@@ -820,7 +824,8 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         let section_count = song.section_markers.len();
-        song.section_markers.retain(|section| section.id != section_id);
+        song.section_markers
+            .retain(|section| section.id != section_id);
 
         if song.section_markers.len() == section_count {
             return Err(DesktopError::SectionNotFound(section_id.to_string()));
@@ -932,7 +937,12 @@ impl DesktopSession {
             output_bus_id,
         };
 
-        insert_track(&mut song.tracks, track, insert_after_track_id, parent_track_id)?;
+        insert_track(
+            &mut song.tracks,
+            track,
+            insert_after_track_id,
+            parent_track_id,
+        )?;
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
 
         Ok(self.snapshot())
@@ -1026,8 +1036,7 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let deleted_track =
-            delete_track_and_repair_hierarchy(&mut song.tracks, track_id)?;
+        let deleted_track = delete_track_and_repair_hierarchy(&mut song.tracks, track_id)?;
 
         if deleted_track.kind == TrackKind::Audio {
             song.clips.retain(|clip| clip.track_id != track_id);
@@ -1078,7 +1087,8 @@ impl DesktopSession {
             ..clip
         };
 
-        song.clips.splice(clip_index..=clip_index, [left_clip, right_clip]);
+        song.clips
+            .splice(clip_index..=clip_index, [left_clip, right_clip]);
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
 
         Ok(self.snapshot())
@@ -1142,7 +1152,8 @@ impl DesktopSession {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         audio.play(song_dir, song, self.engine.position_seconds(), reason)?;
         self.engine.play()?;
-        self.transport_clock.start_from(self.engine.position_seconds());
+        self.transport_clock
+            .start_from(self.engine.position_seconds());
 
         Ok(self.snapshot())
     }
@@ -1188,8 +1199,10 @@ impl DesktopSession {
                 if restored_position < target_section.start_seconds
                     && restored_position < pending_jump.execute_at_seconds
                 {
-                    self.engine
-                        .schedule_section_jump(&pending_jump.target_marker_id, pending_jump.trigger)?;
+                    self.engine.schedule_section_jump(
+                        &pending_jump.target_marker_id,
+                        pending_jump.trigger,
+                    )?;
                 }
             }
         }
@@ -1212,10 +1225,12 @@ impl DesktopSession {
             }
             PlaybackState::Paused => {
                 self.engine.pause()?;
-                self.transport_clock.pause_at(self.engine.position_seconds());
+                self.transport_clock
+                    .pause_at(self.engine.position_seconds());
             }
             PlaybackState::Stopped | PlaybackState::Empty => {
-                self.transport_clock.pause_at(self.engine.position_seconds());
+                self.transport_clock
+                    .pause_at(self.engine.position_seconds());
             }
         }
 
@@ -1256,7 +1271,8 @@ impl DesktopSession {
 
         if jump_executed {
             self.restart_audio(audio, PlaybackStartReason::TransportResync)?;
-            self.transport_clock.note_jump_while_playing(advanced_position);
+            self.transport_clock
+                .note_jump_while_playing(advanced_position);
         } else {
             self.transport_clock.reanchor_playing(advanced_position);
         }
@@ -1293,8 +1309,9 @@ impl DesktopSession {
             is_native_runtime: true,
         };
         self.perf_metrics.transport_snapshot_build_millis = started_at.elapsed().as_millis();
-        self.perf_metrics.transport_snapshot_bytes =
-            to_vec(&snapshot).map(|bytes| bytes.len()).unwrap_or_default();
+        self.perf_metrics.transport_snapshot_bytes = to_vec(&snapshot)
+            .map(|bytes| bytes.len())
+            .unwrap_or_default();
         snapshot
     }
 
@@ -1529,8 +1546,7 @@ fn insert_track(
     parent_track_id: Option<&str>,
 ) -> Result<(), DesktopError> {
     validate_track_parent(tracks, &track.id, parent_track_id)?;
-    let insert_index =
-        resolve_insert_index(tracks, insert_after_track_id, None, parent_track_id)?;
+    let insert_index = resolve_insert_index(tracks, insert_after_track_id, None, parent_track_id)?;
     tracks.insert(insert_index, track);
     Ok(())
 }
@@ -1716,7 +1732,11 @@ impl WaveformMemoryCache {
     }
 }
 
-fn song_to_view(song: &Song, waveform_cache: &WaveformMemoryCache, project_revision: u64) -> SongView {
+fn song_to_view(
+    song: &Song,
+    waveform_cache: &WaveformMemoryCache,
+    project_revision: u64,
+) -> SongView {
     let derived_sections = song
         .derived_sections()
         .iter()
@@ -1953,7 +1973,9 @@ fn parse_time_signature(time_signature: &str) -> Result<(u32, u32), DesktopError
         .parse::<u32>()
         .map_err(|_| DesktopError::AudioCommand("time signature is invalid".into()))?;
     if numerator == 0 || denominator == 0 {
-        return Err(DesktopError::AudioCommand("time signature is invalid".into()));
+        return Err(DesktopError::AudioCommand(
+            "time signature is invalid".into(),
+        ));
     }
     Ok((numerator, denominator))
 }
@@ -2021,7 +2043,9 @@ mod tests {
     use libretracks_core::{
         Clip, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track, TrackKind,
     };
-    use libretracks_project::{create_song_folder, generate_waveform_summary, load_song, save_song};
+    use libretracks_project::{
+        create_song_folder, generate_waveform_summary, load_song, save_song,
+    };
     use tempfile::tempdir;
 
     use super::{DesktopSession, TransportClock};
@@ -2123,7 +2147,10 @@ mod tests {
 
         let mut session = DesktopSession::default();
         session.song_dir = Some(song_dir);
-        session.engine.load_song(song).expect("song should load into engine");
+        session
+            .engine
+            .load_song(song)
+            .expect("song should load into engine");
         session
     }
 
@@ -2244,7 +2271,10 @@ mod tests {
             .expect("immediate jump should execute");
 
         assert_eq!(snapshot.transport_clock.anchor_position_seconds, 1.0);
-        assert_eq!(snapshot.transport_clock.last_seek_position_seconds, Some(1.0));
+        assert_eq!(
+            snapshot.transport_clock.last_seek_position_seconds,
+            Some(1.0)
+        );
         assert_eq!(snapshot.transport_clock.last_start_position_seconds, None);
         assert_eq!(snapshot.transport_clock.last_jump_position_seconds, None);
         assert!(!snapshot.transport_clock.running);
@@ -2263,7 +2293,10 @@ mod tests {
 
         assert_eq!(snapshot.position_seconds, 2.75);
         assert_eq!(snapshot.transport_clock.anchor_position_seconds, 2.75);
-        assert_eq!(snapshot.transport_clock.last_seek_position_seconds, Some(2.75));
+        assert_eq!(
+            snapshot.transport_clock.last_seek_position_seconds,
+            Some(2.75)
+        );
         assert_eq!(snapshot.transport_clock.last_start_position_seconds, None);
         assert_eq!(snapshot.transport_clock.last_jump_position_seconds, None);
         assert!(!snapshot.transport_clock.running);
@@ -2301,17 +2334,29 @@ mod tests {
 
         session.play(&audio).expect("play should succeed");
         thread::sleep(Duration::from_millis(15));
-        session.seek(2.0, &audio).expect("first seek should succeed");
-        let snapshot = session.seek(3.5, &audio).expect("second seek should succeed");
+        session
+            .seek(2.0, &audio)
+            .expect("first seek should succeed");
+        let snapshot = session
+            .seek(3.5, &audio)
+            .expect("second seek should succeed");
 
         assert_eq!(snapshot.playback_state, "playing");
         assert!(snapshot.position_seconds >= 3.5);
         assert!(snapshot.position_seconds < 3.65);
-        assert_eq!(snapshot.transport_clock.last_seek_position_seconds, Some(3.5));
+        assert_eq!(
+            snapshot.transport_clock.last_seek_position_seconds,
+            Some(3.5)
+        );
         assert!(snapshot.transport_clock.running);
 
-        let debug_snapshot = audio.debug_snapshot().expect("debug snapshot should succeed");
-        assert_eq!(debug_snapshot.playhead.last_start_reason.as_deref(), Some("seek"));
+        let debug_snapshot = audio
+            .debug_snapshot()
+            .expect("debug snapshot should succeed");
+        assert_eq!(
+            debug_snapshot.playhead.last_start_reason.as_deref(),
+            Some("seek")
+        );
         assert!(debug_snapshot.playhead.running);
         assert!(
             debug_snapshot
@@ -2335,16 +2380,25 @@ mod tests {
         )
         .expect("folder should move before another folder");
 
-        let ordered_ids = tracks.iter().map(|track| track.id.as_str()).collect::<Vec<_>>();
+        let ordered_ids = tracks
+            .iter()
+            .map(|track| track.id.as_str())
+            .collect::<Vec<_>>();
         assert_eq!(
             ordered_ids,
-            vec!["track_folder_b", "track_child_b", "track_folder_a", "track_child_a"]
+            vec![
+                "track_folder_b",
+                "track_child_b",
+                "track_folder_a",
+                "track_child_a"
+            ]
         );
     }
 
     #[test]
     fn executing_section_jump_reanchors_transport_and_runtime() {
-        let mut session = session_with_song_dir("jump-resync-demo", demo_song_with_three_sections());
+        let mut session =
+            session_with_song_dir("jump-resync-demo", demo_song_with_three_sections());
         let audio = crate::audio_runtime::AudioController::default();
 
         session.seek(3.95, &audio).expect("seek should succeed");
@@ -2369,9 +2423,17 @@ mod tests {
                 .name,
             "Bridge"
         );
-        assert!(snapshot.transport_clock.last_jump_position_seconds.unwrap_or_default() >= 8.0);
+        assert!(
+            snapshot
+                .transport_clock
+                .last_jump_position_seconds
+                .unwrap_or_default()
+                >= 8.0
+        );
 
-        let debug_snapshot = audio.debug_snapshot().expect("debug snapshot should succeed");
+        let debug_snapshot = audio
+            .debug_snapshot()
+            .expect("debug snapshot should succeed");
         assert_eq!(
             debug_snapshot.playhead.last_start_reason.as_deref(),
             Some("transport_resync")
@@ -2396,7 +2458,9 @@ mod tests {
         assert!(!snapshot.transport_clock.running);
         assert_eq!(snapshot.transport_clock.anchor_position_seconds, 0.0);
 
-        let debug_snapshot = audio.debug_snapshot().expect("debug snapshot should succeed");
+        let debug_snapshot = audio
+            .debug_snapshot()
+            .expect("debug snapshot should succeed");
         assert!(!debug_snapshot.playhead.running);
     }
 
@@ -2423,7 +2487,14 @@ mod tests {
             .expect("song view should exist");
 
         assert_eq!(snapshot.playback_state, "stopped");
-        assert_eq!(song_view.clips.first().expect("clip summary should exist").timeline_start_seconds, 6.5);
+        assert_eq!(
+            song_view
+                .clips
+                .first()
+                .expect("clip summary should exist")
+                .timeline_start_seconds,
+            6.5
+        );
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.clips[0].timeline_start_seconds, 6.5);
@@ -2454,7 +2525,10 @@ mod tests {
         assert_eq!(snapshot.project_revision, snapshot_song.project_revision);
         assert_eq!(snapshot_song.tracks.len(), 2);
         assert_eq!(snapshot_song.clips.len(), 2);
-        assert!(snapshot_song.tracks.iter().any(|track| track.id == "track_1"));
+        assert!(snapshot_song
+            .tracks
+            .iter()
+            .any(|track| track.id == "track_1"));
         assert!(snapshot_song
             .tracks
             .iter()
@@ -2463,7 +2537,10 @@ mod tests {
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.tracks.len(), 2);
         assert_eq!(saved_song.clips.len(), 2);
-        assert!(saved_song.clips.iter().any(|clip| clip.file_path.starts_with("audio/click")));
+        assert!(saved_song
+            .clips
+            .iter()
+            .any(|clip| clip.file_path.starts_with("audio/click")));
     }
 
     #[test]
@@ -2508,7 +2585,10 @@ mod tests {
         assert_eq!(first_waveform.len(), 1);
         assert_eq!(second_waveform.len(), 1);
         assert!(perf_after_load.waveform_cache_misses > 0);
-        assert!(perf_after_second_request.waveform_cache_hits > perf_after_first_request.waveform_cache_hits);
+        assert!(
+            perf_after_second_request.waveform_cache_hits
+                > perf_after_first_request.waveform_cache_hits
+        );
     }
 
     #[test]
@@ -2716,8 +2796,8 @@ mod tests {
     #[test]
     fn transport_only_updates_preserve_pending_jump_when_target_survives() {
         let root = tempdir().expect("temp dir should exist");
-        let song_dir =
-            create_song_folder(root.path(), "transport-only-pending-jump").expect("song dir should exist");
+        let song_dir = create_song_folder(root.path(), "transport-only-pending-jump")
+            .expect("song dir should exist");
         fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
 
         let mut session = DesktopSession::default();
@@ -2775,8 +2855,8 @@ mod tests {
     #[test]
     fn deleting_target_section_clears_pending_jump() {
         let root = tempdir().expect("temp dir should exist");
-        let song_dir =
-            create_song_folder(root.path(), "delete-target-pending-jump").expect("song dir should exist");
+        let song_dir = create_song_folder(root.path(), "delete-target-pending-jump")
+            .expect("song dir should exist");
         fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
 
         let mut session = DesktopSession::default();
@@ -2812,11 +2892,16 @@ mod tests {
             .schedule_section_jump("section_2", JumpTrigger::SectionEnd, &audio)
             .expect("jump should schedule");
 
-        let snapshot = session.seek(4.0, &audio).expect("seek should clear pending jump");
+        let snapshot = session
+            .seek(4.0, &audio)
+            .expect("seek should clear pending jump");
 
         assert_eq!(snapshot.position_seconds, 4.0);
         assert!(snapshot.pending_section_jump.is_none());
-        assert_eq!(snapshot.transport_clock.last_seek_position_seconds, Some(4.0));
+        assert_eq!(
+            snapshot.transport_clock.last_seek_position_seconds,
+            Some(4.0)
+        );
     }
 
     #[test]
