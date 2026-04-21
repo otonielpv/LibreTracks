@@ -37,6 +37,7 @@ const TRACK_HEIGHT = 94;
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 48;
 const ZOOM_STEP = 0.25;
+const ZOOM_WHEEL_STEP = 1.25;
 
 type ContextMenuAction = {
   label: string;
@@ -62,6 +63,11 @@ type ClipDragState = {
 type RulerDragState = {
   pointerId: number;
   startSeconds: number;
+  currentSeconds: number;
+} | null;
+
+type PlayheadDragState = {
+  pointerId: number;
   currentSeconds: number;
 } | null;
 
@@ -258,6 +264,16 @@ function isInteractiveTrackControl(target: EventTarget | null) {
     : false;
 }
 
+function isInteractiveTimelineTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement
+    ? Boolean(
+        target.closest(
+          ".lt-clip, .lt-section-tag, .lt-track-header, .lt-inline-menu, .lt-context-menu, button, input, select, textarea, label",
+        ),
+      )
+    : false;
+}
+
 function resolveTrackDropState(
   song: SongSummary,
   draggingTrackId: string,
@@ -319,11 +335,13 @@ export function TransportPanel() {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [clipDrag, setClipDrag] = useState<ClipDragState>(null);
   const [rulerDrag, setRulerDrag] = useState<RulerDragState>(null);
+  const [playheadDrag, setPlayheadDrag] = useState<PlayheadDragState>(null);
   const [timeSelection, setTimeSelection] = useState<TimeSelection>(null);
   const [isTimelinePanning, setIsTimelinePanning] = useState(false);
   const [displayPositionSeconds, setDisplayPositionSeconds] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const [trackDrag, setTrackDrag] = useState<TrackDragState>(null);
+  const [volumeDrafts, setVolumeDrafts] = useState<Record<string, number>>({});
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [trackDropState, setTrackDropState] = useState<TrackDropState>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -428,6 +446,21 @@ export function TransportPanel() {
   ]);
 
   useEffect(() => {
+    if (!snapshot?.song) {
+      setVolumeDrafts({});
+      return;
+    }
+
+    setVolumeDrafts((current) => {
+      const validTrackIds = new Set(snapshot.song?.tracks.map((track) => track.id));
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([trackId]) => validTrackIds.has(trackId)),
+      );
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+  }, [snapshot?.song]);
+
+  useEffect(() => {
     if (snapshot?.playbackState !== "playing") {
       return;
     }
@@ -456,13 +489,23 @@ export function TransportPanel() {
   }, [snapshot?.playbackState]);
 
   useEffect(() => {
-    const closeMenu = () => setContextMenu(null);
-    window.addEventListener("click", closeMenu);
-    window.addEventListener("blur", closeMenu);
+    const closeMenu = (event: PointerEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+      if (event.target instanceof HTMLElement && event.target.closest(".lt-context-menu")) {
+        return;
+      }
+      setContextMenu(null);
+    };
+    const closeMenuOnBlur = () => setContextMenu(null);
+
+    window.addEventListener("pointerdown", closeMenu);
+    window.addEventListener("blur", closeMenuOnBlur);
 
     return () => {
-      window.removeEventListener("click", closeMenu);
-      window.removeEventListener("blur", closeMenu);
+      window.removeEventListener("pointerdown", closeMenu);
+      window.removeEventListener("blur", closeMenuOnBlur);
     };
   }, []);
 
@@ -640,6 +683,57 @@ export function TransportPanel() {
   }, [rulerDrag, snapshot?.song, zoomLevel]);
 
   useEffect(() => {
+    if (!playheadDrag || !snapshot?.song || !rulerTrackRef.current) {
+      return;
+    }
+
+    const effectSong = snapshot.song;
+
+    const onMouseMove = (event: MouseEvent) => {
+      const nextSeconds = rulerPointerToSeconds(
+        event,
+        rulerTrackRef.current as HTMLElement,
+        effectSong.durationSeconds,
+        zoomLevel * 18,
+      );
+      setPlayheadDrag((current) =>
+        current
+          ? {
+              ...current,
+              currentSeconds: nextSeconds,
+            }
+          : current,
+      );
+    };
+
+    const onMouseUp = async (event: MouseEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      const activeDrag = playheadDrag;
+      setPlayheadDrag(null);
+      if (!activeDrag) {
+        return;
+      }
+
+      await runAction(async () => {
+        const nextSnapshot = await seekTransport(activeDrag.currentSeconds);
+        setSnapshot(nextSnapshot);
+        setStatus(`Cursor movido a ${formatClock(nextSnapshot.positionSeconds)}`);
+      });
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [playheadDrag, snapshot?.song, zoomLevel]);
+
+  useEffect(() => {
     if (!trackDrag || !snapshot?.song) {
       return;
     }
@@ -727,7 +821,7 @@ export function TransportPanel() {
     ? clamp(laneViewportWidth / (Math.max(song.durationSeconds, 1) * 18), ZOOM_MIN, ZOOM_MAX)
     : ZOOM_MIN;
   const effectiveZoomMin = song ? fitAllZoomLevel : ZOOM_MIN;
-  const positionSeconds = displayPositionSeconds;
+  const positionSeconds = playheadDrag?.currentSeconds ?? displayPositionSeconds;
   const pixelsPerSecond = zoomLevel * 18;
   const timelineWidth = Math.max((song?.durationSeconds ?? 0) * pixelsPerSecond, laneViewportWidth);
   const timelineRowWidth = HEADER_WIDTH + timelineWidth;
@@ -786,7 +880,16 @@ export function TransportPanel() {
   }
 
   function beginTimelinePan(event: ReactMouseEvent) {
-    if (!timelineShellRef.current || event.button !== 1) {
+    if (!timelineShellRef.current) {
+      return;
+    }
+
+    const canPanWithPrimaryButton =
+      event.button === 0 &&
+      !isInteractiveTimelineTarget(event.target) &&
+      !(event.target instanceof HTMLElement && event.target.closest(".lt-ruler-track"));
+
+    if (event.button !== 1 && !canPanWithPrimaryButton) {
       return;
     }
 
@@ -810,7 +913,7 @@ export function TransportPanel() {
     window.addEventListener("mouseup", onUp);
   }
 
-  function applyZoom(nextZoomLevel: number, anchorClientX?: number) {
+  function applyZoom(nextZoomLevel: number) {
     const shell = timelineShellRef.current;
     const clampedZoom = clamp(nextZoomLevel, effectiveZoomMin, ZOOM_MAX);
 
@@ -819,15 +922,11 @@ export function TransportPanel() {
       return;
     }
 
-    const bounds = shell.getBoundingClientRect();
-    const viewOffsetX =
-      anchorClientX !== undefined ? anchorClientX - bounds.left : bounds.width / 2;
-    const laneOffsetX = clamp(viewOffsetX - HEADER_WIDTH, 0, Math.max(0, bounds.width - HEADER_WIDTH));
-    const anchorSeconds = (shell.scrollLeft + laneOffsetX) / Math.max(pixelsPerSecond, 0.0001);
+    const laneCenterOffsetX = Math.max(0, (shell.clientWidth - HEADER_WIDTH) / 2);
 
     pendingZoomAnchorRef.current = {
-      seconds: anchorSeconds,
-      viewOffsetX,
+      seconds: positionSeconds,
+      viewOffsetX: HEADER_WIDTH + laneCenterOffsetX,
     };
     setZoomLevel(clampedZoom);
   }
@@ -870,6 +969,38 @@ export function TransportPanel() {
             ? `Track reordenado encima de ${targetTrack.name}.`
             : `Track reordenado debajo de ${targetTrack.name}.`,
       );
+    });
+  }
+
+  async function commitTrackVolume(trackId: string) {
+    const track = findTrack(song, trackId);
+    const draftVolume = volumeDrafts[trackId];
+    if (!track || draftVolume === undefined) {
+      return;
+    }
+
+    const nextVolume = clamp(draftVolume, 0, 1);
+    if (Math.abs(nextVolume - track.volume) < 0.0001) {
+      setVolumeDrafts((current) => {
+        const next = { ...current };
+        delete next[trackId];
+        return next;
+      });
+      return;
+    }
+
+    await runAction(async () => {
+      const nextSnapshot = await updateTrack({
+        trackId,
+        volume: nextVolume,
+      });
+      setSnapshot(nextSnapshot);
+    });
+
+    setVolumeDrafts((current) => {
+      const next = { ...current };
+      delete next[trackId];
+      return next;
     });
   }
 
@@ -1222,10 +1353,7 @@ export function TransportPanel() {
           onWheel={(event) => {
             if (event.ctrlKey || event.metaKey) {
               event.preventDefault();
-              applyZoom(
-                zoomLevel + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP),
-                event.clientX,
-              );
+              applyZoom(zoomLevel + (event.deltaY < 0 ? ZOOM_WHEEL_STEP : -ZOOM_WHEEL_STEP));
               return;
             }
 
@@ -1249,6 +1377,7 @@ export function TransportPanel() {
                   return;
                 }
 
+                event.preventDefault();
                 const startSeconds = rulerPointerToSeconds(
                   event,
                   rulerTrackRef.current,
@@ -1285,6 +1414,10 @@ export function TransportPanel() {
                       width: `${((section.endSeconds - section.startSeconds) /
                         Math.max(1, song.durationSeconds)) * timelineWidth}px`,
                     }}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
                     onClick={(event) => {
                       event.stopPropagation();
                       setSelectedSectionId(section.id);
@@ -1293,6 +1426,7 @@ export function TransportPanel() {
                       setStatus(`Seccion seleccionada: ${section.name}`);
                     }}
                     onContextMenu={(event) => {
+                      event.stopPropagation();
                       setSelectedSectionId(section.id);
                       openMenu(event, section.name, sectionContextMenu(section));
                     }}
@@ -1308,7 +1442,23 @@ export function TransportPanel() {
                   />
                 ) : null}
 
-                <div className="lt-playhead" style={{ left: playheadOffset }} />
+                <div
+                  className={`lt-playhead is-handle ${playheadDrag ? "is-dragging" : ""}`}
+                  style={{ left: playheadOffset }}
+                  onMouseDown={(event) => {
+                    if (!song || event.button !== 0) {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setContextMenu(null);
+                    setPlayheadDrag({
+                      pointerId: 1,
+                      currentSeconds: positionSeconds,
+                    });
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -1455,15 +1605,26 @@ export function TransportPanel() {
                           min={0}
                           max={1}
                           step={0.01}
-                          value={track.volume}
+                          value={volumeDrafts[track.id] ?? track.volume}
                           onChange={(event) => {
-                            void runAction(async () => {
-                              const nextSnapshot = await updateTrack({
-                                trackId: track.id,
-                                volume: Number(event.target.value),
-                              });
-                              setSnapshot(nextSnapshot);
-                            });
+                            setVolumeDrafts((current) => ({
+                              ...current,
+                              [track.id]: Number(event.target.value),
+                            }));
+                          }}
+                          onMouseUp={() => {
+                            void commitTrackVolume(track.id);
+                          }}
+                          onTouchEnd={() => {
+                            void commitTrackVolume(track.id);
+                          }}
+                          onKeyUp={(event) => {
+                            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") {
+                              void commitTrackVolume(track.id);
+                            }
+                          }}
+                          onBlur={() => {
+                            void commitTrackVolume(track.id);
                           }}
                         />
                       </label>

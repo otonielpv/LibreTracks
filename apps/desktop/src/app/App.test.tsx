@@ -61,6 +61,12 @@ function mockTimelineShellMetrics(container: HTMLElement, width = 1400) {
     }),
   });
 
+  Object.defineProperty(shell, "scrollLeft", {
+    configurable: true,
+    writable: true,
+    value: 0,
+  });
+
   return shell;
 }
 
@@ -191,6 +197,10 @@ describe("App", () => {
 
     const introSection = await screen.findByRole("button", { name: "Intro" });
     await act(async () => {
+      fireEvent.click(introSection);
+    });
+
+    await act(async () => {
       fireEvent.contextMenu(introSection, { clientX: 220, clientY: 120 });
     });
 
@@ -201,6 +211,27 @@ describe("App", () => {
     expect(
       within(context as HTMLElement).getByRole("button", { name: /programar salto al final/i }),
     ).toBeTruthy();
+  });
+
+  it("pans the timeline by dragging over an empty lane", async () => {
+    const { container } = await renderApp();
+    const shell = mockTimelineShellMetrics(container, 1500);
+    const firstLane = container.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(firstLane).toBeTruthy();
+
+    Object.defineProperty(shell, "scrollLeft", {
+      configurable: true,
+      writable: true,
+      value: 120,
+    });
+
+    await act(async () => {
+      fireEvent.mouseDown(firstLane as HTMLElement, { button: 0, clientX: 300 });
+      fireEvent.mouseMove(window, { clientX: 220 });
+      fireEvent.mouseUp(window, { button: 0, clientX: 220 });
+    });
+
+    expect((shell as HTMLDivElement).scrollLeft).toBe(200);
   });
 
   it("collapses folder children locally in the UI", async () => {
@@ -219,10 +250,22 @@ describe("App", () => {
   it("supports ctrl plus wheel zoom on the timeline shell", async () => {
     const { container } = await renderApp();
     const shell = mockTimelineShellMetrics(container, 1500);
+    mockRulerBounds(container);
 
     await act(async () => {
       fireEvent(window, new Event("resize"));
     });
+
+    const ruler = container.querySelector(".lt-ruler-track") as HTMLElement;
+    await act(async () => {
+      fireEvent.mouseDown(ruler, { button: 0, clientX: 900 });
+    });
+    await act(async () => {
+      fireEvent.mouseMove(window, { button: 0, clientX: 900 });
+      fireEvent.mouseUp(window, { button: 0, clientX: 900 });
+    });
+
+    expect(await screen.findByText(/cursor movido a 02:15.000/i)).toBeTruthy();
 
     const zoomSlider = screen.getByRole("slider", { name: /zoom horizontal del timeline/i });
     expect(Number(zoomSlider.getAttribute("min"))).toBeLessThan(1);
@@ -231,7 +274,7 @@ describe("App", () => {
       fireEvent.wheel(shell, { deltaY: -100, ctrlKey: true, clientX: 900 });
     });
 
-    expect(screen.getByText("7.3x")).toBeTruthy();
+    expect(screen.getByText("8.3x")).toBeTruthy();
   });
 
   it("creates a new audio track from the track context menu", async () => {

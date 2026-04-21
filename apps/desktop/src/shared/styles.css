@@ -1179,11 +1179,13 @@ input[type="range"] {
   border-bottom: 1px solid rgba(116, 143, 165, 0.12);
   overflow: hidden;
   position: relative;
+  user-select: none;
 }
 
 .lt-ruler-content {
   height: 86px;
   position: relative;
+  user-select: none;
 }
 
 .lt-ruler-mark,
@@ -1223,6 +1225,8 @@ input[type="range"] {
   padding: 0 0.5rem;
   position: absolute;
   top: 50px;
+  user-select: none;
+  z-index: 3;
 }
 
 .lt-section-tag.is-selected {
@@ -1239,12 +1243,32 @@ input[type="range"] {
   z-index: 5;
 }
 
+.lt-playhead.is-handle {
+  cursor: ew-resize;
+  transform: translateX(-5px);
+  width: 12px;
+}
+
+.lt-playhead.is-handle::after {
+  background: linear-gradient(180deg, #d7f2ff 0%, #8fd2ff 100%);
+  box-shadow: 0 0 16px rgba(143, 210, 255, 0.5);
+  content: "";
+  inset: 0 5px;
+  position: absolute;
+}
+
+.lt-playhead.is-handle.is-dragging::after {
+  box-shadow: 0 0 20px rgba(143, 210, 255, 0.8);
+}
+
 .lt-time-selection {
   background: rgba(79, 150, 202, 0.18);
   border: 1px solid rgba(135, 197, 241, 0.34);
+  pointer-events: none;
   position: absolute;
   top: 0;
   bottom: 0;
+  z-index: 1;
 }
 
 .lt-track-list {
