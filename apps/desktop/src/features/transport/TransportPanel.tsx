@@ -36,6 +36,7 @@ import {
   type WaveformSummaryDto,
   reportUiRenderMetric,
 } from "./desktopApi";
+import { ImportAudioModal } from "./ImportAudioModal";
 import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
 
 const HEADER_WIDTH = 260;
@@ -373,6 +374,8 @@ export function TransportPanel() {
   const [clipWaveformPaths, setClipWaveformPaths] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("Cargando sesion...");
   const [isBusy, setIsBusy] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImportingFromModal, setIsImportingFromModal] = useState(false);
   const [tempoDraft, setTempoDraft] = useState("120");
   const [globalJumpMode, setGlobalJumpMode] = useState<GlobalJumpMode>("immediate");
   const [globalJumpBars, setGlobalJumpBars] = useState(4);
@@ -1651,6 +1654,22 @@ export function TransportPanel() {
     }, 250);
   }
 
+  async function importFromModal() {
+    setIsImportingFromModal(true);
+    await runAction(
+      async () => {
+        const nextSnapshot = await pickAndImportSong();
+        if (nextSnapshot) {
+          setSnapshot(nextSnapshot);
+        }
+        setStatus("Importacion de audio ejecutada.");
+        setIsImportModalOpen(false);
+      },
+      { busy: true },
+    );
+    setIsImportingFromModal(false);
+  }
+
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
       <div className="lt-daw-shell" ref={panelRef} onContextMenu={(event) => event.preventDefault()}>
@@ -1773,11 +1792,7 @@ export function TransportPanel() {
           </button>
           <button
             type="button"
-            onClick={() =>
-              void runAction(async () => setSnapshot((await pickAndImportSong()) ?? snapshot), {
-                busy: true,
-              })
-            }
+            onClick={() => setIsImportModalOpen(true)}
           >
             Importar WAVs
           </button>
@@ -2397,6 +2412,17 @@ export function TransportPanel() {
           ))}
         </div>
       ) : null}
+
+        <ImportAudioModal
+          isOpen={isImportModalOpen}
+          isImporting={isImportingFromModal}
+          onClose={() => {
+            if (!isImportingFromModal) {
+              setIsImportModalOpen(false);
+            }
+          }}
+          onImport={importFromModal}
+        />
         </div>
       </div>
       </div>
