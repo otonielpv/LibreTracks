@@ -1985,7 +1985,7 @@ export function TransportPanel() {
                   style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${timelineWidth}px` }}
                 >
                   <div
-                    className={`lt-track-header ${isTrackSelected ? "is-selected" : ""} ${track.kind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${draggingTrackId === track.id ? "is-dragging" : ""}`}
+                    className={`lt-track-header ${isTrackSelected ? "is-selected" : ""} ${track.solo ? "is-solo" : ""} ${track.kind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${draggingTrackId === track.id ? "is-dragging" : ""}`}
                     style={{ paddingLeft: 16 + track.depth * 22 }}
                     role="button"
                     tabIndex={0}
@@ -2113,6 +2113,9 @@ export function TransportPanel() {
                           max={1}
                           step={0.01}
                           value={volumeDrafts[track.id] ?? track.volume}
+                          style={{
+                            background: `linear-gradient(to right, ${track.solo ? "#ffe2ab" : "#3cddc7"} ${((volumeDrafts[track.id] ?? track.volume) * 100).toFixed(2)}%, #0e0e0e ${((volumeDrafts[track.id] ?? track.volume) * 100).toFixed(2)}%)`,
+                          }}
                           onChange={(event) => {
                             setVolumeDrafts((current) => ({
                               ...current,

@@ -298,6 +298,7 @@ body {
 }
 
 .lt-track-header {
+  position: relative;
   height: 84px;
   display: flex;
   align-items: center;
@@ -306,8 +307,20 @@ body {
   background: #2a2a2a;
 }
 
-.lt-track-header.is-selected {
-  box-shadow: inset 2px 0 0 #57f1db;
+.lt-track-header::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: transparent;
+}
+
+.lt-track-header.is-selected::before {
+  background: #57f1db;
+}
+
+.lt-track-header.is-solo::before {
+  background: #ffe2ab;
 }
 
 .lt-track-header-main {
@@ -442,7 +455,7 @@ body {
 }
 
 .lt-clip.is-selected {
-  background: rgb(87 241 219 / 0.18);
+  background: rgb(87 241 219 / 0.2);
 }
 
 .lt-clip-name {
@@ -603,6 +616,7 @@ body {
   padding: 0.45rem;
   border-radius: 0.5rem;
   background: rgb(19 19 19 / 0.8);
+  border: 1px solid rgb(133 148 144 / 0.18);
   backdrop-filter: blur(12px);
 }
 
