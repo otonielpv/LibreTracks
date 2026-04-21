@@ -24,6 +24,7 @@ import {
   splitClip,
   stopTransport,
   updateSection,
+  updateSongTempo,
   updateTrack,
   type ClipSummary,
   type SectionSummary,
@@ -335,6 +336,7 @@ export function TransportPanel() {
   const [clipWaveformPaths, setClipWaveformPaths] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("Cargando sesion...");
   const [isBusy, setIsBusy] = useState(false);
+  const [tempoDraft, setTempoDraft] = useState("120");
   const [zoomLevel, setZoomLevel] = useState(7);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
@@ -466,6 +468,14 @@ export function TransportPanel() {
 
     setWaveformCache({});
   }, [song?.projectRevision]);
+
+  useEffect(() => {
+    if (!song) {
+      return;
+    }
+
+    setTempoDraft(String(song.bpm));
+  }, [song?.bpm, song?.projectRevision]);
 
   useEffect(() => {
     let active = true;
@@ -1483,6 +1493,37 @@ export function TransportPanel() {
         </div>
 
         <div className="lt-transport">
+          <label className="lt-zoom-control">
+            <span>BPM</span>
+            <input
+              aria-label="BPM de la cancion"
+              type="number"
+              min={1}
+              step={0.1}
+              value={tempoDraft}
+              onChange={(event) => setTempoDraft(event.target.value)}
+              onBlur={() => {
+                const nextBpm = Number(tempoDraft);
+                if (!song || !Number.isFinite(nextBpm) || nextBpm <= 0 || nextBpm === song.bpm) {
+                  setTempoDraft(String(song?.bpm ?? 120));
+                  return;
+                }
+
+                void runAction(async () => {
+                  const nextSnapshot = await updateSongTempo(nextBpm);
+                  setSnapshot(nextSnapshot);
+                  setStatus(`Tempo actualizado a ${nextBpm.toFixed(1)} BPM.`);
+                });
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") {
+                  return;
+                }
+
+                event.currentTarget.blur();
+              }}
+            />
+          </label>
           <div className="lt-transport-buttons">
             <button
               type="button"

@@ -28,12 +28,20 @@ pub struct WaveformSummary {
     pub max_peaks: Vec<f32>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TempoCandidate {
+    pub bpm: f64,
+    pub confidence: f64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnalyzedWav {
     pub duration_seconds: f64,
     pub sample_rate: u32,
     pub channels: u16,
     pub waveform: WaveformSummary,
+    pub tempo_candidate: Option<TempoCandidate>,
 }
 
 pub fn waveform_file_path(
@@ -91,18 +99,117 @@ pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectEr
         )?,
     };
 
+    let waveform = WaveformSummary {
+        version: WAVEFORM_FORMAT_VERSION,
+        duration_seconds,
+        bucket_count: waveform.bucket_count,
+        peaks: waveform.peaks,
+        min_peaks: waveform.min_peaks,
+        max_peaks: waveform.max_peaks,
+    };
+
     Ok(AnalyzedWav {
         duration_seconds,
         sample_rate: spec.sample_rate,
         channels: spec.channels,
-        waveform: WaveformSummary {
-            version: WAVEFORM_FORMAT_VERSION,
-            duration_seconds,
-            bucket_count: waveform.bucket_count,
-            peaks: waveform.peaks,
-            min_peaks: waveform.min_peaks,
-            max_peaks: waveform.max_peaks,
-        },
+        tempo_candidate: estimate_tempo_candidate(&waveform),
+        waveform,
+    })
+}
+
+fn estimate_tempo_candidate(waveform: &WaveformSummary) -> Option<TempoCandidate> {
+    if waveform.duration_seconds <= 0.0 || waveform.max_peaks.len() < 64 {
+        return None;
+    }
+
+    let bucket_rate = waveform.bucket_count as f64 / waveform.duration_seconds.max(0.0001);
+    if bucket_rate <= 0.0 {
+        return None;
+    }
+
+    let onset_envelope = waveform
+        .max_peaks
+        .windows(2)
+        .map(|pair| f64::from((pair[1] - pair[0]).max(0.0)))
+        .collect::<Vec<_>>();
+    if onset_envelope.len() < 32 {
+        return None;
+    }
+
+    let mean = onset_envelope.iter().sum::<f64>() / onset_envelope.len() as f64;
+    let centered = onset_envelope
+        .iter()
+        .map(|value| (value - mean).max(0.0))
+        .collect::<Vec<_>>();
+    let centered_energy = centered.iter().map(|value| value * value).sum::<f64>();
+    if centered_energy <= 0.000001 {
+        return None;
+    }
+
+    let lag_min = ((bucket_rate * 60.0 / 220.0).round() as usize).max(1);
+    let lag_max = ((bucket_rate * 60.0 / 60.0).round() as usize)
+        .min(centered.len().saturating_sub(1));
+    if lag_min >= lag_max {
+        return None;
+    }
+
+    let mut scores = vec![0.0_f64; lag_max.saturating_add(1)];
+    let mut best_lag = 0_usize;
+    let mut best_score = 0.0_f64;
+
+    for lag in lag_min..=lag_max {
+        let mut score = 0.0_f64;
+        let mut left_energy = 0.0_f64;
+        let mut right_energy = 0.0_f64;
+
+        for index in lag..centered.len() {
+            let left = centered[index];
+            let right = centered[index - lag];
+            score += left * right;
+            left_energy += left * left;
+            right_energy += right * right;
+        }
+
+        if left_energy <= 0.0 || right_energy <= 0.0 {
+            continue;
+        }
+
+        let normalized_score = score / (left_energy.sqrt() * right_energy.sqrt());
+        scores[lag] = normalized_score;
+        if normalized_score > best_score {
+            best_score = normalized_score;
+            best_lag = lag;
+        }
+    }
+
+    if best_lag == 0 || best_score <= 0.05 {
+        return None;
+    }
+
+    let mut resolved_lag = best_lag;
+    let mut resolved_score = best_score;
+    while resolved_lag / 2 >= lag_min {
+        let half_lag = resolved_lag / 2;
+        let half_score = scores[half_lag];
+        if half_score >= resolved_score * 0.92 {
+            resolved_lag = half_lag;
+            resolved_score = half_score;
+        } else {
+            break;
+        }
+    }
+
+    let mut bpm = 60.0 * bucket_rate / resolved_lag as f64;
+    while bpm < 60.0 {
+        bpm *= 2.0;
+    }
+    while bpm > 220.0 {
+        bpm /= 2.0;
+    }
+
+    Some(TempoCandidate {
+        bpm: (bpm * 10.0).round() / 10.0,
+        confidence: resolved_score.clamp(0.0, 1.0),
     })
 }
 

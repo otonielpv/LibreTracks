@@ -13,7 +13,8 @@ pub use song_store::{
 };
 pub use waveform::{
     analyze_wav_file, generate_waveform_summary, load_waveform_summary, waveform_file_path,
-    waveform_file_path_for_source, write_waveform_summary, AnalyzedWav, WaveformSummary,
+    waveform_file_path_for_source, write_waveform_summary, AnalyzedWav, TempoCandidate,
+    WaveformSummary,
 };
 
 #[cfg(test)]
@@ -184,6 +185,39 @@ mod tests {
         writer.finalize().expect("wav should finalize");
     }
 
+    fn write_click_test_wav(
+        path: &Path,
+        sample_rate: u32,
+        channels: u16,
+        duration_seconds: u32,
+        bpm: f64,
+    ) {
+        let spec = WavSpec {
+            channels,
+            sample_rate,
+            bits_per_sample: 16,
+            sample_format: SampleFormat::Int,
+        };
+
+        let mut writer = WavWriter::create(path, spec).expect("wav should be created");
+        let total_frames = sample_rate * duration_seconds;
+        let frames_per_beat = ((f64::from(sample_rate) * 60.0) / bpm).round() as u32;
+        let click_frames = (sample_rate / 80).max(1);
+
+        for frame in 0..total_frames {
+            let sample = if frame % frames_per_beat < click_frames {
+                i16::MAX / 2
+            } else {
+                0_i16
+            };
+            for _ in 0..channels {
+                writer.write_sample(sample).expect("sample should be written");
+            }
+        }
+
+        writer.finalize().expect("wav should finalize");
+    }
+
     #[test]
     fn reads_wav_metadata_and_duration() {
         let root = tempdir().expect("temp dir should exist");
@@ -195,6 +229,21 @@ mod tests {
         assert_eq!(metadata.channels, 2);
         assert_eq!(metadata.sample_rate, 48_000);
         assert!((metadata.duration_seconds - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn analyzes_click_track_and_estimates_tempo() {
+        let root = tempdir().expect("temp dir should exist");
+        let wav_path = root.path().join("click.wav");
+        write_click_test_wav(&wav_path, 44_100, 1, 8, 120.0);
+
+        let analysis = analyze_wav_file(&wav_path).expect("analysis should succeed");
+        let tempo_candidate = analysis
+            .tempo_candidate
+            .expect("tempo candidate should be detected");
+
+        assert!((tempo_candidate.bpm - 120.0).abs() < 2.0);
+        assert!(tempo_candidate.confidence > 0.1);
     }
 
     #[test]
@@ -241,6 +290,39 @@ mod tests {
         assert_eq!(waveform.bucket_count, waveform.max_peaks.len());
         assert!(waveform.bucket_count >= 2048);
         assert!(waveform.duration_seconds > 0.0);
+    }
+
+    #[test]
+    fn imports_detected_tempo_and_prioritizes_click_like_file_names() {
+        let root = tempdir().expect("temp dir should exist");
+        let imports_dir = root.path().join("imports");
+        fs::create_dir_all(&imports_dir).expect("imports dir should exist");
+
+        let click_path = imports_dir.join("guide-click.wav");
+        let drums_path = imports_dir.join("drums.wav");
+        write_click_test_wav(&click_path, 44_100, 1, 8, 120.0);
+        write_click_test_wav(&drums_path, 44_100, 1, 8, 90.0);
+
+        let request = ProjectImportRequest {
+            song_id: "song_004".into(),
+            title: "Detected Tempo Demo".into(),
+            artist: None,
+            bpm: None,
+            key: None,
+            time_signature: "4/4".into(),
+            wav_files: vec![drums_path, click_path],
+        };
+
+        let imported =
+            import_wav_song(root.path(), "detected-tempo-demo", &request).expect("import should work");
+
+        assert!((imported.song.bpm - 120.0).abs() < 2.0);
+        assert_eq!(imported.song.tempo_metadata.source, TempoSource::AutoImport);
+        assert_eq!(
+            imported.song.tempo_metadata.reference_file_path.as_deref(),
+            Some("audio/guide-click.wav")
+        );
+        assert!(imported.song.tempo_metadata.confidence.unwrap_or_default() > 0.1);
     }
 
     #[test]

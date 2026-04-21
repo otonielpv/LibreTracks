@@ -299,6 +299,18 @@ export async function saveProject(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("save_project");
 }
 
+export async function updateSongTempo(bpm: number): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => ({
+      ...song,
+      bpm: Math.max(1, bpm),
+    }));
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("update_song_tempo", { bpm });
+}
+
 export async function openProject(): Promise<TransportSnapshot | null> {
   if (!isTauriApp) {
     demoSong = buildDemoSong();

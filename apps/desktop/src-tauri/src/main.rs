@@ -343,6 +343,21 @@ fn delete_section(
 }
 
 #[tauri::command]
+fn update_song_tempo(
+    bpm: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_song_tempo(bpm, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn create_track(
     name: String,
     kind: TrackKind,
@@ -489,6 +504,7 @@ fn main() {
             create_section,
             update_section,
             delete_section,
+            update_song_tempo,
             create_track,
             move_track,
             update_track,

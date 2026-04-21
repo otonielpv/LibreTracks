@@ -13,7 +13,7 @@ use libretracks_core::{
 
 use crate::{
     analyze_wav_file, create_song_folder, save_song, waveform_file_path_for_source,
-    write_waveform_summary, ProjectError,
+    write_waveform_summary, ProjectError, TempoCandidate,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,6 +32,7 @@ pub struct WavMetadata {
     pub channels: u16,
     pub sample_rate: u32,
     pub duration_seconds: f64,
+    pub tempo_candidate: Option<TempoCandidate>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -76,6 +77,7 @@ pub fn read_wav_metadata(path: impl AsRef<Path>) -> Result<WavMetadata, ProjectE
         channels: analysis.channels,
         sample_rate: analysis.sample_rate,
         duration_seconds: analysis.duration_seconds,
+        tempo_candidate: analysis.tempo_candidate,
     })
 }
 
@@ -118,19 +120,25 @@ pub fn import_wav_song(
         });
     }
 
+    let detected_tempo = request
+        .bpm
+        .map(|bpm| ResolvedTempo {
+            bpm,
+            source: TempoSource::Manual,
+            confidence: None,
+            reference_file_path: None,
+        })
+        .unwrap_or_else(|| resolve_import_tempo(&analyzed_files));
+
     let song = Song {
         id: request.song_id.clone(),
         title: request.title.clone(),
         artist: request.artist.clone(),
-        bpm: request.bpm.unwrap_or(120.0),
+        bpm: detected_tempo.bpm,
         tempo_metadata: TempoMetadata {
-            source: if request.bpm.is_some() {
-                TempoSource::Manual
-            } else {
-                TempoSource::AutoImport
-            },
-            confidence: None,
-            reference_file_path: None,
+            source: detected_tempo.source,
+            confidence: detected_tempo.confidence,
+            reference_file_path: detected_tempo.reference_file_path,
         },
         key: request.key.clone(),
         time_signature: request.time_signature.clone(),
@@ -404,6 +412,7 @@ fn analyze_import_files_in_parallel(
                     channels: analysis.channels,
                     sample_rate: analysis.sample_rate,
                     duration_seconds: analysis.duration_seconds,
+                    tempo_candidate: analysis.tempo_candidate,
                 };
 
                 results
@@ -444,6 +453,72 @@ fn analyze_import_files_in_parallel(
 
     analyzed_files.sort_by_key(|file| file.index);
     Ok((analyzed_files, metrics))
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedTempo {
+    bpm: f64,
+    source: TempoSource,
+    confidence: Option<f64>,
+    reference_file_path: Option<String>,
+}
+
+fn resolve_import_tempo(analyzed_files: &[AnalyzedImportFile]) -> ResolvedTempo {
+    let best_candidate = analyzed_files
+        .iter()
+        .filter_map(|file| {
+            file.metadata
+                .tempo_candidate
+                .as_ref()
+                .map(|tempo_candidate| (file, tempo_candidate))
+        })
+        .max_by(|(left_file, left_candidate), (right_file, right_candidate)| {
+            import_file_priority(&left_file.imported_relative_path)
+                .cmp(&import_file_priority(&right_file.imported_relative_path))
+                .then_with(|| {
+                    left_candidate
+                        .confidence
+                        .partial_cmp(&right_candidate.confidence)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+        });
+
+    match best_candidate {
+        Some((file, tempo_candidate)) => ResolvedTempo {
+            bpm: tempo_candidate.bpm,
+            source: TempoSource::AutoImport,
+            confidence: Some(tempo_candidate.confidence),
+            reference_file_path: Some(file.imported_relative_path.to_string_lossy().replace('\\', "/")),
+        },
+        None => ResolvedTempo {
+            bpm: 120.0,
+            source: TempoSource::AutoImport,
+            confidence: None,
+            reference_file_path: None,
+        },
+    }
+}
+
+fn import_file_priority(path: &Path) -> u8 {
+    let normalized = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if normalized.contains("guide click") {
+        5
+    } else if normalized.contains("click") {
+        4
+    } else if normalized.contains("met") || normalized.contains("metro") {
+        3
+    } else if normalized.contains("guide") {
+        2
+    } else if normalized.contains("drum") {
+        1
+    } else {
+        0
+    }
 }
 
 fn merge_import_metrics(target: &mut ImportOperationMetrics, source: &ImportOperationMetrics) {
