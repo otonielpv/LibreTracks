@@ -42,6 +42,7 @@ const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 48;
 const ZOOM_STEP = 0.25;
 const ZOOM_WHEEL_STEP = 1.25;
+const DRAG_THRESHOLD_PX = 6;
 
 type ContextMenuAction = {
   label: string;
@@ -92,6 +93,11 @@ type TrackDragState = {
 type TimeSelection = {
   startSeconds: number;
   endSeconds: number;
+} | null;
+
+type PendingRulerPress = {
+  startClientX: number;
+  startSeconds: number;
 } | null;
 
 function formatClock(seconds: number) {
@@ -262,12 +268,6 @@ function isTrackDescendant(song: SongView, candidateTrackId: string | null, trac
   return false;
 }
 
-function isInteractiveTrackControl(target: EventTarget | null) {
-  return target instanceof HTMLElement
-    ? Boolean(target.closest("button, input, select, textarea, label"))
-    : false;
-}
-
 function isInteractiveTimelineTarget(target: EventTarget | null) {
   return target instanceof HTMLElement
     ? Boolean(
@@ -363,8 +363,13 @@ export function TransportPanel() {
     durationSeconds: 0,
     running: false,
   });
+  const displayPositionSecondsRef = useRef(0);
   const pendingZoomAnchorRef = useRef<{ seconds: number; viewOffsetX: number } | null>(null);
   const suppressTrackClickRef = useRef(false);
+  const pendingRulerPressRef = useRef<PendingRulerPress>(null);
+  const renderMetricTimeoutRef = useRef<number | null>(null);
+  const pendingRenderMetricRef = useRef(0);
+  const transportReadoutValueRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -535,6 +540,7 @@ export function TransportPanel() {
     };
 
     if (snapshot?.playbackState !== "playing") {
+      displayPositionSecondsRef.current = snapshot?.positionSeconds ?? 0;
       setDisplayPositionSeconds(snapshot?.positionSeconds ?? 0);
     }
   }, [
@@ -561,6 +567,14 @@ export function TransportPanel() {
   }, [song]);
 
   useEffect(() => {
+    return () => {
+      if (renderMetricTimeoutRef.current !== null) {
+        window.clearTimeout(renderMetricTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (snapshot?.playbackState !== "playing") {
       return;
     }
@@ -568,6 +582,11 @@ export function TransportPanel() {
     let animationFrameId = 0;
 
     const tick = () => {
+      if (playheadDrag) {
+        animationFrameId = window.requestAnimationFrame(tick);
+        return;
+      }
+
       const anchor = playbackVisualAnchorRef.current;
       const elapsedSeconds = anchor.running
         ? (performance.now() - anchor.anchorReceivedAtMs) / 1000
@@ -577,7 +596,7 @@ export function TransportPanel() {
         anchor.anchorPositionSeconds + elapsedSeconds,
       );
 
-      setDisplayPositionSeconds(nextPositionSeconds);
+      syncLivePosition(nextPositionSeconds);
       animationFrameId = window.requestAnimationFrame(tick);
     };
 
@@ -586,7 +605,7 @@ export function TransportPanel() {
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [snapshot?.playbackState]);
+  }, [playheadDrag, snapshot?.playbackState]);
 
   useEffect(() => {
     const closeMenu = (event: PointerEvent) => {
@@ -727,7 +746,7 @@ export function TransportPanel() {
   }, [clipDrag, snapEnabled, song, zoomLevel]);
 
   useEffect(() => {
-    if (!rulerDrag || !song || !rulerTrackRef.current) {
+    if (!song || !rulerTrackRef.current) {
       return;
     }
 
@@ -738,6 +757,24 @@ export function TransportPanel() {
         song.durationSeconds,
         zoomLevel * 18,
       );
+      const pendingPress = pendingRulerPressRef.current;
+      if (pendingPress && !rulerDrag) {
+        const movedEnough = Math.abs(event.clientX - pendingPress.startClientX) > DRAG_THRESHOLD_PX;
+        if (!movedEnough) {
+          return;
+        }
+
+        setRulerDrag({
+          pointerId: 1,
+          startSeconds: pendingPress.startSeconds,
+          currentSeconds: nextSeconds,
+        });
+        return;
+      }
+
+      if (!rulerDrag && !pendingPress) {
+        return;
+      }
       setRulerDrag((current) => (current ? { ...current, currentSeconds: nextSeconds } : current));
     };
 
@@ -746,9 +783,46 @@ export function TransportPanel() {
         return;
       }
 
+      const pendingPress = pendingRulerPressRef.current;
+      pendingRulerPressRef.current = null;
       const activeDrag = rulerDrag;
       setRulerDrag(null);
+      const pointerSeconds = rulerPointerToSeconds(
+        event,
+        rulerTrackRef.current as HTMLElement,
+        song.durationSeconds,
+        zoomLevel * 18,
+      );
+
       if (!activeDrag) {
+        if (!pendingPress) {
+          return;
+        }
+
+        const movedEnough = Math.abs(event.clientX - pendingPress.startClientX) > DRAG_THRESHOLD_PX;
+        if (movedEnough) {
+          const normalized = normalizeSelection({
+            startSeconds: pendingPress.startSeconds,
+            endSeconds: pointerSeconds,
+          });
+
+          if (normalized && normalized.endSeconds - normalized.startSeconds >= 0.15) {
+            setTimeSelection(normalized);
+            setStatus(
+              `Seleccion temporal: ${formatClock(normalized.startSeconds)} -> ${formatClock(normalized.endSeconds)}`,
+            );
+            return;
+          }
+        }
+
+        previewSeek(pointerSeconds);
+
+        await runAction(async () => {
+          const nextSnapshot = await seekTransport(pointerSeconds);
+          setSnapshot(nextSnapshot);
+          setStatus(`Cursor movido a ${formatClock(nextSnapshot.positionSeconds)}`);
+        });
+        setTimeSelection(null);
         return;
       }
 
@@ -758,6 +832,8 @@ export function TransportPanel() {
       });
 
       if (!normalized || normalized.endSeconds - normalized.startSeconds < 0.15) {
+        previewSeek(activeDrag.currentSeconds);
+
         await runAction(async () => {
           const nextSnapshot = await seekTransport(activeDrag.currentSeconds);
           setSnapshot(nextSnapshot);
@@ -817,6 +893,8 @@ export function TransportPanel() {
         return;
       }
 
+      previewSeek(activeDrag.currentSeconds);
+
       await runAction(async () => {
         const nextSnapshot = await seekTransport(activeDrag.currentSeconds);
         setSnapshot(nextSnapshot);
@@ -842,8 +920,8 @@ export function TransportPanel() {
 
     const onMouseMove = (event: MouseEvent) => {
       const exceededThreshold =
-        Math.abs(event.clientX - trackDrag.startClientX) > 5 ||
-        Math.abs(event.clientY - trackDrag.startClientY) > 5;
+        Math.abs(event.clientX - trackDrag.startClientX) > DRAG_THRESHOLD_PX ||
+        Math.abs(event.clientY - trackDrag.startClientY) > DRAG_THRESHOLD_PX;
       const isDraggingNow = trackDrag.isDragging || exceededThreshold;
 
       setTrackDrag((current) =>
@@ -872,8 +950,8 @@ export function TransportPanel() {
       }
 
       const movedEnough =
-        Math.abs(event.clientX - trackDrag.startClientX) > 5 ||
-        Math.abs(event.clientY - trackDrag.startClientY) > 5;
+        Math.abs(event.clientX - trackDrag.startClientX) > DRAG_THRESHOLD_PX ||
+        Math.abs(event.clientY - trackDrag.startClientY) > DRAG_THRESHOLD_PX;
       const shouldTreatAsDrag = trackDrag.isDragging || movedEnough;
       const dropState = shouldTreatAsDrag
         ? resolveTrackDropState(effectSong, trackDrag.trackId, event.clientX, event.clientY)
@@ -915,6 +993,34 @@ export function TransportPanel() {
     }
   }
 
+  function syncLivePosition(positionSeconds: number) {
+    const durationSeconds = song?.durationSeconds ?? 0;
+    const clampedPosition = clamp(positionSeconds, 0, durationSeconds || Number.MAX_SAFE_INTEGER);
+    const durationForOffset = Math.max(1, durationSeconds);
+    const playheadOffset = (clampedPosition / durationForOffset) * timelineWidth;
+
+    displayPositionSecondsRef.current = clampedPosition;
+    panelRef.current?.style.setProperty("--lt-playhead-left", `${playheadOffset}px`);
+
+    if (transportReadoutValueRef.current) {
+      transportReadoutValueRef.current.textContent = formatClock(clampedPosition);
+    }
+  }
+
+  function previewSeek(positionSeconds: number) {
+    const durationSeconds = song?.durationSeconds ?? 0;
+    const clampedPosition = clamp(positionSeconds, 0, durationSeconds || Number.MAX_SAFE_INTEGER);
+
+    playbackVisualAnchorRef.current = {
+      anchorPositionSeconds: clampedPosition,
+      anchorReceivedAtMs: performance.now(),
+      durationSeconds,
+      running: snapshot?.playbackState === "playing" && Boolean(snapshot?.transportClock?.running),
+    };
+    setDisplayPositionSeconds(clampedPosition);
+    syncLivePosition(clampedPosition);
+  }
+
   const laneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
   const fitAllZoomLevel = song?.durationSeconds
     ? clamp(laneViewportWidth / (Math.max(song.durationSeconds, 1) * 18), ZOOM_MIN, ZOOM_MAX)
@@ -944,7 +1050,10 @@ export function TransportPanel() {
         Math.max(1, song?.durationSeconds ?? 1)) *
       timelineWidth
     : 0;
-  const playheadOffset = (positionSeconds / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth;
+  const draggedPlayheadOffset =
+    playheadDrag && song
+      ? (playheadDrag.currentSeconds / Math.max(1, song.durationSeconds)) * timelineWidth
+      : null;
   const rulerMarks = buildRulerMarks(song?.durationSeconds ?? 0, zoomLevel);
 
   useEffect(() => {
@@ -968,6 +1077,10 @@ export function TransportPanel() {
     const nextScrollLeft = pendingAnchor.seconds * pixelsPerSecond - laneOffsetX;
     shell.scrollLeft = clamp(nextScrollLeft, 0, Math.max(0, timelineRowWidth - shell.clientWidth));
   }, [pixelsPerSecond, timelineRowWidth]);
+
+  useEffect(() => {
+    syncLivePosition(playheadDrag?.currentSeconds ?? displayPositionSecondsRef.current);
+  }, [playheadDrag?.currentSeconds, timelineWidth, song?.durationSeconds, displayPositionSeconds]);
 
   function clearSelections(message: string) {
     setSelectedTrackId(null);
@@ -1024,7 +1137,7 @@ export function TransportPanel() {
     const laneCenterOffsetX = Math.max(0, (shell.clientWidth - HEADER_WIDTH) / 2);
 
     pendingZoomAnchorRef.current = {
-      seconds: positionSeconds,
+      seconds: displayPositionSecondsRef.current,
       viewOffsetX: HEADER_WIDTH + laneCenterOffsetX,
     };
     setZoomLevel(clampedZoom);
@@ -1224,9 +1337,10 @@ export function TransportPanel() {
   }
 
   function clipContextMenu(clip: ClipSummary) {
+    const currentCursorSeconds = displayPositionSecondsRef.current;
     const canSplit =
-      displayPositionSeconds > clip.timelineStartSeconds &&
-      displayPositionSeconds < clip.timelineStartSeconds + clip.durationSeconds;
+      currentCursorSeconds > clip.timelineStartSeconds &&
+      currentCursorSeconds < clip.timelineStartSeconds + clip.durationSeconds;
 
     return [
       {
@@ -1234,9 +1348,9 @@ export function TransportPanel() {
         disabled: !canSplit,
         onSelect: async () => {
           await runAction(async () => {
-            const nextSnapshot = await splitClip(clip.id, displayPositionSeconds);
+            const nextSnapshot = await splitClip(clip.id, currentCursorSeconds);
             setSnapshot(nextSnapshot);
-            setStatus(`Clip cortado en ${formatClock(displayPositionSeconds)}`);
+            setStatus(`Clip cortado en ${formatClock(currentCursorSeconds)}`);
           });
         },
       },
@@ -1338,7 +1452,15 @@ export function TransportPanel() {
     _phase: "mount" | "update" | "nested-update",
     actualDuration: number,
   ) {
-    void reportUiRenderMetric(actualDuration);
+    pendingRenderMetricRef.current = actualDuration;
+    if (renderMetricTimeoutRef.current !== null) {
+      return;
+    }
+
+    renderMetricTimeoutRef.current = window.setTimeout(() => {
+      renderMetricTimeoutRef.current = null;
+      void reportUiRenderMetric(pendingRenderMetricRef.current);
+    }, 250);
   }
 
   return (
@@ -1400,7 +1522,7 @@ export function TransportPanel() {
             </button>
           </div>
           <div className="lt-transport-readout">
-            <strong>{formatClock(positionSeconds)}</strong>
+            <strong ref={transportReadoutValueRef}>{formatClock(positionSeconds)}</strong>
             <span className={`transport-pill is-${snapshot?.playbackState ?? "empty"}`}>
               {snapshot?.playbackState ?? "empty"}
             </span>
@@ -1494,11 +1616,10 @@ export function TransportPanel() {
                 );
                 setSelectedSectionId(null);
                 setContextMenu(null);
-                setRulerDrag({
-                  pointerId: 1,
+                pendingRulerPressRef.current = {
+                  startClientX: event.clientX,
                   startSeconds,
-                  currentSeconds: startSeconds,
-                });
+                };
               }}
             >
               <div className="lt-ruler-content" style={{ width: timelineWidth }}>
@@ -1552,7 +1673,7 @@ export function TransportPanel() {
 
                 <div
                   className={`lt-playhead is-handle ${playheadDrag ? "is-dragging" : ""}`}
-                  style={{ left: playheadOffset }}
+                  style={draggedPlayheadOffset === null ? undefined : { left: draggedPlayheadOffset }}
                   onMouseDown={(event) => {
                     if (!song || event.button !== 0) {
                       return;
@@ -1563,7 +1684,7 @@ export function TransportPanel() {
                     setContextMenu(null);
                     setPlayheadDrag({
                       pointerId: 1,
-                      currentSeconds: positionSeconds,
+                      currentSeconds: displayPositionSecondsRef.current,
                     });
                   }}
                 />
@@ -1598,21 +1719,6 @@ export function TransportPanel() {
                     style={{ paddingLeft: 16 + track.depth * 22 }}
                     role="button"
                     tabIndex={0}
-                    onMouseDown={(event) => {
-                      if (event.button !== 0 || isInteractiveTrackControl(event.target)) {
-                        return;
-                      }
-
-                      setContextMenu(null);
-                      setTrackDrag({
-                        trackId: track.id,
-                        pointerId: 1,
-                        startClientX: event.clientX,
-                        startClientY: event.clientY,
-                        currentClientY: event.clientY,
-                        isDragging: false,
-                      });
-                    }}
                     onClick={() => {
                       if (suppressTrackClickRef.current) {
                         suppressTrackClickRef.current = false;
@@ -1631,6 +1737,29 @@ export function TransportPanel() {
                   >
                     <div className="lt-track-header-main">
                       <div className="lt-track-title-row">
+                        <button
+                          type="button"
+                          className="lt-track-drag-handle"
+                          aria-label={`Mover ${track.name}`}
+                          onMouseDown={(event) => {
+                            if (event.button !== 0) {
+                              return;
+                            }
+
+                            event.stopPropagation();
+                            setContextMenu(null);
+                            setTrackDrag({
+                              trackId: track.id,
+                              pointerId: 1,
+                              startClientX: event.clientX,
+                              startClientY: event.clientY,
+                              currentClientY: event.clientY,
+                              isDragging: false,
+                            });
+                          }}
+                        >
+                          ::
+                        </button>
                         {track.kind === "folder" ? (
                           <button
                             type="button"
@@ -1807,7 +1936,10 @@ export function TransportPanel() {
                         );
                       })}
 
-                      <div className="lt-playhead" style={{ left: playheadOffset }} />
+                      <div
+                        className="lt-playhead"
+                        style={draggedPlayheadOffset === null ? undefined : { left: draggedPlayheadOffset }}
+                      />
                     </div>
                   </div>
                 </div>

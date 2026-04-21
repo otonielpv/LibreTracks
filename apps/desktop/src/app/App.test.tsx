@@ -301,11 +301,11 @@ describe("App", () => {
     const { container } = await renderApp();
     mockTrackRowDragGeometry(container);
 
-    const keysHeader = screen.getByText("Keys").closest(".lt-track-header");
-    expect(keysHeader).toBeTruthy();
+    const dragHandle = screen.getByRole("button", { name: /mover keys/i });
+    expect(dragHandle).toBeTruthy();
 
     await act(async () => {
-      fireEvent.mouseDown(keysHeader as HTMLElement, { button: 0, clientX: 80, clientY: 470 });
+      fireEvent.mouseDown(dragHandle, { button: 0, clientX: 80, clientY: 470 });
     });
 
     await act(async () => {
@@ -320,11 +320,11 @@ describe("App", () => {
     const { container } = await renderApp();
     mockTrackRowDragGeometry(container);
 
-    const keysHeader = screen.getByText("Keys").closest(".lt-track-header");
-    expect(keysHeader).toBeTruthy();
+    const dragHandle = screen.getByRole("button", { name: /mover keys/i });
+    expect(dragHandle).toBeTruthy();
 
     await act(async () => {
-      fireEvent.mouseDown(keysHeader as HTMLElement, { button: 0, clientX: 80, clientY: 470 });
+      fireEvent.mouseDown(dragHandle, { button: 0, clientX: 80, clientY: 470 });
     });
 
     await act(async () => {

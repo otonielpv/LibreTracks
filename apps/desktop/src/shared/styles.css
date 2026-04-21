@@ -1236,6 +1236,7 @@ input[type="range"] {
 .lt-playhead {
   background: linear-gradient(180deg, #d7f2ff 0%, #8fd2ff 100%);
   box-shadow: 0 0 16px rgba(143, 210, 255, 0.5);
+  left: var(--lt-playhead-left, 0px);
   position: absolute;
   top: 0;
   bottom: 0;
@@ -1285,7 +1286,7 @@ input[type="range"] {
   border: 0;
   border-right: 1px solid rgba(116, 143, 165, 0.16);
   border-radius: 0;
-  cursor: grab;
+  cursor: pointer;
   display: grid;
   gap: 0.45rem;
   grid-template-columns: minmax(0, 1fr);
@@ -1310,7 +1311,6 @@ input[type="range"] {
 }
 
 .lt-track-header.is-dragging {
-  cursor: grabbing;
   opacity: 0.72;
 }
 
@@ -1325,6 +1325,22 @@ input[type="range"] {
   display: flex;
   gap: 0.35rem;
   min-width: 0;
+}
+
+.lt-track-drag-handle {
+  border-radius: 8px;
+  color: #91a3b3;
+  cursor: grab;
+  flex: 0 0 auto;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+  min-width: 30px;
+  padding: 0.28rem 0.45rem;
+}
+
+.lt-track-drag-handle:active {
+  cursor: grabbing;
 }
 
 .lt-track-title-row strong {
