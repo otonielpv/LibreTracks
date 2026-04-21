@@ -314,6 +314,12 @@ body {
   min-height: 0;
   overflow: auto;
   background: #0e0e0e;
+  display: flex;
+  flex-direction: column;
+}
+
+.lt-track-list {
+  flex: 1;
 }
 
 .lt-ruler-row,

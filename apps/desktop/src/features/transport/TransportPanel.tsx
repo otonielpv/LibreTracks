@@ -146,22 +146,6 @@ function normalizeSelection(selection: TimeSelection) {
   };
 }
 
-function buildRulerMarks(durationSeconds: number, zoomLevel: number) {
-  const stepSeconds =
-    zoomLevel >= 24 ? 1 : zoomLevel >= 12 ? 2 : zoomLevel >= 6 ? 4 : zoomLevel >= 3 ? 8 : 16;
-  const marks: number[] = [];
-
-  for (let current = 0; current <= durationSeconds; current += stepSeconds) {
-    marks.push(current);
-  }
-
-  if (marks.at(-1) !== durationSeconds) {
-    marks.push(durationSeconds);
-  }
-
-  return marks;
-}
-
 function keyboardDigit(eventCode: string) {
   if (eventCode.startsWith("Digit")) {
     const value = Number(eventCode.slice("Digit".length));
@@ -1189,7 +1173,6 @@ export function TransportPanel() {
     playheadDrag && song
       ? (playheadDrag.currentSeconds / Math.max(1, song.durationSeconds)) * timelineWidth
       : null;
-  const rulerMarks = buildRulerMarks(song?.durationSeconds ?? 0, zoomLevel);
   const timelineGrid = useTimelineGrid({
     durationSeconds: song?.durationSeconds ?? 0,
     bpm: song?.bpm ?? 120,
@@ -1904,16 +1887,6 @@ export function TransportPanel() {
               }}
             >
               <div className="lt-ruler-content" style={{ width: timelineWidth }}>
-                {rulerMarks.map((mark) => (
-                  <div
-                    key={mark}
-                    className="lt-ruler-mark"
-                    style={{ left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px` }}
-                  >
-                    <span>{formatCompactTime(mark)}</span>
-                  </div>
-                ))}
-
                 {timelineGrid.subdivisions.map((mark) => (
                   <div
                     key={`sub-${mark.toFixed(4)}`}
@@ -2180,16 +2153,6 @@ export function TransportPanel() {
 
                   <div className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""}`}>
                     <div className="lt-track-lane-grid" style={{ width: timelineWidth }}>
-                      {rulerMarks.map((mark) => (
-                        <div
-                          key={`${track.id}-${mark}`}
-                          className="lt-lane-grid-line"
-                          style={{
-                            left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px`,
-                          }}
-                        />
-                      ))}
-
                       {timelineGrid.subdivisions.map((mark) => (
                         <div
                           key={`${track.id}-sub-${mark.toFixed(4)}`}

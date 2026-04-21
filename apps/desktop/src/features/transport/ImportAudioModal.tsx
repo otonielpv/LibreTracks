@@ -1,5 +1,3 @@
-import { useMemo, useState } from "react";
-
 type ImportAudioModalProps = {
   isOpen: boolean;
   isImporting: boolean;
@@ -60,115 +58,47 @@ const DEMO_FILES: DemoFile[] = [
 ];
 
 export function ImportAudioModal({ isOpen, isImporting, onClose, onImport }: ImportAudioModalProps) {
-  const [selectedIds, setSelectedIds] = useState<string[]>(["lead-vocal", "synth-bass"]);
-
-  const selectedCount = useMemo(() => selectedIds.length, [selectedIds]);
-
   if (!isOpen) {
     return null;
   }
 
   return (
     <div className="lt-import-overlay">
-      <div className="lt-import-dialog">
+      <div className="lt-import-dialog lt-import-dialog--simple">
         <header className="lt-import-header">
           <div className="lt-import-header-title">
-            <span className="material-symbols-outlined">library_music</span>
-            <span>Import Audio Files</span>
+            <span className="material-symbols-outlined">audio_file</span>
+            <span>Importar Audio</span>
           </div>
-          <button type="button" className="lt-import-close" onClick={onClose}>
+          <button type="button" className="lt-import-close" onClick={onClose} disabled={isImporting}>
             <span className="material-symbols-outlined">close</span>
           </button>
         </header>
 
-        <div className="lt-import-body">
-          <aside className="lt-import-sidebar">
-            <span className="lt-import-sidebar-label">Locations</span>
-            <div className="lt-import-sidebar-list">
-              <button type="button">This PC</button>
-              <button type="button">Samples Drive</button>
-              <button type="button" className="is-active">Project Audio</button>
-              <button type="button">Cloud Storage</button>
-            </div>
-          </aside>
-
-          <main className="lt-import-main">
-            <div className="lt-import-breadcrumbs">
-              <div>Samples Drive / Project Audio / Bounces</div>
-              <input
-                type="text"
-                readOnly
-                value="Search..."
-                className="lt-import-search"
-              />
-            </div>
-
-            <div className="lt-import-table-header">
-              <span />
-              <span>Name</span>
-              <span>Format</span>
-              <span>Duration</span>
-              <span>Size</span>
-            </div>
-
-            <div className="lt-import-file-list">
-              {DEMO_FILES.map((file) => {
-                const isSelected = selectedIds.includes(file.id);
-                return (
-                  <button
-                    key={file.id}
-                    type="button"
-                    disabled={!file.selectable}
-                    className={`lt-import-file-row ${
-                      file.selectable
-                        ? isSelected
-                          ? "is-selected"
-                          : ""
-                        : "is-disabled"
-                    }`}
-                    onClick={() => {
-                      if (!file.selectable) {
-                        return;
-                      }
-
-                      setSelectedIds((current) =>
-                        current.includes(file.id)
-                          ? current.filter((id) => id !== file.id)
-                          : [...current, file.id],
-                      );
-                    }}
-                  >
-                    <span className="lt-import-check">{isSelected ? "✓" : ""}</span>
-                    <span className="lt-import-file-name">{file.name}</span>
-                    <span className="lt-import-file-meta">{file.format}</span>
-                    <span className="lt-import-file-meta">{file.duration}</span>
-                    <span className="lt-import-file-meta">{file.size}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </main>
+        <div className="lt-import-simple-body">
+          <span className="material-symbols-outlined lt-import-simple-icon">folder_open</span>
+          <p className="lt-import-simple-title">Selecciona archivos WAV desde tu ordenador</p>
+          <p className="lt-import-simple-hint">
+            Se abrirá el explorador de archivos del sistema. Puedes seleccionar uno o varios archivos WAV.
+          </p>
+          <button
+            type="button"
+            disabled={isImporting}
+            className="lt-import-submit"
+            onClick={() => {
+              void onImport();
+            }}
+          >
+            <span className="material-symbols-outlined">file_open</span>
+            {isImporting ? "Importando..." : "Seleccionar archivos..."}
+          </button>
         </div>
 
         <footer className="lt-import-footer">
-          <div className="lt-import-preview-toggle">
-            <span className="lt-import-preview-pill" />
-            Auto-Play Preview
-          </div>
+          <div />
           <div className="lt-import-actions">
-            <button type="button" className="lt-import-cancel" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={selectedCount === 0 || isImporting}
-              className="lt-import-submit"
-              onClick={() => {
-                void onImport();
-              }}
-            >
-              <span className="material-symbols-outlined">file_download</span>
-              {isImporting ? "Importing..." : `Import Selected (${selectedCount})`}
+            <button type="button" className="lt-import-cancel" onClick={onClose} disabled={isImporting}>
+              Cancelar
             </button>
           </div>
         </footer>
