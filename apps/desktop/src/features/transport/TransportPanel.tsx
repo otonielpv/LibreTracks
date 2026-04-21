@@ -1684,13 +1684,11 @@ export function TransportPanel() {
 
       <header className="lt-topbar">
         <div className="lt-brand">
-          <span className="lt-kicker">LibreTracks Desktop</span>
-          <h1>Timeline DAW</h1>
-          <p>{song ? `${song.title} | ${song.bpm} BPM | ${song.timeSignature}` : "Sesion vacia"}</p>
+          <span className="lt-brand-title">LIBRETRACKS</span>
         </div>
 
         <div className="lt-transport">
-          <label className="lt-zoom-control">
+          <label className="lt-bpm-control">
             <span>BPM</span>
             <input
               aria-label="BPM de la cancion"
@@ -1720,35 +1718,16 @@ export function TransportPanel() {
                 event.currentTarget.blur();
               }}
             />
-            <small title={song?.tempoMetadata.referenceFilePath ?? undefined}>{tempoSourceLabel} (editable)</small>
+            <small title={song?.tempoMetadata.referenceFilePath ?? undefined}>{tempoSourceLabel}</small>
           </label>
+
           <div className="lt-transport-buttons">
-            <button
-              type="button"
-              onClick={() =>
-                void runAction(async () => {
-                  const nextSnapshot = await playTransport();
-                  setSnapshot(nextSnapshot);
-                  setStatus("Reproduccion iniciada.");
-                })
-              }
-            >
-              Play
+            <button type="button" aria-label="Anterior">
+              <span className="material-symbols-outlined">skip_previous</span>
             </button>
             <button
               type="button"
-              onClick={() =>
-                void runAction(async () => {
-                  const nextSnapshot = await pauseTransport();
-                  setSnapshot(nextSnapshot);
-                  setStatus("Reproduccion pausada.");
-                })
-              }
-            >
-              Pause
-            </button>
-            <button
-              type="button"
+              aria-label="Detener"
               onClick={() =>
                 void runAction(async () => {
                   const nextSnapshot = await stopTransport();
@@ -1757,12 +1736,53 @@ export function TransportPanel() {
                 })
               }
             >
-              Stop
+              <span className="material-symbols-outlined">stop</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Reproducir"
+              className="is-play"
+              onClick={() =>
+                void runAction(async () => {
+                  const nextSnapshot = await playTransport();
+                  setSnapshot(nextSnapshot);
+                  setStatus("Reproduccion iniciada.");
+                })
+              }
+            >
+              <span className="material-symbols-outlined">play_arrow</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Pausar"
+              onClick={() =>
+                void runAction(async () => {
+                  const nextSnapshot = await pauseTransport();
+                  setSnapshot(nextSnapshot);
+                  setStatus("Reproduccion pausada.");
+                })
+              }
+            >
+              <span className="material-symbols-outlined">pause</span>
+            </button>
+            <button type="button" aria-label="Siguiente">
+              <span className="material-symbols-outlined">skip_next</span>
             </button>
           </div>
+
           <div className="lt-transport-readout">
-            <strong ref={transportReadoutValueRef}>{formatClock(positionSeconds)}</strong>
-            <small>{musicalPositionLabel}</small>
+            <div className="lt-readout-block">
+              <span>Tempo</span>
+              <strong>{song ? `${song.bpm.toFixed(2)} BPM` : "120.00 BPM"}</strong>
+            </div>
+            <div className="lt-readout-block">
+              <span>Bar</span>
+              <strong>{musicalPositionLabel}</strong>
+            </div>
+            <div className="lt-readout-block is-timecode">
+              <span>Timecode</span>
+              <strong ref={transportReadoutValueRef}>{formatClock(positionSeconds)}</strong>
+            </div>
             <span className={`transport-pill is-${snapshot?.playbackState ?? "empty"}`}>
               {snapshot?.playbackState ?? "empty"}
             </span>
@@ -1802,15 +1822,23 @@ export function TransportPanel() {
       <div className="lt-shell-body">
         <aside className="lt-side-nav" aria-label="Navegacion principal">
           <button type="button" className="is-active" aria-label="Browser">
+            <span className="material-symbols-outlined">folder_open</span>
             Browser
           </button>
           <button type="button" aria-label="Markers">
+            <span className="material-symbols-outlined">sell</span>
             Markers
           </button>
           <button type="button" aria-label="Library">
+            <span className="material-symbols-outlined">library_music</span>
             Library
           </button>
+          <button type="button" aria-label="Routing">
+            <span className="material-symbols-outlined">settings_input_component</span>
+            Routing
+          </button>
           <button type="button" aria-label="Settings">
+            <span className="material-symbols-outlined">settings</span>
             Settings
           </button>
         </aside>
@@ -1978,12 +2006,6 @@ export function TransportPanel() {
           </div>
 
           <div className="lt-track-list" ref={laneAreaRef}>
-            {song && visibleTracks.length === 0 ? (
-              <div className="lt-empty-state">
-                <strong>No hay tracks cargados</strong>
-                <p>Crea un proyecto o importa WAVs para empezar a editar la sesion.</p>
-              </div>
-            ) : null}
 
             {song?.tracks && visibleTracks.map((track) => {
               const trackClips = clipsByTrack[track.id] ?? [];
