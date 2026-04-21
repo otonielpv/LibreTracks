@@ -28,8 +28,8 @@ use crate::state::DesktopError;
 
 const PCM_RING_CAPACITY_FRAMES: usize = 16_384;
 const DISK_RENDER_BLOCK_FRAMES: usize = 1_024;
-const DISK_READER_IDLE_SLEEP: Duration = Duration::from_millis(2);
 const SOURCE_BUFFER_COMPACT_THRESHOLD_FRAMES: u64 = 4_096;
+const GAIN_EPSILON: f32 = 0.000_001;
 
 pub struct AudioRuntime {
     session: Option<PlaybackSession>,
@@ -208,10 +208,20 @@ struct PlaybackClipPlan {
     file_path: PathBuf,
     timeline_start_frame: u64,
     duration_frames: u64,
+    clip_start_offset_frames: u64,
+    total_clip_duration_frames: u64,
+    fade_in_frames: u64,
+    fade_out_frames: u64,
     source_start_seconds: f64,
 }
 
 struct DiskReaderState {
+    mixer: Mixer,
+    producer: Producer<f32>,
+    command_receiver: Receiver<ReaderCommand>,
+}
+
+struct Mixer {
     song: Song,
     output_sample_rate: u32,
     output_channels: usize,
@@ -219,15 +229,18 @@ struct DiskReaderState {
     remaining_song_frames: u64,
     next_plan_index: usize,
     plans: Vec<PlaybackClipPlan>,
-    active_readers: Vec<StreamingClipReader>,
-    producer: Producer<f32>,
-    command_receiver: Receiver<ReaderCommand>,
+    active_clips: Vec<MixClipState>,
     debug_config: AudioDebugConfig,
     opened_files: usize,
 }
 
-struct StreamingClipReader {
+struct MixClipState {
     plan: PlaybackClipPlan,
+    reader: StreamingClipReader,
+    current_gain: f32,
+}
+
+struct StreamingClipReader {
     format: Box<dyn FormatReader>,
     decoder: Box<dyn Decoder>,
     track_id: u32,
@@ -252,6 +265,27 @@ impl PlaybackClipPlan {
     fn timeline_end_frame(&self) -> u64 {
         self.timeline_start_frame
             .saturating_add(self.duration_frames)
+    }
+
+    fn edge_gain(&self, clip_frame_position: u64) -> f32 {
+        let fade_in_gain = if self.fade_in_frames == 0 || clip_frame_position >= self.fade_in_frames
+        {
+            1.0
+        } else {
+            clip_frame_position as f32 / self.fade_in_frames as f32
+        };
+
+        let remaining_frames = self
+            .total_clip_duration_frames
+            .saturating_sub(clip_frame_position);
+        let fade_out_gain = if self.fade_out_frames == 0 || remaining_frames >= self.fade_out_frames
+        {
+            1.0
+        } else {
+            remaining_frames as f32 / self.fade_out_frames as f32
+        };
+
+        fade_in_gain.min(fade_out_gain).clamp(0.0, 1.0)
     }
 }
 
@@ -583,21 +617,16 @@ impl PlaybackSession {
         let (reader_sender, reader_receiver) = mpsc::channel();
 
         let reader_handle = spawn_disk_reader(DiskReaderState {
-            song: song.clone(),
-            output_sample_rate,
-            output_channels,
-            timeline_cursor_frame: 0,
-            remaining_song_frames: seconds_to_frames(
-                (song.duration_seconds - position_seconds).max(0.0),
+            mixer: Mixer::new(
+                &song_dir,
+                song.clone(),
+                position_seconds,
                 output_sample_rate,
+                output_channels,
+                debug_config,
             ),
-            next_plan_index: 0,
-            plans: build_playback_plans(&song_dir, &song, position_seconds, output_sample_rate),
-            active_readers: Vec::new(),
             producer,
             command_receiver: reader_receiver,
-            debug_config,
-            opened_files: 0,
         });
 
         let stream = build_output_stream(&device, &config, sample_format, consumer)?;
@@ -639,7 +668,6 @@ impl StreamingClipReader {
         let source_start_seconds = source_start_seconds_floor(plan.source_start_seconds);
 
         Ok(Self {
-            plan,
             format: source.format,
             decoder: source.decoder,
             track_id: source.track_id,
@@ -1032,18 +1060,19 @@ fn coalesce_sync_song_commands(
 }
 
 fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
-    while state.timeline_cursor_frame < state.remaining_song_frames {
+    while state.mixer.timeline_cursor_frame < state.mixer.remaining_song_frames {
         if state.consume_commands() {
             break;
         }
 
-        let free_frames = state.producer.slots() / state.output_channels.max(1);
+        let free_frames = state.producer.slots() / state.mixer.output_channels.max(1);
         if free_frames == 0 {
-            thread::sleep(DISK_READER_IDLE_SLEEP);
+            thread::yield_now();
             continue;
         }
 
-        let remaining_frames = (state.remaining_song_frames - state.timeline_cursor_frame) as usize;
+        let remaining_frames =
+            (state.mixer.remaining_song_frames - state.mixer.timeline_cursor_frame) as usize;
         let block_frames = DISK_RENDER_BLOCK_FRAMES
             .min(free_frames)
             .min(remaining_frames);
@@ -1051,13 +1080,10 @@ fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
             break;
         }
 
-        state.activate_due_readers(state.timeline_cursor_frame + block_frames as u64);
-        let block = state.render_block(block_frames);
+        let block = state.mixer.render_next_block(block_frames);
         if !push_block_into_ring(&mut state.producer, &block) {
             break;
         }
-
-        state.timeline_cursor_frame += block_frames as u64;
     }
 
     DiskReaderReport
@@ -1069,25 +1095,107 @@ impl DiskReaderState {
 
         while let Ok(command) = self.command_receiver.try_recv() {
             match command {
-                ReaderCommand::UpdateSong(song) => self.song = song,
+                ReaderCommand::UpdateSong(song) => self.mixer.apply_song_update(song),
                 ReaderCommand::Stop => should_stop = true,
             }
         }
 
         should_stop
     }
+}
 
-    fn activate_due_readers(&mut self, window_end_frame: u64) {
+impl Mixer {
+    fn new(
+        song_dir: &Path,
+        song: Song,
+        position_seconds: f64,
+        output_sample_rate: u32,
+        output_channels: usize,
+        debug_config: AudioDebugConfig,
+    ) -> Self {
+        Self {
+            remaining_song_frames: seconds_to_frames(
+                (song.duration_seconds - position_seconds).max(0.0),
+                output_sample_rate,
+            ),
+            plans: build_playback_plans(song_dir, &song, position_seconds, output_sample_rate),
+            song,
+            output_sample_rate,
+            output_channels,
+            timeline_cursor_frame: 0,
+            next_plan_index: 0,
+            active_clips: Vec::new(),
+            debug_config,
+            opened_files: 0,
+        }
+    }
+
+    fn apply_song_update(&mut self, song: Song) {
+        self.song = song;
+    }
+
+    fn render_next_block(&mut self, block_frames: usize) -> Vec<f32> {
+        let block_start = self.timeline_cursor_frame;
+        let block_end = block_start + block_frames as u64;
+        let mut mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
+
+        self.activate_due_clips(block_end);
+
+        for clip_state in &mut self.active_clips {
+            let overlap_start = block_start.max(clip_state.plan.timeline_start_frame);
+            let overlap_end = block_end.min(clip_state.plan.timeline_end_frame());
+            if overlap_end <= overlap_start {
+                continue;
+            }
+
+            let offset_frames = (overlap_start - block_start) as usize;
+            let overlap_frames = (overlap_end - overlap_start) as usize;
+            let target_gain = resolve_clip_runtime_gain(
+                &self.song,
+                &clip_state.plan.clip_id,
+                &clip_state.plan.track_id,
+            ) as f32;
+
+            if let Err(error) = clip_state.mix_into(
+                &mut mixed,
+                offset_frames,
+                overlap_frames,
+                self.output_channels,
+                overlap_start,
+                target_gain,
+            ) {
+                clip_state.reader.eof = true;
+                if self.debug_config.enabled || self.debug_config.log_commands {
+                    eprintln!("[libretracks-audio] clip decode failed: {error}");
+                }
+            }
+        }
+
+        self.active_clips.retain(|clip_state| {
+            !clip_state.reader.eof && block_end < clip_state.plan.timeline_end_frame()
+        });
+        self.timeline_cursor_frame += block_frames as u64;
+
+        mixed
+    }
+
+    fn activate_due_clips(&mut self, window_end_frame: u64) {
         while self.next_plan_index < self.plans.len()
             && self.plans[self.next_plan_index].timeline_start_frame < window_end_frame
         {
             let plan = self.plans[self.next_plan_index].clone();
             self.next_plan_index += 1;
 
-            match StreamingClipReader::open(plan, self.output_sample_rate) {
+            match StreamingClipReader::open(plan.clone(), self.output_sample_rate) {
                 Ok(reader) => {
+                    let current_gain =
+                        resolve_clip_runtime_gain(&self.song, &plan.clip_id, &plan.track_id) as f32;
                     self.opened_files += 1;
-                    self.active_readers.push(reader);
+                    self.active_clips.push(MixClipState {
+                        plan,
+                        reader,
+                        current_gain,
+                    });
                 }
                 Err(error) => {
                     if self.debug_config.enabled || self.debug_config.log_commands {
@@ -1097,43 +1205,58 @@ impl DiskReaderState {
             }
         }
     }
+}
 
-    fn render_block(&mut self, block_frames: usize) -> Vec<f32> {
-        let block_start = self.timeline_cursor_frame;
-        let block_end = block_start + block_frames as u64;
-        let mut mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
+impl MixClipState {
+    fn mix_into(
+        &mut self,
+        buffer: &mut [f32],
+        offset_frames: usize,
+        frame_count: usize,
+        output_channels: usize,
+        overlap_start_frame: u64,
+        target_gain: f32,
+    ) -> Result<(), String> {
+        let start_gain = self.current_gain;
 
-        for reader in &mut self.active_readers {
-            let overlap_start = block_start.max(reader.plan.timeline_start_frame);
-            let overlap_end = block_end.min(reader.plan.timeline_end_frame());
-            if overlap_end <= overlap_start {
-                continue;
-            }
+        for frame_offset in 0..frame_count {
+            let dynamic_gain =
+                interpolated_gain(start_gain, target_gain, frame_offset, frame_count);
+            let clip_frame_position = self.plan.clip_start_offset_frames
+                + (overlap_start_frame - self.plan.timeline_start_frame)
+                + frame_offset as u64;
+            let edge_gain = self.plan.edge_gain(clip_frame_position);
 
-            let offset_frames = (overlap_start - block_start) as usize;
-            let overlap_frames = (overlap_end - overlap_start) as usize;
-            let gain =
-                resolve_clip_runtime_gain(&self.song, &reader.plan.clip_id, &reader.plan.track_id);
-
-            if let Err(error) = reader.mix_into(
-                &mut mixed,
-                offset_frames,
-                overlap_frames,
-                self.output_channels,
-                gain as f32,
-            ) {
-                reader.eof = true;
-                if self.debug_config.enabled || self.debug_config.log_commands {
-                    eprintln!("[libretracks-audio] clip decode failed: {error}");
-                }
-            }
+            self.reader.mix_into(
+                buffer,
+                offset_frames + frame_offset,
+                1,
+                output_channels,
+                dynamic_gain * edge_gain,
+            )?;
         }
 
-        self.active_readers
-            .retain(|reader| !reader.eof && block_end < reader.plan.timeline_end_frame());
-
-        mixed
+        self.current_gain = target_gain;
+        Ok(())
     }
+}
+
+fn interpolated_gain(
+    start_gain: f32,
+    target_gain: f32,
+    frame_offset: usize,
+    frame_count: usize,
+) -> f32 {
+    if (target_gain - start_gain).abs() <= GAIN_EPSILON {
+        return target_gain;
+    }
+
+    if frame_count <= 1 {
+        return target_gain;
+    }
+
+    let gain_ratio = frame_offset as f32 / frame_count.saturating_sub(1).max(1) as f32;
+    start_gain + (target_gain - start_gain) * gain_ratio
 }
 
 fn push_block_into_ring(producer: &mut Producer<f32>, block: &[f32]) -> bool {
@@ -1175,6 +1298,19 @@ fn build_playback_plans(
                 output_sample_rate,
             ),
             duration_frames: seconds_to_frames(remaining_duration, output_sample_rate),
+            clip_start_offset_frames: seconds_to_frames(elapsed_inside_clip, output_sample_rate),
+            total_clip_duration_frames: seconds_to_frames(
+                clip.duration_seconds,
+                output_sample_rate,
+            ),
+            fade_in_frames: clip
+                .fade_in_seconds
+                .map(|seconds| seconds_to_frames(seconds, output_sample_rate))
+                .unwrap_or(0),
+            fade_out_frames: clip
+                .fade_out_seconds
+                .map(|seconds| seconds_to_frames(seconds, output_sample_rate))
+                .unwrap_or(0),
             source_start_seconds: clip.source_start_seconds + elapsed_inside_clip,
         });
     }
@@ -1209,6 +1345,10 @@ fn probe_audio_file(file_path: &Path) -> Result<(), String> {
             file_path: file_path.to_path_buf(),
             timeline_start_frame: 0,
             duration_frames: 1,
+            clip_start_offset_frames: 0,
+            total_clip_duration_frames: 1,
+            fade_in_frames: 0,
+            fade_out_frames: 0,
             source_start_seconds: 0.0,
         },
         44_100,
@@ -1316,9 +1456,9 @@ mod tests {
 
     use super::{
         build_playback_plans, coalesce_sync_song_commands, drain_consumer_samples, env_flag,
-        playback_reason_label, probe_audio_file, scheduled_clip_count, AudioCommand,
-        AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState,
-        PlaybackStartReason, RestartReport, StopReport, SyncReport,
+        interpolated_gain, playback_reason_label, probe_audio_file, scheduled_clip_count,
+        AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState,
+        PlaybackClipPlan, PlaybackStartReason, RestartReport, StopReport, SyncReport,
     };
 
     fn demo_song() -> Song {
@@ -1598,10 +1738,40 @@ mod tests {
         assert_eq!(plans[0].clip_id, "clip_intro");
         assert_eq!(plans[0].timeline_start_frame, 0);
         assert_eq!(plans[0].duration_frames, 48_000 * 4);
+        assert_eq!(plans[0].clip_start_offset_frames, 48_000);
+        assert_eq!(plans[0].total_clip_duration_frames, 48_000 * 5);
         assert!((plans[0].source_start_seconds - 1.0).abs() < 0.000_001);
 
         assert_eq!(plans[1].clip_id, "clip_late");
         assert_eq!(plans[1].timeline_start_frame, 48_000 * 9);
+    }
+
+    #[test]
+    fn interpolated_gain_reaches_target_on_last_sample() {
+        assert!((interpolated_gain(0.2, 1.0, 0, 4) - 0.2).abs() < 0.000_001);
+        assert!((interpolated_gain(0.2, 1.0, 1, 4) - 0.466_666_67).abs() < 0.000_1);
+        assert!((interpolated_gain(0.2, 1.0, 3, 4) - 1.0).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn playback_plan_edge_gain_applies_fades_in_sample_domain() {
+        let plan = PlaybackClipPlan {
+            clip_id: "clip".into(),
+            track_id: "track".into(),
+            file_path: PathBuf::from("audio/test.wav"),
+            timeline_start_frame: 0,
+            duration_frames: 100,
+            clip_start_offset_frames: 0,
+            total_clip_duration_frames: 100,
+            fade_in_frames: 20,
+            fade_out_frames: 20,
+            source_start_seconds: 0.0,
+        };
+
+        assert!((plan.edge_gain(0) - 0.0).abs() < 0.000_001);
+        assert!(plan.edge_gain(10) > 0.45 && plan.edge_gain(10) < 0.55);
+        assert!((plan.edge_gain(50) - 1.0).abs() < 0.000_001);
+        assert!(plan.edge_gain(90) > 0.45 && plan.edge_gain(90) < 0.55);
     }
 
     #[test]
