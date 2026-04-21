@@ -165,6 +165,11 @@ impl AudioEngine {
             return Ok(None);
         }
 
+        if self.position_seconds >= target_marker.start_seconds {
+            self.pending_section_jump = None;
+            return Ok(None);
+        }
+
         let execute_at_seconds = jump_execute_at(song, self.position_seconds, &trigger)?;
 
         let pending_jump = PendingSectionJump {
@@ -193,11 +198,13 @@ impl AudioEngine {
 
         if let Some(pending_jump) = self.pending_section_jump.clone() {
             let execute_at = pending_jump.execute_at_seconds;
+            let target_marker = find_marker(&song, &pending_jump.target_marker_id)?;
 
             if execute_at <= next_position {
                 let overshoot = next_position - execute_at;
-                let target_marker = find_marker(&song, &pending_jump.target_marker_id)?;
                 next_position = (target_marker.start_seconds + overshoot).min(song.duration_seconds);
+                self.pending_section_jump = None;
+            } else if next_position >= target_marker.start_seconds {
                 self.pending_section_jump = None;
             }
         }

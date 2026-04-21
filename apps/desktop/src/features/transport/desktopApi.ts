@@ -412,12 +412,12 @@ export async function seekTransport(positionSeconds: number): Promise<TransportS
 }
 
 export async function scheduleSectionJump(
-  targetSectionId: string,
+  targetMarkerId: string,
   trigger: "immediate" | "section_end" | "after_bars",
   bars?: number,
 ): Promise<TransportSnapshot> {
   if (!isTauriApp) {
-    const targetSection = demoSong.sectionMarkers.find((section) => section.id === targetSectionId) ?? null;
+    const targetSection = demoSong.sectionMarkers.find((section) => section.id === targetMarkerId) ?? null;
     if (targetSection) {
       if (trigger === "immediate") {
         demoClock.anchorPositionSeconds = targetSection.startSeconds;
@@ -425,7 +425,7 @@ export async function scheduleSectionJump(
         demoPendingJump = null;
       } else {
         demoPendingJump = {
-          targetMarkerId: targetSectionId,
+          targetMarkerId,
           targetMarkerName: targetSection.name,
           targetDigit: "digit" in targetSection ? (targetSection.digit ?? null) : null,
           trigger: trigger === "after_bars" ? `after_bars:${bars ?? 4}` : "section_end",
@@ -437,7 +437,7 @@ export async function scheduleSectionJump(
   }
 
   return invokeCommand<TransportSnapshot>("schedule_section_jump", {
-    targetSectionId,
+    targetMarkerId,
     trigger,
     bars,
   });

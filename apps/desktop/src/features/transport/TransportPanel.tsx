@@ -102,6 +102,8 @@ type PendingRulerPress = {
   startSeconds: number;
 } | null;
 
+type GlobalJumpMode = "immediate" | "after_bars" | "section_end";
+
 function formatClock(seconds: number) {
   const safeSeconds = Math.max(0, seconds);
   const minutes = Math.floor(safeSeconds / 60);
@@ -156,6 +158,48 @@ function buildRulerMarks(durationSeconds: number, zoomLevel: number) {
   }
 
   return marks;
+}
+
+function buildMusicalGridMarks(durationSeconds: number, bpm: number, timeSignature: string) {
+  if (durationSeconds <= 0 || bpm <= 0) {
+    return { bars: [] as number[], beats: [] as number[] };
+  }
+
+  const [numeratorRaw] = timeSignature.split("/");
+  const beatsPerBar = Math.max(1, Number(numeratorRaw) || 4);
+  const beatDurationSeconds = 60 / bpm;
+  const bars: number[] = [];
+  const beats: number[] = [];
+  const totalBeats = Math.ceil(durationSeconds / beatDurationSeconds);
+
+  for (let beatIndex = 0; beatIndex <= totalBeats; beatIndex += 1) {
+    const markSeconds = beatIndex * beatDurationSeconds;
+    if (markSeconds > durationSeconds + 0.0001) {
+      break;
+    }
+
+    if (beatIndex % beatsPerBar === 0) {
+      bars.push(markSeconds);
+    } else {
+      beats.push(markSeconds);
+    }
+  }
+
+  return { bars, beats };
+}
+
+function keyboardDigit(eventCode: string) {
+  if (eventCode.startsWith("Digit")) {
+    const value = Number(eventCode.slice("Digit".length));
+    return Number.isInteger(value) && value >= 0 && value <= 9 ? value : null;
+  }
+
+  if (eventCode.startsWith("Numpad")) {
+    const value = Number(eventCode.slice("Numpad".length));
+    return Number.isInteger(value) && value >= 0 && value <= 9 ? value : null;
+  }
+
+  return null;
 }
 
 function cropWaveform(clip: ClipSummary, waveform: WaveformSummaryDto | undefined) {
@@ -357,6 +401,8 @@ export function TransportPanel() {
   const [status, setStatus] = useState("Cargando sesion...");
   const [isBusy, setIsBusy] = useState(false);
   const [tempoDraft, setTempoDraft] = useState("120");
+  const [globalJumpMode, setGlobalJumpMode] = useState<GlobalJumpMode>("immediate");
+  const [globalJumpBars, setGlobalJumpBars] = useState(4);
   const [zoomLevel, setZoomLevel] = useState(7);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
@@ -701,8 +747,47 @@ export function TransportPanel() {
         return;
       }
 
+      const keyDigit = keyboardDigit(event.code);
+      if (keyDigit !== null) {
+        event.preventDefault();
+
+        const marker = song?.sectionMarkers.find((candidate) => candidate.digit === keyDigit) ?? null;
+        if (!marker) {
+          setStatus(`No hay marca asignada al digito ${keyDigit}.`);
+          return;
+        }
+
+        void runAction(async () => {
+          const pendingJump = snapshot?.pendingSectionJump;
+          if (
+            pendingJump &&
+            pendingJump.targetMarkerId === marker.id &&
+            pendingJump.targetDigit === keyDigit
+          ) {
+            const nextSnapshot = await cancelSectionJump();
+            setSnapshot(nextSnapshot);
+            setStatus(`Salto cancelado para digito ${keyDigit}.`);
+            return;
+          }
+
+          await scheduleMarkerJumpWithGlobalMode(marker.id, marker.name);
+        });
+
+        return;
+      }
+
       if (event.key === "Escape") {
         event.preventDefault();
+
+        if (snapshot?.pendingSectionJump) {
+          void runAction(async () => {
+            const nextSnapshot = await cancelSectionJump();
+            setSnapshot(nextSnapshot);
+            setStatus("Salto cancelado.");
+          });
+          return;
+        }
+
         clearSelections("Selecciones limpiadas.");
         return;
       }
@@ -722,7 +807,14 @@ export function TransportPanel() {
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [selectedClipId, snapshot?.playbackState]);
+  }, [
+    globalJumpBars,
+    globalJumpMode,
+    selectedClipId,
+    snapshot?.pendingSectionJump,
+    snapshot?.playbackState,
+    song,
+  ]);
 
   useEffect(() => {
     if (!clipDrag || !song || !laneAreaRef.current) {
@@ -1057,9 +1149,9 @@ export function TransportPanel() {
     : ZOOM_MIN;
   const effectiveZoomMin = song ? fitAllZoomLevel : ZOOM_MIN;
   const positionSeconds = playheadDrag?.currentSeconds ?? displayPositionSeconds;
-  const musicalPositionLabel = song
-    ? formatMusicalPosition(positionSeconds, song.bpm, song.timeSignature)
-    : "1.1.00";
+  const musicalPositionLabel =
+    snapshot?.musicalPosition?.display ??
+    (song ? formatMusicalPosition(positionSeconds, song.bpm, song.timeSignature) : "1.1.00");
   const tempoSourceLabel =
     song?.tempoMetadata.source === "auto_import"
       ? `Detectado en importacion${song.tempoMetadata.confidence != null ? ` (${Math.round(song.tempoMetadata.confidence * 100)}%)` : ""}`
@@ -1092,6 +1184,30 @@ export function TransportPanel() {
       ? (playheadDrag.currentSeconds / Math.max(1, song.durationSeconds)) * timelineWidth
       : null;
   const rulerMarks = buildRulerMarks(song?.durationSeconds ?? 0, zoomLevel);
+  const musicalGridMarks = buildMusicalGridMarks(
+    song?.durationSeconds ?? 0,
+    song?.bpm ?? 120,
+    song?.timeSignature ?? "4/4",
+  );
+
+  async function scheduleMarkerJumpWithGlobalMode(markerId: string, markerName: string) {
+    const trigger =
+      globalJumpMode === "after_bars" ? "after_bars" : globalJumpMode;
+    const bars = Math.max(1, Math.floor(globalJumpBars));
+    const nextSnapshot = await scheduleSectionJump(
+      markerId,
+      trigger,
+      trigger === "after_bars" ? bars : undefined,
+    );
+    setSnapshot(nextSnapshot);
+    setStatus(
+      trigger === "immediate"
+        ? `Salto inmediato a ${markerName}.`
+        : trigger === "section_end"
+          ? `Salto armado al final de seccion hacia ${markerName}.`
+          : `Salto armado en ${bars} compases hacia ${markerName}.`,
+    );
+  }
 
   useEffect(() => {
     setZoomLevel((current) => (current < effectiveZoomMin ? effectiveZoomMin : current));
@@ -1487,7 +1603,11 @@ export function TransportPanel() {
       },
       {
         label: "Ir ahora",
+        disabled: !canEditMarker,
         onSelect: async () => {
+          if (!marker) {
+            return;
+          }
           await runAction(async () => {
             const nextSnapshot = await scheduleSectionJump(section.id, "immediate");
             setSnapshot(nextSnapshot);
@@ -1496,23 +1616,14 @@ export function TransportPanel() {
         },
       },
       {
-        label: "Programar salto al final",
+        label: "Disparar con modo global",
+        disabled: !canEditMarker,
         onSelect: async () => {
+          if (!marker) {
+            return;
+          }
           await runAction(async () => {
-            const nextSnapshot = await scheduleSectionJump(section.id, "section_end");
-            setSnapshot(nextSnapshot);
-            setStatus(`Salto armado hacia ${section.name}`);
-          });
-        },
-      },
-      {
-        label: "Programar salto en compases",
-        onSelect: async () => {
-          const bars = Number(window.prompt("Compases para el salto", "4") ?? "4");
-          await runAction(async () => {
-            const nextSnapshot = await scheduleSectionJump(section.id, "after_bars", bars);
-            setSnapshot(nextSnapshot);
-            setStatus(`Salto en compases armado hacia ${section.name}`);
+            await scheduleMarkerJumpWithGlobalMode(marker.id, section.name);
           });
         },
       },
@@ -1735,6 +1846,27 @@ export function TransportPanel() {
                     style={{ left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px` }}
                   >
                     <span>{formatCompactTime(mark)}</span>
+                  </div>
+                ))}
+
+                {musicalGridMarks.beats.map((mark) => (
+                  <div
+                    key={`beat-${mark.toFixed(4)}`}
+                    className="lt-lane-grid-line"
+                    style={{
+                      left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px`,
+                      opacity: 0.18,
+                    }}
+                  />
+                ))}
+
+                {musicalGridMarks.bars.map((mark, index) => (
+                  <div
+                    key={`bar-${mark.toFixed(4)}`}
+                    className="lt-ruler-mark"
+                    style={{ left: `${(mark / Math.max(1, song?.durationSeconds ?? 1)) * timelineWidth}px` }}
+                  >
+                    <span>{`|${index + 1}`}</span>
                   </div>
                 ))}
 
@@ -1985,6 +2117,28 @@ export function TransportPanel() {
                         />
                       ))}
 
+                      {musicalGridMarks.beats.map((mark) => (
+                        <div
+                          key={`${track.id}-beat-${mark.toFixed(4)}`}
+                          className="lt-lane-grid-line"
+                          style={{
+                            left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px`,
+                            opacity: 0.18,
+                          }}
+                        />
+                      ))}
+
+                      {musicalGridMarks.bars.map((mark) => (
+                        <div
+                          key={`${track.id}-bar-${mark.toFixed(4)}`}
+                          className="lt-lane-grid-line"
+                          style={{
+                            left: `${(mark / Math.max(1, song.durationSeconds)) * timelineWidth}px`,
+                            opacity: 0.5,
+                          }}
+                        />
+                      ))}
+
                       {track.kind === "folder" ? (
                         <div className="lt-folder-lane-fill">
                           <span>{childCount ? `${childCount} tracks dentro del folder` : "Folder track"}</span>
@@ -2100,6 +2254,31 @@ export function TransportPanel() {
           <button type="button" className={snapEnabled ? "is-active" : ""} onClick={() => setSnapEnabled((current) => !current)}>
             Snap beat
           </button>
+          <label className="lt-zoom-control">
+            <span>Modo salto</span>
+            <select
+              aria-label="Modo global de salto"
+              value={globalJumpMode}
+              onChange={(event) => setGlobalJumpMode(event.target.value as GlobalJumpMode)}
+            >
+              <option value="immediate">Immediate</option>
+              <option value="after_bars">After X bars</option>
+              <option value="section_end">At section end</option>
+            </select>
+          </label>
+          {globalJumpMode === "after_bars" ? (
+            <label className="lt-zoom-control">
+              <span>Compases</span>
+              <input
+                aria-label="Compases para salto global"
+                type="number"
+                min={1}
+                step={1}
+                value={globalJumpBars}
+                onChange={(event) => setGlobalJumpBars(Math.max(1, Number(event.target.value) || 1))}
+              />
+            </label>
+          ) : null}
           <button
             type="button"
             disabled={!snapshot?.pendingSectionJump}

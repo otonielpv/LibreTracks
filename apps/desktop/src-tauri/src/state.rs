@@ -593,7 +593,7 @@ impl DesktopSession {
 
     pub fn schedule_section_jump(
         &mut self,
-        target_section_id: &str,
+        target_marker_id: &str,
         trigger: JumpTrigger,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
@@ -601,7 +601,7 @@ impl DesktopSession {
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
 
         self.engine
-            .schedule_section_jump(target_section_id, trigger.clone())?;
+            .schedule_section_jump(target_marker_id, trigger.clone())?;
 
         if trigger == JumpTrigger::Immediate {
             if was_playing {

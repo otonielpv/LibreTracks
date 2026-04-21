@@ -193,7 +193,7 @@ fn seek_transport(
 
 #[tauri::command]
 fn schedule_section_jump(
-    target_section_id: String,
+    target_marker_id: String,
     trigger: String,
     bars: Option<u32>,
     state: State<'_, DesktopState>,
@@ -206,7 +206,7 @@ fn schedule_section_jump(
     let jump_trigger = parse_jump_trigger(&trigger, bars).map_err(|error| error.to_string())?;
 
     session
-        .schedule_section_jump(&target_section_id, jump_trigger, &state.audio)
+        .schedule_section_jump(&target_marker_id, jump_trigger, &state.audio)
         .map_err(|error| error.to_string())
 }
 
