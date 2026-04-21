@@ -115,6 +115,17 @@ function formatCompactTime(seconds: number) {
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
+function formatMusicalPosition(seconds: number, bpm: number, timeSignature: string) {
+  const [numeratorRaw] = timeSignature.split("/");
+  const beatsPerBar = Math.max(1, Number(numeratorRaw) || 4);
+  const beatDurationSeconds = bpm > 0 ? 60 / bpm : 0.5;
+  const totalBeats = Math.max(0, seconds) / beatDurationSeconds;
+  const barNumber = Math.floor(totalBeats / beatsPerBar) + 1;
+  const beatInBar = (Math.floor(totalBeats) % beatsPerBar) + 1;
+  const subBeat = Math.floor((totalBeats % 1) * 100);
+  return `${barNumber}.${beatInBar}.${String(subBeat).padStart(2, "0")}`;
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -1037,6 +1048,9 @@ export function TransportPanel() {
     : ZOOM_MIN;
   const effectiveZoomMin = song ? fitAllZoomLevel : ZOOM_MIN;
   const positionSeconds = playheadDrag?.currentSeconds ?? displayPositionSeconds;
+  const musicalPositionLabel = song
+    ? formatMusicalPosition(positionSeconds, song.bpm, song.timeSignature)
+    : "1.1.00";
   const pixelsPerSecond = zoomLevel * 18;
   const timelineWidth = Math.max((song?.durationSeconds ?? 0) * pixelsPerSecond, laneViewportWidth);
   const timelineRowWidth = HEADER_WIDTH + timelineWidth;
@@ -1564,6 +1578,7 @@ export function TransportPanel() {
           </div>
           <div className="lt-transport-readout">
             <strong ref={transportReadoutValueRef}>{formatClock(positionSeconds)}</strong>
+            <small>{musicalPositionLabel}</small>
             <span className={`transport-pill is-${snapshot?.playbackState ?? "empty"}`}>
               {snapshot?.playbackState ?? "empty"}
             </span>

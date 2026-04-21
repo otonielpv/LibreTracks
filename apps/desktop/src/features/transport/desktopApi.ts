@@ -9,10 +9,25 @@ export type SectionSummary = {
   endSeconds: number;
 };
 
+export type SectionMarkerSummary = {
+  id: string;
+  name: string;
+  startSeconds: number;
+  digit?: number | null;
+};
+
+export type TempoMetadataSummary = {
+  source: "manual" | "auto_import";
+  confidence?: number | null;
+  referenceFilePath?: string | null;
+};
+
 export type PendingJumpSummary = {
-  targetSectionId: string;
-  targetSectionName: string;
+  targetMarkerId: string;
+  targetMarkerName: string;
+  targetDigit?: number | null;
   trigger: JumpTriggerLabel;
+  executeAtSeconds: number;
 };
 
 export type TrackSummary = {
@@ -46,10 +61,13 @@ export type SongView = {
   title: string;
   artist?: string | null;
   bpm: number;
+  tempoMetadata: TempoMetadataSummary;
   key?: string | null;
   timeSignature: string;
   durationSeconds: number;
   sections: SectionSummary[];
+  sectionMarkers: SectionMarkerSummary[];
+  derivedSections: SectionSummary[];
   clips: ClipSummary[];
   tracks: TrackSummary[];
   projectRevision: number;
@@ -85,6 +103,12 @@ export type TransportSnapshot = {
   positionSeconds: number;
   currentSection?: SectionSummary | null;
   pendingSectionJump?: PendingJumpSummary | null;
+  musicalPosition?: {
+    barNumber: number;
+    beatInBar: number;
+    subBeat: number;
+    display: string;
+  };
   transportClock?: {
     anchorPositionSeconds: number;
     running: boolean;
@@ -183,10 +207,11 @@ function buildDemoSnapshot(): TransportSnapshot {
     playbackState: demoPlaybackState,
     positionSeconds,
     currentSection:
-      demoSong.sections.find(
+      demoSong.derivedSections.find(
         (section) => positionSeconds >= section.startSeconds && positionSeconds < section.endSeconds,
       ) ?? null,
     pendingSectionJump: demoPendingJump ? cloneSnapshot(demoPendingJump) : null,
+    musicalPosition: buildMusicalPosition(positionSeconds, demoSong.bpm, demoSong.timeSignature),
     transportClock: {
       anchorPositionSeconds: demoClock.anchorPositionSeconds,
       running: demoPlaybackState === "playing",
@@ -266,10 +291,17 @@ export async function createSong(): Promise<TransportSnapshot> {
       title: "Nueva Cancion",
       artist: null,
       bpm: 120,
+      tempoMetadata: {
+        source: "manual",
+        confidence: null,
+        referenceFilePath: null,
+      },
       key: null,
       timeSignature: "4/4",
       durationSeconds: 60,
       sections: [],
+      sectionMarkers: [],
+      derivedSections: [],
       clips: [],
       tracks: [],
       projectRevision: demoProjectRevision + 1,
@@ -387,7 +419,10 @@ export async function scheduleSectionJump(
   bars?: number,
 ): Promise<TransportSnapshot> {
   if (!isTauriApp) {
-    const targetSection = demoSong.sections.find((section) => section.id === targetSectionId) ?? null;
+    const targetSection =
+      demoSong.sectionMarkers.find((section) => section.id === targetSectionId) ??
+      demoSong.sections.find((section) => section.id === targetSectionId) ??
+      null;
     if (targetSection) {
       if (trigger === "immediate") {
         demoClock.anchorPositionSeconds = targetSection.startSeconds;
@@ -395,9 +430,11 @@ export async function scheduleSectionJump(
         demoPendingJump = null;
       } else {
         demoPendingJump = {
-          targetSectionId,
-          targetSectionName: targetSection.name,
+          targetMarkerId: targetSectionId,
+          targetMarkerName: targetSection.name,
+          targetDigit: "digit" in targetSection ? (targetSection.digit ?? null) : null,
           trigger: trigger === "after_bars" ? `after_bars:${bars ?? 4}` : "section_end",
+          executeAtSeconds: demoClock.anchorPositionSeconds,
         };
       }
     }
@@ -562,13 +599,14 @@ export async function createSection(
   endSeconds: number,
 ): Promise<TransportSnapshot> {
   if (!isTauriApp) {
+    const markerStartSeconds = Math.min(startSeconds, endSeconds);
     updateDemoSong((song) => ({
       ...song,
-      sections: [...song.sections, {
+      sectionMarkers: [...song.sectionMarkers, {
         id: `section-demo-${Date.now()}`,
-        name: `Seccion ${song.sections.length + 1}`,
-        startSeconds: Math.min(startSeconds, endSeconds),
-        endSeconds: Math.max(startSeconds, endSeconds),
+        name: `Seccion ${song.sectionMarkers.length + 1}`,
+        startSeconds: markerStartSeconds,
+        digit: null,
       }],
     }));
     return buildDemoSnapshot();
@@ -584,15 +622,15 @@ export async function updateSection(
   endSeconds: number,
 ): Promise<TransportSnapshot> {
   if (!isTauriApp) {
+    const markerStartSeconds = Math.min(startSeconds, endSeconds);
     updateDemoSong((song) => ({
       ...song,
-      sections: song.sections.map((section) =>
+      sectionMarkers: song.sectionMarkers.map((section) =>
         section.id === sectionId
           ? {
               ...section,
               name,
-              startSeconds: Math.min(startSeconds, endSeconds),
-              endSeconds: Math.max(startSeconds, endSeconds),
+              startSeconds: markerStartSeconds,
             }
           : section,
       ),
@@ -612,15 +650,98 @@ export async function deleteSection(sectionId: string): Promise<TransportSnapsho
   if (!isTauriApp) {
     updateDemoSong((song) => ({
       ...song,
-      sections: song.sections.filter((section) => section.id !== sectionId),
+      sectionMarkers: song.sectionMarkers.filter((section) => section.id !== sectionId),
     }));
-    if (demoPendingJump?.targetSectionId === sectionId) {
+    if (demoPendingJump?.targetMarkerId === sectionId) {
       demoPendingJump = null;
     }
     return buildDemoSnapshot();
   }
 
   return invokeCommand<TransportSnapshot>("delete_section", { sectionId });
+}
+
+export async function createSectionMarker(startSeconds: number): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => ({
+      ...song,
+      sectionMarkers: [...song.sectionMarkers, {
+        id: `section-marker-demo-${Date.now()}`,
+        name: `Seccion ${song.sectionMarkers.length + 1}`,
+        startSeconds: Math.max(0, startSeconds),
+        digit: null,
+      }],
+    }));
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("create_section_marker", { startSeconds });
+}
+
+export async function updateSectionMarker(
+  sectionId: string,
+  name: string,
+  startSeconds: number,
+): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => ({
+      ...song,
+      sectionMarkers: song.sectionMarkers.map((marker) =>
+        marker.id === sectionId
+          ? {
+              ...marker,
+              name,
+              startSeconds,
+            }
+          : marker,
+      ),
+    }));
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("update_section_marker", {
+    sectionId,
+    name,
+    startSeconds,
+  });
+}
+
+export async function deleteSectionMarker(sectionId: string): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => ({
+      ...song,
+      sectionMarkers: song.sectionMarkers.filter((marker) => marker.id !== sectionId),
+    }));
+    if (demoPendingJump?.targetMarkerId === sectionId) {
+      demoPendingJump = null;
+    }
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("delete_section_marker", { sectionId });
+}
+
+export async function assignSectionMarkerDigit(
+  sectionId: string,
+  digit: number | null,
+): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => ({
+      ...song,
+      sectionMarkers: song.sectionMarkers.map((marker) => {
+        if (marker.id === sectionId) {
+          return { ...marker, digit };
+        }
+        if (digit !== null && marker.digit === digit) {
+          return { ...marker, digit: null };
+        }
+        return marker;
+      }),
+    }));
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("assign_section_marker_digit", { sectionId, digit });
 }
 
 export async function createTrack(args: {
@@ -770,13 +891,67 @@ function normalizeSong(song: SongView): SongView {
       0,
     ),
   );
+  const sectionMarkers = [...(song.sectionMarkers ?? song.sections.map((section) => ({
+    id: section.id,
+    name: section.name,
+    startSeconds: section.startSeconds,
+    digit: null,
+  })))]
+    .sort((left, right) => left.startSeconds - right.startSeconds);
+  const derivedSections = buildDerivedSections(sectionMarkers, durationSeconds);
 
   return {
     ...song,
     durationSeconds,
     tracks: normalizedTracks,
     clips: normalizedClips,
-    sections: [...song.sections].sort((left, right) => left.startSeconds - right.startSeconds),
+    sectionMarkers,
+    derivedSections,
+    sections: derivedSections,
+  };
+}
+
+function buildDerivedSections(markers: SectionMarkerSummary[], durationSeconds: number): SectionSummary[] {
+  const sections: SectionSummary[] = [];
+  if (markers[0] && markers[0].startSeconds > 0) {
+    sections.push({
+      id: "derived_intro",
+      name: "Inicio",
+      startSeconds: 0,
+      endSeconds: markers[0].startSeconds,
+    });
+  }
+
+  markers.forEach((marker, index) => {
+    const endSeconds = markers[index + 1]?.startSeconds ?? durationSeconds;
+    if (endSeconds <= marker.startSeconds) {
+      return;
+    }
+    sections.push({
+      id: marker.id,
+      name: marker.name,
+      startSeconds: marker.startSeconds,
+      endSeconds,
+    });
+  });
+
+  return sections;
+}
+
+function buildMusicalPosition(positionSeconds: number, bpm: number, timeSignature: string) {
+  const [numeratorRaw] = timeSignature.split("/");
+  const beatsPerBar = Math.max(1, Number(numeratorRaw) || 4);
+  const beatDurationSeconds = bpm > 0 ? 60 / bpm : 0.5;
+  const totalBeats = Math.max(0, positionSeconds) / beatDurationSeconds;
+  const barNumber = Math.floor(totalBeats / beatsPerBar) + 1;
+  const beatInBar = (Math.floor(totalBeats) % beatsPerBar) + 1;
+  const subBeat = Math.floor((totalBeats % 1) * 100);
+
+  return {
+    barNumber,
+    beatInBar,
+    subBeat,
+    display: `${barNumber}.${beatInBar}.${String(subBeat).padStart(2, "0")}`,
   };
 }
 
@@ -879,6 +1054,11 @@ function buildDemoSong(): SongView {
     title: "LibreTracks Session",
     artist: "Demo Ensemble",
     bpm: 120,
+    tempoMetadata: {
+      source: "manual",
+      confidence: null,
+      referenceFilePath: null,
+    },
     key: "Am",
     timeSignature: "4/4",
     durationSeconds: 180,
@@ -1024,6 +1204,13 @@ function buildDemoSong(): SongView {
       { id: "section-bridge", name: "Bridge", startSeconds: 72, endSeconds: 108 },
       { id: "section-outro", name: "Outro", startSeconds: 108, endSeconds: 156 },
     ],
+    sectionMarkers: [
+      { id: "section-intro", name: "Intro", startSeconds: 0, digit: 1 },
+      { id: "section-verse", name: "Verse", startSeconds: 24, digit: 2 },
+      { id: "section-bridge", name: "Bridge", startSeconds: 72, digit: 3 },
+      { id: "section-outro", name: "Outro", startSeconds: 108, digit: 4 },
+    ],
+    derivedSections: [],
     projectRevision: 1,
   });
 }
