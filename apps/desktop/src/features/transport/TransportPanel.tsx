@@ -204,13 +204,13 @@ function buildWaveformPath(clip: ClipSummary, waveform: WaveformSummaryDto | und
 
   const topPoints = max.map((peak, index) => {
     const x = (index / Math.max(1, max.length - 1)) * 100;
-    const y = 50 - peak * 42;
+    const y = 50 - clamp(peak, -1, 1) * 47;
     return `${x},${y}`;
   });
   const bottomPoints = min
     .map((peak, index) => {
       const x = (index / Math.max(1, min.length - 1)) * 100;
-      const y = 50 - peak * 42;
+      const y = 50 - clamp(peak, -1, 1) * 47;
       return `${x},${y}`;
     })
     .reverse();
@@ -2202,7 +2202,6 @@ export function TransportPanel() {
                               aria-hidden="true"
                             >
                               <path d={clipWaveformPaths[clip.id] ?? ""} />
-                              <line x1="0" y1="50" x2="100" y2="50" />
                             </svg>
                           </button>
                         );
