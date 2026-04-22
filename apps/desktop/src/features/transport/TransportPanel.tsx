@@ -1285,6 +1285,7 @@ export function TransportPanel() {
     song?.tempoMetadata.source === "auto_import"
       ? `Detectado en importacion${song.tempoMetadata.confidence != null ? ` (${Math.round(song.tempoMetadata.confidence * 100)}%)` : ""}`
       : "Manual";
+  const isProjectEmpty = !song || song.tracks.length === 0;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
   const selectedTrack = selectedTrackId ? tracksById[selectedTrackId] ?? null : null;
@@ -2004,6 +2005,7 @@ export function TransportPanel() {
             <span>BPM</span>
             <input
               aria-label="BPM de la cancion"
+              disabled={isProjectEmpty}
               type="number"
               min={1}
               step={0.1}
@@ -2034,12 +2036,13 @@ export function TransportPanel() {
           </label>
 
           <div className="lt-transport-buttons">
-            <button type="button" aria-label="Anterior">
+            <button type="button" aria-label="Anterior" disabled={isProjectEmpty}>
               <span className="material-symbols-outlined">skip_previous</span>
             </button>
             <button
               type="button"
               aria-label="Detener"
+              disabled={isProjectEmpty}
               onClick={() =>
                 void runAction(async () => {
                   const nextSnapshot = await stopTransport();
@@ -2054,6 +2057,7 @@ export function TransportPanel() {
               type="button"
               aria-label="Reproducir"
               className="is-play"
+              disabled={isProjectEmpty}
               onClick={() =>
                 void runAction(async () => {
                   const nextSnapshot = await playTransport();
@@ -2067,6 +2071,7 @@ export function TransportPanel() {
             <button
               type="button"
               aria-label="Pausar"
+              disabled={isProjectEmpty}
               onClick={() =>
                 void runAction(async () => {
                   const nextSnapshot = await pauseTransport();
@@ -2077,7 +2082,7 @@ export function TransportPanel() {
             >
               <span className="material-symbols-outlined">pause</span>
             </button>
-            <button type="button" aria-label="Siguiente">
+            <button type="button" aria-label="Siguiente" disabled={isProjectEmpty}>
               <span className="material-symbols-outlined">skip_next</span>
             </button>
           </div>
@@ -2410,6 +2415,7 @@ export function TransportPanel() {
             <span>Modo salto</span>
             <select
               aria-label="Modo global de salto"
+              disabled={isProjectEmpty}
               value={globalJumpMode}
               onChange={(event) => setGlobalJumpMode(event.target.value as GlobalJumpMode)}
             >

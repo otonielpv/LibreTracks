@@ -110,6 +110,11 @@ body {
   padding: 0 0.4rem;
 }
 
+.lt-bpm-control input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .lt-transport-buttons {
   display: flex;
   align-items: center;
@@ -147,6 +152,25 @@ body {
 .lt-transport-buttons button:hover {
   background: #2a2a2a;
   color: #57f1db;
+}
+
+.lt-transport-buttons button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  background: transparent;
+  color: rgb(186 202 197 / 0.4);
+  box-shadow: none;
+}
+
+.lt-transport-buttons button:disabled:hover {
+  background: transparent;
+  color: rgb(186 202 197 / 0.4);
+}
+
+.lt-transport-buttons button.is-play:disabled {
+  background: rgb(87 241 219 / 0.18);
+  color: rgb(0 55 49 / 0.55);
+  box-shadow: none;
 }
 
 .lt-transport-buttons button.is-play {
@@ -900,6 +924,12 @@ body {
   color: #e5e2e1;
   font-size: 12px;
   padding: 0.2rem 0.4rem;
+}
+
+.lt-zoom-control input:disabled,
+.lt-zoom-control select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .lt-inspector-strip {
