@@ -545,6 +545,30 @@ fn split_clip(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn undo_action(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .undo_action(&state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn redo_action(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .redo_action(&state.audio)
+        .map_err(|error| error.to_string())
+}
+
 fn parse_jump_trigger(trigger: &str, bars: Option<u32>) -> Result<JumpTrigger, DesktopError> {
     match trigger {
         "immediate" => Ok(JumpTrigger::Immediate),
@@ -588,6 +612,8 @@ fn main() {
             update_clip_window,
             duplicate_clip,
             split_clip,
+            undo_action,
+            redo_action,
             create_section_marker,
             update_section_marker,
             delete_section_marker,

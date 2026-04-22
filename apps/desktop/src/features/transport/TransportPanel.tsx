@@ -29,12 +29,14 @@ import {
   pauseTransport,
   pickAndImportSong,
   playTransport,
+  redoAction,
   saveProject,
   saveProjectAs,
   scheduleMarkerJump,
   seekTransport,
   splitClip,
   stopTransport,
+  undoAction,
   updateSectionMarker,
   updateSongTempo,
   updateTrack,
@@ -1096,6 +1098,26 @@ export function TransportPanel() {
         }
 
         handleSaveProjectClick();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        void runAction(async () => {
+          const nextSnapshot = event.shiftKey ? await redoAction() : await undoAction();
+          setSnapshot(nextSnapshot);
+          setStatus(event.shiftKey ? "Accion rehecha." : "Accion deshecha.");
+        });
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        void runAction(async () => {
+          const nextSnapshot = await redoAction();
+          setSnapshot(nextSnapshot);
+          setStatus("Accion rehecha.");
+        });
         return;
       }
 

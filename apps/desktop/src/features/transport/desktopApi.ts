@@ -149,6 +149,8 @@ let demoWaveforms = buildDemoWaveforms();
 let demoPlaybackState: PlaybackState = "stopped";
 let demoPendingJump: PendingJumpSummary | null = null;
 let demoProjectRevision = demoSong.projectRevision;
+let demoUndoStack: SongView[] = [];
+let demoRedoStack: SongView[] = [];
 let demoClock: DemoClock = {
   anchorPositionSeconds: 0,
   anchorStartedAt: null,
@@ -221,7 +223,27 @@ function syncDemoPlayback() {
 
 function updateDemoSong(mutator: (song: SongView) => SongView) {
   syncDemoPlayback();
+  demoUndoStack.push(cloneSnapshot(demoSong));
+  if (demoUndoStack.length > 50) {
+    demoUndoStack.shift();
+  }
+  demoRedoStack = [];
   demoSong = normalizeSong(mutator(cloneSnapshot(demoSong)));
+  demoProjectRevision += 1;
+  demoSong.projectRevision = demoProjectRevision;
+  demoWaveforms = Object.fromEntries(
+    demoSong.clips
+      .map((clip) => clip.waveformKey)
+      .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index)
+      .map((waveformKey) => [waveformKey, demoWaveforms[waveformKey]])
+      .filter((entry): entry is [string, WaveformSummaryDto] => Boolean(entry[1])),
+  );
+  demoClock.anchorPositionSeconds = Math.min(demoClock.anchorPositionSeconds, demoSong.durationSeconds);
+}
+
+function applyDemoHistorySong(song: SongView) {
+  syncDemoPlayback();
+  demoSong = normalizeSong(cloneSnapshot(song));
   demoProjectRevision += 1;
   demoSong.projectRevision = demoProjectRevision;
   demoWaveforms = Object.fromEntries(
@@ -343,6 +365,8 @@ export async function createSong(): Promise<TransportSnapshot | null> {
     });
     demoWaveforms = {};
     demoProjectRevision = demoSong.projectRevision;
+    demoUndoStack = [];
+    demoRedoStack = [];
     demoPlaybackState = "stopped";
     demoPendingJump = null;
     demoClock = {
@@ -374,6 +398,39 @@ export async function saveProjectAs(): Promise<TransportSnapshot | null> {
   return invokeCommand<TransportSnapshot | null>("save_project_as");
 }
 
+export async function undoAction(): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const previousSong = demoUndoStack.pop();
+    if (!previousSong) {
+      return buildDemoSnapshot();
+    }
+
+    demoRedoStack.push(cloneSnapshot(demoSong));
+    applyDemoHistorySong(previousSong);
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("undo_action");
+}
+
+export async function redoAction(): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const nextSong = demoRedoStack.pop();
+    if (!nextSong) {
+      return buildDemoSnapshot();
+    }
+
+    demoUndoStack.push(cloneSnapshot(demoSong));
+    if (demoUndoStack.length > 50) {
+      demoUndoStack.shift();
+    }
+    applyDemoHistorySong(nextSong);
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("redo_action");
+}
+
 export async function updateSongTempo(bpm: number): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     updateDemoSong((song) => ({
@@ -391,6 +448,8 @@ export async function openProject(): Promise<TransportSnapshot | null> {
     demoSong = buildDemoSong();
     demoWaveforms = buildDemoWaveforms();
     demoProjectRevision = demoSong.projectRevision;
+    demoUndoStack = [];
+    demoRedoStack = [];
     demoPlaybackState = "stopped";
     demoPendingJump = null;
     demoClock.anchorPositionSeconds = 0;

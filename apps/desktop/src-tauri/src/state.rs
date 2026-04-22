@@ -48,6 +48,8 @@ pub struct DesktopSession {
     pub song_dir: Option<PathBuf>,
     song_file_path: Option<PathBuf>,
     project_revision: u64,
+    undo_stack: Vec<Song>,
+    redo_stack: Vec<Song>,
     waveform_cache: WaveformMemoryCache,
     perf_metrics: DesktopPerformanceMetrics,
 }
@@ -69,6 +71,8 @@ impl Default for DesktopSession {
             song_dir: None,
             song_file_path: None,
             project_revision: 0,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
             waveform_cache: WaveformMemoryCache::default(),
             perf_metrics: DesktopPerformanceMetrics::default(),
         }
@@ -1179,6 +1183,8 @@ impl DesktopSession {
         self.transport_clock.stop();
         self.song_dir = Some(song_dir.clone());
         self.song_file_path = Some(song_dir.join(SONG_FILE_NAME));
+        self.undo_stack.clear();
+        self.redo_stack.clear();
         self.engine.load_song(song)?;
         self.project_revision = self.project_revision.saturating_add(1);
         let loaded_song = self
@@ -1197,7 +1203,27 @@ impl DesktopSession {
         audio: &AudioController,
         impact: AudioChangeImpact,
     ) -> Result<(), DesktopError> {
+        self.persist_song_update_internal(song, audio, impact, true)
+    }
+
+    fn persist_song_update_internal(
+        &mut self,
+        song: Song,
+        audio: &AudioController,
+        impact: AudioChangeImpact,
+        record_history: bool,
+    ) -> Result<(), DesktopError> {
         self.sync_position(audio)?;
+
+        if record_history {
+            if let Some(current_song) = self.engine.song().cloned() {
+                self.undo_stack.push(current_song);
+                if self.undo_stack.len() > 50 {
+                    self.undo_stack.remove(0);
+                }
+            }
+            self.redo_stack.clear();
+        }
 
         let playback_state = self.engine.playback_state();
         let position_seconds = self.current_position();
@@ -1277,6 +1303,59 @@ impl DesktopSession {
         }
 
         Ok(())
+    }
+
+    pub fn undo_action(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let Some(previous_song) = self.undo_stack.pop() else {
+            return Ok(self.snapshot());
+        };
+
+        let current_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        self.redo_stack.push(current_song);
+
+        self.persist_song_update_internal(
+            previous_song,
+            audio,
+            AudioChangeImpact::StructureRebuild,
+            false,
+        )?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn redo_action(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let Some(next_song) = self.redo_stack.pop() else {
+            return Ok(self.snapshot());
+        };
+
+        let current_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        self.undo_stack.push(current_song);
+        if self.undo_stack.len() > 50 {
+            self.undo_stack.remove(0);
+        }
+
+        self.persist_song_update_internal(
+            next_song,
+            audio,
+            AudioChangeImpact::StructureRebuild,
+            false,
+        )?;
+
+        Ok(self.snapshot())
     }
 
     fn current_position(&self) -> f64 {
@@ -2690,6 +2769,59 @@ mod tests {
             .expect("clip should move");
 
         assert!(updated_snapshot.project_revision > initial_snapshot.project_revision);
+    }
+
+    #[test]
+    fn undo_and_redo_restore_song_state() {
+        let mut session = session_with_song_dir("undo-redo-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        let moved_snapshot = session
+            .move_clip("clip_1", 4.25, &audio)
+            .expect("clip should move");
+        let moved_song = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song should exist");
+        assert!(moved_snapshot.project_revision > 0);
+        assert!(
+            moved_song
+                .clips
+                .iter()
+                .find(|clip| clip.id == "clip_1")
+                .map(|clip| (clip.timeline_start_seconds - 4.25).abs() < 0.0001)
+                .unwrap_or(false)
+        );
+
+        let undone_snapshot = session.undo_action(&audio).expect("undo should succeed");
+        let undone_song = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song should exist");
+        assert!(undone_snapshot.project_revision > moved_snapshot.project_revision);
+        assert!(
+            undone_song
+                .clips
+                .iter()
+                .find(|clip| clip.id == "clip_1")
+                .map(|clip| clip.timeline_start_seconds.abs() < 0.0001)
+                .unwrap_or(false)
+        );
+
+        let redone_snapshot = session.redo_action(&audio).expect("redo should succeed");
+        let redone_song = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song should exist");
+        assert!(redone_snapshot.project_revision > undone_snapshot.project_revision);
+        assert!(
+            redone_song
+                .clips
+                .iter()
+                .find(|clip| clip.id == "clip_1")
+                .map(|clip| (clip.timeline_start_seconds - 4.25).abs() < 0.0001)
+                .unwrap_or(false)
+        );
     }
 
     #[test]
