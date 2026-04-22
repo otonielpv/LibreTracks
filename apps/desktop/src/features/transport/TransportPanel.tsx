@@ -63,7 +63,7 @@ import {
   zoomCameraAtViewportX,
 } from "./timelineMath";
 import { TrackHeaderItem } from "./TrackHeaderItem";
-import { useTransportStore } from "./store";
+import { useTransportStore, type OptimisticMixState } from "./store";
 
 const HEADER_WIDTH = 260;
 const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
@@ -77,7 +77,6 @@ const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 48;
 const ZOOM_WHEEL_STEP = 1.25;
 const DRAG_THRESHOLD_PX = 6;
-const MIX_CONTROL_SYNC_DELAY_MS = 30;
 
 type ContextMenuAction = {
   label: string;
@@ -381,8 +380,6 @@ export function TransportPanel() {
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const [trackDrag, setTrackDrag] = useState<TrackDragState>(null);
   const [timelinePan, setTimelinePan] = useState<TimelinePanState>(null);
-  const [volumeDrafts, setVolumeDrafts] = useState<Record<string, number>>({});
-  const [panDrafts, setPanDrafts] = useState<Record<string, number>>({});
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [trackDropState, setTrackDropState] = useState<TrackDropState>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -409,10 +406,7 @@ export function TransportPanel() {
   const snapshotRef = useRef<TransportSnapshot | null>(useTransportStore.getState().playback);
   const songRef = useRef<SongView | null>(null);
   const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
-  const volumeDraftsRef = useRef<Record<string, number>>({});
-  const panDraftsRef = useRef<Record<string, number>>({});
-  const trackMixSyncTimeoutsRef = useRef<Record<string, number>>({});
-  const trackMixSyncRequestIdRef = useRef(0);
+  const trackMixRequestIdsRef = useRef<Record<string, number>>({});
   const playheadDragRef = useRef<PlayheadDragState>(null);
   const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
   const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
@@ -432,8 +426,6 @@ export function TransportPanel() {
 
   songRef.current = song;
   tracksByIdRef.current = tracksById;
-  volumeDraftsRef.current = volumeDrafts;
-  panDraftsRef.current = panDrafts;
   playheadDragRef.current = playheadDrag;
 
   const runAction = useCallback(async (work: () => Promise<void>, options?: { busy?: boolean }) => {
@@ -456,95 +448,112 @@ export function TransportPanel() {
     useTransportStore.getState().setPlaybackState(nextSnapshot);
   }, []);
 
-  const clearTrackMixSyncTimeout = useCallback((trackId: string) => {
-    const timeoutId = trackMixSyncTimeoutsRef.current[trackId];
-    if (timeoutId === undefined) {
-      return;
-    }
-
-    window.clearTimeout(timeoutId);
-    delete trackMixSyncTimeoutsRef.current[trackId];
+  const getTrackOptimisticMix = useCallback((trackId: string) => {
+    return useTransportStore.getState().optimisticMix[trackId] ?? {};
   }, []);
 
-  const clearTrackMixDrafts = useCallback((trackId: string) => {
-    setVolumeDrafts((current) => {
-      if (!(trackId in current)) {
-        return current;
-      }
-
-      const next = { ...current };
-      delete next[trackId];
-      volumeDraftsRef.current = next;
-      return next;
-    });
-
-    setPanDrafts((current) => {
-      if (!(trackId in current)) {
-        return current;
-      }
-
-      const next = { ...current };
-      delete next[trackId];
-      panDraftsRef.current = next;
-      return next;
-    });
+  const setTrackOptimisticMix = useCallback((trackId: string, nextMix: OptimisticMixState) => {
+    useTransportStore.getState().setOptimisticMix(trackId, Object.keys(nextMix).length ? nextMix : null);
   }, []);
 
-  const syncTrackMixDraft = useCallback(
-    async (trackId: string, options?: { clearDrafts?: boolean }) => {
-      clearTrackMixSyncTimeout(trackId);
-
-      const track = findTrack(songRef.current, trackId);
-      if (!track) {
-        if (options?.clearDrafts) {
-          clearTrackMixDrafts(trackId);
-        }
-        return;
-      }
-
-      const nextVolume = clamp(volumeDraftsRef.current[trackId] ?? track.volume, 0, 1);
-      const nextPan = clamp(panDraftsRef.current[trackId] ?? track.pan, -1, 1);
-      const hasVolumeChange = Math.abs(nextVolume - track.volume) >= 0.0001;
-      const hasPanChange = Math.abs(nextPan - track.pan) >= 0.0001;
-
-      if (!hasVolumeChange && !hasPanChange) {
-        if (options?.clearDrafts) {
-          clearTrackMixDrafts(trackId);
-        }
-        return;
-      }
-
-      const requestId = trackMixSyncRequestIdRef.current + 1;
-      trackMixSyncRequestIdRef.current = requestId;
-
-      await runAction(async () => {
-        const nextSnapshot = await updateTrack({
-          trackId,
-          ...(hasVolumeChange ? { volume: nextVolume } : {}),
-          ...(hasPanChange ? { pan: nextPan } : {}),
-        });
-
-        if (requestId === trackMixSyncRequestIdRef.current) {
-          applyPlaybackSnapshot(nextSnapshot);
-        }
+  const patchTrackOptimisticMix = useCallback(
+    (trackId: string, mixPatch: OptimisticMixState) => {
+      setTrackOptimisticMix(trackId, {
+        ...getTrackOptimisticMix(trackId),
+        ...mixPatch,
       });
-
-      if (options?.clearDrafts) {
-        clearTrackMixDrafts(trackId);
-      }
     },
-    [applyPlaybackSnapshot, clearTrackMixDrafts, clearTrackMixSyncTimeout, runAction],
+    [getTrackOptimisticMix, setTrackOptimisticMix],
   );
 
-  const scheduleTrackMixSync = useCallback(
-    (trackId: string) => {
-      clearTrackMixSyncTimeout(trackId);
-      trackMixSyncTimeoutsRef.current[trackId] = window.setTimeout(() => {
-        delete trackMixSyncTimeoutsRef.current[trackId];
-        void syncTrackMixDraft(trackId);
-      }, MIX_CONTROL_SYNC_DELAY_MS);
+  const clearTrackOptimisticMixKeys = useCallback(
+    (trackId: string, keys: Array<keyof OptimisticMixState>) => {
+      const currentMix = getTrackOptimisticMix(trackId);
+      if (!Object.keys(currentMix).length) {
+        return;
+      }
+
+      const nextMix = { ...currentMix };
+      for (const key of keys) {
+        delete nextMix[key];
+      }
+
+      setTrackOptimisticMix(trackId, nextMix);
     },
-    [clearTrackMixSyncTimeout, syncTrackMixDraft],
+    [getTrackOptimisticMix, setTrackOptimisticMix],
+  );
+
+  const resolveTrackMix = useCallback(
+    (track: TrackSummary, trackId: string) => {
+      const optimisticMix = getTrackOptimisticMix(trackId);
+      return {
+        muted: optimisticMix.muted ?? track.muted,
+        solo: optimisticMix.solo ?? track.solo,
+        volume: clamp(optimisticMix.volume ?? track.volume, 0, 1),
+        pan: clamp(optimisticMix.pan ?? track.pan, -1, 1),
+      };
+    },
+    [getTrackOptimisticMix],
+  );
+
+  const nextTrackMixRequestId = useCallback((trackId: string) => {
+    const nextRequestId = (trackMixRequestIdsRef.current[trackId] ?? 0) + 1;
+    trackMixRequestIdsRef.current[trackId] = nextRequestId;
+    return nextRequestId;
+  }, []);
+
+  const persistTrackMix = useCallback(
+    async (trackId: string, keys: Array<keyof OptimisticMixState>) => {
+      const track = findTrack(songRef.current, trackId);
+      if (!track) {
+        clearTrackOptimisticMixKeys(trackId, keys);
+        return;
+      }
+
+      const resolvedMix = resolveTrackMix(track, trackId);
+      const payload: {
+        trackId: string;
+        muted?: boolean;
+        solo?: boolean;
+        volume?: number;
+        pan?: number;
+      } = {
+        trackId,
+      };
+
+      if (keys.includes("muted") && resolvedMix.muted !== track.muted) {
+        payload.muted = resolvedMix.muted;
+      }
+      if (keys.includes("solo") && resolvedMix.solo !== track.solo) {
+        payload.solo = resolvedMix.solo;
+      }
+      if (keys.includes("volume") && Math.abs(resolvedMix.volume - track.volume) >= 0.0001) {
+        payload.volume = resolvedMix.volume;
+      }
+      if (keys.includes("pan") && Math.abs(resolvedMix.pan - track.pan) >= 0.0001) {
+        payload.pan = resolvedMix.pan;
+      }
+
+      if (Object.keys(payload).length === 1) {
+        clearTrackOptimisticMixKeys(trackId, keys);
+        return;
+      }
+
+      const requestId = nextTrackMixRequestId(trackId);
+
+      try {
+        const nextSnapshot = await updateTrack(payload);
+        if (trackMixRequestIdsRef.current[trackId] === requestId) {
+          applyPlaybackSnapshot(nextSnapshot);
+        }
+      } catch (error) {
+        if (trackMixRequestIdsRef.current[trackId] === requestId) {
+          clearTrackOptimisticMixKeys(trackId, keys);
+        }
+        throw error;
+      }
+    },
+    [applyPlaybackSnapshot, clearTrackOptimisticMixKeys, nextTrackMixRequestId, resolveTrackMix],
   );
 
   function transportSnapshotKey(nextSnapshot: TransportSnapshot) {
@@ -846,44 +855,50 @@ export function TransportPanel() {
   }, [song?.durationSeconds]);
 
   useEffect(() => {
+    const optimisticMixEntries = Object.entries(useTransportStore.getState().optimisticMix);
+
     if (!song) {
-      setVolumeDrafts({});
-      volumeDraftsRef.current = {};
-      setPanDrafts({});
-      panDraftsRef.current = {};
-      for (const timeoutId of Object.values(trackMixSyncTimeoutsRef.current)) {
-        window.clearTimeout(timeoutId);
+      for (const [trackId] of optimisticMixEntries) {
+        useTransportStore.getState().setOptimisticMix(trackId, null);
       }
-      trackMixSyncTimeoutsRef.current = {};
+      trackMixRequestIdsRef.current = {};
       return;
     }
 
+    const nextTracksById = Object.fromEntries(song.tracks.map((track) => [track.id, track]));
     const validTrackIds = new Set(song.tracks.map((track) => track.id));
 
-    for (const [trackId, timeoutId] of Object.entries(trackMixSyncTimeoutsRef.current)) {
+    for (const trackId of Object.keys(trackMixRequestIdsRef.current)) {
       if (validTrackIds.has(trackId)) {
         continue;
       }
 
-      window.clearTimeout(timeoutId);
-      delete trackMixSyncTimeoutsRef.current[trackId];
+      delete trackMixRequestIdsRef.current[trackId];
     }
 
-    setVolumeDrafts((current) => {
-      const next = Object.fromEntries(
-        Object.entries(current).filter(([trackId]) => validTrackIds.has(trackId)),
-      );
-      volumeDraftsRef.current = next;
-      return Object.keys(next).length === Object.keys(current).length ? current : next;
-    });
+    for (const [trackId, optimisticMix] of optimisticMixEntries) {
+      const track = nextTracksById[trackId];
+      if (!track) {
+        useTransportStore.getState().setOptimisticMix(trackId, null);
+        continue;
+      }
 
-    setPanDrafts((current) => {
-      const next = Object.fromEntries(
-        Object.entries(current).filter(([trackId]) => validTrackIds.has(trackId)),
-      );
-      panDraftsRef.current = next;
-      return Object.keys(next).length === Object.keys(current).length ? current : next;
-    });
+      const nextOptimisticMix: OptimisticMixState = {};
+      if (optimisticMix.muted !== undefined && optimisticMix.muted !== track.muted) {
+        nextOptimisticMix.muted = optimisticMix.muted;
+      }
+      if (optimisticMix.solo !== undefined && optimisticMix.solo !== track.solo) {
+        nextOptimisticMix.solo = optimisticMix.solo;
+      }
+      if (optimisticMix.volume !== undefined && Math.abs(optimisticMix.volume - track.volume) >= 0.0001) {
+        nextOptimisticMix.volume = optimisticMix.volume;
+      }
+      if (optimisticMix.pan !== undefined && Math.abs(optimisticMix.pan - track.pan) >= 0.0001) {
+        nextOptimisticMix.pan = optimisticMix.pan;
+      }
+
+      useTransportStore.getState().setOptimisticMix(trackId, nextOptimisticMix);
+    }
   }, [song]);
 
   useEffect(() => {
@@ -891,12 +906,6 @@ export function TransportPanel() {
       if (renderMetricTimeoutRef.current !== null) {
         window.clearTimeout(renderMetricTimeoutRef.current);
       }
-
-      for (const timeoutId of Object.values(trackMixSyncTimeoutsRef.current)) {
-        window.clearTimeout(timeoutId);
-      }
-
-      trackMixSyncTimeoutsRef.current = {};
     };
   }, []);
 
@@ -1960,14 +1969,14 @@ export function TransportPanel() {
       return;
     }
 
-    void runAction(async () => {
-      const nextSnapshot = await updateTrack({
-        trackId,
-        muted: !track.muted,
-      });
-      applyPlaybackSnapshot(nextSnapshot);
+    patchTrackOptimisticMix(trackId, {
+      muted: !resolveTrackMix(track, trackId).muted,
     });
-  }, [applyPlaybackSnapshot, runAction]);
+
+    void runAction(async () => {
+      await persistTrackMix(trackId, ["muted"]);
+    });
+  }, [patchTrackOptimisticMix, persistTrackMix, resolveTrackMix, runAction]);
 
   const handleTrackHeaderSoloToggle = useCallback((trackId: string) => {
     const track = findTrack(songRef.current, trackId);
@@ -1975,46 +1984,38 @@ export function TransportPanel() {
       return;
     }
 
-    void runAction(async () => {
-      const nextSnapshot = await updateTrack({
-        trackId,
-        solo: !track.solo,
-      });
-      applyPlaybackSnapshot(nextSnapshot);
+    patchTrackOptimisticMix(trackId, {
+      solo: !resolveTrackMix(track, trackId).solo,
     });
-  }, [applyPlaybackSnapshot, runAction]);
+
+    void runAction(async () => {
+      await persistTrackMix(trackId, ["solo"]);
+    });
+  }, [patchTrackOptimisticMix, persistTrackMix, resolveTrackMix, runAction]);
 
   const handleTrackHeaderVolumeChange = useCallback((trackId: string, nextVolume: number) => {
-    setVolumeDrafts((current) => {
-      const next = {
-        ...current,
-        [trackId]: nextVolume,
-      };
-      volumeDraftsRef.current = next;
-      return next;
+    patchTrackOptimisticMix(trackId, {
+      volume: clamp(nextVolume, 0, 1),
     });
-    scheduleTrackMixSync(trackId);
-  }, [scheduleTrackMixSync]);
+  }, [patchTrackOptimisticMix]);
 
   const handleTrackHeaderVolumeCommit = useCallback((trackId: string) => {
-    void syncTrackMixDraft(trackId, { clearDrafts: true });
-  }, [syncTrackMixDraft]);
+    void runAction(async () => {
+      await persistTrackMix(trackId, ["volume"]);
+    });
+  }, [persistTrackMix, runAction]);
 
   const handleTrackHeaderPanChange = useCallback((trackId: string, nextPan: number) => {
-    setPanDrafts((current) => {
-      const next = {
-        ...current,
-        [trackId]: nextPan,
-      };
-      panDraftsRef.current = next;
-      return next;
+    patchTrackOptimisticMix(trackId, {
+      pan: clamp(nextPan, -1, 1),
     });
-    scheduleTrackMixSync(trackId);
-  }, [scheduleTrackMixSync]);
+  }, [patchTrackOptimisticMix]);
 
   const handleTrackHeaderPanCommit = useCallback((trackId: string) => {
-    void syncTrackMixDraft(trackId, { clearDrafts: true });
-  }, [syncTrackMixDraft]);
+    void runAction(async () => {
+      await persistTrackMix(trackId, ["pan"]);
+    });
+  }, [persistTrackMix, runAction]);
 
   function clipContextMenu(clip: ClipSummary) {
     const currentCursorSeconds = displayPositionSecondsRef.current;
@@ -2766,10 +2767,10 @@ export function TransportPanel() {
                     trackDepth={track.depth}
                     childCount={childCount}
                     trackHeight={trackHeight}
-                    panValue={panDrafts[track.id] ?? track.pan}
+                    panValue={track.pan}
                     trackMuted={track.muted}
                     trackSolo={track.solo}
-                    volumeValue={volumeDrafts[track.id] ?? track.volume}
+                    volumeValue={track.volume}
                     isCollapsed={collapsedFolders.has(track.id)}
                     isSelected={isTrackSelected}
                     isDropTarget={isDropTarget}

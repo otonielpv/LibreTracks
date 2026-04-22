@@ -2,6 +2,7 @@ import { memo, type MouseEvent as ReactMouseEvent } from "react";
 
 import type { TrackKind } from "./desktopApi";
 import { TrackMeter } from "./TrackMeter";
+import { useTransportStore } from "./store";
 
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
@@ -79,8 +80,13 @@ function TrackHeaderItemComponent({
   onPanChange,
   onCommitPan,
 }: TrackHeaderItemProps) {
-  const volumeFill = `${(volumeValue * 100).toFixed(2)}%`;
-  const panFill = `${(((panValue + 1) * 0.5) * 100).toFixed(2)}%`;
+  const optimisticMix = useTransportStore((state) => state.optimisticMix[trackId] ?? null);
+  const effectivePanValue = optimisticMix?.pan ?? panValue;
+  const effectiveTrackMuted = optimisticMix?.muted ?? trackMuted;
+  const effectiveTrackSolo = optimisticMix?.solo ?? trackSolo;
+  const effectiveVolumeValue = optimisticMix?.volume ?? volumeValue;
+  const volumeFill = `${(effectiveVolumeValue * 100).toFixed(2)}%`;
+  const panFill = `${(((effectivePanValue + 1) * 0.5) * 100).toFixed(2)}%`;
   const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (
@@ -99,7 +105,7 @@ function TrackHeaderItemComponent({
 
   return (
     <div
-      className={`lt-track-header ${densityClass} ${isSelected ? "is-selected" : ""} ${trackSolo ? "is-solo" : ""} ${trackKind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${isDragging ? "is-dragging" : ""}`}
+      className={`lt-track-header ${densityClass} ${isSelected ? "is-selected" : ""} ${effectiveTrackSolo ? "is-solo" : ""} ${trackKind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${isDragging ? "is-dragging" : ""}`}
       style={{ height: trackHeight, paddingLeft: 16 + trackDepth * 22 }}
       role="button"
       tabIndex={0}
@@ -135,7 +141,7 @@ function TrackHeaderItemComponent({
             <div className="lt-track-toggle-group">
               <button
                 type="button"
-                className={trackMuted ? "is-active" : ""}
+                className={effectiveTrackMuted ? "is-active" : ""}
                 onClick={(event) => {
                   event.stopPropagation();
                   onToggleMute(trackId);
@@ -145,7 +151,7 @@ function TrackHeaderItemComponent({
               </button>
               <button
                 type="button"
-                className={trackSolo ? "is-active" : ""}
+                className={effectiveTrackSolo ? "is-active" : ""}
                 onClick={(event) => {
                   event.stopPropagation();
                   onToggleSolo(trackId);
@@ -163,7 +169,7 @@ function TrackHeaderItemComponent({
                   min={0}
                   max={1}
                   step={0.01}
-                  value={volumeValue}
+                  value={effectiveVolumeValue}
                   style={{
                     background: `linear-gradient(to right, #3cddc7 ${volumeFill}, #0e0e0e ${volumeFill})`,
                   }}
@@ -187,14 +193,14 @@ function TrackHeaderItemComponent({
                 />
               </label>
               <label className="lt-track-pan">
-                <span>{formatPanValue(panValue)}</span>
+                <span>{formatPanValue(effectivePanValue)}</span>
                 <input
                   aria-label={`Paneo de ${trackName}`}
                   type="range"
                   min={-1}
                   max={1}
                   step={0.01}
-                  value={panValue}
+                  value={effectivePanValue}
                   style={{
                     background: `linear-gradient(to right, #4d79d8 0%, #74b8ff ${panFill}, #0e0e0e ${panFill}, #0e0e0e 100%)`,
                   }}

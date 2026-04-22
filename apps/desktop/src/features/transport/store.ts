@@ -68,10 +68,7 @@ export const useTransportStore = create<TransportStore>()(
         return {
           optimisticMix: {
             ...state.optimisticMix,
-            [trackId]: {
-              ...state.optimisticMix[trackId],
-              ...mix,
-            },
+            [trackId]: mix,
           },
         };
       });
