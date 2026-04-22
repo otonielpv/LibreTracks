@@ -549,6 +549,7 @@ impl DesktopSession {
             PlaybackStartReason::InitialPlay
         };
 
+        audio.replace_song_buffers(&song_dir, &song)?;
         audio.play(song_dir, song, self.engine.position_seconds(), start_reason)?;
         self.engine.play()?;
         self.transport_clock
@@ -1124,6 +1125,7 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
         audio.stop()?;
+        audio.replace_song_buffers(&song_dir, &song)?;
 
         self.transport_clock.stop();
         self.song_dir = Some(song_dir.clone());
@@ -1151,6 +1153,15 @@ impl DesktopSession {
         let position_seconds = self.current_position();
         let pending_jump = self.engine.pending_section_jump().cloned();
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+
+        if playback_state == PlaybackState::Playing
+            && matches!(
+                impact,
+                AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild
+            )
+        {
+            audio.replace_song_buffers(&song_dir, &song)?;
+        }
 
         let save_started_at = Instant::now();
         save_song(&song_dir, &song)?;
@@ -1419,6 +1430,7 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        audio.replace_song_buffers(&song_dir, &song)?;
         audio.play(song_dir, song, self.engine.position_seconds(), reason)?;
         Ok(())
     }

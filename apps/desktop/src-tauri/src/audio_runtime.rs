@@ -1,11 +1,12 @@
 use std::{
+    collections::{HashMap, HashSet},
     fs::File,
     io::ErrorKind,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
         mpsc::{self, Receiver, Sender},
-        Arc,
+        Arc, RwLock,
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -32,15 +33,16 @@ use crate::state::DesktopError;
 
 const PCM_RING_CAPACITY_FRAMES: usize = 16_384;
 const DISK_RENDER_BLOCK_FRAMES: usize = 1_024;
-const SOURCE_BUFFER_COMPACT_THRESHOLD_FRAMES: u64 = 4_096;
 const GAIN_EPSILON: f32 = 0.000_001;
 
 pub struct AudioRuntime {
     session: Option<PlaybackSession>,
+    audio_buffers: AudioBufferCache,
 }
 
 pub struct AudioController {
     sender: Sender<AudioCommand>,
+    audio_buffers: AudioBufferCache,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -198,6 +200,7 @@ struct PlaybackSession {
     reader_sender: Option<Sender<ReaderCommand>>,
     reader_handle: Option<JoinHandle<DiskReaderReport>>,
     seek_generation: Arc<AtomicU64>,
+    audio_buffers: AudioBufferCache,
 }
 
 enum PlaybackBackend {
@@ -232,9 +235,20 @@ struct PlaybackClipPlan {
     source_start_seconds: f64,
 }
 
+#[derive(Debug)]
+struct SharedAudioBuffer {
+    samples: Vec<f32>,
+    sample_rate: u32,
+    channels: usize,
+}
+
+#[derive(Clone, Default)]
+struct AudioBufferCache {
+    entries: Arc<RwLock<HashMap<PathBuf, Arc<SharedAudioBuffer>>>>,
+}
+
 struct DiskReaderState {
     mixer: Mixer,
-    song_dir: PathBuf,
     producer: Producer<OutputSample>,
     command_receiver: Receiver<ReaderCommand>,
     current_generation: u64,
@@ -247,7 +261,9 @@ struct OutputSample {
 }
 
 struct Mixer {
+    song_dir: PathBuf,
     song: Song,
+    audio_buffers: AudioBufferCache,
     output_sample_rate: u32,
     output_channels: usize,
     timeline_cursor_frame: u64,
@@ -261,20 +277,15 @@ struct Mixer {
 
 struct MixClipState {
     plan: PlaybackClipPlan,
-    reader: StreamingClipReader,
+    reader: MemoryClipReader,
     current_gain: f32,
 }
 
-struct StreamingClipReader {
-    format: Box<dyn FormatReader>,
-    decoder: Box<dyn Decoder>,
-    track_id: u32,
-    source_sample_rate: u32,
-    source_channels: usize,
+struct MemoryClipReader {
+    shared_buffer: Arc<SharedAudioBuffer>,
     output_sample_rate: u32,
-    decoded_samples: Vec<f32>,
-    decoded_start_frame: u64,
-    next_source_frame: f64,
+    current_frame: usize,
+    source_frame_cursor: f64,
     eof: bool,
 }
 
@@ -311,6 +322,93 @@ impl PlaybackClipPlan {
         };
 
         fade_in_gain.min(fade_out_gain).clamp(0.0, 1.0)
+    }
+}
+
+impl SharedAudioBuffer {
+    fn frame_count(&self) -> usize {
+        self.samples.len() / self.channels.max(1)
+    }
+
+    fn read_sample(&self, frame_index: usize, channel: usize, output_channels: usize) -> f32 {
+        let sample_index = frame_index.saturating_mul(self.channels);
+        if sample_index >= self.samples.len() {
+            return 0.0;
+        }
+
+        if output_channels == 1 && self.channels > 1 {
+            let left = self.samples[sample_index];
+            let right = self.samples[sample_index + 1.min(self.channels - 1)];
+            return (left + right) * 0.5;
+        }
+
+        let source_channel = if self.channels == 1 {
+            0
+        } else {
+            channel.min(self.channels - 1)
+        };
+
+        self.samples[sample_index + source_channel]
+    }
+}
+
+impl AudioBufferCache {
+    fn replace_song_buffers(&self, song_dir: &Path, song: &Song) -> Result<(), String> {
+        let mut unique_paths = Vec::new();
+        let mut seen_paths = HashSet::new();
+
+        for clip in &song.clips {
+            let file_path = song_dir.join(&clip.file_path);
+            if seen_paths.insert(file_path.clone()) {
+                unique_paths.push(file_path);
+            }
+        }
+
+        unique_paths.sort();
+
+        let existing_entries = self
+            .entries
+            .read()
+            .map_err(|_| "audio buffer cache lock poisoned".to_string())?;
+        let mut next_entries = HashMap::with_capacity(unique_paths.len());
+        let mut missing_paths = Vec::new();
+
+        for file_path in unique_paths {
+            if let Some(buffer) = existing_entries.get(&file_path) {
+                next_entries.insert(file_path.clone(), Arc::clone(buffer));
+            } else {
+                missing_paths.push(file_path);
+            }
+        }
+
+        drop(existing_entries);
+
+        for file_path in missing_paths {
+            next_entries.insert(file_path.clone(), Arc::new(decode_audio_file(&file_path)?));
+        }
+
+        let mut entries = self
+            .entries
+            .write()
+            .map_err(|_| "audio buffer cache lock poisoned".to_string())?;
+        *entries = next_entries;
+
+        Ok(())
+    }
+
+    fn get(&self, file_path: &Path) -> Result<Option<Arc<SharedAudioBuffer>>, String> {
+        let entries = self
+            .entries
+            .read()
+            .map_err(|_| "audio buffer cache lock poisoned".to_string())?;
+        Ok(entries.get(file_path).cloned())
+    }
+
+    fn buffer_count(&self) -> usize {
+        self.entries
+            .read()
+            .map(|entries| entries.len())
+            .unwrap_or_default()
     }
 }
 
@@ -408,7 +506,7 @@ impl AudioDebugState {
         }
 
         self.last_sync = Some(AudioOperationSummary {
-            reason: Some("disk_stream".to_string()),
+            reason: Some("memory_mix".to_string()),
             elapsed_ms: report.elapsed.as_secs_f64() * 1000.0,
             scheduled_clips: report.updated_sinks,
             active_sinks: report.active_sinks,
@@ -487,8 +585,11 @@ impl AudioDebugState {
 }
 
 impl AudioRuntime {
-    fn new() -> Self {
-        Self { session: None }
+    fn new(audio_buffers: AudioBufferCache) -> Self {
+        Self {
+            session: None,
+            audio_buffers,
+        }
     }
 
     fn stop_all(&mut self) -> StopReport {
@@ -521,8 +622,9 @@ impl AudioRuntime {
             song.clone(),
             position_seconds,
             debug_config,
+            self.audio_buffers.clone(),
         )?;
-        let cached_buffers = usize::from(matches!(session.backend, PlaybackBackend::Cpal { .. }));
+        let cached_buffers = session.cached_buffer_count();
 
         self.session = Some(session);
 
@@ -562,13 +664,18 @@ impl AudioController {
     pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel();
         let debug_config = AudioDebugConfig::from_env();
+        let audio_buffers = AudioBufferCache::default();
+        let runtime_audio_buffers = audio_buffers.clone();
 
         thread::Builder::new()
             .name("libretracks-audio".into())
-            .spawn(move || run_audio_thread(receiver, debug_config))
+            .spawn(move || run_audio_thread(receiver, debug_config, runtime_audio_buffers))
             .expect("audio thread should start");
 
-        Self { sender }
+        Self {
+            sender,
+            audio_buffers,
+        }
     }
 
     pub fn play(
@@ -621,6 +728,12 @@ impl AudioController {
             .map_err(|_| DesktopError::AudioThreadUnavailable)
     }
 
+    pub fn replace_song_buffers(&self, song_dir: &Path, song: &Song) -> Result<(), DesktopError> {
+        self.audio_buffers
+            .replace_song_buffers(song_dir, song)
+            .map_err(DesktopError::AudioCommand)
+    }
+
     fn request(
         &self,
         command: impl FnOnce(Sender<Result<(), String>>) -> AudioCommand,
@@ -656,6 +769,7 @@ impl PlaybackSession {
         song: Song,
         position_seconds: f64,
         debug_config: AudioDebugConfig,
+        audio_buffers: AudioBufferCache,
     ) -> Result<Self, String> {
         let host = cpal::default_host();
         let Some(device) = host.default_output_device() else {
@@ -665,6 +779,7 @@ impl PlaybackSession {
                 reader_sender: None,
                 reader_handle: None,
                 seek_generation: Arc::new(AtomicU64::new(0)),
+                audio_buffers,
             });
         };
 
@@ -682,14 +797,14 @@ impl PlaybackSession {
 
         let reader_handle = spawn_disk_reader(DiskReaderState {
             mixer: Mixer::new(
-                &song_dir,
+                song_dir.clone(),
                 song.clone(),
                 position_seconds,
                 output_sample_rate,
                 output_channels,
                 debug_config,
+                audio_buffers.clone(),
             ),
-            song_dir: song_dir.clone(),
             producer,
             command_receiver: reader_receiver,
             current_generation: 0,
@@ -709,7 +824,12 @@ impl PlaybackSession {
             reader_sender: Some(reader_sender),
             reader_handle: Some(reader_handle),
             seek_generation,
+            audio_buffers,
         })
+    }
+
+    fn cached_buffer_count(&self) -> usize {
+        self.audio_buffers.buffer_count()
     }
 
     fn update_song(&mut self, song: Song) -> Result<bool, String> {
@@ -755,23 +875,35 @@ impl PlaybackSession {
     }
 }
 
-impl StreamingClipReader {
-    fn open(plan: PlaybackClipPlan, output_sample_rate: u32) -> Result<Self, String> {
-        let source = open_audio_source(&plan.file_path)?;
-        let source_start_seconds = source_start_seconds_floor(plan.source_start_seconds);
-
-        Ok(Self {
-            format: source.format,
-            decoder: source.decoder,
-            track_id: source.track_id,
-            source_sample_rate: source.sample_rate.max(1),
-            source_channels: source.channels.max(1),
+impl MemoryClipReader {
+    fn open(
+        plan: &PlaybackClipPlan,
+        output_sample_rate: u32,
+        audio_buffers: &AudioBufferCache,
+    ) -> Result<Self, String> {
+        let shared_buffer = audio_buffers
+            .get(&plan.file_path)?
+            .ok_or_else(|| format!("audio buffer is not cached: {}", plan.file_path.display()))?;
+        let mut reader = Self {
+            shared_buffer,
             output_sample_rate: output_sample_rate.max(1),
-            decoded_samples: Vec::new(),
-            decoded_start_frame: 0,
-            next_source_frame: source.sample_rate as f64 * source_start_seconds,
+            current_frame: 0,
+            source_frame_cursor: 0.0,
             eof: false,
-        })
+        };
+        let source_start_frame = seconds_to_frames(
+            source_start_seconds_floor(plan.source_start_seconds),
+            reader.shared_buffer.sample_rate,
+        ) as usize;
+        reader.seek_to(source_start_frame);
+        Ok(reader)
+    }
+
+    fn seek_to(&mut self, target_frame: usize) {
+        let frame_count = self.shared_buffer.frame_count();
+        self.current_frame = target_frame.min(frame_count);
+        self.source_frame_cursor = self.current_frame as f64;
+        self.eof = self.current_frame >= frame_count;
     }
 
     fn mix_into(
@@ -781,116 +913,37 @@ impl StreamingClipReader {
         frame_count: usize,
         output_channels: usize,
         gain: f32,
-    ) -> Result<(), String> {
-        let frame_step = self.source_sample_rate as f64 / self.output_sample_rate as f64;
+    ) {
+        if self.eof {
+            return;
+        }
+
+        let frame_step = self.shared_buffer.sample_rate as f64 / self.output_sample_rate as f64;
+        let source_frame_count = self.shared_buffer.frame_count();
 
         for frame_offset in 0..frame_count {
-            let source_frame = self.next_source_frame.round().max(0.0) as u64;
-            if !self.ensure_source_frame_available(source_frame)? {
+            if self.current_frame >= source_frame_count {
                 self.eof = true;
                 break;
             }
 
-            if gain.abs() > 0.000_001 {
+            if gain.abs() > GAIN_EPSILON {
                 let buffer_base = (offset_frames + frame_offset) * output_channels;
                 for channel in 0..output_channels {
                     buffer[buffer_base + channel] +=
-                        self.read_sample(source_frame, channel, output_channels) * gain;
+                        self.shared_buffer
+                            .read_sample(self.current_frame, channel, output_channels)
+                            * gain;
                 }
             }
 
-            self.next_source_frame += frame_step;
-            self.compact_decoded_prefix();
+            self.source_frame_cursor += frame_step;
+            self.current_frame = self.source_frame_cursor.round().max(0.0) as usize;
         }
 
-        Ok(())
-    }
-
-    fn ensure_source_frame_available(&mut self, target_frame: u64) -> Result<bool, String> {
-        loop {
-            let decoded_frames = self.decoded_samples.len() / self.source_channels;
-            if target_frame < self.decoded_start_frame + decoded_frames as u64 {
-                return Ok(true);
-            }
-
-            if self.eof {
-                return Ok(false);
-            }
-
-            if !self.decode_next_packet()? {
-                self.eof = true;
-                return Ok(false);
-            }
+        if self.current_frame >= source_frame_count {
+            self.eof = true;
         }
-    }
-
-    fn decode_next_packet(&mut self) -> Result<bool, String> {
-        loop {
-            let packet = match self.format.next_packet() {
-                Ok(packet) => packet,
-                Err(SymphoniaError::IoError(error)) if error.kind() == ErrorKind::UnexpectedEof => {
-                    return Ok(false)
-                }
-                Err(error) => return Err(error.to_string()),
-            };
-
-            if packet.track_id() != self.track_id {
-                continue;
-            }
-
-            let decoded = match self.decoder.decode(&packet) {
-                Ok(decoded) => decoded,
-                Err(SymphoniaError::DecodeError(_)) => continue,
-                Err(SymphoniaError::IoError(error)) if error.kind() == ErrorKind::UnexpectedEof => {
-                    return Ok(false)
-                }
-                Err(error) => return Err(error.to_string()),
-            };
-
-            append_decoded_samples(&mut self.decoded_samples, decoded);
-            return Ok(true);
-        }
-    }
-
-    fn read_sample(&self, source_frame: u64, channel: usize, output_channels: usize) -> f32 {
-        let frame_index = (source_frame.saturating_sub(self.decoded_start_frame)) as usize;
-        let sample_index = frame_index.saturating_mul(self.source_channels);
-
-        if sample_index >= self.decoded_samples.len() {
-            return 0.0;
-        }
-
-        if output_channels == 1 && self.source_channels > 1 {
-            let left = self.decoded_samples[sample_index];
-            let right = self.decoded_samples[sample_index + 1.min(self.source_channels - 1)];
-            return (left + right) * 0.5;
-        }
-
-        let source_channel = if self.source_channels == 1 {
-            0
-        } else {
-            channel.min(self.source_channels - 1)
-        };
-
-        self.decoded_samples[sample_index + source_channel]
-    }
-
-    fn compact_decoded_prefix(&mut self) {
-        let target_frame = self.next_source_frame.floor().max(0.0) as u64;
-        if target_frame <= self.decoded_start_frame {
-            return;
-        }
-
-        let frames_to_drop = target_frame - self.decoded_start_frame;
-        if frames_to_drop < SOURCE_BUFFER_COMPACT_THRESHOLD_FRAMES {
-            return;
-        }
-
-        let available_frames = (self.decoded_samples.len() / self.source_channels) as u64;
-        let dropped_frames = frames_to_drop.min(available_frames);
-        let dropped_samples = dropped_frames as usize * self.source_channels;
-        self.decoded_samples.drain(0..dropped_samples);
-        self.decoded_start_frame += dropped_frames;
     }
 }
 
@@ -956,6 +1009,42 @@ fn open_audio_source(file_path: &Path) -> Result<OpenAudioSource, String> {
         track_id,
         sample_rate,
         channels,
+    })
+}
+
+fn decode_audio_file(file_path: &Path) -> Result<SharedAudioBuffer, String> {
+    let mut source = open_audio_source(file_path)?;
+    let mut decoded_samples = Vec::new();
+
+    loop {
+        let packet = match source.format.next_packet() {
+            Ok(packet) => packet,
+            Err(SymphoniaError::IoError(error)) if error.kind() == ErrorKind::UnexpectedEof => {
+                break;
+            }
+            Err(error) => return Err(error.to_string()),
+        };
+
+        if packet.track_id() != source.track_id {
+            continue;
+        }
+
+        let decoded = match source.decoder.decode(&packet) {
+            Ok(decoded) => decoded,
+            Err(SymphoniaError::DecodeError(_)) => continue,
+            Err(SymphoniaError::IoError(error)) if error.kind() == ErrorKind::UnexpectedEof => {
+                break;
+            }
+            Err(error) => return Err(error.to_string()),
+        };
+
+        append_decoded_samples(&mut decoded_samples, decoded);
+    }
+
+    Ok(SharedAudioBuffer {
+        samples: decoded_samples,
+        sample_rate: source.sample_rate.max(1),
+        channels: source.channels.max(1),
     })
 }
 
@@ -1069,7 +1158,11 @@ fn drain_consumer_samples<T>(
     }
 }
 
-fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugConfig) {
+fn run_audio_thread(
+    receiver: Receiver<AudioCommand>,
+    debug_config: AudioDebugConfig,
+    audio_buffers: AudioBufferCache,
+) {
     let mut runtime: Option<AudioRuntime> = None;
     let mut debug_state = AudioDebugState::new(debug_config);
     let mut deferred_command: Option<AudioCommand> = None;
@@ -1088,7 +1181,7 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
                     Some(playback_reason_label(reason).to_string()),
                 );
 
-                let result = ensure_runtime(&mut runtime)
+                let result = ensure_runtime(&mut runtime, &audio_buffers)
                     .restart(&song_dir, &song, position_seconds, debug_config)
                     .map(|report| {
                         debug_state.record_restart(
@@ -1112,7 +1205,7 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
                     Some(playback_reason_label(reason).to_string()),
                 );
 
-                let result = ensure_runtime(&mut runtime)
+                let result = ensure_runtime(&mut runtime, &audio_buffers)
                     .seek(&song, position_seconds)
                     .map(|active_sinks| {
                         debug_state.record_seek(
@@ -1133,9 +1226,12 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
                 debug_state
                     .record_command(AudioCommandKind::SyncSong, Some("mix_only".to_string()));
 
-                let result = ensure_runtime(&mut runtime).sync_song(&song).map(|report| {
-                    debug_state.record_sync(&report);
-                });
+                let result =
+                    ensure_runtime(&mut runtime, &audio_buffers)
+                        .sync_song(&song)
+                        .map(|report| {
+                            debug_state.record_sync(&report);
+                        });
 
                 for respond_to in respond_tos {
                     let _ = respond_to.send(result.clone());
@@ -1172,8 +1268,11 @@ fn run_audio_thread(receiver: Receiver<AudioCommand>, debug_config: AudioDebugCo
     }
 }
 
-fn ensure_runtime(runtime: &mut Option<AudioRuntime>) -> &mut AudioRuntime {
-    runtime.get_or_insert_with(AudioRuntime::new)
+fn ensure_runtime<'a>(
+    runtime: &'a mut Option<AudioRuntime>,
+    audio_buffers: &AudioBufferCache,
+) -> &'a mut AudioRuntime {
+    runtime.get_or_insert_with(|| AudioRuntime::new(audio_buffers.clone()))
 }
 
 fn next_audio_command(
@@ -1252,17 +1351,7 @@ impl DiskReaderState {
                     position_seconds,
                     generation,
                 } => {
-                    let output_sample_rate = self.mixer.output_sample_rate;
-                    let output_channels = self.mixer.output_channels;
-                    let debug_config = self.mixer.debug_config;
-                    self.mixer = Mixer::new(
-                        &self.song_dir,
-                        song,
-                        position_seconds,
-                        output_sample_rate,
-                        output_channels,
-                        debug_config,
-                    );
+                    self.mixer.seek(song, position_seconds);
                     self.current_generation = generation;
                 }
                 ReaderCommand::Stop => should_stop = true,
@@ -1275,32 +1364,58 @@ impl DiskReaderState {
 
 impl Mixer {
     fn new(
-        song_dir: &Path,
+        song_dir: PathBuf,
         song: Song,
         position_seconds: f64,
         output_sample_rate: u32,
         output_channels: usize,
         debug_config: AudioDebugConfig,
+        audio_buffers: AudioBufferCache,
     ) -> Self {
-        Self {
-            remaining_song_frames: seconds_to_frames(
-                (song.duration_seconds - position_seconds).max(0.0),
-                output_sample_rate,
-            ),
-            plans: build_playback_plans(song_dir, &song, position_seconds, output_sample_rate),
+        let mut mixer = Self {
+            song_dir,
             song,
+            audio_buffers,
             output_sample_rate,
             output_channels,
             timeline_cursor_frame: 0,
+            remaining_song_frames: 0,
             next_plan_index: 0,
+            plans: Vec::new(),
             active_clips: Vec::new(),
             debug_config,
             opened_files: 0,
-        }
+        };
+        mixer.reset_timeline(position_seconds);
+        mixer.activate_due_clips(DISK_RENDER_BLOCK_FRAMES as u64);
+        mixer
     }
 
     fn apply_song_update(&mut self, song: Song) {
         self.song = song;
+    }
+
+    fn seek(&mut self, song: Song, position_seconds: f64) {
+        self.song = song;
+        self.reset_timeline(position_seconds);
+        self.activate_due_clips(DISK_RENDER_BLOCK_FRAMES as u64);
+    }
+
+    fn reset_timeline(&mut self, position_seconds: f64) {
+        self.remaining_song_frames = seconds_to_frames(
+            (self.song.duration_seconds - position_seconds).max(0.0),
+            self.output_sample_rate,
+        );
+        self.plans = build_playback_plans(
+            &self.song_dir,
+            &self.song,
+            position_seconds,
+            self.output_sample_rate,
+        );
+        self.timeline_cursor_frame = 0;
+        self.next_plan_index = 0;
+        self.active_clips.clear();
+        self.opened_files = 0;
     }
 
     fn render_next_block(&mut self, block_frames: usize) -> Vec<f32> {
@@ -1325,19 +1440,14 @@ impl Mixer {
                 &clip_state.plan.track_id,
             ) as f32;
 
-            if let Err(error) = clip_state.mix_into(
+            clip_state.mix_into(
                 &mut mixed,
                 offset_frames,
                 overlap_frames,
                 self.output_channels,
                 overlap_start,
                 target_gain,
-            ) {
-                clip_state.reader.eof = true;
-                if self.debug_config.enabled || self.debug_config.log_commands {
-                    eprintln!("[libretracks-audio] clip decode failed: {error}");
-                }
-            }
+            );
         }
 
         self.active_clips.retain(|clip_state| {
@@ -1355,11 +1465,10 @@ impl Mixer {
             let plan = self.plans[self.next_plan_index].clone();
             self.next_plan_index += 1;
 
-            match StreamingClipReader::open(plan.clone(), self.output_sample_rate) {
+            match MemoryClipReader::open(&plan, self.output_sample_rate, &self.audio_buffers) {
                 Ok(reader) => {
                     let current_gain =
                         resolve_clip_runtime_gain(&self.song, &plan.clip_id, &plan.track_id) as f32;
-                    self.opened_files += 1;
                     self.active_clips.push(MixClipState {
                         plan,
                         reader,
@@ -1385,7 +1494,7 @@ impl MixClipState {
         output_channels: usize,
         overlap_start_frame: u64,
         target_gain: f32,
-    ) -> Result<(), String> {
+    ) {
         let start_gain = self.current_gain;
 
         for frame_offset in 0..frame_count {
@@ -1402,11 +1511,10 @@ impl MixClipState {
                 1,
                 output_channels,
                 dynamic_gain * edge_gain,
-            )?;
+            );
         }
 
         self.current_gain = target_gain;
-        Ok(())
     }
 }
 
@@ -1514,29 +1622,10 @@ fn scheduled_clip_count(song: &Song, position_seconds: f64) -> usize {
 
 #[cfg(test)]
 fn probe_audio_file(file_path: &Path) -> Result<(), String> {
-    let mut reader = StreamingClipReader::open(
-        PlaybackClipPlan {
-            clip_id: "probe".into(),
-            track_id: "probe".into(),
-            file_path: file_path.to_path_buf(),
-            timeline_start_frame: 0,
-            duration_frames: 1,
-            clip_start_offset_frames: 0,
-            total_clip_duration_frames: 1,
-            fade_in_frames: 0,
-            fade_out_frames: 0,
-            source_start_seconds: 0.0,
-        },
-        44_100,
-    )?;
-
-    reader
-        .ensure_source_frame_available(0)
-        .and_then(|available| {
-            available
-                .then_some(())
-                .ok_or_else(|| "empty audio stream".to_string())
-        })
+    let decoded = decode_audio_file(file_path)?;
+    (decoded.frame_count() > 0)
+        .then_some(())
+        .ok_or_else(|| "empty audio stream".to_string())
 }
 
 fn resolve_track_clip_gain(

@@ -472,10 +472,8 @@ export function TransportPanel() {
       running: isRunning,
     };
 
-    if (!isRunning) {
-      displayPositionSecondsRef.current = nextSnapshot.positionSeconds;
-      setDisplayPositionSeconds(nextSnapshot.positionSeconds);
-    }
+    setDisplayPositionSeconds(nextSnapshot.positionSeconds);
+    syncLivePosition(isRunning ? anchorPositionSeconds : nextSnapshot.positionSeconds);
   }
 
   useEffect(() => {
@@ -1283,10 +1281,10 @@ export function TransportPanel() {
       anchorPositionSeconds: clampedPosition,
       anchorReceivedAtMs: performance.now(),
       durationSeconds,
-      running: snapshot?.playbackState === "playing" && Boolean(snapshot?.transportClock?.running),
+      running: false,
     };
-    setDisplayPositionSeconds(clampedPosition);
     syncLivePosition(clampedPosition);
+    setDisplayPositionSeconds(clampedPosition);
   }
 
   const laneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
