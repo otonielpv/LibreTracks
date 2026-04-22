@@ -40,7 +40,7 @@ type TrackHeaderItemProps = {
   onSelectTrack: (trackId: string, trackName: string) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
   onStartTrackDrag: (
-    event: ReactMouseEvent<HTMLDivElement>,
+    event: ReactMouseEvent<HTMLElement>,
     trackId: string,
   ) => void;
   onToggleFolder: (trackId: string) => void;
@@ -118,6 +118,19 @@ function TrackHeaderItemComponent({
           <div className="lt-track-header-summary">
             <div className="lt-track-header-main">
               <div className="lt-track-title-row">
+                <button
+                  type="button"
+                  className="lt-track-drag-handle"
+                  aria-label={`Mover ${trackName}`}
+                  title={`Mover ${trackName}`}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onStartTrackDrag(event, trackId);
+                  }}
+                >
+                  <span aria-hidden="true">::</span>
+                </button>
                 {trackKind === "folder" ? (
                   <button
                     type="button"

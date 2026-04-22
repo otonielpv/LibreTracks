@@ -21,8 +21,7 @@ type RulerCanvasProps = {
   selectedMarkerId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
   playheadSecondsRef: MutableRefObject<number>;
-  previewPlayheadSeconds: number | null;
-  playheadColor: string;
+  playheadDragRef: MutableRefObject<{ currentSeconds: number } | null>;
   children?: ReactNode;
 };
 
@@ -38,10 +37,9 @@ type TrackCanvasProps = {
   pixelsPerSecond: number;
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
-  previewClipSeconds: Record<string, number>;
+  clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
   playheadSecondsRef: MutableRefObject<number>;
-  previewPlayheadSeconds: number | null;
-  playheadColor: string;
+  playheadDragRef: MutableRefObject<{ currentSeconds: number } | null>;
 };
 
 type TrackSceneSnapshot = Omit<TrackCanvasProps, "cameraXRef">;
@@ -475,13 +473,6 @@ function buildClipSceneSignature(clipsByTrack: Record<string, ClipSummary[]>) {
     .join("#");
 }
 
-function buildPreviewClipSignature(previewClipSeconds: Record<string, number>) {
-  return Object.entries(previewClipSeconds)
-    .sort(([leftId], [rightId]) => leftId.localeCompare(rightId))
-    .map(([clipId, seconds]) => `${clipId}:${seconds.toFixed(6)}`)
-    .join("|");
-}
-
 function buildWaveformCacheSignature(waveformCache: Record<string, WaveformSummaryDto>) {
   return Object.entries(waveformCache)
     .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
@@ -538,7 +529,8 @@ function drawTrackScene(
 
     const trackClips = snapshot.clipsByTrack[track.id] ?? [];
     for (const clip of trackClips) {
-      const previewStartSeconds = snapshot.previewClipSeconds[clip.id] ?? clip.timelineStartSeconds;
+      const previewStartSeconds =
+        snapshot.clipPreviewSecondsRef.current[clip.id] ?? clip.timelineStartSeconds;
       const { left, width: clipWidth } = clipScreenBounds(
         clip,
         previewStartSeconds,
@@ -627,8 +619,7 @@ export function TimelineRulerCanvas({
   selectedMarkerId,
   pendingMarkerJump,
   playheadSecondsRef,
-  previewPlayheadSeconds,
-  playheadColor,
+  playheadDragRef,
   children,
 }: RulerCanvasProps) {
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -642,8 +633,7 @@ export function TimelineRulerCanvas({
     markers,
     selectedMarkerId,
     pendingMarkerJump,
-    previewPlayheadSeconds,
-    playheadColor,
+    playheadDragRef,
   });
   const sceneVersionRef = useRef(0);
 
@@ -655,8 +645,7 @@ export function TimelineRulerCanvas({
     markers,
     selectedMarkerId,
     pendingMarkerJump,
-    previewPlayheadSeconds,
-    playheadColor,
+    playheadDragRef,
   };
 
   useEffect(() => {
@@ -666,8 +655,6 @@ export function TimelineRulerCanvas({
     markers,
     pendingMarkerJump,
     pixelsPerSecond,
-    previewPlayheadSeconds,
-    playheadColor,
     selectedMarkerId,
     timelineGrid,
     width,
@@ -739,6 +726,8 @@ export function TimelineRulerCanvas({
           const currentMarkerId = snapshot.markers
             .filter((marker) => playheadSecondsRef.current >= marker.startSeconds)
             .at(-1)?.id ?? null;
+          const playheadSeconds =
+            snapshot.playheadDragRef.current?.currentSeconds ?? playheadSecondsRef.current;
 
           for (const marker of snapshot.markers) {
             drawRulerMarker(
@@ -756,6 +745,17 @@ export function TimelineRulerCanvas({
               },
             );
           }
+
+          drawPlayhead(
+            overlayContext,
+            snapshot.width,
+            snapshot.height,
+            cameraX,
+            snapshot.pixelsPerSecond,
+            playheadSeconds,
+            snapshot.playheadDragRef.current ? "#ffe2ab" : "#57f1db",
+            true,
+          );
         }
       } catch (error) {
         console.error("TimelineRulerCanvas render failed", error);
@@ -800,10 +800,9 @@ export function TimelineTrackCanvas({
   pixelsPerSecond,
   timelineGrid,
   selectedClipId,
-  previewClipSeconds,
+  clipPreviewSecondsRef,
   playheadSecondsRef,
-  previewPlayheadSeconds,
-  playheadColor,
+  playheadDragRef,
 }: TrackCanvasProps) {
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -819,10 +818,9 @@ export function TimelineTrackCanvas({
     pixelsPerSecond,
     timelineGrid,
     selectedClipId,
-    previewClipSeconds,
+    clipPreviewSecondsRef,
     playheadSecondsRef,
-    previewPlayheadSeconds,
-    playheadColor,
+    playheadDragRef,
   });
   const sceneVersionRef = useRef(0);
   const trackStructureSignature = useMemo(
@@ -830,10 +828,6 @@ export function TimelineTrackCanvas({
     [song.tracks, visibleTracks],
   );
   const clipSceneSignature = useMemo(() => buildClipSceneSignature(clipsByTrack), [clipsByTrack]);
-  const previewClipSignature = useMemo(
-    () => buildPreviewClipSignature(previewClipSeconds),
-    [previewClipSeconds],
-  );
   const waveformCacheSignature = useMemo(
     () => buildWaveformCacheSignature(waveformCache),
     [waveformCache],
@@ -850,10 +844,9 @@ export function TimelineTrackCanvas({
     pixelsPerSecond,
     timelineGrid,
     selectedClipId,
-    previewClipSeconds,
+    clipPreviewSecondsRef,
     playheadSecondsRef,
-    previewPlayheadSeconds,
-    playheadColor,
+    playheadDragRef,
   };
 
   useEffect(() => {
@@ -862,7 +855,6 @@ export function TimelineTrackCanvas({
     clipSceneSignature,
     height,
     pixelsPerSecond,
-    previewClipSignature,
     selectedClipId,
     trackStructureSignature,
     timelineGrid,
@@ -886,12 +878,17 @@ export function TimelineTrackCanvas({
     let animationFrameId = 0;
     let lastBaseSceneVersion = -1;
     let lastBaseCameraX = Number.NaN;
+    let lastPreviewClipState = clipPreviewSecondsRef.current;
 
     const render = () => {
       const snapshot = snapshotRef.current;
       const cameraX = cameraXRef.current;
 
-      if (lastBaseSceneVersion !== sceneVersionRef.current || lastBaseCameraX !== cameraX) {
+      if (
+        lastBaseSceneVersion !== sceneVersionRef.current ||
+        lastBaseCameraX !== cameraX ||
+        lastPreviewClipState !== snapshot.clipPreviewSecondsRef.current
+      ) {
         const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
         if (baseContext) {
           drawTrackScene(baseContext, snapshot, cameraX, waveformBitmapCacheRef.current);
@@ -899,18 +896,21 @@ export function TimelineTrackCanvas({
 
         lastBaseSceneVersion = sceneVersionRef.current;
         lastBaseCameraX = cameraX;
+        lastPreviewClipState = snapshot.clipPreviewSecondsRef.current;
       }
 
       const overlayContext = setupCanvas(overlayCanvas, snapshot.width, snapshot.height);
       if (overlayContext) {
+        const playheadSeconds =
+          snapshot.playheadDragRef.current?.currentSeconds ?? playheadSecondsRef.current;
         drawPlayhead(
           overlayContext,
           snapshot.width,
           snapshot.height,
           cameraX,
           snapshot.pixelsPerSecond,
-          snapshot.previewPlayheadSeconds ?? playheadSecondsRef.current,
-          snapshot.playheadColor,
+          playheadSeconds,
+          snapshot.playheadDragRef.current ? "#ffe2ab" : "#57f1db",
           false,
         );
       }

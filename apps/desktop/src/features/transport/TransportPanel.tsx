@@ -118,6 +118,8 @@ type TrackDragState = {
   startClientY: number;
   currentClientY: number;
   isDragging: boolean;
+  rowElement: HTMLDivElement | null;
+  headerElement: HTMLDivElement | null;
 } | null;
 
 type TimelinePanState = {
@@ -423,19 +425,14 @@ export function TransportPanel() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
-  const [clipDrag, setClipDrag] = useState<ClipDragState>(null);
-  const [playheadDrag, setPlayheadDrag] = useState<PlayheadDragState>(null);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
-  const [trackDrag, setTrackDrag] = useState<TrackDragState>(null);
-  const [timelinePan, setTimelinePan] = useState<TimelinePanState>(null);
-  const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
-  const [trackDropState, setTrackDropState] = useState<TrackDropState>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const menuBarRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
   const rulerTrackRef = useRef<HTMLDivElement | null>(null);
   const timelineShellRef = useRef<HTMLDivElement | null>(null);
   const horizontalScrollbarRef = useRef<HTMLDivElement | null>(null);
+  const playheadHandleRef = useRef<HTMLDivElement | null>(null);
   const playbackVisualAnchorRef = useRef({
     anchorPositionSeconds: 0,
     anchorReceivedAtMs: 0,
@@ -454,9 +451,16 @@ export function TransportPanel() {
   const snapshotRef = useRef<TransportSnapshot | null>(useTransportStore.getState().playback);
   const songRef = useRef<SongView | null>(null);
   const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
+  const clipDragRef = useRef<ClipDragState>(null);
   const trackMixRequestIdsRef = useRef<Record<string, number>>({});
   const trackMixLiveStatesRef = useRef<Record<string, LiveTrackMixRequestState>>({});
   const playheadDragRef = useRef<PlayheadDragState>(null);
+  const trackDragRef = useRef<TrackDragState>(null);
+  const timelinePanRef = useRef<TimelinePanState>(null);
+  const clipPreviewSecondsRef = useRef<Record<string, number>>({});
+  const trackDropStateRef = useRef<TrackDropState>(null);
+  const draggedTrackRowRef = useRef<HTMLDivElement | null>(null);
+  const droppedTrackRowRef = useRef<HTMLDivElement | null>(null);
   const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
   const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
   const pendingMarkerJumpSignature = useTransportStore((state) => {
@@ -475,7 +479,6 @@ export function TransportPanel() {
 
   songRef.current = song;
   tracksByIdRef.current = tracksById;
-  playheadDragRef.current = playheadDrag;
 
   const runAction = useCallback(async (work: () => Promise<void>, options?: { busy?: boolean }) => {
     try {
@@ -686,6 +689,76 @@ export function TransportPanel() {
     },
     [clearTrackOptimisticMixKeys, flushTrackMixLiveUpdates],
   );
+
+  const clearTrackDragVisuals = useCallback(() => {
+    if (draggedTrackRowRef.current) {
+      draggedTrackRowRef.current.style.transform = "";
+      draggedTrackRowRef.current.style.zIndex = "";
+    }
+
+    const draggedHeader = draggedTrackRowRef.current?.querySelector(".lt-track-header");
+    if (draggedHeader instanceof HTMLElement) {
+      draggedHeader.classList.remove("is-dragging");
+    }
+
+    if (droppedTrackRowRef.current) {
+      droppedTrackRowRef.current.classList.remove(
+        "is-drop-target",
+        "is-drop-before",
+        "is-drop-after",
+        "is-drop-inside-folder",
+      );
+    }
+
+    draggedTrackRowRef.current = null;
+    droppedTrackRowRef.current = null;
+    trackDropStateRef.current = null;
+  }, []);
+
+  const applyTrackDragVisuals = useCallback((dragState: NonNullable<TrackDragState>, dropState: TrackDropState) => {
+    const deltaY = dragState.currentClientY - dragState.startClientY;
+
+    if (draggedTrackRowRef.current !== dragState.rowElement) {
+      clearTrackDragVisuals();
+      draggedTrackRowRef.current = dragState.rowElement;
+    }
+
+    if (dragState.rowElement) {
+      dragState.rowElement.style.transform = `translate3d(0, ${deltaY}px, 0)`;
+      dragState.rowElement.style.zIndex = "8";
+    }
+
+    if (dragState.headerElement) {
+      dragState.headerElement.classList.add("is-dragging");
+    }
+
+    if (
+      droppedTrackRowRef.current &&
+      droppedTrackRowRef.current.dataset.trackId !== dropState?.targetTrackId
+    ) {
+      droppedTrackRowRef.current.classList.remove(
+        "is-drop-target",
+        "is-drop-before",
+        "is-drop-after",
+        "is-drop-inside-folder",
+      );
+      droppedTrackRowRef.current = null;
+    }
+
+    const nextDropRow = dropState?.targetTrackId
+      ? (laneAreaRef.current?.querySelector(`[data-track-id="${dropState.targetTrackId}"]`) as HTMLDivElement | null)
+      : null;
+
+    if (!dropState || !nextDropRow) {
+      trackDropStateRef.current = null;
+      return;
+    }
+
+    nextDropRow.classList.remove("is-drop-before", "is-drop-after", "is-drop-inside-folder");
+    nextDropRow.classList.add("is-drop-target", `is-drop-${dropState.mode}`);
+    droppedTrackRowRef.current = nextDropRow;
+    trackDropStateRef.current = dropState;
+  }, [clearTrackDragVisuals]);
 
   function transportSnapshotKey(nextSnapshot: TransportSnapshot) {
     return [
@@ -1051,7 +1124,7 @@ export function TransportPanel() {
     let animationFrameId = 0;
 
     const tick = () => {
-      if (playheadDrag) {
+      if (playheadDragRef.current) {
         animationFrameId = window.requestAnimationFrame(tick);
         return;
       }
@@ -1105,7 +1178,7 @@ export function TransportPanel() {
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [applyPlaybackSnapshot, playbackState, playheadDrag]);
+  }, [applyPlaybackSnapshot, playbackState]);
 
   useEffect(() => {
     if (!isTauriApp || playbackState !== "playing") {
@@ -1323,91 +1396,48 @@ export function TransportPanel() {
   ]);
 
   useEffect(() => {
-    if (!clipDrag || !song || !laneAreaRef.current) {
-      return;
-    }
-
-    const effectSong = song;
-    const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
-    let activeDrag = clipDrag;
-
     const onMouseMove = (event: MouseEvent) => {
-      const exceededThreshold = Math.abs(event.clientX - activeDrag.startClientX) > DRAG_THRESHOLD_PX;
-      const deltaSeconds = (event.clientX - activeDrag.startClientX) / effectPixelsPerSecond;
-      const nextSeconds = snapEnabled
-        ? snapToTimelineGrid(
-            activeDrag.originSeconds + deltaSeconds,
-            effectSong.bpm,
-            effectSong.timeSignature,
-            zoomLevel,
-            effectPixelsPerSecond,
-          )
-        : activeDrag.originSeconds + deltaSeconds;
+      const clipDrag = clipDragRef.current;
+      const effectSong = songRef.current;
+      if (clipDrag && effectSong) {
+        const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
+        const exceededThreshold = Math.abs(event.clientX - clipDrag.startClientX) > DRAG_THRESHOLD_PX;
+        const deltaSeconds = (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
+        const nextSeconds = snapEnabled
+          ? snapToTimelineGrid(
+              clipDrag.originSeconds + deltaSeconds,
+              effectSong.bpm,
+              effectSong.timeSignature,
+              zoomLevel,
+              effectPixelsPerSecond,
+            )
+          : clipDrag.originSeconds + deltaSeconds;
 
-      activeDrag = {
-        ...activeDrag,
-        hasMoved: activeDrag.hasMoved || exceededThreshold,
-        previewSeconds: clamp(nextSeconds, 0, effectSong.durationSeconds),
-      };
-      setClipDrag(activeDrag);
-    };
-
-    const onMouseUp = async (event: MouseEvent) => {
-      if (event.button !== 0) {
-        return;
+        const nextDrag = {
+          ...clipDrag,
+          hasMoved: clipDrag.hasMoved || exceededThreshold,
+          previewSeconds: clamp(nextSeconds, 0, effectSong.durationSeconds),
+        };
+        clipDragRef.current = nextDrag;
+        clipPreviewSecondsRef.current = { [nextDrag.clipId]: nextDrag.previewSeconds };
       }
 
-      setClipDrag(null);
-      if (!activeDrag) {
-        return;
-      }
-
-      const movedEnough =
-        activeDrag.hasMoved ||
-        Math.abs(event.clientX - activeDrag.startClientX) > DRAG_THRESHOLD_PX;
-      if (!movedEnough) {
-        return;
-      }
-
-      await runAction(async () => {
-        const nextSnapshot = await moveClip(activeDrag.clipId, activeDrag.previewSeconds);
-        applyPlaybackSnapshot(nextSnapshot);
-        const clip = findClip(song, activeDrag.clipId);
-        setStatus(`Clip movido: ${clip?.trackName ?? activeDrag.clipId}`);
-      });
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [clipDrag, snapEnabled, song, zoomLevel]);
-
-  useEffect(() => {
-    if (!playheadDrag || !song || !rulerTrackRef.current) {
-      return;
-    }
-
-    const effectSong = song;
-    const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
-
-    const onMouseMove = (event: MouseEvent) => {
-      const effectCameraX = getCameraX({
-        durationSeconds: effectSong.durationSeconds,
-        pixelsPerSecond: effectPixelsPerSecond,
-      });
-      const rawSeconds = rulerPointerToSeconds(
-        event,
-        rulerTrackRef.current as HTMLElement,
-        effectSong.durationSeconds,
-        effectCameraX,
-        effectPixelsPerSecond,
-      );
-      const nextSeconds =
-        snapEnabled
+      const playheadDrag = playheadDragRef.current;
+      if (playheadDrag && songRef.current && rulerTrackRef.current) {
+        const effectSong = songRef.current;
+        const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
+        const effectCameraX = getCameraX({
+          durationSeconds: effectSong.durationSeconds,
+          pixelsPerSecond: effectPixelsPerSecond,
+        });
+        const rawSeconds = rulerPointerToSeconds(
+          event,
+          rulerTrackRef.current,
+          effectSong.durationSeconds,
+          effectCameraX,
+          effectPixelsPerSecond,
+        );
+        const nextSeconds = snapEnabled
           ? snapToTimelineGrid(
               rawSeconds,
               effectSong.bpm,
@@ -1416,72 +1446,39 @@ export function TransportPanel() {
               effectPixelsPerSecond,
             )
           : rawSeconds;
-      setPlayheadDrag((current) =>
-        current
-          ? {
-              ...current,
-              currentSeconds: nextSeconds,
-            }
-          : current,
-      );
-    };
 
-    const onMouseUp = async (event: MouseEvent) => {
-      if (event.button !== 0) {
-        return;
+        playheadDragRef.current = {
+          ...playheadDrag,
+          currentSeconds: nextSeconds,
+        };
+        syncLivePosition(nextSeconds);
       }
 
-      const activeDrag = playheadDrag;
-      setPlayheadDrag(null);
-      if (!activeDrag) {
-        return;
+      const trackDrag = trackDragRef.current;
+      if (trackDrag && songRef.current) {
+        const exceededThreshold =
+          Math.abs(event.clientX - trackDrag.startClientX) > DRAG_THRESHOLD_PX ||
+          Math.abs(event.clientY - trackDrag.startClientY) > DRAG_THRESHOLD_PX;
+        const isDraggingNow = trackDrag.isDragging || exceededThreshold;
+        const nextDrag = {
+          ...trackDrag,
+          currentClientY: event.clientY,
+          isDragging: isDraggingNow,
+        };
+        trackDragRef.current = nextDrag;
+
+        if (!isDraggingNow) {
+          return;
+        }
+
+        const dropState = resolveTrackDropState(
+          songRef.current,
+          trackDrag.trackId,
+          event.clientX,
+          event.clientY,
+        );
+        applyTrackDragVisuals(nextDrag, dropState);
       }
-
-      await runAction(async () => {
-        await performSeek(activeDrag.currentSeconds);
-      });
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [playheadDrag, runAction, snapEnabled, song, zoomLevel]);
-
-  useEffect(() => {
-    if (!trackDrag || !song) {
-      return;
-    }
-
-    const effectSong = song;
-
-    const onMouseMove = (event: MouseEvent) => {
-      const exceededThreshold =
-        Math.abs(event.clientX - trackDrag.startClientX) > DRAG_THRESHOLD_PX ||
-        Math.abs(event.clientY - trackDrag.startClientY) > DRAG_THRESHOLD_PX;
-      const isDraggingNow = trackDrag.isDragging || exceededThreshold;
-
-      setTrackDrag((current) =>
-        current
-          ? {
-              ...current,
-              currentClientY: event.clientY,
-              isDragging: current.isDragging || exceededThreshold,
-            }
-          : current,
-      );
-
-      if (!isDraggingNow) {
-        return;
-      }
-
-      setDraggingTrackId(trackDrag.trackId);
-      setTrackDropState(
-        resolveTrackDropState(effectSong, trackDrag.trackId, event.clientX, event.clientY),
-      );
     };
 
     const onMouseUp = (event: MouseEvent) => {
@@ -1489,24 +1486,58 @@ export function TransportPanel() {
         return;
       }
 
-      const movedEnough =
-        Math.abs(event.clientX - trackDrag.startClientX) > DRAG_THRESHOLD_PX ||
-        Math.abs(event.clientY - trackDrag.startClientY) > DRAG_THRESHOLD_PX;
-      const shouldTreatAsDrag = trackDrag.isDragging || movedEnough;
-      const dropState = shouldTreatAsDrag
-        ? resolveTrackDropState(effectSong, trackDrag.trackId, event.clientX, event.clientY)
-        : null;
-
-      setTrackDrag(null);
-      setDraggingTrackId(null);
-      setTrackDropState(null);
-      suppressTrackClickRef.current = shouldTreatAsDrag;
-
-      if (!dropState) {
-        return;
+      const activeClipDrag = clipDragRef.current;
+      clipDragRef.current = null;
+      clipPreviewSecondsRef.current = {};
+      if (activeClipDrag) {
+        const movedEnough =
+          activeClipDrag.hasMoved ||
+          Math.abs(event.clientX - activeClipDrag.startClientX) > DRAG_THRESHOLD_PX;
+        if (movedEnough) {
+          void runAction(async () => {
+            const nextSnapshot = await moveClip(activeClipDrag.clipId, activeClipDrag.previewSeconds);
+            applyPlaybackSnapshot(nextSnapshot);
+            const clip = findClip(songRef.current, activeClipDrag.clipId);
+            setStatus(`Clip movido: ${clip?.trackName ?? activeClipDrag.clipId}`);
+          });
+        }
       }
 
-      void handleTrackDrop(trackDrag.trackId, dropState);
+      const activePlayheadDrag = playheadDragRef.current;
+      if (activePlayheadDrag) {
+        playheadDragRef.current = null;
+        playheadHandleRef.current?.classList.remove("is-dragging");
+        void runAction(async () => {
+          await performSeek(activePlayheadDrag.currentSeconds);
+        });
+      }
+
+      const activeTrackDrag = trackDragRef.current;
+      if (activeTrackDrag) {
+        const currentSong = songRef.current;
+        const movedEnough =
+          Math.abs(event.clientX - activeTrackDrag.startClientX) > DRAG_THRESHOLD_PX ||
+          Math.abs(event.clientY - activeTrackDrag.startClientY) > DRAG_THRESHOLD_PX;
+        const shouldTreatAsDrag = Boolean(currentSong) && (activeTrackDrag.isDragging || movedEnough);
+        const dropState = shouldTreatAsDrag && currentSong
+          ? resolveTrackDropState(
+              currentSong,
+              activeTrackDrag.trackId,
+              event.clientX,
+              event.clientY,
+            )
+          : null;
+
+        trackDragRef.current = null;
+        suppressTrackClickRef.current = shouldTreatAsDrag;
+        clearTrackDragVisuals();
+
+        if (dropState) {
+          void handleTrackDrop(activeTrackDrag.trackId, dropState);
+        }
+      }
+
+      timelinePanRef.current = null;
     };
 
     window.addEventListener("mousemove", onMouseMove);
@@ -1516,7 +1547,23 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [song, trackDrag]);
+  }, [
+    applyPlaybackSnapshot,
+    applyTrackDragVisuals,
+    clearTrackDragVisuals,
+    handleTrackDrop,
+    performSeek,
+    runAction,
+    snapEnabled,
+    zoomLevel,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearTrackDragVisuals();
+      playheadHandleRef.current?.classList.remove("is-dragging");
+    };
+  }, [clearTrackDragVisuals]);
 
   function getCameraX(options?: {
     cameraX?: number;
@@ -1683,7 +1730,7 @@ export function TransportPanel() {
   const pendingMarkerJump = pendingMarkerJumpSignature
     ? snapshotRef.current?.pendingMarkerJump ?? null
     : null;
-  const readoutPositionSeconds = playheadDrag?.currentSeconds ?? displayPositionSecondsRef.current;
+  const readoutPositionSeconds = displayPositionSecondsRef.current;
   const musicalPositionLabel = song
     ? formatMusicalPosition(readoutPositionSeconds, song.bpm, song.timeSignature)
     : "1.1.00";
@@ -1715,10 +1762,6 @@ export function TransportPanel() {
       ),
     [timelineGrid.barLabelStep, timelineGrid.markers, timelineGrid.showBeatLabels],
   );
-  const previewClipSeconds = clipDrag
-    ? { [clipDrag.clipId]: clipDrag.previewSeconds }
-    : {};
-  const playheadColor = playheadDrag ? "#ffe2ab" : "#57f1db";
 
   async function scheduleMarkerJumpWithGlobalMode(markerId: string, markerName: string) {
     const trigger =
@@ -1776,10 +1819,9 @@ export function TransportPanel() {
   }, [laneViewportWidth, pixelsPerSecond, song?.durationSeconds]);
 
   useEffect(() => {
-    syncLivePosition(playheadDrag?.currentSeconds ?? displayPositionSecondsRef.current);
+    syncLivePosition(playheadDragRef.current?.currentSeconds ?? displayPositionSecondsRef.current);
   }, [
     pixelsPerSecond,
-    playheadDrag?.currentSeconds,
     song?.bpm,
     song?.durationSeconds,
     song?.timeSignature,
@@ -2066,21 +2108,24 @@ export function TransportPanel() {
   }
 
   const handleTrackHeaderDragStart = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => {
+    (event: ReactMouseEvent<HTMLElement>, trackId: string) => {
       if (event.button !== 0) {
         return;
       }
 
       event.stopPropagation();
       setContextMenu(null);
-      setTrackDrag({
+      const headerElement = event.currentTarget.closest(".lt-track-header") as HTMLDivElement | null;
+      trackDragRef.current = {
         trackId,
         pointerId: 1,
         startClientX: event.clientX,
         startClientY: event.clientY,
         currentClientY: event.clientY,
         isDragging: false,
-      });
+        rowElement: event.currentTarget.closest(".lt-track-row") as HTMLDivElement | null,
+        headerElement,
+      };
     },
     [],
   );
@@ -2223,14 +2268,15 @@ export function TransportPanel() {
       setSelectedTrackId(track.id);
       setSelectedSectionId(null);
       setContextMenu(null);
-      setClipDrag({
+      clipDragRef.current = {
         clipId: hitClip.id,
         pointerId: 1,
         originSeconds: hitClip.timelineStartSeconds,
         previewSeconds: hitClip.timelineStartSeconds,
         startClientX: event.clientX,
         hasMoved: false,
-      });
+      };
+      clipPreviewSecondsRef.current = { [hitClip.id]: hitClip.timelineStartSeconds };
       return;
     }
 
@@ -2242,7 +2288,7 @@ export function TransportPanel() {
       startClientX: event.clientX,
       originCameraX: panOriginCameraX,
     };
-    setTimelinePan(activePan);
+    timelinePanRef.current = activePan;
 
     const onMouseMove = (windowEvent: MouseEvent) => {
       const deltaX = activePan.startClientX - windowEvent.clientX;
@@ -2254,7 +2300,7 @@ export function TransportPanel() {
         return;
       }
 
-      setTimelinePan(null);
+      timelinePanRef.current = null;
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
@@ -2787,8 +2833,7 @@ export function TransportPanel() {
                   selectedMarkerId={selectedSectionId}
                   pendingMarkerJump={pendingMarkerJump}
                   playheadSecondsRef={displayPositionSecondsRef}
-                  previewPlayheadSeconds={playheadDrag?.currentSeconds ?? null}
-                  playheadColor={playheadColor}
+                  playheadDragRef={playheadDragRef}
                 >
                   {timelineHeaderMarkers.map((marker) => {
                     const markerLeft = marker.seconds * pixelsPerSecond;
@@ -2839,7 +2884,8 @@ export function TransportPanel() {
                 </TimelineRulerCanvas>
 
                 <div
-                  className={`lt-playhead is-handle ${playheadDrag ? "is-dragging" : ""}`}
+                  className="lt-playhead is-handle"
+                  ref={playheadHandleRef}
                   onMouseDown={(event) => {
                     if (!song || event.button !== 0) {
                       return;
@@ -2848,10 +2894,11 @@ export function TransportPanel() {
                     event.preventDefault();
                     event.stopPropagation();
                     setContextMenu(null);
-                    setPlayheadDrag({
+                    playheadDragRef.current = {
                       pointerId: 1,
                       currentSeconds: displayPositionSecondsRef.current,
-                    });
+                    };
+                    playheadHandleRef.current?.classList.add("is-dragging");
                   }}
                 />
               </div>
@@ -2872,10 +2919,9 @@ export function TransportPanel() {
                 pixelsPerSecond={pixelsPerSecond}
                 timelineGrid={timelineGrid}
                 selectedClipId={selectedClipId}
-                previewClipSeconds={previewClipSeconds}
+                clipPreviewSecondsRef={clipPreviewSecondsRef}
                 playheadSecondsRef={displayPositionSecondsRef}
-                previewPlayheadSeconds={playheadDrag?.currentSeconds ?? null}
-                playheadColor={playheadColor}
+                playheadDragRef={playheadDragRef}
               />
             ) : null}
 
@@ -2883,15 +2929,13 @@ export function TransportPanel() {
                 const trackClips = clipsByTrack[track.id] ?? [];
                 const isTrackSelected = selectedTrackId === track.id;
                 const childCount = trackChildrenCount(song, track.id);
-                const isDropTarget = trackDropState?.targetTrackId === track.id;
-                const dropMode = isDropTarget ? trackDropState?.mode : null;
                 const trackDensityClass =
                   trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
 
                 return (
                 <div
                   key={track.id}
-                  className={`lt-track-row ${isDropTarget ? `is-drop-target is-drop-${dropMode}` : ""}`}
+                  className="lt-track-row"
                   data-track-id={track.id}
                   style={{
                     width: timelineRowWidth,
@@ -2911,9 +2955,9 @@ export function TransportPanel() {
                     volumeValue={track.volume}
                     isCollapsed={collapsedFolders.has(track.id)}
                     isSelected={isTrackSelected}
-                    isDropTarget={isDropTarget}
-                    dropMode={dropMode}
-                    isDragging={draggingTrackId === track.id}
+                    isDropTarget={false}
+                    dropMode={null}
+                    isDragging={false}
                     densityClass={trackDensityClass}
                     onSelectTrack={handleTrackHeaderSelect}
                     onOpenContextMenu={handleTrackHeaderContextMenu}

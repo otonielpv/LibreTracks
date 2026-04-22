@@ -931,6 +931,25 @@ body {
   gap: 0.25rem;
 }
 
+.lt-track-drag-handle {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.04);
+  color: #bacac5;
+  cursor: grab;
+  font: 600 9px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+}
+
+.lt-track-drag-handle:active {
+  cursor: grabbing;
+}
+
 .lt-track-title-row strong {
   color: #e5e2e1;
   font: 600 12px/1.2 "Space Grotesk", sans-serif;
