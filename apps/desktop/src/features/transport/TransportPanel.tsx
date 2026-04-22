@@ -9,7 +9,7 @@ import {
 } from "react";
 import {
   assignSectionMarkerDigit,
-  cancelSectionJump,
+  cancelMarkerJump,
   createSectionMarker,
   createSong,
   createTrack,
@@ -29,7 +29,7 @@ import {
   pickAndImportSong,
   playTransport,
   saveProject,
-  scheduleSectionJump,
+  scheduleMarkerJump,
   seekTransport,
   splitClip,
   stopTransport,
@@ -37,7 +37,7 @@ import {
   updateSongTempo,
   updateTrack,
   type ClipSummary,
-  type SectionSummary,
+  type SectionMarkerSummary,
   type SongView,
   type TrackKind,
   type TransportLifecycleEvent,
@@ -135,7 +135,7 @@ type PendingRulerPress = {
   startSeconds: number;
 } | null;
 
-type GlobalJumpMode = "immediate" | "after_bars" | "section_end";
+type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
 
 type TransportAnchorMeta = {
   snapshotKey: string;
@@ -256,15 +256,7 @@ function findSection(song: SongView | null, sectionId: string | null) {
     return null;
   }
 
-  return song.derivedSections.find((section) => section.id === sectionId) ?? null;
-}
-
-function findSectionMarker(song: SongView | null, markerId: string | null) {
-  if (!song || !markerId) {
-    return null;
-  }
-
-  return song.sectionMarkers.find((marker) => marker.id === markerId) ?? null;
+  return song.sectionMarkers.find((marker) => marker.id === sectionId) ?? null;
 }
 
 function trackChildrenCount(song: SongView, trackId: string) {
@@ -869,13 +861,13 @@ export function TransportPanel() {
         }
 
         void runAction(async () => {
-          const pendingJump = snapshot?.pendingSectionJump;
+          const pendingJump = snapshot?.pendingMarkerJump;
           if (
             pendingJump &&
             pendingJump.targetMarkerId === marker.id &&
             pendingJump.targetDigit === keyDigit
           ) {
-            const nextSnapshot = await cancelSectionJump();
+            const nextSnapshot = await cancelMarkerJump();
             setSnapshot(nextSnapshot);
             setStatus(`Salto cancelado para digito ${keyDigit}.`);
             return;
@@ -890,9 +882,9 @@ export function TransportPanel() {
       if (event.key === "Escape") {
         event.preventDefault();
 
-        if (snapshot?.pendingSectionJump) {
+        if (snapshot?.pendingMarkerJump) {
           void runAction(async () => {
-            const nextSnapshot = await cancelSectionJump();
+            const nextSnapshot = await cancelMarkerJump();
             setSnapshot(nextSnapshot);
             setStatus("Salto cancelado.");
           });
@@ -922,7 +914,7 @@ export function TransportPanel() {
     globalJumpBars,
     globalJumpMode,
     selectedClipId,
-    snapshot?.pendingSectionJump,
+    snapshot?.pendingMarkerJump,
     snapshot?.playbackState,
     song,
   ]);
@@ -1447,7 +1439,7 @@ export function TransportPanel() {
     const trigger =
       globalJumpMode === "after_bars" ? "after_bars" : globalJumpMode;
     const bars = Math.max(1, Math.floor(globalJumpBars));
-    const nextSnapshot = await scheduleSectionJump(
+    const nextSnapshot = await scheduleMarkerJump(
       markerId,
       trigger,
       trigger === "after_bars" ? bars : undefined,
@@ -1456,8 +1448,8 @@ export function TransportPanel() {
     setStatus(
       trigger === "immediate"
         ? `Salto inmediato a ${markerName}.`
-        : trigger === "section_end"
-          ? `Salto armado al final de seccion hacia ${markerName}.`
+        : trigger === "next_marker"
+          ? `Salto armado en la siguiente marca hacia ${markerName}.`
           : `Salto armado en ${bars} compases hacia ${markerName}.`,
     );
   }
@@ -1994,26 +1986,22 @@ export function TransportPanel() {
     openMenu(event, track.name, trackContextMenu(track));
   }
 
-  function sectionContextMenu(section: SectionSummary) {
-    const marker = findSectionMarker(song, section.id);
-    const canEditMarker = Boolean(marker);
+  function sectionContextMenu(section: SectionMarkerSummary) {
+    const canEditMarker = Boolean(section);
 
     return [
       {
         label: "Renombrar",
         disabled: !canEditMarker,
         onSelect: async () => {
-          if (!marker) {
-            return;
-          }
-          const nextName = window.prompt("Nuevo nombre de la seccion", section.name)?.trim();
+          const nextName = window.prompt("Nuevo nombre de la marca", section.name)?.trim();
           if (!nextName) {
             return;
           }
           await runAction(async () => {
-            const nextSnapshot = await updateSectionMarker(section.id, nextName, marker.startSeconds);
+            const nextSnapshot = await updateSectionMarker(section.id, nextName, section.startSeconds);
             setSnapshot(nextSnapshot);
-            setStatus(`Seccion renombrada: ${nextName}`);
+            setStatus(`Marca renombrada: ${nextName}`);
           });
         },
       },
@@ -2021,25 +2009,19 @@ export function TransportPanel() {
         label: "Borrar",
         disabled: !canEditMarker,
         onSelect: async () => {
-          if (!marker) {
-            return;
-          }
           await runAction(async () => {
             const nextSnapshot = await deleteSectionMarker(section.id);
             setSnapshot(nextSnapshot);
             setSelectedSectionId(null);
-            setStatus(`Seccion eliminada: ${section.name}`);
+            setStatus(`Marca eliminada: ${section.name}`);
           });
         },
       },
       {
-        label: marker?.digit == null ? "Asignar digito" : `Cambiar digito (${marker.digit})`,
+        label: section.digit == null ? "Asignar digito" : `Cambiar digito (${section.digit})`,
         disabled: !canEditMarker,
         onSelect: async () => {
-          if (!marker) {
-            return;
-          }
-          const value = window.prompt("Digito 0-9 (vacio para liberar)", marker.digit?.toString() ?? "");
+          const value = window.prompt("Digito 0-9 (vacio para liberar)", section.digit?.toString() ?? "");
           if (value === null) {
             return;
           }
@@ -2065,11 +2047,8 @@ export function TransportPanel() {
         label: "Ir ahora",
         disabled: !canEditMarker,
         onSelect: async () => {
-          if (!marker) {
-            return;
-          }
           await runAction(async () => {
-            const nextSnapshot = await scheduleSectionJump(section.id, "immediate");
+            const nextSnapshot = await scheduleMarkerJump(section.id, "immediate");
             setSnapshot(nextSnapshot);
             setStatus(`Cursor enviado a ${section.name}`);
           });
@@ -2079,11 +2058,8 @@ export function TransportPanel() {
         label: "Disparar con modo global",
         disabled: !canEditMarker,
         onSelect: async () => {
-          if (!marker) {
-            return;
-          }
           await runAction(async () => {
-            await scheduleMarkerJumpWithGlobalMode(marker.id, section.name);
+            await scheduleMarkerJumpWithGlobalMode(section.id, section.name);
           });
         },
       },
@@ -2367,16 +2343,15 @@ export function TransportPanel() {
                     );
                   })}
 
-                  {song?.derivedSections.map((section) => {
+                  {song?.sectionMarkers.map((section) => {
                     const sectionLeft = section.startSeconds * pixelsPerSecond;
-                    const sectionWidth = (section.endSeconds - section.startSeconds) * pixelsPerSecond;
 
                     return (
                       <button
                         key={section.id}
                         type="button"
                         className={`lt-section-tag ${selectedSectionId === section.id ? "is-selected" : ""}`}
-                        style={{ left: sectionLeft, width: sectionWidth }}
+                        style={{ left: sectionLeft }}
                         onMouseDown={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
@@ -2386,7 +2361,7 @@ export function TransportPanel() {
                           setSelectedSectionId(section.id);
                           setSelectedClipId(null);
                           setSelectedTrackId(null);
-                          setStatus(`Seccion seleccionada: ${section.name}`);
+                          setStatus(`Marca seleccionada: ${section.name}`);
                         }}
                         onContextMenu={(event) => {
                           event.stopPropagation();
@@ -2561,7 +2536,7 @@ export function TransportPanel() {
             >
               <option value="immediate">Immediate</option>
               <option value="after_bars">After X bars</option>
-              <option value="section_end">At section end</option>
+              <option value="next_marker">At next marker</option>
             </select>
           </label>
           {globalJumpMode === "after_bars" ? (
@@ -2577,17 +2552,17 @@ export function TransportPanel() {
               />
             </label>
           ) : null}
-          {snapshot?.pendingSectionJump ? (
+          {snapshot?.pendingMarkerJump ? (
             <span>
-              Armado: {snapshot.pendingSectionJump.targetMarkerName} | {snapshot.pendingSectionJump.trigger}
+              Armado: {snapshot.pendingMarkerJump.targetMarkerName} | {snapshot.pendingMarkerJump.trigger}
             </span>
           ) : null}
           <button
             type="button"
-            disabled={!snapshot?.pendingSectionJump}
+            disabled={!snapshot?.pendingMarkerJump}
             onClick={() =>
               void runAction(async () => {
-                const nextSnapshot = await cancelSectionJump();
+                const nextSnapshot = await cancelMarkerJump();
                 setSnapshot(nextSnapshot);
                 setStatus("Salto cancelado.");
               })
@@ -2618,11 +2593,9 @@ export function TransportPanel() {
 
       {selectedSection ? (
         <div className="lt-inspector-strip">
-          <strong>Seccion</strong>
+          <strong>Marca</strong>
           <span>{selectedSection.name}</span>
-          <span>
-            {formatClock(selectedSection.startSeconds)} {"->"} {formatClock(selectedSection.endSeconds)}
-          </span>
+          <span>{formatClock(selectedSection.startSeconds)}</span>
         </div>
       ) : null}
 

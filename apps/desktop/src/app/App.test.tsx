@@ -184,7 +184,7 @@ describe("App", () => {
     });
 
     expect(await screen.findByText(/marca creada desde la seleccion temporal/i)).toBeTruthy();
-    expect(screen.getByText("Seccion 5")).toBeTruthy();
+    expect(screen.getByText("Marker 5")).toBeTruthy();
   });
 
   it("opens the clip context menu and allows splitting at the cursor", async () => {
@@ -247,14 +247,14 @@ describe("App", () => {
 
     const modeSelect = await screen.findByRole("combobox", { name: /modo global de salto/i });
     await act(async () => {
-      fireEvent.change(modeSelect, { target: { value: "section_end" } });
+      fireEvent.change(modeSelect, { target: { value: "next_marker" } });
     });
 
     await act(async () => {
       fireEvent.keyDown(window, { code: "Digit2", key: "2" });
     });
 
-    expect(await screen.findByText(/salto armado al final de seccion hacia verse/i)).toBeTruthy();
+    expect(await screen.findByText(/salto armado en la siguiente marca hacia verse/i)).toBeTruthy();
 
     await act(async () => {
       fireEvent.keyDown(window, { code: "Escape", key: "Escape" });

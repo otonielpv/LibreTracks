@@ -177,8 +177,8 @@ pub enum DesktopError {
 pub struct TransportSnapshot {
     pub playback_state: String,
     pub position_seconds: f64,
-    pub current_section: Option<SectionSummary>,
-    pub pending_section_jump: Option<PendingJumpSummary>,
+    pub current_marker: Option<MarkerSummary>,
+    pub pending_marker_jump: Option<PendingJumpSummary>,
     pub musical_position: MusicalPositionSummary,
     pub transport_clock: TransportClockSummary,
     pub project_revision: u64,
@@ -208,7 +208,6 @@ pub struct SongView {
     pub time_signature: String,
     pub duration_seconds: f64,
     pub section_markers: Vec<MarkerSummary>,
-    pub derived_sections: Vec<SectionSummary>,
     pub clips: Vec<ClipSummary>,
     pub tracks: Vec<TrackSummary>,
     pub project_revision: u64,
@@ -227,15 +226,6 @@ pub struct TrackSummary {
     pub pan: f64,
     pub muted: bool,
     pub solo: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SectionSummary {
-    pub id: String,
-    pub name: String,
-    pub start_seconds: f64,
-    pub end_seconds: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -597,7 +587,7 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn schedule_section_jump(
+    pub fn schedule_marker_jump(
         &mut self,
         target_marker_id: &str,
         trigger: JumpTrigger,
@@ -622,7 +612,7 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn cancel_section_jump(
+    pub fn cancel_marker_jump(
         &mut self,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
@@ -1275,17 +1265,13 @@ impl DesktopSession {
         let snapshot = TransportSnapshot {
             playback_state: playback_state_label(self.engine.playback_state()).to_string(),
             position_seconds: self.current_position(),
-            current_section: self
+            current_marker: self
                 .engine
                 .current_marker()
                 .ok()
                 .flatten()
-                .and_then(|marker| {
-                    self.engine
-                        .song()
-                        .map(|song| marker_to_section_summary(song, &marker))
-                }),
-            pending_section_jump: self
+                .map(|marker| marker_to_summary(&marker)),
+            pending_marker_jump: self
                 .engine
                 .pending_marker_jump()
                 .map(pending_jump_to_summary),
@@ -1746,8 +1732,6 @@ fn song_to_view(
     waveform_cache: &WaveformMemoryCache,
     project_revision: u64,
 ) -> SongView {
-    let derived_sections = build_section_summaries(song);
-
     SongView {
         id: song.id.clone(),
         title: song.title.clone(),
@@ -1758,7 +1742,6 @@ fn song_to_view(
         time_signature: song.time_signature.clone(),
         duration_seconds: song.duration_seconds,
         section_markers: song.section_markers.iter().map(marker_to_summary).collect(),
-        derived_sections,
         clips: song
             .clips
             .iter()
@@ -1891,55 +1874,6 @@ fn refresh_song_duration(song: &mut Song) {
         .max(1.0);
 }
 
-fn build_section_summaries(song: &Song) -> Vec<SectionSummary> {
-    let markers = song.sorted_markers();
-    let mut sections = Vec::new();
-
-    if let Some(first_marker) = markers.first() {
-        if first_marker.start_seconds > 0.0 {
-            sections.push(SectionSummary {
-                id: "derived_intro".to_string(),
-                name: "Inicio".to_string(),
-                start_seconds: 0.0,
-                end_seconds: first_marker.start_seconds.min(song.duration_seconds),
-            });
-        }
-    }
-
-    for (index, marker) in markers.iter().enumerate() {
-        let end_seconds = markers
-            .get(index + 1)
-            .map(|next_marker| next_marker.start_seconds)
-            .unwrap_or(song.duration_seconds)
-            .min(song.duration_seconds);
-
-        if end_seconds <= marker.start_seconds {
-            continue;
-        }
-
-        sections.push(SectionSummary {
-            id: marker.id.clone(),
-            name: marker.name.clone(),
-            start_seconds: marker.start_seconds,
-            end_seconds,
-        });
-    }
-
-    sections
-}
-
-fn marker_to_section_summary(song: &Song, marker: &Marker) -> SectionSummary {
-    SectionSummary {
-        id: marker.id.clone(),
-        name: marker.name.clone(),
-        start_seconds: marker.start_seconds,
-        end_seconds: song
-            .next_marker_after(marker.start_seconds)
-            .map(|next_marker| next_marker.start_seconds)
-            .unwrap_or(song.duration_seconds),
-    }
-}
-
 fn marker_to_summary(marker: &Marker) -> MarkerSummary {
     MarkerSummary {
         id: marker.id.clone(),
@@ -2039,7 +1973,7 @@ fn parse_time_signature(time_signature: &str) -> Result<(u32, u32), DesktopError
 fn pending_jump_trigger_label(trigger: &JumpTrigger) -> String {
     match trigger {
         JumpTrigger::Immediate => "immediate".to_string(),
-        JumpTrigger::NextMarker => "section_end".to_string(),
+        JumpTrigger::NextMarker => "next_marker".to_string(),
         JumpTrigger::AfterBars(bars) => format!("after_bars:{bars}"),
     }
 }
@@ -2348,7 +2282,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session
-            .schedule_section_jump("section_1", JumpTrigger::Immediate, &audio)
+            .schedule_marker_jump("section_1", JumpTrigger::Immediate, &audio)
             .expect("immediate jump should execute");
 
         assert_eq!(snapshot.transport_clock.anchor_position_seconds, 1.0);
@@ -2486,7 +2420,7 @@ mod tests {
         session.seek(3.95, &audio).expect("seek should succeed");
         session.play(&audio).expect("play should succeed");
         session
-            .schedule_section_jump("section_3", JumpTrigger::NextMarker, &audio)
+            .schedule_marker_jump("section_3", JumpTrigger::NextMarker, &audio)
             .expect("jump should schedule");
 
         thread::sleep(Duration::from_millis(70));
@@ -2495,13 +2429,13 @@ mod tests {
             .expect("sync should execute jump");
 
         assert_eq!(snapshot.playback_state, "playing");
-        assert!(snapshot.pending_section_jump.is_none());
+        assert!(snapshot.pending_marker_jump.is_none());
         assert!(snapshot.position_seconds >= 8.0);
         assert!(snapshot.position_seconds < 8.3);
         assert_eq!(
             snapshot
-                .current_section
-                .expect("current section should exist after jump")
+                .current_marker
+                .expect("current marker should exist after jump")
                 .name,
             "Bridge"
         );
@@ -2834,24 +2768,24 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let scheduled_snapshot = session
-            .schedule_section_jump("section_1", JumpTrigger::AfterBars(6), &audio)
+            .schedule_marker_jump("section_1", JumpTrigger::AfterBars(6), &audio)
             .expect("jump should schedule");
 
         let pending_jump = scheduled_snapshot
-            .pending_section_jump
+            .pending_marker_jump
             .expect("pending jump should exist");
         assert_eq!(pending_jump.target_marker_id, "section_1");
         assert_eq!(pending_jump.target_marker_name, "Intro");
         assert_eq!(pending_jump.trigger, "after_bars:6");
 
         let cancelled_snapshot = session
-            .cancel_section_jump(&audio)
+            .cancel_marker_jump(&audio)
             .expect("jump should cancel");
-        assert!(cancelled_snapshot.pending_section_jump.is_none());
+        assert!(cancelled_snapshot.pending_marker_jump.is_none());
     }
 
     #[test]
-    fn scheduling_an_immediate_section_jump_updates_position_and_current_section() {
+    fn scheduling_an_immediate_section_jump_updates_position_and_current_marker() {
         let mut session = DesktopSession::default();
         session
             .engine
@@ -2861,15 +2795,15 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session
-            .schedule_section_jump("section_1", JumpTrigger::Immediate, &audio)
+            .schedule_marker_jump("section_1", JumpTrigger::Immediate, &audio)
             .expect("immediate jump should execute");
 
-        assert!(snapshot.pending_section_jump.is_none());
+        assert!(snapshot.pending_marker_jump.is_none());
         assert_eq!(snapshot.position_seconds, 1.0);
         assert_eq!(
             snapshot
-                .current_section
-                .expect("current section should exist")
+                .current_marker
+                .expect("current marker should exist")
                 .name,
             "Intro"
         );
@@ -2891,7 +2825,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_section_jump("section_2", JumpTrigger::NextMarker, &audio)
+            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, &audio)
             .expect("jump should schedule");
 
         let snapshot = session
@@ -2899,11 +2833,11 @@ mod tests {
             .expect("section marker update should succeed");
 
         let pending_jump = snapshot
-            .pending_section_jump
+            .pending_marker_jump
             .expect("pending jump should survive transport-only change");
         assert_eq!(pending_jump.target_marker_id, "section_2");
         assert_eq!(pending_jump.target_marker_name, "Verse");
-        assert_eq!(pending_jump.trigger, "section_end");
+        assert_eq!(pending_jump.trigger, "next_marker");
     }
 
     #[test]
@@ -2923,7 +2857,7 @@ mod tests {
         let audio = crate::audio_runtime::AudioController::default();
         session.seek(5.0, &audio).expect("seek should work");
         session
-            .schedule_section_jump("section_2", JumpTrigger::NextMarker, &audio)
+            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, &audio)
             .expect("jump should schedule");
 
         let snapshot = session
@@ -2931,7 +2865,7 @@ mod tests {
             .expect("section marker update should succeed");
 
         assert_eq!(snapshot.position_seconds, 5.0);
-        assert!(snapshot.pending_section_jump.is_none());
+        assert!(snapshot.pending_marker_jump.is_none());
     }
 
     #[test]
@@ -2950,14 +2884,14 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_section_jump("section_2", JumpTrigger::AfterBars(2), &audio)
+            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), &audio)
             .expect("jump should schedule");
 
         let snapshot = session
             .delete_section_marker("section_2", &audio)
             .expect("target section marker should delete");
 
-        assert!(snapshot.pending_section_jump.is_none());
+        assert!(snapshot.pending_marker_jump.is_none());
     }
 
     #[test]
@@ -2971,7 +2905,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_section_jump("section_2", JumpTrigger::NextMarker, &audio)
+            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, &audio)
             .expect("jump should schedule");
 
         let snapshot = session
@@ -2979,7 +2913,7 @@ mod tests {
             .expect("seek should clear pending jump");
 
         assert_eq!(snapshot.position_seconds, 4.0);
-        assert!(snapshot.pending_section_jump.is_none());
+        assert!(snapshot.pending_marker_jump.is_none());
         assert_eq!(
             snapshot.transport_clock.last_seek_position_seconds,
             Some(4.0)

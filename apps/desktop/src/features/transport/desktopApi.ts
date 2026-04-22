@@ -2,14 +2,7 @@ import { getMusicalPosition } from "./timelineMath";
 
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
 export type TrackKind = "audio" | "folder";
-export type JumpTriggerLabel = "immediate" | "section_end" | `after_bars:${number}`;
-
-export type SectionSummary = {
-  id: string;
-  name: string;
-  startSeconds: number;
-  endSeconds: number;
-};
+export type JumpTriggerLabel = "immediate" | "next_marker" | `after_bars:${number}`;
 
 export type SectionMarkerSummary = {
   id: string;
@@ -68,7 +61,6 @@ export type SongView = {
   timeSignature: string;
   durationSeconds: number;
   sectionMarkers: SectionMarkerSummary[];
-  derivedSections: SectionSummary[];
   clips: ClipSummary[];
   tracks: TrackSummary[];
   projectRevision: number;
@@ -102,8 +94,8 @@ export type DesktopPerformanceSnapshot = {
 export type TransportSnapshot = {
   playbackState: PlaybackState;
   positionSeconds: number;
-  currentSection?: SectionSummary | null;
-  pendingSectionJump?: PendingJumpSummary | null;
+  currentMarker?: SectionMarkerSummary | null;
+  pendingMarkerJump?: PendingJumpSummary | null;
   musicalPosition?: {
     barNumber: number;
     beatInBar: number;
@@ -225,15 +217,16 @@ function updateDemoSong(mutator: (song: SongView) => SongView) {
 function buildDemoSnapshot(): TransportSnapshot {
   syncDemoPlayback();
   const positionSeconds = demoClock.anchorPositionSeconds;
+  const currentMarker =
+    [...demoSong.sectionMarkers]
+      .reverse()
+      .find((marker) => positionSeconds >= marker.startSeconds) ?? null;
 
   return {
     playbackState: demoPlaybackState,
     positionSeconds,
-    currentSection:
-      demoSong.derivedSections.find(
-        (section) => positionSeconds >= section.startSeconds && positionSeconds < section.endSeconds,
-      ) ?? null,
-    pendingSectionJump: demoPendingJump ? cloneSnapshot(demoPendingJump) : null,
+    currentMarker,
+    pendingMarkerJump: demoPendingJump ? cloneSnapshot(demoPendingJump) : null,
     musicalPosition: buildMusicalPosition(positionSeconds, demoSong.bpm, demoSong.timeSignature),
     transportClock: {
       anchorPositionSeconds: demoClock.anchorPositionSeconds,
@@ -323,7 +316,6 @@ export async function createSong(): Promise<TransportSnapshot> {
       timeSignature: "4/4",
       durationSeconds: 60,
       sectionMarkers: [],
-      derivedSections: [],
       clips: [],
       tracks: [],
       projectRevision: demoProjectRevision + 1,
@@ -435,24 +427,24 @@ export async function seekTransport(positionSeconds: number): Promise<TransportS
   return invokeCommand<TransportSnapshot>("seek_transport", { positionSeconds });
 }
 
-export async function scheduleSectionJump(
+export async function scheduleMarkerJump(
   targetMarkerId: string,
-  trigger: "immediate" | "section_end" | "after_bars",
+  trigger: "immediate" | "next_marker" | "after_bars",
   bars?: number,
 ): Promise<TransportSnapshot> {
   if (!isTauriApp) {
-    const targetSection = demoSong.sectionMarkers.find((section) => section.id === targetMarkerId) ?? null;
-    if (targetSection) {
+    const targetMarker = demoSong.sectionMarkers.find((marker) => marker.id === targetMarkerId) ?? null;
+    if (targetMarker) {
       if (trigger === "immediate") {
-        demoClock.anchorPositionSeconds = targetSection.startSeconds;
-        demoClock.lastJumpPositionSeconds = targetSection.startSeconds;
+        demoClock.anchorPositionSeconds = targetMarker.startSeconds;
+        demoClock.lastJumpPositionSeconds = targetMarker.startSeconds;
         demoPendingJump = null;
       } else {
         demoPendingJump = {
           targetMarkerId,
-          targetMarkerName: targetSection.name,
-          targetDigit: "digit" in targetSection ? (targetSection.digit ?? null) : null,
-          trigger: trigger === "after_bars" ? `after_bars:${bars ?? 4}` : "section_end",
+          targetMarkerName: targetMarker.name,
+          targetDigit: targetMarker.digit ?? null,
+          trigger: trigger === "after_bars" ? `after_bars:${bars ?? 4}` : "next_marker",
           executeAtSeconds: demoClock.anchorPositionSeconds,
         };
       }
@@ -460,20 +452,20 @@ export async function scheduleSectionJump(
     return buildDemoSnapshot();
   }
 
-  return invokeCommand<TransportSnapshot>("schedule_section_jump", {
+  return invokeCommand<TransportSnapshot>("schedule_marker_jump", {
     targetMarkerId,
     trigger,
     bars,
   });
 }
 
-export async function cancelSectionJump(): Promise<TransportSnapshot> {
+export async function cancelMarkerJump(): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     demoPendingJump = null;
     return buildDemoSnapshot();
   }
 
-  return invokeCommand<TransportSnapshot>("cancel_section_jump");
+  return invokeCommand<TransportSnapshot>("cancel_marker_jump");
 }
 
 export async function moveClip(
@@ -619,7 +611,7 @@ export async function createSectionMarker(startSeconds: number): Promise<Transpo
       ...song,
       sectionMarkers: [...song.sectionMarkers, {
         id: `section-marker-demo-${Date.now()}`,
-        name: `Seccion ${song.sectionMarkers.length + 1}`,
+        name: `Marker ${song.sectionMarkers.length + 1}`,
         startSeconds: Math.max(0, startSeconds),
         digit: null,
       }],
@@ -845,7 +837,6 @@ function normalizeSong(song: SongView): SongView {
   );
   const sectionMarkers = [...song.sectionMarkers]
     .sort((left, right) => left.startSeconds - right.startSeconds);
-  const derivedSections = buildDerivedSections(sectionMarkers, durationSeconds);
 
   return {
     ...song,
@@ -853,35 +844,7 @@ function normalizeSong(song: SongView): SongView {
     tracks: normalizedTracks,
     clips: normalizedClips,
     sectionMarkers,
-    derivedSections,
   };
-}
-
-function buildDerivedSections(markers: SectionMarkerSummary[], durationSeconds: number): SectionSummary[] {
-  const sections: SectionSummary[] = [];
-  if (markers[0] && markers[0].startSeconds > 0) {
-    sections.push({
-      id: "derived_intro",
-      name: "Inicio",
-      startSeconds: 0,
-      endSeconds: markers[0].startSeconds,
-    });
-  }
-
-  markers.forEach((marker, index) => {
-    const endSeconds = markers[index + 1]?.startSeconds ?? durationSeconds;
-    if (endSeconds <= marker.startSeconds) {
-      return;
-    }
-    sections.push({
-      id: marker.id,
-      name: marker.name,
-      startSeconds: marker.startSeconds,
-      endSeconds,
-    });
-  });
-
-  return sections;
 }
 
 function buildMusicalPosition(positionSeconds: number, bpm: number, timeSignature: string) {
@@ -1137,7 +1100,6 @@ function buildDemoSong(): SongView {
       { id: "section-bridge", name: "Bridge", startSeconds: 72, digit: 3 },
       { id: "section-outro", name: "Outro", startSeconds: 108, digit: 4 },
     ],
-    derivedSections: [],
     projectRevision: 1,
   });
 }

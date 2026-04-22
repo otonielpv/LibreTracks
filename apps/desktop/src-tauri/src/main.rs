@@ -249,7 +249,7 @@ fn seek_transport(
 }
 
 #[tauri::command]
-fn schedule_section_jump(
+fn schedule_marker_jump(
     target_marker_id: String,
     trigger: String,
     bars: Option<u32>,
@@ -263,19 +263,19 @@ fn schedule_section_jump(
     let jump_trigger = parse_jump_trigger(&trigger, bars).map_err(|error| error.to_string())?;
 
     session
-        .schedule_section_jump(&target_marker_id, jump_trigger, &state.audio)
+        .schedule_marker_jump(&target_marker_id, jump_trigger, &state.audio)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn cancel_section_jump(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+fn cancel_marker_jump(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .cancel_section_jump(&state.audio)
+        .cancel_marker_jump(&state.audio)
         .map_err(|error| error.to_string())
 }
 
@@ -565,8 +565,8 @@ fn main() {
             pause_transport,
             stop_transport,
             seek_transport,
-            schedule_section_jump,
-            cancel_section_jump,
+            schedule_marker_jump,
+            cancel_marker_jump,
             move_clip,
             delete_clip,
             update_clip_window,
