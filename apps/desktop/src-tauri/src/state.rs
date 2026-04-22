@@ -1050,44 +1050,25 @@ impl DesktopSession {
         solo: Option<bool>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let mut song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        let track = song
-            .tracks
-            .iter_mut()
-            .find(|track| track.id == track_id)
-            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+        self.sync_position(audio)?;
 
-        if let Some(name) = name {
-            let trimmed_name = name.trim();
-            if trimmed_name.is_empty() {
-                return Err(DesktopError::AudioCommand(
-                    "track name must not be empty".into(),
-                ));
+        if let Some(current_song) = self.engine.song().cloned() {
+            self.undo_stack.push(current_song);
+            if self.undo_stack.len() > 50 {
+                self.undo_stack.remove(0);
             }
-            track.name = trimmed_name.to_string();
+        }
+        self.redo_stack.clear();
+
+        self.update_loaded_track(track_id, name, volume, pan, muted, solo)?;
+        if volume.is_some() || pan.is_some() || muted.is_some() || solo.is_some() {
+            let loaded_song = self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
+            audio.ensure_live_track(loaded_song, track_id)?;
+            audio.update_live_track_mix(track_id, volume, pan, muted, solo)?;
         }
 
-        if let Some(volume) = volume {
-            track.volume = volume.clamp(0.0, 1.0);
-        }
-
-        if let Some(pan) = pan {
-            track.pan = pan.clamp(-1.0, 1.0);
-        }
-
-        if let Some(muted) = muted {
-            track.muted = muted;
-        }
-
-        if let Some(solo) = solo {
-            track.solo = solo;
-        }
-
-        self.persist_song_update(song, audio, AudioChangeImpact::MixOnly)?;
+        self.perf_metrics.song_save_millis = 0;
+        self.project_revision = self.project_revision.saturating_add(1);
 
         Ok(self.snapshot())
     }
@@ -1101,34 +1082,11 @@ impl DesktopSession {
         solo: Option<bool>,
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
-        let mut song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        let track = song
-            .tracks
-            .iter_mut()
-            .find(|track| track.id == track_id)
-            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
-
-        if let Some(volume) = volume {
-            track.volume = volume.clamp(0.0, 1.0);
-        }
-
-        if let Some(pan) = pan {
-            track.pan = pan.clamp(-1.0, 1.0);
-        }
-
-        if let Some(muted) = muted {
-            track.muted = muted;
-        }
-
-        if let Some(solo) = solo {
-            track.solo = solo;
-        }
-
-        self.apply_live_song_update(song, audio)?;
+        self.sync_position(audio)?;
+        self.update_loaded_track(track_id, None, volume, pan, muted, solo)?;
+        let loaded_song = self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
+        audio.ensure_live_track(loaded_song, track_id)?;
+        audio.update_live_track_mix(track_id, volume, pan, muted, solo)?;
 
         Ok(())
     }
@@ -1239,6 +1197,7 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        audio.sync_live_mix(&loaded_song)?;
         self.prime_waveform_cache(&song_dir, &loaded_song)?;
 
         Ok(())
@@ -1304,6 +1263,7 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        audio.sync_live_mix(&loaded_song)?;
 
         if let Some(pending_jump) = pending_jump {
             if loaded_song
@@ -1323,7 +1283,6 @@ impl DesktopSession {
             PlaybackState::Playing => {
                 self.engine.play()?;
                 match impact {
-                    AudioChangeImpact::MixOnly => audio.sync_song(loaded_song)?,
                     AudioChangeImpact::TransportOnly => {}
                     AudioChangeImpact::TimelineWindow => {
                         self.restart_audio(audio, PlaybackStartReason::TimelineWindow)?
@@ -1349,51 +1308,48 @@ impl DesktopSession {
         Ok(())
     }
 
-    fn apply_live_song_update(
+    fn update_loaded_track(
         &mut self,
-        song: Song,
-        audio: &AudioController,
+        track_id: &str,
+        name: Option<&str>,
+        volume: Option<f64>,
+        pan: Option<f64>,
+        muted: Option<bool>,
+        solo: Option<bool>,
     ) -> Result<(), DesktopError> {
-        self.sync_position(audio)?;
+        let track = self
+            .engine
+            .song_mut()?
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
 
-        let playback_state = self.engine.playback_state();
-        let position_seconds = self.current_position();
-        let pending_jump = self.engine.pending_marker_jump().cloned();
-        let restored_position = position_seconds.min(song.duration_seconds);
-        let live_song = song.clone();
-
-        self.engine.load_song(song)?;
-        self.engine.seek(restored_position)?;
-
-        if let Some(pending_jump) = pending_jump {
-            if live_song
-                .marker_by_id(&pending_jump.target_marker_id)
-                .is_some()
-                && restored_position < pending_jump.execute_at_seconds
-            {
-                self.engine
-                    .schedule_marker_jump(&pending_jump.target_marker_id, pending_jump.trigger)?;
+        if let Some(name) = name {
+            let trimmed_name = name.trim();
+            if trimmed_name.is_empty() {
+                return Err(DesktopError::AudioCommand(
+                    "track name must not be empty".into(),
+                ));
             }
+            track.name = trimmed_name.to_string();
         }
 
-        match playback_state {
-            PlaybackState::Playing => {
-                self.engine.play()?;
-                self.transport_clock
-                    .reanchor_playing(self.engine.position_seconds());
-            }
-            PlaybackState::Paused => {
-                self.engine.pause()?;
-                self.transport_clock
-                    .pause_at(self.engine.position_seconds());
-            }
-            PlaybackState::Stopped | PlaybackState::Empty => {
-                self.transport_clock
-                    .pause_at(self.engine.position_seconds());
-            }
+        if let Some(volume) = volume {
+            track.volume = volume.clamp(0.0, 1.0);
         }
 
-        audio.sync_song(live_song)?;
+        if let Some(pan) = pan {
+            track.pan = pan.clamp(-1.0, 1.0);
+        }
+
+        if let Some(muted) = muted {
+            track.muted = muted;
+        }
+
+        if let Some(solo) = solo {
+            track.solo = solo;
+        }
 
         Ok(())
     }
@@ -1679,7 +1635,6 @@ impl DesktopSession {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AudioChangeImpact {
-    MixOnly,
     TransportOnly,
     TimelineWindow,
     StructureRebuild,

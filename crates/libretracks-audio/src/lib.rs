@@ -95,6 +95,10 @@ impl AudioEngine {
         self.song.as_ref()
     }
 
+    pub fn song_mut(&mut self) -> Result<&mut Song, AudioEngineError> {
+        self.song.as_mut().ok_or(AudioEngineError::NoSongLoaded)
+    }
+
     pub fn pending_marker_jump(&self) -> Option<&PendingMarkerJump> {
         self.pending_marker_jump.as_ref()
     }

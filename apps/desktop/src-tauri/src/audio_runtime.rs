@@ -16,7 +16,7 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, SampleFormat, Stream, StreamConfig,
 };
-use libretracks_core::{Song, TrackKind};
+use libretracks_core::{Song, Track, TrackKind};
 use rtrb::{Consumer, Producer, RingBuffer};
 use serde::Serialize;
 use symphonia::core::{
@@ -39,17 +39,30 @@ const AUDIO_METER_EVENT: &str = "audio:meters";
 const AUDIO_METER_EMIT_INTERVAL: Duration = Duration::from_millis(33);
 
 type SharedAppHandle = Arc<RwLock<Option<AppHandle>>>;
+type SharedTrackMixState = Arc<RwLock<HashMap<String, LiveTrackMix>>>;
+
+#[derive(Debug, Clone)]
+struct LiveTrackMix {
+    parent_track_id: Option<String>,
+    kind: TrackKind,
+    volume: f32,
+    pan: f32,
+    muted: bool,
+    solo: bool,
+}
 
 pub struct AudioRuntime {
     session: Option<PlaybackSession>,
     audio_buffers: AudioBufferCache,
     app_handle: SharedAppHandle,
+    live_mix_state: SharedTrackMixState,
 }
 
 pub struct AudioController {
     sender: Sender<AudioCommand>,
     audio_buffers: AudioBufferCache,
     app_handle: SharedAppHandle,
+    live_mix_state: SharedTrackMixState,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -241,6 +254,7 @@ struct PlaybackClipPlan {
     clip_id: String,
     track_id: String,
     file_path: PathBuf,
+    clip_gain: f32,
     timeline_start_frame: u64,
     duration_frames: u64,
     fade_in_frames: u64,
@@ -275,6 +289,7 @@ struct OutputSample {
 
 struct Mixer {
     song: Song,
+    live_mix_state: SharedTrackMixState,
     audio_buffers: AudioBufferCache,
     output_sample_rate: u32,
     output_channels: usize,
@@ -341,6 +356,19 @@ impl PlaybackClipPlan {
         };
 
         fade_in_gain.min(fade_out_gain).clamp(0.0, 1.0)
+    }
+}
+
+impl LiveTrackMix {
+    fn from_track(track: &Track) -> Self {
+        Self {
+            parent_track_id: track.parent_track_id.clone(),
+            kind: track.kind,
+            volume: track.volume as f32,
+            pan: track.pan as f32,
+            muted: track.muted,
+            solo: track.solo,
+        }
     }
 }
 
@@ -604,11 +632,16 @@ impl AudioDebugState {
 }
 
 impl AudioRuntime {
-    fn new(audio_buffers: AudioBufferCache, app_handle: SharedAppHandle) -> Self {
+    fn new(
+        audio_buffers: AudioBufferCache,
+        app_handle: SharedAppHandle,
+        live_mix_state: SharedTrackMixState,
+    ) -> Self {
         Self {
             session: None,
             audio_buffers,
             app_handle,
+            live_mix_state,
         }
     }
 
@@ -642,6 +675,7 @@ impl AudioRuntime {
             song.clone(),
             position_seconds,
             self.app_handle.clone(),
+            self.live_mix_state.clone(),
             debug_config,
             self.audio_buffers.clone(),
         )?;
@@ -687,8 +721,10 @@ impl AudioController {
         let debug_config = AudioDebugConfig::from_env();
         let audio_buffers = AudioBufferCache::default();
         let app_handle = Arc::new(RwLock::new(None));
+        let live_mix_state = Arc::new(RwLock::new(HashMap::new()));
         let runtime_audio_buffers = audio_buffers.clone();
         let runtime_app_handle = app_handle.clone();
+        let runtime_live_mix_state = live_mix_state.clone();
 
         thread::Builder::new()
             .name("libretracks-audio".into())
@@ -698,6 +734,7 @@ impl AudioController {
                     debug_config,
                     runtime_audio_buffers,
                     runtime_app_handle,
+                    runtime_live_mix_state,
                 )
             })
             .expect("audio thread should start");
@@ -706,6 +743,7 @@ impl AudioController {
             sender,
             audio_buffers,
             app_handle,
+            live_mix_state,
         }
     }
 
@@ -722,6 +760,7 @@ impl AudioController {
         position_seconds: f64,
         reason: PlaybackStartReason,
     ) -> Result<(), DesktopError> {
+        self.sync_live_mix(&song)?;
         self.request(|respond_to| AudioCommand::Play {
             song_dir,
             song,
@@ -737,6 +776,7 @@ impl AudioController {
         position_seconds: f64,
         reason: PlaybackStartReason,
     ) -> Result<(), DesktopError> {
+        self.sync_live_mix(&song)?;
         self.request(|respond_to| AudioCommand::Seek {
             song,
             position_seconds,
@@ -745,8 +785,38 @@ impl AudioController {
         })
     }
 
+    #[allow(dead_code)]
     pub fn sync_song(&self, song: Song) -> Result<(), DesktopError> {
+        self.sync_live_mix(&song)?;
         self.request(|respond_to| AudioCommand::SyncSong { song, respond_to })
+    }
+
+    pub fn sync_live_mix(&self, song: &Song) -> Result<(), DesktopError> {
+        replace_shared_live_mix(&self.live_mix_state, song).map_err(DesktopError::AudioCommand)
+    }
+
+    pub fn ensure_live_track(&self, song: &Song, track_id: &str) -> Result<(), DesktopError> {
+        let has_track = self
+            .live_mix_state
+            .read()
+            .map_err(|_| DesktopError::AudioCommand("live mix state lock poisoned".into()))?
+            .contains_key(track_id);
+        if !has_track {
+            self.sync_live_mix(song)?;
+        }
+        Ok(())
+    }
+
+    pub fn update_live_track_mix(
+        &self,
+        track_id: &str,
+        volume: Option<f64>,
+        pan: Option<f64>,
+        muted: Option<bool>,
+        solo: Option<bool>,
+    ) -> Result<(), DesktopError> {
+        update_shared_track_mix(&self.live_mix_state, track_id, volume, pan, muted, solo)
+            .map_err(DesktopError::AudioCommand)
     }
 
     pub fn stop(&self) -> Result<(), DesktopError> {
@@ -806,6 +876,7 @@ impl PlaybackSession {
         song: Song,
         position_seconds: f64,
         app_handle: SharedAppHandle,
+        live_mix_state: SharedTrackMixState,
         debug_config: AudioDebugConfig,
         audio_buffers: AudioBufferCache,
     ) -> Result<Self, String> {
@@ -841,6 +912,7 @@ impl PlaybackSession {
                 output_sample_rate,
                 output_channels,
                 app_handle,
+                live_mix_state,
                 debug_config,
                 audio_buffers.clone(),
             ),
@@ -1249,6 +1321,7 @@ fn run_audio_thread(
     debug_config: AudioDebugConfig,
     audio_buffers: AudioBufferCache,
     app_handle: SharedAppHandle,
+    live_mix_state: SharedTrackMixState,
 ) {
     let mut runtime: Option<AudioRuntime> = None;
     let mut debug_state = AudioDebugState::new(debug_config);
@@ -1268,16 +1341,17 @@ fn run_audio_thread(
                     Some(playback_reason_label(reason).to_string()),
                 );
 
-                let result = ensure_runtime(&mut runtime, &audio_buffers, &app_handle)
-                    .restart(&song_dir, &song, position_seconds, debug_config)
-                    .map(|report| {
-                        debug_state.record_restart(
-                            reason,
-                            position_seconds,
-                            song.duration_seconds,
-                            &report,
-                        );
-                    });
+                let result =
+                    ensure_runtime(&mut runtime, &audio_buffers, &app_handle, &live_mix_state)
+                        .restart(&song_dir, &song, position_seconds, debug_config)
+                        .map(|report| {
+                            debug_state.record_restart(
+                                reason,
+                                position_seconds,
+                                song.duration_seconds,
+                                &report,
+                            );
+                        });
 
                 let _ = respond_to.send(result);
             }
@@ -1292,16 +1366,17 @@ fn run_audio_thread(
                     Some(playback_reason_label(reason).to_string()),
                 );
 
-                let result = ensure_runtime(&mut runtime, &audio_buffers, &app_handle)
-                    .seek(&song, position_seconds)
-                    .map(|active_sinks| {
-                        debug_state.record_seek(
-                            reason,
-                            position_seconds,
-                            song.duration_seconds,
-                            active_sinks.max(1),
-                        );
-                    });
+                let result =
+                    ensure_runtime(&mut runtime, &audio_buffers, &app_handle, &live_mix_state)
+                        .seek(&song, position_seconds)
+                        .map(|active_sinks| {
+                            debug_state.record_seek(
+                                reason,
+                                position_seconds,
+                                song.duration_seconds,
+                                active_sinks.max(1),
+                            );
+                        });
 
                 let _ = respond_to.send(result);
             }
@@ -1313,11 +1388,12 @@ fn run_audio_thread(
                 debug_state
                     .record_command(AudioCommandKind::SyncSong, Some("mix_only".to_string()));
 
-                let result = ensure_runtime(&mut runtime, &audio_buffers, &app_handle)
-                    .sync_song(&song)
-                    .map(|report| {
-                        debug_state.record_sync(&report);
-                    });
+                let result =
+                    ensure_runtime(&mut runtime, &audio_buffers, &app_handle, &live_mix_state)
+                        .sync_song(&song)
+                        .map(|report| {
+                            debug_state.record_sync(&report);
+                        });
 
                 for respond_to in respond_tos {
                     let _ = respond_to.send(result.clone());
@@ -1358,8 +1434,15 @@ fn ensure_runtime<'a>(
     runtime: &'a mut Option<AudioRuntime>,
     audio_buffers: &AudioBufferCache,
     app_handle: &SharedAppHandle,
+    live_mix_state: &SharedTrackMixState,
 ) -> &'a mut AudioRuntime {
-    runtime.get_or_insert_with(|| AudioRuntime::new(audio_buffers.clone(), app_handle.clone()))
+    runtime.get_or_insert_with(|| {
+        AudioRuntime::new(
+            audio_buffers.clone(),
+            app_handle.clone(),
+            live_mix_state.clone(),
+        )
+    })
 }
 
 fn next_audio_command(
@@ -1457,9 +1540,11 @@ impl Mixer {
         output_sample_rate: u32,
         output_channels: usize,
         app_handle: SharedAppHandle,
+        live_mix_state: SharedTrackMixState,
         debug_config: AudioDebugConfig,
         audio_buffers: AudioBufferCache,
     ) -> Self {
+        let _ = replace_shared_live_mix(&live_mix_state, &song);
         let plans = build_playback_plans(&song_dir, &song, output_sample_rate);
         let track_meter_indices = song
             .tracks
@@ -1470,6 +1555,7 @@ impl Mixer {
         let track_child_indices = vec![Vec::new(); song.tracks.len()];
         let mut mixer = Self {
             song,
+            live_mix_state,
             audio_buffers,
             output_sample_rate,
             output_channels,
@@ -1489,11 +1575,13 @@ impl Mixer {
     }
 
     fn apply_song_update(&mut self, song: Song) {
+        let _ = replace_shared_live_mix(&self.live_mix_state, &song);
         self.song = song;
         self.rebuild_track_meter_indices();
     }
 
     fn seek(&mut self, song: Song, position_seconds: f64) {
+        let _ = replace_shared_live_mix(&self.live_mix_state, &song);
         self.song = song;
         self.rebuild_track_meter_indices();
         self.song_duration_frames =
@@ -1519,6 +1607,7 @@ impl Mixer {
         let mut track_meters = should_capture_track_meters.then(|| self.empty_track_meters());
 
         self.activate_due_clips(block_end);
+        let live_mix_state = self.live_mix_state.read().ok();
 
         for clip_state in &mut self.active_clips {
             let overlap_start = block_start.max(clip_state.plan.timeline_start_frame);
@@ -1529,15 +1618,26 @@ impl Mixer {
 
             let offset_frames = (overlap_start - block_start) as usize;
             let overlap_frames = (overlap_end - overlap_start) as usize;
-            let target_gain = resolve_clip_runtime_gain(
-                &self.song,
-                &clip_state.plan.clip_id,
-                &clip_state.plan.track_id,
-            ) as f32;
-            let target_pan = resolve_track_runtime_pan(&self.song, &clip_state.plan.track_id);
-            let parent_gain =
-                resolve_parent_track_runtime_gain(&self.song, &clip_state.plan.track_id)
-                    .unwrap_or(1.0);
+            let target_gain = live_mix_state
+                .as_deref()
+                .map(|shared_mix| {
+                    resolve_clip_runtime_gain(
+                        shared_mix,
+                        &clip_state.plan.track_id,
+                        clip_state.plan.clip_gain,
+                    )
+                })
+                .unwrap_or(0.0);
+            let target_pan = live_mix_state
+                .as_deref()
+                .map(|shared_mix| resolve_track_runtime_pan(shared_mix, &clip_state.plan.track_id))
+                .unwrap_or(0.0);
+            let parent_gain = live_mix_state
+                .as_deref()
+                .and_then(|shared_mix| {
+                    resolve_parent_track_runtime_gain(shared_mix, &clip_state.plan.track_id)
+                })
+                .unwrap_or(1.0);
 
             let (left_peak, right_peak) = clip_state.mix_into(
                 &mut mixed,
@@ -1608,9 +1708,17 @@ impl Mixer {
                 activation_start_frame,
             ) {
                 Ok(reader) => {
-                    let current_gain =
-                        resolve_clip_runtime_gain(&self.song, &plan.clip_id, &plan.track_id) as f32;
-                    let current_pan = resolve_track_runtime_pan(&self.song, &plan.track_id);
+                    let live_mix_state = self.live_mix_state.read().ok();
+                    let current_gain = live_mix_state
+                        .as_deref()
+                        .map(|shared_mix| {
+                            resolve_clip_runtime_gain(shared_mix, &plan.track_id, plan.clip_gain)
+                        })
+                        .unwrap_or(0.0);
+                    let current_pan = live_mix_state
+                        .as_deref()
+                        .map(|shared_mix| resolve_track_runtime_pan(shared_mix, &plan.track_id))
+                        .unwrap_or(0.0);
                     self.active_clips.push(MixClipState {
                         plan,
                         reader,
@@ -1661,6 +1769,8 @@ impl Mixer {
     }
 
     fn roll_up_folder_track_meters(&self, track_meters: &mut [AudioMeterLevel]) {
+        let live_mix_state = self.live_mix_state.read().ok();
+
         for track_index in (0..self.song.tracks.len()).rev() {
             let track = &self.song.tracks[track_index];
             if track.kind != TrackKind::Folder {
@@ -1675,7 +1785,11 @@ impl Mixer {
                 right_peak = right_peak.max(track_meters[child_index].right_peak);
             }
 
-            let folder_gain = (track.volume as f32).clamp(0.0, 1.0);
+            let folder_gain = live_mix_state
+                .as_deref()
+                .and_then(|shared_mix| shared_mix.get(track.id.as_str()))
+                .map(|track_mix| track_mix.volume.clamp(0.0, 1.0))
+                .unwrap_or(0.0);
             track_meters[track_index].left_peak = (left_peak * folder_gain).clamp(0.0, 1.0);
             track_meters[track_index].right_peak = (right_peak * folder_gain).clamp(0.0, 1.0);
         }
@@ -1822,6 +1936,7 @@ fn build_playback_plans(
             clip_id: clip.id.clone(),
             track_id: clip.track_id.clone(),
             file_path: song_dir.join(&clip.file_path),
+            clip_gain: clip.gain as f32,
             timeline_start_frame: seconds_to_frames(
                 clip.timeline_start_seconds,
                 output_sample_rate,
@@ -1841,69 +1956,6 @@ fn build_playback_plans(
 
     plans.sort_by_key(|plan| plan.timeline_start_frame);
     plans
-}
-
-fn find_song_track<'a>(
-    song: &'a Song,
-    track_id: &str,
-) -> Result<&'a libretracks_core::Track, DesktopError> {
-    song.tracks
-        .iter()
-        .find(|track| track.id == track_id)
-        .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))
-}
-
-fn resolve_clip_runtime_gain(song: &Song, clip_id: &str, track_id: &str) -> f64 {
-    let clip_gain = song
-        .clips
-        .iter()
-        .find(|clip| clip.id == clip_id)
-        .map(|clip| clip.gain)
-        .unwrap_or(0.0);
-
-    resolve_track_clip_gain(song, track_id, clip_gain).unwrap_or(0.0)
-}
-
-fn resolve_track_runtime_pan(song: &Song, track_id: &str) -> f32 {
-    let Ok(track) = find_song_track(song, track_id) else {
-        return 0.0;
-    };
-
-    let mut pan = track.pan as f32;
-    let mut cursor = track.parent_track_id.as_deref();
-
-    while let Some(parent_track_id) = cursor {
-        let Ok(parent_track) = find_song_track(song, parent_track_id) else {
-            return 0.0;
-        };
-
-        if parent_track.kind != TrackKind::Folder {
-            return 0.0;
-        }
-
-        pan += parent_track.pan as f32;
-        cursor = parent_track.parent_track_id.as_deref();
-    }
-
-    pan.clamp(-1.0, 1.0)
-}
-
-fn resolve_parent_track_runtime_gain(song: &Song, track_id: &str) -> Result<f32, DesktopError> {
-    let track = find_song_track(song, track_id)?;
-    let mut gain = 1.0_f32;
-    let mut cursor = track.parent_track_id.as_deref();
-
-    while let Some(parent_track_id) = cursor {
-        let parent_track = find_song_track(song, parent_track_id)?;
-        if parent_track.kind != TrackKind::Folder {
-            return Err(DesktopError::TrackNotFound(parent_track_id.to_string()));
-        }
-
-        gain *= parent_track.volume as f32;
-        cursor = parent_track.parent_track_id.as_deref();
-    }
-
-    Ok(gain)
 }
 
 fn apply_runtime_pan(
@@ -1947,81 +1999,177 @@ fn probe_audio_file(file_path: &Path) -> Result<(), String> {
         .ok_or_else(|| "empty audio stream".to_string())
 }
 
-fn resolve_track_clip_gain(
-    song: &Song,
-    track_id: &str,
-    clip_gain: f64,
-) -> Result<f64, DesktopError> {
-    let track = song
-        .tracks
+fn build_live_mix_map(song: &Song) -> HashMap<String, LiveTrackMix> {
+    song.tracks
         .iter()
-        .find(|track| track.id == track_id)
-        .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+        .map(|track| (track.id.clone(), LiveTrackMix::from_track(track)))
+        .collect()
+}
 
-    let is_any_track_soloed = song.tracks.iter().any(|candidate| candidate.solo);
+fn replace_shared_live_mix(
+    shared_mix_state: &SharedTrackMixState,
+    song: &Song,
+) -> Result<(), String> {
+    let mut live_mix_state = shared_mix_state
+        .write()
+        .map_err(|_| "live mix state lock poisoned".to_string())?;
+    *live_mix_state = build_live_mix_map(song);
+    Ok(())
+}
 
-    if is_any_track_soloed && !is_track_soloed_in_hierarchy(song, track)? {
-        return Ok(0.0);
+fn update_shared_track_mix(
+    shared_mix_state: &SharedTrackMixState,
+    track_id: &str,
+    volume: Option<f64>,
+    pan: Option<f64>,
+    muted: Option<bool>,
+    solo: Option<bool>,
+) -> Result<(), String> {
+    let mut live_mix_state = shared_mix_state
+        .write()
+        .map_err(|_| "live mix state lock poisoned".to_string())?;
+    let track_mix = live_mix_state
+        .get_mut(track_id)
+        .ok_or_else(|| format!("track not found: {track_id}"))?;
+
+    if let Some(volume) = volume {
+        track_mix.volume = volume.clamp(0.0, 1.0) as f32;
     }
 
-    if track.muted {
-        return Ok(0.0);
+    if let Some(pan) = pan {
+        track_mix.pan = pan.clamp(-1.0, 1.0) as f32;
     }
 
-    let mut gain = track.volume;
+    if let Some(muted) = muted {
+        track_mix.muted = muted;
+    }
+
+    if let Some(solo) = solo {
+        track_mix.solo = solo;
+    }
+
+    Ok(())
+}
+
+fn resolve_clip_runtime_gain(
+    live_mix_state: &HashMap<String, LiveTrackMix>,
+    track_id: &str,
+    clip_gain: f32,
+) -> f32 {
+    resolve_track_clip_gain(live_mix_state, track_id, clip_gain).unwrap_or(0.0)
+}
+
+fn resolve_track_runtime_pan(
+    live_mix_state: &HashMap<String, LiveTrackMix>,
+    track_id: &str,
+) -> f32 {
+    let Some(track) = live_mix_state.get(track_id) else {
+        return 0.0;
+    };
+
+    let mut pan = track.pan;
     let mut cursor = track.parent_track_id.as_deref();
 
     while let Some(parent_track_id) = cursor {
-        let parent_track = song
-            .tracks
-            .iter()
-            .find(|track| track.id == parent_track_id)
-            .ok_or_else(|| DesktopError::TrackNotFound(parent_track_id.to_string()))?;
+        let Some(parent_track) = live_mix_state.get(parent_track_id) else {
+            return 0.0;
+        };
 
         if parent_track.kind != TrackKind::Folder {
-            return Err(DesktopError::TrackNotFound(parent_track_id.to_string()));
+            return 0.0;
         }
 
-        if parent_track.muted {
-            return Ok(0.0);
+        pan += parent_track.pan;
+        cursor = parent_track.parent_track_id.as_deref();
+    }
+
+    pan.clamp(-1.0, 1.0)
+}
+
+fn resolve_parent_track_runtime_gain(
+    live_mix_state: &HashMap<String, LiveTrackMix>,
+    track_id: &str,
+) -> Option<f32> {
+    let track = live_mix_state.get(track_id)?;
+    let mut gain = 1.0_f32;
+    let mut cursor = track.parent_track_id.as_deref();
+
+    while let Some(parent_track_id) = cursor {
+        let parent_track = live_mix_state.get(parent_track_id)?;
+        if parent_track.kind != TrackKind::Folder {
+            return None;
         }
 
         gain *= parent_track.volume;
         cursor = parent_track.parent_track_id.as_deref();
     }
 
-    Ok(gain * clip_gain)
+    Some(gain)
+}
+
+fn resolve_track_clip_gain(
+    live_mix_state: &HashMap<String, LiveTrackMix>,
+    track_id: &str,
+    clip_gain: f32,
+) -> Option<f32> {
+    let track = live_mix_state.get(track_id)?;
+    let is_any_track_soloed = live_mix_state.values().any(|candidate| candidate.solo);
+
+    if is_any_track_soloed && !is_track_soloed_in_hierarchy(live_mix_state, track) {
+        return Some(0.0);
+    }
+
+    if track.muted {
+        return Some(0.0);
+    }
+
+    let mut gain = track.volume;
+    let mut cursor = track.parent_track_id.as_deref();
+
+    while let Some(parent_track_id) = cursor {
+        let parent_track = live_mix_state.get(parent_track_id)?;
+        if parent_track.kind != TrackKind::Folder {
+            return None;
+        }
+
+        if parent_track.muted {
+            return Some(0.0);
+        }
+
+        gain *= parent_track.volume;
+        cursor = parent_track.parent_track_id.as_deref();
+    }
+
+    Some(gain * clip_gain)
 }
 
 fn is_track_soloed_in_hierarchy(
-    song: &Song,
-    track: &libretracks_core::Track,
-) -> Result<bool, DesktopError> {
+    live_mix_state: &HashMap<String, LiveTrackMix>,
+    track: &LiveTrackMix,
+) -> bool {
     if track.solo {
-        return Ok(true);
+        return true;
     }
 
     let mut cursor = track.parent_track_id.as_deref();
 
     while let Some(parent_track_id) = cursor {
-        let parent_track = song
-            .tracks
-            .iter()
-            .find(|candidate| candidate.id == parent_track_id)
-            .ok_or_else(|| DesktopError::TrackNotFound(parent_track_id.to_string()))?;
+        let Some(parent_track) = live_mix_state.get(parent_track_id) else {
+            return false;
+        };
 
         if parent_track.kind != TrackKind::Folder {
-            return Err(DesktopError::TrackNotFound(parent_track_id.to_string()));
+            return false;
         }
 
         if parent_track.solo {
-            return Ok(true);
+            return true;
         }
 
         cursor = parent_track.parent_track_id.as_deref();
     }
 
-    Ok(false)
+    false
 }
 
 fn seconds_to_frames(seconds: f64, sample_rate: u32) -> u64 {
@@ -2080,7 +2228,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        apply_runtime_pan, build_playback_plans, coalesce_sync_song_commands,
+        apply_runtime_pan, build_live_mix_map, build_playback_plans, coalesce_sync_song_commands,
         drain_consumer_samples, env_flag, interpolated_gain, playback_reason_label,
         probe_audio_file, resolve_track_runtime_pan, scheduled_clip_count, AudioBufferCache,
         AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState,
@@ -2190,6 +2338,12 @@ mod tests {
                 }),
             );
         cache
+    }
+
+    fn shared_mix_state(
+        song: &Song,
+    ) -> Arc<RwLock<std::collections::HashMap<String, super::LiveTrackMix>>> {
+        Arc::new(RwLock::new(build_live_mix_map(song)))
     }
 
     #[test]
@@ -2408,6 +2562,7 @@ mod tests {
             clip_id: "clip".into(),
             track_id: "track".into(),
             file_path: PathBuf::from("audio/test.wav"),
+            clip_gain: 1.0,
             timeline_start_frame: 0,
             duration_frames: 100,
             fade_in_frames: 20,
@@ -2430,6 +2585,7 @@ mod tests {
                 clip_id: "clip".into(),
                 track_id: "track".into(),
                 file_path: clip_path,
+                clip_gain: 1.0,
                 timeline_start_frame: 0,
                 duration_frames: 2,
                 fade_in_frames: 0,
@@ -2459,6 +2615,7 @@ mod tests {
                 clip_id: "clip".into(),
                 track_id: "track".into(),
                 file_path: clip_path,
+                clip_gain: 1.0,
                 timeline_start_frame: 0,
                 duration_frames: 1,
                 fade_in_frames: 0,
@@ -2506,6 +2663,7 @@ mod tests {
                 clip_id: "clip".into(),
                 track_id: "track".into(),
                 file_path: clip_path,
+                clip_gain: 1.0,
                 timeline_start_frame: 0,
                 duration_frames: 1,
                 fade_in_frames: 0,
@@ -2530,7 +2688,7 @@ mod tests {
         song.tracks[0].pan = -0.35;
         song.tracks[1].pan = -0.8;
 
-        let pan = resolve_track_runtime_pan(&song, "track_drums");
+        let pan = resolve_track_runtime_pan(&build_live_mix_map(&song), "track_drums");
 
         assert!((pan + 1.0).abs() < 0.000_001);
     }
@@ -2540,11 +2698,12 @@ mod tests {
         let song = demo_song();
         let mixer = Mixer::new(
             PathBuf::from("song"),
-            song,
+            song.clone(),
             0.0,
             48_000,
             2,
             Arc::new(RwLock::new(None)),
+            shared_mix_state(&song),
             AudioDebugConfig {
                 enabled: false,
                 log_commands: false,
@@ -2580,6 +2739,7 @@ mod tests {
                 clip_id: "clip".into(),
                 track_id: "track".into(),
                 file_path: clip_path,
+                clip_gain: 1.0,
                 timeline_start_frame: 0,
                 duration_frames: 3,
                 fade_in_frames: 0,
@@ -2610,6 +2770,7 @@ mod tests {
                 clip_id: "clip".into(),
                 track_id: "track".into(),
                 file_path: clip_path,
+                clip_gain: 1.0,
                 timeline_start_frame: 0,
                 duration_frames: 1,
                 fade_in_frames: 0,
@@ -2661,6 +2822,7 @@ mod tests {
             48_000,
             1,
             Arc::new(RwLock::new(None)),
+            shared_mix_state(&song),
             AudioDebugConfig {
                 enabled: false,
                 log_commands: false,
