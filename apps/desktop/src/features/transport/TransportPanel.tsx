@@ -2122,19 +2122,23 @@ export function TransportPanel() {
 
         <div className="lt-session-actions">
           <button type="button" onClick={handleCreateSongClick}>
-            Crear cancion
+            <span className="material-symbols-outlined" aria-hidden="true">add_box</span>
+            <span className="lt-button-label">Crear cancion</span>
           </button>
           <button type="button" onClick={handleOpenProjectClick}>
-            Abrir
+            <span className="material-symbols-outlined" aria-hidden="true">folder_open</span>
+            <span className="lt-button-label">Abrir</span>
           </button>
           <button
             type="button"
             onClick={() => void runAction(async () => setSnapshot(await saveProject()), { busy: true })}
           >
-            Guardar
+            <span className="material-symbols-outlined" aria-hidden="true">save</span>
+            <span className="lt-button-label">Guardar</span>
           </button>
           <button type="button" onClick={handleImportWavsClick}>
-            Importar WAVs
+            <span className="material-symbols-outlined" aria-hidden="true">audio_file</span>
+            <span className="lt-button-label">Importar WAVs</span>
           </button>
         </div>
       </header>
@@ -2195,13 +2199,16 @@ export function TransportPanel() {
             <div className="lt-bottom-controls lt-timeline-controls">
               <button
                 type="button"
-                className={snapEnabled ? "is-active" : ""}
+                className={`lt-icon-button ${snapEnabled ? "is-active" : ""}`}
+                aria-label={snapEnabled ? "Desactivar snap to grid" : "Activar snap to grid"}
+                aria-pressed={snapEnabled}
+                title={`Snap to Grid (${timelineGrid.subdivisionPerBeat}/1)`}
                 onClick={() => setSnapEnabled((current) => !current)}
               >
-                Snap to Grid ({timelineGrid.subdivisionPerBeat}/1)
+                <span className="material-symbols-outlined">{snapEnabled ? "grid_on" : "grid_off"}</span>
               </button>
-              <label className="lt-zoom-control">
-                <span>Modo salto</span>
+              <label className="lt-zoom-control lt-icon-select">
+                <span className="material-symbols-outlined" aria-hidden="true">switch_access_shortcut</span>
                 <select
                   aria-label="Modo global de salto"
                   disabled={isProjectEmpty}
@@ -2233,6 +2240,9 @@ export function TransportPanel() {
               ) : null}
               <button
                 type="button"
+                className="lt-icon-button"
+                aria-label="Cancelar salto"
+                title="Cancelar salto"
                 disabled={!snapshot?.pendingMarkerJump}
                 onClick={() =>
                   void runAction(async () => {
@@ -2242,7 +2252,7 @@ export function TransportPanel() {
                   })
                 }
               >
-                Cancelar salto
+                <span className="material-symbols-outlined">close</span>
               </button>
             </div>
           </div>

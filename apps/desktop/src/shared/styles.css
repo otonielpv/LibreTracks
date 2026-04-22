@@ -254,6 +254,9 @@ body {
 }
 
 .lt-session-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   border-radius: 0.125rem;
   background: #201f1f;
   color: #bacac5;
@@ -264,6 +267,14 @@ body {
 .lt-session-actions button:hover {
   background: #2a2a2a;
   color: #e5e2e1;
+}
+
+.lt-session-actions button .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.lt-button-label {
+  white-space: nowrap;
 }
 
 .lt-shell-body {
@@ -1019,6 +1030,20 @@ body {
   cursor: not-allowed;
 }
 
+.lt-icon-button {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lt-icon-button .material-symbols-outlined {
+  font-size: 16px;
+}
+
 .lt-bottom-controls > span {
   color: #bacac5;
   font: 600 10px/1.2 "Space Grotesk", sans-serif;
@@ -1041,6 +1066,10 @@ body {
   font: 600 10px/1 "Space Grotesk", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+}
+
+.lt-icon-select .material-symbols-outlined {
+  font-size: 16px;
 }
 
 .lt-zoom-control input,
