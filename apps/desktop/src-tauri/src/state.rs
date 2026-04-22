@@ -16,8 +16,8 @@ use libretracks_core::{
 use libretracks_project::{
     append_wav_files_to_song, create_song_folder, generate_waveform_summary, import_wav_song,
     load_song, load_song_from_file, load_waveform_summary, read_wav_metadata, save_song,
-    save_song_to_file, waveform_file_path, ImportOperationMetrics, ImportedSong,
-    ProjectError, ProjectImportRequest, WaveformSummary, SONG_FILE_NAME,
+    save_song_to_file, waveform_file_path, ImportOperationMetrics, ImportedSong, ProjectError,
+    ProjectImportRequest, WaveformSummary, SONG_FILE_NAME,
 };
 use rfd::FileDialog;
 use serde::Serialize;
@@ -373,11 +373,14 @@ impl DesktopSession {
             return Ok(None);
         };
 
-        let song_dir = target_song_file.parent().map(Path::to_path_buf).ok_or_else(|| {
-            DesktopError::AudioCommand(
-                "el archivo del proyecto debe vivir dentro de una carpeta".into(),
-            )
-        })?;
+        let song_dir = target_song_file
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| {
+                DesktopError::AudioCommand(
+                    "el archivo del proyecto debe vivir dentro de una carpeta".into(),
+                )
+            })?;
         fs::create_dir_all(song_dir.join("audio"))?;
         fs::create_dir_all(song_dir.join("cache").join("waveforms"))?;
 
@@ -422,11 +425,14 @@ impl DesktopSession {
             return Ok(None);
         };
 
-        let target_song_dir = target_song_file.parent().map(Path::to_path_buf).ok_or_else(|| {
-            DesktopError::AudioCommand(
-                "el archivo del proyecto debe vivir dentro de una carpeta".into(),
-            )
-        })?;
+        let target_song_dir = target_song_file
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| {
+                DesktopError::AudioCommand(
+                    "el archivo del proyecto debe vivir dentro de una carpeta".into(),
+                )
+            })?;
 
         let save_started_at = Instant::now();
         copy_project_audio_files(&source_song_dir, &target_song_dir, &song)?;
@@ -2162,7 +2168,11 @@ fn slugify(value: &str) -> String {
 
 fn default_project_file_name(title: &str) -> String {
     let trimmed = title.trim();
-    let fallback = if trimmed.is_empty() { "proyecto" } else { trimmed };
+    let fallback = if trimmed.is_empty() {
+        "proyecto"
+    } else {
+        trimmed
+    };
     format!("{fallback}.json")
 }
 
@@ -2232,7 +2242,7 @@ mod tests {
         Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
     };
     use libretracks_project::{
-        create_song_folder, generate_waveform_summary, load_song, save_song,
+        create_song_folder, generate_waveform_summary, load_song, save_song, SONG_FILE_NAME,
     };
     use tempfile::tempdir;
 
@@ -2784,14 +2794,12 @@ mod tests {
             .expect("song view should build")
             .expect("song should exist");
         assert!(moved_snapshot.project_revision > 0);
-        assert!(
-            moved_song
-                .clips
-                .iter()
-                .find(|clip| clip.id == "clip_1")
-                .map(|clip| (clip.timeline_start_seconds - 4.25).abs() < 0.0001)
-                .unwrap_or(false)
-        );
+        assert!(moved_song
+            .clips
+            .iter()
+            .find(|clip| clip.id == "clip_1")
+            .map(|clip| (clip.timeline_start_seconds - 4.25).abs() < 0.0001)
+            .unwrap_or(false));
 
         let undone_snapshot = session.undo_action(&audio).expect("undo should succeed");
         let undone_song = session
@@ -2799,14 +2807,12 @@ mod tests {
             .expect("song view should build")
             .expect("song should exist");
         assert!(undone_snapshot.project_revision > moved_snapshot.project_revision);
-        assert!(
-            undone_song
-                .clips
-                .iter()
-                .find(|clip| clip.id == "clip_1")
-                .map(|clip| clip.timeline_start_seconds.abs() < 0.0001)
-                .unwrap_or(false)
-        );
+        assert!(undone_song
+            .clips
+            .iter()
+            .find(|clip| clip.id == "clip_1")
+            .map(|clip| clip.timeline_start_seconds.abs() < 0.0001)
+            .unwrap_or(false));
 
         let redone_snapshot = session.redo_action(&audio).expect("redo should succeed");
         let redone_song = session
@@ -2814,14 +2820,12 @@ mod tests {
             .expect("song view should build")
             .expect("song should exist");
         assert!(redone_snapshot.project_revision > undone_snapshot.project_revision);
-        assert!(
-            redone_song
-                .clips
-                .iter()
-                .find(|clip| clip.id == "clip_1")
-                .map(|clip| (clip.timeline_start_seconds - 4.25).abs() < 0.0001)
-                .unwrap_or(false)
-        );
+        assert!(redone_song
+            .clips
+            .iter()
+            .find(|clip| clip.id == "clip_1")
+            .map(|clip| (clip.timeline_start_seconds - 4.25).abs() < 0.0001)
+            .unwrap_or(false));
     }
 
     #[test]

@@ -255,6 +255,11 @@ impl AudioEngine {
         effective_track_gain(song, track_id)
     }
 
+    pub fn effective_track_pan(&self, track_id: &str) -> Result<f64, AudioEngineError> {
+        let song = self.ensure_song_loaded()?;
+        effective_track_pan(song, track_id)
+    }
+
     fn ensure_song_loaded(&self) -> Result<&Song, AudioEngineError> {
         self.song.as_ref().ok_or(AudioEngineError::NoSongLoaded)
     }
@@ -355,6 +360,24 @@ fn effective_track_gain(song: &Song, track_id: &str) -> Result<f64, AudioEngineE
     }
 
     Ok(gain)
+}
+
+fn effective_track_pan(song: &Song, track_id: &str) -> Result<f64, AudioEngineError> {
+    let track = find_track(song, track_id)?;
+    let mut pan = track.pan;
+    let mut cursor = track.parent_track_id.as_deref();
+
+    while let Some(parent_track_id) = cursor {
+        let parent_track = find_track(song, parent_track_id)?;
+        if parent_track.kind != TrackKind::Folder {
+            return Err(AudioEngineError::TrackNotFound(parent_track_id.to_string()));
+        }
+
+        pan += parent_track.pan;
+        cursor = parent_track.parent_track_id.as_deref();
+    }
+
+    Ok(pan.clamp(-1.0, 1.0))
 }
 
 fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, AudioEngineError> {
@@ -512,6 +535,21 @@ mod tests {
         engine.play().expect("play should work");
 
         assert_eq!(engine.playback_state(), PlaybackState::Playing);
+    }
+
+    #[test]
+    fn effective_track_pan_accumulates_folder_pan_and_clamps() {
+        let mut song = demo_song();
+        song.tracks[0].pan = -0.35;
+        song.tracks[1].pan = -0.8;
+        let mut engine = AudioEngine::new();
+        engine.load_song(song).expect("song should load");
+
+        let pan = engine
+            .effective_track_pan("track_click")
+            .expect("effective pan should resolve");
+
+        assert!((pan + 1.0).abs() < 0.000_001);
     }
 
     #[test]

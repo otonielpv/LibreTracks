@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    f32::consts::PI,
     fs::File,
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -287,6 +286,7 @@ struct Mixer {
     debug_config: AudioDebugConfig,
     opened_files: usize,
     track_meter_indices: HashMap<String, usize>,
+    track_child_indices: Vec<Vec<usize>>,
     meter_emitter: MeterEmitterState,
 }
 
@@ -962,8 +962,7 @@ impl MemoryClipReader {
             frame_count,
             output_channels,
             gain,
-            1.0,
-            1.0,
+            0.0,
         )
     }
 
@@ -974,8 +973,7 @@ impl MemoryClipReader {
         frame_count: usize,
         output_channels: usize,
         gain: f32,
-        left_gain: f32,
-        right_gain: f32,
+        pan: f32,
     ) -> (f32, f32) {
         if self.eof {
             return (0.0, 0.0);
@@ -985,6 +983,7 @@ impl MemoryClipReader {
         let source_frame_count = self.shared_buffer.frame_count();
         let mut left_peak = 0.0_f32;
         let mut right_peak = 0.0_f32;
+        let pan = pan.clamp(-1.0, 1.0);
 
         for frame_offset in 0..frame_count {
             if self.current_frame >= source_frame_count {
@@ -994,31 +993,43 @@ impl MemoryClipReader {
 
             if gain.abs() > GAIN_EPSILON {
                 let buffer_base = (offset_frames + frame_offset) * output_channels;
-                for channel in 0..output_channels {
-                    let channel_gain = if output_channels <= 1 {
-                        1.0
-                    } else if channel == 0 {
-                        left_gain
-                    } else if channel == 1 {
-                        right_gain
+                if output_channels <= 1 {
+                    let mono_sample =
+                        self.shared_buffer
+                            .read_sample(self.current_frame, 0, output_channels)
+                            * gain;
+                    buffer[buffer_base] += mono_sample;
+                    let mono_peak = mono_sample.abs();
+                    left_peak = left_peak.max(mono_peak);
+                    right_peak = right_peak.max(mono_peak);
+                } else {
+                    let left_input = self.shared_buffer.read_sample(self.current_frame, 0, 2);
+                    let right_input = if self.shared_buffer.channels > 1 {
+                        self.shared_buffer.read_sample(self.current_frame, 1, 2)
                     } else {
-                        1.0
+                        left_input
                     };
-                    let sample = self.shared_buffer.read_sample(
-                        self.current_frame,
-                        channel,
-                        output_channels,
-                    ) * gain * channel_gain;
-                    buffer[buffer_base + channel] += sample;
+                    let (mut left_output, mut right_output) = apply_runtime_pan(
+                        left_input,
+                        right_input,
+                        pan,
+                        self.shared_buffer.channels,
+                    );
+                    left_output *= gain;
+                    right_output *= gain;
 
-                    if output_channels <= 1 {
-                        let mono_peak = sample.abs();
-                        left_peak = left_peak.max(mono_peak);
-                        right_peak = right_peak.max(mono_peak);
-                    } else if channel == 0 {
-                        left_peak = left_peak.max(sample.abs());
-                    } else if channel == 1 {
-                        right_peak = right_peak.max(sample.abs());
+                    buffer[buffer_base] += left_output;
+                    buffer[buffer_base + 1] += right_output;
+                    left_peak = left_peak.max(left_output.abs());
+                    right_peak = right_peak.max(right_output.abs());
+
+                    for channel in 2..output_channels {
+                        let sample = self.shared_buffer.read_sample(
+                            self.current_frame,
+                            channel,
+                            output_channels,
+                        ) * gain;
+                        buffer[buffer_base + channel] += sample;
                     }
                 }
             }
@@ -1483,6 +1494,7 @@ impl Mixer {
             .enumerate()
             .map(|(index, track)| (track.id.clone(), index))
             .collect();
+        let track_child_indices = vec![Vec::new(); song.tracks.len()];
         let mut mixer = Self {
             song,
             audio_buffers,
@@ -1496,6 +1508,7 @@ impl Mixer {
             debug_config,
             opened_files: 0,
             track_meter_indices,
+            track_child_indices,
             meter_emitter: MeterEmitterState::new(app_handle),
         };
         mixer.seek(mixer.song.clone(), position_seconds);
@@ -1549,6 +1562,9 @@ impl Mixer {
                 &clip_state.plan.track_id,
             ) as f32;
             let target_pan = resolve_track_runtime_pan(&self.song, &clip_state.plan.track_id);
+            let parent_gain =
+                resolve_parent_track_runtime_gain(&self.song, &clip_state.plan.track_id)
+                    .unwrap_or(1.0);
 
             let (left_peak, right_peak) = clip_state.mix_into(
                 &mut mixed,
@@ -1566,12 +1582,26 @@ impl Mixer {
                     .copied()
             }) {
                 if let Some(track_meter_levels) = track_meters.as_mut() {
+                    let meter_left_peak = if parent_gain.abs() <= GAIN_EPSILON {
+                        0.0
+                    } else {
+                        left_peak / parent_gain
+                    };
+                    let meter_right_peak = if parent_gain.abs() <= GAIN_EPSILON {
+                        0.0
+                    } else {
+                        right_peak / parent_gain
+                    };
                     track_meter_levels[index].left_peak =
-                        track_meter_levels[index].left_peak.max(left_peak);
+                        track_meter_levels[index].left_peak.max(meter_left_peak);
                     track_meter_levels[index].right_peak =
-                        track_meter_levels[index].right_peak.max(right_peak);
+                        track_meter_levels[index].right_peak.max(meter_right_peak);
                 }
             }
+        }
+
+        if let Some(track_meter_levels) = track_meters.as_mut() {
+            self.roll_up_folder_track_meters(track_meter_levels);
         }
 
         if let Some(track_meter_levels) = track_meters.as_ref() {
@@ -1632,6 +1662,17 @@ impl Mixer {
             .enumerate()
             .map(|(index, track)| (track.id.clone(), index))
             .collect();
+        self.track_child_indices = vec![Vec::new(); self.song.tracks.len()];
+
+        for (child_index, track) in self.song.tracks.iter().enumerate() {
+            let Some(parent_track_id) = track.parent_track_id.as_deref() else {
+                continue;
+            };
+            let Some(&parent_index) = self.track_meter_indices.get(parent_track_id) else {
+                continue;
+            };
+            self.track_child_indices[parent_index].push(child_index);
+        }
     }
 
     fn empty_track_meters(&self) -> Vec<AudioMeterLevel> {
@@ -1644,6 +1685,27 @@ impl Mixer {
                 right_peak: 0.0,
             })
             .collect()
+    }
+
+    fn roll_up_folder_track_meters(&self, track_meters: &mut [AudioMeterLevel]) {
+        for track_index in (0..self.song.tracks.len()).rev() {
+            let track = &self.song.tracks[track_index];
+            if track.kind != TrackKind::Folder {
+                continue;
+            }
+
+            let mut left_peak = 0.0_f32;
+            let mut right_peak = 0.0_f32;
+
+            for &child_index in &self.track_child_indices[track_index] {
+                left_peak = left_peak.max(track_meters[child_index].left_peak);
+                right_peak = right_peak.max(track_meters[child_index].right_peak);
+            }
+
+            let folder_gain = (track.volume as f32).clamp(0.0, 1.0);
+            track_meters[track_index].left_peak = (left_peak * folder_gain).clamp(0.0, 1.0);
+            track_meters[track_index].right_peak = (right_peak * folder_gain).clamp(0.0, 1.0);
+        }
     }
 }
 
@@ -1710,7 +1772,6 @@ impl MixClipState {
             let dynamic_gain =
                 interpolated_gain(start_gain, target_gain, frame_offset, frame_count);
             let dynamic_pan = interpolated_gain(start_pan, target_pan, frame_offset, frame_count);
-            let (left_gain, right_gain) = constant_power_pan_gains(dynamic_pan);
             let clip_frame_position =
                 (overlap_start_frame - self.plan.timeline_start_frame) + frame_offset as u64;
             let edge_gain = self.plan.edge_gain(clip_frame_position);
@@ -1721,8 +1782,7 @@ impl MixClipState {
                 1,
                 output_channels,
                 dynamic_gain * edge_gain,
-                left_gain,
-                right_gain,
+                dynamic_pan,
             );
             left_peak = left_peak.max(frame_left_peak);
             right_peak = right_peak.max(frame_right_peak);
@@ -1810,6 +1870,16 @@ fn build_playback_plans(
     plans
 }
 
+fn find_song_track<'a>(
+    song: &'a Song,
+    track_id: &str,
+) -> Result<&'a libretracks_core::Track, DesktopError> {
+    song.tracks
+        .iter()
+        .find(|track| track.id == track_id)
+        .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))
+}
+
 fn resolve_clip_runtime_gain(song: &Song, clip_id: &str, track_id: &str) -> f64 {
     let clip_gain = song
         .clips
@@ -1822,17 +1892,71 @@ fn resolve_clip_runtime_gain(song: &Song, clip_id: &str, track_id: &str) -> f64 
 }
 
 fn resolve_track_runtime_pan(song: &Song, track_id: &str) -> f32 {
-    song.tracks
-        .iter()
-        .find(|track| track.id == track_id)
-        .map(|track| track.pan as f32)
-        .unwrap_or(0.0)
-        .clamp(-1.0, 1.0)
+    let Ok(track) = find_song_track(song, track_id) else {
+        return 0.0;
+    };
+
+    let mut pan = track.pan as f32;
+    let mut cursor = track.parent_track_id.as_deref();
+
+    while let Some(parent_track_id) = cursor {
+        let Ok(parent_track) = find_song_track(song, parent_track_id) else {
+            return 0.0;
+        };
+
+        if parent_track.kind != TrackKind::Folder {
+            return 0.0;
+        }
+
+        pan += parent_track.pan as f32;
+        cursor = parent_track.parent_track_id.as_deref();
+    }
+
+    pan.clamp(-1.0, 1.0)
 }
 
-fn constant_power_pan_gains(pan: f32) -> (f32, f32) {
-    let angle = (pan.clamp(-1.0, 1.0) + 1.0) * PI * 0.25;
-    (angle.cos(), angle.sin())
+fn resolve_parent_track_runtime_gain(song: &Song, track_id: &str) -> Result<f32, DesktopError> {
+    let track = find_song_track(song, track_id)?;
+    let mut gain = 1.0_f32;
+    let mut cursor = track.parent_track_id.as_deref();
+
+    while let Some(parent_track_id) = cursor {
+        let parent_track = find_song_track(song, parent_track_id)?;
+        if parent_track.kind != TrackKind::Folder {
+            return Err(DesktopError::TrackNotFound(parent_track_id.to_string()));
+        }
+
+        gain *= parent_track.volume as f32;
+        cursor = parent_track.parent_track_id.as_deref();
+    }
+
+    Ok(gain)
+}
+
+fn apply_runtime_pan(
+    left_input: f32,
+    right_input: f32,
+    pan: f32,
+    source_channels: usize,
+) -> (f32, f32) {
+    let pan = pan.clamp(-1.0, 1.0);
+
+    if source_channels <= 1 {
+        if pan < 0.0 {
+            (left_input, right_input * (1.0 - pan.abs()))
+        } else if pan > 0.0 {
+            (left_input * (1.0 - pan), right_input)
+        } else {
+            (left_input, right_input)
+        }
+    } else if pan < 0.0 {
+        let fold = pan.abs();
+        (left_input + right_input * fold, right_input * (1.0 - fold))
+    } else if pan > 0.0 {
+        (left_input * (1.0 - pan), right_input + left_input * pan)
+    } else {
+        (left_input, right_input)
+    }
 }
 
 fn scheduled_clip_count(song: &Song, position_seconds: f64) -> usize {
@@ -1896,7 +2020,10 @@ fn resolve_track_clip_gain(
     Ok(gain * clip_gain)
 }
 
-fn is_track_soloed_in_hierarchy(song: &Song, track: &libretracks_core::Track) -> Result<bool, DesktopError> {
+fn is_track_soloed_in_hierarchy(
+    song: &Song,
+    track: &libretracks_core::Track,
+) -> Result<bool, DesktopError> {
     if track.solo {
         return Ok(true);
     }
@@ -1969,7 +2096,7 @@ mod tests {
         path::{Path, PathBuf},
         sync::{
             atomic::{AtomicU64, Ordering},
-            mpsc, Arc,
+            mpsc, Arc, RwLock,
         },
         thread,
         time::Duration,
@@ -1980,11 +2107,13 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        build_playback_plans, coalesce_sync_song_commands, drain_consumer_samples, env_flag,
-        interpolated_gain, playback_reason_label, probe_audio_file, scheduled_clip_count,
-        AudioBufferCache, AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot,
-        AudioDebugState, MemoryClipReader, Mixer, OutputSample, PlaybackClipPlan,
-        PlaybackStartReason, RestartReport, SharedAudioBuffer, StopReport, SyncReport,
+        apply_runtime_pan, build_playback_plans, coalesce_sync_song_commands,
+        drain_consumer_samples, env_flag, interpolated_gain, playback_reason_label,
+        probe_audio_file, resolve_track_runtime_pan, scheduled_clip_count, AudioBufferCache,
+        AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState,
+        AudioMeterLevel, MemoryClipReader, Mixer, OutputSample, PlaybackBackend, PlaybackClipPlan,
+        PlaybackSession, PlaybackStartReason, RestartReport, SharedAudioBuffer, StopReport,
+        SyncReport,
     };
 
     fn demo_song() -> Song {
@@ -2349,16 +2478,16 @@ mod tests {
     }
 
     #[test]
-    fn memory_clip_reader_applies_channel_gains_for_pan() {
+    fn memory_clip_reader_applies_true_stereo_pan_folding() {
         let clip_path = PathBuf::from("audio/pan-buffer.wav");
-        let cache = cache_with_shared_buffer(&clip_path, vec![0.5, 0.25], 48_000, 1);
+        let cache = cache_with_shared_buffer(&clip_path, vec![0.3, 0.7], 48_000, 2);
         let mut reader = MemoryClipReader::open(
             &PlaybackClipPlan {
                 clip_id: "clip".into(),
                 track_id: "track".into(),
                 file_path: clip_path,
                 timeline_start_frame: 0,
-                duration_frames: 2,
+                duration_frames: 1,
                 fade_in_frames: 0,
                 fade_out_frames: 0,
                 source_start_seconds: 0.0,
@@ -2369,27 +2498,76 @@ mod tests {
         )
         .expect("memory reader should open");
 
-        let mut mixed = [0.0_f32; 4];
+        let mut mixed = [0.0_f32; 2];
         let (left_peak, right_peak) =
-            reader.mix_into_with_channel_gains(&mut mixed, 0, 2, 2, 1.0, 1.0, 0.0);
+            reader.mix_into_with_channel_gains(&mut mixed, 0, 1, 2, 1.0, -0.5);
 
-        assert_eq!(mixed, [0.5, 0.0, 0.25, 0.0]);
-        assert!((left_peak - 0.5).abs() < 0.000_001);
-        assert!(right_peak.abs() < 0.000_001);
+        assert_eq!(mixed, [0.65, 0.35]);
+        assert!((left_peak - 0.65).abs() < 0.000_001);
+        assert!((right_peak - 0.35).abs() < 0.000_001);
     }
 
     #[test]
-    fn constant_power_pan_gains_match_expected_edges_and_center() {
-        let (hard_left_l, hard_left_r) = constant_power_pan_gains(-1.0);
-        let (center_l, center_r) = constant_power_pan_gains(0.0);
-        let (hard_right_l, hard_right_r) = constant_power_pan_gains(1.0);
+    fn runtime_pan_folds_stereo_and_balances_mono() {
+        let (hard_left_l, hard_left_r) = apply_runtime_pan(0.25, 0.75, -1.0, 2);
+        let (center_l, center_r) = apply_runtime_pan(0.25, 0.75, 0.0, 2);
+        let (hard_right_l, hard_right_r) = apply_runtime_pan(0.25, 0.75, 1.0, 2);
+        let (mono_left, mono_right) = apply_runtime_pan(0.5, 0.5, 0.4, 1);
 
         assert!((hard_left_l - 1.0).abs() < 0.000_001);
         assert!(hard_left_r.abs() < 0.000_001);
-        assert!((center_l - 0.707_106_77).abs() < 0.000_1);
-        assert!((center_r - 0.707_106_77).abs() < 0.000_1);
+        assert!((center_l - 0.25).abs() < 0.000_001);
+        assert!((center_r - 0.75).abs() < 0.000_001);
         assert!(hard_right_l.abs() < 0.000_001);
         assert!((hard_right_r - 1.0).abs() < 0.000_001);
+        assert!((mono_left - 0.3).abs() < 0.000_001);
+        assert!((mono_right - 0.5).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn resolve_track_runtime_pan_accumulates_folder_pan_and_clamps() {
+        let mut song = demo_song();
+        song.tracks[0].pan = -0.35;
+        song.tracks[1].pan = -0.8;
+
+        let pan = resolve_track_runtime_pan(&song, "track_drums");
+
+        assert!((pan + 1.0).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn mixer_rolls_child_meter_peaks_up_to_folder_tracks() {
+        let song = demo_song();
+        let mixer = Mixer::new(
+            PathBuf::from("song"),
+            song,
+            0.0,
+            48_000,
+            2,
+            Arc::new(RwLock::new(None)),
+            AudioDebugConfig {
+                enabled: false,
+                log_commands: false,
+            },
+            AudioBufferCache::default(),
+        );
+        let mut track_meters = vec![
+            AudioMeterLevel {
+                track_id: "folder_main".into(),
+                left_peak: 0.0,
+                right_peak: 0.0,
+            },
+            AudioMeterLevel {
+                track_id: "track_drums".into(),
+                left_peak: 0.5,
+                right_peak: 0.25,
+            },
+        ];
+
+        mixer.roll_up_folder_track_meters(&mut track_meters);
+
+        assert!((track_meters[0].left_peak - 0.35).abs() < 0.000_001);
+        assert!((track_meters[0].right_peak - 0.175).abs() < 0.000_001);
     }
 
     #[test]
@@ -2482,6 +2660,7 @@ mod tests {
             0.0,
             48_000,
             1,
+            Arc::new(RwLock::new(None)),
             AudioDebugConfig {
                 enabled: false,
                 log_commands: false,

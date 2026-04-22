@@ -96,7 +96,10 @@ pub fn save_song(song_dir: impl AsRef<Path>, song: &Song) -> Result<PathBuf, Pro
     save_song_to_file(song_file_path(song_dir), song)
 }
 
-pub fn save_song_to_file(song_file: impl AsRef<Path>, song: &Song) -> Result<PathBuf, ProjectError> {
+pub fn save_song_to_file(
+    song_file: impl AsRef<Path>,
+    song: &Song,
+) -> Result<PathBuf, ProjectError> {
     validate_song(song)?;
 
     let song_file = song_file.as_ref();

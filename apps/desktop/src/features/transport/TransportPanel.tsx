@@ -162,16 +162,6 @@ function formatMusicalPosition(seconds: number, bpm: number, timeSignature: stri
   return getMusicalPosition(seconds, bpm, timeSignature).display;
 }
 
-function setTrackMeterBarLevel(element: HTMLDivElement | null, peak: number) {
-  if (!element) {
-    return;
-  }
-
-  const nextPeak = Math.max(0, Math.min(1, peak));
-  element.style.transform = `scaleY(${nextPeak.toFixed(4)})`;
-  element.style.opacity = nextPeak > 0.001 ? "1" : "0.18";
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -396,6 +386,9 @@ export function TransportPanel() {
   const [panDrafts, setPanDrafts] = useState<Record<string, number>>({});
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [trackDropState, setTrackDropState] = useState<TrackDropState>(null);
+  const [trackMeters, setTrackMeters] = useState<
+    Record<string, { leftPeak: number; rightPeak: number }>
+  >({});
   const panelRef = useRef<HTMLDivElement | null>(null);
   const menuBarRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
@@ -419,9 +412,6 @@ export function TransportPanel() {
   const cameraXRef = useRef(0);
   const songRef = useRef<SongView | null>(null);
   const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
-  const trackMeterElementsRef = useRef<
-    Record<string, { left: HTMLDivElement | null; right: HTMLDivElement | null }>
-  >({});
   const volumeDraftsRef = useRef<Record<string, number>>({});
   const panDraftsRef = useRef<Record<string, number>>({});
   const trackMixSyncTimeoutsRef = useRef<Record<string, number>>({});
@@ -448,34 +438,6 @@ export function TransportPanel() {
       }
     }
   }, []);
-
-  const clearTrackMeters = useCallback(() => {
-    for (const meterElements of Object.values(trackMeterElementsRef.current)) {
-      setTrackMeterBarLevel(meterElements.left, 0);
-      setTrackMeterBarLevel(meterElements.right, 0);
-    }
-  }, []);
-
-  const handleTrackMeterElementChange = useCallback(
-    (trackId: string, channel: "left" | "right", element: HTMLDivElement | null) => {
-      const current = trackMeterElementsRef.current[trackId] ?? { left: null, right: null };
-      const next = {
-        ...current,
-        [channel]: element,
-      };
-
-      if (!next.left && !next.right) {
-        delete trackMeterElementsRef.current[trackId];
-        return;
-      }
-
-      trackMeterElementsRef.current[trackId] = next;
-      if (element) {
-        setTrackMeterBarLevel(element, 0);
-      }
-    },
-    [],
-  );
 
   const clearTrackMixSyncTimeout = useCallback((trackId: string) => {
     const timeoutId = trackMixSyncTimeoutsRef.current[trackId];
@@ -677,15 +639,17 @@ export function TransportPanel() {
         return;
       }
 
-      for (const level of levels) {
-        const meterElements = trackMeterElementsRef.current[level.trackId];
-        if (!meterElements) {
-          continue;
-        }
-
-        setTrackMeterBarLevel(meterElements.left, level.leftPeak);
-        setTrackMeterBarLevel(meterElements.right, level.rightPeak);
-      }
+      setTrackMeters(
+        Object.fromEntries(
+          levels.map((level) => [
+            level.trackId,
+            {
+              leftPeak: level.leftPeak,
+              rightPeak: level.rightPeak,
+            },
+          ]),
+        ),
+      );
     }).then((nextUnlisten) => {
       if (!active) {
         nextUnlisten();
@@ -806,8 +770,8 @@ export function TransportPanel() {
       return;
     }
 
-    clearTrackMeters();
-  }, [clearTrackMeters, snapshot?.playbackState, song?.projectRevision]);
+    setTrackMeters({});
+  }, [snapshot?.playbackState, song?.projectRevision]);
 
   useEffect(() => {
     if (!song) {
@@ -2781,6 +2745,8 @@ export function TransportPanel() {
                     childCount={childCount}
                     trackHeight={trackHeight}
                     panValue={panDrafts[track.id] ?? track.pan}
+                    meterLeftPeak={trackMeters[track.id]?.leftPeak ?? 0}
+                    meterRightPeak={trackMeters[track.id]?.rightPeak ?? 0}
                     trackMuted={track.muted}
                     trackSolo={track.solo}
                     volumeValue={volumeDrafts[track.id] ?? track.volume}
@@ -2800,7 +2766,6 @@ export function TransportPanel() {
                     onCommitVolume={handleTrackHeaderVolumeCommit}
                     onPanChange={handleTrackHeaderPanChange}
                     onCommitPan={handleTrackHeaderPanCommit}
-                    onMeterElementChange={handleTrackMeterElementChange}
                   />
 
                   <div
