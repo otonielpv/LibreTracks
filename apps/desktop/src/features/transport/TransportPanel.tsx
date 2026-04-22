@@ -63,6 +63,7 @@ import {
   zoomCameraAtViewportX,
 } from "./timelineMath";
 import { TrackHeaderItem } from "./TrackHeaderItem";
+import { useTransportStore } from "./store";
 
 const HEADER_WIDTH = 260;
 const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
@@ -386,9 +387,6 @@ export function TransportPanel() {
   const [panDrafts, setPanDrafts] = useState<Record<string, number>>({});
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [trackDropState, setTrackDropState] = useState<TrackDropState>(null);
-  const [trackMeters, setTrackMeters] = useState<
-    Record<string, { leftPeak: number; rightPeak: number }>
-  >({});
   const panelRef = useRef<HTMLDivElement | null>(null);
   const menuBarRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
@@ -627,6 +625,10 @@ export function TransportPanel() {
   }, []);
 
   useEffect(() => {
+    useTransportStore.getState().setPlaybackState(snapshot);
+  }, [snapshot]);
+
+  useEffect(() => {
     if (!isTauriApp) {
       return () => {};
     }
@@ -639,17 +641,7 @@ export function TransportPanel() {
         return;
       }
 
-      setTrackMeters(
-        Object.fromEntries(
-          levels.map((level) => [
-            level.trackId,
-            {
-              leftPeak: level.leftPeak,
-              rightPeak: level.rightPeak,
-            },
-          ]),
-        ),
-      );
+      useTransportStore.getState().setMeters(levels);
     }).then((nextUnlisten) => {
       if (!active) {
         nextUnlisten();
@@ -770,7 +762,7 @@ export function TransportPanel() {
       return;
     }
 
-    setTrackMeters({});
+    useTransportStore.getState().setMeters({});
   }, [snapshot?.playbackState, song?.projectRevision]);
 
   useEffect(() => {
@@ -2745,8 +2737,6 @@ export function TransportPanel() {
                     childCount={childCount}
                     trackHeight={trackHeight}
                     panValue={panDrafts[track.id] ?? track.pan}
-                    meterLeftPeak={trackMeters[track.id]?.leftPeak ?? 0}
-                    meterRightPeak={trackMeters[track.id]?.rightPeak ?? 0}
                     trackMuted={track.muted}
                     trackSolo={track.solo}
                     volumeValue={volumeDrafts[track.id] ?? track.volume}

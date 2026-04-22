@@ -1,6 +1,7 @@
 import { memo, type MouseEvent as ReactMouseEvent } from "react";
 
 import type { TrackKind } from "./desktopApi";
+import { TrackMeter } from "./TrackMeter";
 
 const PAN_DISPLAY_CENTER_EPSILON = 0.005;
 const PAN_SNAP_TO_CENTER_EPSILON = 0.05;
@@ -26,8 +27,6 @@ type TrackHeaderItemProps = {
   childCount: number;
   trackHeight: number;
   panValue: number;
-  meterLeftPeak: number;
-  meterRightPeak: number;
   trackMuted: boolean;
   trackSolo: boolean;
   volumeValue: number;
@@ -52,14 +51,6 @@ type TrackHeaderItemProps = {
   onCommitPan: (trackId: string) => void;
 };
 
-function meterStyle(peak: number) {
-  const nextPeak = Math.max(0, Math.min(1, peak));
-  return {
-    transform: `scaleY(${nextPeak.toFixed(4)})`,
-    opacity: nextPeak > 0.001 ? "1" : "0.18",
-  } as const;
-}
-
 function TrackHeaderItemComponent({
   trackId,
   trackName,
@@ -68,8 +59,6 @@ function TrackHeaderItemComponent({
   childCount,
   trackHeight,
   panValue,
-  meterLeftPeak,
-  meterRightPeak,
   trackMuted,
   trackSolo,
   volumeValue,
@@ -241,14 +230,7 @@ function TrackHeaderItemComponent({
           </div>
         </div>
 
-        <div className="lt-track-meter" aria-hidden="true">
-          <div className="lt-track-meter-channel">
-            <div className="lt-track-meter-bar is-left" style={meterStyle(meterLeftPeak)} />
-          </div>
-          <div className="lt-track-meter-channel">
-            <div className="lt-track-meter-bar is-right" style={meterStyle(meterRightPeak)} />
-          </div>
-        </div>
+        <TrackMeter trackId={trackId} />
       </div>
     </div>
   );
@@ -263,8 +245,6 @@ function areTrackHeaderPropsEqual(previous: TrackHeaderItemProps, next: TrackHea
     previous.childCount === next.childCount &&
     previous.trackHeight === next.trackHeight &&
     previous.panValue === next.panValue &&
-    previous.meterLeftPeak === next.meterLeftPeak &&
-    previous.meterRightPeak === next.meterRightPeak &&
     previous.trackMuted === next.trackMuted &&
     previous.trackSolo === next.trackSolo &&
     previous.volumeValue === next.volumeValue &&
