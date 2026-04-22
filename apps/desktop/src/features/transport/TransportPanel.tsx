@@ -1059,12 +1059,8 @@ export function TransportPanel() {
           }
         }
 
-        previewSeek(pointerSeconds);
-
         await runAction(async () => {
-          const nextSnapshot = await seekTransport(pointerSeconds);
-          setSnapshot(nextSnapshot);
-          setStatus(`Cursor movido a ${formatClock(nextSnapshot.positionSeconds)}`);
+          await performSeek(pointerSeconds);
         });
         setTimeSelection(null);
         return;
@@ -1076,12 +1072,8 @@ export function TransportPanel() {
       });
 
       if (!normalized || normalized.endSeconds - normalized.startSeconds < 0.15) {
-        previewSeek(activeDrag.currentSeconds);
-
         await runAction(async () => {
-          const nextSnapshot = await seekTransport(activeDrag.currentSeconds);
-          setSnapshot(nextSnapshot);
-          setStatus(`Cursor movido a ${formatClock(nextSnapshot.positionSeconds)}`);
+          await performSeek(activeDrag.currentSeconds);
         });
         setTimeSelection(null);
         return;
@@ -1156,12 +1148,8 @@ export function TransportPanel() {
         return;
       }
 
-      previewSeek(activeDrag.currentSeconds);
-
       await runAction(async () => {
-        const nextSnapshot = await seekTransport(activeDrag.currentSeconds);
-        setSnapshot(nextSnapshot);
-        setStatus(`Cursor movido a ${formatClock(nextSnapshot.positionSeconds)}`);
+        await performSeek(activeDrag.currentSeconds);
       });
     };
 
@@ -1284,7 +1272,35 @@ export function TransportPanel() {
       running: false,
     };
     syncLivePosition(clampedPosition);
-    setDisplayPositionSeconds(clampedPosition);
+  }
+
+  function restoreConfirmedTransportVisual() {
+    if (snapshot) {
+      applyTransportVisualAnchor(snapshot);
+      return;
+    }
+
+    playbackVisualAnchorRef.current = {
+      anchorPositionSeconds: 0,
+      anchorReceivedAtMs: performance.now(),
+      durationSeconds: songDurationSecondsRef.current,
+      running: false,
+    };
+    setDisplayPositionSeconds(0);
+    syncLivePosition(0);
+  }
+
+  async function performSeek(positionSeconds: number) {
+    previewSeek(positionSeconds);
+
+    try {
+      const nextSnapshot = await seekTransport(positionSeconds);
+      setSnapshot(nextSnapshot);
+      setStatus(`Cursor movido a ${formatClock(nextSnapshot.positionSeconds)}`);
+    } catch (error) {
+      restoreConfirmedTransportVisual();
+      throw error;
+    }
   }
 
   const laneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
