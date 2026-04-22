@@ -2491,13 +2491,6 @@ export function TransportPanel() {
   </section>
   )}
 
-      <div className="lt-inline-status">
-        <div className="lt-bottom-status">
-          <strong>Estado</strong>
-          <p>{status}</p>
-        </div>
-      </div>
-
       {selectedClip ? (
         <div className="lt-inspector-strip">
           <strong>Clip</strong>
@@ -2557,6 +2550,10 @@ export function TransportPanel() {
           }}
           onImport={importFromModal}
         />
+
+        <div className="lt-status-overlay" aria-live="polite">
+          <span>{status}</span>
+        </div>
         </div>
       </div>
       </div>

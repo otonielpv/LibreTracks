@@ -995,12 +995,6 @@ body {
   font-size: 13px;
 }
 
-.lt-inline-status {
-  padding: 0.45rem 1rem;
-  background: #2a2a2a;
-  border-top: 1px solid rgb(60 74 70 / 0.22);
-}
-
 .lt-bottom-controls {
   display: flex;
   flex-wrap: wrap;
@@ -1102,6 +1096,29 @@ body {
   font: 600 10px/1 "Space Grotesk", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+}
+
+.lt-status-overlay {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 30;
+  max-width: min(28rem, calc(100vw - 6rem));
+  padding: 0.45rem 0.65rem;
+  border: 1px solid rgb(87 241 219 / 0.12);
+  border-radius: 0.75rem;
+  background: rgb(10 10 10 / 0.7);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.24);
+  color: rgb(186 202 197 / 0.82);
+  pointer-events: none;
+}
+
+.lt-status-overlay span {
+  display: block;
+  margin: 0;
+  font: 600 10px/1.4 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
 }
 
 .lt-context-menu {
