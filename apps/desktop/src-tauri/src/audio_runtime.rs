@@ -964,7 +964,7 @@ impl MemoryClipReader {
             gain,
             1.0,
             1.0,
-        );
+        )
     }
 
     fn mix_into_with_channel_gains(

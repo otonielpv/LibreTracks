@@ -4,7 +4,7 @@ mod state;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use audio_runtime::AudioDebugSnapshot;
 use libretracks_audio::JumpTrigger;
