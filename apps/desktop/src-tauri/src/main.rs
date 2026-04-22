@@ -180,7 +180,10 @@ fn open_project_from_dialog(
 }
 
 #[tauri::command]
-fn play_transport(app: AppHandle, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+fn play_transport(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
         .lock()
@@ -211,7 +214,10 @@ fn pause_transport(
 }
 
 #[tauri::command]
-fn stop_transport(app: AppHandle, state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
+fn stop_transport(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
         .lock()

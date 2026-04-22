@@ -162,7 +162,10 @@ pub fn import_wav_song(
             .map(|file| Clip {
                 id: file.clip_id.clone(),
                 track_id: file.track_id.clone(),
-                file_path: file.imported_relative_path.to_string_lossy().replace('\\', "/"),
+                file_path: file
+                    .imported_relative_path
+                    .to_string_lossy()
+                    .replace('\\', "/"),
                 timeline_start_seconds: 0.0,
                 source_start_seconds: 0.0,
                 duration_seconds: file.duration_seconds,
@@ -201,7 +204,8 @@ pub fn append_wav_files_to_song(
     let mut used_file_names = collect_used_file_names(song_dir, song)?;
     let mut used_track_ids: HashSet<String> =
         song.tracks.iter().map(|track| track.id.clone()).collect();
-    let mut used_clip_ids: HashSet<String> = song.clips.iter().map(|clip| clip.id.clone()).collect();
+    let mut used_clip_ids: HashSet<String> =
+        song.clips.iter().map(|clip| clip.id.clone()).collect();
     let mut metrics = ImportOperationMetrics::default();
     let planned_files = plan_import_files(song_dir, wav_files, &mut used_file_names)?;
     metrics.copy_millis = copy_import_files(&planned_files)?;
@@ -258,7 +262,10 @@ pub fn append_wav_files_to_song(
 }
 
 fn ensure_wav_extension(path: &Path) -> Result<(), ProjectError> {
-    let extension = path.extension().and_then(|value| value.to_str()).unwrap_or_default();
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
     if extension.eq_ignore_ascii_case("wav") {
         Ok(())
     } else {
@@ -361,7 +368,11 @@ fn analyze_import_files_in_parallel(
 
     let worker_count = planned_files
         .len()
-        .min(thread::available_parallelism().map(|count| count.get()).unwrap_or(1))
+        .min(
+            thread::available_parallelism()
+                .map(|count| count.get())
+                .unwrap_or(1),
+        )
         .min(4);
     let queue = Arc::new(Mutex::new(VecDeque::from(planned_files)));
     let results = Arc::new(Mutex::new(Vec::new()));
@@ -418,12 +429,21 @@ fn analyze_import_files_in_parallel(
                 results
                     .lock()
                     .expect("results lock should not poison")
-                    .push((next_file, metadata, wav_analysis_millis, waveform_write_millis));
+                    .push((
+                        next_file,
+                        metadata,
+                        wav_analysis_millis,
+                        waveform_write_millis,
+                    ));
             });
         }
     });
 
-    if let Some(error) = first_error.lock().expect("error lock should not poison").take() {
+    if let Some(error) = first_error
+        .lock()
+        .expect("error lock should not poison")
+        .take()
+    {
         return Err(error);
     }
 
@@ -472,23 +492,29 @@ fn resolve_import_tempo(analyzed_files: &[AnalyzedImportFile]) -> ResolvedTempo 
                 .as_ref()
                 .map(|tempo_candidate| (file, tempo_candidate))
         })
-        .max_by(|(left_file, left_candidate), (right_file, right_candidate)| {
-            import_file_priority(&left_file.imported_relative_path)
-                .cmp(&import_file_priority(&right_file.imported_relative_path))
-                .then_with(|| {
-                    left_candidate
-                        .confidence
-                        .partial_cmp(&right_candidate.confidence)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-        });
+        .max_by(
+            |(left_file, left_candidate), (right_file, right_candidate)| {
+                import_file_priority(&left_file.imported_relative_path)
+                    .cmp(&import_file_priority(&right_file.imported_relative_path))
+                    .then_with(|| {
+                        left_candidate
+                            .confidence
+                            .partial_cmp(&right_candidate.confidence)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+            },
+        );
 
     match best_candidate {
         Some((file, tempo_candidate)) => ResolvedTempo {
             bpm: tempo_candidate.bpm,
             source: TempoSource::AutoImport,
             confidence: Some(tempo_candidate.confidence),
-            reference_file_path: Some(file.imported_relative_path.to_string_lossy().replace('\\', "/")),
+            reference_file_path: Some(
+                file.imported_relative_path
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            ),
         },
         None => ResolvedTempo {
             bpm: 120.0,

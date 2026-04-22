@@ -34,17 +34,17 @@ pub enum DomainError {
     UnknownTrack { clip_id: String, track_id: String },
     #[error("clip {clip_id} cannot target folder track {track_id}")]
     ClipTargetsFolderTrack { clip_id: String, track_id: String },
-    #[error("section marker {marker_id} has invalid position")]
-    InvalidSectionMarkerPosition { marker_id: String },
-    #[error("section markers are out of order: {previous_marker_id} before {marker_id}")]
-    SectionMarkersOutOfOrder {
+    #[error("marker {marker_id} has invalid position")]
+    InvalidMarkerPosition { marker_id: String },
+    #[error("markers are out of order: {previous_marker_id} before {marker_id}")]
+    MarkersOutOfOrder {
         previous_marker_id: String,
         marker_id: String,
     },
-    #[error("section marker {marker_id} has invalid digit {digit}")]
-    InvalidSectionMarkerDigit { marker_id: String, digit: u8 },
-    #[error("section marker digit is duplicated: {digit}")]
-    DuplicateSectionMarkerDigit { digit: u8 },
+    #[error("marker {marker_id} has invalid digit {digit}")]
+    InvalidMarkerDigit { marker_id: String, digit: u8 },
+    #[error("marker digit is duplicated: {digit}")]
+    DuplicateMarkerDigit { digit: u8 },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -140,14 +140,14 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
 
     for marker in &song.section_markers {
         if !(0.0..song.duration_seconds).contains(&marker.start_seconds) {
-            return Err(DomainError::InvalidSectionMarkerPosition {
+            return Err(DomainError::InvalidMarkerPosition {
                 marker_id: marker.id.clone(),
             });
         }
 
         if let Some(previous_start_seconds) = previous_marker_start_seconds {
             if marker.start_seconds <= previous_start_seconds {
-                return Err(DomainError::SectionMarkersOutOfOrder {
+                return Err(DomainError::MarkersOutOfOrder {
                     previous_marker_id: previous_marker_id.unwrap_or_default().to_string(),
                     marker_id: marker.id.clone(),
                 });
@@ -156,14 +156,14 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
 
         if let Some(digit) = marker.digit {
             if digit > 9 {
-                return Err(DomainError::InvalidSectionMarkerDigit {
+                return Err(DomainError::InvalidMarkerDigit {
                     marker_id: marker.id.clone(),
                     digit,
                 });
             }
 
             if !used_digits.insert(digit) {
-                return Err(DomainError::DuplicateSectionMarkerDigit { digit });
+                return Err(DomainError::DuplicateMarkerDigit { digit });
             }
         }
 

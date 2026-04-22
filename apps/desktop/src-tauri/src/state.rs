@@ -8,11 +8,10 @@ use std::{
 };
 
 use libretracks_audio::{
-    AudioEngine, AudioEngineError, JumpTrigger, PendingSectionJump, PlaybackState,
+    AudioEngine, AudioEngineError, JumpTrigger, PendingMarkerJump, PlaybackState,
 };
 use libretracks_core::{
-    Clip, DerivedSection, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track,
-    TrackKind,
+    Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
 };
 use libretracks_project::{
     append_wav_files_to_song, create_song_folder, generate_waveform_summary, import_wav_song,
@@ -208,7 +207,7 @@ pub struct SongView {
     pub key: Option<String>,
     pub time_signature: String,
     pub duration_seconds: f64,
-    pub section_markers: Vec<SectionMarkerSummary>,
+    pub section_markers: Vec<MarkerSummary>,
     pub derived_sections: Vec<SectionSummary>,
     pub clips: Vec<ClipSummary>,
     pub tracks: Vec<TrackSummary>,
@@ -251,7 +250,7 @@ pub struct PendingJumpSummary {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SectionMarkerSummary {
+pub struct MarkerSummary {
     pub id: String,
     pub name: String,
     pub start_seconds: f64,
@@ -760,10 +759,10 @@ impl DesktopSession {
         let start_seconds = start_seconds
             .max(0.0)
             .min((song.duration_seconds - 0.0001).max(0.0));
-        let section_number = song.section_markers.len() + 1;
-        song.section_markers.push(SectionMarker {
+        let marker_name = song.next_marker_name();
+        song.section_markers.push(Marker {
             id: format!("section_{}", timestamp_suffix()),
-            name: format!("Seccion {section_number}"),
+            name: marker_name,
             start_seconds,
             digit: None,
         });
@@ -1151,7 +1150,7 @@ impl DesktopSession {
 
         let playback_state = self.engine.playback_state();
         let position_seconds = self.current_position();
-        let pending_jump = self.engine.pending_section_jump().cloned();
+        let pending_jump = self.engine.pending_marker_jump().cloned();
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
 
         if playback_state == PlaybackState::Playing
@@ -1185,10 +1184,10 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         if let Some(pending_jump) = pending_jump {
-            let target_section = loaded_song.section_marker_by_id(&pending_jump.target_marker_id);
+            let target_marker = loaded_song.marker_by_id(&pending_jump.target_marker_id);
 
-            if let Some(target_section) = target_section {
-                if restored_position < target_section.start_seconds
+            if let Some(target_marker) = target_marker {
+                if restored_position < target_marker.start_seconds
                     && restored_position < pending_jump.execute_at_seconds
                 {
                     self.engine.schedule_section_jump(
@@ -1279,13 +1278,17 @@ impl DesktopSession {
             position_seconds: self.current_position(),
             current_section: self
                 .engine
-                .current_section()
+                .current_marker()
                 .ok()
                 .flatten()
-                .map(|section| derived_section_to_summary(&section)),
+                .and_then(|marker| {
+                    self.engine
+                        .song()
+                        .map(|song| marker_to_section_summary(song, &marker))
+                }),
             pending_section_jump: self
                 .engine
-                .pending_section_jump()
+                .pending_marker_jump()
                 .map(pending_jump_to_summary),
             musical_position: self
                 .engine
@@ -1744,11 +1747,7 @@ fn song_to_view(
     waveform_cache: &WaveformMemoryCache,
     project_revision: u64,
 ) -> SongView {
-    let derived_sections = song
-        .derived_sections()
-        .iter()
-        .map(derived_section_to_summary)
-        .collect::<Vec<_>>();
+    let derived_sections = build_section_summaries(song);
 
     SongView {
         id: song.id.clone(),
@@ -1759,11 +1758,7 @@ fn song_to_view(
         key: song.key.clone(),
         time_signature: song.time_signature.clone(),
         duration_seconds: song.duration_seconds,
-        section_markers: song
-            .section_markers
-            .iter()
-            .map(section_marker_to_summary)
-            .collect(),
+        section_markers: song.section_markers.iter().map(marker_to_summary).collect(),
         derived_sections,
         clips: song
             .clips
@@ -1885,37 +1880,77 @@ fn refresh_song_duration(song: &mut Song) {
         .iter()
         .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
         .fold(0.0_f64, f64::max);
-    let max_section_end = song
-        .derived_sections()
+    let max_marker_start = song
+        .section_markers
         .iter()
-        .map(|section| section.end_seconds)
+        .map(|marker| marker.start_seconds)
         .fold(0.0_f64, f64::max);
 
-    song.duration_seconds = max_clip_end.max(max_section_end).max(1.0);
+    song.duration_seconds = max_clip_end
+        .max(max_marker_start)
+        .max(song.duration_seconds)
+        .max(1.0);
 }
 
-fn derived_section_to_summary(section: &DerivedSection) -> SectionSummary {
+fn build_section_summaries(song: &Song) -> Vec<SectionSummary> {
+    let markers = song.sorted_markers();
+    let mut sections = Vec::new();
+
+    if let Some(first_marker) = markers.first() {
+        if first_marker.start_seconds > 0.0 {
+            sections.push(SectionSummary {
+                id: "derived_intro".to_string(),
+                name: "Inicio".to_string(),
+                start_seconds: 0.0,
+                end_seconds: first_marker.start_seconds.min(song.duration_seconds),
+            });
+        }
+    }
+
+    for (index, marker) in markers.iter().enumerate() {
+        let end_seconds = markers
+            .get(index + 1)
+            .map(|next_marker| next_marker.start_seconds)
+            .unwrap_or(song.duration_seconds)
+            .min(song.duration_seconds);
+
+        if end_seconds <= marker.start_seconds {
+            continue;
+        }
+
+        sections.push(SectionSummary {
+            id: marker.id.clone(),
+            name: marker.name.clone(),
+            start_seconds: marker.start_seconds,
+            end_seconds,
+        });
+    }
+
+    sections
+}
+
+fn marker_to_section_summary(song: &Song, marker: &Marker) -> SectionSummary {
     SectionSummary {
-        id: section
-            .marker_id
-            .clone()
-            .unwrap_or_else(|| "derived_intro".to_string()),
-        name: section.name.clone(),
-        start_seconds: section.start_seconds,
-        end_seconds: section.end_seconds,
+        id: marker.id.clone(),
+        name: marker.name.clone(),
+        start_seconds: marker.start_seconds,
+        end_seconds: song
+            .next_marker_after(marker.start_seconds)
+            .map(|next_marker| next_marker.start_seconds)
+            .unwrap_or(song.duration_seconds),
     }
 }
 
-fn section_marker_to_summary(section: &SectionMarker) -> SectionMarkerSummary {
-    SectionMarkerSummary {
-        id: section.id.clone(),
-        name: section.name.clone(),
-        start_seconds: section.start_seconds,
-        digit: section.digit,
+fn marker_to_summary(marker: &Marker) -> MarkerSummary {
+    MarkerSummary {
+        id: marker.id.clone(),
+        name: marker.name.clone(),
+        start_seconds: marker.start_seconds,
+        digit: marker.digit,
     }
 }
 
-fn pending_jump_to_summary(pending_jump: &PendingSectionJump) -> PendingJumpSummary {
+fn pending_jump_to_summary(pending_jump: &PendingMarkerJump) -> PendingJumpSummary {
     PendingJumpSummary {
         target_marker_id: pending_jump.target_marker_id.clone(),
         target_marker_name: pending_jump.target_marker_name.clone(),
@@ -1960,8 +1995,8 @@ fn musical_position_summary(song: &Song, position_seconds: f64) -> MusicalPositi
     let beat_offset_frames = total_frames % beat_frames;
     let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
     let beat_in_bar = (total_whole_beats % u64::from(beats_per_bar)) as u32 + 1;
-    let sub_beat = (((u128::from(beat_offset_frames)) * 100) / u128::from(beat_frames))
-        .min(99) as u32;
+    let sub_beat =
+        (((u128::from(beat_offset_frames)) * 100) / u128::from(beat_frames)).min(99) as u32;
 
     MusicalPositionSummary {
         bar_number,
@@ -2063,7 +2098,7 @@ mod tests {
 
     use libretracks_audio::{JumpTrigger, PlaybackState};
     use libretracks_core::{
-        Clip, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track, TrackKind,
+        Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
     };
     use libretracks_project::{
         create_song_folder, generate_waveform_summary, load_song, save_song,
@@ -2114,7 +2149,7 @@ mod tests {
 
     fn demo_song_with_section() -> Song {
         let mut song = demo_song();
-        song.section_markers.push(SectionMarker {
+        song.section_markers.push(Marker {
             id: "section_1".into(),
             name: "Intro".into(),
             start_seconds: 1.0,
@@ -2150,7 +2185,7 @@ mod tests {
 
     fn demo_song_with_two_sections() -> Song {
         let mut song = demo_song_with_section();
-        song.section_markers.push(SectionMarker {
+        song.section_markers.push(Marker {
             id: "section_2".into(),
             name: "Verse".into(),
             start_seconds: 4.0,
@@ -2161,7 +2196,7 @@ mod tests {
 
     fn demo_song_with_three_sections() -> Song {
         let mut song = demo_song_with_two_sections();
-        song.section_markers.push(SectionMarker {
+        song.section_markers.push(Marker {
             id: "section_3".into(),
             name: "Bridge".into(),
             start_seconds: 8.0,

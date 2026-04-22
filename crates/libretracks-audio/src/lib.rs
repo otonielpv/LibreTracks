@@ -1,8 +1,6 @@
 //! Motor de audio y transporte.
 
-use libretracks_core::{
-    validate_song, Clip, DerivedSection, DomainError, Song, Track, TrackKind,
-};
+use libretracks_core::{validate_song, Clip, DomainError, Marker, Song, Track, TrackKind};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,7 +30,7 @@ pub enum JumpTrigger {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PendingSectionJump {
+pub struct PendingMarkerJump {
     pub target_marker_id: String,
     pub target_marker_name: String,
     pub target_digit: Option<u8>,
@@ -50,8 +48,8 @@ pub enum AudioEngineError {
     PositionOutOfRange,
     #[error("track not found: {0}")]
     TrackNotFound(String),
-    #[error("section marker not found: {0}")]
-    SectionMarkerNotFound(String),
+    #[error("marker not found: {0}")]
+    MarkerNotFound(String),
     #[error("time signature is invalid: {0}")]
     InvalidTimeSignature(String),
 }
@@ -61,7 +59,7 @@ pub struct AudioEngine {
     song: Option<Song>,
     playback_state: PlaybackState,
     position_seconds: f64,
-    pending_section_jump: Option<PendingSectionJump>,
+    pending_marker_jump: Option<PendingMarkerJump>,
 }
 
 impl Default for PlaybackState {
@@ -80,7 +78,7 @@ impl AudioEngine {
         self.song = Some(song);
         self.playback_state = PlaybackState::Stopped;
         self.position_seconds = 0.0;
-        self.pending_section_jump = None;
+        self.pending_marker_jump = None;
 
         Ok(())
     }
@@ -97,8 +95,8 @@ impl AudioEngine {
         self.song.as_ref()
     }
 
-    pub fn pending_section_jump(&self) -> Option<&PendingSectionJump> {
-        self.pending_section_jump.as_ref()
+    pub fn pending_marker_jump(&self) -> Option<&PendingMarkerJump> {
+        self.pending_marker_jump.as_ref()
     }
 
     pub fn play(&mut self) -> Result<(), AudioEngineError> {
@@ -117,7 +115,7 @@ impl AudioEngine {
         self.ensure_song_loaded()?;
         self.playback_state = PlaybackState::Stopped;
         self.position_seconds = 0.0;
-        self.pending_section_jump = None;
+        self.pending_marker_jump = None;
         Ok(())
     }
 
@@ -128,7 +126,7 @@ impl AudioEngine {
         }
 
         let should_clear_pending_jump = self
-            .pending_section_jump
+            .pending_marker_jump
             .as_ref()
             .map(|pending_jump| {
                 find_marker(song, &pending_jump.target_marker_id).map(|target_marker| {
@@ -141,38 +139,38 @@ impl AudioEngine {
 
         self.position_seconds = position_seconds;
         if should_clear_pending_jump {
-            self.pending_section_jump = None;
+            self.pending_marker_jump = None;
         }
         Ok(())
     }
 
-    pub fn current_section(&self) -> Result<Option<DerivedSection>, AudioEngineError> {
+    pub fn current_marker(&self) -> Result<Option<Marker>, AudioEngineError> {
         let song = self.ensure_song_loaded()?;
-        Ok(song.derived_section_at(self.position_seconds))
+        Ok(song.marker_at(self.position_seconds))
     }
 
     pub fn schedule_section_jump(
         &mut self,
         target_section_id: &str,
         trigger: JumpTrigger,
-    ) -> Result<Option<PendingSectionJump>, AudioEngineError> {
+    ) -> Result<Option<PendingMarkerJump>, AudioEngineError> {
         let song = self.ensure_song_loaded()?;
         let target_marker = find_marker(song, target_section_id)?;
 
         if trigger == JumpTrigger::Immediate {
             self.position_seconds = target_marker.start_seconds;
-            self.pending_section_jump = None;
+            self.pending_marker_jump = None;
             return Ok(None);
         }
 
         if self.position_seconds >= target_marker.start_seconds {
-            self.pending_section_jump = None;
+            self.pending_marker_jump = None;
             return Ok(None);
         }
 
         let execute_at_seconds = jump_execute_at(song, self.position_seconds, &trigger)?;
 
-        let pending_jump = PendingSectionJump {
+        let pending_jump = PendingMarkerJump {
             target_marker_id: target_marker.id.clone(),
             target_marker_name: target_marker.name.clone(),
             target_digit: target_marker.digit,
@@ -180,12 +178,12 @@ impl AudioEngine {
             execute_at_seconds,
         };
 
-        self.pending_section_jump = Some(pending_jump.clone());
+        self.pending_marker_jump = Some(pending_jump.clone());
         Ok(Some(pending_jump))
     }
 
     pub fn cancel_section_jump(&mut self) {
-        self.pending_section_jump = None;
+        self.pending_marker_jump = None;
     }
 
     pub fn advance_transport(&mut self, delta_seconds: f64) -> Result<f64, AudioEngineError> {
@@ -196,16 +194,17 @@ impl AudioEngine {
         let song = self.ensure_song_loaded()?.clone();
         let mut next_position = (self.position_seconds + delta_seconds).min(song.duration_seconds);
 
-        if let Some(pending_jump) = self.pending_section_jump.clone() {
+        if let Some(pending_jump) = self.pending_marker_jump.clone() {
             let execute_at = pending_jump.execute_at_seconds;
             let target_marker = find_marker(&song, &pending_jump.target_marker_id)?;
 
             if execute_at <= next_position {
                 let overshoot = next_position - execute_at;
-                next_position = (target_marker.start_seconds + overshoot).min(song.duration_seconds);
-                self.pending_section_jump = None;
+                next_position =
+                    (target_marker.start_seconds + overshoot).min(song.duration_seconds);
+                self.pending_marker_jump = None;
             } else if next_position >= target_marker.start_seconds {
-                self.pending_section_jump = None;
+                self.pending_marker_jump = None;
             }
         }
 
@@ -213,7 +212,7 @@ impl AudioEngine {
 
         if self.position_seconds >= song.duration_seconds {
             self.playback_state = PlaybackState::Stopped;
-            self.pending_section_jump = None;
+            self.pending_marker_jump = None;
         }
 
         Ok(self.position_seconds)
@@ -277,12 +276,9 @@ fn find_track<'a>(song: &'a Song, track_id: &str) -> Result<&'a Track, AudioEngi
         .ok_or_else(|| AudioEngineError::TrackNotFound(track_id.to_string()))
 }
 
-fn find_marker<'a>(
-    song: &'a Song,
-    marker_id: &str,
-) -> Result<&'a libretracks_core::SectionMarker, AudioEngineError> {
-    song.section_marker_by_id(marker_id)
-        .ok_or_else(|| AudioEngineError::SectionMarkerNotFound(marker_id.to_string()))
+fn find_marker<'a>(song: &'a Song, marker_id: &str) -> Result<&'a Marker, AudioEngineError> {
+    song.marker_by_id(marker_id)
+        .ok_or_else(|| AudioEngineError::MarkerNotFound(marker_id.to_string()))
 }
 
 fn jump_execute_at(
@@ -292,12 +288,10 @@ fn jump_execute_at(
 ) -> Result<f64, AudioEngineError> {
     match trigger {
         JumpTrigger::Immediate => Ok(current_position),
-        JumpTrigger::SectionEnd => {
-            let current_section = song
-                .derived_section_at(current_position)
-                .ok_or_else(|| AudioEngineError::SectionMarkerNotFound("current".into()))?;
-            Ok(current_section.end_seconds)
-        }
+        JumpTrigger::SectionEnd => Ok(song
+            .next_marker_after(current_position)
+            .map(|marker| marker.start_seconds)
+            .unwrap_or(song.duration_seconds)),
         JumpTrigger::AfterBars(bars) => {
             let bar_duration = song_bar_duration_seconds(song)?;
             let current_bar_index = (current_position / bar_duration).floor();
@@ -363,7 +357,7 @@ fn effective_track_gain(song: &Song, track_id: &str) -> Result<f64, AudioEngineE
 #[cfg(test)]
 mod tests {
     use libretracks_core::{
-        Clip, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track, TrackKind,
+        Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
     };
 
     use crate::{AudioEngine, JumpTrigger, PlaybackState};
@@ -453,19 +447,19 @@ mod tests {
                 },
             ],
             section_markers: vec![
-                SectionMarker {
+                Marker {
                     id: "section_intro".into(),
                     name: "Intro".into(),
                     start_seconds: 0.0,
                     digit: Some(1),
                 },
-                SectionMarker {
+                Marker {
                     id: "section_break".into(),
                     name: "Break".into(),
                     start_seconds: 8.0,
                     digit: None,
                 },
-                SectionMarker {
+                Marker {
                     id: "section_outro".into(),
                     name: "Outro".into(),
                     start_seconds: 12.0,
@@ -540,7 +534,7 @@ mod tests {
 
         assert!(scheduled.is_none());
         assert_eq!(engine.position_seconds(), 12.0);
-        assert!(engine.pending_section_jump().is_none());
+        assert!(engine.pending_marker_jump().is_none());
     }
 
     #[test]
@@ -562,7 +556,7 @@ mod tests {
             .expect("transport should advance");
 
         assert!((position - 13.0).abs() < 0.0001);
-        assert!(engine.pending_section_jump().is_none());
+        assert!(engine.pending_marker_jump().is_none());
     }
 
     #[test]
@@ -581,7 +575,7 @@ mod tests {
             .expect("transport should advance");
 
         assert!((position - 12.3333333333).abs() < 0.0001);
-        assert!(engine.pending_section_jump().is_none());
+        assert!(engine.pending_marker_jump().is_none());
     }
 
     #[test]
@@ -600,7 +594,7 @@ mod tests {
             .expect("transport should advance");
 
         assert!((position - 13.0).abs() < 0.0001);
-        assert!(engine.pending_section_jump().is_none());
+        assert!(engine.pending_marker_jump().is_none());
     }
 
     #[test]
@@ -620,7 +614,7 @@ mod tests {
             .expect("transport should advance");
 
         assert!((position - 9.0).abs() < 0.0001);
-        assert!(engine.pending_section_jump().is_none());
+        assert!(engine.pending_marker_jump().is_none());
     }
 
     #[test]
@@ -633,12 +627,12 @@ mod tests {
         engine
             .schedule_section_jump("section_outro", JumpTrigger::SectionEnd)
             .expect("jump should schedule");
-        assert!(engine.pending_section_jump().is_some());
+        assert!(engine.pending_marker_jump().is_some());
 
         engine.seek(12.0).expect("seek to target should work");
 
         assert_eq!(engine.position_seconds(), 12.0);
-        assert!(engine.pending_section_jump().is_none());
+        assert!(engine.pending_marker_jump().is_none());
     }
 
     #[test]
@@ -651,26 +645,26 @@ mod tests {
         engine
             .schedule_section_jump("section_outro", JumpTrigger::AfterBars(2))
             .expect("jump should schedule");
-        assert!(engine.pending_section_jump().is_some());
+        assert!(engine.pending_marker_jump().is_some());
 
         engine.seek(8.0).expect("seek before target should work");
 
         assert_eq!(engine.position_seconds(), 8.0);
-        assert!(engine.pending_section_jump().is_some());
+        assert!(engine.pending_marker_jump().is_some());
     }
 
     #[test]
-    fn exposes_current_section_for_future_timeline_navigation() {
+    fn exposes_current_marker_for_future_timeline_navigation() {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
         engine.seek(13.0).expect("seek should work");
 
-        let section = engine
-            .current_section()
-            .expect("section should resolve")
-            .expect("section should exist");
+        let marker = engine
+            .current_marker()
+            .expect("marker should resolve")
+            .expect("marker should exist");
 
-        assert_eq!(section.marker_id.as_deref(), Some("section_outro"));
+        assert_eq!(marker.id, "section_outro");
     }
 
     #[test]
@@ -710,7 +704,9 @@ mod tests {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
 
-        let clips = engine.active_clips_at(7.0).expect("active clips should resolve");
+        let clips = engine
+            .active_clips_at(7.0)
+            .expect("active clips should resolve");
 
         assert!(clips.is_empty());
     }
@@ -720,7 +716,9 @@ mod tests {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
 
-        let clips = engine.active_clips_at(11.0).expect("active clips should resolve");
+        let clips = engine
+            .active_clips_at(11.0)
+            .expect("active clips should resolve");
 
         assert_eq!(clips.len(), 1);
         assert_eq!(clips[0].clip_id, "clip_drums");

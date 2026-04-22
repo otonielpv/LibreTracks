@@ -4,7 +4,7 @@ use std::{
 };
 
 use libretracks_core::{
-    validate_song, Clip, DomainError, SectionMarker, Song, TempoMetadata, TempoSource, Track,
+    validate_song, Clip, DomainError, Marker, Song, TempoMetadata, TempoSource, Track,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -31,7 +31,9 @@ pub enum ProjectError {
     Io(#[from] std::io::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("Este proyecto usa el formato anterior de grupos y no es compatible con la version actual")]
+    #[error(
+        "Este proyecto usa el formato anterior de grupos y no es compatible con la version actual"
+    )]
     LegacyGroupFormatUnsupported,
     #[error("wav error: {0}")]
     Wav(#[from] hound::Error),
@@ -138,7 +140,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
     let mut section_markers = document
         .sections
         .into_iter()
-        .map(|section| SectionMarker {
+        .map(|section| Marker {
             id: section.id,
             name: section.name,
             start_seconds: section.start_seconds,

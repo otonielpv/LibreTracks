@@ -23,14 +23,14 @@ mod tests {
 
     use hound::{SampleFormat, WavSpec, WavWriter};
     use libretracks_core::{
-        Clip, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track, TrackKind,
+        Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
     };
     use tempfile::tempdir;
 
     use crate::{
-        analyze_wav_file, append_wav_files_to_song, create_song_folder, import_wav_song,
-        load_song, load_waveform_summary, read_wav_metadata, save_song, song_file_path,
-        waveform_file_path, ProjectError, ProjectImportRequest,
+        analyze_wav_file, append_wav_files_to_song, create_song_folder, import_wav_song, load_song,
+        load_waveform_summary, read_wav_metadata, save_song, song_file_path, waveform_file_path,
+        ProjectError, ProjectImportRequest,
     };
 
     fn demo_song() -> Song {
@@ -69,7 +69,7 @@ mod tests {
                 fade_in_seconds: None,
                 fade_out_seconds: None,
             }],
-            section_markers: vec![SectionMarker {
+            section_markers: vec![Marker {
                 id: "section_intro".into(),
                 name: "Intro".into(),
                 start_seconds: 0.0,
@@ -134,12 +134,7 @@ mod tests {
         }
     }
 
-    fn write_test_wav(
-        path: &Path,
-        sample_rate: u32,
-        channels: u16,
-        duration_seconds: u32,
-    ) {
+    fn write_test_wav(path: &Path, sample_rate: u32, channels: u16, duration_seconds: u32) {
         let spec = WavSpec {
             channels,
             sample_rate,
@@ -152,19 +147,16 @@ mod tests {
 
         for _ in 0..total_frames {
             for _ in 0..channels {
-                writer.write_sample(0_i16).expect("sample should be written");
+                writer
+                    .write_sample(0_i16)
+                    .expect("sample should be written");
             }
         }
 
         writer.finalize().expect("wav should finalize");
     }
 
-    fn write_float_test_wav(
-        path: &Path,
-        sample_rate: u32,
-        channels: u16,
-        duration_seconds: u32,
-    ) {
+    fn write_float_test_wav(path: &Path, sample_rate: u32, channels: u16, duration_seconds: u32) {
         let spec = WavSpec {
             channels,
             sample_rate,
@@ -178,7 +170,9 @@ mod tests {
         for frame in 0..total_frames {
             let sample = if frame % 2 == 0 { 0.5_f32 } else { -0.25_f32 };
             for _ in 0..channels {
-                writer.write_sample(sample).expect("sample should be written");
+                writer
+                    .write_sample(sample)
+                    .expect("sample should be written");
             }
         }
 
@@ -211,7 +205,9 @@ mod tests {
                 0_i16
             };
             for _ in 0..channels {
-                writer.write_sample(sample).expect("sample should be written");
+                writer
+                    .write_sample(sample)
+                    .expect("sample should be written");
             }
         }
 
@@ -298,8 +294,8 @@ mod tests {
         assert_eq!(loaded.tracks.len(), 2);
         assert_eq!(loaded.clips[0].timeline_start_seconds, 0.0);
 
-        let waveform =
-            load_waveform_summary(&imported.song_dir, "audio/drums.wav").expect("waveform should load");
+        let waveform = load_waveform_summary(&imported.song_dir, "audio/drums.wav")
+            .expect("waveform should load");
         assert_eq!(waveform.bucket_count, waveform.peaks.len());
         assert_eq!(waveform.bucket_count, waveform.min_peaks.len());
         assert_eq!(waveform.bucket_count, waveform.max_peaks.len());
@@ -328,8 +324,8 @@ mod tests {
             wav_files: vec![drums_path, click_path],
         };
 
-        let imported =
-            import_wav_song(root.path(), "detected-tempo-demo", &request).expect("import should work");
+        let imported = import_wav_song(root.path(), "detected-tempo-demo", &request)
+            .expect("import should work");
 
         assert!((imported.song.bpm - 120.0).abs() < 2.0);
         assert_eq!(imported.song.tempo_metadata.source, TempoSource::AutoImport);
@@ -351,15 +347,21 @@ mod tests {
         assert_eq!(analysis.channels, 2);
         assert_eq!(analysis.sample_rate, 48_000);
         assert!((analysis.duration_seconds - 2.0).abs() < 0.001);
-        assert_eq!(analysis.waveform.bucket_count, analysis.waveform.max_peaks.len());
-        assert_eq!(analysis.waveform.bucket_count, analysis.waveform.min_peaks.len());
+        assert_eq!(
+            analysis.waveform.bucket_count,
+            analysis.waveform.max_peaks.len()
+        );
+        assert_eq!(
+            analysis.waveform.bucket_count,
+            analysis.waveform.min_peaks.len()
+        );
     }
 
     #[test]
     fn load_waveform_summary_rejects_invalid_cache_instead_of_regenerating_inside_the_reader() {
         let root = tempdir().expect("temp dir should exist");
-        let song_dir =
-            create_song_folder(root.path(), "invalid-waveform-cache").expect("song dir should exist");
+        let song_dir = create_song_folder(root.path(), "invalid-waveform-cache")
+            .expect("song dir should exist");
         let wav_path = song_dir.join("audio").join("click.wav");
         write_test_wav(&wav_path, 44_100, 2, 1);
 
@@ -369,8 +371,8 @@ mod tests {
         )
         .expect("invalid waveform should be written");
 
-        let error =
-            load_waveform_summary(&song_dir, "audio/click.wav").expect_err("invalid waveform should fail");
+        let error = load_waveform_summary(&song_dir, "audio/click.wav")
+            .expect_err("invalid waveform should fail");
         assert!(matches!(error, ProjectError::InvalidWaveformSummary(_)));
     }
 
@@ -402,7 +404,8 @@ mod tests {
     #[test]
     fn appends_wav_files_without_replacing_existing_tracks() {
         let root = tempdir().expect("temp dir should exist");
-        let song_dir = create_song_folder(root.path(), "append-demo").expect("song dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "append-demo").expect("song dir should exist");
         let existing_audio_path = song_dir.join("audio").join("click.wav");
         write_test_wav(&existing_audio_path, 44_100, 2, 2);
 
@@ -420,7 +423,11 @@ mod tests {
 
         assert_eq!(appended_song.song.tracks.len(), 2);
         assert_eq!(appended_song.song.clips.len(), 2);
-        assert!(appended_song.song.tracks.iter().any(|track| track.id == "track_click"));
+        assert!(appended_song
+            .song
+            .tracks
+            .iter()
+            .any(|track| track.id == "track_click"));
         assert!(appended_song
             .song
             .tracks
@@ -488,7 +495,8 @@ mod tests {
     #[test]
     fn migrates_v2_sections_to_v3_markers_on_load() {
         let root = tempdir().expect("temp dir should exist");
-        let song_dir = create_song_folder(root.path(), "migrate-v2").expect("folder should be created");
+        let song_dir =
+            create_song_folder(root.path(), "migrate-v2").expect("folder should be created");
 
         fs::write(
             song_file_path(&song_dir),

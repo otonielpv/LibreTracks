@@ -23,7 +23,7 @@ pub struct Song {
     pub duration_seconds: f64,
     pub tracks: Vec<Track>,
     pub clips: Vec<Clip>,
-    pub section_markers: Vec<SectionMarker>,
+    pub section_markers: Vec<Marker>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -63,7 +63,7 @@ pub struct Clip {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct SectionMarker {
+pub struct Marker {
     pub id: String,
     pub name: String,
     pub start_seconds: f64,
@@ -89,15 +89,6 @@ pub struct TempoMetadata {
     pub reference_file_path: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct DerivedSection {
-    pub marker_id: Option<String>,
-    pub name: String,
-    pub start_seconds: f64,
-    pub end_seconds: f64,
-    pub digit: Option<u8>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputBus {
     Main,
@@ -114,7 +105,7 @@ impl OutputBus {
 }
 
 impl Song {
-    pub fn sorted_section_markers(&self) -> Vec<&SectionMarker> {
+    pub fn sorted_markers(&self) -> Vec<&Marker> {
         let mut markers = self.section_markers.iter().collect::<Vec<_>>();
         markers.sort_by(|left, right| {
             left.start_seconds
@@ -124,64 +115,38 @@ impl Song {
         markers
     }
 
-    pub fn section_marker_by_id(&self, marker_id: &str) -> Option<&SectionMarker> {
-        self.section_markers.iter().find(|marker| marker.id == marker_id)
+    pub fn marker_by_id(&self, marker_id: &str) -> Option<&Marker> {
+        self.section_markers
+            .iter()
+            .find(|marker| marker.id == marker_id)
     }
 
-    pub fn section_marker_by_digit(&self, digit: u8) -> Option<&SectionMarker> {
+    pub fn marker_by_digit(&self, digit: u8) -> Option<&Marker> {
         self.section_markers
             .iter()
             .find(|marker| marker.digit == Some(digit))
     }
 
-    pub fn derived_sections(&self) -> Vec<DerivedSection> {
-        let markers = self.sorted_section_markers();
-        let mut sections = Vec::new();
-
-        if let Some(first_marker) = markers.first() {
-            if first_marker.start_seconds > 0.0 {
-                sections.push(DerivedSection {
-                    marker_id: None,
-                    name: "Inicio".to_string(),
-                    start_seconds: 0.0,
-                    end_seconds: first_marker.start_seconds.min(self.duration_seconds),
-                    digit: None,
-                });
-            }
+    pub fn marker_at(&self, position_seconds: f64) -> Option<Marker> {
+        if !(0.0..self.duration_seconds).contains(&position_seconds) {
+            return None;
         }
 
-        for (index, marker) in markers.iter().enumerate() {
-            let end_seconds = markers
-                .get(index + 1)
-                .map(|next_marker| next_marker.start_seconds)
-                .unwrap_or(self.duration_seconds)
-                .min(self.duration_seconds);
-
-            if end_seconds <= marker.start_seconds {
-                continue;
-            }
-
-            sections.push(DerivedSection {
-                marker_id: Some(marker.id.clone()),
-                name: marker.name.clone(),
-                start_seconds: marker.start_seconds,
-                end_seconds,
-                digit: marker.digit,
-            });
-        }
-
-        sections
-    }
-
-    pub fn derived_section_at(&self, position_seconds: f64) -> Option<DerivedSection> {
-        self.derived_sections().into_iter().find(|section| {
-            position_seconds >= section.start_seconds && position_seconds < section.end_seconds
-        })
-    }
-
-    pub fn derived_section_for_marker(&self, marker_id: &str) -> Option<DerivedSection> {
-        self.derived_sections()
+        self.sorted_markers()
             .into_iter()
-            .find(|section| section.marker_id.as_deref() == Some(marker_id))
+            .rev()
+            .find(|marker| marker.start_seconds <= position_seconds)
+            .cloned()
+    }
+
+    pub fn next_marker_after(&self, position_seconds: f64) -> Option<Marker> {
+        self.sorted_markers()
+            .into_iter()
+            .find(|marker| marker.start_seconds > position_seconds)
+            .cloned()
+    }
+
+    pub fn next_marker_name(&self) -> String {
+        format!("Marker {}", self.section_markers.len() + 1)
     }
 }

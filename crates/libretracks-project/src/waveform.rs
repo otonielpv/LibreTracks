@@ -147,8 +147,8 @@ fn estimate_tempo_candidate(waveform: &WaveformSummary) -> Option<TempoCandidate
     }
 
     let lag_min = ((bucket_rate * 60.0 / 220.0).round() as usize).max(1);
-    let lag_max = ((bucket_rate * 60.0 / 60.0).round() as usize)
-        .min(centered.len().saturating_sub(1));
+    let lag_max =
+        ((bucket_rate * 60.0 / 60.0).round() as usize).min(centered.len().saturating_sub(1));
     if lag_min >= lag_max {
         return None;
     }
@@ -387,7 +387,10 @@ fn collect_float_waveform_streaming(
         channel_index += 1;
 
         if channel_index == channel_count {
-            buckets.push_frame(frame_index, (frame_sum / channel_count as f32).clamp(-1.0, 1.0));
+            buckets.push_frame(
+                frame_index,
+                (frame_sum / channel_count as f32).clamp(-1.0, 1.0),
+            );
             frame_sum = 0.0;
             channel_index = 0;
             frame_index += 1;
@@ -417,7 +420,10 @@ fn collect_int_waveform_streaming(
         channel_index += 1;
 
         if channel_index == channel_count {
-            buckets.push_frame(frame_index, (frame_sum / channel_count as f32).clamp(-1.0, 1.0));
+            buckets.push_frame(
+                frame_index,
+                (frame_sum / channel_count as f32).clamp(-1.0, 1.0),
+            );
             frame_sum = 0.0;
             channel_index = 0;
             frame_index += 1;

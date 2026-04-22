@@ -928,10 +928,11 @@ impl MemoryClipReader {
             if gain.abs() > GAIN_EPSILON {
                 let buffer_base = (offset_frames + frame_offset) * output_channels;
                 for channel in 0..output_channels {
-                    buffer[buffer_base + channel] +=
-                        self.shared_buffer
-                            .read_sample(self.current_frame, channel, output_channels)
-                            * gain;
+                    buffer[buffer_base + channel] += self.shared_buffer.read_sample(
+                        self.current_frame,
+                        channel,
+                        output_channels,
+                    ) * gain;
                 }
             }
 
@@ -1238,12 +1239,11 @@ fn run_audio_thread(
                 debug_state
                     .record_command(AudioCommandKind::SyncSong, Some("mix_only".to_string()));
 
-                let result =
-                    ensure_runtime(&mut runtime, &audio_buffers)
-                        .sync_song(&song)
-                        .map(|report| {
-                            debug_state.record_sync(&report);
-                        });
+                let result = ensure_runtime(&mut runtime, &audio_buffers)
+                    .sync_song(&song)
+                    .map(|report| {
+                        debug_state.record_sync(&report);
+                    });
 
                 for respond_to in respond_tos {
                     let _ = respond_to.send(result.clone());
@@ -1515,8 +1515,8 @@ impl MixClipState {
         for frame_offset in 0..frame_count {
             let dynamic_gain =
                 interpolated_gain(start_gain, target_gain, frame_offset, frame_count);
-            let clip_frame_position = (overlap_start_frame - self.plan.timeline_start_frame)
-                + frame_offset as u64;
+            let clip_frame_position =
+                (overlap_start_frame - self.plan.timeline_start_frame) + frame_offset as u64;
             let edge_gain = self.plan.edge_gain(clip_frame_position);
 
             self.reader.mix_into(
@@ -1550,7 +1550,11 @@ fn interpolated_gain(
     start_gain + (target_gain - start_gain) * gain_ratio
 }
 
-fn push_block_into_ring(producer: &mut Producer<OutputSample>, block: &[f32], generation: u64) -> bool {
+fn push_block_into_ring(
+    producer: &mut Producer<OutputSample>,
+    block: &[f32],
+    generation: u64,
+) -> bool {
     for &sample in block {
         if producer
             .push(OutputSample {
@@ -1582,7 +1586,10 @@ fn build_playback_plans(
             clip_id: clip.id.clone(),
             track_id: clip.track_id.clone(),
             file_path: song_dir.join(&clip.file_path),
-            timeline_start_frame: seconds_to_frames(clip.timeline_start_seconds, output_sample_rate),
+            timeline_start_frame: seconds_to_frames(
+                clip.timeline_start_seconds,
+                output_sample_rate,
+            ),
             duration_frames: seconds_to_frames(clip.duration_seconds, output_sample_rate),
             fade_in_frames: clip
                 .fade_in_seconds
@@ -1711,8 +1718,7 @@ mod tests {
         path::{Path, PathBuf},
         sync::{
             atomic::{AtomicU64, Ordering},
-            mpsc,
-            Arc,
+            mpsc, Arc,
         },
         thread,
         time::Duration,
@@ -2065,12 +2071,7 @@ mod tests {
     #[test]
     fn memory_clip_reader_reads_pcm_from_shared_buffer() {
         let clip_path = PathBuf::from("audio/shared-buffer.wav");
-        let cache = cache_with_shared_buffer(
-            &clip_path,
-            vec![0.25, -0.25, 0.5, -0.5],
-            48_000,
-            2,
-        );
+        let cache = cache_with_shared_buffer(&clip_path, vec![0.25, -0.25, 0.5, -0.5], 48_000, 2);
         let mut reader = MemoryClipReader::open(
             &PlaybackClipPlan {
                 clip_id: "clip".into(),
@@ -2099,12 +2100,8 @@ mod tests {
     #[test]
     fn memory_clip_reader_seek_to_jumps_directly_to_target_frame() {
         let clip_path = PathBuf::from("audio/seek-buffer.wav");
-        let cache = cache_with_shared_buffer(
-            &clip_path,
-            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-            48_000,
-            2,
-        );
+        let cache =
+            cache_with_shared_buffer(&clip_path, vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6], 48_000, 2);
         let mut reader = MemoryClipReader::open(
             &PlaybackClipPlan {
                 clip_id: "clip".into(),
@@ -2134,12 +2131,7 @@ mod tests {
     #[test]
     fn memory_clip_reader_honors_source_start_offset_when_opening() {
         let clip_path = PathBuf::from("audio/offset-buffer.wav");
-        let cache = cache_with_shared_buffer(
-            &clip_path,
-            vec![0.1, 0.2, 0.3, 0.4],
-            4,
-            1,
-        );
+        let cache = cache_with_shared_buffer(&clip_path, vec![0.1, 0.2, 0.3, 0.4], 4, 1);
         let reader = MemoryClipReader::open(
             &PlaybackClipPlan {
                 clip_id: "clip".into(),

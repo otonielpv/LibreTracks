@@ -2,16 +2,14 @@ pub mod model;
 pub mod validation;
 
 pub use model::{
-    Clip, DerivedSection, OutputBus, Project, SectionMarker, Song, TempoMetadata, TempoSource,
-    Track, TrackKind,
+    Clip, Marker, OutputBus, Project, Song, TempoMetadata, TempoSource, Track, TrackKind,
 };
 pub use validation::{validate_song, DomainError};
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        validate_song, Clip, OutputBus, SectionMarker, Song, TempoMetadata, TempoSource, Track,
-        TrackKind,
+        validate_song, Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
     };
 
     fn valid_song() -> Song {
@@ -63,7 +61,7 @@ mod tests {
                 fade_in_seconds: None,
                 fade_out_seconds: None,
             }],
-            section_markers: vec![SectionMarker {
+            section_markers: vec![Marker {
                 id: "section_intro".into(),
                 name: "Intro".into(),
                 start_seconds: 0.0,
@@ -110,7 +108,7 @@ mod tests {
     #[test]
     fn rejects_duplicate_marker_digits() {
         let mut song = valid_song();
-        song.section_markers.push(SectionMarker {
+        song.section_markers.push(Marker {
             id: "section_verse".into(),
             name: "Verse".into(),
             start_seconds: 32.0,
@@ -122,16 +120,16 @@ mod tests {
     }
 
     #[test]
-    fn derives_sections_from_markers() {
+    fn resolves_the_current_marker_at_a_position() {
         let mut song = valid_song();
         song.section_markers = vec![
-            SectionMarker {
+            Marker {
                 id: "section_verse".into(),
                 name: "Verse".into(),
                 start_seconds: 16.0,
                 digit: Some(2),
             },
-            SectionMarker {
+            Marker {
                 id: "section_outro".into(),
                 name: "Outro".into(),
                 start_seconds: 48.0,
@@ -139,15 +137,24 @@ mod tests {
             },
         ];
 
-        let sections = song.derived_sections();
+        let marker = song
+            .marker_at(52.0)
+            .expect("marker should resolve at position");
 
-        assert_eq!(sections.len(), 3);
-        assert_eq!(sections[0].name, "Inicio");
-        assert_eq!(sections[0].start_seconds, 0.0);
-        assert_eq!(sections[0].end_seconds, 16.0);
-        assert_eq!(sections[1].name, "Verse");
-        assert_eq!(sections[1].end_seconds, 48.0);
-        assert_eq!(sections[2].name, "Outro");
-        assert_eq!(sections[2].end_seconds, 240.0);
+        assert_eq!(marker.id, "section_outro");
+        assert_eq!(marker.name, "Outro");
+    }
+
+    #[test]
+    fn auto_names_the_next_marker() {
+        let mut song = valid_song();
+        song.section_markers.push(Marker {
+            id: "section_verse".into(),
+            name: "Verse".into(),
+            start_seconds: 32.0,
+            digit: Some(2),
+        });
+
+        assert_eq!(song.next_marker_name(), "Marker 3");
     }
 }
