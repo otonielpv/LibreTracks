@@ -128,6 +128,11 @@ type TimelinePanState = {
   originCameraX: number;
 } | null;
 
+type LiveClipMoveState = {
+  inFlight: boolean;
+  queuedSeconds: number | null;
+};
+
 type LiveTrackMixRequestState = {
   inFlight: boolean;
   queuedKeys: Set<keyof OptimisticMixState>;
@@ -452,6 +457,7 @@ export function TransportPanel() {
   const songRef = useRef<SongView | null>(null);
   const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
   const clipDragRef = useRef<ClipDragState>(null);
+  const clipMoveLiveStatesRef = useRef<Record<string, LiveClipMoveState>>({});
   const trackMixRequestIdsRef = useRef<Record<string, number>>({});
   const trackMixLiveStatesRef = useRef<Record<string, LiveTrackMixRequestState>>({});
   const playheadDragRef = useRef<PlayheadDragState>(null);
@@ -688,6 +694,61 @@ export function TransportPanel() {
       });
     },
     [clearTrackOptimisticMixKeys, flushTrackMixLiveUpdates],
+  );
+
+  const flushClipMoveLiveUpdates = useCallback(
+    async (clipId: string) => {
+      const liveStates = clipMoveLiveStatesRef.current;
+      const liveState = liveStates[clipId];
+      if (!liveState || liveState.inFlight) {
+        return;
+      }
+
+      liveState.inFlight = true;
+
+      try {
+        while (liveState.queuedSeconds !== null) {
+          const queuedSeconds = liveState.queuedSeconds;
+          liveState.queuedSeconds = null;
+          const nextSnapshot = await moveClip(clipId, queuedSeconds);
+          applyPlaybackSnapshot(nextSnapshot);
+        }
+      } finally {
+        liveState.inFlight = false;
+        if (liveState.queuedSeconds !== null) {
+          void flushClipMoveLiveUpdates(clipId);
+          return;
+        }
+
+        delete liveStates[clipId];
+        if (clipDragRef.current?.clipId !== clipId) {
+          clipPreviewSecondsRef.current = {};
+        }
+      }
+    },
+    [applyPlaybackSnapshot],
+  );
+
+  const queueClipMoveLiveUpdate = useCallback(
+    (clipId: string, previewSeconds: number) => {
+      const liveStates = clipMoveLiveStatesRef.current;
+      const liveState = liveStates[clipId] ?? {
+        inFlight: false,
+        queuedSeconds: null,
+      };
+
+      liveState.queuedSeconds = previewSeconds;
+      liveStates[clipId] = liveState;
+
+      void flushClipMoveLiveUpdates(clipId).catch((error) => {
+        delete clipMoveLiveStatesRef.current[clipId];
+        if (clipDragRef.current?.clipId !== clipId) {
+          clipPreviewSecondsRef.current = {};
+        }
+        setStatus(`Error: ${String(error)}`);
+      });
+    },
+    [flushClipMoveLiveUpdates],
   );
 
   const clearTrackDragVisuals = useCallback(() => {
@@ -1419,6 +1480,9 @@ export function TransportPanel() {
         };
         clipDragRef.current = nextDrag;
         clipPreviewSecondsRef.current = { [nextDrag.clipId]: nextDrag.previewSeconds };
+        if (nextDrag.hasMoved) {
+          queueClipMoveLiveUpdate(nextDrag.clipId, nextDrag.previewSeconds);
+        }
       }
 
       const playheadDrag = playheadDragRef.current;
@@ -1487,19 +1551,19 @@ export function TransportPanel() {
 
       const activeClipDrag = clipDragRef.current;
       clipDragRef.current = null;
-      clipPreviewSecondsRef.current = {};
       if (activeClipDrag) {
         const movedEnough =
           activeClipDrag.hasMoved ||
           Math.abs(event.clientX - activeClipDrag.startClientX) > DRAG_THRESHOLD_PX;
         if (movedEnough) {
-          void runAction(async () => {
-            const nextSnapshot = await moveClip(activeClipDrag.clipId, activeClipDrag.previewSeconds);
-            applyPlaybackSnapshot(nextSnapshot);
-            const clip = findClip(songRef.current, activeClipDrag.clipId);
-            setStatus(`Clip movido: ${clip?.trackName ?? activeClipDrag.clipId}`);
-          });
+          queueClipMoveLiveUpdate(activeClipDrag.clipId, activeClipDrag.previewSeconds);
+          const clip = findClip(songRef.current, activeClipDrag.clipId);
+          setStatus(`Clip movido: ${clip?.trackName ?? activeClipDrag.clipId}`);
+        } else {
+          clipPreviewSecondsRef.current = {};
         }
+      } else {
+        clipPreviewSecondsRef.current = {};
       }
 
       const activePlayheadDrag = playheadDragRef.current;
