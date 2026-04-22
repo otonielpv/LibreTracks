@@ -356,7 +356,6 @@ function lanePointerToClip(
 }
 
 export function TransportPanel() {
-  const [snapshot, setSnapshot] = useState<TransportSnapshot | null>(null);
   const [song, setSong] = useState<SongView | null>(null);
   const [waveformCache, setWaveformCache] = useState<Record<string, WaveformSummaryDto>>({});
   const [clipsByTrack, setClipsByTrack] = useState<Record<string, ClipSummary[]>>({});
@@ -379,7 +378,6 @@ export function TransportPanel() {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [clipDrag, setClipDrag] = useState<ClipDragState>(null);
   const [playheadDrag, setPlayheadDrag] = useState<PlayheadDragState>(null);
-  const [displayPositionSeconds, setDisplayPositionSeconds] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const [trackDrag, setTrackDrag] = useState<TrackDragState>(null);
   const [timelinePan, setTimelinePan] = useState<TimelinePanState>(null);
@@ -408,6 +406,7 @@ export function TransportPanel() {
   const songDurationSecondsRef = useRef(0);
   const transportAnchorMetaRef = useRef<TransportAnchorMeta | null>(null);
   const cameraXRef = useRef(0);
+  const snapshotRef = useRef<TransportSnapshot | null>(useTransportStore.getState().playback);
   const songRef = useRef<SongView | null>(null);
   const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
   const volumeDraftsRef = useRef<Record<string, number>>({});
@@ -415,6 +414,21 @@ export function TransportPanel() {
   const trackMixSyncTimeoutsRef = useRef<Record<string, number>>({});
   const trackMixSyncRequestIdRef = useRef(0);
   const playheadDragRef = useRef<PlayheadDragState>(null);
+  const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
+  const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
+  const pendingMarkerJumpSignature = useTransportStore((state) => {
+    const pendingJump = state.playback?.pendingMarkerJump;
+    if (!pendingJump) {
+      return "";
+    }
+
+    return [
+      pendingJump.targetMarkerId,
+      pendingJump.targetMarkerName,
+      pendingJump.trigger,
+      pendingJump.executeAtSeconds.toFixed(6),
+    ].join("|");
+  });
 
   songRef.current = song;
   tracksByIdRef.current = tracksById;
@@ -435,6 +449,11 @@ export function TransportPanel() {
         setIsBusy(false);
       }
     }
+  }, []);
+
+  const applyPlaybackSnapshot = useCallback((nextSnapshot: TransportSnapshot | null) => {
+    snapshotRef.current = nextSnapshot;
+    useTransportStore.getState().setPlaybackState(nextSnapshot);
   }, []);
 
   const clearTrackMixSyncTimeout = useCallback((trackId: string) => {
@@ -506,7 +525,7 @@ export function TransportPanel() {
         });
 
         if (requestId === trackMixSyncRequestIdRef.current) {
-          setSnapshot(nextSnapshot);
+          applyPlaybackSnapshot(nextSnapshot);
         }
       });
 
@@ -514,7 +533,7 @@ export function TransportPanel() {
         clearTrackMixDrafts(trackId);
       }
     },
-    [clearTrackMixDrafts, clearTrackMixSyncTimeout, runAction],
+    [applyPlaybackSnapshot, clearTrackMixDrafts, clearTrackMixSyncTimeout, runAction],
   );
 
   const scheduleTrackMixSync = useCallback(
@@ -567,9 +586,41 @@ export function TransportPanel() {
       running: isRunning,
     };
 
-    setDisplayPositionSeconds(nextSnapshot.positionSeconds);
     syncLivePosition(isRunning ? anchorPositionSeconds : nextSnapshot.positionSeconds);
   }
+
+  useEffect(() => {
+    const syncPlaybackSnapshot = (nextSnapshot: TransportSnapshot | null) => {
+      snapshotRef.current = nextSnapshot;
+
+      if (!nextSnapshot) {
+        playbackVisualAnchorRef.current = {
+          anchorPositionSeconds: 0,
+          anchorReceivedAtMs: performance.now(),
+          durationSeconds: songDurationSecondsRef.current,
+          running: false,
+        };
+        syncLivePosition(0);
+        return;
+      }
+
+      const snapshotKey = transportSnapshotKey(nextSnapshot);
+      const anchorMeta =
+        transportAnchorMetaRef.current?.snapshotKey === snapshotKey
+          ? transportAnchorMetaRef.current
+          : null;
+
+      if (anchorMeta) {
+        transportAnchorMetaRef.current = null;
+      }
+
+      applyTransportVisualAnchor(nextSnapshot, anchorMeta);
+    };
+
+    syncPlaybackSnapshot(useTransportStore.getState().playback);
+
+    return useTransportStore.subscribe((state) => state.playback, syncPlaybackSnapshot);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -581,8 +632,7 @@ export function TransportPanel() {
         return;
       }
 
-      applyTransportVisualAnchor(nextSnapshot);
-      setSnapshot(nextSnapshot);
+      applyPlaybackSnapshot(nextSnapshot);
       setStatus(
         nextSnapshot.isNativeRuntime
           ? "Sesion desktop lista para edicion."
@@ -608,7 +658,7 @@ export function TransportPanel() {
         anchorPositionSeconds: event.anchorPositionSeconds,
         emittedAtUnixMs: event.emittedAtUnixMs,
       };
-      setSnapshot(event.snapshot);
+      applyPlaybackSnapshot(event.snapshot);
     }).then((nextUnlisten) => {
       if (!active) {
         nextUnlisten();
@@ -622,11 +672,7 @@ export function TransportPanel() {
       active = false;
       unlisten?.();
     };
-  }, []);
-
-  useEffect(() => {
-    useTransportStore.getState().setPlaybackState(snapshot);
-  }, [snapshot]);
+  }, [applyPlaybackSnapshot]);
 
   useEffect(() => {
     if (!isTauriApp) {
@@ -685,7 +731,7 @@ export function TransportPanel() {
     let active = true;
 
     async function loadSong() {
-      if (!snapshot || snapshot.projectRevision === 0) {
+      if (playbackProjectRevision === 0) {
         setSong(null);
         return;
       }
@@ -703,7 +749,7 @@ export function TransportPanel() {
     return () => {
       active = false;
     };
-  }, [snapshot?.projectRevision]);
+  }, [playbackProjectRevision]);
 
   useEffect(() => {
     if (!song) {
@@ -758,12 +804,12 @@ export function TransportPanel() {
   }, [song, waveformCache]);
 
   useEffect(() => {
-    if (snapshot?.playbackState === "playing") {
+    if (playbackState === "playing") {
       return;
     }
 
     useTransportStore.getState().setMeters({});
-  }, [snapshot?.playbackState, song?.projectRevision]);
+  }, [playbackState, song?.projectRevision]);
 
   useEffect(() => {
     if (!song) {
@@ -792,29 +838,12 @@ export function TransportPanel() {
     const songDurationSeconds = song?.durationSeconds ?? 0;
     songDurationSecondsRef.current = songDurationSeconds;
 
-    if (!snapshot) {
+    if (!snapshotRef.current) {
       return;
     }
 
-    const snapshotKey = transportSnapshotKey(snapshot);
-    const anchorMeta =
-      transportAnchorMetaRef.current?.snapshotKey === snapshotKey
-        ? transportAnchorMetaRef.current
-        : null;
-
-    if (anchorMeta) {
-      transportAnchorMetaRef.current = null;
-    }
-
-    applyTransportVisualAnchor(snapshot, anchorMeta);
-  }, [
-    snapshot,
-    snapshot?.playbackState,
-    snapshot?.positionSeconds,
-    song?.durationSeconds,
-    snapshot?.transportClock?.anchorPositionSeconds,
-    snapshot?.transportClock?.running,
-  ]);
+    applyTransportVisualAnchor(snapshotRef.current);
+  }, [song?.durationSeconds]);
 
   useEffect(() => {
     if (!song) {
@@ -872,7 +901,7 @@ export function TransportPanel() {
   }, []);
 
   useEffect(() => {
-    if (snapshot?.playbackState !== "playing") {
+    if (playbackState !== "playing") {
       return;
     }
 
@@ -894,19 +923,20 @@ export function TransportPanel() {
       );
 
       if (anchor.durationSeconds > 0 && nextPositionSeconds >= anchor.durationSeconds) {
+        const currentSnapshot = snapshotRef.current;
         const stoppedSnapshot =
-          snapshot?.playbackState === "playing"
+          currentSnapshot?.playbackState === "playing"
             ? {
-                ...snapshot,
+                ...currentSnapshot,
                 playbackState: "stopped" as const,
                 positionSeconds: 0,
-                transportClock: snapshot.transportClock
+                transportClock: currentSnapshot.transportClock
                   ? {
-                      ...snapshot.transportClock,
+                      ...currentSnapshot.transportClock,
                       anchorPositionSeconds: 0,
                       running: false,
                     }
-                  : snapshot.transportClock,
+                  : currentSnapshot.transportClock,
               }
             : null;
 
@@ -917,9 +947,8 @@ export function TransportPanel() {
           running: false,
         };
         displayPositionSecondsRef.current = 0;
-        setDisplayPositionSeconds(0);
         if (stoppedSnapshot) {
-          setSnapshot(stoppedSnapshot);
+          applyPlaybackSnapshot(stoppedSnapshot);
         }
         return;
       }
@@ -933,10 +962,10 @@ export function TransportPanel() {
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [playheadDrag, snapshot]);
+  }, [applyPlaybackSnapshot, playbackState, playheadDrag]);
 
   useEffect(() => {
-    if (!isTauriApp || snapshot?.playbackState !== "playing") {
+    if (!isTauriApp || playbackState !== "playing") {
       return;
     }
 
@@ -955,7 +984,7 @@ export function TransportPanel() {
           return;
         }
 
-        setSnapshot(nextSnapshot);
+        applyPlaybackSnapshot(nextSnapshot);
       } finally {
         inFlight = false;
       }
@@ -969,7 +998,7 @@ export function TransportPanel() {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [snapshot?.playbackState]);
+  }, [applyPlaybackSnapshot, playbackState]);
 
   useEffect(() => {
     const closeMenu = (event: PointerEvent) => {
@@ -1031,15 +1060,15 @@ export function TransportPanel() {
       if (event.code === "Space") {
         event.preventDefault();
         void runAction(async () => {
-          if (snapshot?.playbackState === "playing") {
+          if (snapshotRef.current?.playbackState === "playing") {
             const nextSnapshot = await pauseTransport();
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus("Reproduccion pausada.");
             return;
           }
 
           const nextSnapshot = await playTransport();
-          setSnapshot(nextSnapshot);
+          applyPlaybackSnapshot(nextSnapshot);
           setStatus("Reproduccion iniciada.");
         });
         return;
@@ -1061,7 +1090,7 @@ export function TransportPanel() {
         event.preventDefault();
         void runAction(async () => {
           const nextSnapshot = event.shiftKey ? await redoAction() : await undoAction();
-          setSnapshot(nextSnapshot);
+          applyPlaybackSnapshot(nextSnapshot);
           setStatus(event.shiftKey ? "Accion rehecha." : "Accion deshecha.");
         });
         return;
@@ -1071,7 +1100,7 @@ export function TransportPanel() {
         event.preventDefault();
         void runAction(async () => {
           const nextSnapshot = await redoAction();
-          setSnapshot(nextSnapshot);
+          applyPlaybackSnapshot(nextSnapshot);
           setStatus("Accion rehecha.");
         });
         return;
@@ -1088,10 +1117,10 @@ export function TransportPanel() {
         }
 
         void runAction(async () => {
-          const pendingJump = snapshot?.pendingMarkerJump;
+          const pendingJump = snapshotRef.current?.pendingMarkerJump;
           if (pendingJump && pendingJump.targetMarkerId === marker.id) {
             const nextSnapshot = await cancelMarkerJump();
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus(`Salto cancelado para digito ${keyDigit}.`);
             return;
           }
@@ -1110,10 +1139,10 @@ export function TransportPanel() {
           return;
         }
 
-        if (snapshot?.pendingMarkerJump) {
+        if (snapshotRef.current?.pendingMarkerJump) {
           void runAction(async () => {
             const nextSnapshot = await cancelMarkerJump();
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus("Salto cancelado.");
           });
           return;
@@ -1127,7 +1156,7 @@ export function TransportPanel() {
         event.preventDefault();
         void runAction(async () => {
           const nextSnapshot = await deleteClip(selectedClipId);
-          setSnapshot(nextSnapshot);
+          applyPlaybackSnapshot(nextSnapshot);
           setSelectedClipId(null);
           setStatus("Clip eliminado.");
         });
@@ -1139,6 +1168,7 @@ export function TransportPanel() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [
+    applyPlaybackSnapshot,
     clearSelections,
     handleSaveProjectAsClick,
     handleSaveProjectClick,
@@ -1146,7 +1176,6 @@ export function TransportPanel() {
     runAction,
     scheduleMarkerJumpWithGlobalMode,
     selectedClipId,
-    snapshot,
     song,
   ]);
 
@@ -1199,7 +1228,7 @@ export function TransportPanel() {
 
       await runAction(async () => {
         const nextSnapshot = await moveClip(activeDrag.clipId, activeDrag.previewSeconds);
-        setSnapshot(nextSnapshot);
+        applyPlaybackSnapshot(nextSnapshot);
         const clip = findClip(song, activeDrag.clipId);
         setStatus(`Clip movido: ${clip?.trackName ?? activeDrag.clipId}`);
       });
@@ -1452,8 +1481,8 @@ export function TransportPanel() {
   }
 
   function restoreConfirmedTransportVisual() {
-    if (snapshot) {
-      applyTransportVisualAnchor(snapshot);
+    if (snapshotRef.current) {
+      applyTransportVisualAnchor(snapshotRef.current);
       return;
     }
 
@@ -1463,7 +1492,6 @@ export function TransportPanel() {
       durationSeconds: songDurationSecondsRef.current,
       running: false,
     };
-    setDisplayPositionSeconds(0);
     syncLivePosition(0);
   }
 
@@ -1472,7 +1500,7 @@ export function TransportPanel() {
 
     try {
       const nextSnapshot = await seekTransport(positionSeconds);
-      setSnapshot(nextSnapshot);
+      applyPlaybackSnapshot(nextSnapshot);
       setStatus(`Cursor movido a ${formatClock(nextSnapshot.positionSeconds)}`);
     } catch (error) {
       restoreConfirmedTransportVisual();
@@ -1509,17 +1537,20 @@ export function TransportPanel() {
   const effectiveZoomMin = song ? fitAllZoomLevel : ZOOM_MIN;
   const pixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
   const maxTimelineCameraX = getMaxCameraX(song?.durationSeconds ?? 0, pixelsPerSecond, laneViewportWidth);
-  const positionSeconds = playheadDrag?.currentSeconds ?? displayPositionSeconds;
-  const musicalPositionLabel =
-    snapshot?.musicalPosition?.display ??
-    (song ? formatMusicalPosition(positionSeconds, song.bpm, song.timeSignature) : "1.1.00");
+  const pendingMarkerJump = pendingMarkerJumpSignature
+    ? snapshotRef.current?.pendingMarkerJump ?? null
+    : null;
+  const readoutPositionSeconds = playheadDrag?.currentSeconds ?? displayPositionSecondsRef.current;
+  const musicalPositionLabel = song
+    ? formatMusicalPosition(readoutPositionSeconds, song.bpm, song.timeSignature)
+    : "1.1.00";
   const tempoSourceLabel =
     song?.tempoMetadata.source === "auto_import"
       ? `Detectado en importacion${song.tempoMetadata.confidence != null ? ` (${Math.round(song.tempoMetadata.confidence * 100)}%)` : ""}`
       : "Manual";
   const canPersistProject = Boolean(song);
   const isProjectEmpty = !song || song.tracks.length === 0;
-  const isProjectPending = Boolean(snapshot && snapshot.projectRevision > 0 && !song);
+  const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
   const shouldShowEmptyState = !isProjectPending && isProjectEmpty;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
@@ -1555,7 +1586,7 @@ export function TransportPanel() {
       trigger,
       trigger === "after_bars" ? bars : undefined,
     );
-    setSnapshot(nextSnapshot);
+    applyPlaybackSnapshot(nextSnapshot);
 
     if (trigger === "next_marker" && !nextSnapshot.pendingMarkerJump) {
       setStatus("Aviso: no quedan marcas por delante; salto en la siguiente marca ignorado.");
@@ -1579,9 +1610,9 @@ export function TransportPanel() {
     setSelectedTrackId(null);
     setContextMenu(null);
 
-    if (snapshot?.pendingMarkerJump?.targetMarkerId === section.id) {
+    if (snapshotRef.current?.pendingMarkerJump?.targetMarkerId === section.id) {
       const nextSnapshot = await cancelMarkerJump();
-      setSnapshot(nextSnapshot);
+      applyPlaybackSnapshot(nextSnapshot);
       setStatus(`Salto cancelado para ${section.name}.`);
       return;
     }
@@ -1604,7 +1635,6 @@ export function TransportPanel() {
   useEffect(() => {
     syncLivePosition(playheadDrag?.currentSeconds ?? displayPositionSecondsRef.current);
   }, [
-    displayPositionSeconds,
     pixelsPerSecond,
     playheadDrag?.currentSeconds,
     song?.bpm,
@@ -1627,7 +1657,7 @@ export function TransportPanel() {
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await createSectionMarker(positionSeconds);
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setSelectedClipId(null);
             setSelectedTrackId(null);
             setSelectedSectionId(null);
@@ -1738,7 +1768,7 @@ export function TransportPanel() {
 
     await runAction(async () => {
       const nextSnapshot = await moveTrack(moveArgs);
-      setSnapshot(nextSnapshot);
+      applyPlaybackSnapshot(nextSnapshot);
       setStatus(
         dropState.mode === "inside-folder"
           ? `Track movido dentro de ${targetTrack.name}.`
@@ -1778,7 +1808,7 @@ export function TransportPanel() {
         insertAfterTrackId: anchorTrack?.id ?? null,
         parentTrackId: parentTrackId ?? null,
       });
-      setSnapshot(nextSnapshot);
+      applyPlaybackSnapshot(nextSnapshot);
       setStatus(`Track creado: ${name}`);
     });
   }
@@ -1811,7 +1841,7 @@ export function TransportPanel() {
           }
           await runAction(async () => {
             const nextSnapshot = await updateTrack({ trackId: track.id, name: nextName });
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus(`Track renombrado: ${nextName}`);
           });
         },
@@ -1830,7 +1860,7 @@ export function TransportPanel() {
 
           await runAction(async () => {
             const nextSnapshot = await deleteTrack(track.id);
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus(`Track borrado: ${track.name}`);
           });
         },
@@ -1847,7 +1877,7 @@ export function TransportPanel() {
               trackId: track.id,
               parentTrackId: previousFolder.id,
             });
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus(`Track movido dentro de ${previousFolder.name}`);
           });
         },
@@ -1862,7 +1892,7 @@ export function TransportPanel() {
               insertAfterTrackId: track.parentTrackId ?? null,
               parentTrackId: parentOfParent,
             });
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus(`Track sacado del folder: ${track.name}`);
           });
         },
@@ -1935,9 +1965,9 @@ export function TransportPanel() {
         trackId,
         muted: !track.muted,
       });
-      setSnapshot(nextSnapshot);
+      applyPlaybackSnapshot(nextSnapshot);
     });
-  }, [runAction]);
+  }, [applyPlaybackSnapshot, runAction]);
 
   const handleTrackHeaderSoloToggle = useCallback((trackId: string) => {
     const track = findTrack(songRef.current, trackId);
@@ -1950,9 +1980,9 @@ export function TransportPanel() {
         trackId,
         solo: !track.solo,
       });
-      setSnapshot(nextSnapshot);
+      applyPlaybackSnapshot(nextSnapshot);
     });
-  }, [runAction]);
+  }, [applyPlaybackSnapshot, runAction]);
 
   const handleTrackHeaderVolumeChange = useCallback((trackId: string, nextVolume: number) => {
     setVolumeDrafts((current) => {
@@ -1999,7 +2029,7 @@ export function TransportPanel() {
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await splitClip(clip.id, currentCursorSeconds);
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus(`Clip cortado en ${formatClock(currentCursorSeconds)}`);
           });
         },
@@ -2012,7 +2042,7 @@ export function TransportPanel() {
               clip.id,
               clip.timelineStartSeconds + clip.durationSeconds + 1,
             );
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus(`Clip duplicado: ${clip.trackName}`);
           });
         },
@@ -2022,7 +2052,7 @@ export function TransportPanel() {
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await deleteClip(clip.id);
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setSelectedClipId(null);
             setStatus(`Clip eliminado: ${clip.trackName}`);
           });
@@ -2131,7 +2161,7 @@ export function TransportPanel() {
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await scheduleMarkerJump(section.id, "immediate");
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus(`Cursor enviado a ${section.name}`);
           });
         },
@@ -2146,7 +2176,7 @@ export function TransportPanel() {
           }
           await runAction(async () => {
             const nextSnapshot = await updateSectionMarker(section.id, nextName, section.startSeconds);
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setStatus(`Marca renombrada: ${nextName}`);
           });
         },
@@ -2157,7 +2187,7 @@ export function TransportPanel() {
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await deleteSectionMarker(section.id);
-            setSnapshot(nextSnapshot);
+            applyPlaybackSnapshot(nextSnapshot);
             setSelectedSectionId(null);
             setStatus(`Marca eliminada: ${section.name}`);
           });
@@ -2188,7 +2218,7 @@ export function TransportPanel() {
       async () => {
         const nextSnapshot = await pickAndImportSong();
         if (nextSnapshot) {
-          setSnapshot(nextSnapshot);
+          applyPlaybackSnapshot(nextSnapshot);
         }
         setStatus("Importacion de audio ejecutada.");
         setIsImportModalOpen(false);
@@ -2206,7 +2236,7 @@ export function TransportPanel() {
           return;
         }
 
-        setSnapshot(nextSnapshot);
+        applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath
             ? `Proyecto creado en ${nextSnapshot.songFilePath}.`
@@ -2218,7 +2248,7 @@ export function TransportPanel() {
   }
 
   function handleOpenProjectClick() {
-    void runAction(async () => setSnapshot((await openProject()) ?? snapshot), { busy: true });
+    void runAction(async () => applyPlaybackSnapshot((await openProject()) ?? snapshotRef.current), { busy: true });
   }
 
   function handleToggleTopMenu(menuKey: "file") {
@@ -2234,7 +2264,7 @@ export function TransportPanel() {
     void runAction(
       async () => {
         const nextSnapshot = await saveProject();
-        setSnapshot(nextSnapshot);
+        applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath
             ? `Proyecto guardado en ${nextSnapshot.songFilePath}.`
@@ -2253,7 +2283,7 @@ export function TransportPanel() {
           return;
         }
 
-        setSnapshot(nextSnapshot);
+        applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath
             ? `Proyecto guardado en ${nextSnapshot.songFilePath}.`
@@ -2357,7 +2387,7 @@ export function TransportPanel() {
 
                 void runAction(async () => {
                   const nextSnapshot = await updateSongTempo(nextBpm);
-                  setSnapshot(nextSnapshot);
+                  applyPlaybackSnapshot(nextSnapshot);
                   setStatus(`Tempo actualizado a ${nextBpm.toFixed(1)} BPM.`);
                 });
               }}
@@ -2383,7 +2413,7 @@ export function TransportPanel() {
               onClick={() =>
                 void runAction(async () => {
                   const nextSnapshot = await stopTransport();
-                  setSnapshot(nextSnapshot);
+                  applyPlaybackSnapshot(nextSnapshot);
                   setStatus("Reproduccion detenida.");
                 })
               }
@@ -2398,7 +2428,7 @@ export function TransportPanel() {
               onClick={() =>
                 void runAction(async () => {
                   const nextSnapshot = await playTransport();
-                  setSnapshot(nextSnapshot);
+                  applyPlaybackSnapshot(nextSnapshot);
                   setStatus("Reproduccion iniciada.");
                 })
               }
@@ -2412,7 +2442,7 @@ export function TransportPanel() {
               onClick={() =>
                 void runAction(async () => {
                   const nextSnapshot = await pauseTransport();
-                  setSnapshot(nextSnapshot);
+                  applyPlaybackSnapshot(nextSnapshot);
                   setStatus("Reproduccion pausada.");
                 })
               }
@@ -2435,10 +2465,10 @@ export function TransportPanel() {
             </div>
             <div className="lt-readout-block is-timecode">
               <span>Timecode</span>
-              <strong ref={transportReadoutValueRef}>{formatClock(positionSeconds)}</strong>
+              <strong ref={transportReadoutValueRef}>{formatClock(readoutPositionSeconds)}</strong>
             </div>
-            <span className={`transport-pill is-${snapshot?.playbackState ?? "empty"}`}>
-              {snapshot?.playbackState ?? "empty"}
+            <span className={`transport-pill is-${playbackState}`}>
+              {playbackState}
             </span>
           </div>
           </div>
@@ -2527,9 +2557,9 @@ export function TransportPanel() {
                   />
                 </label>
               ) : null}
-              {snapshot?.pendingMarkerJump ? (
+              {pendingMarkerJump ? (
                 <span>
-                  Armado: {snapshot.pendingMarkerJump.targetMarkerName} | {snapshot.pendingMarkerJump.trigger}
+                  Armado: {pendingMarkerJump.targetMarkerName} | {pendingMarkerJump.trigger}
                 </span>
               ) : null}
               <button
@@ -2537,11 +2567,11 @@ export function TransportPanel() {
                 className="lt-icon-button"
                 aria-label="Cancelar salto"
                 title="Cancelar salto"
-                disabled={!snapshot?.pendingMarkerJump}
+                disabled={!pendingMarkerJump}
                 onClick={() =>
                   void runAction(async () => {
                     const nextSnapshot = await cancelMarkerJump();
-                    setSnapshot(nextSnapshot);
+                    applyPlaybackSnapshot(nextSnapshot);
                     setStatus("Salto cancelado.");
                   })
                 }
@@ -2616,7 +2646,7 @@ export function TransportPanel() {
                   timelineGrid={timelineGrid}
                   markers={song?.sectionMarkers ?? []}
                   selectedMarkerId={selectedSectionId}
-                  pendingMarkerJump={snapshot?.pendingMarkerJump ?? null}
+                  pendingMarkerJump={pendingMarkerJump}
                   playheadSecondsRef={displayPositionSecondsRef}
                   previewPlayheadSeconds={playheadDrag?.currentSeconds ?? null}
                   playheadColor={playheadColor}
