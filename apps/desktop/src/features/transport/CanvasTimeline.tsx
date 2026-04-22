@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MutableRefObject, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type MutableRefObject, type ReactNode } from "react";
 
 import type {
   ClipSummary,
@@ -442,6 +442,49 @@ function getOrCreateWaveformBitmap(
   return bitmap;
 }
 
+function buildTrackStructureSignature(song: SongView, visibleTracks: TrackSummary[]) {
+  const trackStructureSignature = song.tracks
+    .map((track) => [track.id, track.kind, track.parentTrackId ?? "root"].join(":"))
+    .join("|");
+  const visibleTrackOrderSignature = visibleTracks.map((track) => track.id).join("|");
+  return `${trackStructureSignature}#visible=${visibleTrackOrderSignature}`;
+}
+
+function buildClipSceneSignature(clipsByTrack: Record<string, ClipSummary[]>) {
+  return Object.keys(clipsByTrack)
+    .sort()
+    .map((trackId) =>
+      `${trackId}:${(clipsByTrack[trackId] ?? [])
+        .map((clip) =>
+          [
+            clip.id,
+            clip.trackId,
+            clip.waveformKey,
+            clip.timelineStartSeconds.toFixed(6),
+            clip.sourceStartSeconds.toFixed(6),
+            clip.sourceDurationSeconds.toFixed(6),
+            clip.durationSeconds.toFixed(6),
+          ].join(":"),
+        )
+        .join("|")}`,
+    )
+    .join("#");
+}
+
+function buildPreviewClipSignature(previewClipSeconds: Record<string, number>) {
+  return Object.entries(previewClipSeconds)
+    .sort(([leftId], [rightId]) => leftId.localeCompare(rightId))
+    .map(([clipId, seconds]) => `${clipId}:${seconds.toFixed(6)}`)
+    .join("|");
+}
+
+function buildWaveformCacheSignature(waveformCache: Record<string, WaveformSummaryDto>) {
+  return Object.entries(waveformCache)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    .map(([waveformKey, summary]) => `${waveformKey}:${summary.version}:${summary.bucketCount}`)
+    .join("|");
+}
+
 function drawTrackScene(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
@@ -764,6 +807,19 @@ export function TimelineTrackCanvas({
     playheadColor,
   });
   const sceneVersionRef = useRef(0);
+  const trackStructureSignature = useMemo(
+    () => buildTrackStructureSignature(song, visibleTracks),
+    [song.tracks, visibleTracks],
+  );
+  const clipSceneSignature = useMemo(() => buildClipSceneSignature(clipsByTrack), [clipsByTrack]);
+  const previewClipSignature = useMemo(
+    () => buildPreviewClipSignature(previewClipSeconds),
+    [previewClipSeconds],
+  );
+  const waveformCacheSignature = useMemo(
+    () => buildWaveformCacheSignature(waveformCache),
+    [waveformCache],
+  );
 
   snapshotRef.current = {
     width,
@@ -785,23 +841,22 @@ export function TimelineTrackCanvas({
   useEffect(() => {
     sceneVersionRef.current += 1;
   }, [
-    clipsByTrack,
+    clipSceneSignature,
     height,
     pixelsPerSecond,
-    previewClipSeconds,
+    previewClipSignature,
     selectedClipId,
-    song,
+    trackStructureSignature,
     timelineGrid,
     trackHeight,
-    visibleTracks,
-    waveformCache,
+    waveformCacheSignature,
     width,
   ]);
 
   useEffect(() => {
     waveformBitmapCacheRef.current.clear();
     sceneVersionRef.current += 1;
-  }, [pixelsPerSecond, song.projectRevision, trackHeight]);
+  }, [clipSceneSignature, pixelsPerSecond, trackHeight, waveformCacheSignature]);
 
   useEffect(() => {
     const baseCanvas = baseCanvasRef.current;

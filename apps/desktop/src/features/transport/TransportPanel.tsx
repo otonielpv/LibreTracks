@@ -243,6 +243,48 @@ function trackChildrenCount(song: SongView, trackId: string) {
   return song.tracks.filter((track) => track.parentTrackId === trackId).length;
 }
 
+function isClipStructurallyEqual(left: ClipSummary, right: ClipSummary) {
+  return (
+    left.id === right.id &&
+    left.trackId === right.trackId &&
+    left.waveformKey === right.waveformKey &&
+    left.timelineStartSeconds === right.timelineStartSeconds &&
+    left.sourceStartSeconds === right.sourceStartSeconds &&
+    left.sourceDurationSeconds === right.sourceDurationSeconds &&
+    left.durationSeconds === right.durationSeconds
+  );
+}
+
+function buildMemoizedClipsByTrack(
+  song: SongView,
+  current: Record<string, ClipSummary[]>,
+): Record<string, ClipSummary[]> {
+  const nextBuckets = Object.fromEntries(song.tracks.map((track) => [track.id, [] as ClipSummary[]]));
+
+  for (const clip of song.clips) {
+    nextBuckets[clip.trackId] ??= [];
+    nextBuckets[clip.trackId].push(clip);
+  }
+
+  let hasChanged = Object.keys(current).length !== Object.keys(nextBuckets).length;
+  const nextClipsByTrack: Record<string, ClipSummary[]> = {};
+
+  for (const track of song.tracks) {
+    const nextTrackClips = nextBuckets[track.id] ?? [];
+    const currentTrackClips = current[track.id] ?? [];
+    const canReuseTrackClips =
+      nextTrackClips.length === currentTrackClips.length &&
+      nextTrackClips.every((clip, index) => isClipStructurallyEqual(clip, currentTrackClips[index]));
+
+    nextClipsByTrack[track.id] = canReuseTrackClips ? currentTrackClips : nextTrackClips;
+    if (!canReuseTrackClips) {
+      hasChanged = true;
+    }
+  }
+
+  return hasChanged ? nextClipsByTrack : current;
+}
+
 function isTrackDescendant(song: SongView, candidateTrackId: string | null, trackId: string) {
   let cursor = candidateTrackId;
 
@@ -828,15 +870,9 @@ export function TransportPanel() {
     }
 
     const nextTracksById = Object.fromEntries(song.tracks.map((track) => [track.id, track]));
-    const nextClipsByTrack = Object.fromEntries(song.tracks.map((track) => [track.id, [] as ClipSummary[]]));
-
-    for (const clip of song.clips) {
-      nextClipsByTrack[clip.trackId] ??= [];
-      nextClipsByTrack[clip.trackId].push(clip);
-    }
 
     setTracksById(nextTracksById);
-    setClipsByTrack(nextClipsByTrack);
+    setClipsByTrack((current) => buildMemoizedClipsByTrack(song, current));
   }, [song]);
 
   useEffect(() => {
