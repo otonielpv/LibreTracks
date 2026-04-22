@@ -23,7 +23,7 @@ type TrackHeaderItemProps = {
   onSelectTrack: (trackId: string, trackName: string) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
   onStartTrackDrag: (
-    event: ReactMouseEvent<HTMLButtonElement>,
+    event: ReactMouseEvent<HTMLDivElement>,
     trackId: string,
   ) => void;
   onToggleFolder: (trackId: string) => void;
@@ -61,6 +61,20 @@ function TrackHeaderItemComponent({
   onCommitVolume,
 }: TrackHeaderItemProps) {
   const volumeFill = `${(volumeValue * 100).toFixed(2)}%`;
+  const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest(
+        'button, input, label, textarea, select, .lt-track-toggle-group, .lt-folder-toggle, .lt-track-volume',
+      )
+    ) {
+      return;
+    }
+
+    onStartTrackDrag(event, trackId);
+  };
+
   const metaLabel =
     trackKind === "folder"
       ? `${childCount} hijos`
@@ -79,6 +93,7 @@ function TrackHeaderItemComponent({
       style={{ height: trackHeight, paddingLeft: 16 + trackDepth * 22 }}
       role="button"
       tabIndex={0}
+      onMouseDown={handleMouseDown}
       onClick={() => onSelectTrack(trackId, trackName)}
       onContextMenu={(event) => onOpenContextMenu(event, trackId)}
     >
@@ -88,7 +103,6 @@ function TrackHeaderItemComponent({
             type="button"
             className="lt-track-drag-handle"
             aria-label={`Mover ${trackName}`}
-            onMouseDown={(event) => onStartTrackDrag(event, trackId)}
           >
             ::
           </button>

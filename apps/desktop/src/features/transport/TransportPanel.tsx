@@ -1733,7 +1733,7 @@ export function TransportPanel() {
   }
 
   const handleTrackHeaderDragStart = useCallback(
-    (event: ReactMouseEvent<HTMLButtonElement>, trackId: string) => {
+    (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => {
       if (event.button !== 0) {
         return;
       }
