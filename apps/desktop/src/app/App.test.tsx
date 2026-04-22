@@ -129,7 +129,7 @@ function mockTrackRowDragGeometry(container: HTMLElement) {
 
 describe("App", () => {
   it("renders the timeline-centric DAW shell", async () => {
-    await renderApp();
+    const { container } = await renderApp();
 
     expect(screen.getByText("LIBRETRACKS")).toBeTruthy();
     expect(screen.getByRole("button", { name: /reproducir/i })).toBeTruthy();
@@ -137,6 +137,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /detener/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /browser/i })).toBeTruthy();
     expect(screen.queryByText(/submezclas/i)).toBeNull();
+    expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();
   });
 
   it("supports transport shortcuts from the keyboard", async () => {

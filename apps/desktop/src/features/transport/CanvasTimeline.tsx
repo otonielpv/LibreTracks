@@ -48,6 +48,10 @@ type TrackSceneSnapshot = Omit<TrackCanvasProps, "cameraXRef">;
 
 type WaveformBitmap = HTMLCanvasElement;
 
+function isRenderableCanvasSize(value: number) {
+  return Number.isFinite(value) && value > 0;
+}
+
 function setupCanvas(canvas: HTMLCanvasElement, width: number, height: number) {
   if (typeof globalThis === "object" && "__vitest_worker__" in globalThis) {
     return null;
@@ -683,70 +687,78 @@ export function TimelineRulerCanvas({
 
     const render = () => {
       const snapshot = snapshotRef.current;
+      if (!isRenderableCanvasSize(snapshot.width) || !isRenderableCanvasSize(snapshot.height)) {
+        animationFrameId = window.requestAnimationFrame(render);
+        return;
+      }
+
       const cameraX = cameraXRef.current;
 
-      if (lastBaseSceneVersion !== sceneVersionRef.current || lastBaseCameraX !== cameraX) {
-        const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
-        if (baseContext) {
-          baseContext.clearRect(0, 0, snapshot.width, snapshot.height);
-          baseContext.fillStyle = "#2a2a2a";
-          baseContext.fillRect(0, 0, snapshot.width, snapshot.height);
-          drawGridLines(
-            baseContext,
-            snapshot.timelineGrid,
-            snapshot.width,
-            snapshot.height,
-            cameraX,
-            snapshot.pixelsPerSecond,
-          );
+      try {
+        if (lastBaseSceneVersion !== sceneVersionRef.current || lastBaseCameraX !== cameraX) {
+          const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
+          if (baseContext) {
+            baseContext.clearRect(0, 0, snapshot.width, snapshot.height);
+            baseContext.fillStyle = "#2a2a2a";
+            baseContext.fillRect(0, 0, snapshot.width, snapshot.height);
+            drawGridLines(
+              baseContext,
+              snapshot.timelineGrid,
+              snapshot.width,
+              snapshot.height,
+              cameraX,
+              snapshot.pixelsPerSecond,
+            );
+          }
+
+          lastBaseSceneVersion = sceneVersionRef.current;
+          lastBaseCameraX = cameraX;
         }
 
-        lastBaseSceneVersion = sceneVersionRef.current;
-        lastBaseCameraX = cameraX;
-      }
-
-      if (overlayContentRef.current && lastOverlayTransformCameraX !== cameraX) {
-        overlayContentRef.current.style.transform = `translate3d(${-cameraX}px, 0, 0)`;
-        lastOverlayTransformCameraX = cameraX;
-      }
-
-      const overlayContext = setupCanvas(overlayCanvas, snapshot.width, snapshot.height);
-      if (overlayContext) {
-        overlayContext.clearRect(0, 0, snapshot.width, snapshot.height);
-
-        if (snapshot.pendingMarkerJump) {
-          drawPendingExecutionLine(
-            overlayContext,
-            snapshot.width,
-            snapshot.height,
-            cameraX,
-            snapshot.pixelsPerSecond,
-            snapshot.pendingMarkerJump.executeAtSeconds,
-          );
+        if (overlayContentRef.current && lastOverlayTransformCameraX !== cameraX) {
+          overlayContentRef.current.style.transform = `translate3d(${-cameraX}px, 0, 0)`;
+          lastOverlayTransformCameraX = cameraX;
         }
 
-        const pulseAlpha = 0.72 + Math.sin(performance.now() / 160) * 0.18;
-        const currentMarkerId = snapshot.markers
-          .filter((marker) => playheadSecondsRef.current >= marker.startSeconds)
-          .at(-1)?.id ?? null;
+        const overlayContext = setupCanvas(overlayCanvas, snapshot.width, snapshot.height);
+        if (overlayContext) {
+          overlayContext.clearRect(0, 0, snapshot.width, snapshot.height);
 
-        for (const marker of snapshot.markers) {
-          drawRulerMarker(
-            overlayContext,
-            marker,
-            snapshot.width,
-            snapshot.height,
-            cameraX,
-            snapshot.pixelsPerSecond,
-            {
-              isSelected: snapshot.selectedMarkerId === marker.id,
-              isArmed: snapshot.pendingMarkerJump?.targetMarkerId === marker.id,
-              isCurrent: currentMarkerId === marker.id,
-              pulseAlpha,
-            },
-          );
+          if (snapshot.pendingMarkerJump) {
+            drawPendingExecutionLine(
+              overlayContext,
+              snapshot.width,
+              snapshot.height,
+              cameraX,
+              snapshot.pixelsPerSecond,
+              snapshot.pendingMarkerJump.executeAtSeconds,
+            );
+          }
+
+          const pulseAlpha = 0.72 + Math.sin(performance.now() / 160) * 0.18;
+          const currentMarkerId = snapshot.markers
+            .filter((marker) => playheadSecondsRef.current >= marker.startSeconds)
+            .at(-1)?.id ?? null;
+
+          for (const marker of snapshot.markers) {
+            drawRulerMarker(
+              overlayContext,
+              marker,
+              snapshot.width,
+              snapshot.height,
+              cameraX,
+              snapshot.pixelsPerSecond,
+              {
+                isSelected: snapshot.selectedMarkerId === marker.id,
+                isArmed: snapshot.pendingMarkerJump?.targetMarkerId === marker.id,
+                isCurrent: currentMarkerId === marker.id,
+                pulseAlpha,
+              },
+            );
+          }
         }
-
+      } catch (error) {
+        console.error("TimelineRulerCanvas render failed", error);
       }
 
       animationFrameId = window.requestAnimationFrame(render);
@@ -760,13 +772,19 @@ export function TimelineRulerCanvas({
   }, [cameraXRef, playheadSecondsRef]);
 
   return (
-    <>
+    <div
+      className="lt-ruler-canvas-layer"
+      style={{
+        width: isRenderableCanvasSize(width) ? width : 1,
+        height: isRenderableCanvasSize(height) ? height : 1,
+      }}
+    >
       <canvas className="lt-ruler-canvas" ref={baseCanvasRef} aria-hidden="true" />
       <canvas className="lt-ruler-canvas-overlay" ref={overlayCanvasRef} aria-hidden="true" />
       <div className="lt-ruler-overlay" ref={overlayContentRef}>
         {children}
       </div>
-    </>
+    </div>
   );
 }
 
