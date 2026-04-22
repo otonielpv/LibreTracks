@@ -1,4 +1,11 @@
-import { Profiler, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  Profiler,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   assignSectionMarkerDigit,
   cancelSectionJump,
@@ -53,7 +60,10 @@ import {
 
 const HEADER_WIDTH = 260;
 const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
-const TRACK_HEIGHT = 94;
+const DEFAULT_TRACK_HEIGHT = 94;
+const TRACK_HEIGHT_MIN = 68;
+const TRACK_HEIGHT_MAX = 148;
+const TRACK_HEIGHT_STEP = 8;
 const RULER_HEIGHT = 64;
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 48;
@@ -283,6 +293,20 @@ function isInteractiveTimelineTarget(target: EventTarget | null) {
     : false;
 }
 
+function isTimelineZoomTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement
+    ? Boolean(
+        target.closest(
+          ".lt-ruler-track, .lt-ruler-content, .lt-ruler-canvas, .lt-ruler-canvas-overlay, .lt-track-list, .lt-track-row, .lt-track-lane, .lt-track-canvas-layer, .lt-track-canvas, .lt-track-canvas-overlay",
+        ),
+      )
+    : false;
+}
+
+function isTrackInfoScrollTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement ? Boolean(target.closest(".lt-track-header")) : false;
+}
+
 function resolveTrackDropState(
   song: SongView,
   draggingTrackId: string,
@@ -370,6 +394,7 @@ export function TransportPanel() {
   const [globalJumpMode, setGlobalJumpMode] = useState<GlobalJumpMode>("immediate");
   const [globalJumpBars, setGlobalJumpBars] = useState(4);
   const [zoomLevel, setZoomLevel] = useState(7);
+  const [trackHeight, setTrackHeight] = useState(DEFAULT_TRACK_HEIGHT);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
@@ -392,6 +417,7 @@ export function TransportPanel() {
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
   const rulerTrackRef = useRef<HTMLDivElement | null>(null);
   const timelineShellRef = useRef<HTMLDivElement | null>(null);
+  const horizontalScrollbarRef = useRef<HTMLDivElement | null>(null);
   const playbackVisualAnchorRef = useRef({
     anchorPositionSeconds: 0,
     anchorReceivedAtMs: 0,
@@ -1371,6 +1397,15 @@ export function TransportPanel() {
   }, [clampedTimelineCameraX]);
 
   useEffect(() => {
+    const horizontalScrollbar = horizontalScrollbarRef.current;
+    if (!horizontalScrollbar) {
+      return;
+    }
+
+    horizontalScrollbar.scrollLeft = clampedTimelineCameraX;
+  }, [clampedTimelineCameraX]);
+
+  useEffect(() => {
     syncLivePosition(playheadDrag?.currentSeconds ?? displayPositionSecondsRef.current);
   }, [
     clampedTimelineCameraX,
@@ -1405,6 +1440,55 @@ export function TransportPanel() {
     setZoomLevel(clampedZoom);
     setCameraX(nextCameraX);
   }
+
+  function applyTrackHeight(nextTrackHeight: number) {
+    setTrackHeight(clamp(Math.round(nextTrackHeight), TRACK_HEIGHT_MIN, TRACK_HEIGHT_MAX));
+  }
+
+  function handleTimelineWheel(event: WheelEvent, shell: HTMLDivElement) {
+    if (!song) {
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      applyTrackHeight(trackHeight + (event.deltaY < 0 ? TRACK_HEIGHT_STEP : -TRACK_HEIGHT_STEP));
+      return;
+    }
+
+    if (isTrackInfoScrollTarget(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    if (!isTimelineZoomTarget(event.target)) {
+      return;
+    }
+
+    const bounds = shell.getBoundingClientRect();
+    const anchorViewportX = clamp(event.clientX - bounds.left - HEADER_WIDTH, 0, laneViewportWidth);
+
+    applyZoom(
+      zoomLevel + (event.deltaY < 0 ? ZOOM_WHEEL_STEP : -ZOOM_WHEEL_STEP),
+      anchorViewportX,
+    );
+  }
+
+  useEffect(() => {
+    const shell = timelineShellRef.current;
+    if (!shell) {
+      return;
+    }
+
+    const onWheel = (event: WheelEvent) => {
+      handleTimelineWheel(event, shell);
+    };
+
+    shell.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    return () => {
+      shell.removeEventListener("wheel", onWheel, true);
+    };
+  }, [handleTimelineWheel, laneViewportWidth, song, trackHeight, zoomLevel]);
 
   async function handleTrackDrop(trackId: string, dropState: NonNullable<TrackDropState>) {
     const targetTrack = tracksById[dropState.targetTrackId] ?? null;
@@ -2052,42 +2136,10 @@ export function TransportPanel() {
           </div>
         </div>
 
-        <div
-          className="lt-timeline-shell"
-          ref={timelineShellRef}
-          onWheel={(event) => {
-            if (!song) {
-              return;
-            }
-
-            if (event.ctrlKey || event.metaKey) {
-              event.preventDefault();
-              const bounds = event.currentTarget.getBoundingClientRect();
-              const anchorViewportX = clamp(
-                event.clientX - bounds.left - HEADER_WIDTH,
-                0,
-                laneViewportWidth,
-              );
-              applyZoom(
-                zoomLevel + (event.deltaY < 0 ? ZOOM_WHEEL_STEP : -ZOOM_WHEEL_STEP),
-                anchorViewportX,
-              );
-              return;
-            }
-
-            event.preventDefault();
-            const horizontalDelta =
-              Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-            setCameraX((current) =>
-              clampCameraX(
-                current + horizontalDelta,
-                song.durationSeconds,
-                pixelsPerSecond,
-                laneViewportWidth,
-              ),
-            );
-          }}
-        >
+          <div
+            className="lt-timeline-shell"
+            ref={timelineShellRef}
+          >
           <div
             className="lt-ruler-row"
             style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${laneViewportWidth}px` }}
@@ -2223,8 +2275,8 @@ export function TransportPanel() {
             {song ? (
               <TimelineTrackCanvas
                 width={laneViewportWidth}
-                height={visibleTracks.length * TRACK_HEIGHT}
-                trackHeight={TRACK_HEIGHT}
+                height={visibleTracks.length * trackHeight}
+                trackHeight={trackHeight}
                 song={song}
                 visibleTracks={visibleTracks}
                 clipsByTrack={clipsByTrack}
@@ -2241,23 +2293,28 @@ export function TransportPanel() {
             ) : null}
 
             {song?.tracks && visibleTracks.map((track) => {
-              const trackClips = clipsByTrack[track.id] ?? [];
-              const isTrackSelected = selectedTrackId === track.id;
-              const childCount = trackChildrenCount(song, track.id);
-              const isDropTarget = trackDropState?.targetTrackId === track.id;
-              const dropMode = isDropTarget ? trackDropState?.mode : null;
+                const trackClips = clipsByTrack[track.id] ?? [];
+                const isTrackSelected = selectedTrackId === track.id;
+                const childCount = trackChildrenCount(song, track.id);
+                const isDropTarget = trackDropState?.targetTrackId === track.id;
+                const dropMode = isDropTarget ? trackDropState?.mode : null;
+                const trackDensityClass =
+                  trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
 
-              return (
+                return (
                 <div
                   key={track.id}
                   className={`lt-track-row ${isDropTarget ? `is-drop-target is-drop-${dropMode}` : ""}`}
                   data-track-id={track.id}
-                  style={{ width: timelineRowWidth, gridTemplateColumns: `${HEADER_WIDTH}px ${laneViewportWidth}px` }}
+                  style={{
+                    width: timelineRowWidth,
+                    gridTemplateColumns: `${HEADER_WIDTH}px ${laneViewportWidth}px`,
+                  }}
                 >
-                  <div
-                    className={`lt-track-header ${isTrackSelected ? "is-selected" : ""} ${track.solo ? "is-solo" : ""} ${track.kind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${draggingTrackId === track.id ? "is-dragging" : ""}`}
-                    style={{ paddingLeft: 16 + track.depth * 22 }}
-                    role="button"
+                    <div
+                      className={`lt-track-header ${trackDensityClass} ${isTrackSelected ? "is-selected" : ""} ${track.solo ? "is-solo" : ""} ${track.kind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${draggingTrackId === track.id ? "is-dragging" : ""}`}
+                      style={{ height: trackHeight, paddingLeft: 16 + track.depth * 22 }}
+                      role="button"
                     tabIndex={0}
                     onClick={() => {
                       if (suppressTrackClickRef.current) {
@@ -2413,6 +2470,7 @@ export function TransportPanel() {
 
                   <div
                     className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""}`}
+                    style={{ height: trackHeight }}
                     aria-label={`Lane ${track.name}`}
                     onMouseDown={(event) => handleTrackLaneMouseDown(event, track, trackClips)}
                     onContextMenu={(event) => handleTrackLaneContextMenu(event, track, trackClips)}
@@ -2421,7 +2479,21 @@ export function TransportPanel() {
               );
             })}
           </div>
-        </div>
+          <div className="lt-horizontal-scrollbar">
+            <div className="lt-horizontal-scrollbar-spacer" aria-hidden="true" />
+            <div
+              ref={horizontalScrollbarRef}
+              className="lt-horizontal-scrollbar-rail"
+              aria-label="Desplazamiento horizontal del timeline"
+              onScroll={(event) => setCameraX(event.currentTarget.scrollLeft)}
+            >
+              <div
+                className="lt-horizontal-scrollbar-content"
+                style={{ width: laneViewportWidth + maxTimelineCameraX }}
+              />
+            </div>
+            </div>
+          </div>
 
         {currentSelection ? (
             <div className="lt-inline-menu">

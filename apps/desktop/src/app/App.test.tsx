@@ -297,7 +297,7 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: /expandir rhythm/i })).toBeTruthy();
   });
 
-  it("supports ctrl plus wheel zoom on the timeline shell", async () => {
+  it("zooms the timeline with the wheel and exposes a native horizontal scrollbar", async () => {
     const { container } = await renderApp();
     const shell = mockTimelineShellMetrics(container, 1500);
     mockRulerBounds(container);
@@ -317,12 +317,88 @@ describe("App", () => {
 
     expect(await screen.findByText(/cursor movido a 00:07.000/i)).toBeTruthy();
     expect(screen.queryByRole("slider", { name: /zoom horizontal del timeline/i })).toBeNull();
+    expect(screen.getByLabelText(/desplazamiento horizontal del timeline/i)).toBeTruthy();
 
     await act(async () => {
-      fireEvent.wheel(shell, { deltaY: -100, ctrlKey: true, clientX: 900 });
+      fireEvent.wheel(ruler, { deltaY: -100, clientX: 900 });
     });
 
     expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
+  });
+
+  it("zooms when the wheel is used over the painted timeline canvas", async () => {
+    const { container } = await renderApp();
+    const shell = mockTimelineShellMetrics(container, 1500);
+
+    await act(async () => {
+      fireEvent(window, new Event("resize"));
+    });
+
+    const trackCanvas = container.querySelector(".lt-track-canvas") as HTMLElement | null;
+    expect(trackCanvas).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.wheel(trackCanvas as HTMLElement, { deltaY: -100, clientX: 900 });
+    });
+
+    expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
+  });
+
+  it("zooms when the wheel is used over the track list surface", async () => {
+    const { container } = await renderApp();
+    const shell = mockTimelineShellMetrics(container, 1500);
+
+    await act(async () => {
+      fireEvent(window, new Event("resize"));
+    });
+
+    const trackList = container.querySelector(".lt-track-list") as HTMLElement | null;
+    expect(trackList).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.wheel(trackList as HTMLElement, { deltaY: -100, clientX: 900 });
+    });
+
+    expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
+  });
+
+  it("registers a non-passive capture wheel listener on the timeline shell", async () => {
+    const addEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, "addEventListener");
+
+    await renderApp();
+
+    const wheelCall = addEventListenerSpy.mock.calls.find(([type, _listener, options]) => {
+      return (
+        type === "wheel" &&
+        typeof options === "object" &&
+        options !== null &&
+        "capture" in options &&
+        "passive" in options &&
+        options.capture === true &&
+        options.passive === false
+      );
+    });
+
+    expect(wheelCall).toBeTruthy();
+  });
+
+  it("resizes track rows with ctrl plus wheel anywhere on the timeline shell", async () => {
+    const { container } = await renderApp();
+    mockTimelineShellMetrics(container, 1500);
+
+    const firstHeader = container.querySelector(".lt-track-header") as HTMLElement | null;
+    const firstLane = container.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(firstHeader).toBeTruthy();
+    expect(firstLane).toBeTruthy();
+    expect((firstHeader as HTMLElement).style.height).toBe("94px");
+    expect((firstLane as HTMLElement).style.height).toBe("94px");
+
+    await act(async () => {
+      fireEvent.wheel(firstHeader as HTMLElement, { deltaY: -100, ctrlKey: true });
+    });
+
+    expect((firstHeader as HTMLElement).style.height).toBe("102px");
+    expect((firstLane as HTMLElement).style.height).toBe("102px");
   });
 
   it("creates a new audio track from the track context menu", async () => {
