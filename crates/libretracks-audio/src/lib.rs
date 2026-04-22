@@ -327,6 +327,12 @@ fn parse_time_signature(time_signature: &str) -> Result<(u32, u32), AudioEngineE
 
 fn effective_track_gain(song: &Song, track_id: &str) -> Result<f64, AudioEngineError> {
     let track = find_track(song, track_id)?;
+    let is_any_track_soloed = song.tracks.iter().any(|candidate| candidate.solo);
+
+    if is_any_track_soloed && !is_track_soloed_in_hierarchy(song, track)? {
+        return Ok(0.0);
+    }
+
     if track.muted {
         return Ok(0.0);
     }
@@ -349,6 +355,29 @@ fn effective_track_gain(song: &Song, track_id: &str) -> Result<f64, AudioEngineE
     }
 
     Ok(gain)
+}
+
+fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, AudioEngineError> {
+    if track.solo {
+        return Ok(true);
+    }
+
+    let mut cursor = track.parent_track_id.as_deref();
+
+    while let Some(parent_track_id) = cursor {
+        let parent_track = find_track(song, parent_track_id)?;
+        if parent_track.kind != TrackKind::Folder {
+            return Err(AudioEngineError::TrackNotFound(parent_track_id.to_string()));
+        }
+
+        if parent_track.solo {
+            return Ok(true);
+        }
+
+        cursor = parent_track.parent_track_id.as_deref();
+    }
+
+    Ok(false)
 }
 
 #[cfg(test)]
@@ -745,6 +774,30 @@ mod tests {
         let gain = engine.effective_track_gain("track_drums").unwrap();
 
         assert!((gain - 0.35).abs() < 0.0001);
+    }
+
+    #[test]
+    fn soloed_track_mutes_other_tracks() {
+        let mut song = demo_song();
+        song.tracks[1].solo = true;
+
+        let mut engine = AudioEngine::new();
+        engine.load_song(song).expect("song should load");
+
+        assert!((engine.effective_track_gain("track_click").unwrap() - 0.4).abs() < 0.0001);
+        assert_eq!(engine.effective_track_gain("track_drums").unwrap(), 0.0);
+    }
+
+    #[test]
+    fn soloed_folder_keeps_child_track_audible() {
+        let mut song = demo_song();
+        song.tracks[2].solo = true;
+
+        let mut engine = AudioEngine::new();
+        engine.load_song(song).expect("song should load");
+
+        assert_eq!(engine.effective_track_gain("track_click").unwrap(), 0.0);
+        assert!((engine.effective_track_gain("track_drums").unwrap() - 0.35).abs() < 0.0001);
     }
 
     #[test]
