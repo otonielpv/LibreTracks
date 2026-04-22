@@ -9,7 +9,8 @@ pub use importer::{
     ImportOperationMetrics, ImportedAudioFile, ImportedSong, ProjectImportRequest, WavMetadata,
 };
 pub use song_store::{
-    create_song_folder, load_song, save_song, song_file_path, ProjectError, SONG_FILE_NAME,
+    create_song_folder, load_song, load_song_from_file, save_song, save_song_to_file,
+    song_file_path, ProjectError, SONG_FILE_NAME,
 };
 pub use waveform::{
     analyze_wav_file, generate_waveform_summary, load_waveform_summary, waveform_file_path,

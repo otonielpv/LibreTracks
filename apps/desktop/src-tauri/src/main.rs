@@ -166,6 +166,16 @@ fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot, Str
 }
 
 #[tauri::command]
+fn save_project_as(state: State<'_, DesktopState>) -> Result<Option<TransportSnapshot>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session.save_project_as().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn open_project_from_dialog(
     state: State<'_, DesktopState>,
 ) -> Result<Option<TransportSnapshot>, String> {
@@ -559,6 +569,7 @@ fn main() {
             report_ui_render_metric,
             create_song,
             save_project,
+            save_project_as,
             open_project_from_dialog,
             pick_and_import_song_from_dialog,
             play_transport,

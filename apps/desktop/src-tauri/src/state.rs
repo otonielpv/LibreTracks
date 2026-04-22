@@ -15,8 +15,9 @@ use libretracks_core::{
 };
 use libretracks_project::{
     append_wav_files_to_song, create_song_folder, generate_waveform_summary, import_wav_song,
-    load_song, load_waveform_summary, read_wav_metadata, save_song, waveform_file_path,
-    ImportOperationMetrics, ImportedSong, ProjectError, ProjectImportRequest, WaveformSummary,
+    load_song, load_song_from_file, load_waveform_summary, read_wav_metadata, save_song,
+    save_song_to_file, waveform_file_path, ImportOperationMetrics, ImportedSong,
+    ProjectError, ProjectImportRequest, WaveformSummary, SONG_FILE_NAME,
 };
 use rfd::FileDialog;
 use serde::Serialize;
@@ -45,6 +46,7 @@ pub struct DesktopSession {
     pub engine: AudioEngine,
     transport_clock: TransportClock,
     pub song_dir: Option<PathBuf>,
+    song_file_path: Option<PathBuf>,
     project_revision: u64,
     waveform_cache: WaveformMemoryCache,
     perf_metrics: DesktopPerformanceMetrics,
@@ -65,6 +67,7 @@ impl Default for DesktopSession {
             engine: AudioEngine::default(),
             transport_clock: TransportClock::default(),
             song_dir: None,
+            song_file_path: None,
             project_revision: 0,
             waveform_cache: WaveformMemoryCache::default(),
             perf_metrics: DesktopPerformanceMetrics::default(),
@@ -183,6 +186,7 @@ pub struct TransportSnapshot {
     pub transport_clock: TransportClockSummary,
     pub project_revision: u64,
     pub song_dir: Option<String>,
+    pub song_file_path: Option<String>,
     pub is_native_runtime: bool,
 }
 
@@ -364,7 +368,7 @@ impl DesktopSession {
     }
 
     pub fn save_project(&mut self) -> Result<TransportSnapshot, DesktopError> {
-        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song_file_path = self.current_song_file_path()?;
         let song = self
             .engine
             .song()
@@ -372,9 +376,45 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let save_started_at = Instant::now();
-        save_song(song_dir, &song)?;
+        save_song_to_file(&song_file_path, &song)?;
         self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
         Ok(self.snapshot())
+    }
+
+    pub fn save_project_as(&mut self) -> Result<Option<TransportSnapshot>, DesktopError> {
+        let source_song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        let target_song_file = FileDialog::new()
+            .add_filter("LibreTracks Song", &["json"])
+            .set_title("Guardar proyecto como")
+            .set_file_name(&default_project_file_name(&song.title))
+            .save_file();
+
+        let Some(target_song_file) = target_song_file else {
+            return Ok(None);
+        };
+
+        let target_song_dir = target_song_file.parent().map(Path::to_path_buf).ok_or_else(|| {
+            DesktopError::AudioCommand(
+                "el archivo del proyecto debe vivir dentro de una carpeta".into(),
+            )
+        })?;
+
+        let save_started_at = Instant::now();
+        copy_project_audio_files(&source_song_dir, &target_song_dir, &song)?;
+        save_song_to_file(&target_song_file, &song)?;
+        self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
+
+        self.song_dir = Some(target_song_dir.clone());
+        self.song_file_path = Some(target_song_file);
+        self.prime_waveform_cache(&target_song_dir, &song)?;
+
+        Ok(Some(self.snapshot()))
     }
 
     pub fn open_project_from_dialog(
@@ -396,9 +436,10 @@ impl DesktopSession {
             .ok_or_else(|| {
                 DesktopError::AudioCommand("song.json must live inside a folder".into())
             })?;
-        let song = load_song(&song_dir)?;
+        let song = load_song_from_file(&song_file)?;
 
         self.load_song_from_path(song, song_dir, audio)?;
+        self.song_file_path = Some(song_file);
 
         Ok(Some(self.snapshot()))
     }
@@ -1118,6 +1159,7 @@ impl DesktopSession {
 
         self.transport_clock.stop();
         self.song_dir = Some(song_dir.clone());
+        self.song_file_path = Some(song_dir.join(SONG_FILE_NAME));
         self.engine.load_song(song)?;
         self.project_revision = self.project_revision.saturating_add(1);
         let loaded_song = self
@@ -1142,6 +1184,7 @@ impl DesktopSession {
         let position_seconds = self.current_position();
         let pending_jump = self.engine.pending_marker_jump().cloned();
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song_file_path = self.current_song_file_path()?;
 
         if playback_state == PlaybackState::Playing
             && matches!(
@@ -1153,7 +1196,7 @@ impl DesktopSession {
         }
 
         let save_started_at = Instant::now();
-        save_song(&song_dir, &song)?;
+        save_song_to_file(&song_file_path, &song)?;
         self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
         self.engine.load_song(song)?;
         self.project_revision = self.project_revision.saturating_add(1);
@@ -1285,6 +1328,15 @@ impl DesktopSession {
                 .song_dir
                 .as_ref()
                 .map(|value| value.display().to_string()),
+            song_file_path: self
+                .song_file_path
+                .as_ref()
+                .map(|value| value.display().to_string())
+                .or_else(|| {
+                    self.song_dir
+                        .as_ref()
+                        .map(|song_dir| song_dir.join(SONG_FILE_NAME).display().to_string())
+                }),
             is_native_runtime: true,
         };
         self.perf_metrics.transport_snapshot_build_millis = started_at.elapsed().as_millis();
@@ -1299,6 +1351,17 @@ impl DesktopSession {
         self.perf_metrics.wav_analysis_millis = metrics.wav_analysis_millis;
         self.perf_metrics.waveform_write_millis = metrics.waveform_write_millis;
         self.perf_metrics.song_save_millis = metrics.song_save_millis;
+    }
+
+    fn current_song_file_path(&self) -> Result<PathBuf, DesktopError> {
+        if let Some(song_file_path) = self.song_file_path.clone() {
+            return Ok(song_file_path);
+        }
+
+        self.song_dir
+            .as_ref()
+            .map(|song_dir| song_dir.join(SONG_FILE_NAME))
+            .ok_or(DesktopError::NoSongLoaded)
     }
 
     fn prime_waveform_cache(&mut self, song_dir: &Path, song: &Song) -> Result<(), DesktopError> {
@@ -1999,6 +2062,44 @@ fn slugify(value: &str) -> String {
     }
 }
 
+fn default_project_file_name(title: &str) -> String {
+    let trimmed = title.trim();
+    let fallback = if trimmed.is_empty() { "proyecto" } else { trimmed };
+    format!("{fallback}.json")
+}
+
+fn copy_project_audio_files(
+    source_song_dir: &Path,
+    target_song_dir: &Path,
+    song: &Song,
+) -> Result<(), DesktopError> {
+    fs::create_dir_all(target_song_dir.join("audio"))?;
+    fs::create_dir_all(target_song_dir.join("cache").join("waveforms"))?;
+
+    let mut copied_relative_paths = std::collections::HashSet::new();
+    for clip in &song.clips {
+        let relative_path = Path::new(&clip.file_path);
+        if !copied_relative_paths.insert(relative_path.to_path_buf()) {
+            continue;
+        }
+
+        let source_path = source_song_dir.join(relative_path);
+        let target_path = target_song_dir.join(relative_path);
+
+        if source_path == target_path {
+            continue;
+        }
+
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        fs::copy(source_path, target_path)?;
+    }
+
+    Ok(())
+}
+
 fn humanize(value: &str) -> String {
     let words: Vec<String> = value
         .split(|character: char| !character.is_ascii_alphanumeric())
@@ -2160,6 +2261,7 @@ mod tests {
         write_silent_test_wav(&song_dir.join("audio").join("test.wav"), 12);
 
         let mut session = DesktopSession::default();
+        session.song_file_path = Some(song_dir.join(SONG_FILE_NAME));
         session.song_dir = Some(song_dir);
         session
             .engine

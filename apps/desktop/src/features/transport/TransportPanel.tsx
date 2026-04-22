@@ -29,6 +29,7 @@ import {
   pickAndImportSong,
   playTransport,
   saveProject,
+  saveProjectAs,
   scheduleMarkerJump,
   seekTransport,
   splitClip,
@@ -847,11 +848,36 @@ export function TransportPanel() {
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
+
+        if (event.shiftKey) {
+          void runAction(
+            async () => {
+              const nextSnapshot = await saveProjectAs();
+              if (!nextSnapshot) {
+                return;
+              }
+
+              setSnapshot(nextSnapshot);
+              setStatus(
+                nextSnapshot.songFilePath
+                  ? `Proyecto guardado en ${nextSnapshot.songFilePath}.`
+                  : "Proyecto guardado en nueva ubicacion.",
+              );
+            },
+            { busy: true },
+          );
+          return;
+        }
+
         void runAction(
           async () => {
             const nextSnapshot = await saveProject();
             setSnapshot(nextSnapshot);
-            setStatus("Proyecto guardado.");
+            setStatus(
+              nextSnapshot.songFilePath
+                ? `Proyecto guardado en ${nextSnapshot.songFilePath}.`
+                : "Proyecto guardado.",
+            );
           },
           { busy: true },
         );
@@ -1996,6 +2022,25 @@ export function TransportPanel() {
     void runAction(async () => setSnapshot((await openProject()) ?? snapshot), { busy: true });
   }
 
+  function handleSaveProjectAsClick() {
+    void runAction(
+      async () => {
+        const nextSnapshot = await saveProjectAs();
+        if (!nextSnapshot) {
+          return;
+        }
+
+        setSnapshot(nextSnapshot);
+        setStatus(
+          nextSnapshot.songFilePath
+            ? `Proyecto guardado en ${nextSnapshot.songFilePath}.`
+            : "Proyecto guardado en nueva ubicacion.",
+        );
+      },
+      { busy: true },
+    );
+  }
+
   function handleImportWavsClick() {
     setIsImportModalOpen(true);
   }
@@ -2131,10 +2176,10 @@ export function TransportPanel() {
           </button>
           <button
             type="button"
-            onClick={() => void runAction(async () => setSnapshot(await saveProject()), { busy: true })}
+            onClick={handleSaveProjectAsClick}
           >
-            <span className="material-symbols-outlined" aria-hidden="true">save</span>
-            <span className="lt-button-label">Guardar</span>
+            <span className="material-symbols-outlined" aria-hidden="true">save_as</span>
+            <span className="lt-button-label">Guardar como</span>
           </button>
           <button type="button" onClick={handleImportWavsClick}>
             <span className="material-symbols-outlined" aria-hidden="true">audio_file</span>

@@ -93,9 +93,19 @@ pub fn create_song_folder(
 }
 
 pub fn save_song(song_dir: impl AsRef<Path>, song: &Song) -> Result<PathBuf, ProjectError> {
+    save_song_to_file(song_file_path(song_dir), song)
+}
+
+pub fn save_song_to_file(song_file: impl AsRef<Path>, song: &Song) -> Result<PathBuf, ProjectError> {
     validate_song(song)?;
 
-    let song_dir = song_dir.as_ref();
+    let song_file = song_file.as_ref();
+    let song_dir = song_file.parent().ok_or_else(|| {
+        ProjectError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "song file must live inside a folder",
+        ))
+    })?;
     fs::create_dir_all(song_dir)?;
 
     let document = SongDocument {
@@ -103,15 +113,18 @@ pub fn save_song(song_dir: impl AsRef<Path>, song: &Song) -> Result<PathBuf, Pro
         song: song.clone(),
     };
 
-    let path = song_file_path(song_dir);
     let json = serde_json::to_string_pretty(&document)?;
-    fs::write(&path, json)?;
+    fs::write(song_file, json)?;
 
-    Ok(path)
+    Ok(song_file.to_path_buf())
 }
 
 pub fn load_song(song_dir: impl AsRef<Path>) -> Result<Song, ProjectError> {
-    let json = fs::read_to_string(song_file_path(song_dir))?;
+    load_song_from_file(song_file_path(song_dir))
+}
+
+pub fn load_song_from_file(song_file: impl AsRef<Path>) -> Result<Song, ProjectError> {
+    let json = fs::read_to_string(song_file)?;
     let raw_document: Value = serde_json::from_str(&json)?;
     reject_legacy_group_format(&raw_document)?;
     match document_version(&raw_document)? {

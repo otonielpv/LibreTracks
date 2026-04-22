@@ -111,6 +111,7 @@ export type TransportSnapshot = {
   };
   projectRevision: number;
   songDir?: string | null;
+  songFilePath?: string | null;
   isNativeRuntime: boolean;
 };
 
@@ -237,6 +238,7 @@ function buildDemoSnapshot(): TransportSnapshot {
     },
     projectRevision: demoProjectRevision,
     songDir: "demo://session",
+    songFilePath: "demo://session/song.json",
     isNativeRuntime: false,
   };
 }
@@ -343,6 +345,14 @@ export async function saveProject(): Promise<TransportSnapshot> {
   }
 
   return invokeCommand<TransportSnapshot>("save_project");
+}
+
+export async function saveProjectAs(): Promise<TransportSnapshot | null> {
+  if (!isTauriApp) {
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot | null>("save_project_as");
 }
 
 export async function updateSongTempo(bpm: number): Promise<TransportSnapshot> {
