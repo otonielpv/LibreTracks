@@ -25,7 +25,7 @@ pub struct ActiveClip {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JumpTrigger {
     Immediate,
-    SectionEnd,
+    NextMarker,
     AfterBars(u32),
 }
 
@@ -128,13 +128,7 @@ impl AudioEngine {
         let should_clear_pending_jump = self
             .pending_marker_jump
             .as_ref()
-            .map(|pending_jump| {
-                find_marker(song, &pending_jump.target_marker_id).map(|target_marker| {
-                    position_seconds >= target_marker.start_seconds
-                        || position_seconds >= pending_jump.execute_at_seconds
-                })
-            })
-            .transpose()?
+            .map(|pending_jump| position_seconds >= pending_jump.execute_at_seconds)
             .unwrap_or(false);
 
         self.position_seconds = position_seconds;
@@ -149,13 +143,13 @@ impl AudioEngine {
         Ok(song.marker_at(self.position_seconds))
     }
 
-    pub fn schedule_section_jump(
+    pub fn schedule_marker_jump(
         &mut self,
-        target_section_id: &str,
+        target_marker_id: &str,
         trigger: JumpTrigger,
     ) -> Result<Option<PendingMarkerJump>, AudioEngineError> {
         let song = self.ensure_song_loaded()?;
-        let target_marker = find_marker(song, target_section_id)?;
+        let target_marker = find_marker(song, target_marker_id)?;
 
         if trigger == JumpTrigger::Immediate {
             self.position_seconds = target_marker.start_seconds;
@@ -163,12 +157,11 @@ impl AudioEngine {
             return Ok(None);
         }
 
-        if self.position_seconds >= target_marker.start_seconds {
+        let Some(execute_at_seconds) = jump_execute_at(song, self.position_seconds, &trigger)?
+        else {
             self.pending_marker_jump = None;
             return Ok(None);
-        }
-
-        let execute_at_seconds = jump_execute_at(song, self.position_seconds, &trigger)?;
+        };
 
         let pending_jump = PendingMarkerJump {
             target_marker_id: target_marker.id.clone(),
@@ -202,8 +195,6 @@ impl AudioEngine {
                 let overshoot = next_position - execute_at;
                 next_position =
                     (target_marker.start_seconds + overshoot).min(song.duration_seconds);
-                self.pending_marker_jump = None;
-            } else if next_position >= target_marker.start_seconds {
                 self.pending_marker_jump = None;
             }
         }
@@ -285,17 +276,18 @@ fn jump_execute_at(
     song: &Song,
     current_position: f64,
     trigger: &JumpTrigger,
-) -> Result<f64, AudioEngineError> {
+) -> Result<Option<f64>, AudioEngineError> {
     match trigger {
-        JumpTrigger::Immediate => Ok(current_position),
-        JumpTrigger::SectionEnd => Ok(song
+        JumpTrigger::Immediate => Ok(Some(current_position)),
+        JumpTrigger::NextMarker => Ok(song
             .next_marker_after(current_position)
-            .map(|marker| marker.start_seconds)
-            .unwrap_or(song.duration_seconds)),
+            .map(|marker| marker.start_seconds)),
         JumpTrigger::AfterBars(bars) => {
             let bar_duration = song_bar_duration_seconds(song)?;
             let current_bar_index = (current_position / bar_duration).floor();
-            Ok(((current_bar_index + f64::from(*bars)) * bar_duration).min(song.duration_seconds))
+            Ok(Some(
+                ((current_bar_index + f64::from(*bars)) * bar_duration).min(song.duration_seconds),
+            ))
         }
     }
 }
@@ -523,13 +515,13 @@ mod tests {
     }
 
     #[test]
-    fn immediate_section_jump_moves_transport_now() {
+    fn immediate_marker_jump_moves_transport_now() {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
         engine.seek(1.0).expect("seek should work");
 
         let scheduled = engine
-            .schedule_section_jump("section_outro", JumpTrigger::Immediate)
+            .schedule_marker_jump("section_outro", JumpTrigger::Immediate)
             .expect("jump should schedule");
 
         assert!(scheduled.is_none());
@@ -538,14 +530,14 @@ mod tests {
     }
 
     #[test]
-    fn jump_at_section_end_is_scheduled_and_executed() {
+    fn jump_at_next_marker_is_scheduled_and_executed() {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
         engine.seek(6.0).expect("seek should work");
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_section_jump("section_outro", JumpTrigger::SectionEnd)
+            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker)
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -567,7 +559,7 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_section_jump("section_outro", JumpTrigger::AfterBars(2))
+            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2))
             .expect("jump should schedule");
 
         let position = engine
@@ -586,7 +578,7 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_section_jump("section_outro", JumpTrigger::AfterBars(4))
+            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(4))
             .expect("jump should schedule");
 
         let position = engine
@@ -605,7 +597,7 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_section_jump("section_outro", JumpTrigger::SectionEnd)
+            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker)
             .expect("jump should schedule");
         engine.cancel_section_jump();
 
@@ -625,7 +617,7 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_section_jump("section_outro", JumpTrigger::SectionEnd)
+            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker)
             .expect("jump should schedule");
         assert!(engine.pending_marker_jump().is_some());
 
@@ -643,7 +635,7 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_section_jump("section_outro", JumpTrigger::AfterBars(2))
+            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2))
             .expect("jump should schedule");
         assert!(engine.pending_marker_jump().is_some());
 
@@ -651,6 +643,51 @@ mod tests {
 
         assert_eq!(engine.position_seconds(), 8.0);
         assert!(engine.pending_marker_jump().is_some());
+    }
+
+    #[test]
+    fn next_marker_jump_can_target_a_marker_behind_the_playhead() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(6.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        let scheduled = engine
+            .schedule_marker_jump("section_intro", JumpTrigger::NextMarker)
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        assert_eq!(scheduled.execute_at_seconds, 8.0);
+        assert_eq!(scheduled.target_marker_id, "section_intro");
+
+        let intermediate_position = engine
+            .advance_transport(1.0)
+            .expect("transport should advance before execution");
+
+        assert!((intermediate_position - 7.0).abs() < 0.0001);
+        assert!(engine.pending_marker_jump().is_some());
+
+        let position = engine
+            .advance_transport(2.0)
+            .expect("transport should advance");
+
+        assert!((position - 1.0).abs() < 0.0001);
+        assert!(engine.pending_marker_jump().is_none());
+    }
+
+    #[test]
+    fn next_marker_jump_is_ignored_when_there_are_no_markers_ahead() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(13.0).expect("seek should work");
+
+        let scheduled = engine
+            .schedule_marker_jump("section_intro", JumpTrigger::NextMarker)
+            .expect("jump should resolve safely");
+
+        assert!(scheduled.is_none());
+        assert!(engine.pending_marker_jump().is_none());
+        assert_eq!(engine.position_seconds(), 13.0);
     }
 
     #[test]

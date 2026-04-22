@@ -607,7 +607,7 @@ impl DesktopSession {
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
 
         self.engine
-            .schedule_section_jump(target_marker_id, trigger.clone())?;
+            .schedule_marker_jump(target_marker_id, trigger.clone())?;
 
         if trigger == JumpTrigger::Immediate {
             if was_playing {
@@ -1184,13 +1184,12 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         if let Some(pending_jump) = pending_jump {
-            let target_marker = loaded_song.marker_by_id(&pending_jump.target_marker_id);
-
-            if let Some(target_marker) = target_marker {
-                if restored_position < target_marker.start_seconds
-                    && restored_position < pending_jump.execute_at_seconds
-                {
-                    self.engine.schedule_section_jump(
+            if loaded_song
+                .marker_by_id(&pending_jump.target_marker_id)
+                .is_some()
+            {
+                if restored_position < pending_jump.execute_at_seconds {
+                    self.engine.schedule_marker_jump(
                         &pending_jump.target_marker_id,
                         pending_jump.trigger,
                     )?;
@@ -2040,7 +2039,7 @@ fn parse_time_signature(time_signature: &str) -> Result<(u32, u32), DesktopError
 fn pending_jump_trigger_label(trigger: &JumpTrigger) -> String {
     match trigger {
         JumpTrigger::Immediate => "immediate".to_string(),
-        JumpTrigger::SectionEnd => "section_end".to_string(),
+        JumpTrigger::NextMarker => "section_end".to_string(),
         JumpTrigger::AfterBars(bars) => format!("after_bars:{bars}"),
     }
 }
@@ -2487,7 +2486,7 @@ mod tests {
         session.seek(3.95, &audio).expect("seek should succeed");
         session.play(&audio).expect("play should succeed");
         session
-            .schedule_section_jump("section_3", JumpTrigger::SectionEnd, &audio)
+            .schedule_section_jump("section_3", JumpTrigger::NextMarker, &audio)
             .expect("jump should schedule");
 
         thread::sleep(Duration::from_millis(70));
@@ -2892,7 +2891,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_section_jump("section_2", JumpTrigger::SectionEnd, &audio)
+            .schedule_section_jump("section_2", JumpTrigger::NextMarker, &audio)
             .expect("jump should schedule");
 
         let snapshot = session
@@ -2924,7 +2923,7 @@ mod tests {
         let audio = crate::audio_runtime::AudioController::default();
         session.seek(5.0, &audio).expect("seek should work");
         session
-            .schedule_section_jump("section_2", JumpTrigger::SectionEnd, &audio)
+            .schedule_section_jump("section_2", JumpTrigger::NextMarker, &audio)
             .expect("jump should schedule");
 
         let snapshot = session
@@ -2972,7 +2971,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_section_jump("section_2", JumpTrigger::SectionEnd, &audio)
+            .schedule_section_jump("section_2", JumpTrigger::NextMarker, &audio)
             .expect("jump should schedule");
 
         let snapshot = session

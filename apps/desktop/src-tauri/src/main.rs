@@ -538,7 +538,7 @@ fn split_clip(
 fn parse_jump_trigger(trigger: &str, bars: Option<u32>) -> Result<JumpTrigger, DesktopError> {
     match trigger {
         "immediate" => Ok(JumpTrigger::Immediate),
-        "section_end" => Ok(JumpTrigger::SectionEnd),
+        "section_end" | "next_marker" => Ok(JumpTrigger::NextMarker),
         "after_bars" => Ok(JumpTrigger::AfterBars(bars.unwrap_or(4))),
         _ => Err(DesktopError::AudioCommand(format!(
             "unknown jump trigger: {trigger}"
