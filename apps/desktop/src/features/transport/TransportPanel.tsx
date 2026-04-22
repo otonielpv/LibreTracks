@@ -1286,6 +1286,8 @@ export function TransportPanel() {
       ? `Detectado en importacion${song.tempoMetadata.confidence != null ? ` (${Math.round(song.tempoMetadata.confidence * 100)}%)` : ""}`
       : "Manual";
   const isProjectEmpty = !song || song.tracks.length === 0;
+  const isProjectPending = Boolean(snapshot && snapshot.projectRevision > 0 && !song);
+  const shouldShowEmptyState = !isProjectPending && isProjectEmpty;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
   const selectedTrack = selectedTrackId ? tracksById[selectedTrackId] ?? null : null;
@@ -1983,6 +1985,18 @@ export function TransportPanel() {
     setIsImportingFromModal(false);
   }
 
+  function handleCreateSongClick() {
+    void runAction(async () => setSnapshot(await createSong()), { busy: true });
+  }
+
+  function handleOpenProjectClick() {
+    void runAction(async () => setSnapshot((await openProject()) ?? snapshot), { busy: true });
+  }
+
+  function handleImportWavsClick() {
+    setIsImportModalOpen(true);
+  }
+
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
       <div className="lt-daw-shell" ref={panelRef} onContextMenu={(event) => event.preventDefault()}>
@@ -2107,18 +2121,10 @@ export function TransportPanel() {
         </div>
 
         <div className="lt-session-actions">
-          <button
-            type="button"
-            onClick={() => void runAction(async () => setSnapshot(await createSong()), { busy: true })}
-          >
+          <button type="button" onClick={handleCreateSongClick}>
             Crear cancion
           </button>
-          <button
-            type="button"
-            onClick={() =>
-              void runAction(async () => setSnapshot((await openProject()) ?? snapshot), { busy: true })
-            }
-          >
+          <button type="button" onClick={handleOpenProjectClick}>
             Abrir
           </button>
           <button
@@ -2127,10 +2133,7 @@ export function TransportPanel() {
           >
             Guardar
           </button>
-          <button
-            type="button"
-            onClick={() => setIsImportModalOpen(true)}
-          >
+          <button type="button" onClick={handleImportWavsClick}>
             Importar WAVs
           </button>
         </div>
@@ -2161,6 +2164,26 @@ export function TransportPanel() {
         </aside>
 
         <div className="lt-workspace">
+      {shouldShowEmptyState ? (
+        <div className="lt-empty-state">
+          <div className="lt-empty-state-card">
+            <span className="lt-empty-state-eyebrow">LibreTracks DAW</span>
+            <h1>Import tracks to start</h1>
+            <p>Create a new song or bring WAV stems into the session to unlock the timeline.</p>
+            <div className="lt-empty-state-actions">
+              <button type="button" className="is-primary" onClick={handleCreateSongClick}>
+                Create Song
+              </button>
+              <button type="button" onClick={handleOpenProjectClick}>
+                Open
+              </button>
+              <button type="button" onClick={handleImportWavsClick}>
+                Import WAVs
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
       <section className="lt-main-stage">
         <div className="lt-timeline-topline">
           <div className="lt-timeline-stats">
@@ -2400,7 +2423,8 @@ export function TransportPanel() {
             </div>
           </div>
 
-      </section>
+  </section>
+  )}
 
       <footer className="lt-bottom-strip">
         <div className="lt-bottom-status">

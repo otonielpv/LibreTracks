@@ -325,6 +325,85 @@ body {
   background: #0e0e0e;
 }
 
+.lt-empty-state {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background:
+    radial-gradient(circle at top, rgb(87 241 219 / 0.12), transparent 30%),
+    radial-gradient(circle at 80% 20%, rgb(255 226 171 / 0.10), transparent 24%),
+    linear-gradient(180deg, #111111 0%, #0b0b0b 100%);
+}
+
+.lt-empty-state-card {
+  width: min(38rem, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2.5rem 2rem;
+  border: 1px solid rgb(87 241 219 / 0.14);
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgb(28 27 27 / 0.96), rgb(14 14 14 / 0.96));
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.34), inset 0 1px 0 rgb(255 255 255 / 0.04);
+  text-align: center;
+}
+
+.lt-empty-state-eyebrow {
+  color: #57f1db;
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.lt-empty-state-card h1 {
+  margin: 0;
+  color: #f3f0ef;
+  font: 900 clamp(2rem, 4vw, 3.1rem)/0.95 Inter, sans-serif;
+  letter-spacing: -0.05em;
+}
+
+.lt-empty-state-card p {
+  margin: 0;
+  max-width: 30rem;
+  color: rgb(229 226 225 / 0.76);
+  font: 500 0.98rem/1.6 "Space Grotesk", sans-serif;
+}
+
+.lt-empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.lt-empty-state-actions button {
+  min-width: 8.75rem;
+  border: 1px solid rgb(87 241 219 / 0.16);
+  border-radius: 999px;
+  background: rgb(32 31 31 / 0.95);
+  color: #e5e2e1;
+  padding: 0.8rem 1.15rem;
+  font: 700 11px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.lt-empty-state-actions button:hover {
+  border-color: rgb(87 241 219 / 0.36);
+  background: #2a2a2a;
+}
+
+.lt-empty-state-actions button.is-primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #57f1db, #2dd4bf);
+  color: #042f2a;
+  box-shadow: 0 14px 40px rgb(87 241 219 / 0.22);
+}
+
 .lt-timeline-topline {
   height: 3.4rem;
   flex-shrink: 0;
