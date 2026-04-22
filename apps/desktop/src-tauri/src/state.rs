@@ -165,8 +165,6 @@ pub enum DesktopError {
     TrackNotFound(String),
     #[error("section not found: {0}")]
     SectionNotFound(String),
-    #[error("section range is invalid")]
-    InvalidSectionRange,
     #[error("clip range is invalid")]
     InvalidClipRange,
     #[error("track parent is invalid")]

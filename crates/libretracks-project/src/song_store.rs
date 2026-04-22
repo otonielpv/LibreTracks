@@ -50,7 +50,6 @@ struct SongDocument {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LegacySongDocumentV2 {
-    version: u32,
     id: String,
     title: String,
     artist: Option<String>,
@@ -69,7 +68,6 @@ struct LegacySectionV2 {
     id: String,
     name: String,
     start_seconds: f64,
-    end_seconds: f64,
 }
 
 pub fn song_file_path(song_dir: impl AsRef<Path>) -> PathBuf {

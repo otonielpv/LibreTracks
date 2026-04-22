@@ -1512,6 +1512,7 @@ fn scheduled_clip_count(song: &Song, position_seconds: f64) -> usize {
         .count()
 }
 
+#[cfg(test)]
 fn probe_audio_file(file_path: &Path) -> Result<(), String> {
     let mut reader = StreamingClipReader::open(
         PlaybackClipPlan {
