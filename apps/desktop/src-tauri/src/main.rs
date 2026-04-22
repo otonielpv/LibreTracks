@@ -559,6 +559,11 @@ fn parse_jump_trigger(trigger: &str, bars: Option<u32>) -> Result<JumpTrigger, D
 fn main() {
     tauri::Builder::default()
         .manage(DesktopState::default())
+        .setup(|app| {
+            let state = app.state::<DesktopState>();
+            state.audio.attach_app_handle(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             healthcheck,
             get_transport_snapshot,

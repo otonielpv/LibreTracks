@@ -33,6 +33,11 @@ type TrackHeaderItemProps = {
   onCommitVolume: (trackId: string) => void;
   onPanChange: (trackId: string, nextPan: number) => void;
   onCommitPan: (trackId: string) => void;
+  onMeterElementChange: (
+    trackId: string,
+    channel: "left" | "right",
+    element: HTMLDivElement | null,
+  ) => void;
 };
 
 function TrackHeaderItemComponent({
@@ -63,6 +68,7 @@ function TrackHeaderItemComponent({
   onCommitVolume,
   onPanChange,
   onCommitPan,
+  onMeterElementChange,
 }: TrackHeaderItemProps) {
   const volumeFill = `${(volumeValue * 100).toFixed(2)}%`;
   const panFill = `${(((panValue + 1) * 0.5) * 100).toFixed(2)}%`;
@@ -128,6 +134,24 @@ function TrackHeaderItemComponent({
         </div>
         <span className="lt-track-meta">{metaLabel}</span>
         {dropHint ? <span className="lt-track-drop-hint">{dropHint}</span> : null}
+      </div>
+      <div className="lt-track-meter" aria-hidden="true">
+        <div className="lt-track-meter-channel">
+          <div
+            className="lt-track-meter-bar is-left"
+            ref={(element) => {
+              onMeterElementChange(trackId, "left", element);
+            }}
+          />
+        </div>
+        <div className="lt-track-meter-channel">
+          <div
+            className="lt-track-meter-bar is-right"
+            ref={(element) => {
+              onMeterElementChange(trackId, "right", element);
+            }}
+          />
+        </div>
       </div>
 
       <div className="lt-track-control-row">

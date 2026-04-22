@@ -21,6 +21,7 @@ import {
   getTransportSnapshot,
   getWaveformSummaries,
   isTauriApp,
+  listenToAudioMeters,
   listenToTransportLifecycle,
   moveClip,
   moveTrack,
@@ -157,6 +158,16 @@ function formatTimelineHeaderMusicalPosition(barNumber: number, beatInBar: numbe
 
 function formatMusicalPosition(seconds: number, bpm: number, timeSignature: string) {
   return getMusicalPosition(seconds, bpm, timeSignature).display;
+}
+
+function setTrackMeterBarLevel(element: HTMLDivElement | null, peak: number) {
+  if (!element) {
+    return;
+  }
+
+  const nextPeak = Math.max(0, Math.min(1, peak));
+  element.style.transform = `scaleX(${nextPeak.toFixed(4)})`;
+  element.style.opacity = nextPeak > 0.001 ? "1" : "0.18";
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -406,6 +417,9 @@ export function TransportPanel() {
   const cameraXRef = useRef(0);
   const songRef = useRef<SongView | null>(null);
   const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
+  const trackMeterElementsRef = useRef<
+    Record<string, { left: HTMLDivElement | null; right: HTMLDivElement | null }>
+  >({});
   const volumeDraftsRef = useRef<Record<string, number>>({});
   const panDraftsRef = useRef<Record<string, number>>({});
   const trackMixSyncTimeoutsRef = useRef<Record<string, number>>({});
@@ -432,6 +446,34 @@ export function TransportPanel() {
       }
     }
   }, []);
+
+  const clearTrackMeters = useCallback(() => {
+    for (const meterElements of Object.values(trackMeterElementsRef.current)) {
+      setTrackMeterBarLevel(meterElements.left, 0);
+      setTrackMeterBarLevel(meterElements.right, 0);
+    }
+  }, []);
+
+  const handleTrackMeterElementChange = useCallback(
+    (trackId: string, channel: "left" | "right", element: HTMLDivElement | null) => {
+      const current = trackMeterElementsRef.current[trackId] ?? { left: null, right: null };
+      const next = {
+        ...current,
+        [channel]: element,
+      };
+
+      if (!next.left && !next.right) {
+        delete trackMeterElementsRef.current[trackId];
+        return;
+      }
+
+      trackMeterElementsRef.current[trackId] = next;
+      if (element) {
+        setTrackMeterBarLevel(element, 0);
+      }
+    },
+    [],
+  );
 
   const clearTrackMixSyncTimeout = useCallback((trackId: string) => {
     const timeoutId = trackMixSyncTimeoutsRef.current[trackId];
@@ -621,6 +663,43 @@ export function TransportPanel() {
   }, []);
 
   useEffect(() => {
+    if (!isTauriApp) {
+      return () => {};
+    }
+
+    let active = true;
+    let unlisten: (() => void) | undefined;
+
+    void listenToAudioMeters((levels) => {
+      if (!active) {
+        return;
+      }
+
+      for (const level of levels) {
+        const meterElements = trackMeterElementsRef.current[level.trackId];
+        if (!meterElements) {
+          continue;
+        }
+
+        setTrackMeterBarLevel(meterElements.left, level.leftPeak);
+        setTrackMeterBarLevel(meterElements.right, level.rightPeak);
+      }
+    }).then((nextUnlisten) => {
+      if (!active) {
+        nextUnlisten();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
     const shell = timelineShellRef.current;
     if (!shell) {
       return;
@@ -719,6 +798,14 @@ export function TransportPanel() {
       active = false;
     };
   }, [song, waveformCache]);
+
+  useEffect(() => {
+    if (snapshot?.playbackState === "playing") {
+      return;
+    }
+
+    clearTrackMeters();
+  }, [clearTrackMeters, snapshot?.playbackState, song?.projectRevision]);
 
   useEffect(() => {
     if (!song) {
@@ -2692,6 +2779,7 @@ export function TransportPanel() {
                     onCommitVolume={handleTrackHeaderVolumeCommit}
                     onPanChange={handleTrackHeaderPanChange}
                     onCommitPan={handleTrackHeaderPanCommit}
+                    onMeterElementChange={handleTrackMeterElementChange}
                   />
 
                   <div

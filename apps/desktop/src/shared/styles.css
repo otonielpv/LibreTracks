@@ -800,6 +800,10 @@ body {
   gap: 0.35rem;
 }
 
+.lt-track-header.is-condensed .lt-track-meter-channel {
+  height: 3px;
+}
+
 .lt-track-header.is-condensed .lt-track-mix-controls {
   gap: 0.2rem;
   min-width: 96px;
@@ -840,6 +844,14 @@ body {
 
 .lt-track-header.is-compact .lt-track-control-row {
   gap: 0.3rem;
+}
+
+.lt-track-header.is-compact .lt-track-meter {
+  gap: 0.12rem;
+}
+
+.lt-track-header.is-compact .lt-track-meter-channel {
+  height: 3px;
 }
 
 .lt-track-header.is-compact .lt-track-mix-controls {
@@ -883,6 +895,39 @@ body {
   font: 600 10px/1.2 "Space Grotesk", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+}
+
+.lt-track-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.lt-track-meter-channel {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #0e0e0e;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+.lt-track-meter-bar {
+  position: absolute;
+  inset: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  opacity: 0.18;
+  will-change: transform, opacity;
+  transition: opacity 120ms linear;
+}
+
+.lt-track-meter-bar.is-left {
+  background: linear-gradient(90deg, #32d3a5 0%, #cde75a 72%, #ff8c5a 100%);
+}
+
+.lt-track-meter-bar.is-right {
+  background: linear-gradient(90deg, #45b9ff 0%, #6ad6dd 72%, #bdf378 100%);
 }
 
 .lt-track-control-row {

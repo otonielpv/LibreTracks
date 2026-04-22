@@ -124,6 +124,12 @@ export type TransportLifecycleEvent = {
   emittedAtUnixMs: number;
 };
 
+export type AudioMeterLevel = {
+  trackId: string;
+  leftPeak: number;
+  rightPeak: number;
+};
+
 const tauriWindow = window as Window & {
   __TAURI_INTERNALS__?: unknown;
 };
@@ -165,6 +171,19 @@ export async function listenToTransportLifecycle(
 
   const { listen } = await import("@tauri-apps/api/event");
   return listen<TransportLifecycleEvent>("transport:lifecycle", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenToAudioMeters(
+  handler: (levels: AudioMeterLevel[]) => void,
+): Promise<() => void> {
+  if (!isTauriApp) {
+    return () => {};
+  }
+
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<AudioMeterLevel[]>("audio:meters", (event) => {
     handler(event.payload);
   });
 }

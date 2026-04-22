@@ -29,21 +29,36 @@ use symphonia::core::{
     meta::MetadataOptions,
     probe::Hint,
 };
+use tauri::{AppHandle, Emitter};
 
 use crate::state::DesktopError;
 
 const PCM_RING_CAPACITY_FRAMES: usize = 16_384;
 const DISK_RENDER_BLOCK_FRAMES: usize = 1_024;
 const GAIN_EPSILON: f32 = 0.000_001;
+const AUDIO_METER_EVENT: &str = "audio:meters";
+const AUDIO_METER_EMIT_INTERVAL: Duration = Duration::from_millis(33);
+
+type SharedAppHandle = Arc<RwLock<Option<AppHandle>>>;
 
 pub struct AudioRuntime {
     session: Option<PlaybackSession>,
     audio_buffers: AudioBufferCache,
+    app_handle: SharedAppHandle,
 }
 
 pub struct AudioController {
     sender: Sender<AudioCommand>,
     audio_buffers: AudioBufferCache,
+    app_handle: SharedAppHandle,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioMeterLevel {
+    pub track_id: String,
+    pub left_peak: f32,
+    pub right_peak: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -271,6 +286,8 @@ struct Mixer {
     active_clips: Vec<MixClipState>,
     debug_config: AudioDebugConfig,
     opened_files: usize,
+    track_meter_indices: HashMap<String, usize>,
+    meter_emitter: MeterEmitterState,
 }
 
 struct MixClipState {
@@ -278,6 +295,11 @@ struct MixClipState {
     reader: MemoryClipReader,
     current_gain: f32,
     current_pan: f32,
+}
+
+struct MeterEmitterState {
+    app_handle: SharedAppHandle,
+    last_emitted_at: Option<Instant>,
 }
 
 struct MemoryClipReader {
@@ -582,10 +604,11 @@ impl AudioDebugState {
 }
 
 impl AudioRuntime {
-    fn new(audio_buffers: AudioBufferCache) -> Self {
+    fn new(audio_buffers: AudioBufferCache, app_handle: SharedAppHandle) -> Self {
         Self {
             session: None,
             audio_buffers,
+            app_handle,
         }
     }
 
@@ -618,6 +641,7 @@ impl AudioRuntime {
             song_dir.to_path_buf(),
             song.clone(),
             position_seconds,
+            self.app_handle.clone(),
             debug_config,
             self.audio_buffers.clone(),
         )?;
@@ -662,16 +686,32 @@ impl AudioController {
         let (sender, receiver) = mpsc::channel();
         let debug_config = AudioDebugConfig::from_env();
         let audio_buffers = AudioBufferCache::default();
+        let app_handle = Arc::new(RwLock::new(None));
         let runtime_audio_buffers = audio_buffers.clone();
+        let runtime_app_handle = app_handle.clone();
 
         thread::Builder::new()
             .name("libretracks-audio".into())
-            .spawn(move || run_audio_thread(receiver, debug_config, runtime_audio_buffers))
+            .spawn(move || {
+                run_audio_thread(
+                    receiver,
+                    debug_config,
+                    runtime_audio_buffers,
+                    runtime_app_handle,
+                )
+            })
             .expect("audio thread should start");
 
         Self {
             sender,
             audio_buffers,
+            app_handle,
+        }
+    }
+
+    pub fn attach_app_handle(&self, app_handle: AppHandle) {
+        if let Ok(mut shared_app_handle) = self.app_handle.write() {
+            *shared_app_handle = Some(app_handle);
         }
     }
 
@@ -765,6 +805,7 @@ impl PlaybackSession {
         song_dir: PathBuf,
         song: Song,
         position_seconds: f64,
+        app_handle: SharedAppHandle,
         debug_config: AudioDebugConfig,
         audio_buffers: AudioBufferCache,
     ) -> Result<Self, String> {
@@ -799,6 +840,7 @@ impl PlaybackSession {
                 position_seconds,
                 output_sample_rate,
                 output_channels,
+                app_handle,
                 debug_config,
                 audio_buffers.clone(),
             ),
@@ -913,7 +955,7 @@ impl MemoryClipReader {
         frame_count: usize,
         output_channels: usize,
         gain: f32,
-    ) {
+    ) -> (f32, f32) {
         self.mix_into_with_channel_gains(
             buffer,
             offset_frames,
@@ -934,13 +976,15 @@ impl MemoryClipReader {
         gain: f32,
         left_gain: f32,
         right_gain: f32,
-    ) {
+    ) -> (f32, f32) {
         if self.eof {
-            return;
+            return (0.0, 0.0);
         }
 
         let frame_step = self.shared_buffer.sample_rate as f64 / self.output_sample_rate as f64;
         let source_frame_count = self.shared_buffer.frame_count();
+        let mut left_peak = 0.0_f32;
+        let mut right_peak = 0.0_f32;
 
         for frame_offset in 0..frame_count {
             if self.current_frame >= source_frame_count {
@@ -960,11 +1004,22 @@ impl MemoryClipReader {
                     } else {
                         1.0
                     };
-                    buffer[buffer_base + channel] += self.shared_buffer.read_sample(
+                    let sample = self.shared_buffer.read_sample(
                         self.current_frame,
                         channel,
                         output_channels,
                     ) * gain * channel_gain;
+                    buffer[buffer_base + channel] += sample;
+
+                    if output_channels <= 1 {
+                        let mono_peak = sample.abs();
+                        left_peak = left_peak.max(mono_peak);
+                        right_peak = right_peak.max(mono_peak);
+                    } else if channel == 0 {
+                        left_peak = left_peak.max(sample.abs());
+                    } else if channel == 1 {
+                        right_peak = right_peak.max(sample.abs());
+                    }
                 }
             }
 
@@ -975,6 +1030,8 @@ impl MemoryClipReader {
         if self.current_frame >= source_frame_count {
             self.eof = true;
         }
+
+        (left_peak, right_peak)
     }
 }
 
@@ -1207,6 +1264,7 @@ fn run_audio_thread(
     receiver: Receiver<AudioCommand>,
     debug_config: AudioDebugConfig,
     audio_buffers: AudioBufferCache,
+    app_handle: SharedAppHandle,
 ) {
     let mut runtime: Option<AudioRuntime> = None;
     let mut debug_state = AudioDebugState::new(debug_config);
@@ -1226,7 +1284,7 @@ fn run_audio_thread(
                     Some(playback_reason_label(reason).to_string()),
                 );
 
-                let result = ensure_runtime(&mut runtime, &audio_buffers)
+                let result = ensure_runtime(&mut runtime, &audio_buffers, &app_handle)
                     .restart(&song_dir, &song, position_seconds, debug_config)
                     .map(|report| {
                         debug_state.record_restart(
@@ -1250,7 +1308,7 @@ fn run_audio_thread(
                     Some(playback_reason_label(reason).to_string()),
                 );
 
-                let result = ensure_runtime(&mut runtime, &audio_buffers)
+                let result = ensure_runtime(&mut runtime, &audio_buffers, &app_handle)
                     .seek(&song, position_seconds)
                     .map(|active_sinks| {
                         debug_state.record_seek(
@@ -1271,7 +1329,7 @@ fn run_audio_thread(
                 debug_state
                     .record_command(AudioCommandKind::SyncSong, Some("mix_only".to_string()));
 
-                let result = ensure_runtime(&mut runtime, &audio_buffers)
+                let result = ensure_runtime(&mut runtime, &audio_buffers, &app_handle)
                     .sync_song(&song)
                     .map(|report| {
                         debug_state.record_sync(&report);
@@ -1315,8 +1373,9 @@ fn run_audio_thread(
 fn ensure_runtime<'a>(
     runtime: &'a mut Option<AudioRuntime>,
     audio_buffers: &AudioBufferCache,
+    app_handle: &SharedAppHandle,
 ) -> &'a mut AudioRuntime {
-    runtime.get_or_insert_with(|| AudioRuntime::new(audio_buffers.clone()))
+    runtime.get_or_insert_with(|| AudioRuntime::new(audio_buffers.clone(), app_handle.clone()))
 }
 
 fn next_audio_command(
@@ -1413,10 +1472,17 @@ impl Mixer {
         position_seconds: f64,
         output_sample_rate: u32,
         output_channels: usize,
+        app_handle: SharedAppHandle,
         debug_config: AudioDebugConfig,
         audio_buffers: AudioBufferCache,
     ) -> Self {
         let plans = build_playback_plans(&song_dir, &song, output_sample_rate);
+        let track_meter_indices = song
+            .tracks
+            .iter()
+            .enumerate()
+            .map(|(index, track)| (track.id.clone(), index))
+            .collect();
         let mut mixer = Self {
             song,
             audio_buffers,
@@ -1429,6 +1495,8 @@ impl Mixer {
             active_clips: Vec::new(),
             debug_config,
             opened_files: 0,
+            track_meter_indices,
+            meter_emitter: MeterEmitterState::new(app_handle),
         };
         mixer.seek(mixer.song.clone(), position_seconds);
         mixer
@@ -1436,10 +1504,12 @@ impl Mixer {
 
     fn apply_song_update(&mut self, song: Song) {
         self.song = song;
+        self.rebuild_track_meter_indices();
     }
 
     fn seek(&mut self, song: Song, position_seconds: f64) {
         self.song = song;
+        self.rebuild_track_meter_indices();
         self.song_duration_frames =
             seconds_to_frames(self.song.duration_seconds, self.output_sample_rate);
         self.timeline_cursor_frame = seconds_to_frames(position_seconds, self.output_sample_rate)
@@ -1459,6 +1529,8 @@ impl Mixer {
         let block_start = self.timeline_cursor_frame;
         let block_end = block_start + block_frames as u64;
         let mut mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
+        let should_capture_track_meters = self.meter_emitter.should_emit();
+        let mut track_meters = should_capture_track_meters.then(|| self.empty_track_meters());
 
         self.activate_due_clips(block_end);
 
@@ -1478,7 +1550,7 @@ impl Mixer {
             ) as f32;
             let target_pan = resolve_track_runtime_pan(&self.song, &clip_state.plan.track_id);
 
-            clip_state.mix_into(
+            let (left_peak, right_peak) = clip_state.mix_into(
                 &mut mixed,
                 offset_frames,
                 overlap_frames,
@@ -1487,6 +1559,23 @@ impl Mixer {
                 target_gain,
                 target_pan,
             );
+
+            if let Some(index) = track_meters.as_ref().and_then(|_| {
+                self.track_meter_indices
+                    .get(clip_state.plan.track_id.as_str())
+                    .copied()
+            }) {
+                if let Some(track_meter_levels) = track_meters.as_mut() {
+                    track_meter_levels[index].left_peak =
+                        track_meter_levels[index].left_peak.max(left_peak);
+                    track_meter_levels[index].right_peak =
+                        track_meter_levels[index].right_peak.max(right_peak);
+                }
+            }
+        }
+
+        if let Some(track_meter_levels) = track_meters.as_ref() {
+            self.meter_emitter.emit(track_meter_levels);
         }
 
         self.active_clips.retain(|clip_state| {
@@ -1534,6 +1623,71 @@ impl Mixer {
             }
         }
     }
+
+    fn rebuild_track_meter_indices(&mut self) {
+        self.track_meter_indices = self
+            .song
+            .tracks
+            .iter()
+            .enumerate()
+            .map(|(index, track)| (track.id.clone(), index))
+            .collect();
+    }
+
+    fn empty_track_meters(&self) -> Vec<AudioMeterLevel> {
+        self.song
+            .tracks
+            .iter()
+            .map(|track| AudioMeterLevel {
+                track_id: track.id.clone(),
+                left_peak: 0.0,
+                right_peak: 0.0,
+            })
+            .collect()
+    }
+}
+
+impl MeterEmitterState {
+    fn new(app_handle: SharedAppHandle) -> Self {
+        Self {
+            app_handle,
+            last_emitted_at: None,
+        }
+    }
+
+    fn should_emit(&self) -> bool {
+        let has_app_handle = self
+            .app_handle
+            .read()
+            .ok()
+            .and_then(|app_handle| app_handle.as_ref().cloned())
+            .is_some();
+        if !has_app_handle {
+            return false;
+        }
+
+        self.last_emitted_at
+            .map(|last_emitted_at| last_emitted_at.elapsed() >= AUDIO_METER_EMIT_INTERVAL)
+            .unwrap_or(true)
+    }
+
+    fn emit(&mut self, track_meters: &[AudioMeterLevel]) {
+        let Some(app_handle) = self
+            .app_handle
+            .read()
+            .ok()
+            .and_then(|app_handle| app_handle.as_ref().cloned())
+        else {
+            return;
+        };
+
+        if let Err(error) = app_handle.emit(AUDIO_METER_EVENT, track_meters.to_vec()) {
+            eprintln!("[libretracks-audio] failed to emit audio meters: {error}");
+            return;
+        }
+
+        self.last_emitted_at = Some(Instant::now());
+    }
 }
 
 impl MixClipState {
@@ -1546,9 +1700,11 @@ impl MixClipState {
         overlap_start_frame: u64,
         target_gain: f32,
         target_pan: f32,
-    ) {
+    ) -> (f32, f32) {
         let start_gain = self.current_gain;
         let start_pan = self.current_pan;
+        let mut left_peak = 0.0_f32;
+        let mut right_peak = 0.0_f32;
 
         for frame_offset in 0..frame_count {
             let dynamic_gain =
@@ -1559,7 +1715,7 @@ impl MixClipState {
                 (overlap_start_frame - self.plan.timeline_start_frame) + frame_offset as u64;
             let edge_gain = self.plan.edge_gain(clip_frame_position);
 
-            self.reader.mix_into_with_channel_gains(
+            let (frame_left_peak, frame_right_peak) = self.reader.mix_into_with_channel_gains(
                 buffer,
                 offset_frames + frame_offset,
                 1,
@@ -1568,10 +1724,14 @@ impl MixClipState {
                 left_gain,
                 right_gain,
             );
+            left_peak = left_peak.max(frame_left_peak);
+            right_peak = right_peak.max(frame_right_peak);
         }
 
         self.current_gain = target_gain;
         self.current_pan = target_pan;
+
+        (left_peak, right_peak)
     }
 }
 
@@ -2176,9 +2336,12 @@ mod tests {
         .expect("memory reader should open");
 
         let mut mixed = [0.0_f32; 4];
-        reader.mix_into_with_channel_gains(&mut mixed, 0, 2, 2, 1.0, 1.0, 0.0);
+        let (left_peak, right_peak) =
+            reader.mix_into_with_channel_gains(&mut mixed, 0, 2, 2, 1.0, 1.0, 0.0);
 
         assert_eq!(mixed, [0.5, 0.0, 0.25, 0.0]);
+        assert!((left_peak - 0.5).abs() < 0.000_001);
+        assert!(right_peak.abs() < 0.000_001);
     }
 
     #[test]
