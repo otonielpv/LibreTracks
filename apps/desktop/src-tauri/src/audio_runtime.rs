@@ -32,8 +32,8 @@ use tauri::{AppHandle, Emitter};
 
 use crate::state::DesktopError;
 
-const PCM_RING_CAPACITY_FRAMES: usize = 16_384;
-const DISK_RENDER_BLOCK_FRAMES: usize = 1_024;
+const PCM_RING_CAPACITY_FRAMES: usize = 4_096;
+const DISK_RENDER_BLOCK_FRAMES: usize = 512;
 const GAIN_EPSILON: f32 = 0.000_001;
 const AUDIO_METER_EVENT: &str = "audio:meters";
 const AUDIO_METER_EMIT_INTERVAL: Duration = Duration::from_millis(33);
