@@ -1727,9 +1727,9 @@ mod tests {
     use super::{
         build_playback_plans, coalesce_sync_song_commands, drain_consumer_samples, env_flag,
         interpolated_gain, playback_reason_label, probe_audio_file, scheduled_clip_count,
-        AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState,
-        OutputSample, PlaybackClipPlan, PlaybackStartReason, RestartReport, StopReport,
-        SyncReport,
+        AudioBufferCache, AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot,
+        AudioDebugState, MemoryClipReader, OutputSample, PlaybackClipPlan, PlaybackStartReason,
+        RestartReport, SharedAudioBuffer, StopReport, SyncReport,
     };
 
     fn demo_song() -> Song {
@@ -1811,6 +1811,28 @@ mod tests {
             writer.write_sample(0_i16).expect("sample should write");
         }
         writer.finalize().expect("wav should finalize");
+    }
+
+    fn cache_with_shared_buffer(
+        path: &Path,
+        samples: Vec<f32>,
+        sample_rate: u32,
+        channels: usize,
+    ) -> AudioBufferCache {
+        let cache = AudioBufferCache::default();
+        cache
+            .entries
+            .write()
+            .expect("audio cache should lock")
+            .insert(
+                path.to_path_buf(),
+                Arc::new(SharedAudioBuffer {
+                    samples,
+                    sample_rate,
+                    channels,
+                }),
+            );
+        cache
     }
 
     #[test]
@@ -2044,6 +2066,108 @@ mod tests {
         assert!(plan.edge_gain(10) > 0.45 && plan.edge_gain(10) < 0.55);
         assert!((plan.edge_gain(50) - 1.0).abs() < 0.000_001);
         assert!(plan.edge_gain(90) > 0.45 && plan.edge_gain(90) < 0.55);
+    }
+
+    #[test]
+    fn memory_clip_reader_reads_pcm_from_shared_buffer() {
+        let clip_path = PathBuf::from("audio/shared-buffer.wav");
+        let cache = cache_with_shared_buffer(
+            &clip_path,
+            vec![0.25, -0.25, 0.5, -0.5],
+            48_000,
+            2,
+        );
+        let mut reader = MemoryClipReader::open(
+            &PlaybackClipPlan {
+                clip_id: "clip".into(),
+                track_id: "track".into(),
+                file_path: clip_path,
+                timeline_start_frame: 0,
+                duration_frames: 2,
+                clip_start_offset_frames: 0,
+                total_clip_duration_frames: 2,
+                fade_in_frames: 0,
+                fade_out_frames: 0,
+                source_start_seconds: 0.0,
+            },
+            48_000,
+            &cache,
+        )
+        .expect("memory reader should open");
+
+        let mut mixed = [0.0_f32; 4];
+        reader.mix_into(&mut mixed, 0, 2, 2, 1.0);
+
+        assert_eq!(mixed, [0.25, -0.25, 0.5, -0.5]);
+        assert!(reader.eof);
+        assert_eq!(reader.current_frame, 2);
+    }
+
+    #[test]
+    fn memory_clip_reader_seek_to_jumps_directly_to_target_frame() {
+        let clip_path = PathBuf::from("audio/seek-buffer.wav");
+        let cache = cache_with_shared_buffer(
+            &clip_path,
+            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            48_000,
+            2,
+        );
+        let mut reader = MemoryClipReader::open(
+            &PlaybackClipPlan {
+                clip_id: "clip".into(),
+                track_id: "track".into(),
+                file_path: clip_path,
+                timeline_start_frame: 0,
+                duration_frames: 3,
+                clip_start_offset_frames: 0,
+                total_clip_duration_frames: 3,
+                fade_in_frames: 0,
+                fade_out_frames: 0,
+                source_start_seconds: 0.0,
+            },
+            48_000,
+            &cache,
+        )
+        .expect("memory reader should open");
+
+        reader.seek_to(1);
+        let mut mixed = [0.0_f32; 2];
+        reader.mix_into(&mut mixed, 0, 1, 2, 1.0);
+
+        assert_eq!(mixed, [0.3, 0.4]);
+        assert_eq!(reader.current_frame, 2);
+        assert!(!reader.eof);
+    }
+
+    #[test]
+    fn memory_clip_reader_honors_source_start_offset_when_opening() {
+        let clip_path = PathBuf::from("audio/offset-buffer.wav");
+        let cache = cache_with_shared_buffer(
+            &clip_path,
+            vec![0.1, 0.2, 0.3, 0.4],
+            4,
+            1,
+        );
+        let reader = MemoryClipReader::open(
+            &PlaybackClipPlan {
+                clip_id: "clip".into(),
+                track_id: "track".into(),
+                file_path: clip_path,
+                timeline_start_frame: 0,
+                duration_frames: 1,
+                clip_start_offset_frames: 0,
+                total_clip_duration_frames: 1,
+                fade_in_frames: 0,
+                fade_out_frames: 0,
+                source_start_seconds: 0.5,
+            },
+            4,
+            &cache,
+        )
+        .expect("memory reader should open");
+
+        assert_eq!(reader.current_frame, 2);
+        assert!(!reader.eof);
     }
 
     #[test]
