@@ -228,8 +228,6 @@ struct PlaybackClipPlan {
     file_path: PathBuf,
     timeline_start_frame: u64,
     duration_frames: u64,
-    clip_start_offset_frames: u64,
-    total_clip_duration_frames: u64,
     fade_in_frames: u64,
     fade_out_frames: u64,
     source_start_seconds: f64,
@@ -261,13 +259,12 @@ struct OutputSample {
 }
 
 struct Mixer {
-    song_dir: PathBuf,
     song: Song,
     audio_buffers: AudioBufferCache,
     output_sample_rate: u32,
     output_channels: usize,
     timeline_cursor_frame: u64,
-    remaining_song_frames: u64,
+    song_duration_frames: u64,
     next_plan_index: usize,
     plans: Vec<PlaybackClipPlan>,
     active_clips: Vec<MixClipState>,
@@ -311,9 +308,7 @@ impl PlaybackClipPlan {
             clip_frame_position as f32 / self.fade_in_frames as f32
         };
 
-        let remaining_frames = self
-            .total_clip_duration_frames
-            .saturating_sub(clip_frame_position);
+        let remaining_frames = self.duration_frames.saturating_sub(clip_frame_position);
         let fade_out_gain = if self.fade_out_frames == 0 || remaining_frames >= self.fade_out_frames
         {
             1.0
@@ -880,6 +875,7 @@ impl MemoryClipReader {
         plan: &PlaybackClipPlan,
         output_sample_rate: u32,
         audio_buffers: &AudioBufferCache,
+        timeline_frame: u64,
     ) -> Result<Self, String> {
         let shared_buffer = audio_buffers
             .get(&plan.file_path)?
@@ -891,10 +887,12 @@ impl MemoryClipReader {
             source_frame_cursor: 0.0,
             eof: false,
         };
-        let source_start_frame = seconds_to_frames(
-            source_start_seconds_floor(plan.source_start_seconds),
+        let source_start_frame = source_frame_for_timeline_position(
+            plan,
+            timeline_frame,
+            output_sample_rate,
             reader.shared_buffer.sample_rate,
-        ) as usize;
+        );
         reader.seek_to(source_start_frame);
         Ok(reader)
     }
@@ -959,6 +957,20 @@ fn source_start_seconds_floor(seconds: f64) -> f64 {
     } else {
         0.0
     }
+}
+
+fn source_frame_for_timeline_position(
+    plan: &PlaybackClipPlan,
+    timeline_frame: u64,
+    output_sample_rate: u32,
+    source_sample_rate: u32,
+) -> usize {
+    let elapsed_frames = timeline_frame.saturating_sub(plan.timeline_start_frame);
+    let elapsed_seconds = elapsed_frames as f64 / output_sample_rate.max(1) as f64;
+    seconds_to_frames(
+        source_start_seconds_floor(plan.source_start_seconds) + elapsed_seconds,
+        source_sample_rate,
+    ) as usize
 }
 
 fn open_audio_source(file_path: &Path) -> Result<OpenAudioSource, String> {
@@ -1310,7 +1322,7 @@ fn coalesce_sync_song_commands(
 }
 
 fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
-    while state.mixer.timeline_cursor_frame < state.mixer.remaining_song_frames {
+    while state.mixer.timeline_cursor_frame < state.mixer.song_duration_frames {
         if state.consume_commands() {
             break;
         }
@@ -1322,7 +1334,7 @@ fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
         }
 
         let remaining_frames =
-            (state.mixer.remaining_song_frames - state.mixer.timeline_cursor_frame) as usize;
+            (state.mixer.song_duration_frames - state.mixer.timeline_cursor_frame) as usize;
         let block_frames = DISK_RENDER_BLOCK_FRAMES
             .min(free_frames)
             .min(remaining_frames);
@@ -1372,22 +1384,21 @@ impl Mixer {
         debug_config: AudioDebugConfig,
         audio_buffers: AudioBufferCache,
     ) -> Self {
+        let plans = build_playback_plans(&song_dir, &song, output_sample_rate);
         let mut mixer = Self {
-            song_dir,
             song,
             audio_buffers,
             output_sample_rate,
             output_channels,
             timeline_cursor_frame: 0,
-            remaining_song_frames: 0,
+            song_duration_frames: 0,
             next_plan_index: 0,
-            plans: Vec::new(),
+            plans,
             active_clips: Vec::new(),
             debug_config,
             opened_files: 0,
         };
-        mixer.reset_timeline(position_seconds);
-        mixer.activate_due_clips(DISK_RENDER_BLOCK_FRAMES as u64);
+        mixer.seek(mixer.song.clone(), position_seconds);
         mixer
     }
 
@@ -1397,25 +1408,19 @@ impl Mixer {
 
     fn seek(&mut self, song: Song, position_seconds: f64) {
         self.song = song;
-        self.reset_timeline(position_seconds);
-        self.activate_due_clips(DISK_RENDER_BLOCK_FRAMES as u64);
-    }
-
-    fn reset_timeline(&mut self, position_seconds: f64) {
-        self.remaining_song_frames = seconds_to_frames(
-            (self.song.duration_seconds - position_seconds).max(0.0),
-            self.output_sample_rate,
-        );
-        self.plans = build_playback_plans(
-            &self.song_dir,
-            &self.song,
-            position_seconds,
-            self.output_sample_rate,
-        );
-        self.timeline_cursor_frame = 0;
-        self.next_plan_index = 0;
+        self.song_duration_frames =
+            seconds_to_frames(self.song.duration_seconds, self.output_sample_rate);
+        self.timeline_cursor_frame = seconds_to_frames(position_seconds, self.output_sample_rate)
+            .min(self.song_duration_frames);
+        self.next_plan_index = self
+            .plans
+            .partition_point(|plan| plan.timeline_end_frame() <= self.timeline_cursor_frame);
         self.active_clips.clear();
         self.opened_files = 0;
+        self.activate_due_clips(
+            self.timeline_cursor_frame
+                .saturating_add(DISK_RENDER_BLOCK_FRAMES as u64),
+        );
     }
 
     fn render_next_block(&mut self, block_frames: usize) -> Vec<f32> {
@@ -1459,13 +1464,23 @@ impl Mixer {
     }
 
     fn activate_due_clips(&mut self, window_end_frame: u64) {
+        let activation_start_frame = self.timeline_cursor_frame;
         while self.next_plan_index < self.plans.len()
             && self.plans[self.next_plan_index].timeline_start_frame < window_end_frame
         {
             let plan = self.plans[self.next_plan_index].clone();
             self.next_plan_index += 1;
 
-            match MemoryClipReader::open(&plan, self.output_sample_rate, &self.audio_buffers) {
+            if plan.timeline_end_frame() <= activation_start_frame {
+                continue;
+            }
+
+            match MemoryClipReader::open(
+                &plan,
+                self.output_sample_rate,
+                &self.audio_buffers,
+                activation_start_frame,
+            ) {
                 Ok(reader) => {
                     let current_gain =
                         resolve_clip_runtime_gain(&self.song, &plan.clip_id, &plan.track_id) as f32;
@@ -1500,8 +1515,7 @@ impl MixClipState {
         for frame_offset in 0..frame_count {
             let dynamic_gain =
                 interpolated_gain(start_gain, target_gain, frame_offset, frame_count);
-            let clip_frame_position = self.plan.clip_start_offset_frames
-                + (overlap_start_frame - self.plan.timeline_start_frame)
+            let clip_frame_position = (overlap_start_frame - self.plan.timeline_start_frame)
                 + frame_offset as u64;
             let edge_gain = self.plan.edge_gain(clip_frame_position);
 
@@ -1555,20 +1569,12 @@ fn push_block_into_ring(producer: &mut Producer<OutputSample>, block: &[f32], ge
 fn build_playback_plans(
     song_dir: &Path,
     song: &Song,
-    position_seconds: f64,
     output_sample_rate: u32,
 ) -> Vec<PlaybackClipPlan> {
     let mut plans = Vec::new();
 
     for clip in &song.clips {
-        let clip_end_seconds = clip.timeline_start_seconds + clip.duration_seconds;
-        if clip_end_seconds <= position_seconds {
-            continue;
-        }
-
-        let elapsed_inside_clip = (position_seconds - clip.timeline_start_seconds).max(0.0);
-        let remaining_duration = (clip.duration_seconds - elapsed_inside_clip).max(0.0);
-        if remaining_duration <= 0.0 {
+        if clip.duration_seconds <= 0.0 {
             continue;
         }
 
@@ -1576,16 +1582,8 @@ fn build_playback_plans(
             clip_id: clip.id.clone(),
             track_id: clip.track_id.clone(),
             file_path: song_dir.join(&clip.file_path),
-            timeline_start_frame: seconds_to_frames(
-                (clip.timeline_start_seconds - position_seconds).max(0.0),
-                output_sample_rate,
-            ),
-            duration_frames: seconds_to_frames(remaining_duration, output_sample_rate),
-            clip_start_offset_frames: seconds_to_frames(elapsed_inside_clip, output_sample_rate),
-            total_clip_duration_frames: seconds_to_frames(
-                clip.duration_seconds,
-                output_sample_rate,
-            ),
+            timeline_start_frame: seconds_to_frames(clip.timeline_start_seconds, output_sample_rate),
+            duration_frames: seconds_to_frames(clip.duration_seconds, output_sample_rate),
             fade_in_frames: clip
                 .fade_in_seconds
                 .map(|seconds| seconds_to_frames(seconds, output_sample_rate))
@@ -1594,7 +1592,7 @@ fn build_playback_plans(
                 .fade_out_seconds
                 .map(|seconds| seconds_to_frames(seconds, output_sample_rate))
                 .unwrap_or(0),
-            source_start_seconds: clip.source_start_seconds + elapsed_inside_clip,
+            source_start_seconds: clip.source_start_seconds,
         });
     }
 
@@ -1728,8 +1726,8 @@ mod tests {
         build_playback_plans, coalesce_sync_song_commands, drain_consumer_samples, env_flag,
         interpolated_gain, playback_reason_label, probe_audio_file, scheduled_clip_count,
         AudioBufferCache, AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot,
-        AudioDebugState, MemoryClipReader, OutputSample, PlaybackClipPlan, PlaybackStartReason,
-        RestartReport, SharedAudioBuffer, StopReport, SyncReport,
+        AudioDebugState, MemoryClipReader, Mixer, OutputSample, PlaybackClipPlan,
+        PlaybackStartReason, RestartReport, SharedAudioBuffer, StopReport, SyncReport,
     };
 
     fn demo_song() -> Song {
@@ -2025,19 +2023,17 @@ mod tests {
     }
 
     #[test]
-    fn playback_plans_trim_running_clips_against_current_position() {
-        let plans = build_playback_plans(Path::new("song"), &demo_song(), 1.0, 48_000);
+    fn playback_plans_use_absolute_song_timeline_frames() {
+        let plans = build_playback_plans(Path::new("song"), &demo_song(), 48_000);
 
         assert_eq!(plans.len(), 2);
         assert_eq!(plans[0].clip_id, "clip_intro");
         assert_eq!(plans[0].timeline_start_frame, 0);
-        assert_eq!(plans[0].duration_frames, 48_000 * 4);
-        assert_eq!(plans[0].clip_start_offset_frames, 48_000);
-        assert_eq!(plans[0].total_clip_duration_frames, 48_000 * 5);
-        assert!((plans[0].source_start_seconds - 1.0).abs() < 0.000_001);
+        assert_eq!(plans[0].duration_frames, 48_000 * 5);
+        assert!((plans[0].source_start_seconds - 0.0).abs() < 0.000_001);
 
         assert_eq!(plans[1].clip_id, "clip_late");
-        assert_eq!(plans[1].timeline_start_frame, 48_000 * 9);
+        assert_eq!(plans[1].timeline_start_frame, 48_000 * 10);
     }
 
     #[test]
@@ -2055,8 +2051,6 @@ mod tests {
             file_path: PathBuf::from("audio/test.wav"),
             timeline_start_frame: 0,
             duration_frames: 100,
-            clip_start_offset_frames: 0,
-            total_clip_duration_frames: 100,
             fade_in_frames: 20,
             fade_out_frames: 20,
             source_start_seconds: 0.0,
@@ -2084,14 +2078,13 @@ mod tests {
                 file_path: clip_path,
                 timeline_start_frame: 0,
                 duration_frames: 2,
-                clip_start_offset_frames: 0,
-                total_clip_duration_frames: 2,
                 fade_in_frames: 0,
                 fade_out_frames: 0,
                 source_start_seconds: 0.0,
             },
             48_000,
             &cache,
+            0,
         )
         .expect("memory reader should open");
 
@@ -2119,14 +2112,13 @@ mod tests {
                 file_path: clip_path,
                 timeline_start_frame: 0,
                 duration_frames: 3,
-                clip_start_offset_frames: 0,
-                total_clip_duration_frames: 3,
                 fade_in_frames: 0,
                 fade_out_frames: 0,
                 source_start_seconds: 0.0,
             },
             48_000,
             &cache,
+            0,
         )
         .expect("memory reader should open");
 
@@ -2155,19 +2147,73 @@ mod tests {
                 file_path: clip_path,
                 timeline_start_frame: 0,
                 duration_frames: 1,
-                clip_start_offset_frames: 0,
-                total_clip_duration_frames: 1,
                 fade_in_frames: 0,
                 fade_out_frames: 0,
                 source_start_seconds: 0.5,
             },
             4,
             &cache,
+            0,
         )
         .expect("memory reader should open");
 
         assert_eq!(reader.current_frame, 2);
         assert!(!reader.eof);
+    }
+
+    #[test]
+    fn mixer_seek_reuses_absolute_plans_and_activates_overlapping_clip() {
+        let song = demo_song();
+        let song_dir = PathBuf::from("song");
+        let cache = AudioBufferCache::default();
+        cache
+            .entries
+            .write()
+            .expect("audio cache should lock")
+            .extend([
+                (
+                    song_dir.join("audio/intro.wav"),
+                    Arc::new(SharedAudioBuffer {
+                        samples: vec![0.0; 48_000 * 5],
+                        sample_rate: 48_000,
+                        channels: 1,
+                    }),
+                ),
+                (
+                    song_dir.join("audio/late.wav"),
+                    Arc::new(SharedAudioBuffer {
+                        samples: vec![0.0; 48_000 * 5],
+                        sample_rate: 48_000,
+                        channels: 1,
+                    }),
+                ),
+            ]);
+
+        let mut mixer = Mixer::new(
+            song_dir,
+            song.clone(),
+            0.0,
+            48_000,
+            1,
+            AudioDebugConfig {
+                enabled: false,
+                log_commands: false,
+            },
+            cache,
+        );
+
+        assert_eq!(mixer.plans.len(), 2);
+        assert_eq!(mixer.timeline_cursor_frame, 0);
+        assert_eq!(mixer.active_clips.len(), 1);
+        assert_eq!(mixer.active_clips[0].plan.clip_id, "clip_intro");
+
+        mixer.seek(song, 11.0);
+
+        assert_eq!(mixer.plans.len(), 2);
+        assert_eq!(mixer.timeline_cursor_frame, 48_000 * 11);
+        assert_eq!(mixer.active_clips.len(), 1);
+        assert_eq!(mixer.active_clips[0].plan.clip_id, "clip_late");
+        assert_eq!(mixer.active_clips[0].reader.current_frame, 48_000);
     }
 
     #[test]
