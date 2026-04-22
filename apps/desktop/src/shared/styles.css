@@ -800,26 +800,34 @@ body {
   z-index: 3;
 }
 
-.lt-section-tag {
+.lt-marker-hotspot {
   position: absolute;
-  top: 2rem;
-  height: 1.5rem;
+  top: 1rem;
+  width: 4.25rem;
+  height: 2.25rem;
+  margin-left: -0.5rem;
   border: 0;
-  border-radius: 2px;
-  background: rgb(87 241 219 / 0.12);
-  color: #e5e2e1;
-  font: 600 10px/1 "Space Grotesk", sans-serif;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0 0.45rem;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  z-index: 3;
 }
 
-.lt-section-tag.is-selected {
-  background: rgb(255 226 171 / 0.18);
-  color: #ffe2ab;
+.lt-marker-hotspot:focus-visible {
+  outline: 1px solid rgb(255 226 171 / 0.88);
+  outline-offset: 1px;
+}
+
+.lt-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .lt-inline-menu {

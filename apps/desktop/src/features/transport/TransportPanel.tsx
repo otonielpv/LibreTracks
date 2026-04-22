@@ -281,7 +281,7 @@ function isInteractiveTimelineTarget(target: EventTarget | null) {
   return target instanceof HTMLElement
     ? Boolean(
         target.closest(
-          ".lt-section-tag, .lt-track-header, .lt-inline-menu, .lt-context-menu, button, input, select, textarea, label",
+          ".lt-marker-hotspot, .lt-track-header, .lt-inline-menu, .lt-context-menu, button, input, select, textarea, label",
         ),
       )
     : false;
@@ -2323,6 +2323,9 @@ export function TransportPanel() {
                   cameraXRef={cameraXRef}
                   pixelsPerSecond={pixelsPerSecond}
                   timelineGrid={timelineGrid}
+                  markers={song?.sectionMarkers ?? []}
+                  selectedMarkerId={selectedSectionId}
+                  pendingMarkerJump={snapshot?.pendingMarkerJump ?? null}
                   selection={currentSelection}
                   playheadSecondsRef={displayPositionSecondsRef}
                   previewPlayheadSeconds={playheadDrag?.currentSeconds ?? null}
@@ -2350,7 +2353,9 @@ export function TransportPanel() {
                       <button
                         key={section.id}
                         type="button"
-                        className={`lt-section-tag ${selectedSectionId === section.id ? "is-selected" : ""}`}
+                        className={`lt-marker-hotspot ${selectedSectionId === section.id ? "is-selected" : ""}`}
+                        aria-label={section.name}
+                        title={section.name}
                         style={{ left: sectionLeft }}
                         onMouseDown={(event) => {
                           event.preventDefault();
@@ -2369,7 +2374,7 @@ export function TransportPanel() {
                           openMenu(event, section.name, sectionContextMenu(section));
                         }}
                       >
-                        {section.name}
+                        <span className="lt-sr-only">{section.name}</span>
                       </button>
                     );
                   })}

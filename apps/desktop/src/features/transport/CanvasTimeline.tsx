@@ -2,6 +2,8 @@ import { useEffect, useRef, type MutableRefObject, type ReactNode } from "react"
 
 import type {
   ClipSummary,
+  PendingJumpSummary,
+  SectionMarkerSummary,
   SongView,
   TrackSummary,
   WaveformSummaryDto,
@@ -20,6 +22,9 @@ type RulerCanvasProps = {
   cameraXRef: MutableRefObject<number>;
   pixelsPerSecond: number;
   timelineGrid: TimelineGrid;
+  markers: SectionMarkerSummary[];
+  selectedMarkerId: string | null;
+  pendingMarkerJump: PendingJumpSummary | null;
   selection: TimeSelection;
   playheadSecondsRef: MutableRefObject<number>;
   previewPlayheadSeconds: number | null;
@@ -168,6 +173,141 @@ function drawPlayhead(
   context.lineTo(snappedX, 7);
   context.closePath();
   context.fill();
+}
+
+function drawPendingExecutionLine(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+  executeAtSeconds: number,
+) {
+  const x = secondsToScreenX(executeAtSeconds, cameraX, pixelsPerSecond);
+  if (x < -12 || x > width + 12) {
+    return;
+  }
+
+  const snappedX = Math.round(x) + 0.5;
+  context.save();
+  context.strokeStyle = "rgba(255, 226, 171, 0.88)";
+  context.fillStyle = "rgba(255, 226, 171, 0.92)";
+  context.lineWidth = 1.5;
+  context.setLineDash([6, 4]);
+  context.beginPath();
+  context.moveTo(snappedX, 0);
+  context.lineTo(snappedX, height);
+  context.stroke();
+  context.setLineDash([]);
+  context.beginPath();
+  context.moveTo(snappedX - 5, 0);
+  context.lineTo(snappedX + 5, 0);
+  context.lineTo(snappedX, 8);
+  context.closePath();
+  context.fill();
+  context.restore();
+}
+
+function drawRulerMarker(
+  context: CanvasRenderingContext2D,
+  marker: SectionMarkerSummary,
+  width: number,
+  height: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+  options: {
+    isSelected: boolean;
+    isArmed: boolean;
+    isCurrent: boolean;
+    pulseAlpha: number;
+  },
+) {
+  const x = secondsToScreenX(marker.startSeconds, cameraX, pixelsPerSecond);
+  const label = marker.digit == null ? marker.name : `${marker.digit}. ${marker.name}`;
+
+  context.font = '600 10px "Space Grotesk", sans-serif';
+  const labelWidth = Math.max(30, Math.ceil(context.measureText(label).width) + 12);
+  const labelHeight = 16;
+  const snappedX = Math.round(x) + 0.5;
+  const stemTop = 23;
+  const stemBottom = height - 10;
+  const alignRight = snappedX > width - labelWidth - 12;
+  const flagLeft = alignRight ? snappedX - labelWidth - 8 : snappedX + 2;
+  const flagRight = flagLeft + labelWidth;
+  const flagTop = 20;
+  const flagBottom = flagTop + labelHeight;
+
+  if (flagRight < -20 || flagLeft > width + 20) {
+    return;
+  }
+
+  const strokeStyle = options.isArmed
+    ? `rgba(87, 241, 219, ${options.pulseAlpha})`
+    : options.isSelected
+      ? "rgba(255, 226, 171, 0.9)"
+      : options.isCurrent
+        ? "rgba(229, 226, 225, 0.88)"
+        : "rgba(186, 202, 197, 0.48)";
+  const fillStyle = options.isArmed
+    ? `rgba(87, 241, 219, ${0.22 + options.pulseAlpha * 0.22})`
+    : options.isSelected
+      ? "rgba(255, 226, 171, 0.18)"
+      : options.isCurrent
+        ? "rgba(229, 226, 225, 0.16)"
+        : "rgba(186, 202, 197, 0.12)";
+  const textStyle = options.isArmed
+    ? "#57f1db"
+    : options.isSelected
+      ? "#ffe2ab"
+      : options.isCurrent
+        ? "#e5e2e1"
+        : "#bacac5";
+
+  context.save();
+  context.strokeStyle = strokeStyle;
+  context.fillStyle = fillStyle;
+  context.lineWidth = options.isArmed ? 1.8 : 1.2;
+  if (options.isArmed) {
+    context.shadowColor = "rgba(87, 241, 219, 0.55)";
+    context.shadowBlur = 10;
+  }
+
+  context.beginPath();
+  context.moveTo(snappedX, stemTop + 1);
+  context.lineTo(snappedX, stemBottom);
+  context.stroke();
+
+  context.beginPath();
+  if (alignRight) {
+    context.moveTo(snappedX, flagTop + 1);
+    context.lineTo(flagRight, flagTop + 1);
+    context.lineTo(flagRight, flagBottom - 1);
+    context.lineTo(flagLeft + 7, flagBottom - 1);
+    context.lineTo(snappedX, flagTop + labelHeight * 0.55);
+  } else {
+    context.moveTo(snappedX, flagTop + 1);
+    context.lineTo(flagRight - 7, flagTop + 1);
+    context.lineTo(flagRight, flagTop + labelHeight * 0.5);
+    context.lineTo(flagRight - 7, flagBottom - 1);
+    context.lineTo(snappedX, flagBottom - 1);
+  }
+  context.closePath();
+  context.fill();
+  context.stroke();
+
+  context.shadowBlur = 0;
+  context.fillStyle = textStyle;
+  context.textBaseline = "middle";
+  context.fillText(label, flagLeft + 6, flagTop + labelHeight / 2 + 0.5);
+
+  context.fillStyle = textStyle;
+  context.beginPath();
+  context.moveTo(snappedX - 4, stemBottom);
+  context.lineTo(snappedX + 4, stemBottom);
+  context.lineTo(snappedX, stemBottom + 6);
+  context.closePath();
+  context.fill();
+  context.restore();
 }
 
 function clipScreenBounds(
@@ -442,6 +582,9 @@ export function TimelineRulerCanvas({
   cameraXRef,
   pixelsPerSecond,
   timelineGrid,
+  markers,
+  selectedMarkerId,
+  pendingMarkerJump,
   selection,
   playheadSecondsRef,
   previewPlayheadSeconds,
@@ -456,6 +599,9 @@ export function TimelineRulerCanvas({
     height,
     pixelsPerSecond,
     timelineGrid,
+    markers,
+    selectedMarkerId,
+    pendingMarkerJump,
     selection,
     previewPlayheadSeconds,
     playheadColor,
@@ -467,6 +613,9 @@ export function TimelineRulerCanvas({
     height,
     pixelsPerSecond,
     timelineGrid,
+    markers,
+    selectedMarkerId,
+    pendingMarkerJump,
     selection,
     previewPlayheadSeconds,
     playheadColor,
@@ -474,7 +623,18 @@ export function TimelineRulerCanvas({
 
   useEffect(() => {
     sceneVersionRef.current += 1;
-  }, [height, pixelsPerSecond, previewPlayheadSeconds, playheadColor, selection, timelineGrid, width]);
+  }, [
+    height,
+    markers,
+    pendingMarkerJump,
+    pixelsPerSecond,
+    previewPlayheadSeconds,
+    playheadColor,
+    selectedMarkerId,
+    selection,
+    timelineGrid,
+    width,
+  ]);
 
   useEffect(() => {
     const baseCanvas = baseCanvasRef.current;
@@ -532,6 +692,39 @@ export function TimelineRulerCanvas({
             snapshot.pixelsPerSecond;
           overlayContext.fillStyle = "rgba(87, 241, 219, 0.12)";
           overlayContext.fillRect(left, 0, selectionWidth, snapshot.height);
+        }
+
+        if (snapshot.pendingMarkerJump) {
+          drawPendingExecutionLine(
+            overlayContext,
+            snapshot.width,
+            snapshot.height,
+            cameraX,
+            snapshot.pixelsPerSecond,
+            snapshot.pendingMarkerJump.executeAtSeconds,
+          );
+        }
+
+        const pulseAlpha = 0.72 + Math.sin(performance.now() / 160) * 0.18;
+        const currentMarkerId = snapshot.markers
+          .filter((marker) => playheadSecondsRef.current >= marker.startSeconds)
+          .at(-1)?.id ?? null;
+
+        for (const marker of snapshot.markers) {
+          drawRulerMarker(
+            overlayContext,
+            marker,
+            snapshot.width,
+            snapshot.height,
+            cameraX,
+            snapshot.pixelsPerSecond,
+            {
+              isSelected: snapshot.selectedMarkerId === marker.id,
+              isArmed: snapshot.pendingMarkerJump?.targetMarkerId === marker.id,
+              isCurrent: currentMarkerId === marker.id,
+              pulseAlpha,
+            },
+          );
         }
 
       }
