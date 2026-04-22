@@ -850,37 +850,11 @@ export function TransportPanel() {
         event.preventDefault();
 
         if (event.shiftKey) {
-          void runAction(
-            async () => {
-              const nextSnapshot = await saveProjectAs();
-              if (!nextSnapshot) {
-                return;
-              }
-
-              setSnapshot(nextSnapshot);
-              setStatus(
-                nextSnapshot.songFilePath
-                  ? `Proyecto guardado en ${nextSnapshot.songFilePath}.`
-                  : "Proyecto guardado en nueva ubicacion.",
-              );
-            },
-            { busy: true },
-          );
+          handleSaveProjectAsClick();
           return;
         }
 
-        void runAction(
-          async () => {
-            const nextSnapshot = await saveProject();
-            setSnapshot(nextSnapshot);
-            setStatus(
-              nextSnapshot.songFilePath
-                ? `Proyecto guardado en ${nextSnapshot.songFilePath}.`
-                : "Proyecto guardado.",
-            );
-          },
-          { busy: true },
-        );
+        handleSaveProjectClick();
         return;
       }
 
@@ -2015,11 +1989,41 @@ export function TransportPanel() {
   }
 
   function handleCreateSongClick() {
-    void runAction(async () => setSnapshot(await createSong()), { busy: true });
+    void runAction(
+      async () => {
+        const nextSnapshot = await createSong();
+        if (!nextSnapshot) {
+          return;
+        }
+
+        setSnapshot(nextSnapshot);
+        setStatus(
+          nextSnapshot.songFilePath
+            ? `Proyecto creado en ${nextSnapshot.songFilePath}.`
+            : "Proyecto creado.",
+        );
+      },
+      { busy: true },
+    );
   }
 
   function handleOpenProjectClick() {
     void runAction(async () => setSnapshot((await openProject()) ?? snapshot), { busy: true });
+  }
+
+  function handleSaveProjectClick() {
+    void runAction(
+      async () => {
+        const nextSnapshot = await saveProject();
+        setSnapshot(nextSnapshot);
+        setStatus(
+          nextSnapshot.songFilePath
+            ? `Proyecto guardado en ${nextSnapshot.songFilePath}.`
+            : "Proyecto guardado.",
+        );
+      },
+      { busy: true },
+    );
   }
 
   function handleSaveProjectAsClick() {
@@ -2173,6 +2177,13 @@ export function TransportPanel() {
           <button type="button" onClick={handleOpenProjectClick}>
             <span className="material-symbols-outlined" aria-hidden="true">folder_open</span>
             <span className="lt-button-label">Abrir</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveProjectClick}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">save</span>
+            <span className="lt-button-label">Guardar</span>
           </button>
           <button
             type="button"

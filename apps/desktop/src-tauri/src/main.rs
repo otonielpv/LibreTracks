@@ -144,7 +144,7 @@ fn pick_and_import_song_from_dialog(
 fn create_song(
     app: AppHandle,
     state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
+) -> Result<Option<TransportSnapshot>, String> {
     let mut session = state
         .session
         .lock()

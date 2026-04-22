@@ -352,19 +352,38 @@ impl DesktopSession {
         &mut self,
         app: &AppHandle,
         audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
+    ) -> Result<Option<TransportSnapshot>, DesktopError> {
         let title = "Nueva Cancion".to_string();
         let song_id = format!("song_{}", timestamp_suffix());
-        let folder_name = format!("{}-{}", slugify(&title), timestamp_suffix());
-        let song_dir = create_song_folder(project_root(app).join("songs"), &folder_name)?;
         let song = build_empty_song(song_id, title);
 
+        let default_directory = project_root(app).join("songs");
+        let target_song_file = FileDialog::new()
+            .set_title("Crear proyecto")
+            .set_directory(&default_directory)
+            .add_filter("LibreTracks Song", &["json"])
+            .set_file_name(&default_project_file_name(&song.title))
+            .save_file();
+
+        let Some(target_song_file) = target_song_file else {
+            return Ok(None);
+        };
+
+        let song_dir = target_song_file.parent().map(Path::to_path_buf).ok_or_else(|| {
+            DesktopError::AudioCommand(
+                "el archivo del proyecto debe vivir dentro de una carpeta".into(),
+            )
+        })?;
+        fs::create_dir_all(song_dir.join("audio"))?;
+        fs::create_dir_all(song_dir.join("cache").join("waveforms"))?;
+
         let save_started_at = Instant::now();
-        save_song(&song_dir, &song)?;
+        save_song_to_file(&target_song_file, &song)?;
         self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
         self.load_song_from_path(song, song_dir, audio)?;
+        self.song_file_path = Some(target_song_file);
 
-        Ok(self.snapshot())
+        Ok(Some(self.snapshot()))
     }
 
     pub fn save_project(&mut self) -> Result<TransportSnapshot, DesktopError> {

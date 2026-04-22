@@ -302,7 +302,7 @@ export async function reportUiRenderMetric(renderMillis: number): Promise<void> 
   await invokeCommand("report_ui_render_metric", { renderMillis });
 }
 
-export async function createSong(): Promise<TransportSnapshot> {
+export async function createSong(): Promise<TransportSnapshot | null> {
   if (!isTauriApp) {
     demoSong = normalizeSong({
       id: `song-demo-${Date.now()}`,
@@ -336,7 +336,7 @@ export async function createSong(): Promise<TransportSnapshot> {
     return buildDemoSnapshot();
   }
 
-  return invokeCommand<TransportSnapshot>("create_song");
+  return invokeCommand<TransportSnapshot | null>("create_song");
 }
 
 export async function saveProject(): Promise<TransportSnapshot> {
