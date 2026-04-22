@@ -1022,15 +1022,6 @@ impl MemoryClipReader {
                     buffer[buffer_base + 1] += right_output;
                     left_peak = left_peak.max(left_output.abs());
                     right_peak = right_peak.max(right_output.abs());
-
-                    for channel in 2..output_channels {
-                        let sample = self.shared_buffer.read_sample(
-                            self.current_frame,
-                            channel,
-                            output_channels,
-                        ) * gain;
-                        buffer[buffer_base + channel] += sample;
-                    }
                 }
             }
 
@@ -2522,6 +2513,33 @@ mod tests {
         assert!((hard_right_r - 1.0).abs() < 0.000_001);
         assert!((mono_left - 0.3).abs() < 0.000_001);
         assert!((mono_right - 0.5).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn memory_clip_reader_keeps_extra_output_channels_silent() {
+        let clip_path = PathBuf::from("audio/multichannel-pan-buffer.wav");
+        let cache = cache_with_shared_buffer(&clip_path, vec![0.25, 0.75], 48_000, 2);
+        let mut reader = MemoryClipReader::open(
+            &PlaybackClipPlan {
+                clip_id: "clip".into(),
+                track_id: "track".into(),
+                file_path: clip_path,
+                timeline_start_frame: 0,
+                duration_frames: 1,
+                fade_in_frames: 0,
+                fade_out_frames: 0,
+                source_start_seconds: 0.0,
+            },
+            48_000,
+            &cache,
+            0,
+        )
+        .expect("memory reader should open");
+
+        let mut mixed = [0.0_f32; 4];
+        reader.mix_into_with_channel_gains(&mut mixed, 0, 1, 4, 1.0, -1.0);
+
+        assert_eq!(mixed, [1.0, 0.0, 0.0, 0.0]);
     }
 
     #[test]

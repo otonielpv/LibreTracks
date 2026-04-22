@@ -758,6 +758,23 @@ body {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03), 1px 0 0 rgb(19 19 19 / 0.55), 10px 0 18px rgb(0 0 0 / 0.12);
 }
 
+.lt-track-header-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.lt-track-header-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
 .lt-track-header.is-dragging {
   background: linear-gradient(180deg, #181818 0%, #111111 100%);
   border-right-color: rgb(21 31 29 / 0.52);
@@ -794,7 +811,6 @@ body {
   flex: 1 1 auto;
   display: flex;
   align-items: stretch;
-  gap: 0.55rem;
 }
 
 .lt-track-header.is-condensed {
@@ -818,6 +834,11 @@ body {
 
 .lt-track-header.is-condensed .lt-track-header-summary {
   gap: 0.4rem;
+}
+
+.lt-track-header.is-condensed .lt-track-header-body,
+.lt-track-header.is-condensed .lt-track-header-content {
+  gap: 0.35rem;
 }
 
 .lt-track-header.is-condensed .lt-track-mix-controls {
@@ -853,8 +874,7 @@ body {
 
 .lt-track-header.is-compact .lt-track-meta,
 .lt-track-header.is-compact .lt-track-drop-hint,
-.lt-track-header.is-compact .lt-track-volume span,
-.lt-track-header.is-compact .lt-track-pan span {
+.lt-track-header.is-compact .lt-track-volume span {
   display: none;
 }
 
@@ -864,6 +884,11 @@ body {
 
 .lt-track-header.is-compact .lt-track-header-summary {
   gap: 0.35rem;
+}
+
+.lt-track-header.is-compact .lt-track-header-body,
+.lt-track-header.is-compact .lt-track-header-content {
+  gap: 0.25rem;
 }
 
 .lt-track-header.is-compact .lt-track-meter {
@@ -918,7 +943,7 @@ body {
   display: flex;
   width: 16px;
   flex: 0 0 16px;
-  height: 100%;
+  align-self: stretch;
   align-items: stretch;
   justify-content: flex-end;
   gap: 0.22rem;
@@ -1006,6 +1031,16 @@ body {
   font: 600 10px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.lt-track-volume span {
+  flex: 0 0 1.9rem;
+}
+
+.lt-track-pan span {
+  flex: 0 0 1.9rem;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .lt-track-volume input[type="range"],
