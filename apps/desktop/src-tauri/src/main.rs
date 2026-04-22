@@ -306,6 +306,22 @@ fn move_clip(
 }
 
 #[tauri::command]
+fn move_clip_live(
+    clip_id: String,
+    timeline_start_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .move_clip_live(&clip_id, timeline_start_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn delete_clip(
     clip_id: String,
     state: State<'_, DesktopState>,
@@ -627,6 +643,7 @@ fn main() {
             schedule_marker_jump,
             cancel_marker_jump,
             move_clip,
+            move_clip_live,
             delete_clip,
             update_clip_window,
             duplicate_clip,

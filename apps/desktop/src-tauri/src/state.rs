@@ -50,6 +50,7 @@ pub struct DesktopSession {
     project_revision: u64,
     undo_stack: Vec<Song>,
     redo_stack: Vec<Song>,
+    live_history_anchor: Option<Song>,
     waveform_cache: WaveformMemoryCache,
     perf_metrics: DesktopPerformanceMetrics,
 }
@@ -73,6 +74,7 @@ impl Default for DesktopSession {
             project_revision: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            live_history_anchor: None,
             waveform_cache: WaveformMemoryCache::default(),
             perf_metrics: DesktopPerformanceMetrics::default(),
         }
@@ -520,6 +522,7 @@ impl DesktopSession {
             updated_song.song,
             audio,
             AudioChangeImpact::StructureRebuild,
+            true,
         )?;
         Ok(self.snapshot())
     }
@@ -711,9 +714,43 @@ impl DesktopSession {
         clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
         refresh_song_duration(&mut song);
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
 
         Ok(self.snapshot())
+    }
+
+    pub fn move_clip_live(
+        &mut self,
+        clip_id: &str,
+        timeline_start_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        self.sync_position(audio)?;
+        self.capture_live_history_anchor();
+
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let clip = song
+            .clips
+            .iter_mut()
+            .find(|clip| clip.id == clip_id)
+            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
+
+        clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
+        refresh_song_duration(&mut song);
+
+        self.persist_song_update_internal(
+            song,
+            audio,
+            AudioChangeImpact::TimelineWindow,
+            false,
+            false,
+        )?;
+
+        Ok(())
     }
 
     pub fn delete_clip(
@@ -734,7 +771,7 @@ impl DesktopSession {
         }
 
         refresh_song_duration(&mut song);
-        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
         Ok(self.snapshot())
     }
@@ -772,7 +809,7 @@ impl DesktopSession {
         clip.duration_seconds = duration_seconds;
         refresh_song_duration(&mut song);
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
 
         Ok(self.snapshot())
     }
@@ -801,7 +838,7 @@ impl DesktopSession {
         song.clips.push(duplicated_clip);
         refresh_song_duration(&mut song);
 
-        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
         Ok(self.snapshot())
     }
@@ -832,7 +869,7 @@ impl DesktopSession {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
         Ok(self.snapshot())
     }
@@ -874,7 +911,7 @@ impl DesktopSession {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
         Ok(self.snapshot())
     }
@@ -897,7 +934,7 @@ impl DesktopSession {
             return Err(DesktopError::SectionNotFound(section_id.to_string()));
         }
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
         Ok(self.snapshot())
     }
@@ -929,7 +966,7 @@ impl DesktopSession {
             .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
         marker.digit = digit;
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
         Ok(self.snapshot())
     }
@@ -957,7 +994,7 @@ impl DesktopSession {
             reference_file_path: None,
         };
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
         Ok(self.snapshot())
     }
@@ -1009,7 +1046,7 @@ impl DesktopSession {
             insert_after_track_id,
             parent_track_id,
         )?;
-        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
         Ok(self.snapshot())
     }
@@ -1035,7 +1072,7 @@ impl DesktopSession {
             insert_before_track_id,
             parent_track_id,
         )?;
-        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
         Ok(self.snapshot())
     }
@@ -1052,12 +1089,7 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
 
-        if let Some(current_song) = self.engine.song().cloned() {
-            self.undo_stack.push(current_song);
-            if self.undo_stack.len() > 50 {
-                self.undo_stack.remove(0);
-            }
-        }
+        self.push_history_entry();
         self.redo_stack.clear();
 
         self.update_loaded_track(track_id, name, volume, pan, muted, solo)?;
@@ -1083,6 +1115,7 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
         self.sync_position(audio)?;
+        self.capture_live_history_anchor();
         self.update_loaded_track(track_id, None, volume, pan, muted, solo)?;
         let loaded_song = self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
         audio.ensure_live_track(loaded_song, track_id)?;
@@ -1108,7 +1141,7 @@ impl DesktopSession {
             refresh_song_duration(&mut song);
         }
 
-        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
         Ok(self.snapshot())
     }
@@ -1154,7 +1187,7 @@ impl DesktopSession {
 
         song.clips
             .splice(clip_index..=clip_index, [left_clip, right_clip]);
-        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
         Ok(self.snapshot())
     }
@@ -1190,6 +1223,7 @@ impl DesktopSession {
         self.song_file_path = Some(song_dir.join(SONG_FILE_NAME));
         self.undo_stack.clear();
         self.redo_stack.clear();
+        self.live_history_anchor = None;
         self.engine.load_song(song)?;
         self.project_revision = self.project_revision.saturating_add(1);
         let loaded_song = self
@@ -1208,8 +1242,9 @@ impl DesktopSession {
         song: Song,
         audio: &AudioController,
         impact: AudioChangeImpact,
+        bump_revision: bool,
     ) -> Result<(), DesktopError> {
-        self.persist_song_update_internal(song, audio, impact, true)
+        self.persist_song_update_internal(song, audio, impact, true, bump_revision)
     }
 
     fn persist_song_update_internal(
@@ -1218,16 +1253,12 @@ impl DesktopSession {
         audio: &AudioController,
         impact: AudioChangeImpact,
         record_history: bool,
+        bump_revision: bool,
     ) -> Result<(), DesktopError> {
         self.sync_position(audio)?;
 
         if record_history {
-            if let Some(current_song) = self.engine.song().cloned() {
-                self.undo_stack.push(current_song);
-                if self.undo_stack.len() > 50 {
-                    self.undo_stack.remove(0);
-                }
-            }
+            self.push_history_entry();
             self.redo_stack.clear();
         }
 
@@ -1247,7 +1278,9 @@ impl DesktopSession {
 
         self.perf_metrics.song_save_millis = 0;
         self.engine.load_song(song)?;
-        self.project_revision = self.project_revision.saturating_add(1);
+        if bump_revision {
+            self.project_revision = self.project_revision.saturating_add(1);
+        }
         self.prune_waveform_cache_for_current_song();
 
         let restored_position = position_seconds.min(
@@ -1308,6 +1341,26 @@ impl DesktopSession {
         Ok(())
     }
 
+    fn capture_live_history_anchor(&mut self) {
+        if self.live_history_anchor.is_none() {
+            self.live_history_anchor = self.engine.song().cloned();
+        }
+    }
+
+    fn push_history_entry(&mut self) {
+        let history_entry = self
+            .live_history_anchor
+            .take()
+            .or_else(|| self.engine.song().cloned());
+
+        if let Some(song) = history_entry {
+            self.undo_stack.push(song);
+            if self.undo_stack.len() > 50 {
+                self.undo_stack.remove(0);
+            }
+        }
+    }
+
     fn update_loaded_track(
         &mut self,
         track_id: &str,
@@ -1358,6 +1411,7 @@ impl DesktopSession {
         &mut self,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        self.live_history_anchor = None;
         let Some(previous_song) = self.undo_stack.pop() else {
             return Ok(self.snapshot());
         };
@@ -1374,6 +1428,7 @@ impl DesktopSession {
             audio,
             AudioChangeImpact::StructureRebuild,
             false,
+            true,
         )?;
 
         Ok(self.snapshot())
@@ -1383,6 +1438,7 @@ impl DesktopSession {
         &mut self,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        self.live_history_anchor = None;
         let Some(next_song) = self.redo_stack.pop() else {
             return Ok(self.snapshot());
         };
@@ -1402,6 +1458,7 @@ impl DesktopSession {
             audio,
             AudioChangeImpact::StructureRebuild,
             false,
+            true,
         )?;
 
         Ok(self.snapshot())
@@ -2818,6 +2875,85 @@ mod tests {
         assert_eq!(saved_track.pan, 0.0);
         assert!(!saved_track.muted);
         assert!(!saved_track.solo);
+    }
+
+    #[test]
+    fn live_track_mix_commit_undoes_in_single_step() {
+        let mut session = session_with_song_dir("live-mix-undo-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        session
+            .update_track_mix_live(
+                "track_1",
+                Some(0.61),
+                Some(-0.22),
+                Some(true),
+                Some(true),
+                &audio,
+            )
+            .expect("live mix update should succeed");
+        assert_eq!(session.undo_stack.len(), 0);
+
+        session
+            .update_track(
+                "track_1",
+                None,
+                Some(0.61),
+                Some(-0.22),
+                Some(true),
+                Some(true),
+                &audio,
+            )
+            .expect("mix commit should succeed");
+        assert_eq!(session.undo_stack.len(), 1);
+
+        session.undo_action(&audio).expect("undo should succeed");
+        let track = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist")
+            .tracks
+            .into_iter()
+            .find(|track| track.id == "track_1")
+            .expect("track should exist after undo");
+
+        assert_eq!(track.volume, 1.0);
+        assert_eq!(track.pan, 0.0);
+        assert!(!track.muted);
+        assert!(!track.solo);
+    }
+
+    #[test]
+    fn live_clip_move_commit_undoes_in_single_step() {
+        let mut session = session_with_song_dir("live-clip-move-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+        let initial_revision = session.snapshot().project_revision;
+
+        session
+            .move_clip_live("clip_1", 3.0, &audio)
+            .expect("first live move should succeed");
+        session
+            .move_clip_live("clip_1", 4.5, &audio)
+            .expect("second live move should succeed");
+        assert_eq!(session.snapshot().project_revision, initial_revision);
+        assert_eq!(session.undo_stack.len(), 0);
+
+        session
+            .move_clip("clip_1", 6.0, &audio)
+            .expect("clip commit should succeed");
+        assert_eq!(session.undo_stack.len(), 1);
+
+        session.undo_action(&audio).expect("undo should succeed");
+        let clip = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song should exist")
+            .clips
+            .into_iter()
+            .find(|clip| clip.id == "clip_1")
+            .expect("clip should exist after undo");
+
+        assert!((clip.timeline_start_seconds - 1.0).abs() < 0.0001);
     }
 
     #[test]

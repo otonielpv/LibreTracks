@@ -590,6 +590,28 @@ export async function moveClip(
   return invokeCommand<TransportSnapshot>("move_clip", { clipId, timelineStartSeconds });
 }
 
+export async function moveClipLive(
+  clipId: string,
+  timelineStartSeconds: number,
+): Promise<void> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => ({
+      ...song,
+      clips: song.clips.map((clip) =>
+        clip.id === clipId
+          ? {
+              ...clip,
+              timelineStartSeconds: Math.max(0, timelineStartSeconds),
+            }
+          : clip,
+      ),
+    }));
+    return;
+  }
+
+  await invokeCommand("move_clip_live", { clipId, timelineStartSeconds });
+}
+
 export async function deleteClip(clipId: string): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     updateDemoSong((song) => ({

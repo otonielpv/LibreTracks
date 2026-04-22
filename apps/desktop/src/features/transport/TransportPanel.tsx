@@ -24,6 +24,7 @@ import {
   listenToAudioMeters,
   listenToTransportLifecycle,
   moveClip,
+  moveClipLive,
   moveTrack,
   openProject,
   pauseTransport,
@@ -710,8 +711,7 @@ export function TransportPanel() {
         while (liveState.queuedSeconds !== null) {
           const queuedSeconds = liveState.queuedSeconds;
           liveState.queuedSeconds = null;
-          const nextSnapshot = await moveClip(clipId, queuedSeconds);
-          applyPlaybackSnapshot(nextSnapshot);
+          await moveClipLive(clipId, queuedSeconds);
         }
       } finally {
         liveState.inFlight = false;
@@ -726,7 +726,7 @@ export function TransportPanel() {
         }
       }
     },
-    [applyPlaybackSnapshot],
+    [],
   );
 
   const queueClipMoveLiveUpdate = useCallback(
@@ -750,6 +750,22 @@ export function TransportPanel() {
     },
     [flushClipMoveLiveUpdates],
   );
+
+  const waitForClipMoveLiveIdle = useCallback((clipId: string) => {
+    return new Promise<void>((resolve) => {
+      const tick = () => {
+        const liveState = clipMoveLiveStatesRef.current[clipId];
+        if (!liveState) {
+          resolve();
+          return;
+        }
+
+        window.setTimeout(tick, 0);
+      };
+
+      tick();
+    });
+  }, []);
 
   const clearTrackDragVisuals = useCallback(() => {
     if (draggedTrackRowRef.current) {
@@ -1557,8 +1573,13 @@ export function TransportPanel() {
           Math.abs(event.clientX - activeClipDrag.startClientX) > DRAG_THRESHOLD_PX;
         if (movedEnough) {
           queueClipMoveLiveUpdate(activeClipDrag.clipId, activeClipDrag.previewSeconds);
-          const clip = findClip(songRef.current, activeClipDrag.clipId);
-          setStatus(`Clip movido: ${clip?.trackName ?? activeClipDrag.clipId}`);
+          void runAction(async () => {
+            await waitForClipMoveLiveIdle(activeClipDrag.clipId);
+            const nextSnapshot = await moveClip(activeClipDrag.clipId, activeClipDrag.previewSeconds);
+            applyPlaybackSnapshot(nextSnapshot);
+            const clip = findClip(songRef.current, activeClipDrag.clipId);
+            setStatus(`Clip movido: ${clip?.trackName ?? activeClipDrag.clipId}`);
+          });
         } else {
           clipPreviewSecondsRef.current = {};
         }
@@ -1618,6 +1639,7 @@ export function TransportPanel() {
     performSeek,
     runAction,
     snapEnabled,
+    waitForClipMoveLiveIdle,
     zoomLevel,
   ]);
 
