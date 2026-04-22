@@ -740,14 +740,15 @@ body {
   bottom: 0;
   left: var(--lt-playhead-left, 0px);
   width: 1px;
+  color: #57f1db;
   background: #57f1db;
   z-index: 20;
   box-shadow: 0 0 8px rgb(87 241 219 / 0.55);
 }
 
 .lt-playhead.is-handle {
-  width: 12px;
-  margin-left: -6px;
+  width: 16px;
+  margin-left: -8px;
   background: transparent;
   box-shadow: none;
 }
@@ -756,20 +757,39 @@ body {
   content: "";
   position: absolute;
   top: 0;
-  left: -5px;
+  left: 50%;
   width: 0;
   height: 0;
+  transform: translateX(-50%);
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 7px solid #57f1db;
+  border-top: 7px solid currentColor;
+}
+
+.lt-playhead.is-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: currentColor;
+  box-shadow: 0 0 8px rgb(87 241 219 / 0.55);
 }
 
 .lt-playhead.is-dragging {
+  color: #ffe2ab;
   background: #ffe2ab;
 }
 
 .lt-playhead.is-dragging::before {
   border-top-color: #ffe2ab;
+}
+
+.lt-playhead.is-dragging::after {
+  background: #ffe2ab;
+  box-shadow: 0 0 8px rgb(255 226 171 / 0.55);
 }
 
 .lt-time-selection {

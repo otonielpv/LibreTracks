@@ -431,6 +431,7 @@ export function TransportPanel() {
   const renderMetricTimeoutRef = useRef<number | null>(null);
   const pendingRenderMetricRef = useRef(0);
   const transportReadoutValueRef = useRef<HTMLElement | null>(null);
+  const transportReadoutBarRef = useRef<HTMLElement | null>(null);
   const songDurationSecondsRef = useRef(0);
   const transportAnchorMetaRef = useRef<TransportAnchorMeta | null>(null);
   const cameraXRef = useRef(0);
@@ -1283,12 +1284,21 @@ export function TransportPanel() {
       getCameraX(options),
       options?.pixelsPerSecond ?? pixelsPerSecond,
     );
+    const snappedPlayheadOffset = Math.round(playheadOffset) + 0.5;
 
     displayPositionSecondsRef.current = clampedPosition;
-    panelRef.current?.style.setProperty("--lt-playhead-left", `${playheadOffset}px`);
+    panelRef.current?.style.setProperty("--lt-playhead-left", `${snappedPlayheadOffset}px`);
 
     if (transportReadoutValueRef.current) {
       transportReadoutValueRef.current.textContent = formatClock(clampedPosition);
+    }
+
+    if (transportReadoutBarRef.current) {
+      transportReadoutBarRef.current.textContent = formatMusicalPosition(
+        clampedPosition,
+        songRef.current?.bpm ?? 120,
+        songRef.current?.timeSignature ?? "4/4",
+      );
     }
   }
 
@@ -1470,7 +1480,9 @@ export function TransportPanel() {
     displayPositionSeconds,
     pixelsPerSecond,
     playheadDrag?.currentSeconds,
+    song?.bpm,
     song?.durationSeconds,
+    song?.timeSignature,
   ]);
 
   function clearSelections(message: string) {
@@ -2217,7 +2229,7 @@ export function TransportPanel() {
             </div>
             <div className="lt-readout-block">
               <span>Bar</span>
-              <strong>{musicalPositionLabel}</strong>
+              <strong ref={transportReadoutBarRef}>{musicalPositionLabel}</strong>
             </div>
             <div className="lt-readout-block is-timecode">
               <span>Timecode</span>

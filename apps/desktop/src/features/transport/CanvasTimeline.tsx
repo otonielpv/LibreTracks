@@ -534,16 +534,6 @@ export function TimelineRulerCanvas({
           overlayContext.fillRect(left, 0, selectionWidth, snapshot.height);
         }
 
-        drawPlayhead(
-          overlayContext,
-          snapshot.width,
-          snapshot.height,
-          cameraX,
-          snapshot.pixelsPerSecond,
-          snapshot.previewPlayheadSeconds ?? playheadSecondsRef.current,
-          snapshot.playheadColor,
-          true,
-        );
       }
 
       animationFrameId = window.requestAnimationFrame(render);
