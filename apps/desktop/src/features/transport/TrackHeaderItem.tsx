@@ -10,7 +10,7 @@ type TrackHeaderItemProps = {
   childCount: number;
   clipCount: number;
   trackHeight: number;
-  trackPan: number;
+  panValue: number;
   trackMuted: boolean;
   trackSolo: boolean;
   volumeValue: number;
@@ -31,6 +31,8 @@ type TrackHeaderItemProps = {
   onToggleSolo: (trackId: string) => void;
   onVolumeChange: (trackId: string, nextVolume: number) => void;
   onCommitVolume: (trackId: string) => void;
+  onPanChange: (trackId: string, nextPan: number) => void;
+  onCommitPan: (trackId: string) => void;
 };
 
 function TrackHeaderItemComponent({
@@ -41,7 +43,7 @@ function TrackHeaderItemComponent({
   childCount,
   clipCount,
   trackHeight,
-  trackPan,
+  panValue,
   trackMuted,
   trackSolo,
   volumeValue,
@@ -59,14 +61,17 @@ function TrackHeaderItemComponent({
   onToggleSolo,
   onVolumeChange,
   onCommitVolume,
+  onPanChange,
+  onCommitPan,
 }: TrackHeaderItemProps) {
   const volumeFill = `${(volumeValue * 100).toFixed(2)}%`;
+  const panFill = `${(((panValue + 1) * 0.5) * 100).toFixed(2)}%`;
   const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (
       target instanceof Element &&
       target.closest(
-        'button, input, label, textarea, select, .lt-track-toggle-group, .lt-folder-toggle, .lt-track-volume',
+        'button, input, label, textarea, select, .lt-track-toggle-group, .lt-folder-toggle, .lt-track-volume, .lt-track-pan',
       )
     ) {
       return;
@@ -78,7 +83,7 @@ function TrackHeaderItemComponent({
   const metaLabel =
     trackKind === "folder"
       ? `${childCount} hijos`
-      : `${clipCount} clips | pan ${trackPan.toFixed(2)}`;
+      : `${clipCount} clips | pan ${panValue.toFixed(2)}`;
   const dropHint = !isDropTarget
     ? null
     : dropMode === "inside-folder"
@@ -148,37 +153,70 @@ function TrackHeaderItemComponent({
             S
           </button>
         </div>
-        <label className="lt-track-volume">
-          <span>Vol</span>
-          <input
-            aria-label={`Volumen de ${trackName}`}
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={volumeValue}
-            style={{
-              background: `linear-gradient(to right, ${trackSolo ? "#ffe2ab" : "#3cddc7"} ${volumeFill}, #0e0e0e ${volumeFill})`,
-            }}
-            onChange={(event) => {
-              onVolumeChange(trackId, Number(event.target.value));
-            }}
-            onMouseUp={() => {
-              onCommitVolume(trackId);
-            }}
-            onTouchEnd={() => {
-              onCommitVolume(trackId);
-            }}
-            onKeyUp={(event) => {
-              if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") {
+        <div className="lt-track-mix-controls">
+          <label className="lt-track-volume">
+            <span>Vol</span>
+            <input
+              aria-label={`Volumen de ${trackName}`}
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volumeValue}
+              style={{
+                background: `linear-gradient(to right, ${trackSolo ? "#ffe2ab" : "#3cddc7"} ${volumeFill}, #0e0e0e ${volumeFill})`,
+              }}
+              onChange={(event) => {
+                onVolumeChange(trackId, Number(event.target.value));
+              }}
+              onMouseUp={() => {
                 onCommitVolume(trackId);
-              }
-            }}
-            onBlur={() => {
-              onCommitVolume(trackId);
-            }}
-          />
-        </label>
+              }}
+              onTouchEnd={() => {
+                onCommitVolume(trackId);
+              }}
+              onKeyUp={(event) => {
+                if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") {
+                  onCommitVolume(trackId);
+                }
+              }}
+              onBlur={() => {
+                onCommitVolume(trackId);
+              }}
+            />
+          </label>
+          <label className="lt-track-pan">
+            <span>Pan</span>
+            <input
+              aria-label={`Paneo de ${trackName}`}
+              type="range"
+              min={-1}
+              max={1}
+              step={0.01}
+              value={panValue}
+              style={{
+                background: `linear-gradient(to right, #4d79d8 0%, #74b8ff ${panFill}, #0e0e0e ${panFill}, #0e0e0e 100%)`,
+              }}
+              onChange={(event) => {
+                onPanChange(trackId, Number(event.target.value));
+              }}
+              onMouseUp={() => {
+                onCommitPan(trackId);
+              }}
+              onTouchEnd={() => {
+                onCommitPan(trackId);
+              }}
+              onKeyUp={(event) => {
+                if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") {
+                  onCommitPan(trackId);
+                }
+              }}
+              onBlur={() => {
+                onCommitPan(trackId);
+              }}
+            />
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -193,7 +231,7 @@ function areTrackHeaderPropsEqual(previous: TrackHeaderItemProps, next: TrackHea
     previous.childCount === next.childCount &&
     previous.clipCount === next.clipCount &&
     previous.trackHeight === next.trackHeight &&
-    previous.trackPan === next.trackPan &&
+    previous.panValue === next.panValue &&
     previous.trackMuted === next.trackMuted &&
     previous.trackSolo === next.trackSolo &&
     previous.volumeValue === next.volumeValue &&

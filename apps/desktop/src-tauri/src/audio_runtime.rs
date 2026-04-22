@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    f32::consts::PI,
     fs::File,
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -276,6 +277,7 @@ struct MixClipState {
     plan: PlaybackClipPlan,
     reader: MemoryClipReader,
     current_gain: f32,
+    current_pan: f32,
 }
 
 struct MemoryClipReader {
@@ -912,6 +914,27 @@ impl MemoryClipReader {
         output_channels: usize,
         gain: f32,
     ) {
+        self.mix_into_with_channel_gains(
+            buffer,
+            offset_frames,
+            frame_count,
+            output_channels,
+            gain,
+            1.0,
+            1.0,
+        );
+    }
+
+    fn mix_into_with_channel_gains(
+        &mut self,
+        buffer: &mut [f32],
+        offset_frames: usize,
+        frame_count: usize,
+        output_channels: usize,
+        gain: f32,
+        left_gain: f32,
+        right_gain: f32,
+    ) {
         if self.eof {
             return;
         }
@@ -928,11 +951,20 @@ impl MemoryClipReader {
             if gain.abs() > GAIN_EPSILON {
                 let buffer_base = (offset_frames + frame_offset) * output_channels;
                 for channel in 0..output_channels {
+                    let channel_gain = if output_channels <= 1 {
+                        1.0
+                    } else if channel == 0 {
+                        left_gain
+                    } else if channel == 1 {
+                        right_gain
+                    } else {
+                        1.0
+                    };
                     buffer[buffer_base + channel] += self.shared_buffer.read_sample(
                         self.current_frame,
                         channel,
                         output_channels,
-                    ) * gain;
+                    ) * gain * channel_gain;
                 }
             }
 
@@ -1444,6 +1476,7 @@ impl Mixer {
                 &clip_state.plan.clip_id,
                 &clip_state.plan.track_id,
             ) as f32;
+            let target_pan = resolve_track_runtime_pan(&self.song, &clip_state.plan.track_id);
 
             clip_state.mix_into(
                 &mut mixed,
@@ -1452,6 +1485,7 @@ impl Mixer {
                 self.output_channels,
                 overlap_start,
                 target_gain,
+                target_pan,
             );
         }
 
@@ -1484,10 +1518,12 @@ impl Mixer {
                 Ok(reader) => {
                     let current_gain =
                         resolve_clip_runtime_gain(&self.song, &plan.clip_id, &plan.track_id) as f32;
+                    let current_pan = resolve_track_runtime_pan(&self.song, &plan.track_id);
                     self.active_clips.push(MixClipState {
                         plan,
                         reader,
                         current_gain,
+                        current_pan,
                     });
                 }
                 Err(error) => {
@@ -1509,26 +1545,33 @@ impl MixClipState {
         output_channels: usize,
         overlap_start_frame: u64,
         target_gain: f32,
+        target_pan: f32,
     ) {
         let start_gain = self.current_gain;
+        let start_pan = self.current_pan;
 
         for frame_offset in 0..frame_count {
             let dynamic_gain =
                 interpolated_gain(start_gain, target_gain, frame_offset, frame_count);
+            let dynamic_pan = interpolated_gain(start_pan, target_pan, frame_offset, frame_count);
+            let (left_gain, right_gain) = constant_power_pan_gains(dynamic_pan);
             let clip_frame_position =
                 (overlap_start_frame - self.plan.timeline_start_frame) + frame_offset as u64;
             let edge_gain = self.plan.edge_gain(clip_frame_position);
 
-            self.reader.mix_into(
+            self.reader.mix_into_with_channel_gains(
                 buffer,
                 offset_frames + frame_offset,
                 1,
                 output_channels,
                 dynamic_gain * edge_gain,
+                left_gain,
+                right_gain,
             );
         }
 
         self.current_gain = target_gain;
+        self.current_pan = target_pan;
     }
 }
 
@@ -1616,6 +1659,20 @@ fn resolve_clip_runtime_gain(song: &Song, clip_id: &str, track_id: &str) -> f64 
         .unwrap_or(0.0);
 
     resolve_track_clip_gain(song, track_id, clip_gain).unwrap_or(0.0)
+}
+
+fn resolve_track_runtime_pan(song: &Song, track_id: &str) -> f32 {
+    song.tracks
+        .iter()
+        .find(|track| track.id == track_id)
+        .map(|track| track.pan as f32)
+        .unwrap_or(0.0)
+        .clamp(-1.0, 1.0)
+}
+
+fn constant_power_pan_gains(pan: f32) -> (f32, f32) {
+    let angle = (pan.clamp(-1.0, 1.0) + 1.0) * PI * 0.25;
+    (angle.cos(), angle.sin())
 }
 
 fn scheduled_clip_count(song: &Song, position_seconds: f64) -> usize {
@@ -2095,6 +2152,47 @@ mod tests {
         assert_eq!(mixed, [0.25, -0.25, 0.5, -0.5]);
         assert!(reader.eof);
         assert_eq!(reader.current_frame, 2);
+    }
+
+    #[test]
+    fn memory_clip_reader_applies_channel_gains_for_pan() {
+        let clip_path = PathBuf::from("audio/pan-buffer.wav");
+        let cache = cache_with_shared_buffer(&clip_path, vec![0.5, 0.25], 48_000, 1);
+        let mut reader = MemoryClipReader::open(
+            &PlaybackClipPlan {
+                clip_id: "clip".into(),
+                track_id: "track".into(),
+                file_path: clip_path,
+                timeline_start_frame: 0,
+                duration_frames: 2,
+                fade_in_frames: 0,
+                fade_out_frames: 0,
+                source_start_seconds: 0.0,
+            },
+            48_000,
+            &cache,
+            0,
+        )
+        .expect("memory reader should open");
+
+        let mut mixed = [0.0_f32; 4];
+        reader.mix_into_with_channel_gains(&mut mixed, 0, 2, 2, 1.0, 1.0, 0.0);
+
+        assert_eq!(mixed, [0.5, 0.0, 0.25, 0.0]);
+    }
+
+    #[test]
+    fn constant_power_pan_gains_match_expected_edges_and_center() {
+        let (hard_left_l, hard_left_r) = constant_power_pan_gains(-1.0);
+        let (center_l, center_r) = constant_power_pan_gains(0.0);
+        let (hard_right_l, hard_right_r) = constant_power_pan_gains(1.0);
+
+        assert!((hard_left_l - 1.0).abs() < 0.000_001);
+        assert!(hard_left_r.abs() < 0.000_001);
+        assert!((center_l - 0.707_106_77).abs() < 0.000_1);
+        assert!((center_r - 0.707_106_77).abs() < 0.000_1);
+        assert!(hard_right_l.abs() < 0.000_001);
+        assert!((hard_right_r - 1.0).abs() < 0.000_001);
     }
 
     #[test]
