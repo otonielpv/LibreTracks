@@ -2631,9 +2631,11 @@ mod tests {
 
         assert_eq!(snapshot.project_revision, song_view.project_revision);
         assert_eq!(song_view.section_markers.len(), 1);
+        assert_eq!(song_view.section_markers[0].name, "Marker 0");
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.section_markers.len(), 1);
+        assert_eq!(saved_song.section_markers[0].name, "Marker 0");
         assert_eq!(saved_song.section_markers[0].start_seconds, 2.0);
     }
 

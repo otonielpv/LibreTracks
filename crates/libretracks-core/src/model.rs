@@ -147,6 +147,6 @@ impl Song {
     }
 
     pub fn next_marker_name(&self) -> String {
-        format!("Marker {}", self.section_markers.len() + 1)
+        format!("Marker {}", self.section_markers.len())
     }
 }

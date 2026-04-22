@@ -155,6 +155,6 @@ mod tests {
             digit: Some(2),
         });
 
-        assert_eq!(song.next_marker_name(), "Marker 3");
+        assert_eq!(song.next_marker_name(), "Marker 2");
     }
 }

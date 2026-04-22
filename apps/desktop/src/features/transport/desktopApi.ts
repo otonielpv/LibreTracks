@@ -623,7 +623,7 @@ export async function createSectionMarker(startSeconds: number): Promise<Transpo
       ...song,
       sectionMarkers: [...song.sectionMarkers, {
         id: `section-marker-demo-${Date.now()}`,
-        name: `Marker ${song.sectionMarkers.length + 1}`,
+        name: `Marker ${song.sectionMarkers.length}`,
         startSeconds: Math.max(0, startSeconds),
         digit: null,
       }],
