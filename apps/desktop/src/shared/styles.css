@@ -405,13 +405,22 @@ body {
 }
 
 .lt-timeline-topline {
-  height: 3.4rem;
+  min-height: 3.4rem;
   flex-shrink: 0;
-  padding: 0 1rem;
+  padding: 0.55rem 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   background: #2a2a2a;
+}
+
+.lt-timeline-meta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .lt-timeline-topline h1,
@@ -438,6 +447,10 @@ body {
 .lt-timeline-stats {
   display: flex;
   gap: 0.5rem;
+}
+
+.lt-timeline-controls {
+  justify-content: flex-end;
 }
 
 .lt-timeline-shell {
@@ -971,11 +984,46 @@ body {
   font-size: 13px;
 }
 
+.lt-inline-status {
+  padding: 0.45rem 1rem;
+  background: #2a2a2a;
+  border-top: 1px solid rgb(60 74 70 / 0.22);
+}
+
 .lt-bottom-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+.lt-bottom-controls button {
+  border: 0;
+  border-radius: 2px;
+  background: #201f1f;
+  color: #e5e2e1;
+  padding: 0.35rem 0.55rem;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-bottom-controls button:hover,
+.lt-bottom-controls button.is-active {
+  background: #2f2e2e;
+  color: #57f1db;
+}
+
+.lt-bottom-controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lt-bottom-controls > span {
+  color: #bacac5;
+  font: 600 10px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .lt-zoom-control {

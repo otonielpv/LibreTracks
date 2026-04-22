@@ -2186,10 +2186,65 @@ export function TransportPanel() {
       ) : (
       <section className="lt-main-stage">
         <div className="lt-timeline-topline">
-          <div className="lt-timeline-stats">
-            <span>{song?.tracks.length ?? 0} tracks</span>
-            <span>{song?.clips.length ?? 0} clips</span>
-            <span>{song?.sectionMarkers.length ?? 0} marcas</span>
+          <div className="lt-timeline-meta">
+            <div className="lt-timeline-stats">
+              <span>{song?.tracks.length ?? 0} tracks</span>
+              <span>{song?.clips.length ?? 0} clips</span>
+              <span>{song?.sectionMarkers.length ?? 0} marcas</span>
+            </div>
+            <div className="lt-bottom-controls lt-timeline-controls">
+              <button
+                type="button"
+                className={snapEnabled ? "is-active" : ""}
+                onClick={() => setSnapEnabled((current) => !current)}
+              >
+                Snap to Grid ({timelineGrid.subdivisionPerBeat}/1)
+              </button>
+              <label className="lt-zoom-control">
+                <span>Modo salto</span>
+                <select
+                  aria-label="Modo global de salto"
+                  disabled={isProjectEmpty}
+                  value={globalJumpMode}
+                  onChange={(event) => setGlobalJumpMode(event.target.value as GlobalJumpMode)}
+                >
+                  <option value="immediate">Immediate</option>
+                  <option value="after_bars">After X bars</option>
+                  <option value="next_marker">At next marker</option>
+                </select>
+              </label>
+              {globalJumpMode === "after_bars" ? (
+                <label className="lt-zoom-control">
+                  <span>Compases</span>
+                  <input
+                    aria-label="Compases para salto global"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={globalJumpBars}
+                    onChange={(event) => setGlobalJumpBars(Math.max(1, Number(event.target.value) || 1))}
+                  />
+                </label>
+              ) : null}
+              {snapshot?.pendingMarkerJump ? (
+                <span>
+                  Armado: {snapshot.pendingMarkerJump.targetMarkerName} | {snapshot.pendingMarkerJump.trigger}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                disabled={!snapshot?.pendingMarkerJump}
+                onClick={() =>
+                  void runAction(async () => {
+                    const nextSnapshot = await cancelMarkerJump();
+                    setSnapshot(nextSnapshot);
+                    setStatus("Salto cancelado.");
+                  })
+                }
+              >
+                Cancelar salto
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2426,61 +2481,12 @@ export function TransportPanel() {
   </section>
   )}
 
-      <footer className="lt-bottom-strip">
+      <div className="lt-inline-status">
         <div className="lt-bottom-status">
           <strong>Estado</strong>
           <p>{status}</p>
         </div>
-        <div className="lt-bottom-controls">
-          <button type="button" className={snapEnabled ? "is-active" : ""} onClick={() => setSnapEnabled((current) => !current)}>
-            Snap to Grid ({timelineGrid.subdivisionPerBeat}/1)
-          </button>
-          <label className="lt-zoom-control">
-            <span>Modo salto</span>
-            <select
-              aria-label="Modo global de salto"
-              disabled={isProjectEmpty}
-              value={globalJumpMode}
-              onChange={(event) => setGlobalJumpMode(event.target.value as GlobalJumpMode)}
-            >
-              <option value="immediate">Immediate</option>
-              <option value="after_bars">After X bars</option>
-              <option value="next_marker">At next marker</option>
-            </select>
-          </label>
-          {globalJumpMode === "after_bars" ? (
-            <label className="lt-zoom-control">
-              <span>Compases</span>
-              <input
-                aria-label="Compases para salto global"
-                type="number"
-                min={1}
-                step={1}
-                value={globalJumpBars}
-                onChange={(event) => setGlobalJumpBars(Math.max(1, Number(event.target.value) || 1))}
-              />
-            </label>
-          ) : null}
-          {snapshot?.pendingMarkerJump ? (
-            <span>
-              Armado: {snapshot.pendingMarkerJump.targetMarkerName} | {snapshot.pendingMarkerJump.trigger}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            disabled={!snapshot?.pendingMarkerJump}
-            onClick={() =>
-              void runAction(async () => {
-                const nextSnapshot = await cancelMarkerJump();
-                setSnapshot(nextSnapshot);
-                setStatus("Salto cancelado.");
-              })
-            }
-          >
-            Cancelar salto
-          </button>
-        </div>
-      </footer>
+      </div>
 
       {selectedClip ? (
         <div className="lt-inspector-strip">
