@@ -94,12 +94,6 @@ type ClipDragState = {
   hasMoved: boolean;
 } | null;
 
-type RulerDragState = {
-  pointerId: number;
-  startSeconds: number;
-  currentSeconds: number;
-} | null;
-
 type PlayheadDragState = {
   pointerId: number;
   currentSeconds: number;
@@ -123,16 +117,6 @@ type TimelinePanState = {
   pointerId: number;
   startClientX: number;
   originCameraX: number;
-} | null;
-
-type TimeSelection = {
-  startSeconds: number;
-  endSeconds: number;
-} | null;
-
-type PendingRulerPress = {
-  startClientX: number;
-  startSeconds: number;
 } | null;
 
 type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
@@ -174,17 +158,6 @@ function formatMusicalPosition(seconds: number, bpm: number, timeSignature: stri
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function normalizeSelection(selection: TimeSelection) {
-  if (!selection) {
-    return null;
-  }
-
-  return {
-    startSeconds: Math.min(selection.startSeconds, selection.endSeconds),
-    endSeconds: Math.max(selection.startSeconds, selection.endSeconds),
-  };
 }
 
 function keyboardDigit(eventCode: string) {
@@ -396,9 +369,7 @@ export function TransportPanel() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [clipDrag, setClipDrag] = useState<ClipDragState>(null);
-  const [rulerDrag, setRulerDrag] = useState<RulerDragState>(null);
   const [playheadDrag, setPlayheadDrag] = useState<PlayheadDragState>(null);
-  const [timeSelection, setTimeSelection] = useState<TimeSelection>(null);
   const [displayPositionSeconds, setDisplayPositionSeconds] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const [trackDrag, setTrackDrag] = useState<TrackDragState>(null);
@@ -419,7 +390,6 @@ export function TransportPanel() {
   });
   const displayPositionSecondsRef = useRef(0);
   const suppressTrackClickRef = useRef(false);
-  const pendingRulerPressRef = useRef<PendingRulerPress>(null);
   const renderMetricTimeoutRef = useRef<number | null>(null);
   const pendingRenderMetricRef = useRef(0);
   const transportReadoutValueRef = useRef<HTMLElement | null>(null);
@@ -984,137 +954,6 @@ export function TransportPanel() {
   }, [clipDrag, snapEnabled, song, zoomLevel]);
 
   useEffect(() => {
-    if (!song || !rulerTrackRef.current) {
-      return;
-    }
-
-    const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
-
-    const onMouseMove = (event: MouseEvent) => {
-      const effectCameraX = getCameraX({
-        durationSeconds: song.durationSeconds,
-        pixelsPerSecond: effectPixelsPerSecond,
-      });
-      const rawSeconds = rulerPointerToSeconds(
-        event,
-        rulerTrackRef.current as HTMLElement,
-        song.durationSeconds,
-        effectCameraX,
-        effectPixelsPerSecond,
-      );
-      const nextSeconds =
-        snapEnabled
-          ? snapToTimelineGrid(rawSeconds, song.bpm, song.timeSignature, zoomLevel, effectPixelsPerSecond)
-          : rawSeconds;
-      const pendingPress = pendingRulerPressRef.current;
-      if (pendingPress && !rulerDrag) {
-        const movedEnough = Math.abs(event.clientX - pendingPress.startClientX) > DRAG_THRESHOLD_PX;
-        if (!movedEnough) {
-          return;
-        }
-
-        setRulerDrag({
-          pointerId: 1,
-          startSeconds: pendingPress.startSeconds,
-          currentSeconds: nextSeconds,
-        });
-        return;
-      }
-
-      if (!rulerDrag && !pendingPress) {
-        return;
-      }
-      setRulerDrag((current) => (current ? { ...current, currentSeconds: nextSeconds } : current));
-    };
-
-    const onMouseUp = async (event: MouseEvent) => {
-      if (event.button !== 0) {
-        return;
-      }
-
-      const pendingPress = pendingRulerPressRef.current;
-      pendingRulerPressRef.current = null;
-      const activeDrag = rulerDrag;
-      setRulerDrag(null);
-      const effectCameraX = getCameraX({
-        durationSeconds: song.durationSeconds,
-        pixelsPerSecond: effectPixelsPerSecond,
-      });
-      const rawPointerSeconds = rulerPointerToSeconds(
-        event,
-        rulerTrackRef.current as HTMLElement,
-        song.durationSeconds,
-        effectCameraX,
-        effectPixelsPerSecond,
-      );
-      const pointerSeconds =
-        snapEnabled
-          ? snapToTimelineGrid(
-              rawPointerSeconds,
-              song.bpm,
-              song.timeSignature,
-              zoomLevel,
-              effectPixelsPerSecond,
-            )
-          : rawPointerSeconds;
-
-      if (!activeDrag) {
-        if (!pendingPress) {
-          return;
-        }
-
-        const movedEnough = Math.abs(event.clientX - pendingPress.startClientX) > DRAG_THRESHOLD_PX;
-        if (movedEnough) {
-          const normalized = normalizeSelection({
-            startSeconds: pendingPress.startSeconds,
-            endSeconds: pointerSeconds,
-          });
-
-          if (normalized && normalized.endSeconds - normalized.startSeconds >= 0.15) {
-            setTimeSelection(normalized);
-            setStatus(
-              `Seleccion temporal: ${formatClock(normalized.startSeconds)} -> ${formatClock(normalized.endSeconds)}`,
-            );
-            return;
-          }
-        }
-
-        await runAction(async () => {
-          await performSeek(pointerSeconds);
-        });
-        setTimeSelection(null);
-        return;
-      }
-
-      const normalized = normalizeSelection({
-        startSeconds: activeDrag.startSeconds,
-        endSeconds: activeDrag.currentSeconds,
-      });
-
-      if (!normalized || normalized.endSeconds - normalized.startSeconds < 0.15) {
-        await runAction(async () => {
-          await performSeek(activeDrag.currentSeconds);
-        });
-        setTimeSelection(null);
-        return;
-      }
-
-      setTimeSelection(normalized);
-      setStatus(
-        `Rango temporal listo: ${formatClock(normalized.startSeconds)} -> ${formatClock(normalized.endSeconds)}`,
-      );
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [rulerDrag, runAction, snapEnabled, song, zoomLevel]);
-
-  useEffect(() => {
     if (!playheadDrag || !song || !rulerTrackRef.current) {
       return;
     }
@@ -1380,6 +1219,20 @@ export function TransportPanel() {
     }
   }
 
+  function snappedRulerSeconds(event: MouseEvent | ReactMouseEvent, durationSeconds: number) {
+    const rawSeconds = rulerPointerToSeconds(
+      event,
+      rulerTrackRef.current as HTMLElement,
+      durationSeconds,
+      getCameraX(),
+      pixelsPerSecond,
+    );
+
+    return snapEnabled
+      ? snapToTimelineGrid(rawSeconds, song?.bpm ?? 120, song?.timeSignature ?? "4/4", zoomLevel, pixelsPerSecond)
+      : rawSeconds;
+  }
+
   const laneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
   const fitAllZoomLevel = song?.durationSeconds
     ? clamp(
@@ -1404,14 +1257,6 @@ export function TransportPanel() {
   const selectedTrack = selectedTrackId ? tracksById[selectedTrackId] ?? null : null;
   const selectedClip = findClip(song, selectedClipId);
   const selectedSection = findSection(song, selectedSectionId);
-  const currentSelection = normalizeSelection(
-    rulerDrag
-      ? {
-          startSeconds: rulerDrag.startSeconds,
-          endSeconds: rulerDrag.currentSeconds,
-        }
-      : timeSelection,
-  );
   const timelineGrid = useTimelineGrid({
     durationSeconds: song?.durationSeconds ?? 0,
     bpm: song?.bpm ?? 120,
@@ -1505,9 +1350,26 @@ export function TransportPanel() {
     setSelectedTrackId(null);
     setSelectedClipId(null);
     setSelectedSectionId(null);
-    setTimeSelection(null);
     setContextMenu(null);
     setStatus(message);
+  }
+
+  function rulerContextMenu(positionSeconds: number): ContextMenuAction[] {
+    return [
+      {
+        label: "Create marker",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await createSectionMarker(positionSeconds);
+            setSnapshot(nextSnapshot);
+            setSelectedClipId(null);
+            setSelectedTrackId(null);
+            setSelectedSectionId(null);
+            setStatus(`Marca creada en ${formatClock(positionSeconds)}.`);
+          });
+        },
+      },
+    ];
   }
 
   function applyZoom(nextZoomLevel: number, anchorViewportX = laneViewportWidth / 2) {
@@ -2297,12 +2159,27 @@ export function TransportPanel() {
                   getCameraX(),
                   pixelsPerSecond,
                 );
+                const snappedSeconds = snapEnabled
+                  ? snapToTimelineGrid(startSeconds, song.bpm, song.timeSignature, zoomLevel, pixelsPerSecond)
+                  : startSeconds;
                 setSelectedSectionId(null);
+                setSelectedClipId(null);
+                setSelectedTrackId(null);
                 setContextMenu(null);
-                pendingRulerPressRef.current = {
-                  startClientX: event.clientX,
-                  startSeconds,
-                };
+                void runAction(async () => {
+                  await performSeek(snappedSeconds);
+                });
+              }}
+              onContextMenu={(event) => {
+                if (!song || !rulerTrackRef.current) {
+                  return;
+                }
+
+                const positionSeconds = snappedRulerSeconds(event, song.durationSeconds);
+                setSelectedSectionId(null);
+                setSelectedClipId(null);
+                setSelectedTrackId(null);
+                openMenu(event, `Timeline ${formatClock(positionSeconds)}`, rulerContextMenu(positionSeconds));
               }}
             >
               <div className="lt-ruler-content" style={{ width: laneViewportWidth }}>
@@ -2315,7 +2192,6 @@ export function TransportPanel() {
                   markers={song?.sectionMarkers ?? []}
                   selectedMarkerId={selectedSectionId}
                   pendingMarkerJump={snapshot?.pendingMarkerJump ?? null}
-                  selection={currentSelection}
                   playheadSecondsRef={displayPositionSecondsRef}
                   previewPlayheadSeconds={playheadDrag?.currentSeconds ?? null}
                   playheadColor={playheadColor}
@@ -2486,29 +2362,6 @@ export function TransportPanel() {
             </div>
           </div>
 
-        {currentSelection ? (
-            <div className="lt-inline-menu">
-              <span>
-                Seleccion: {formatClock(currentSelection.startSeconds)} {"->"} {formatClock(currentSelection.endSeconds)}
-              </span>
-            <button
-              type="button"
-              onClick={() =>
-                void runAction(async () => {
-                  const nextSnapshot = await createSectionMarker(currentSelection.startSeconds);
-                  setSnapshot(nextSnapshot);
-                  setTimeSelection(null);
-                  setStatus("Marca creada desde la seleccion temporal.");
-                })
-              }
-            >
-              Crear marca
-            </button>
-            <button type="button" onClick={() => clearSelections("Seleccion temporal cancelada.")}>
-              Cancelar seleccion
-            </button>
-          </div>
-        ) : null}
       </section>
 
       <footer className="lt-bottom-strip">

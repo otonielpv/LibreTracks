@@ -11,11 +11,6 @@ import type {
 import type { TimelineGrid } from "./timelineMath";
 import { clamp, secondsToScreenX } from "./timelineMath";
 
-type TimeSelection = {
-  startSeconds: number;
-  endSeconds: number;
-} | null;
-
 type RulerCanvasProps = {
   width: number;
   height: number;
@@ -25,7 +20,6 @@ type RulerCanvasProps = {
   markers: SectionMarkerSummary[];
   selectedMarkerId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
-  selection: TimeSelection;
   playheadSecondsRef: MutableRefObject<number>;
   previewPlayheadSeconds: number | null;
   playheadColor: string;
@@ -585,7 +579,6 @@ export function TimelineRulerCanvas({
   markers,
   selectedMarkerId,
   pendingMarkerJump,
-  selection,
   playheadSecondsRef,
   previewPlayheadSeconds,
   playheadColor,
@@ -602,7 +595,6 @@ export function TimelineRulerCanvas({
     markers,
     selectedMarkerId,
     pendingMarkerJump,
-    selection,
     previewPlayheadSeconds,
     playheadColor,
   });
@@ -616,7 +608,6 @@ export function TimelineRulerCanvas({
     markers,
     selectedMarkerId,
     pendingMarkerJump,
-    selection,
     previewPlayheadSeconds,
     playheadColor,
   };
@@ -631,7 +622,6 @@ export function TimelineRulerCanvas({
     previewPlayheadSeconds,
     playheadColor,
     selectedMarkerId,
-    selection,
     timelineGrid,
     width,
   ]);
@@ -680,19 +670,6 @@ export function TimelineRulerCanvas({
       const overlayContext = setupCanvas(overlayCanvas, snapshot.width, snapshot.height);
       if (overlayContext) {
         overlayContext.clearRect(0, 0, snapshot.width, snapshot.height);
-
-        if (snapshot.selection) {
-          const left = secondsToScreenX(
-            snapshot.selection.startSeconds,
-            cameraX,
-            snapshot.pixelsPerSecond,
-          );
-          const selectionWidth =
-            (snapshot.selection.endSeconds - snapshot.selection.startSeconds) *
-            snapshot.pixelsPerSecond;
-          overlayContext.fillStyle = "rgba(87, 241, 219, 0.12)";
-          overlayContext.fillRect(left, 0, selectionWidth, snapshot.height);
-        }
 
         if (snapshot.pendingMarkerJump) {
           drawPendingExecutionLine(

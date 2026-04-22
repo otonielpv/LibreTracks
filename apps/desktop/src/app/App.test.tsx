@@ -166,24 +166,22 @@ describe("App", () => {
     expect(screen.getByRole("slider", { name: /volumen de drums/i })).toBeTruthy();
   });
 
-  it("creates a time selection from the ruler and turns it into a marker", async () => {
+  it("creates a marker from the ruler right-click context menu", async () => {
     const { container } = await renderApp();
     mockRulerBounds(container);
 
     const ruler = container.querySelector(".lt-ruler-track") as HTMLElement;
     await act(async () => {
-      fireEvent.mouseDown(ruler, { button: 0, clientX: 120 });
-      fireEvent.mouseMove(window, { button: 0, clientX: 420 });
-      fireEvent.mouseUp(window, { button: 0, clientX: 420 });
+      fireEvent.contextMenu(ruler, { clientX: 420, clientY: 32 });
     });
 
-    expect(await screen.findByRole("button", { name: /crear marca/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /create marker/i })).toBeTruthy();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /crear marca/i }));
+      fireEvent.click(screen.getByRole("button", { name: /create marker/i }));
     });
 
-    expect(await screen.findByText(/marca creada desde la seleccion temporal/i)).toBeTruthy();
+    expect(await screen.findByText(/marca creada en/i)).toBeTruthy();
     expect(screen.getByText("Marker 5")).toBeTruthy();
   });
 
