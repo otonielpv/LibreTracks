@@ -370,6 +370,7 @@ export function TransportPanel() {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [clipDrag, setClipDrag] = useState<ClipDragState>(null);
   const [playheadDrag, setPlayheadDrag] = useState<PlayheadDragState>(null);
@@ -381,6 +382,7 @@ export function TransportPanel() {
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [trackDropState, setTrackDropState] = useState<TrackDropState>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const menuBarRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
   const rulerTrackRef = useRef<HTMLDivElement | null>(null);
   const timelineShellRef = useRef<HTMLDivElement | null>(null);
@@ -817,6 +819,29 @@ export function TransportPanel() {
   }, []);
 
   useEffect(() => {
+    if (!openTopMenu) {
+      return;
+    }
+
+    const closeTopMenu = (event: PointerEvent) => {
+      if (event.target instanceof Node && menuBarRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setOpenTopMenu(null);
+    };
+    const closeTopMenuOnBlur = () => setOpenTopMenu(null);
+
+    window.addEventListener("pointerdown", closeTopMenu);
+    window.addEventListener("blur", closeTopMenuOnBlur);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeTopMenu);
+      window.removeEventListener("blur", closeTopMenuOnBlur);
+    };
+  }, [openTopMenu]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const isTypingTarget =
@@ -886,6 +911,11 @@ export function TransportPanel() {
       if (event.key === "Escape") {
         event.preventDefault();
 
+        if (openTopMenu) {
+          setOpenTopMenu(null);
+          return;
+        }
+
         if (snapshot?.pendingMarkerJump) {
           void runAction(async () => {
             const nextSnapshot = await cancelMarkerJump();
@@ -915,11 +945,14 @@ export function TransportPanel() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [
-    globalJumpBars,
-    globalJumpMode,
+    clearSelections,
+    handleSaveProjectAsClick,
+    handleSaveProjectClick,
+    openTopMenu,
+    runAction,
+    scheduleMarkerJumpWithGlobalMode,
     selectedClipId,
-    snapshot?.pendingMarkerJump,
-    snapshot?.playbackState,
+    snapshot,
     song,
   ]);
 
@@ -1290,10 +1323,10 @@ export function TransportPanel() {
     song?.tempoMetadata.source === "auto_import"
       ? `Detectado en importacion${song.tempoMetadata.confidence != null ? ` (${Math.round(song.tempoMetadata.confidence * 100)}%)` : ""}`
       : "Manual";
+  const canPersistProject = Boolean(song);
   const isProjectEmpty = !song || song.tracks.length === 0;
   const isProjectPending = Boolean(snapshot && snapshot.projectRevision > 0 && !song);
   const shouldShowEmptyState = !isProjectPending && isProjectEmpty;
-  const shouldShowSessionActions = !shouldShowEmptyState;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
   const timelineGrid = useTimelineGrid({
@@ -2011,6 +2044,15 @@ export function TransportPanel() {
     void runAction(async () => setSnapshot((await openProject()) ?? snapshot), { busy: true });
   }
 
+  function handleToggleTopMenu(menuKey: "file") {
+    setOpenTopMenu((currentMenu) => (currentMenu === menuKey ? null : menuKey));
+  }
+
+  function handleTopMenuAction(action: () => void) {
+    setOpenTopMenu(null);
+    action();
+  }
+
   function handleSaveProjectClick() {
     void runAction(
       async () => {
@@ -2062,11 +2104,63 @@ export function TransportPanel() {
       ) : null}
 
       <header className="lt-topbar">
-        <div className="lt-brand">
-          <span className="lt-brand-title">LIBRETRACKS</span>
+        <div className="lt-topbar-menu-row">
+          <div className="lt-brand">
+            <span className="lt-brand-title">LIBRETRACKS</span>
+          </div>
+
+          <nav className="lt-menu-bar" aria-label="Menu principal" ref={menuBarRef}>
+            <div className={`lt-top-menu ${openTopMenu === "file" ? "is-open" : ""}`}>
+              <button
+                type="button"
+                className="lt-top-menu-trigger"
+                aria-haspopup="menu"
+                aria-expanded={openTopMenu === "file"}
+                onClick={() => handleToggleTopMenu("file")}
+              >
+                <span className="lt-button-label">Archivo</span>
+                <span className="material-symbols-outlined" aria-hidden="true">arrow_drop_down</span>
+              </button>
+
+              {openTopMenu === "file" ? (
+                <div className="lt-top-menu-dropdown" role="menu" aria-label="Archivo">
+                  <button type="button" role="menuitem" onClick={() => handleTopMenuAction(handleCreateSongClick)}>
+                    <span>Nuevo proyecto</span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => handleTopMenuAction(handleOpenProjectClick)}>
+                    <span>Abrir</span>
+                  </button>
+                  <div className="lt-top-menu-separator" aria-hidden="true" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={!canPersistProject}
+                    onClick={() => handleTopMenuAction(handleSaveProjectClick)}
+                  >
+                    <span>Guardar</span>
+                    <span className="lt-top-menu-shortcut">Ctrl+S</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={!canPersistProject}
+                    onClick={() => handleTopMenuAction(handleSaveProjectAsClick)}
+                  >
+                    <span>Guardar como</span>
+                    <span className="lt-top-menu-shortcut">Ctrl+Shift+S</span>
+                  </button>
+                  <div className="lt-top-menu-separator" aria-hidden="true" />
+                  <button type="button" role="menuitem" onClick={() => handleTopMenuAction(handleImportWavsClick)}>
+                    <span>Importar WAVs</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </nav>
         </div>
 
-        <div className="lt-transport">
+        <div className="lt-topbar-main-row">
+          <div className="lt-transport">
           <label className="lt-bpm-control">
             <span>BPM</span>
             <input
@@ -2170,34 +2264,8 @@ export function TransportPanel() {
               {snapshot?.playbackState ?? "empty"}
             </span>
           </div>
+          </div>
         </div>
-
-        {shouldShowSessionActions ? (
-        <div className="lt-session-actions">
-          <button type="button" onClick={handleOpenProjectClick}>
-            <span className="material-symbols-outlined" aria-hidden="true">folder_open</span>
-            <span className="lt-button-label">Abrir</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleSaveProjectClick}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">save</span>
-            <span className="lt-button-label">Guardar</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleSaveProjectAsClick}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">save_as</span>
-            <span className="lt-button-label">Guardar como</span>
-          </button>
-          <button type="button" onClick={handleImportWavsClick}>
-            <span className="material-symbols-outlined" aria-hidden="true">audio_file</span>
-            <span className="lt-button-label">Importar WAVs</span>
-          </button>
-        </div>
-        ) : null}
       </header>
 
       <div className="lt-shell-body">

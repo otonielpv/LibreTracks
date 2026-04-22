@@ -56,14 +56,108 @@ body {
 
 .lt-topbar {
   z-index: 20;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 1.4rem;
-  height: 3.5rem;
-  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  padding: 0.55rem 1rem 0.7rem;
   background: #131313;
   box-shadow: inset 0 -1px 0 rgb(186 202 197 / 0.15);
+}
+
+.lt-topbar-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 1.75rem;
+}
+
+.lt-topbar-main-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.lt-menu-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lt-top-menu {
+  position: relative;
+}
+
+.lt-top-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.125rem;
+  background: #1b1a1a;
+  color: #bacac5;
+  font: 600 12px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lt-top-menu-trigger:hover,
+.lt-top-menu.is-open .lt-top-menu-trigger {
+  background: #262424;
+  color: #e5e2e1;
+}
+
+.lt-top-menu-trigger .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.lt-top-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  min-width: 15rem;
+  padding: 0.35rem;
+  border: 1px solid rgb(186 202 197 / 0.14);
+  border-radius: 0.2rem;
+  background: linear-gradient(180deg, #181717 0%, #111111 100%);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 0.45);
+}
+
+.lt-top-menu-dropdown button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.125rem;
+  background: transparent;
+  color: #d7ddd9;
+  font: 500 13px/1.1 Inter, sans-serif;
+  text-align: left;
+}
+
+.lt-top-menu-dropdown button:hover:not(:disabled) {
+  background: #262424;
+  color: #57f1db;
+}
+
+.lt-top-menu-dropdown button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lt-top-menu-shortcut {
+  color: #7f918c;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lt-top-menu-separator {
+  height: 1px;
+  margin: 0.3rem 0;
+  background: rgb(186 202 197 / 0.12);
 }
 
 .lt-brand-title {
@@ -127,6 +221,8 @@ body {
 }
 
 .lt-transport-buttons button,
+.lt-top-menu-trigger,
+.lt-top-menu-dropdown button,
 .lt-session-actions button,
 .lt-inline-menu button,
 .lt-context-menu button,
