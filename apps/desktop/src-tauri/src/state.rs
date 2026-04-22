@@ -1276,7 +1276,6 @@ impl DesktopSession {
         let position_seconds = self.current_position();
         let pending_jump = self.engine.pending_marker_jump().cloned();
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song_file_path = self.current_song_file_path()?;
 
         if playback_state == PlaybackState::Playing
             && matches!(
@@ -1287,9 +1286,7 @@ impl DesktopSession {
             audio.replace_song_buffers(&song_dir, &song)?;
         }
 
-        let save_started_at = Instant::now();
-        save_song_to_file(&song_file_path, &song)?;
-        self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
+        self.perf_metrics.song_save_millis = 0;
         self.engine.load_song(song)?;
         self.project_revision = self.project_revision.saturating_add(1);
         self.prune_waveform_cache_for_current_song();
@@ -1374,10 +1371,8 @@ impl DesktopSession {
                 .is_some()
                 && restored_position < pending_jump.execute_at_seconds
             {
-                self.engine.schedule_marker_jump(
-                    &pending_jump.target_marker_id,
-                    pending_jump.trigger,
-                )?;
+                self.engine
+                    .schedule_marker_jump(&pending_jump.target_marker_id, pending_jump.trigger)?;
             }
         }
 
@@ -2782,10 +2777,11 @@ mod tests {
     }
 
     #[test]
-    fn moving_a_clip_updates_song_json_and_snapshot() {
+    fn moving_a_clip_stays_in_memory_until_save() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir = create_song_folder(root.path(), "move-demo").expect("song dir should exist");
         fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        save_song(&song_dir, &demo_song()).expect("song should save");
 
         let mut session = DesktopSession::default();
         session.song_dir = Some(song_dir.clone());
@@ -2814,7 +2810,7 @@ mod tests {
         );
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert_eq!(saved_song.clips[0].timeline_start_seconds, 6.5);
+        assert_eq!(saved_song.clips[0].timeline_start_seconds, 1.0);
         assert_eq!(session.engine.playback_state(), PlaybackState::Stopped);
     }
 
@@ -2831,7 +2827,14 @@ mod tests {
         let initial_revision = session.snapshot().project_revision;
 
         session
-            .update_track_mix_live("track_1", Some(0.61), Some(-0.22), Some(true), Some(true), &audio)
+            .update_track_mix_live(
+                "track_1",
+                Some(0.61),
+                Some(-0.22),
+                Some(true),
+                Some(true),
+                &audio,
+            )
             .expect("live mix update should succeed");
 
         let updated_song = session
@@ -2896,12 +2899,8 @@ mod tests {
             .any(|track| track.id == "track_click" || track.id == "track_click-1"));
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert_eq!(saved_song.tracks.len(), 2);
-        assert_eq!(saved_song.clips.len(), 2);
-        assert!(saved_song
-            .clips
-            .iter()
-            .any(|clip| clip.file_path.starts_with("audio/click")));
+        assert_eq!(saved_song.tracks.len(), 1);
+        assert_eq!(saved_song.clips.len(), 1);
     }
 
     #[test]
@@ -2947,7 +2946,7 @@ mod tests {
             .clips
             .iter()
             .find(|clip| clip.id == "clip_1")
-            .map(|clip| clip.timeline_start_seconds.abs() < 0.0001)
+            .map(|clip| (clip.timeline_start_seconds - 1.0).abs() < 0.0001)
             .unwrap_or(false));
 
         let redone_snapshot = session.redo_action(&audio).expect("redo should succeed");
@@ -3000,11 +2999,12 @@ mod tests {
     }
 
     #[test]
-    fn creating_a_section_marker_updates_song_json_and_snapshot() {
+    fn creating_a_section_marker_stays_in_memory_until_save() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir =
             create_song_folder(root.path(), "section-demo").expect("song dir should exist");
         fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        save_song(&song_dir, &demo_song()).expect("song should save");
 
         let mut session = DesktopSession::default();
         session.song_dir = Some(song_dir.clone());
@@ -3027,17 +3027,16 @@ mod tests {
         assert_eq!(song_view.section_markers[0].name, "Marker 0");
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert_eq!(saved_song.section_markers.len(), 1);
-        assert_eq!(saved_song.section_markers[0].name, "Marker 0");
-        assert_eq!(saved_song.section_markers[0].start_seconds, 2.0);
+        assert!(saved_song.section_markers.is_empty());
     }
 
     #[test]
-    fn deleting_a_clip_updates_song_json_and_snapshot() {
+    fn deleting_a_clip_stays_in_memory_until_save() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir =
             create_song_folder(root.path(), "clip-delete-demo").expect("song dir should exist");
         fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        save_song(&song_dir, &demo_song()).expect("song should save");
 
         let mut session = DesktopSession::default();
         session.song_dir = Some(song_dir.clone());
@@ -3059,12 +3058,12 @@ mod tests {
         assert!(song_view.clips.is_empty());
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert!(saved_song.clips.is_empty());
+        assert_eq!(saved_song.clips.len(), 1);
         assert_eq!(session.engine.playback_state(), PlaybackState::Stopped);
     }
 
     #[test]
-    fn updating_a_clip_window_updates_song_json_and_snapshot() {
+    fn updating_a_clip_window_stays_in_memory_until_save() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir =
             create_song_folder(root.path(), "clip-window-demo").expect("song dir should exist");
@@ -3083,6 +3082,7 @@ mod tests {
             writer.write_sample(0_i16).expect("sample should write");
         }
         writer.finalize().expect("wav should finalize");
+        save_song(&song_dir, &demo_song()).expect("song should save");
 
         let mut session = DesktopSession::default();
         session.song_dir = Some(song_dir.clone());
@@ -3110,17 +3110,18 @@ mod tests {
         assert_eq!(updated_clip.duration_seconds, 2.25);
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert_eq!(saved_song.clips[0].timeline_start_seconds, 2.0);
-        assert_eq!(saved_song.clips[0].source_start_seconds, 1.5);
-        assert_eq!(saved_song.clips[0].duration_seconds, 2.25);
+        assert_eq!(saved_song.clips[0].timeline_start_seconds, 1.0);
+        assert_eq!(saved_song.clips[0].source_start_seconds, 0.0);
+        assert_eq!(saved_song.clips[0].duration_seconds, 4.0);
     }
 
     #[test]
-    fn duplicating_a_clip_updates_song_json_and_snapshot() {
+    fn duplicating_a_clip_stays_in_memory_until_save() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir =
             create_song_folder(root.path(), "clip-duplicate-demo").expect("song dir should exist");
         fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        save_song(&song_dir, &demo_song()).expect("song should save");
 
         let mut session = DesktopSession::default();
         session.song_dir = Some(song_dir.clone());
@@ -3145,11 +3146,7 @@ mod tests {
             .any(|clip| clip.id != "clip_1" && clip.timeline_start_seconds == 6.0));
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert_eq!(saved_song.clips.len(), 2);
-        assert!(saved_song
-            .clips
-            .iter()
-            .any(|clip| clip.id != "clip_1" && clip.timeline_start_seconds == 6.0));
+        assert_eq!(saved_song.clips.len(), 1);
     }
 
     #[test]
@@ -3315,11 +3312,12 @@ mod tests {
     }
 
     #[test]
-    fn updating_a_section_marker_updates_song_json_and_snapshot() {
+    fn updating_a_section_marker_stays_in_memory_until_save() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir =
             create_song_folder(root.path(), "section-update-demo").expect("song dir should exist");
         fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        save_song(&song_dir, &demo_song_with_section()).expect("song should save");
 
         let mut session = DesktopSession::default();
         session.song_dir = Some(song_dir.clone());
@@ -3345,16 +3343,17 @@ mod tests {
         assert_eq!(updated_section.start_seconds, 2.5);
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert_eq!(saved_song.section_markers[0].name, "Verse");
-        assert_eq!(saved_song.section_markers[0].start_seconds, 2.5);
+        assert_eq!(saved_song.section_markers[0].name, "Intro");
+        assert_eq!(saved_song.section_markers[0].start_seconds, 1.0);
     }
 
     #[test]
-    fn deleting_a_section_marker_updates_song_json_and_snapshot() {
+    fn deleting_a_section_marker_stays_in_memory_until_save() {
         let root = tempdir().expect("temp dir should exist");
         let song_dir =
             create_song_folder(root.path(), "section-delete-demo").expect("song dir should exist");
         fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        save_song(&song_dir, &demo_song_with_section()).expect("song should save");
 
         let mut session = DesktopSession::default();
         session.song_dir = Some(song_dir.clone());
@@ -3376,6 +3375,29 @@ mod tests {
         assert!(song_view.section_markers.is_empty());
 
         let saved_song = load_song(&song_dir).expect("song json should load");
-        assert!(saved_song.section_markers.is_empty());
+        assert_eq!(saved_song.section_markers.len(), 1);
+    }
+
+    #[test]
+    fn save_project_persists_pending_song_changes() {
+        let mut session = session_with_song_dir("save-project-demo", demo_song());
+        let song_dir = session
+            .song_dir
+            .clone()
+            .expect("song dir should exist for loaded session");
+        save_song(&song_dir, &demo_song()).expect("seed song should save");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        session
+            .move_clip("clip_1", 6.5, &audio)
+            .expect("clip should move");
+
+        let unsaved_song = load_song(&song_dir).expect("song json should load");
+        assert_eq!(unsaved_song.clips[0].timeline_start_seconds, 1.0);
+
+        session.save_project().expect("save should succeed");
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        assert_eq!(saved_song.clips[0].timeline_start_seconds, 6.5);
     }
 }
