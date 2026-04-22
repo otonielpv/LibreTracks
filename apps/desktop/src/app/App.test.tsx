@@ -131,11 +131,11 @@ describe("App", () => {
   it("renders the timeline-centric DAW shell", async () => {
     await renderApp();
 
-    expect(screen.getByRole("heading", { name: /timeline daw/i })).toBeTruthy();
+    expect(screen.getByText("LIBRETRACKS")).toBeTruthy();
     expect(screen.getByRole("button", { name: /reproducir/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /pausar/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /detener/i })).toBeTruthy();
-    expect(screen.getByText(/vista principal/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /browser/i })).toBeTruthy();
     expect(screen.queryByText(/submezclas/i)).toBeNull();
   });
 
@@ -316,15 +316,13 @@ describe("App", () => {
     });
 
     expect(await screen.findByText(/cursor movido a 00:07.000/i)).toBeTruthy();
-
-    const zoomSlider = screen.getByRole("slider", { name: /zoom horizontal del timeline/i });
-    expect(Number(zoomSlider.getAttribute("min"))).toBeLessThan(1);
+    expect(screen.queryByRole("slider", { name: /zoom horizontal del timeline/i })).toBeNull();
 
     await act(async () => {
       fireEvent.wheel(shell, { deltaY: -100, ctrlKey: true, clientX: 900 });
     });
 
-    expect(screen.getByText("8.3x")).toBeTruthy();
+    expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
   });
 
   it("creates a new audio track from the track context menu", async () => {

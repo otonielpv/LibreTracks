@@ -247,6 +247,21 @@ mod tests {
     }
 
     #[test]
+    fn analyzes_click_track_and_snaps_near_integer_bpm() {
+        let root = tempdir().expect("temp dir should exist");
+        let wav_path = root.path().join("click-91.wav");
+        write_click_test_wav(&wav_path, 44_100, 1, 12, 91.0);
+
+        let analysis = analyze_wav_file(&wav_path).expect("analysis should succeed");
+        let tempo_candidate = analysis
+            .tempo_candidate
+            .expect("tempo candidate should be detected");
+
+        assert_eq!(tempo_candidate.bpm, 91.0);
+        assert!(tempo_candidate.confidence > 0.1);
+    }
+
+    #[test]
     fn imports_wav_files_and_creates_song_structure() {
         let root = tempdir().expect("temp dir should exist");
         let imports_dir = root.path().join("imports");

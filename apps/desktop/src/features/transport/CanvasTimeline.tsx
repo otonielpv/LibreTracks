@@ -178,7 +178,12 @@ function clipScreenBounds(
   };
 }
 
-function cropWaveform(clip: ClipSummary, waveform: WaveformSummaryDto | undefined) {
+function cropWaveform(
+  clip: ClipSummary,
+  waveform: WaveformSummaryDto | undefined,
+  visibleStartRatio = 0,
+  visibleEndRatio = 1,
+) {
   const maxPeaks = waveform?.maxPeaks ?? [];
   const minPeaks = waveform?.minPeaks?.length ? waveform.minPeaks : maxPeaks.map((peak) => -peak);
   if (!maxPeaks.length || clip.sourceDurationSeconds <= 0) {
@@ -188,12 +193,10 @@ function cropWaveform(clip: ClipSummary, waveform: WaveformSummaryDto | undefine
     };
   }
 
-  const startRatio = clamp(clip.sourceStartSeconds / clip.sourceDurationSeconds, 0, 1);
-  const endRatio = clamp(
-    (clip.sourceStartSeconds + clip.durationSeconds) / clip.sourceDurationSeconds,
-    0,
-    1,
-  );
+  const clipStartRatio = clamp(clip.sourceStartSeconds / clip.sourceDurationSeconds, 0, 1);
+  const clipSpanRatio = clamp(clip.durationSeconds / clip.sourceDurationSeconds, 0, 1);
+  const startRatio = clamp(clipStartRatio + clipSpanRatio * visibleStartRatio, 0, 1);
+  const endRatio = clamp(clipStartRatio + clipSpanRatio * visibleEndRatio, 0, 1);
   const startIndex = Math.floor(startRatio * maxPeaks.length);
   const endIndex = Math.max(startIndex + 1, Math.ceil(endRatio * maxPeaks.length));
 
@@ -211,8 +214,10 @@ function drawWaveform(
   width: number,
   top: number,
   height: number,
+  visibleStartRatio = 0,
+  visibleEndRatio = 1,
 ) {
-  const { min, max } = cropWaveform(clip, waveform);
+  const { min, max } = cropWaveform(clip, waveform, visibleStartRatio, visibleEndRatio);
   if (!max.length || !min.length || width < 4) {
     return;
   }
@@ -426,6 +431,8 @@ export function TimelineTrackCanvas({
         const clippedLeft = clamp(left, 0, width);
         const clippedRight = clamp(right, 0, width);
         const visibleWidth = Math.max(2, clippedRight - clippedLeft);
+        const visibleStartRatio = clipWidth > 0 ? clamp((clippedLeft - left) / clipWidth, 0, 1) : 0;
+        const visibleEndRatio = clipWidth > 0 ? clamp((clippedRight - left) / clipWidth, 0, 1) : 1;
         const clipTop = trackTop + 8;
         const clipHeight = trackHeight - 18;
 
@@ -446,6 +453,8 @@ export function TimelineTrackCanvas({
           visibleWidth,
           clipTop,
           clipHeight,
+          visibleStartRatio,
+          visibleEndRatio,
         );
 
         if (visibleWidth >= 52) {

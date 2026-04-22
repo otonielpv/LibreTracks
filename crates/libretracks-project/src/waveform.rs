@@ -199,18 +199,50 @@ fn estimate_tempo_candidate(waveform: &WaveformSummary) -> Option<TempoCandidate
         }
     }
 
-    let mut bpm = 60.0 * bucket_rate / resolved_lag as f64;
+    let refined_lag = refine_lag_with_parabolic_peak(&scores, resolved_lag).max(lag_min as f64);
+    let mut bpm = 60.0 * bucket_rate / refined_lag;
     while bpm < 60.0 {
         bpm *= 2.0;
     }
     while bpm > 220.0 {
         bpm /= 2.0;
     }
+    bpm = snap_detected_bpm(bpm, resolved_score);
 
     Some(TempoCandidate {
         bpm: (bpm * 10.0).round() / 10.0,
         confidence: resolved_score.clamp(0.0, 1.0),
     })
+}
+
+fn refine_lag_with_parabolic_peak(scores: &[f64], lag: usize) -> f64 {
+    if lag == 0 || lag + 1 >= scores.len() {
+        return lag as f64;
+    }
+
+    let left = scores[lag - 1];
+    let center = scores[lag];
+    let right = scores[lag + 1];
+    let denominator = left - (2.0 * center) + right;
+    if denominator.abs() <= f64::EPSILON {
+        return lag as f64;
+    }
+
+    let offset = 0.5 * (left - right) / denominator;
+    (lag as f64 + offset.clamp(-0.5, 0.5)).max(1.0)
+}
+
+fn snap_detected_bpm(bpm: f64, confidence: f64) -> f64 {
+    if !bpm.is_finite() || bpm <= 0.0 {
+        return bpm;
+    }
+
+    let nearest_integer = bpm.round();
+    if confidence >= 0.1 && (bpm - nearest_integer).abs() <= 0.35 {
+        return nearest_integer;
+    }
+
+    bpm
 }
 
 pub fn write_waveform_summary(

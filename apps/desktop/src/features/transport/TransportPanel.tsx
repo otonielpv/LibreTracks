@@ -57,7 +57,6 @@ const TRACK_HEIGHT = 94;
 const RULER_HEIGHT = 64;
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 48;
-const ZOOM_STEP = 0.25;
 const ZOOM_WHEEL_STEP = 1.25;
 const DRAG_THRESHOLD_PX = 6;
 
@@ -2046,11 +2045,6 @@ export function TransportPanel() {
         <div className="lt-workspace">
       <section className="lt-main-stage">
         <div className="lt-timeline-topline">
-          <div>
-            <h1>Timeline DAW</h1>
-            <strong>Vista principal</strong>
-            <p>El timeline manda; el resto vive en menus contextuales e interacciones directas.</p>
-          </div>
           <div className="lt-timeline-stats">
             <span>{song?.tracks.length ?? 0} tracks</span>
             <span>{song?.clips.length ?? 0} clips</span>
@@ -2460,19 +2454,6 @@ export function TransportPanel() {
           <p>{status}</p>
         </div>
         <div className="lt-bottom-controls">
-          <label className="lt-zoom-control">
-            <span>Zoom</span>
-            <input
-              aria-label="Zoom horizontal del timeline"
-              type="range"
-              min={effectiveZoomMin}
-              max={ZOOM_MAX}
-              step={ZOOM_STEP}
-              value={zoomLevel}
-              onChange={(event) => applyZoom(Number(event.target.value))}
-            />
-            <strong>{zoomLevel.toFixed(1)}x</strong>
-          </label>
           <button type="button" className={snapEnabled ? "is-active" : ""} onClick={() => setSnapEnabled((current) => !current)}>
             Snap to Grid ({timelineGrid.subdivisionPerBeat}/1)
           </button>
