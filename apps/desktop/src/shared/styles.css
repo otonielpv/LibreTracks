@@ -1083,22 +1083,6 @@ body {
   cursor: not-allowed;
 }
 
-.lt-inspector-strip {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  background: #201f1f;
-  padding: 0.25rem 1rem;
-  font-size: 12px;
-}
-
-.lt-inspector-strip strong {
-  color: #bacac5;
-  font: 600 10px/1 "Space Grotesk", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-
 .lt-status-overlay {
   position: absolute;
   right: 1rem;

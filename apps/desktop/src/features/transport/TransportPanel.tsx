@@ -62,6 +62,7 @@ import { TrackHeaderItem } from "./TrackHeaderItem";
 
 const HEADER_WIDTH = 260;
 const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
+const TIMELINE_FIT_RIGHT_GUTTER_PX = 140;
 const DEFAULT_TRACK_HEIGHT = 94;
 const TRACK_HEIGHT_MIN = 68;
 const TRACK_HEIGHT_MAX = 148;
@@ -1267,9 +1268,13 @@ export function TransportPanel() {
   }
 
   const laneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
+  const timelineFitViewportWidth = Math.max(
+    320,
+    laneViewportWidth - Math.min(TIMELINE_FIT_RIGHT_GUTTER_PX, laneViewportWidth * 0.16),
+  );
   const fitAllZoomLevel = song?.durationSeconds
     ? clamp(
-        laneViewportWidth / (Math.max(song.durationSeconds, 1) * BASE_PIXELS_PER_SECOND),
+        timelineFitViewportWidth / (Math.max(song.durationSeconds, 1) * BASE_PIXELS_PER_SECOND),
         ZOOM_MIN,
         ZOOM_MAX,
       )
@@ -1291,9 +1296,6 @@ export function TransportPanel() {
   const shouldShowSessionActions = !shouldShowEmptyState;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
-  const selectedTrack = selectedTrackId ? tracksById[selectedTrackId] ?? null : null;
-  const selectedClip = findClip(song, selectedClipId);
-  const selectedSection = findSection(song, selectedSectionId);
   const timelineGrid = useTimelineGrid({
     durationSeconds: song?.durationSeconds ?? 0,
     bpm: song?.bpm ?? 120,
@@ -2486,32 +2488,6 @@ export function TransportPanel() {
 
   </section>
   )}
-
-      {selectedClip ? (
-        <div className="lt-inspector-strip">
-          <strong>Clip</strong>
-          <span>{selectedClip.trackName}</span>
-          <span>
-            {formatClock(selectedClip.timelineStartSeconds)} | {selectedClip.durationSeconds.toFixed(2)}s
-          </span>
-        </div>
-      ) : null}
-
-      {selectedTrack ? (
-        <div className="lt-inspector-strip">
-          <strong>Track</strong>
-          <span>{selectedTrack.name}</span>
-          <span>{selectedTrack.kind === "folder" ? "folder" : "audio"}</span>
-        </div>
-      ) : null}
-
-      {selectedSection ? (
-        <div className="lt-inspector-strip">
-          <strong>Marca</strong>
-          <span>{selectedSection.name}</span>
-          <span>{formatClock(selectedSection.startSeconds)}</span>
-        </div>
-      ) : null}
 
         {contextMenu ? (
         <div
