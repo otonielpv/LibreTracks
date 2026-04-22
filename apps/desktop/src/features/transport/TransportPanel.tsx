@@ -1445,6 +1445,12 @@ export function TransportPanel() {
       trigger === "after_bars" ? bars : undefined,
     );
     setSnapshot(nextSnapshot);
+
+    if (trigger === "next_marker" && !nextSnapshot.pendingMarkerJump) {
+      setStatus("Aviso: no quedan marcas por delante; salto en la siguiente marca ignorado.");
+      return nextSnapshot;
+    }
+
     setStatus(
       trigger === "immediate"
         ? `Salto inmediato a ${markerName}.`
@@ -1452,6 +1458,24 @@ export function TransportPanel() {
           ? `Salto armado en la siguiente marca hacia ${markerName}.`
           : `Salto armado en ${bars} compases hacia ${markerName}.`,
     );
+
+    return nextSnapshot;
+  }
+
+  async function handleMarkerPrimaryAction(section: SectionMarkerSummary) {
+    setSelectedSectionId(section.id);
+    setSelectedClipId(null);
+    setSelectedTrackId(null);
+    setContextMenu(null);
+
+    if (snapshot?.pendingMarkerJump?.targetMarkerId === section.id) {
+      const nextSnapshot = await cancelMarkerJump();
+      setSnapshot(nextSnapshot);
+      setStatus(`Salto cancelado para ${section.name}.`);
+      return;
+    }
+
+    await scheduleMarkerJumpWithGlobalMode(section.id, section.name);
   }
 
   useEffect(() => {
@@ -1991,7 +2015,18 @@ export function TransportPanel() {
 
     return [
       {
-        label: "Renombrar",
+        label: "Jump to this marker",
+        disabled: !canEditMarker,
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await scheduleMarkerJump(section.id, "immediate");
+            setSnapshot(nextSnapshot);
+            setStatus(`Cursor enviado a ${section.name}`);
+          });
+        },
+      },
+      {
+        label: "Rename",
         disabled: !canEditMarker,
         onSelect: async () => {
           const nextName = window.prompt("Nuevo nombre de la marca", section.name)?.trim();
@@ -2006,7 +2041,7 @@ export function TransportPanel() {
         },
       },
       {
-        label: "Borrar",
+        label: "Delete",
         disabled: !canEditMarker,
         onSelect: async () => {
           await runAction(async () => {
@@ -2014,52 +2049,6 @@ export function TransportPanel() {
             setSnapshot(nextSnapshot);
             setSelectedSectionId(null);
             setStatus(`Marca eliminada: ${section.name}`);
-          });
-        },
-      },
-      {
-        label: section.digit == null ? "Asignar digito" : `Cambiar digito (${section.digit})`,
-        disabled: !canEditMarker,
-        onSelect: async () => {
-          const value = window.prompt("Digito 0-9 (vacio para liberar)", section.digit?.toString() ?? "");
-          if (value === null) {
-            return;
-          }
-          const trimmed = value.trim();
-          const nextDigit = trimmed === "" ? null : Number(trimmed);
-          if (nextDigit !== null && (!Number.isInteger(nextDigit) || nextDigit < 0 || nextDigit > 9)) {
-            setStatus("Digito invalido. Usa un valor entre 0 y 9.");
-            return;
-          }
-
-          await runAction(async () => {
-            const nextSnapshot = await assignSectionMarkerDigit(section.id, nextDigit);
-            setSnapshot(nextSnapshot);
-            setStatus(
-              nextDigit === null
-                ? `Digito liberado para ${section.name}.`
-                : `Digito ${nextDigit} asignado a ${section.name}.`,
-            );
-          });
-        },
-      },
-      {
-        label: "Ir ahora",
-        disabled: !canEditMarker,
-        onSelect: async () => {
-          await runAction(async () => {
-            const nextSnapshot = await scheduleMarkerJump(section.id, "immediate");
-            setSnapshot(nextSnapshot);
-            setStatus(`Cursor enviado a ${section.name}`);
-          });
-        },
-      },
-      {
-        label: "Disparar con modo global",
-        disabled: !canEditMarker,
-        onSelect: async () => {
-          await runAction(async () => {
-            await scheduleMarkerJumpWithGlobalMode(section.id, section.name);
           });
         },
       },
@@ -2363,10 +2352,9 @@ export function TransportPanel() {
                         }}
                         onClick={(event) => {
                           event.stopPropagation();
-                          setSelectedSectionId(section.id);
-                          setSelectedClipId(null);
-                          setSelectedTrackId(null);
-                          setStatus(`Marca seleccionada: ${section.name}`);
+                          void runAction(async () => {
+                            await handleMarkerPrimaryAction(section);
+                          });
                         }}
                         onContextMenu={(event) => {
                           event.stopPropagation();

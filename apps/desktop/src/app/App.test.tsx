@@ -221,25 +221,20 @@ describe("App", () => {
     expect(screen.getByText("2 clips | pan 0.00")).toBeTruthy();
   });
 
-  it("shows the section context menu on right click", async () => {
+  it("shows the marker context menu on right click", async () => {
     await renderApp();
 
     const introSection = await screen.findByRole("button", { name: "Intro" });
     await act(async () => {
-      fireEvent.click(introSection);
-    });
-
-    await act(async () => {
       fireEvent.contextMenu(introSection, { clientX: 220, clientY: 120 });
     });
 
-    const jumpNow = await screen.findByRole("button", { name: /ir ahora/i });
+    const jumpNow = await screen.findByRole("button", { name: /jump to this marker/i });
     const context = jumpNow.closest(".lt-context-menu");
     expect(context).toBeTruthy();
-    expect(within(context as HTMLElement).getByRole("button", { name: /ir ahora/i })).toBeTruthy();
-    expect(
-      within(context as HTMLElement).getByRole("button", { name: /disparar con modo global/i }),
-    ).toBeTruthy();
+    expect(within(context as HTMLElement).getByRole("button", { name: /jump to this marker/i })).toBeTruthy();
+    expect(within(context as HTMLElement).getByRole("button", { name: /rename/i })).toBeTruthy();
+    expect(within(context as HTMLElement).getByRole("button", { name: /delete/i })).toBeTruthy();
   });
 
   it("triggers marker jump with digit keys and cancels with escape", async () => {
@@ -261,6 +256,75 @@ describe("App", () => {
     });
 
     expect(await screen.findByText(/salto cancelado/i)).toBeTruthy();
+  });
+
+  it("overwrites the armed marker on click and cancels when clicked again", async () => {
+    await renderApp();
+
+    const modeSelect = await screen.findByRole("combobox", { name: /modo global de salto/i });
+    await act(async () => {
+      fireEvent.change(modeSelect, { target: { value: "next_marker" } });
+    });
+
+    const introMarker = await screen.findByRole("button", { name: "Intro" });
+    const bridgeMarker = await screen.findByRole("button", { name: "Bridge" });
+
+    await act(async () => {
+      fireEvent.click(introMarker);
+    });
+
+    expect(await screen.findByText(/armado: intro \| next_marker/i)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(bridgeMarker);
+    });
+
+    expect(await screen.findByText(/armado: bridge \| next_marker/i)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(bridgeMarker);
+    });
+
+    expect(await screen.findByText(/salto cancelado para bridge/i)).toBeTruthy();
+    expect(screen.queryByText(/armado: bridge \| next_marker/i)).toBeNull();
+  });
+
+  it("warns when next marker jump is ignored because there are no markers ahead", async () => {
+    const { container } = await renderApp();
+    const shell = mockTimelineShellMetrics(container, 1500);
+    mockRulerBounds(container);
+
+    await act(async () => {
+      fireEvent(window, new Event("resize"));
+    });
+
+    const ruler = container.querySelector(".lt-ruler-track") as HTMLElement;
+    for (let index = 0; index < 6; index += 1) {
+      await act(async () => {
+        fireEvent.wheel(ruler, { deltaY: 100, clientX: 1180 });
+      });
+    }
+
+    await act(async () => {
+      fireEvent.mouseDown(ruler, { button: 0, clientX: 1180 });
+      fireEvent.mouseMove(window, { button: 0, clientX: 1180 });
+      fireEvent.mouseUp(window, { button: 0, clientX: 1180 });
+    });
+
+    expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThanOrEqual(0);
+
+    const modeSelect = await screen.findByRole("combobox", { name: /modo global de salto/i });
+    await act(async () => {
+      fireEvent.change(modeSelect, { target: { value: "next_marker" } });
+    });
+
+    const introMarker = await screen.findByRole("button", { name: "Intro" });
+    await act(async () => {
+      fireEvent.click(introMarker);
+    });
+
+    expect(await screen.findByText(/aviso: no quedan marcas por delante; salto en la siguiente marca ignorado/i)).toBeTruthy();
+    expect(screen.queryByText(/armado:/i)).toBeNull();
   });
 
   it("pans the timeline by dragging over an empty lane", async () => {

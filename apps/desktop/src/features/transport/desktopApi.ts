@@ -433,6 +433,8 @@ export async function scheduleMarkerJump(
   bars?: number,
 ): Promise<TransportSnapshot> {
   if (!isTauriApp) {
+    syncDemoPlayback();
+    const currentPosition = demoClock.anchorPositionSeconds;
     const targetMarker = demoSong.sectionMarkers.find((marker) => marker.id === targetMarkerId) ?? null;
     if (targetMarker) {
       if (trigger === "immediate") {
@@ -440,12 +442,22 @@ export async function scheduleMarkerJump(
         demoClock.lastJumpPositionSeconds = targetMarker.startSeconds;
         demoPendingJump = null;
       } else {
+        const nextMarkerAhead =
+          trigger === "next_marker"
+            ? demoSong.sectionMarkers.find((marker) => marker.startSeconds > currentPosition) ?? null
+            : null;
+
+        if (trigger === "next_marker" && !nextMarkerAhead) {
+          demoPendingJump = null;
+          return buildDemoSnapshot();
+        }
+
         demoPendingJump = {
           targetMarkerId,
           targetMarkerName: targetMarker.name,
           targetDigit: targetMarker.digit ?? null,
           trigger: trigger === "after_bars" ? `after_bars:${bars ?? 4}` : "next_marker",
-          executeAtSeconds: demoClock.anchorPositionSeconds,
+          executeAtSeconds: nextMarkerAhead?.startSeconds ?? demoClock.anchorPositionSeconds,
         };
       }
     }
