@@ -179,13 +179,17 @@ impl AudioEngine {
         self.pending_marker_jump = None;
     }
 
-    pub fn advance_transport(&mut self, delta_seconds: f64) -> Result<f64, AudioEngineError> {
+    pub fn advance_transport(
+        &mut self,
+        delta_seconds: f64,
+    ) -> Result<(f64, bool), AudioEngineError> {
         if delta_seconds < 0.0 {
             return Err(AudioEngineError::PositionOutOfRange);
         }
 
         let song = self.ensure_song_loaded()?.clone();
         let mut next_position = (self.position_seconds + delta_seconds).min(song.duration_seconds);
+        let mut jump_executed = false;
 
         if let Some(pending_jump) = self.pending_marker_jump.clone() {
             let execute_at = pending_jump.execute_at_seconds;
@@ -196,6 +200,7 @@ impl AudioEngine {
                 next_position =
                     (target_marker.start_seconds + overshoot).min(song.duration_seconds);
                 self.pending_marker_jump = None;
+                jump_executed = true;
             }
         }
 
@@ -206,7 +211,7 @@ impl AudioEngine {
             self.pending_marker_jump = None;
         }
 
-        Ok(self.position_seconds)
+        Ok((self.position_seconds, jump_executed))
     }
 
     pub fn active_clips(&self) -> Result<Vec<ActiveClip>, AudioEngineError> {
@@ -543,11 +548,12 @@ mod tests {
 
         assert_eq!(scheduled.target_marker_name, "Outro");
 
-        let position = engine
+        let (position, jump_executed) = engine
             .advance_transport(3.0)
             .expect("transport should advance");
 
         assert!((position - 13.0).abs() < 0.0001);
+        assert!(jump_executed);
         assert!(engine.pending_marker_jump().is_none());
     }
 
@@ -562,11 +568,12 @@ mod tests {
             .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2))
             .expect("jump should schedule");
 
-        let position = engine
+        let (position, jump_executed) = engine
             .advance_transport(6.0)
             .expect("transport should advance");
 
         assert!((position - 12.3333333333).abs() < 0.0001);
+        assert!(jump_executed);
         assert!(engine.pending_marker_jump().is_none());
     }
 
@@ -581,11 +588,12 @@ mod tests {
             .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(4))
             .expect("jump should schedule");
 
-        let position = engine
+        let (position, jump_executed) = engine
             .advance_transport(14.0)
             .expect("transport should advance");
 
         assert!((position - 13.0).abs() < 0.0001);
+        assert!(jump_executed);
         assert!(engine.pending_marker_jump().is_none());
     }
 
@@ -601,11 +609,12 @@ mod tests {
             .expect("jump should schedule");
         engine.cancel_section_jump();
 
-        let position = engine
+        let (position, jump_executed) = engine
             .advance_transport(3.0)
             .expect("transport should advance");
 
         assert!((position - 9.0).abs() < 0.0001);
+        assert!(!jump_executed);
         assert!(engine.pending_marker_jump().is_none());
     }
 
@@ -660,18 +669,20 @@ mod tests {
         assert_eq!(scheduled.execute_at_seconds, 8.0);
         assert_eq!(scheduled.target_marker_id, "section_intro");
 
-        let intermediate_position = engine
+        let (intermediate_position, jump_executed) = engine
             .advance_transport(1.0)
             .expect("transport should advance before execution");
 
         assert!((intermediate_position - 7.0).abs() < 0.0001);
+        assert!(!jump_executed);
         assert!(engine.pending_marker_jump().is_some());
 
-        let position = engine
+        let (position, jump_executed) = engine
             .advance_transport(2.0)
             .expect("transport should advance");
 
         assert!((position - 1.0).abs() < 0.0001);
+        assert!(jump_executed);
         assert!(engine.pending_marker_jump().is_none());
     }
 

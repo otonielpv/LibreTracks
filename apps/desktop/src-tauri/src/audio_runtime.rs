@@ -2272,6 +2272,26 @@ mod tests {
     }
 
     #[test]
+    fn playback_session_seek_increments_generation_for_buffer_flush() {
+        let song = demo_song();
+        let seek_generation = Arc::new(AtomicU64::new(0));
+        let mut session = PlaybackSession {
+            backend: PlaybackBackend::Null,
+            reader_sender: None,
+            reader_handle: None,
+            seek_generation: seek_generation.clone(),
+            audio_buffers: AudioBufferCache::default(),
+        };
+
+        let consumed_null_backend = session
+            .seek(song, 8.0)
+            .expect("seek should succeed on null backend");
+
+        assert!(consumed_null_backend);
+        assert_eq!(seek_generation.load(Ordering::Acquire), 1);
+    }
+
+    #[test]
     fn symphonia_probes_wav_assets() {
         let temp_dir = tempdir().expect("temp dir should exist");
         let audio_path = temp_dir.path().join("clip.wav");

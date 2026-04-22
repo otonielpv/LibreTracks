@@ -161,25 +161,15 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function keyboardDigit(eventCode: string) {
-  if (eventCode.startsWith("Digit")) {
-    const value = Number(eventCode.slice("Digit".length));
-    return Number.isInteger(value) && value >= 0 && value <= 9 ? value : null;
-  }
-
-  if (eventCode.startsWith("Numpad")) {
-    const value = Number(eventCode.slice("Numpad".length));
-    return Number.isInteger(value) && value >= 0 && value <= 9 ? value : null;
+  const match = eventCode.match(/^(?:Digit|Numpad)(\d)$/);
+  if (match) {
+    return Number(match[1]);
   }
 
   return null;
 }
 
 function resolveMarkerShortcut(markers: SectionMarkerSummary[], digit: number) {
-  const assignedMarker = markers.find((marker) => marker.digit === digit) ?? null;
-  if (assignedMarker) {
-    return assignedMarker;
-  }
-
   return [...markers]
     .sort((left, right) => left.startSeconds - right.startSeconds)
     .at(digit) ?? null;

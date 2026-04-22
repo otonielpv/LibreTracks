@@ -1246,8 +1246,7 @@ impl DesktopSession {
         }
 
         let elapsed = self.transport_clock.elapsed_since_anchor();
-        let advanced_position = self.engine.advance_transport(elapsed)?;
-        let jump_executed = (advanced_position - linear_position).abs() > 0.001;
+        let (advanced_position, jump_executed) = self.engine.advance_transport(elapsed)?;
 
         if jump_executed {
             self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
