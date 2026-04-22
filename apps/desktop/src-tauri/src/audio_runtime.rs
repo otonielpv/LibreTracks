@@ -36,7 +36,7 @@ const PCM_RING_CAPACITY_FRAMES: usize = 4_096;
 const DISK_RENDER_BLOCK_FRAMES: usize = 512;
 const GAIN_EPSILON: f32 = 0.000_001;
 const AUDIO_METER_EVENT: &str = "audio:meters";
-const AUDIO_METER_EMIT_INTERVAL: Duration = Duration::from_millis(33);
+const AUDIO_METER_EMIT_INTERVAL: Duration = Duration::from_millis(16);
 
 type SharedAppHandle = Arc<RwLock<Option<AppHandle>>>;
 type SharedTrackMixState = Arc<RwLock<HashMap<String, LiveTrackMix>>>;
@@ -251,6 +251,7 @@ struct DiskReaderReport;
 
 #[derive(Debug, Clone)]
 struct PlaybackClipPlan {
+    #[cfg_attr(not(test), allow(dead_code))]
     clip_id: String,
     track_id: String,
     file_path: PathBuf,
@@ -314,7 +315,8 @@ struct MixClipState {
 
 struct MeterEmitterState {
     app_handle: SharedAppHandle,
-    last_emitted_at: Option<Instant>,
+    pending_track_meters: Vec<AudioMeterLevel>,
+    last_emit_at: Option<Instant>,
 }
 
 struct MemoryClipReader {
@@ -1603,7 +1605,7 @@ impl Mixer {
         let block_start = self.timeline_cursor_frame;
         let block_end = block_start + block_frames as u64;
         let mut mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
-        let should_capture_track_meters = self.meter_emitter.should_emit();
+        let should_capture_track_meters = self.meter_emitter.is_enabled();
         let mut track_meters = should_capture_track_meters.then(|| self.empty_track_meters());
 
         self.activate_due_clips(block_end);
@@ -1800,24 +1802,18 @@ impl MeterEmitterState {
     fn new(app_handle: SharedAppHandle) -> Self {
         Self {
             app_handle,
-            last_emitted_at: None,
+            pending_track_meters: Vec::new(),
+            last_emit_at: None,
         }
     }
 
-    fn should_emit(&self) -> bool {
-        let has_app_handle = self
+    fn is_enabled(&self) -> bool {
+        self
             .app_handle
             .read()
             .ok()
             .and_then(|app_handle| app_handle.as_ref().cloned())
-            .is_some();
-        if !has_app_handle {
-            return false;
-        }
-
-        self.last_emitted_at
-            .map(|last_emitted_at| last_emitted_at.elapsed() >= AUDIO_METER_EMIT_INTERVAL)
-            .unwrap_or(true)
+            .is_some()
     }
 
     fn emit(&mut self, track_meters: &[AudioMeterLevel]) {
@@ -1830,12 +1826,43 @@ impl MeterEmitterState {
             return;
         };
 
-        if let Err(error) = app_handle.emit(AUDIO_METER_EVENT, track_meters.to_vec()) {
-            eprintln!("[libretracks-audio] failed to emit audio meters: {error}");
+        self.accumulate(track_meters);
+
+        let now = Instant::now();
+        let should_emit = match self.last_emit_at {
+            Some(last_emit_at) => now.duration_since(last_emit_at) >= AUDIO_METER_EMIT_INTERVAL,
+            None => true,
+        };
+
+        if !should_emit {
             return;
         }
 
-        self.last_emitted_at = Some(Instant::now());
+        self.last_emit_at = Some(now);
+
+        if let Err(error) = app_handle.emit(AUDIO_METER_EVENT, self.pending_track_meters.clone()) {
+            eprintln!("[libretracks-audio] failed to emit audio meters: {error}");
+        }
+
+        self.pending_track_meters.clear();
+    }
+
+    fn accumulate(&mut self, track_meters: &[AudioMeterLevel]) {
+        if self.pending_track_meters.len() != track_meters.len()
+            || self
+                .pending_track_meters
+                .iter()
+                .zip(track_meters)
+                .any(|(pending, next)| pending.track_id != next.track_id)
+        {
+            self.pending_track_meters = track_meters.to_vec();
+            return;
+        }
+
+        for (pending_meter, next_meter) in self.pending_track_meters.iter_mut().zip(track_meters) {
+            pending_meter.left_peak = pending_meter.left_peak.max(next_meter.left_peak);
+            pending_meter.right_peak = pending_meter.right_peak.max(next_meter.right_peak);
+        }
     }
 }
 

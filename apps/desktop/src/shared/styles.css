@@ -968,17 +968,16 @@ body {
 
 .lt-track-meter {
   display: flex;
-  width: 16px;
-  flex: 0 0 16px;
+  width: 10px;
+  flex: 0 0 10px;
   align-self: stretch;
   align-items: stretch;
   justify-content: flex-end;
-  gap: 0.22rem;
 }
 
 .lt-track-meter-channel {
   position: relative;
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
   border-radius: 999px;
@@ -989,19 +988,33 @@ body {
 .lt-track-meter-bar {
   position: absolute;
   inset: 0;
-  transform: scaleY(0);
-  transform-origin: center bottom;
+  clip-path: inset(100% 0 0 0);
   opacity: 0.18;
-  will-change: transform, opacity;
+  will-change: clip-path, opacity;
   transition: opacity 120ms linear;
+  background: linear-gradient(
+    180deg,
+    #ff6150 0%,
+    #ff6150 15.79%,
+    #dbe95f 15.79%,
+    #dbe95f 36.84%,
+    #63db78 36.84%,
+    #2fba69 68%,
+    #1f8a55 100%
+  );
 }
 
-.lt-track-meter-bar.is-left {
-  background: linear-gradient(90deg, #32d3a5 0%, #cde75a 72%, #ff8c5a 100%);
-}
-
-.lt-track-meter-bar.is-right {
-  background: linear-gradient(90deg, #45b9ff 0%, #6ad6dd 72%, #bdf378 100%);
+.lt-track-meter-clip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: #ff6150;
+  opacity: 0;
+  box-shadow: 0 0 10px rgb(255 97 80 / 0.55);
+  transition: opacity 90ms linear;
 }
 
 .lt-track-control-row {

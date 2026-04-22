@@ -15,31 +15,28 @@ export type OptimisticMixState = Partial<{
   volume: number;
 }>;
 
-type MeterDictionary = Record<string, TrackMeterState>;
+export type MeterDictionary = Record<string, TrackMeterState>;
 
 type TransportStore = {
   meters: MeterDictionary;
   playback: TransportSnapshot | null;
   optimisticMix: Record<string, OptimisticMixState>;
-  setMeters: (levels: AudioMeterLevel[] | MeterDictionary) => void;
+  setMeters: (meters: MeterDictionary) => void;
   setPlaybackState: (playback: TransportSnapshot | null) => void;
   setOptimisticMix: (trackId: string, mix: OptimisticMixState | null) => void;
 };
 
-function normalizeMeters(levels: AudioMeterLevel[] | MeterDictionary): MeterDictionary {
-  if (Array.isArray(levels)) {
-    return Object.fromEntries(
-      levels.map((level) => [
-        level.trackId,
-        {
-          leftPeak: level.leftPeak,
-          rightPeak: level.rightPeak,
-        },
-      ]),
-    );
+export function meterDictionaryFromLevels(levels: AudioMeterLevel[]): MeterDictionary {
+  const meters: MeterDictionary = {};
+
+  for (const level of levels) {
+    meters[level.trackId] = {
+      leftPeak: level.leftPeak,
+      rightPeak: level.rightPeak,
+    };
   }
 
-  return levels;
+  return meters;
 }
 
 export const useTransportStore = create<TransportStore>()(
@@ -47,8 +44,8 @@ export const useTransportStore = create<TransportStore>()(
     meters: {},
     playback: null,
     optimisticMix: {},
-    setMeters: (levels) => {
-      set({ meters: normalizeMeters(levels) });
+    setMeters: (meters) => {
+      set({ meters });
     },
     setPlaybackState: (playback) => {
       set({ playback });

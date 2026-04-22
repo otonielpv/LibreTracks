@@ -65,7 +65,11 @@ import {
   zoomCameraAtViewportX,
 } from "./timelineMath";
 import { TrackHeaderItem } from "./TrackHeaderItem";
-import { useTransportStore, type OptimisticMixState } from "./store";
+import {
+  meterDictionaryFromLevels,
+  useTransportStore,
+  type OptimisticMixState,
+} from "./store";
 
 const HEADER_WIDTH = 260;
 const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
@@ -79,6 +83,7 @@ const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 48;
 const ZOOM_WHEEL_STEP = 1.25;
 const DRAG_THRESHOLD_PX = 6;
+const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
 
 type ContextMenuAction = {
   label: string;
@@ -137,6 +142,7 @@ type LiveClipMoveState = {
 type LiveTrackMixRequestState = {
   inFlight: boolean;
   queuedKeys: Set<keyof OptimisticMixState>;
+  lastSentAt: number;
 };
 
 type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
@@ -627,6 +633,14 @@ export function TransportPanel() {
 
       try {
         while (liveState.queuedKeys.size > 0) {
+          const now = performance.now();
+          const remainingDelay = LIVE_TRACK_MIX_MIN_INTERVAL_MS - (now - liveState.lastSentAt);
+          if (remainingDelay > 0) {
+            await new Promise<void>((resolve) => {
+              window.setTimeout(resolve, remainingDelay);
+            });
+          }
+
           const keys = [...liveState.queuedKeys];
           liveState.queuedKeys.clear();
 
@@ -661,6 +675,7 @@ export function TransportPanel() {
           }
 
           await updateTrackMixLive(payload);
+          liveState.lastSentAt = performance.now();
         }
       } finally {
         liveState.inFlight = false;
@@ -681,6 +696,7 @@ export function TransportPanel() {
       const liveState = liveStates[trackId] ?? {
         inFlight: false,
         queuedKeys: new Set<keyof OptimisticMixState>(),
+        lastSentAt: 0,
       };
 
       liveStates[trackId] = liveState;
@@ -971,13 +987,28 @@ export function TransportPanel() {
 
     let active = true;
     let unlisten: (() => void) | undefined;
+    let frameId: number | null = null;
+    let pendingMeters: ReturnType<typeof meterDictionaryFromLevels> | null = null;
+
+    const flushMeters = () => {
+      frameId = null;
+      if (!active || pendingMeters === null) {
+        return;
+      }
+
+      useTransportStore.getState().setMeters(pendingMeters);
+      pendingMeters = null;
+    };
 
     void listenToAudioMeters((levels) => {
       if (!active) {
         return;
       }
 
-      useTransportStore.getState().setMeters(levels);
+      pendingMeters = meterDictionaryFromLevels(levels);
+      if (frameId === null) {
+        frameId = window.requestAnimationFrame(flushMeters);
+      }
     }).then((nextUnlisten) => {
       if (!active) {
         nextUnlisten();
@@ -989,6 +1020,10 @@ export function TransportPanel() {
 
     return () => {
       active = false;
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      pendingMeters = null;
       unlisten?.();
     };
   }, []);

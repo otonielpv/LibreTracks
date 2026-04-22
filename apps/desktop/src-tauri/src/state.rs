@@ -1114,7 +1114,6 @@ impl DesktopSession {
         solo: Option<bool>,
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
-        self.sync_position(audio)?;
         self.capture_live_history_anchor();
         self.update_loaded_track(track_id, None, volume, pan, muted, solo)?;
         let loaded_song = self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
@@ -2345,7 +2344,9 @@ mod tests {
     };
     use tempfile::tempdir;
 
-    use super::{musical_position_summary, DesktopSession, TransportClock};
+    use super::{
+        musical_position_summary, song_to_view, DesktopSession, TransportClock, WaveformMemoryCache,
+    };
 
     fn demo_song() -> Song {
         Song {
@@ -2716,6 +2717,60 @@ mod tests {
                 "track_folder_a",
                 "track_child_a"
             ]
+        );
+    }
+
+    #[test]
+    fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
+        let song = Song {
+            id: "song_ids".into(),
+            title: "ID Audit".into(),
+            artist: None,
+            bpm: 120.0,
+            tempo_metadata: TempoMetadata {
+                source: TempoSource::Manual,
+                confidence: None,
+                reference_file_path: None,
+            },
+            key: None,
+            time_signature: "4/4".into(),
+            duration_seconds: 8.0,
+            tracks: vec![
+                Track {
+                    id: "folder_main".into(),
+                    name: "Folder".into(),
+                    kind: TrackKind::Folder,
+                    parent_track_id: None,
+                    volume: 1.0,
+                    pan: 0.0,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Main.id(),
+                },
+                Track {
+                    id: "track-drums_01".into(),
+                    name: "Drums".into(),
+                    kind: TrackKind::Audio,
+                    parent_track_id: Some("folder_main".into()),
+                    volume: 1.0,
+                    pan: 0.0,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Main.id(),
+                },
+            ],
+            clips: vec![],
+            section_markers: vec![],
+        };
+
+        let view = song_to_view(&song, &WaveformMemoryCache::default(), 7);
+
+        assert_eq!(view.tracks[0].id, "folder_main");
+        assert_eq!(view.tracks[0].parent_track_id, None);
+        assert_eq!(view.tracks[1].id, "track-drums_01");
+        assert_eq!(
+            view.tracks[1].parent_track_id.as_deref(),
+            Some("folder_main")
         );
     }
 
