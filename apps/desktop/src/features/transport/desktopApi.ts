@@ -872,6 +872,36 @@ export async function updateTrack(args: {
   return invokeCommand<TransportSnapshot>("update_track", args);
 }
 
+export async function updateTrackMixLive(args: {
+  trackId: string;
+  volume?: number;
+  pan?: number;
+  muted?: boolean;
+  solo?: boolean;
+}): Promise<void> {
+  if (!isTauriApp) {
+    syncDemoPlayback();
+    demoSong = normalizeSong({
+      ...demoSong,
+      tracks: demoSong.tracks.map((track) =>
+        track.id === args.trackId
+          ? {
+              ...track,
+              volume: args.volume ?? track.volume,
+              pan: args.pan ?? track.pan,
+              muted: args.muted ?? track.muted,
+              solo: args.solo ?? track.solo,
+            }
+          : track,
+      ),
+    });
+    demoSong.projectRevision = demoProjectRevision;
+    return;
+  }
+
+  await invokeCommand("update_track_mix_live", args);
+}
+
 export async function deleteTrack(trackId: string): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     updateDemoSong((song) => deleteTrackFromSong(song, trackId));

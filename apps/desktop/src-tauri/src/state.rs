@@ -1092,6 +1092,47 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn update_track_mix_live(
+        &mut self,
+        track_id: &str,
+        volume: Option<f64>,
+        pan: Option<f64>,
+        muted: Option<bool>,
+        solo: Option<bool>,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let track = song
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+
+        if let Some(volume) = volume {
+            track.volume = volume.clamp(0.0, 1.0);
+        }
+
+        if let Some(pan) = pan {
+            track.pan = pan.clamp(-1.0, 1.0);
+        }
+
+        if let Some(muted) = muted {
+            track.muted = muted;
+        }
+
+        if let Some(solo) = solo {
+            track.solo = solo;
+        }
+
+        self.apply_live_song_update(song, audio)?;
+
+        Ok(())
+    }
+
     pub fn delete_track(
         &mut self,
         track_id: &str,
@@ -1307,6 +1348,57 @@ impl DesktopSession {
                     .pause_at(self.engine.position_seconds());
             }
         }
+
+        Ok(())
+    }
+
+    fn apply_live_song_update(
+        &mut self,
+        song: Song,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        self.sync_position(audio)?;
+
+        let playback_state = self.engine.playback_state();
+        let position_seconds = self.current_position();
+        let pending_jump = self.engine.pending_marker_jump().cloned();
+        let restored_position = position_seconds.min(song.duration_seconds);
+        let live_song = song.clone();
+
+        self.engine.load_song(song)?;
+        self.engine.seek(restored_position)?;
+
+        if let Some(pending_jump) = pending_jump {
+            if live_song
+                .marker_by_id(&pending_jump.target_marker_id)
+                .is_some()
+                && restored_position < pending_jump.execute_at_seconds
+            {
+                self.engine.schedule_marker_jump(
+                    &pending_jump.target_marker_id,
+                    pending_jump.trigger,
+                )?;
+            }
+        }
+
+        match playback_state {
+            PlaybackState::Playing => {
+                self.engine.play()?;
+                self.transport_clock
+                    .reanchor_playing(self.engine.position_seconds());
+            }
+            PlaybackState::Paused => {
+                self.engine.pause()?;
+                self.transport_clock
+                    .pause_at(self.engine.position_seconds());
+            }
+            PlaybackState::Stopped | PlaybackState::Empty => {
+                self.transport_clock
+                    .pause_at(self.engine.position_seconds());
+            }
+        }
+
+        audio.sync_song(live_song)?;
 
         Ok(())
     }
@@ -2724,6 +2816,50 @@ mod tests {
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.clips[0].timeline_start_seconds, 6.5);
         assert_eq!(session.engine.playback_state(), PlaybackState::Stopped);
+    }
+
+    #[test]
+    fn live_track_mix_updates_skip_disk_and_project_revision() {
+        let mut session = session_with_song_dir("live-mix-demo", demo_song());
+        let song_dir = session
+            .song_dir
+            .clone()
+            .expect("song dir should exist for loaded session");
+        save_song(&song_dir, &demo_song()).expect("seed song should save");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let initial_revision = session.snapshot().project_revision;
+
+        session
+            .update_track_mix_live("track_1", Some(0.61), Some(-0.22), Some(true), Some(true), &audio)
+            .expect("live mix update should succeed");
+
+        let updated_song = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
+        let updated_track = updated_song
+            .tracks
+            .into_iter()
+            .find(|track| track.id == "track_1")
+            .expect("updated track should exist");
+
+        assert_eq!(session.snapshot().project_revision, initial_revision);
+        assert_eq!(updated_track.volume, 0.61);
+        assert_eq!(updated_track.pan, -0.22);
+        assert!(updated_track.muted);
+        assert!(updated_track.solo);
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        let saved_track = saved_song
+            .tracks
+            .into_iter()
+            .find(|track| track.id == "track_1")
+            .expect("saved track should exist");
+        assert_eq!(saved_track.volume, 1.0);
+        assert_eq!(saved_track.pan, 0.0);
+        assert!(!saved_track.muted);
+        assert!(!saved_track.solo);
     }
 
     #[test]

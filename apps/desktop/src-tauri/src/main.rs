@@ -515,6 +515,25 @@ fn update_track(
 }
 
 #[tauri::command]
+fn update_track_mix_live(
+    track_id: String,
+    volume: Option<f64>,
+    pan: Option<f64>,
+    muted: Option<bool>,
+    solo: Option<bool>,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_track_mix_live(&track_id, volume, pan, muted, solo, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn delete_track(
     track_id: String,
     state: State<'_, DesktopState>,
@@ -621,6 +640,7 @@ fn main() {
             update_song_tempo,
             create_track,
             move_track,
+            update_track_mix_live,
             update_track,
             delete_track
         ])

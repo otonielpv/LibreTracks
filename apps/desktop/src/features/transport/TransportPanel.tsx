@@ -40,6 +40,7 @@ import {
   updateSectionMarker,
   updateSongTempo,
   updateTrack,
+  updateTrackMixLive,
   type ClipSummary,
   type SectionMarkerSummary,
   type SongView,
@@ -124,6 +125,11 @@ type TimelinePanState = {
   startClientX: number;
   originCameraX: number;
 } | null;
+
+type LiveTrackMixRequestState = {
+  inFlight: boolean;
+  queuedKeys: Set<keyof OptimisticMixState>;
+};
 
 type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
 
@@ -449,6 +455,7 @@ export function TransportPanel() {
   const songRef = useRef<SongView | null>(null);
   const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
   const trackMixRequestIdsRef = useRef<Record<string, number>>({});
+  const trackMixLiveStatesRef = useRef<Record<string, LiveTrackMixRequestState>>({});
   const playheadDragRef = useRef<PlayheadDragState>(null);
   const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
   const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
@@ -596,6 +603,88 @@ export function TransportPanel() {
       }
     },
     [applyPlaybackSnapshot, clearTrackOptimisticMixKeys, nextTrackMixRequestId, resolveTrackMix],
+  );
+
+  const flushTrackMixLiveUpdates = useCallback(
+    async (trackId: string) => {
+      const liveStates = trackMixLiveStatesRef.current;
+      const liveState = liveStates[trackId];
+      if (!liveState || liveState.inFlight) {
+        return;
+      }
+
+      liveState.inFlight = true;
+
+      try {
+        while (liveState.queuedKeys.size > 0) {
+          const keys = [...liveState.queuedKeys];
+          liveState.queuedKeys.clear();
+
+          const track = findTrack(songRef.current, trackId);
+          if (!track) {
+            clearTrackOptimisticMixKeys(trackId, keys);
+            continue;
+          }
+
+          const resolvedMix = resolveTrackMix(track, trackId);
+          const payload: {
+            trackId: string;
+            muted?: boolean;
+            solo?: boolean;
+            volume?: number;
+            pan?: number;
+          } = {
+            trackId,
+          };
+
+          if (keys.includes("muted")) {
+            payload.muted = resolvedMix.muted;
+          }
+          if (keys.includes("solo")) {
+            payload.solo = resolvedMix.solo;
+          }
+          if (keys.includes("volume")) {
+            payload.volume = resolvedMix.volume;
+          }
+          if (keys.includes("pan")) {
+            payload.pan = resolvedMix.pan;
+          }
+
+          await updateTrackMixLive(payload);
+        }
+      } finally {
+        liveState.inFlight = false;
+        if (liveState.queuedKeys.size > 0) {
+          void flushTrackMixLiveUpdates(trackId);
+          return;
+        }
+
+        delete liveStates[trackId];
+      }
+    },
+    [clearTrackOptimisticMixKeys, resolveTrackMix],
+  );
+
+  const queueTrackMixLiveUpdate = useCallback(
+    (trackId: string, keys: Array<keyof OptimisticMixState>) => {
+      const liveStates = trackMixLiveStatesRef.current;
+      const liveState = liveStates[trackId] ?? {
+        inFlight: false,
+        queuedKeys: new Set<keyof OptimisticMixState>(),
+      };
+
+      liveStates[trackId] = liveState;
+      for (const key of keys) {
+        liveState.queuedKeys.add(key);
+      }
+
+      void flushTrackMixLiveUpdates(trackId).catch((error) => {
+        clearTrackOptimisticMixKeys(trackId, ["muted", "solo", "volume", "pan"]);
+        delete trackMixLiveStatesRef.current[trackId];
+        setStatus(`Error: ${String(error)}`);
+      });
+    },
+    [clearTrackOptimisticMixKeys, flushTrackMixLiveUpdates],
   );
 
   function transportSnapshotKey(nextSnapshot: TransportSnapshot) {
@@ -898,6 +987,7 @@ export function TransportPanel() {
         useTransportStore.getState().setOptimisticMix(trackId, null);
       }
       trackMixRequestIdsRef.current = {};
+      trackMixLiveStatesRef.current = {};
       return;
     }
 
@@ -910,6 +1000,14 @@ export function TransportPanel() {
       }
 
       delete trackMixRequestIdsRef.current[trackId];
+    }
+
+    for (const trackId of Object.keys(trackMixLiveStatesRef.current)) {
+      if (validTrackIds.has(trackId)) {
+        continue;
+      }
+
+      delete trackMixLiveStatesRef.current[trackId];
     }
 
     for (const [trackId, optimisticMix] of optimisticMixEntries) {
@@ -2008,11 +2106,12 @@ export function TransportPanel() {
     patchTrackOptimisticMix(trackId, {
       muted: !resolveTrackMix(track, trackId).muted,
     });
+    queueTrackMixLiveUpdate(trackId, ["muted"]);
 
     void runAction(async () => {
       await persistTrackMix(trackId, ["muted"]);
     });
-  }, [patchTrackOptimisticMix, persistTrackMix, resolveTrackMix, runAction]);
+  }, [patchTrackOptimisticMix, persistTrackMix, queueTrackMixLiveUpdate, resolveTrackMix, runAction]);
 
   const handleTrackHeaderSoloToggle = useCallback((trackId: string) => {
     const track = findTrack(songRef.current, trackId);
@@ -2023,17 +2122,19 @@ export function TransportPanel() {
     patchTrackOptimisticMix(trackId, {
       solo: !resolveTrackMix(track, trackId).solo,
     });
+    queueTrackMixLiveUpdate(trackId, ["solo"]);
 
     void runAction(async () => {
       await persistTrackMix(trackId, ["solo"]);
     });
-  }, [patchTrackOptimisticMix, persistTrackMix, resolveTrackMix, runAction]);
+  }, [patchTrackOptimisticMix, persistTrackMix, queueTrackMixLiveUpdate, resolveTrackMix, runAction]);
 
   const handleTrackHeaderVolumeChange = useCallback((trackId: string, nextVolume: number) => {
     patchTrackOptimisticMix(trackId, {
       volume: clamp(nextVolume, 0, 1),
     });
-  }, [patchTrackOptimisticMix]);
+    queueTrackMixLiveUpdate(trackId, ["volume"]);
+  }, [patchTrackOptimisticMix, queueTrackMixLiveUpdate]);
 
   const handleTrackHeaderVolumeCommit = useCallback((trackId: string) => {
     void runAction(async () => {
@@ -2045,7 +2146,8 @@ export function TransportPanel() {
     patchTrackOptimisticMix(trackId, {
       pan: clamp(nextPan, -1, 1),
     });
-  }, [patchTrackOptimisticMix]);
+    queueTrackMixLiveUpdate(trackId, ["pan"]);
+  }, [patchTrackOptimisticMix, queueTrackMixLiveUpdate]);
 
   const handleTrackHeaderPanCommit = useCallback((trackId: string) => {
     void runAction(async () => {
