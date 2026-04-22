@@ -967,11 +967,10 @@ export function TransportPanel() {
   useEffect(() => {
     if (!song) {
       setWaveformCache({});
-      return;
     }
-
-    setWaveformCache({});
-  }, [song?.projectRevision]);
+    // Mantenemos la caché viva entre revisiones del mismo proyecto.
+    // Solo se limpia si cerramos la canción (!song) o cambiamos de proyecto.
+  }, [song?.id]);
 
   useEffect(() => {
     if (!song) {

@@ -648,12 +648,21 @@ export function TimelineRulerCanvas({
     playheadDragRef,
   };
 
+  const markersSignature = useMemo(
+    () => markers.map((m) => `${m.id}:${m.startSeconds}`).join("|"),
+    [markers],
+  );
+
+  const pendingJumpSignature = pendingMarkerJump
+    ? `${pendingMarkerJump.targetMarkerId}:${pendingMarkerJump.executeAtSeconds}`
+    : "";
+
   useEffect(() => {
     sceneVersionRef.current += 1;
   }, [
     height,
-    markers,
-    pendingMarkerJump,
+    markersSignature,
+    pendingJumpSignature,
     pixelsPerSecond,
     selectedMarkerId,
     timelineGrid,
