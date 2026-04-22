@@ -107,13 +107,6 @@ function TrackHeaderItemComponent({
   };
 
   const metaLabel = trackKind === "folder" ? `${childCount} hijos` : null;
-  const dropHint = !isDropTarget
-    ? null
-    : dropMode === "inside-folder"
-      ? "Soltar para meter en folder"
-      : dropMode === "before"
-        ? "Soltar para subir antes de este track"
-        : "Soltar para bajar despues de este track";
 
   return (
     <div
@@ -146,7 +139,6 @@ function TrackHeaderItemComponent({
                 <strong>{trackName}</strong>
               </div>
               {metaLabel ? <span className="lt-track-meta">{metaLabel}</span> : null}
-              {dropHint ? <span className="lt-track-drop-hint">{dropHint}</span> : null}
             </div>
           </div>
 

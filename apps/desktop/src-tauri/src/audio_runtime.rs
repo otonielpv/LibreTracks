@@ -948,24 +948,6 @@ impl MemoryClipReader {
         self.eof = self.current_frame >= frame_count;
     }
 
-    fn mix_into(
-        &mut self,
-        buffer: &mut [f32],
-        offset_frames: usize,
-        frame_count: usize,
-        output_channels: usize,
-        gain: f32,
-    ) -> (f32, f32) {
-        self.mix_into_with_channel_gains(
-            buffer,
-            offset_frames,
-            frame_count,
-            output_channels,
-            gain,
-            0.0,
-        )
-    }
-
     fn mix_into_with_channel_gains(
         &mut self,
         buffer: &mut [f32],
@@ -2461,7 +2443,7 @@ mod tests {
         .expect("memory reader should open");
 
         let mut mixed = [0.0_f32; 4];
-        reader.mix_into(&mut mixed, 0, 2, 2, 1.0);
+        reader.mix_into_with_channel_gains(&mut mixed, 0, 2, 2, 1.0, 0.0);
 
         assert_eq!(mixed, [0.25, -0.25, 0.5, -0.5]);
         assert!(reader.eof);
@@ -2612,7 +2594,7 @@ mod tests {
 
         reader.seek_to(1);
         let mut mixed = [0.0_f32; 2];
-        reader.mix_into(&mut mixed, 0, 1, 2, 1.0);
+        reader.mix_into_with_channel_gains(&mut mixed, 0, 1, 2, 1.0, 0.0);
 
         assert_eq!(mixed, [0.3, 0.4]);
         assert_eq!(reader.current_frame, 2);

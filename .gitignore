@@ -11,3 +11,4 @@ Cargo.lock
 *.log
 .DS_Store
 Thumbs.db
+repomix-output.xml
