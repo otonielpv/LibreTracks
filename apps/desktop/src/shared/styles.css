@@ -781,6 +781,13 @@ body {
   gap: 0.25rem;
 }
 
+.lt-track-header-summary {
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
 .lt-track-header.is-condensed {
   gap: 0.35rem;
   padding-top: 0.35rem;
@@ -800,8 +807,8 @@ body {
   gap: 0.35rem;
 }
 
-.lt-track-header.is-condensed .lt-track-meter-channel {
-  height: 3px;
+.lt-track-header.is-condensed .lt-track-header-summary {
+  gap: 0.4rem;
 }
 
 .lt-track-header.is-condensed .lt-track-mix-controls {
@@ -846,12 +853,13 @@ body {
   gap: 0.3rem;
 }
 
-.lt-track-header.is-compact .lt-track-meter {
-  gap: 0.12rem;
+.lt-track-header.is-compact .lt-track-header-summary {
+  gap: 0.35rem;
 }
 
-.lt-track-header.is-compact .lt-track-meter-channel {
-  height: 3px;
+.lt-track-header.is-compact .lt-track-meter {
+  width: 12px;
+  gap: 0.18rem;
 }
 
 .lt-track-header.is-compact .lt-track-mix-controls {
@@ -899,13 +907,17 @@ body {
 
 .lt-track-meter {
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  width: 16px;
+  flex: 0 0 16px;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 0.22rem;
 }
 
 .lt-track-meter-channel {
   position: relative;
-  height: 4px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   border-radius: 999px;
   background: #0e0e0e;
@@ -915,8 +927,8 @@ body {
 .lt-track-meter-bar {
   position: absolute;
   inset: 0;
-  transform: scaleX(0);
-  transform-origin: left center;
+  transform: scaleY(0);
+  transform-origin: center bottom;
   opacity: 0.18;
   will-change: transform, opacity;
   transition: opacity 120ms linear;

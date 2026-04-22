@@ -108,49 +108,51 @@ function TrackHeaderItemComponent({
       onClick={() => onSelectTrack(trackId, trackName)}
       onContextMenu={(event) => onOpenContextMenu(event, trackId)}
     >
-      <div className="lt-track-header-main">
-        <div className="lt-track-title-row">
-          <button
-            type="button"
-            className="lt-track-drag-handle"
-            aria-label={`Mover ${trackName}`}
-          >
-            ::
-          </button>
-          {trackKind === "folder" ? (
+      <div className="lt-track-header-summary">
+        <div className="lt-track-header-main">
+          <div className="lt-track-title-row">
             <button
               type="button"
-              className="lt-folder-toggle"
-              aria-label={isCollapsed ? `Expandir ${trackName}` : `Colapsar ${trackName}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggleFolder(trackId);
-              }}
+              className="lt-track-drag-handle"
+              aria-label={`Mover ${trackName}`}
             >
-              {isCollapsed ? "+" : "-"}
+              ::
             </button>
-          ) : null}
-          <strong>{trackName}</strong>
+            {trackKind === "folder" ? (
+              <button
+                type="button"
+                className="lt-folder-toggle"
+                aria-label={isCollapsed ? `Expandir ${trackName}` : `Colapsar ${trackName}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleFolder(trackId);
+                }}
+              >
+                {isCollapsed ? "+" : "-"}
+              </button>
+            ) : null}
+            <strong>{trackName}</strong>
+          </div>
+          <span className="lt-track-meta">{metaLabel}</span>
+          {dropHint ? <span className="lt-track-drop-hint">{dropHint}</span> : null}
         </div>
-        <span className="lt-track-meta">{metaLabel}</span>
-        {dropHint ? <span className="lt-track-drop-hint">{dropHint}</span> : null}
-      </div>
-      <div className="lt-track-meter" aria-hidden="true">
-        <div className="lt-track-meter-channel">
-          <div
-            className="lt-track-meter-bar is-left"
-            ref={(element) => {
-              onMeterElementChange(trackId, "left", element);
-            }}
-          />
-        </div>
-        <div className="lt-track-meter-channel">
-          <div
-            className="lt-track-meter-bar is-right"
-            ref={(element) => {
-              onMeterElementChange(trackId, "right", element);
-            }}
-          />
+        <div className="lt-track-meter" aria-hidden="true">
+          <div className="lt-track-meter-channel">
+            <div
+              className="lt-track-meter-bar is-left"
+              ref={(element) => {
+                onMeterElementChange(trackId, "left", element);
+              }}
+            />
+          </div>
+          <div className="lt-track-meter-channel">
+            <div
+              className="lt-track-meter-bar is-right"
+              ref={(element) => {
+                onMeterElementChange(trackId, "right", element);
+              }}
+            />
+          </div>
         </div>
       </div>
 

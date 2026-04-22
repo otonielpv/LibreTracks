@@ -166,7 +166,7 @@ function setTrackMeterBarLevel(element: HTMLDivElement | null, peak: number) {
   }
 
   const nextPeak = Math.max(0, Math.min(1, peak));
-  element.style.transform = `scaleX(${nextPeak.toFixed(4)})`;
+  element.style.transform = `scaleY(${nextPeak.toFixed(4)})`;
   element.style.opacity = nextPeak > 0.001 ? "1" : "0.18";
 }
 
