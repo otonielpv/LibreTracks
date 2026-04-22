@@ -174,6 +174,17 @@ function keyboardDigit(eventCode: string) {
   return null;
 }
 
+function resolveMarkerShortcut(markers: SectionMarkerSummary[], digit: number) {
+  const assignedMarker = markers.find((marker) => marker.digit === digit) ?? null;
+  if (assignedMarker) {
+    return assignedMarker;
+  }
+
+  return [...markers]
+    .sort((left, right) => left.startSeconds - right.startSeconds)
+    .at(digit) ?? null;
+}
+
 function buildVisibleTracks(song: SongView, collapsedFolders: Set<string>) {
   const visibility = new Map<string, boolean>();
 
@@ -757,6 +768,42 @@ export function TransportPanel() {
   }, [playheadDrag, snapshot]);
 
   useEffect(() => {
+    if (!isTauriApp || snapshot?.playbackState !== "playing") {
+      return;
+    }
+
+    let active = true;
+    let inFlight = false;
+
+    const refreshSnapshot = async () => {
+      if (!active || inFlight) {
+        return;
+      }
+
+      inFlight = true;
+      try {
+        const nextSnapshot = await getTransportSnapshot();
+        if (!active) {
+          return;
+        }
+
+        setSnapshot(nextSnapshot);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void refreshSnapshot();
+    }, 120);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [snapshot?.playbackState]);
+
+  useEffect(() => {
     const closeMenu = (event: PointerEvent) => {
       if (event.button !== 0) {
         return;
@@ -824,19 +871,15 @@ export function TransportPanel() {
       if (keyDigit !== null) {
         event.preventDefault();
 
-        const marker = song?.sectionMarkers.find((candidate) => candidate.digit === keyDigit) ?? null;
+        const marker = song ? resolveMarkerShortcut(song.sectionMarkers, keyDigit) : null;
         if (!marker) {
-          setStatus(`No hay marca asignada al digito ${keyDigit}.`);
+          setStatus(`No hay marca disponible para el digito ${keyDigit}.`);
           return;
         }
 
         void runAction(async () => {
           const pendingJump = snapshot?.pendingMarkerJump;
-          if (
-            pendingJump &&
-            pendingJump.targetMarkerId === marker.id &&
-            pendingJump.targetDigit === keyDigit
-          ) {
+          if (pendingJump && pendingJump.targetMarkerId === marker.id) {
             const nextSnapshot = await cancelMarkerJump();
             setSnapshot(nextSnapshot);
             setStatus(`Salto cancelado para digito ${keyDigit}.`);

@@ -256,6 +256,21 @@ describe("App", () => {
     expect(await screen.findByText(/salto cancelado/i)).toBeTruthy();
   });
 
+  it("maps numpad 0 to the first marker", async () => {
+    await renderApp();
+
+    const modeSelect = await screen.findByRole("combobox", { name: /modo global de salto/i });
+    await act(async () => {
+      fireEvent.change(modeSelect, { target: { value: "next_marker" } });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Numpad0", key: "0" });
+    });
+
+    expect(await screen.findByText(/salto armado en la siguiente marca hacia intro/i)).toBeTruthy();
+  });
+
   it("overwrites the armed marker on click and cancels when clicked again", async () => {
     await renderApp();
 
