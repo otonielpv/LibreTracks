@@ -8,7 +8,6 @@ type TrackHeaderItemProps = {
   trackKind: TrackKind;
   trackDepth: number;
   childCount: number;
-  clipCount: number;
   trackHeight: number;
   panValue: number;
   trackMuted: boolean;
@@ -46,7 +45,6 @@ function TrackHeaderItemComponent({
   trackKind,
   trackDepth,
   childCount,
-  clipCount,
   trackHeight,
   panValue,
   trackMuted,
@@ -89,7 +87,7 @@ function TrackHeaderItemComponent({
   const metaLabel =
     trackKind === "folder"
       ? `${childCount} hijos`
-      : `${clipCount} clips | pan ${panValue.toFixed(2)}`;
+      : `pan ${panValue.toFixed(2)}`;
   const dropHint = !isDropTarget
     ? null
     : dropMode === "inside-folder"
@@ -111,13 +109,6 @@ function TrackHeaderItemComponent({
       <div className="lt-track-header-summary">
         <div className="lt-track-header-main">
           <div className="lt-track-title-row">
-            <button
-              type="button"
-              className="lt-track-drag-handle"
-              aria-label={`Mover ${trackName}`}
-            >
-              ::
-            </button>
             {trackKind === "folder" ? (
               <button
                 type="button"
@@ -255,7 +246,6 @@ function areTrackHeaderPropsEqual(previous: TrackHeaderItemProps, next: TrackHea
     previous.trackKind === next.trackKind &&
     previous.trackDepth === next.trackDepth &&
     previous.childCount === next.childCount &&
-    previous.clipCount === next.clipCount &&
     previous.trackHeight === next.trackHeight &&
     previous.panValue === next.panValue &&
     previous.trackMuted === next.trackMuted &&

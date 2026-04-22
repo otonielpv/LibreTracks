@@ -2757,7 +2757,6 @@ export function TransportPanel() {
                     trackKind={track.kind}
                     trackDepth={track.depth}
                     childCount={childCount}
-                    clipCount={trackClips.length}
                     trackHeight={trackHeight}
                     panValue={panDrafts[track.id] ?? track.pan}
                     trackMuted={track.muted}

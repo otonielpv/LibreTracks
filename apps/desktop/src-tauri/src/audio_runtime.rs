@@ -1861,6 +1861,12 @@ fn resolve_track_clip_gain(
         .find(|track| track.id == track_id)
         .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
 
+    let is_any_track_soloed = song.tracks.iter().any(|candidate| candidate.solo);
+
+    if is_any_track_soloed && !is_track_soloed_in_hierarchy(song, track)? {
+        return Ok(0.0);
+    }
+
     if track.muted {
         return Ok(0.0);
     }
@@ -1888,6 +1894,34 @@ fn resolve_track_clip_gain(
     }
 
     Ok(gain * clip_gain)
+}
+
+fn is_track_soloed_in_hierarchy(song: &Song, track: &libretracks_core::Track) -> Result<bool, DesktopError> {
+    if track.solo {
+        return Ok(true);
+    }
+
+    let mut cursor = track.parent_track_id.as_deref();
+
+    while let Some(parent_track_id) = cursor {
+        let parent_track = song
+            .tracks
+            .iter()
+            .find(|candidate| candidate.id == parent_track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(parent_track_id.to_string()))?;
+
+        if parent_track.kind != TrackKind::Folder {
+            return Err(DesktopError::TrackNotFound(parent_track_id.to_string()));
+        }
+
+        if parent_track.solo {
+            return Ok(true);
+        }
+
+        cursor = parent_track.parent_track_id.as_deref();
+    }
+
+    Ok(false)
 }
 
 fn seconds_to_frames(seconds: f64, sample_rate: u32) -> u64 {
