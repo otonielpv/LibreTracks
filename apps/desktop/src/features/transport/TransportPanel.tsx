@@ -541,7 +541,7 @@ export function TransportPanel() {
     return () => {
       window.removeEventListener("resize", updateViewportWidth);
     };
-  }, []);
+  }, [song?.tracks.length]);
 
   useEffect(() => {
     let active = true;
@@ -1288,6 +1288,7 @@ export function TransportPanel() {
   const isProjectEmpty = !song || song.tracks.length === 0;
   const isProjectPending = Boolean(snapshot && snapshot.projectRevision > 0 && !song);
   const shouldShowEmptyState = !isProjectPending && isProjectEmpty;
+  const shouldShowSessionActions = !shouldShowEmptyState;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
   const selectedTrack = selectedTrackId ? tracksById[selectedTrackId] ?? null : null;
@@ -2120,11 +2121,8 @@ export function TransportPanel() {
           </div>
         </div>
 
+        {shouldShowSessionActions ? (
         <div className="lt-session-actions">
-          <button type="button" onClick={handleCreateSongClick}>
-            <span className="material-symbols-outlined" aria-hidden="true">add_box</span>
-            <span className="lt-button-label">Crear cancion</span>
-          </button>
           <button type="button" onClick={handleOpenProjectClick}>
             <span className="material-symbols-outlined" aria-hidden="true">folder_open</span>
             <span className="lt-button-label">Abrir</span>
@@ -2141,6 +2139,7 @@ export function TransportPanel() {
             <span className="lt-button-label">Importar WAVs</span>
           </button>
         </div>
+        ) : null}
       </header>
 
       <div className="lt-shell-body">
@@ -2173,12 +2172,9 @@ export function TransportPanel() {
           <div className="lt-empty-state-card">
             <span className="lt-empty-state-eyebrow">LibreTracks DAW</span>
             <h1>Import tracks to start</h1>
-            <p>Create a new song or bring WAV stems into the session to unlock the timeline.</p>
+            <p>Open an existing session or import WAV stems to start building the arrangement.</p>
             <div className="lt-empty-state-actions">
-              <button type="button" className="is-primary" onClick={handleCreateSongClick}>
-                Create Song
-              </button>
-              <button type="button" onClick={handleOpenProjectClick}>
+              <button type="button" className="is-primary" onClick={handleOpenProjectClick}>
                 Open
               </button>
               <button type="button" onClick={handleImportWavsClick}>
@@ -2191,11 +2187,6 @@ export function TransportPanel() {
       <section className="lt-main-stage">
         <div className="lt-timeline-topline">
           <div className="lt-timeline-meta">
-            <div className="lt-timeline-stats">
-              <span>{song?.tracks.length ?? 0} tracks</span>
-              <span>{song?.clips.length ?? 0} clips</span>
-              <span>{song?.sectionMarkers.length ?? 0} marcas</span>
-            </div>
             <div className="lt-bottom-controls lt-timeline-controls">
               <button
                 type="button"
@@ -2207,8 +2198,8 @@ export function TransportPanel() {
               >
                 <span className="material-symbols-outlined">{snapEnabled ? "grid_on" : "grid_off"}</span>
               </button>
-              <label className="lt-zoom-control lt-icon-select">
-                <span className="material-symbols-outlined" aria-hidden="true">switch_access_shortcut</span>
+              <label className="lt-zoom-control lt-jump-mode-control">
+                <span>Salto</span>
                 <select
                   aria-label="Modo global de salto"
                   disabled={isProjectEmpty}
@@ -2254,6 +2245,11 @@ export function TransportPanel() {
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
+            </div>
+            <div className="lt-timeline-stats">
+              <span>{song?.tracks.length ?? 0} tracks</span>
+              <span>{song?.clips.length ?? 0} clips</span>
+              <span>{song?.sectionMarkers.length ?? 0} marcas</span>
             </div>
           </div>
         </div>
