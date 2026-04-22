@@ -1,5 +1,6 @@
 import {
   Profiler,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -57,6 +58,7 @@ import {
   secondsToScreenX,
   zoomCameraAtViewportX,
 } from "./timelineMath";
+import { TrackHeaderItem } from "./TrackHeaderItem";
 
 const HEADER_WIDTH = 260;
 const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
@@ -407,7 +409,6 @@ export function TransportPanel() {
   const [timeSelection, setTimeSelection] = useState<TimeSelection>(null);
   const [displayPositionSeconds, setDisplayPositionSeconds] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
-  const [cameraX, setCameraX] = useState(0);
   const [trackDrag, setTrackDrag] = useState<TrackDragState>(null);
   const [timelinePan, setTimelinePan] = useState<TimelinePanState>(null);
   const [volumeDrafts, setVolumeDrafts] = useState<Record<string, number>>({});
@@ -432,6 +433,31 @@ export function TransportPanel() {
   const transportReadoutValueRef = useRef<HTMLElement | null>(null);
   const songDurationSecondsRef = useRef(0);
   const transportAnchorMetaRef = useRef<TransportAnchorMeta | null>(null);
+  const cameraXRef = useRef(0);
+  const songRef = useRef<SongView | null>(null);
+  const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
+  const volumeDraftsRef = useRef<Record<string, number>>({});
+  const playheadDragRef = useRef<PlayheadDragState>(null);
+
+  songRef.current = song;
+  tracksByIdRef.current = tracksById;
+  volumeDraftsRef.current = volumeDrafts;
+  playheadDragRef.current = playheadDrag;
+
+  const runAction = useCallback(async (work: () => Promise<void>, options?: { busy?: boolean }) => {
+    try {
+      if (options?.busy) {
+        setIsBusy(true);
+      }
+      await work();
+    } catch (error) {
+      setStatus(`Error: ${String(error)}`);
+    } finally {
+      if (options?.busy) {
+        setIsBusy(false);
+      }
+    }
+  }, []);
 
   function transportSnapshotKey(nextSnapshot: TransportSnapshot) {
     return [
@@ -970,15 +996,12 @@ export function TransportPanel() {
     }
 
     const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
-    const effectLaneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
-    const effectCameraX = clampCameraX(
-      cameraX,
-      song.durationSeconds,
-      effectPixelsPerSecond,
-      effectLaneViewportWidth,
-    );
 
     const onMouseMove = (event: MouseEvent) => {
+      const effectCameraX = getCameraX({
+        durationSeconds: song.durationSeconds,
+        pixelsPerSecond: effectPixelsPerSecond,
+      });
       const rawSeconds = rulerPointerToSeconds(
         event,
         rulerTrackRef.current as HTMLElement,
@@ -1020,6 +1043,10 @@ export function TransportPanel() {
       pendingRulerPressRef.current = null;
       const activeDrag = rulerDrag;
       setRulerDrag(null);
+      const effectCameraX = getCameraX({
+        durationSeconds: song.durationSeconds,
+        pixelsPerSecond: effectPixelsPerSecond,
+      });
       const rawPointerSeconds = rulerPointerToSeconds(
         event,
         rulerTrackRef.current as HTMLElement,
@@ -1092,7 +1119,7 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [cameraX, rulerDrag, snapEnabled, song, timelineViewportWidth, zoomLevel]);
+  }, [rulerDrag, runAction, snapEnabled, song, zoomLevel]);
 
   useEffect(() => {
     if (!playheadDrag || !song || !rulerTrackRef.current) {
@@ -1101,15 +1128,12 @@ export function TransportPanel() {
 
     const effectSong = song;
     const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
-    const effectLaneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
-    const effectCameraX = clampCameraX(
-      cameraX,
-      effectSong.durationSeconds,
-      effectPixelsPerSecond,
-      effectLaneViewportWidth,
-    );
 
     const onMouseMove = (event: MouseEvent) => {
+      const effectCameraX = getCameraX({
+        durationSeconds: effectSong.durationSeconds,
+        pixelsPerSecond: effectPixelsPerSecond,
+      });
       const rawSeconds = rulerPointerToSeconds(
         event,
         rulerTrackRef.current as HTMLElement,
@@ -1160,7 +1184,7 @@ export function TransportPanel() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [cameraX, playheadDrag, snapEnabled, song, timelineViewportWidth, zoomLevel]);
+  }, [playheadDrag, runAction, snapEnabled, song, zoomLevel]);
 
   useEffect(() => {
     if (!trackDrag || !song) {
@@ -1229,28 +1253,35 @@ export function TransportPanel() {
     };
   }, [song, trackDrag]);
 
-  async function runAction(work: () => Promise<void>, options?: { busy?: boolean }) {
-    try {
-      if (options?.busy) {
-        setIsBusy(true);
-      }
-      await work();
-    } catch (error) {
-      setStatus(`Error: ${String(error)}`);
-    } finally {
-      if (options?.busy) {
-        setIsBusy(false);
-      }
-    }
+  function getCameraX(options?: {
+    cameraX?: number;
+    durationSeconds?: number;
+    pixelsPerSecond?: number;
+    viewportWidth?: number;
+  }) {
+    return clampCameraX(
+      options?.cameraX ?? cameraXRef.current,
+      options?.durationSeconds ?? songRef.current?.durationSeconds ?? 0,
+      options?.pixelsPerSecond ?? pixelsPerSecond,
+      options?.viewportWidth ?? laneViewportWidth,
+    );
   }
 
-  function syncLivePosition(positionSeconds: number) {
-    const durationSeconds = song?.durationSeconds ?? 0;
+  function syncLivePosition(
+    positionSeconds: number,
+    options?: {
+      cameraX?: number;
+      durationSeconds?: number;
+      pixelsPerSecond?: number;
+      viewportWidth?: number;
+    },
+  ) {
+    const durationSeconds = options?.durationSeconds ?? songRef.current?.durationSeconds ?? 0;
     const clampedPosition = clamp(positionSeconds, 0, durationSeconds || Number.MAX_SAFE_INTEGER);
     const playheadOffset = secondsToScreenX(
       clampedPosition,
-      clampedTimelineCameraX,
-      pixelsPerSecond,
+      getCameraX(options),
+      options?.pixelsPerSecond ?? pixelsPerSecond,
     );
 
     displayPositionSecondsRef.current = clampedPosition;
@@ -1259,6 +1290,50 @@ export function TransportPanel() {
     if (transportReadoutValueRef.current) {
       transportReadoutValueRef.current.textContent = formatClock(clampedPosition);
     }
+  }
+
+  function updateCameraX(
+    nextCameraX: number,
+    options?: {
+      durationSeconds?: number;
+      pixelsPerSecond?: number;
+      viewportWidth?: number;
+      syncPlayhead?: boolean;
+    },
+  ) {
+    const durationSeconds = options?.durationSeconds ?? songRef.current?.durationSeconds ?? 0;
+    const effectivePixelsPerSecond = options?.pixelsPerSecond ?? pixelsPerSecond;
+    const viewportWidth = options?.viewportWidth ?? laneViewportWidth;
+    const clampedCameraX = clampCameraX(
+      nextCameraX,
+      durationSeconds,
+      effectivePixelsPerSecond,
+      viewportWidth,
+    );
+
+    cameraXRef.current = clampedCameraX;
+    panelRef.current?.style.setProperty("--lt-camera-x", `${clampedCameraX}px`);
+
+    const shell = timelineShellRef.current;
+    if (shell && Math.abs(shell.scrollLeft - clampedCameraX) > 0.5) {
+      shell.scrollLeft = clampedCameraX;
+    }
+
+    const horizontalScrollbar = horizontalScrollbarRef.current;
+    if (horizontalScrollbar && Math.abs(horizontalScrollbar.scrollLeft - clampedCameraX) > 0.5) {
+      horizontalScrollbar.scrollLeft = clampedCameraX;
+    }
+
+    if (options?.syncPlayhead !== false) {
+      syncLivePosition(playheadDragRef.current?.currentSeconds ?? displayPositionSecondsRef.current, {
+        cameraX: clampedCameraX,
+        durationSeconds,
+        pixelsPerSecond: effectivePixelsPerSecond,
+        viewportWidth,
+      });
+    }
+
+    return clampedCameraX;
   }
 
   function previewSeek(positionSeconds: number) {
@@ -1314,10 +1389,6 @@ export function TransportPanel() {
   const effectiveZoomMin = song ? fitAllZoomLevel : ZOOM_MIN;
   const pixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
   const maxTimelineCameraX = getMaxCameraX(song?.durationSeconds ?? 0, pixelsPerSecond, laneViewportWidth);
-  const clampedTimelineCameraX = clamp(cameraX, 0, maxTimelineCameraX);
-  const visibleDurationSeconds = laneViewportWidth / Math.max(1, pixelsPerSecond);
-  const viewportStartSeconds = clampedTimelineCameraX / Math.max(1, pixelsPerSecond);
-  const viewportEndSeconds = viewportStartSeconds + visibleDurationSeconds;
   const positionSeconds = playheadDrag?.currentSeconds ?? displayPositionSeconds;
   const musicalPositionLabel =
     snapshot?.musicalPosition?.display ??
@@ -1339,24 +1410,14 @@ export function TransportPanel() {
         }
       : timeSelection,
   );
-  const currentSelectionLeft = currentSelection
-    ? secondsToScreenX(currentSelection.startSeconds, clampedTimelineCameraX, pixelsPerSecond)
-    : 0;
-  const currentSelectionWidth = currentSelection
-    ? (currentSelection.endSeconds - currentSelection.startSeconds) * pixelsPerSecond
-    : 0;
-  const draggedPlayheadOffset =
-    playheadDrag && song
-      ? secondsToScreenX(playheadDrag.currentSeconds, clampedTimelineCameraX, pixelsPerSecond)
-      : null;
   const timelineGrid = useTimelineGrid({
     durationSeconds: song?.durationSeconds ?? 0,
     bpm: song?.bpm ?? 120,
     timeSignature: song?.timeSignature ?? "4/4",
     zoomLevel,
     pixelsPerSecond,
-    viewportStartSeconds,
-    viewportEndSeconds,
+    viewportStartSeconds: 0,
+    viewportEndSeconds: song?.durationSeconds ?? 0,
   });
   const timelineHeaderMarkers = useMemo(
     () =>
@@ -1396,33 +1457,16 @@ export function TransportPanel() {
   }, [effectiveZoomMin]);
 
   useEffect(() => {
-    if (cameraX !== clampedTimelineCameraX) {
-      setCameraX(clampedTimelineCameraX);
-    }
-  }, [cameraX, clampedTimelineCameraX]);
-
-  useEffect(() => {
-    const shell = timelineShellRef.current;
-    if (!shell) {
-      return;
-    }
-
-    shell.scrollLeft = clampedTimelineCameraX;
-  }, [clampedTimelineCameraX]);
-
-  useEffect(() => {
-    const horizontalScrollbar = horizontalScrollbarRef.current;
-    if (!horizontalScrollbar) {
-      return;
-    }
-
-    horizontalScrollbar.scrollLeft = clampedTimelineCameraX;
-  }, [clampedTimelineCameraX]);
+    updateCameraX(cameraXRef.current, {
+      durationSeconds: song?.durationSeconds ?? 0,
+      pixelsPerSecond,
+      viewportWidth: laneViewportWidth,
+    });
+  }, [laneViewportWidth, pixelsPerSecond, song?.durationSeconds]);
 
   useEffect(() => {
     syncLivePosition(playheadDrag?.currentSeconds ?? displayPositionSecondsRef.current);
   }, [
-    clampedTimelineCameraX,
     displayPositionSeconds,
     pixelsPerSecond,
     playheadDrag?.currentSeconds,
@@ -1446,13 +1490,17 @@ export function TransportPanel() {
       durationSeconds,
       viewportWidth: laneViewportWidth,
       viewportX: clamp(anchorViewportX, 0, laneViewportWidth),
-      currentCameraX: clampedTimelineCameraX,
+      currentCameraX: getCameraX(),
       previousPixelsPerSecond: pixelsPerSecond,
       nextPixelsPerSecond,
     });
 
     setZoomLevel(clampedZoom);
-    setCameraX(nextCameraX);
+    updateCameraX(nextCameraX, {
+      durationSeconds,
+      pixelsPerSecond: nextPixelsPerSecond,
+      viewportWidth: laneViewportWidth,
+    });
   }
 
   function applyTrackHeight(nextTrackHeight: number) {
@@ -1546,8 +1594,8 @@ export function TransportPanel() {
   }
 
   async function commitTrackVolume(trackId: string) {
-    const track = findTrack(song, trackId);
-    const draftVolume = volumeDrafts[trackId];
+    const track = findTrack(songRef.current, trackId);
+    const draftVolume = volumeDraftsRef.current[trackId];
     if (!track || draftVolume === undefined) {
       return;
     }
@@ -1557,6 +1605,7 @@ export function TransportPanel() {
       setVolumeDrafts((current) => {
         const next = { ...current };
         delete next[trackId];
+        volumeDraftsRef.current = next;
         return next;
       });
       return;
@@ -1573,6 +1622,7 @@ export function TransportPanel() {
     setVolumeDrafts((current) => {
       const next = { ...current };
       delete next[trackId];
+      volumeDraftsRef.current = next;
       return next;
     });
   }
@@ -1612,12 +1662,13 @@ export function TransportPanel() {
   }
 
   function trackContextMenu(track: TrackSummary) {
-    if (!song) {
+    const currentSong = songRef.current;
+    if (!currentSong) {
       return [];
     }
 
-    const previousFolder = findPreviousFolderTrack(song, track.id);
-    const parentTrack = findTrack(song, track.parentTrackId ?? null);
+    const previousFolder = findPreviousFolderTrack(currentSong, track.id);
+    const parentTrack = findTrack(currentSong, track.parentTrackId ?? null);
     const parentOfParent = parentTrack?.parentTrackId ?? null;
 
     return [
@@ -1646,7 +1697,7 @@ export function TransportPanel() {
       {
         label: "Borrar",
         onSelect: async () => {
-          const clipCount = song.clips.filter((clip) => clip.trackId === track.id).length;
+          const clipCount = currentSong.clips.filter((clip) => clip.trackId === track.id).length;
           if (
             track.kind === "audio" &&
             clipCount > 0 &&
@@ -1696,6 +1747,105 @@ export function TransportPanel() {
       },
     ];
   }
+
+  const handleTrackHeaderSelect = useCallback((trackId: string, trackName: string) => {
+    if (suppressTrackClickRef.current) {
+      suppressTrackClickRef.current = false;
+      return;
+    }
+
+    setSelectedTrackId(trackId);
+    setSelectedClipId(null);
+    setSelectedSectionId(null);
+    setStatus(`Track seleccionado: ${trackName}`);
+  }, []);
+
+  function handleTrackHeaderContextMenu(event: ReactMouseEvent<HTMLDivElement>, trackId: string) {
+    const track = findTrack(songRef.current, trackId);
+    if (!track) {
+      return;
+    }
+
+    setSelectedTrackId(track.id);
+    openMenu(event, track.name, trackContextMenu(track));
+  }
+
+  const handleTrackHeaderDragStart = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>, trackId: string) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.stopPropagation();
+      setContextMenu(null);
+      setTrackDrag({
+        trackId,
+        pointerId: 1,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        currentClientY: event.clientY,
+        isDragging: false,
+      });
+    },
+    [],
+  );
+
+  const handleTrackHeaderFolderToggle = useCallback((trackId: string) => {
+    setCollapsedFolders((current) => {
+      const next = new Set(current);
+      if (next.has(trackId)) {
+        next.delete(trackId);
+      } else {
+        next.add(trackId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleTrackHeaderMuteToggle = useCallback((trackId: string) => {
+    const track = findTrack(songRef.current, trackId);
+    if (!track) {
+      return;
+    }
+
+    void runAction(async () => {
+      const nextSnapshot = await updateTrack({
+        trackId,
+        muted: !track.muted,
+      });
+      setSnapshot(nextSnapshot);
+    });
+  }, [runAction]);
+
+  const handleTrackHeaderSoloToggle = useCallback((trackId: string) => {
+    const track = findTrack(songRef.current, trackId);
+    if (!track) {
+      return;
+    }
+
+    void runAction(async () => {
+      const nextSnapshot = await updateTrack({
+        trackId,
+        solo: !track.solo,
+      });
+      setSnapshot(nextSnapshot);
+    });
+  }, [runAction]);
+
+  const handleTrackHeaderVolumeChange = useCallback((trackId: string, nextVolume: number) => {
+    setVolumeDrafts((current) => {
+      const next = {
+        ...current,
+        [trackId]: nextVolume,
+      };
+      volumeDraftsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const handleTrackHeaderVolumeCommit = useCallback((trackId: string) => {
+    void commitTrackVolume(trackId);
+  }, []);
 
   function clipContextMenu(clip: ClipSummary) {
     const currentCursorSeconds = displayPositionSecondsRef.current;
@@ -1755,7 +1905,7 @@ export function TransportPanel() {
       trackClips,
       event.currentTarget,
       event.clientX,
-      clampedTimelineCameraX,
+      getCameraX(),
       pixelsPerSecond,
     );
 
@@ -1778,7 +1928,7 @@ export function TransportPanel() {
 
     event.preventDefault();
     setContextMenu(null);
-    const panOriginCameraX = timelineShellRef.current?.scrollLeft ?? clampedTimelineCameraX;
+    const panOriginCameraX = timelineShellRef.current?.scrollLeft ?? getCameraX();
     const activePan: NonNullable<TimelinePanState> = {
       pointerId: 1,
       startClientX: event.clientX,
@@ -1788,14 +1938,7 @@ export function TransportPanel() {
 
     const onMouseMove = (windowEvent: MouseEvent) => {
       const deltaX = activePan.startClientX - windowEvent.clientX;
-      setCameraX(
-        clampCameraX(
-          activePan.originCameraX + deltaX,
-          song?.durationSeconds ?? 0,
-          pixelsPerSecond,
-          laneViewportWidth,
-        ),
-      );
+      updateCameraX(activePan.originCameraX + deltaX);
     };
 
     const onMouseUp = (windowEvent: MouseEvent) => {
@@ -1821,7 +1964,7 @@ export function TransportPanel() {
       trackClips,
       event.currentTarget,
       event.clientX,
-      clampedTimelineCameraX,
+      getCameraX(),
       pixelsPerSecond,
     );
 
@@ -2174,7 +2317,7 @@ export function TransportPanel() {
                   event,
                   rulerTrackRef.current,
                   song.durationSeconds,
-                  clampedTimelineCameraX,
+                  getCameraX(),
                   pixelsPerSecond,
                 );
                 setSelectedSectionId(null);
@@ -2189,7 +2332,7 @@ export function TransportPanel() {
                 <TimelineRulerCanvas
                   width={laneViewportWidth}
                   height={RULER_HEIGHT}
-                  cameraX={clampedTimelineCameraX}
+                  cameraXRef={cameraXRef}
                   pixelsPerSecond={pixelsPerSecond}
                   timelineGrid={timelineGrid}
                   selection={currentSelection}
@@ -2198,11 +2341,7 @@ export function TransportPanel() {
                   playheadColor={playheadColor}
                 >
                   {timelineHeaderMarkers.map((marker) => {
-                    const markerLeft = secondsToScreenX(
-                      marker.seconds,
-                      clampedTimelineCameraX,
-                      pixelsPerSecond,
-                    );
+                    const markerLeft = marker.seconds * pixelsPerSecond;
 
                     return (
                       <div
@@ -2217,16 +2356,8 @@ export function TransportPanel() {
                   })}
 
                   {song?.derivedSections.map((section) => {
-                    const sectionLeft = secondsToScreenX(
-                      section.startSeconds,
-                      clampedTimelineCameraX,
-                      pixelsPerSecond,
-                    );
+                    const sectionLeft = section.startSeconds * pixelsPerSecond;
                     const sectionWidth = (section.endSeconds - section.startSeconds) * pixelsPerSecond;
-
-                    if (sectionLeft + sectionWidth < 0 || sectionLeft > laneViewportWidth) {
-                      return null;
-                    }
 
                     return (
                       <button
@@ -2257,16 +2388,8 @@ export function TransportPanel() {
                   })}
                 </TimelineRulerCanvas>
 
-                {currentSelection ? (
-                  <div
-                    className="lt-time-selection"
-                    style={{ left: currentSelectionLeft, width: currentSelectionWidth }}
-                  />
-                ) : null}
-
                 <div
                   className={`lt-playhead is-handle ${playheadDrag ? "is-dragging" : ""}`}
-                  style={draggedPlayheadOffset === null ? undefined : { left: draggedPlayheadOffset }}
                   onMouseDown={(event) => {
                     if (!song || event.button !== 0) {
                       return;
@@ -2295,7 +2418,7 @@ export function TransportPanel() {
                 visibleTracks={visibleTracks}
                 clipsByTrack={clipsByTrack}
                 waveformCache={waveformCache}
-                cameraX={clampedTimelineCameraX}
+                cameraXRef={cameraXRef}
                 pixelsPerSecond={pixelsPerSecond}
                 timelineGrid={timelineGrid}
                 selectedClipId={selectedClipId}
@@ -2325,162 +2448,33 @@ export function TransportPanel() {
                     gridTemplateColumns: `${HEADER_WIDTH}px ${laneViewportWidth}px`,
                   }}
                 >
-                    <div
-                      className={`lt-track-header ${trackDensityClass} ${isTrackSelected ? "is-selected" : ""} ${track.solo ? "is-solo" : ""} ${track.kind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${draggingTrackId === track.id ? "is-dragging" : ""}`}
-                      style={{ height: trackHeight, paddingLeft: 16 + track.depth * 22 }}
-                      role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      if (suppressTrackClickRef.current) {
-                        suppressTrackClickRef.current = false;
-                        return;
-                      }
-
-                      setSelectedTrackId(track.id);
-                      setSelectedClipId(null);
-                      setSelectedSectionId(null);
-                      setStatus(`Track seleccionado: ${track.name}`);
-                    }}
-                    onContextMenu={(event) => {
-                      setSelectedTrackId(track.id);
-                      openMenu(event, track.name, trackContextMenu(track));
-                    }}
-                  >
-                    <div className="lt-track-header-main">
-                      <div className="lt-track-title-row">
-                        <button
-                          type="button"
-                          className="lt-track-drag-handle"
-                          aria-label={`Mover ${track.name}`}
-                          onMouseDown={(event) => {
-                            if (event.button !== 0) {
-                              return;
-                            }
-
-                            event.stopPropagation();
-                            setContextMenu(null);
-                            setTrackDrag({
-                              trackId: track.id,
-                              pointerId: 1,
-                              startClientX: event.clientX,
-                              startClientY: event.clientY,
-                              currentClientY: event.clientY,
-                              isDragging: false,
-                            });
-                          }}
-                        >
-                          ::
-                        </button>
-                        {track.kind === "folder" ? (
-                          <button
-                            type="button"
-                            className="lt-folder-toggle"
-                            aria-label={collapsedFolders.has(track.id) ? `Expandir ${track.name}` : `Colapsar ${track.name}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setCollapsedFolders((current) => {
-                                const next = new Set(current);
-                                if (next.has(track.id)) {
-                                  next.delete(track.id);
-                                } else {
-                                  next.add(track.id);
-                                }
-                                return next;
-                              });
-                            }}
-                          >
-                            {collapsedFolders.has(track.id) ? "+" : "-"}
-                          </button>
-                        ) : null}
-                        <strong>{track.name}</strong>
-                      </div>
-                      <span className="lt-track-meta">
-                        {track.kind === "folder"
-                          ? `${childCount} hijos`
-                          : `${trackClips.length} clips | pan ${track.pan.toFixed(2)}`}
-                      </span>
-                      {isDropTarget ? (
-                        <span className="lt-track-drop-hint">
-                          {dropMode === "inside-folder"
-                            ? "Soltar para meter en folder"
-                            : dropMode === "before"
-                              ? "Soltar para subir antes de este track"
-                              : "Soltar para bajar despues de este track"}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <div className="lt-track-control-row">
-                      <div className="lt-track-toggle-group">
-                        <button
-                          type="button"
-                          className={track.muted ? "is-active" : ""}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void runAction(async () => {
-                              const nextSnapshot = await updateTrack({
-                                trackId: track.id,
-                                muted: !track.muted,
-                              });
-                              setSnapshot(nextSnapshot);
-                            });
-                          }}
-                        >
-                          M
-                        </button>
-                        <button
-                          type="button"
-                          className={track.solo ? "is-active" : ""}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void runAction(async () => {
-                              const nextSnapshot = await updateTrack({
-                                trackId: track.id,
-                                solo: !track.solo,
-                              });
-                              setSnapshot(nextSnapshot);
-                            });
-                          }}
-                        >
-                          S
-                        </button>
-                      </div>
-                      <label className="lt-track-volume">
-                        <span>Vol</span>
-                        <input
-                          aria-label={`Volumen de ${track.name}`}
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          value={volumeDrafts[track.id] ?? track.volume}
-                          style={{
-                            background: `linear-gradient(to right, ${track.solo ? "#ffe2ab" : "#3cddc7"} ${((volumeDrafts[track.id] ?? track.volume) * 100).toFixed(2)}%, #0e0e0e ${((volumeDrafts[track.id] ?? track.volume) * 100).toFixed(2)}%)`,
-                          }}
-                          onChange={(event) => {
-                            setVolumeDrafts((current) => ({
-                              ...current,
-                              [track.id]: Number(event.target.value),
-                            }));
-                          }}
-                          onMouseUp={() => {
-                            void commitTrackVolume(track.id);
-                          }}
-                          onTouchEnd={() => {
-                            void commitTrackVolume(track.id);
-                          }}
-                          onKeyUp={(event) => {
-                            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") {
-                              void commitTrackVolume(track.id);
-                            }
-                          }}
-                          onBlur={() => {
-                            void commitTrackVolume(track.id);
-                          }}
-                        />
-                      </label>
-                    </div>
-                  </div>
+                  <TrackHeaderItem
+                    trackId={track.id}
+                    trackName={track.name}
+                    trackKind={track.kind}
+                    trackDepth={track.depth}
+                    childCount={childCount}
+                    clipCount={trackClips.length}
+                    trackHeight={trackHeight}
+                    trackPan={track.pan}
+                    trackMuted={track.muted}
+                    trackSolo={track.solo}
+                    volumeValue={volumeDrafts[track.id] ?? track.volume}
+                    isCollapsed={collapsedFolders.has(track.id)}
+                    isSelected={isTrackSelected}
+                    isDropTarget={isDropTarget}
+                    dropMode={dropMode}
+                    isDragging={draggingTrackId === track.id}
+                    densityClass={trackDensityClass}
+                    onSelectTrack={handleTrackHeaderSelect}
+                    onOpenContextMenu={handleTrackHeaderContextMenu}
+                    onStartTrackDrag={handleTrackHeaderDragStart}
+                    onToggleFolder={handleTrackHeaderFolderToggle}
+                    onToggleMute={handleTrackHeaderMuteToggle}
+                    onToggleSolo={handleTrackHeaderSoloToggle}
+                    onVolumeChange={handleTrackHeaderVolumeChange}
+                    onCommitVolume={handleTrackHeaderVolumeCommit}
+                  />
 
                   <div
                     className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""}`}
@@ -2499,7 +2493,10 @@ export function TransportPanel() {
               ref={horizontalScrollbarRef}
               className="lt-horizontal-scrollbar-rail"
               aria-label="Desplazamiento horizontal del timeline"
-              onScroll={(event) => setCameraX(event.currentTarget.scrollLeft)}
+              onScroll={(event) => {
+                cameraXRef.current = event.currentTarget.scrollLeft;
+                updateCameraX(event.currentTarget.scrollLeft);
+              }}
             >
               <div
                 className="lt-horizontal-scrollbar-content"

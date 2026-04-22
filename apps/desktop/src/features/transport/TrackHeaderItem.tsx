@@ -1,0 +1,195 @@
+import { memo, type MouseEvent as ReactMouseEvent } from "react";
+
+import type { TrackKind } from "./desktopApi";
+
+type TrackHeaderItemProps = {
+  trackId: string;
+  trackName: string;
+  trackKind: TrackKind;
+  trackDepth: number;
+  childCount: number;
+  clipCount: number;
+  trackHeight: number;
+  trackPan: number;
+  trackMuted: boolean;
+  trackSolo: boolean;
+  volumeValue: number;
+  isCollapsed: boolean;
+  isSelected: boolean;
+  isDropTarget: boolean;
+  dropMode: "before" | "after" | "inside-folder" | null;
+  isDragging: boolean;
+  densityClass: string;
+  onSelectTrack: (trackId: string, trackName: string) => void;
+  onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
+  onStartTrackDrag: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    trackId: string,
+  ) => void;
+  onToggleFolder: (trackId: string) => void;
+  onToggleMute: (trackId: string) => void;
+  onToggleSolo: (trackId: string) => void;
+  onVolumeChange: (trackId: string, nextVolume: number) => void;
+  onCommitVolume: (trackId: string) => void;
+};
+
+function TrackHeaderItemComponent({
+  trackId,
+  trackName,
+  trackKind,
+  trackDepth,
+  childCount,
+  clipCount,
+  trackHeight,
+  trackPan,
+  trackMuted,
+  trackSolo,
+  volumeValue,
+  isCollapsed,
+  isSelected,
+  isDropTarget,
+  dropMode,
+  isDragging,
+  densityClass,
+  onSelectTrack,
+  onOpenContextMenu,
+  onStartTrackDrag,
+  onToggleFolder,
+  onToggleMute,
+  onToggleSolo,
+  onVolumeChange,
+  onCommitVolume,
+}: TrackHeaderItemProps) {
+  const volumeFill = `${(volumeValue * 100).toFixed(2)}%`;
+  const metaLabel =
+    trackKind === "folder"
+      ? `${childCount} hijos`
+      : `${clipCount} clips | pan ${trackPan.toFixed(2)}`;
+  const dropHint = !isDropTarget
+    ? null
+    : dropMode === "inside-folder"
+      ? "Soltar para meter en folder"
+      : dropMode === "before"
+        ? "Soltar para subir antes de este track"
+        : "Soltar para bajar despues de este track";
+
+  return (
+    <div
+      className={`lt-track-header ${densityClass} ${isSelected ? "is-selected" : ""} ${trackSolo ? "is-solo" : ""} ${trackKind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${isDragging ? "is-dragging" : ""}`}
+      style={{ height: trackHeight, paddingLeft: 16 + trackDepth * 22 }}
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelectTrack(trackId, trackName)}
+      onContextMenu={(event) => onOpenContextMenu(event, trackId)}
+    >
+      <div className="lt-track-header-main">
+        <div className="lt-track-title-row">
+          <button
+            type="button"
+            className="lt-track-drag-handle"
+            aria-label={`Mover ${trackName}`}
+            onMouseDown={(event) => onStartTrackDrag(event, trackId)}
+          >
+            ::
+          </button>
+          {trackKind === "folder" ? (
+            <button
+              type="button"
+              className="lt-folder-toggle"
+              aria-label={isCollapsed ? `Expandir ${trackName}` : `Colapsar ${trackName}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleFolder(trackId);
+              }}
+            >
+              {isCollapsed ? "+" : "-"}
+            </button>
+          ) : null}
+          <strong>{trackName}</strong>
+        </div>
+        <span className="lt-track-meta">{metaLabel}</span>
+        {dropHint ? <span className="lt-track-drop-hint">{dropHint}</span> : null}
+      </div>
+
+      <div className="lt-track-control-row">
+        <div className="lt-track-toggle-group">
+          <button
+            type="button"
+            className={trackMuted ? "is-active" : ""}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleMute(trackId);
+            }}
+          >
+            M
+          </button>
+          <button
+            type="button"
+            className={trackSolo ? "is-active" : ""}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleSolo(trackId);
+            }}
+          >
+            S
+          </button>
+        </div>
+        <label className="lt-track-volume">
+          <span>Vol</span>
+          <input
+            aria-label={`Volumen de ${trackName}`}
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={volumeValue}
+            style={{
+              background: `linear-gradient(to right, ${trackSolo ? "#ffe2ab" : "#3cddc7"} ${volumeFill}, #0e0e0e ${volumeFill})`,
+            }}
+            onChange={(event) => {
+              onVolumeChange(trackId, Number(event.target.value));
+            }}
+            onMouseUp={() => {
+              onCommitVolume(trackId);
+            }}
+            onTouchEnd={() => {
+              onCommitVolume(trackId);
+            }}
+            onKeyUp={(event) => {
+              if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") {
+                onCommitVolume(trackId);
+              }
+            }}
+            onBlur={() => {
+              onCommitVolume(trackId);
+            }}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function areTrackHeaderPropsEqual(previous: TrackHeaderItemProps, next: TrackHeaderItemProps) {
+  return (
+    previous.trackId === next.trackId &&
+    previous.trackName === next.trackName &&
+    previous.trackKind === next.trackKind &&
+    previous.trackDepth === next.trackDepth &&
+    previous.childCount === next.childCount &&
+    previous.clipCount === next.clipCount &&
+    previous.trackHeight === next.trackHeight &&
+    previous.trackPan === next.trackPan &&
+    previous.trackMuted === next.trackMuted &&
+    previous.trackSolo === next.trackSolo &&
+    previous.volumeValue === next.volumeValue &&
+    previous.isCollapsed === next.isCollapsed &&
+    previous.isSelected === next.isSelected &&
+    previous.isDropTarget === next.isDropTarget &&
+    previous.dropMode === next.dropMode &&
+    previous.isDragging === next.isDragging &&
+    previous.densityClass === next.densityClass
+  );
+}
+
+export const TrackHeaderItem = memo(TrackHeaderItemComponent, areTrackHeaderPropsEqual);

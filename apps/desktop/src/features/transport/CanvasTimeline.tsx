@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type MutableRefObject, type ReactNode } from "react";
+import { useEffect, useRef, type MutableRefObject, type ReactNode } from "react";
 
 import type {
   ClipSummary,
@@ -17,7 +17,7 @@ type TimeSelection = {
 type RulerCanvasProps = {
   width: number;
   height: number;
-  cameraX: number;
+  cameraXRef: MutableRefObject<number>;
   pixelsPerSecond: number;
   timelineGrid: TimelineGrid;
   selection: TimeSelection;
@@ -35,7 +35,7 @@ type TrackCanvasProps = {
   visibleTracks: TrackSummary[];
   clipsByTrack: Record<string, ClipSummary[]>;
   waveformCache: Record<string, WaveformSummaryDto>;
-  cameraX: number;
+  cameraXRef: MutableRefObject<number>;
   pixelsPerSecond: number;
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
@@ -44,6 +44,10 @@ type TrackCanvasProps = {
   previewPlayheadSeconds: number | null;
   playheadColor: string;
 };
+
+type TrackSceneSnapshot = Omit<TrackCanvasProps, "cameraXRef">;
+
+type WaveformBitmap = HTMLCanvasElement;
 
 function setupCanvas(canvas: HTMLCanvasElement, width: number, height: number) {
   if (typeof globalThis === "object" && "__vitest_worker__" in globalThis) {
@@ -206,7 +210,7 @@ function cropWaveform(
   };
 }
 
-function drawWaveform(
+function drawWaveformShape(
   context: CanvasRenderingContext2D,
   clip: ClipSummary,
   waveform: WaveformSummaryDto | undefined,
@@ -214,18 +218,11 @@ function drawWaveform(
   width: number,
   top: number,
   height: number,
-  visibleStartRatio = 0,
-  visibleEndRatio = 1,
 ) {
-  const { min, max } = cropWaveform(clip, waveform, visibleStartRatio, visibleEndRatio);
-  if (!max.length || !min.length || width < 4) {
+  const { min, max } = cropWaveform(clip, waveform, 0, 1);
+  if (!max.length || !min.length || width < 2 || height < 2) {
     return;
   }
-
-  context.save();
-  context.beginPath();
-  context.rect(left, top, width, height);
-  context.clip();
 
   context.fillStyle = "rgba(20, 20, 20, 0.72)";
   context.beginPath();
@@ -248,13 +245,201 @@ function drawWaveform(
 
   context.closePath();
   context.fill();
-  context.restore();
+}
+
+function createWaveformBitmap(width: number, height: number) {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(height));
+  return canvas;
+}
+
+function getWaveformBitmapKey(
+  clip: ClipSummary,
+  waveform: WaveformSummaryDto | undefined,
+  pixelsPerSecond: number,
+  clipHeight: number,
+) {
+  return [
+    clip.id,
+    clip.waveformKey,
+    waveform?.version ?? "missing",
+    clip.timelineStartSeconds.toFixed(4),
+    clip.durationSeconds.toFixed(4),
+    clip.sourceStartSeconds.toFixed(4),
+    clip.sourceDurationSeconds.toFixed(4),
+    pixelsPerSecond.toFixed(4),
+    Math.round(clipHeight),
+  ].join("|");
+}
+
+function getOrCreateWaveformBitmap(
+  cache: Map<string, WaveformBitmap>,
+  clip: ClipSummary,
+  waveform: WaveformSummaryDto | undefined,
+  pixelsPerSecond: number,
+  clipHeight: number,
+) {
+  const cacheKey = getWaveformBitmapKey(clip, waveform, pixelsPerSecond, clipHeight);
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const clipWidth = Math.max(2, Math.round(clip.durationSeconds * pixelsPerSecond));
+  const bitmapHeight = Math.max(2, Math.round(clipHeight));
+  const bitmap = createWaveformBitmap(clipWidth, bitmapHeight);
+  if (!bitmap) {
+    return null;
+  }
+
+  const context = bitmap.getContext("2d");
+  if (!context) {
+    return null;
+  }
+
+  context.clearRect(0, 0, clipWidth, bitmapHeight);
+  drawWaveformShape(context, clip, waveform, 0, clipWidth, 0, bitmapHeight);
+  cache.set(cacheKey, bitmap);
+  return bitmap;
+}
+
+function drawTrackScene(
+  context: CanvasRenderingContext2D,
+  snapshot: TrackSceneSnapshot,
+  cameraX: number,
+  waveformBitmapCache: Map<string, WaveformBitmap>,
+) {
+  context.clearRect(0, 0, snapshot.width, snapshot.height);
+  context.fillStyle = "#0e0e0e";
+  context.fillRect(0, 0, snapshot.width, snapshot.height);
+
+  context.strokeStyle = "rgba(229, 226, 225, 0.05)";
+  context.lineWidth = 1;
+  for (let index = 0; index <= snapshot.visibleTracks.length; index += 1) {
+    const y = Math.round(index * snapshot.trackHeight) + 0.5;
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(snapshot.width, y);
+    context.stroke();
+  }
+
+  drawGridLines(
+    context,
+    snapshot.timelineGrid,
+    snapshot.width,
+    snapshot.height,
+    cameraX,
+    snapshot.pixelsPerSecond,
+  );
+
+  snapshot.visibleTracks.forEach((track, trackIndex) => {
+    const trackTop = trackIndex * snapshot.trackHeight;
+    const childCount = snapshot.song.tracks.filter((candidate) => candidate.parentTrackId === track.id).length;
+
+    if (track.kind === "folder") {
+      context.fillStyle = "rgba(32, 31, 31, 0.78)";
+      context.fillRect(8, trackTop + 8, Math.max(0, snapshot.width - 16), snapshot.trackHeight - 16);
+      context.fillStyle = "#bacac5";
+      context.font = '600 10px "Space Grotesk", sans-serif';
+      context.textBaseline = "middle";
+      context.fillText(
+        childCount ? `${childCount} tracks dentro del folder` : "Folder track",
+        20,
+        trackTop + snapshot.trackHeight / 2,
+      );
+      return;
+    }
+
+    const trackClips = snapshot.clipsByTrack[track.id] ?? [];
+    for (const clip of trackClips) {
+      const previewStartSeconds = snapshot.previewClipSeconds[clip.id] ?? clip.timelineStartSeconds;
+      const { left, width: clipWidth } = clipScreenBounds(
+        clip,
+        previewStartSeconds,
+        cameraX,
+        snapshot.pixelsPerSecond,
+      );
+      const right = left + clipWidth;
+
+      if (right < 0 || left > snapshot.width || clipWidth <= 1) {
+        continue;
+      }
+
+      const clippedLeft = clamp(left, 0, snapshot.width);
+      const clippedRight = clamp(right, 0, snapshot.width);
+      const visibleWidth = Math.max(2, clippedRight - clippedLeft);
+      const clipTop = trackTop + 8;
+      const clipHeight = snapshot.trackHeight - 18;
+
+      context.fillStyle = "rgba(210, 212, 209, 0.92)";
+      context.strokeStyle =
+        snapshot.selectedClipId === clip.id ? "rgba(87, 241, 219, 0.9)" : "rgba(12, 12, 12, 0.28)";
+      context.lineWidth = snapshot.selectedClipId === clip.id ? 1.5 : 1;
+      context.beginPath();
+      context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
+      context.fill();
+      context.stroke();
+
+      const waveformBitmap = getOrCreateWaveformBitmap(
+        waveformBitmapCache,
+        clip,
+        snapshot.waveformCache[clip.waveformKey],
+        snapshot.pixelsPerSecond,
+        clipHeight,
+      );
+
+      if (waveformBitmap) {
+        const sourceLeftRatio = clipWidth > 0 ? clamp((clippedLeft - left) / clipWidth, 0, 1) : 0;
+        const sourceRightRatio = clipWidth > 0 ? clamp((clippedRight - left) / clipWidth, 0, 1) : 1;
+        const sourceLeft = sourceLeftRatio * waveformBitmap.width;
+        const sourceWidth = Math.max(1, (sourceRightRatio - sourceLeftRatio) * waveformBitmap.width);
+
+        context.save();
+        context.beginPath();
+        context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
+        context.clip();
+        context.drawImage(
+          waveformBitmap,
+          sourceLeft,
+          0,
+          sourceWidth,
+          waveformBitmap.height,
+          clippedLeft,
+          clipTop,
+          visibleWidth,
+          clipHeight,
+        );
+        context.restore();
+      }
+
+      if (visibleWidth >= 52) {
+        context.save();
+        context.beginPath();
+        context.rect(clippedLeft, clipTop, visibleWidth, clipHeight);
+        context.clip();
+        context.fillStyle = "rgba(255, 255, 255, 0.34)";
+        context.beginPath();
+        context.roundRect(clippedLeft + 6, clipTop + 4, Math.min(visibleWidth - 12, 96), 18, 2);
+        context.fill();
+        context.fillStyle = "rgba(36, 38, 36, 0.95)";
+        context.font = '600 10px "Space Grotesk", sans-serif';
+        context.textBaseline = "middle";
+        context.fillText(clip.trackName, clippedLeft + 12, clipTop + 13);
+        context.restore();
+      }
+    }
+  });
 }
 
 export function TimelineRulerCanvas({
   width,
   height,
-  cameraX,
+  cameraXRef,
   pixelsPerSecond,
   timelineGrid,
   selection,
@@ -265,85 +450,119 @@ export function TimelineRulerCanvas({
 }: RulerCanvasProps) {
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayContentRef = useRef<HTMLDivElement | null>(null);
+  const snapshotRef = useRef({
+    width,
+    height,
+    pixelsPerSecond,
+    timelineGrid,
+    selection,
+    previewPlayheadSeconds,
+    playheadColor,
+  });
+  const sceneVersionRef = useRef(0);
 
-  useLayoutEffect(() => {
-    const canvas = baseCanvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const context = setupCanvas(canvas, width, height);
-    if (!context) {
-      return;
-    }
-
-    context.clearRect(0, 0, width, height);
-    context.fillStyle = "#2a2a2a";
-    context.fillRect(0, 0, width, height);
-    drawGridLines(context, timelineGrid, width, height, cameraX, pixelsPerSecond);
-  }, [cameraX, height, pixelsPerSecond, timelineGrid, width]);
+  snapshotRef.current = {
+    width,
+    height,
+    pixelsPerSecond,
+    timelineGrid,
+    selection,
+    previewPlayheadSeconds,
+    playheadColor,
+  };
 
   useEffect(() => {
-    const canvas = overlayCanvasRef.current;
-    if (!canvas) {
+    sceneVersionRef.current += 1;
+  }, [height, pixelsPerSecond, previewPlayheadSeconds, playheadColor, selection, timelineGrid, width]);
+
+  useEffect(() => {
+    const baseCanvas = baseCanvasRef.current;
+    const overlayCanvas = overlayCanvasRef.current;
+    if (!baseCanvas || !overlayCanvas) {
       return;
     }
 
     let animationFrameId = 0;
+    let lastBaseSceneVersion = -1;
+    let lastBaseCameraX = Number.NaN;
+    let lastOverlayTransformCameraX = Number.NaN;
 
     const render = () => {
-      const context = setupCanvas(canvas, width, height);
-      if (!context) {
-        return;
+      const snapshot = snapshotRef.current;
+      const cameraX = cameraXRef.current;
+
+      if (lastBaseSceneVersion !== sceneVersionRef.current || lastBaseCameraX !== cameraX) {
+        const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
+        if (baseContext) {
+          baseContext.clearRect(0, 0, snapshot.width, snapshot.height);
+          baseContext.fillStyle = "#2a2a2a";
+          baseContext.fillRect(0, 0, snapshot.width, snapshot.height);
+          drawGridLines(
+            baseContext,
+            snapshot.timelineGrid,
+            snapshot.width,
+            snapshot.height,
+            cameraX,
+            snapshot.pixelsPerSecond,
+          );
+        }
+
+        lastBaseSceneVersion = sceneVersionRef.current;
+        lastBaseCameraX = cameraX;
       }
 
-      context.clearRect(0, 0, width, height);
-
-      if (selection) {
-        const left = secondsToScreenX(selection.startSeconds, cameraX, pixelsPerSecond);
-        const selectionWidth =
-          (selection.endSeconds - selection.startSeconds) * pixelsPerSecond;
-        context.fillStyle = "rgba(87, 241, 219, 0.12)";
-        context.fillRect(left, 0, selectionWidth, height);
+      if (overlayContentRef.current && lastOverlayTransformCameraX !== cameraX) {
+        overlayContentRef.current.style.transform = `translate3d(${-cameraX}px, 0, 0)`;
+        lastOverlayTransformCameraX = cameraX;
       }
 
-      drawPlayhead(
-        context,
-        width,
-        height,
-        cameraX,
-        pixelsPerSecond,
-        previewPlayheadSeconds ?? playheadSecondsRef.current,
-        playheadColor,
-        true,
-      );
+      const overlayContext = setupCanvas(overlayCanvas, snapshot.width, snapshot.height);
+      if (overlayContext) {
+        overlayContext.clearRect(0, 0, snapshot.width, snapshot.height);
 
-      if (previewPlayheadSeconds === null) {
-        animationFrameId = window.requestAnimationFrame(render);
+        if (snapshot.selection) {
+          const left = secondsToScreenX(
+            snapshot.selection.startSeconds,
+            cameraX,
+            snapshot.pixelsPerSecond,
+          );
+          const selectionWidth =
+            (snapshot.selection.endSeconds - snapshot.selection.startSeconds) *
+            snapshot.pixelsPerSecond;
+          overlayContext.fillStyle = "rgba(87, 241, 219, 0.12)";
+          overlayContext.fillRect(left, 0, selectionWidth, snapshot.height);
+        }
+
+        drawPlayhead(
+          overlayContext,
+          snapshot.width,
+          snapshot.height,
+          cameraX,
+          snapshot.pixelsPerSecond,
+          snapshot.previewPlayheadSeconds ?? playheadSecondsRef.current,
+          snapshot.playheadColor,
+          true,
+        );
       }
+
+      animationFrameId = window.requestAnimationFrame(render);
     };
 
-    render();
+    animationFrameId = window.requestAnimationFrame(render);
 
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [
-    cameraX,
-    height,
-    pixelsPerSecond,
-    playheadColor,
-    playheadSecondsRef,
-    previewPlayheadSeconds,
-    selection,
-    width,
-  ]);
+  }, [cameraXRef, playheadSecondsRef]);
 
   return (
     <>
       <canvas className="lt-ruler-canvas" ref={baseCanvasRef} aria-hidden="true" />
       <canvas className="lt-ruler-canvas-overlay" ref={overlayCanvasRef} aria-hidden="true" />
-      <div className="lt-ruler-overlay">{children}</div>
+      <div className="lt-ruler-overlay" ref={overlayContentRef}>
+        {children}
+      </div>
     </>
   );
 }
@@ -356,7 +575,7 @@ export function TimelineTrackCanvas({
   visibleTracks,
   clipsByTrack,
   waveformCache,
-  cameraX,
+  cameraXRef,
   pixelsPerSecond,
   timelineGrid,
   selectedClipId,
@@ -367,121 +586,51 @@ export function TimelineTrackCanvas({
 }: TrackCanvasProps) {
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const waveformBitmapCacheRef = useRef<Map<string, WaveformBitmap>>(new Map());
+  const snapshotRef = useRef<TrackSceneSnapshot>({
+    width,
+    height,
+    trackHeight,
+    song,
+    visibleTracks,
+    clipsByTrack,
+    waveformCache,
+    pixelsPerSecond,
+    timelineGrid,
+    selectedClipId,
+    previewClipSeconds,
+    playheadSecondsRef,
+    previewPlayheadSeconds,
+    playheadColor,
+  });
+  const sceneVersionRef = useRef(0);
 
-  useLayoutEffect(() => {
-    const canvas = baseCanvasRef.current;
-    if (!canvas) {
-      return;
-    }
+  snapshotRef.current = {
+    width,
+    height,
+    trackHeight,
+    song,
+    visibleTracks,
+    clipsByTrack,
+    waveformCache,
+    pixelsPerSecond,
+    timelineGrid,
+    selectedClipId,
+    previewClipSeconds,
+    playheadSecondsRef,
+    previewPlayheadSeconds,
+    playheadColor,
+  };
 
-    const context = setupCanvas(canvas, width, height);
-    if (!context) {
-      return;
-    }
-
-    context.clearRect(0, 0, width, height);
-    context.fillStyle = "#0e0e0e";
-    context.fillRect(0, 0, width, height);
-
-    context.strokeStyle = "rgba(229, 226, 225, 0.05)";
-    context.lineWidth = 1;
-    for (let index = 0; index <= visibleTracks.length; index += 1) {
-      const y = Math.round(index * trackHeight) + 0.5;
-      context.beginPath();
-      context.moveTo(0, y);
-      context.lineTo(width, y);
-      context.stroke();
-    }
-
-    drawGridLines(context, timelineGrid, width, height, cameraX, pixelsPerSecond);
-
-    visibleTracks.forEach((track, trackIndex) => {
-      const trackTop = trackIndex * trackHeight;
-      const childCount = song.tracks.filter((candidate) => candidate.parentTrackId === track.id).length;
-
-      if (track.kind === "folder") {
-        context.fillStyle = "rgba(32, 31, 31, 0.78)";
-        context.fillRect(8, trackTop + 8, Math.max(0, width - 16), trackHeight - 16);
-        context.fillStyle = "#bacac5";
-        context.font = '600 10px "Space Grotesk", sans-serif';
-        context.textBaseline = "middle";
-        context.fillText(
-          childCount ? `${childCount} tracks dentro del folder` : "Folder track",
-          20,
-          trackTop + trackHeight / 2,
-        );
-        return;
-      }
-
-      const trackClips = clipsByTrack[track.id] ?? [];
-      for (const clip of trackClips) {
-        const previewStartSeconds = previewClipSeconds[clip.id] ?? clip.timelineStartSeconds;
-        const { left, width: clipWidth } = clipScreenBounds(
-          clip,
-          previewStartSeconds,
-          cameraX,
-          pixelsPerSecond,
-        );
-        const right = left + clipWidth;
-
-        if (right < 0 || left > width || clipWidth <= 1) {
-          continue;
-        }
-
-        const clippedLeft = clamp(left, 0, width);
-        const clippedRight = clamp(right, 0, width);
-        const visibleWidth = Math.max(2, clippedRight - clippedLeft);
-        const visibleStartRatio = clipWidth > 0 ? clamp((clippedLeft - left) / clipWidth, 0, 1) : 0;
-        const visibleEndRatio = clipWidth > 0 ? clamp((clippedRight - left) / clipWidth, 0, 1) : 1;
-        const clipTop = trackTop + 8;
-        const clipHeight = trackHeight - 18;
-
-        context.fillStyle = "rgba(210, 212, 209, 0.92)";
-        context.strokeStyle =
-          selectedClipId === clip.id ? "rgba(87, 241, 219, 0.9)" : "rgba(12, 12, 12, 0.28)";
-        context.lineWidth = selectedClipId === clip.id ? 1.5 : 1;
-        context.beginPath();
-        context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
-        context.fill();
-        context.stroke();
-
-        drawWaveform(
-          context,
-          clip,
-          waveformCache[clip.waveformKey],
-          clippedLeft,
-          visibleWidth,
-          clipTop,
-          clipHeight,
-          visibleStartRatio,
-          visibleEndRatio,
-        );
-
-        if (visibleWidth >= 52) {
-          context.save();
-          context.beginPath();
-          context.rect(clippedLeft, clipTop, visibleWidth, clipHeight);
-          context.clip();
-          context.fillStyle = "rgba(255, 255, 255, 0.34)";
-          context.beginPath();
-          context.roundRect(clippedLeft + 6, clipTop + 4, Math.min(visibleWidth - 12, 96), 18, 2);
-          context.fill();
-          context.fillStyle = "rgba(36, 38, 36, 0.95)";
-          context.font = '600 10px "Space Grotesk", sans-serif';
-          context.textBaseline = "middle";
-          context.fillText(clip.trackName, clippedLeft + 12, clipTop + 13);
-          context.restore();
-        }
-      }
-    });
+  useEffect(() => {
+    sceneVersionRef.current += 1;
   }, [
-    cameraX,
     clipsByTrack,
     height,
     pixelsPerSecond,
     previewClipSeconds,
     selectedClipId,
-    song.tracks,
+    song,
     timelineGrid,
     trackHeight,
     visibleTracks,
@@ -490,49 +639,58 @@ export function TimelineTrackCanvas({
   ]);
 
   useEffect(() => {
-    const canvas = overlayCanvasRef.current;
-    if (!canvas) {
+    waveformBitmapCacheRef.current.clear();
+    sceneVersionRef.current += 1;
+  }, [pixelsPerSecond, song.projectRevision, trackHeight]);
+
+  useEffect(() => {
+    const baseCanvas = baseCanvasRef.current;
+    const overlayCanvas = overlayCanvasRef.current;
+    if (!baseCanvas || !overlayCanvas) {
       return;
     }
 
     let animationFrameId = 0;
+    let lastBaseSceneVersion = -1;
+    let lastBaseCameraX = Number.NaN;
 
     const render = () => {
-      const context = setupCanvas(canvas, width, height);
-      if (!context) {
-        return;
+      const snapshot = snapshotRef.current;
+      const cameraX = cameraXRef.current;
+
+      if (lastBaseSceneVersion !== sceneVersionRef.current || lastBaseCameraX !== cameraX) {
+        const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
+        if (baseContext) {
+          drawTrackScene(baseContext, snapshot, cameraX, waveformBitmapCacheRef.current);
+        }
+
+        lastBaseSceneVersion = sceneVersionRef.current;
+        lastBaseCameraX = cameraX;
       }
 
-      drawPlayhead(
-        context,
-        width,
-        height,
-        cameraX,
-        pixelsPerSecond,
-        previewPlayheadSeconds ?? playheadSecondsRef.current,
-        playheadColor,
-        false,
-      );
-
-      if (previewPlayheadSeconds === null) {
-        animationFrameId = window.requestAnimationFrame(render);
+      const overlayContext = setupCanvas(overlayCanvas, snapshot.width, snapshot.height);
+      if (overlayContext) {
+        drawPlayhead(
+          overlayContext,
+          snapshot.width,
+          snapshot.height,
+          cameraX,
+          snapshot.pixelsPerSecond,
+          snapshot.previewPlayheadSeconds ?? playheadSecondsRef.current,
+          snapshot.playheadColor,
+          false,
+        );
       }
+
+      animationFrameId = window.requestAnimationFrame(render);
     };
 
-    render();
+    animationFrameId = window.requestAnimationFrame(render);
 
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [
-    cameraX,
-    height,
-    pixelsPerSecond,
-    playheadColor,
-    playheadSecondsRef,
-    previewPlayheadSeconds,
-    width,
-  ]);
+  }, [cameraXRef, playheadSecondsRef]);
 
   return (
     <div className="lt-track-canvas-layer" style={{ width, height }}>
