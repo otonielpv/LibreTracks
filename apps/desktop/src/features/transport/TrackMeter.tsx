@@ -8,7 +8,7 @@ const EMPTY_METER: TrackMeterState = {
 };
 const PEAK_FALLOFF_PER_SECOND = 1.8;
 const PEAK_EPSILON = 0.001;
-const METER_MIN_DB = -48;
+const METER_MIN_DB = -60;
 const METER_MAX_DB = 9;
 const CLIP_THRESHOLD = 1;
 const CLIP_HOLD_MS = 220;
@@ -67,6 +67,7 @@ function applyClipIndicator(element: HTMLDivElement | null, isClipping: boolean)
   }
 
   element.style.opacity = isClipping ? "1" : "0";
+  element.style.transform = isClipping ? "scaleY(1)" : "scaleY(0)";
 }
 
 function areTrackMetersEqual(

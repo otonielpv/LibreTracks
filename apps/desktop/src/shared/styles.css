@@ -1009,12 +1009,16 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
-  border-radius: 999px;
+  height: calc(15.79% + 1px);
+  min-height: 0;
+  border-radius: 999px 999px 0 0;
   background: #ff6150;
   opacity: 0;
-  box-shadow: 0 0 10px rgb(255 97 80 / 0.55);
-  transition: opacity 90ms linear;
+  pointer-events: none;
+  transform: scaleY(0);
+  transform-origin: center bottom;
+  will-change: transform, opacity;
+  transition: transform 90ms linear, opacity 90ms linear;
 }
 
 .lt-track-control-row {
