@@ -721,6 +721,7 @@ export function TransportPanel() {
   const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
   const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
   const playbackSongDir = useTransportStore((state) => state.playback?.songDir ?? null);
+  const projectIdentityRef = useRef<string | null>(null);
   const pendingMarkerJumpSignature = useTransportStore((state) => {
     const pendingJump = state.playback?.pendingMarkerJump;
     if (!pendingJump) {
@@ -1417,14 +1418,32 @@ export function TransportPanel() {
   }, [playbackProjectRevision]);
 
   useEffect(() => {
+    const nextProjectIdentity = playbackSongDir ? `${playbackSongDir}::${song?.id ?? "pending"}` : null;
+    const previousProjectIdentity = projectIdentityRef.current;
+
+    if (previousProjectIdentity !== null && previousProjectIdentity !== nextProjectIdentity) {
+      setWaveformCache({});
+      setLibraryAssets([]);
+      setLibraryClipPreview([]);
+      setOptimisticClipOperations([]);
+      clearActiveLibraryDragPayload();
+    }
+
+    projectIdentityRef.current = nextProjectIdentity;
+  }, [playbackSongDir, song?.id]);
+
+  useEffect(() => {
     let active = true;
 
     async function loadLibraryAssets() {
       if (!playbackSongDir) {
         setLibraryAssets([]);
+        setLibraryClipPreview([]);
         return;
       }
 
+      setLibraryAssets([]);
+      setLibraryClipPreview([]);
       setIsLibraryLoading(true);
       try {
         const assets = await getLibraryAssets();
@@ -1449,7 +1468,7 @@ export function TransportPanel() {
     return () => {
       active = false;
     };
-  }, [playbackSongDir]);
+  }, [playbackSongDir, song?.id]);
 
   useEffect(() => {
     let active = true;

@@ -1093,10 +1093,6 @@ impl MemoryClipReader {
         Ok(reader)
     }
 
-    fn seek_to(&mut self, target_frame: usize) {
-        let _ = self.seek_to_internal(target_frame);
-    }
-
     fn seek_to_internal(&mut self, target_frame: usize) -> Result<(), String> {
         self.current_frame = target_frame;
         self.source_frame_cursor = self.current_frame as f64;
