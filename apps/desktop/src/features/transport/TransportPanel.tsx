@@ -32,7 +32,6 @@ import {
   moveTrack,
   openProject,
   pauseTransport,
-  pickAndImportSong,
   playTransport,
   redoAction,
   saveProject,
@@ -58,7 +57,6 @@ import {
   reportUiRenderMetric,
 } from "./desktopApi";
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
-import { ImportAudioModal } from "./ImportAudioModal";
 import { LibrarySidebarPanel } from "./LibrarySidebarPanel";
 import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
 import {
@@ -153,7 +151,7 @@ type LiveTrackMixRequestState = {
 
 type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
 
-type SidebarTab = "browser" | "markers" | "library" | "routing" | "settings";
+type SidebarTab = "markers" | "library" | "routing" | "settings";
 
 type LibraryAssetDragPayload = {
   file_path: string;
@@ -487,8 +485,6 @@ export function TransportPanel() {
   const [tracksById, setTracksById] = useState<Record<string, TrackSummary>>({});
   const [status, setStatus] = useState("Cargando sesion...");
   const [isBusy, setIsBusy] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isImportingFromModal, setIsImportingFromModal] = useState(false);
   const [tempoDraft, setTempoDraft] = useState("120");
   const [globalJumpMode, setGlobalJumpMode] = useState<GlobalJumpMode>("immediate");
   const [globalJumpBars, setGlobalJumpBars] = useState(4);
@@ -501,7 +497,7 @@ export function TransportPanel() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
-  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>("library");
+  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>(null);
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
   const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState | null>(null);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
@@ -2652,22 +2648,6 @@ export function TransportPanel() {
     }, 250);
   }
 
-  async function importFromModal() {
-    setIsImportingFromModal(true);
-    await runAction(
-      async () => {
-        const nextSnapshot = await pickAndImportSong();
-        if (nextSnapshot) {
-          applyPlaybackSnapshot(nextSnapshot);
-        }
-        setStatus("Importacion de audio ejecutada.");
-        setIsImportModalOpen(false);
-      },
-      { busy: true },
-    );
-    setIsImportingFromModal(false);
-  }
-
   function handleCreateSongClick() {
     void runAction(
       async () => {
@@ -2677,6 +2657,7 @@ export function TransportPanel() {
         }
 
         applyPlaybackSnapshot(nextSnapshot);
+        setActiveSidebarTab(null);
         setStatus(
           nextSnapshot.songFilePath
             ? `Proyecto creado en ${nextSnapshot.songFilePath}.`
@@ -2688,7 +2669,14 @@ export function TransportPanel() {
   }
 
   function handleOpenProjectClick() {
-    void runAction(async () => applyPlaybackSnapshot((await openProject()) ?? snapshotRef.current), { busy: true });
+    void runAction(
+      async () => {
+        const nextSnapshot = (await openProject()) ?? snapshotRef.current;
+        applyPlaybackSnapshot(nextSnapshot);
+        setActiveSidebarTab(null);
+      },
+      { busy: true },
+    );
   }
 
   function handleToggleTopMenu(menuKey: "file") {
@@ -2734,8 +2722,8 @@ export function TransportPanel() {
     );
   }
 
-  function handleImportWavsClick() {
-    setIsImportModalOpen(true);
+  function handleSidebarTabToggle(tab: SidebarTab) {
+    setActiveSidebarTab((currentTab) => (currentTab === tab ? null : tab));
   }
 
   async function handleImportLibraryAssetsClick() {
@@ -2752,7 +2740,6 @@ export function TransportPanel() {
       }
 
       setLibraryAssets(assets);
-      setActiveSidebarTab("library");
       setStatus(`Libreria actualizada con ${assets.length} assets.`);
     });
     setIsImportingLibrary(false);
@@ -2994,10 +2981,6 @@ export function TransportPanel() {
                     <span>Guardar como</span>
                     <span className="lt-top-menu-shortcut">Ctrl+Shift+S</span>
                   </button>
-                  <div className="lt-top-menu-separator" aria-hidden="true" />
-                  <button type="button" role="menuitem" onClick={() => handleTopMenuAction(handleImportWavsClick)}>
-                    <span>Importar WAVs</span>
-                  </button>
                 </div>
               ) : null}
             </div>
@@ -3117,18 +3100,9 @@ export function TransportPanel() {
         <aside className="lt-side-nav" aria-label="Navegacion principal">
           <button
             type="button"
-            className={activeSidebarTab === "browser" ? "is-active" : ""}
-            aria-label="Browser"
-            onClick={() => setActiveSidebarTab("browser")}
-          >
-            <span className="material-symbols-outlined">folder_open</span>
-            Browser
-          </button>
-          <button
-            type="button"
             className={activeSidebarTab === "markers" ? "is-active" : ""}
             aria-label="Markers"
-            onClick={() => setActiveSidebarTab("markers")}
+            onClick={() => handleSidebarTabToggle("markers")}
           >
             <span className="material-symbols-outlined">sell</span>
             Markers
@@ -3137,7 +3111,7 @@ export function TransportPanel() {
             type="button"
             className={activeSidebarTab === "library" ? "is-active" : ""}
             aria-label="Library"
-            onClick={() => setActiveSidebarTab("library")}
+            onClick={() => handleSidebarTabToggle("library")}
           >
             <span className="material-symbols-outlined">library_music</span>
             Library
@@ -3146,7 +3120,7 @@ export function TransportPanel() {
             type="button"
             className={activeSidebarTab === "routing" ? "is-active" : ""}
             aria-label="Routing"
-            onClick={() => setActiveSidebarTab("routing")}
+            onClick={() => handleSidebarTabToggle("routing")}
           >
             <span className="material-symbols-outlined">settings_input_component</span>
             Routing
@@ -3155,7 +3129,7 @@ export function TransportPanel() {
             type="button"
             className={activeSidebarTab === "settings" ? "is-active" : ""}
             aria-label="Settings"
-            onClick={() => setActiveSidebarTab("settings")}
+            onClick={() => handleSidebarTabToggle("settings")}
           >
             <span className="material-symbols-outlined">settings</span>
             Settings
@@ -3179,21 +3153,14 @@ export function TransportPanel() {
         <div className="lt-empty-state">
           <div className="lt-empty-state-card">
             <span className="lt-empty-state-eyebrow">LibreTracks DAW</span>
-            <h1>Import tracks to start</h1>
+            <h1>Create or open a song</h1>
             <p>
-              Open an existing session or create an empty one and use the Library tab to import WAV
-              assets before arranging them.
+              Start a new project or open an existing one. Import WAV assets later from the Library
+              panel and drag them onto the timeline only when you want to arrange them.
             </p>
             <div className="lt-empty-state-actions">
-              <button type="button" className="is-primary" onClick={handleOpenProjectClick}>
-                Open
-              </button>
-              <button
-                type="button"
-                onClick={playbackSongDir ? () => void handleImportLibraryAssetsClick() : handleImportWavsClick}
-              >
-                {playbackSongDir ? "Import to Library" : "Import WAVs"}
-              </button>
+              <button type="button" className="is-primary" onClick={handleCreateSongClick}>Create</button>
+              <button type="button" onClick={handleOpenProjectClick}>Open</button>
             </div>
           </div>
         </div>
@@ -3566,17 +3533,6 @@ export function TransportPanel() {
           ))}
         </div>
       ) : null}
-
-        <ImportAudioModal
-          isOpen={isImportModalOpen}
-          isImporting={isImportingFromModal}
-          onClose={() => {
-            if (!isImportingFromModal) {
-              setIsImportModalOpen(false);
-            }
-          }}
-          onImport={importFromModal}
-        />
 
         <div className="lt-status-overlay" aria-live="polite">
           <span>{status}</span>

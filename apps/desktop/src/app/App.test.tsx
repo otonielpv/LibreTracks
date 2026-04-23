@@ -135,9 +135,30 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /reproducir/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /pausar/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /detener/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /browser/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /browser/i })).toBeNull();
+    expect(screen.queryByLabelText(/library panel/i)).toBeNull();
     expect(screen.queryByText(/submezclas/i)).toBeNull();
     expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();
+  });
+
+  it("toggles the library panel from the sidebar button", async () => {
+    await renderApp();
+
+    const libraryButton = screen.getByRole("button", { name: /library/i });
+    expect(screen.queryByLabelText(/library panel/i)).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(libraryButton);
+    });
+
+    expect(await screen.findByLabelText(/library panel/i)).toBeTruthy();
+    expect(screen.getByText("drums.wav")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(libraryButton);
+    });
+
+    expect(screen.queryByLabelText(/library panel/i)).toBeNull();
   });
 
   it("supports transport shortcuts from the keyboard", async () => {
@@ -170,6 +191,10 @@ describe("App", () => {
   it("shows library assets and exposes the drag payload for timeline drops", async () => {
     await renderApp();
 
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /library/i }));
+    });
+
     expect(screen.getByText("drums.wav")).toBeTruthy();
     expect(screen.getByText("bass.wav")).toBeTruthy();
 
@@ -197,6 +222,10 @@ describe("App", () => {
   it("drops a library asset onto a track lane and creates a new clip", async () => {
     const { container } = await renderApp();
     mockLaneBounds(container);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /library/i }));
+    });
 
     const transferData = new Map<string, string>();
     const dataTransfer = {
