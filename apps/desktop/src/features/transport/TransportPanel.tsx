@@ -209,7 +209,15 @@ function readLibraryAssetDragPayload(dataTransfer: DataTransfer | null): Library
 
   const payload = dataTransfer.getData("application/libretracks-library-asset");
   if (!payload) {
-    return null;
+    const filePath = dataTransfer.getData("text/plain").trim();
+    if (!filePath) {
+      return null;
+    }
+
+    return {
+      file_path: filePath,
+      durationSeconds: 0,
+    };
   }
 
   try {
@@ -1112,10 +1120,7 @@ export function TransportPanel() {
         return;
       }
 
-      setLibraryImportProgress((current) => ({
-        percent: Math.max(current?.percent ?? 0, event.percent),
-        message: event.message,
-      }));
+      setLibraryImportProgress(event);
     }).then((nextUnlisten) => {
       if (!active) {
         nextUnlisten();
@@ -1130,36 +1135,6 @@ export function TransportPanel() {
       unlisten?.();
     };
   }, []);
-
-  useEffect(() => {
-    if (!isImportingLibrary) {
-      return () => {};
-    }
-
-    const timerId = window.setInterval(() => {
-      setLibraryImportProgress((current) => {
-        if (!current) {
-          return {
-            percent: 8,
-            message: "Preparando importacion...",
-          };
-        }
-
-        if (current.percent >= 92) {
-          return current;
-        }
-
-        return {
-          ...current,
-          percent: Math.min(current.percent + 4, 92),
-        };
-      });
-    }, 220);
-
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [isImportingLibrary]);
 
   useEffect(() => {
     const shell = timelineShellRef.current;
@@ -2800,10 +2775,7 @@ export function TransportPanel() {
     }
 
     setIsImportingLibrary(true);
-    setLibraryImportProgress({
-      percent: 5,
-      message: "Esperando seleccion de archivos...",
-    });
+    setLibraryImportProgress(null);
     await runAction(async () => {
       const assets = await importLibraryAssetsFromDialog();
       if (!assets) {
@@ -2812,16 +2784,10 @@ export function TransportPanel() {
       }
 
       setLibraryAssets(assets);
-      setLibraryImportProgress({
-        percent: 100,
-        message: `Importacion completada. ${assets.length} asset(s) disponibles.`,
-      });
       setStatus(`Libreria actualizada con ${assets.length} assets.`);
     });
     setIsImportingLibrary(false);
-    window.setTimeout(() => {
-      setLibraryImportProgress((current) => (current?.percent === 100 ? null : current));
-    }, 1200);
+    setLibraryImportProgress(null);
   }
 
   async function handleDeleteLibraryAsset(filePath: string, fileName: string) {

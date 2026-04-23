@@ -61,20 +61,14 @@ export function LibrarySidebarPanel({
 
       <div className="lt-library-panel-meta" aria-live="polite">
         <span>{assets.length} assets</span>
-        <span>{isImporting && importProgress ? `${Math.round(importProgress.percent)}%` : canImport ? "Ready" : "Open or create a session"}</span>
+        <span>{canImport ? "Ready" : "Open or create a session"}</span>
       </div>
 
       {isImporting && importProgress ? (
         <div className="lt-library-progress" aria-live="polite">
-          <div className="lt-library-progress-copy">
+          <div className="lt-library-progress-copy is-spinner-only">
+            <span className="lt-library-progress-spinner" aria-hidden="true" />
             <strong>{importProgress.message}</strong>
-            <span>{Math.max(0, Math.min(100, Math.round(importProgress.percent)))}%</span>
-          </div>
-          <div className="lt-library-progress-bar" aria-hidden="true">
-            <div
-              className="lt-library-progress-fill"
-              style={{ width: `${Math.max(0, Math.min(100, importProgress.percent))}%` }}
-            />
           </div>
         </div>
       ) : null}

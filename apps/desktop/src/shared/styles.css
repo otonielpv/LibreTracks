@@ -517,7 +517,11 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.45rem;
+}
+
+.lt-library-progress-copy.is-spinner-only {
+  justify-content: flex-start;
+  margin-bottom: 0;
 }
 
 .lt-library-progress-copy strong,
@@ -535,18 +539,24 @@ body {
   white-space: nowrap;
 }
 
-.lt-library-progress-bar {
-  height: 0.4rem;
+.lt-library-progress-spinner {
+  width: 0.95rem;
+  height: 0.95rem;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.08);
-  overflow: hidden;
+  border: 2px solid rgb(87 241 219 / 0.18);
+  border-top-color: #57f1db;
+  flex-shrink: 0;
+  animation: lt-library-progress-spin 0.8s linear infinite;
 }
 
-.lt-library-progress-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #57f1db, #f8d38a);
-  transition: width 180ms ease;
+@keyframes lt-library-progress-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .lt-library-panel-body {
