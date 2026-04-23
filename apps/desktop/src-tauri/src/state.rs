@@ -536,14 +536,18 @@ impl DesktopSession {
             })?;
 
         let save_started_at = Instant::now();
-        let library_file_paths = collect_library_file_paths(&source_song_dir, Some(&song))?;
+        let library_assets = list_library_assets(&source_song_dir, Some(&song))?;
+        let library_file_paths = library_assets
+            .iter()
+            .map(|asset| asset.file_path.clone())
+            .collect::<Vec<_>>();
         copy_project_audio_files(
             &source_song_dir,
             &target_song_dir,
             &song,
             &library_file_paths,
         )?;
-        write_library_manifest(&target_song_dir, &library_file_paths)?;
+        write_library_manifest_assets(&target_song_dir, &library_assets)?;
         save_song_to_file(&target_song_file, &song)?;
         self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
 
@@ -672,18 +676,36 @@ impl DesktopSession {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let imported_assets = import_wav_files_to_library(&song_dir, files)?;
         let current_song = self.engine.song().cloned();
-        let mut library_file_paths = collect_library_file_paths(&song_dir, current_song.as_ref())?;
+        let mut library_assets = list_library_assets(&song_dir, current_song.as_ref())?;
         for asset in &imported_assets.assets {
             let normalized_path = normalize_library_file_path(
                 asset.imported_relative_path.to_string_lossy().as_ref(),
             );
-            if !library_file_paths.contains(&normalized_path) {
-                library_file_paths.push(normalized_path);
+            let file_name = Path::new(&normalized_path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or(&normalized_path)
+                .to_string();
+            if let Some(existing_asset) = library_assets
+                .iter_mut()
+                .find(|existing_asset| existing_asset.file_path == normalized_path)
+            {
+                existing_asset.detected_bpm = asset.detected_bpm;
+                existing_asset.duration_seconds = asset.duration_seconds;
+                existing_asset.file_name = file_name.clone();
+            } else {
+                library_assets.push(LibraryAssetSummary {
+                    file_name,
+                    file_path: normalized_path,
+                    duration_seconds: asset.duration_seconds,
+                    detected_bpm: asset.detected_bpm,
+                });
             }
         }
-        write_library_manifest(&song_dir, &library_file_paths)?;
+        library_assets.sort_by(|left, right| left.file_name.cmp(&right.file_name));
+        write_library_manifest_assets(&song_dir, &library_assets)?;
         self.record_import_metrics(&imported_assets.metrics);
-        list_library_assets(&song_dir, current_song.as_ref())
+        Ok(library_assets)
     }
 
     pub fn get_library_assets(&self) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
@@ -713,9 +735,9 @@ impl DesktopSession {
             ));
         }
 
-        let mut library_file_paths = collect_library_file_paths(&song_dir, Some(&song))?;
-        library_file_paths.retain(|path| path != &normalized_file_path);
-        write_library_manifest(&song_dir, &library_file_paths)?;
+        let mut library_assets = list_library_assets(&song_dir, Some(&song))?;
+        library_assets.retain(|asset| asset.file_path != normalized_file_path);
+        write_library_manifest_assets(&song_dir, &library_assets)?;
 
         let audio_file_path = song_dir.join(&normalized_file_path);
         if audio_file_path.exists() {
@@ -2039,7 +2061,18 @@ fn emit_library_import_progress(app: &AppHandle, percent: u8, message: String) {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LibraryManifest {
+    #[serde(default)]
     file_paths: Vec<String>,
+    #[serde(default)]
+    assets: Vec<LibraryManifestAssetEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryManifestAssetEntry {
+    file_path: String,
+    #[serde(default)]
+    detected_bpm: Option<f64>,
 }
 
 fn library_manifest_path(song_dir: &Path) -> PathBuf {
@@ -2050,7 +2083,7 @@ fn normalize_library_file_path(file_path: &str) -> String {
     file_path.replace('\\', "/")
 }
 
-fn read_library_manifest(song_dir: &Path) -> Result<Option<Vec<String>>, DesktopError> {
+fn read_library_manifest(song_dir: &Path) -> Result<Option<LibraryManifest>, DesktopError> {
     let manifest_path = library_manifest_path(song_dir);
     if !manifest_path.exists() {
         return Ok(None);
@@ -2058,19 +2091,46 @@ fn read_library_manifest(song_dir: &Path) -> Result<Option<Vec<String>>, Desktop
 
     let manifest = serde_json::from_slice::<LibraryManifest>(&fs::read(&manifest_path)?)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
-    Ok(Some(manifest.file_paths))
+    Ok(Some(manifest))
 }
 
 fn write_library_manifest(song_dir: &Path, file_paths: &[String]) -> Result<(), DesktopError> {
-    let mut normalized_paths = file_paths
+    let assets = file_paths
         .iter()
-        .map(|file_path| normalize_library_file_path(file_path))
+        .map(|file_path| LibraryAssetSummary {
+            file_name: String::new(),
+            file_path: normalize_library_file_path(file_path),
+            duration_seconds: 0.0,
+            detected_bpm: None,
+        })
+        .collect::<Vec<_>>();
+    write_library_manifest_assets(song_dir, &assets)
+}
+
+fn write_library_manifest_assets(
+    song_dir: &Path,
+    assets: &[LibraryAssetSummary],
+) -> Result<(), DesktopError> {
+    let mut normalized_paths = assets
+        .iter()
+        .map(|asset| normalize_library_file_path(&asset.file_path))
         .collect::<Vec<_>>();
     normalized_paths.sort();
     normalized_paths.dedup();
 
+    let mut normalized_assets = assets
+        .iter()
+        .map(|asset| LibraryManifestAssetEntry {
+            file_path: normalize_library_file_path(&asset.file_path),
+            detected_bpm: asset.detected_bpm,
+        })
+        .collect::<Vec<_>>();
+    normalized_assets.sort_by(|left, right| left.file_path.cmp(&right.file_path));
+    normalized_assets.dedup_by(|left, right| left.file_path == right.file_path);
+
     let manifest = LibraryManifest {
         file_paths: normalized_paths,
+        assets: normalized_assets,
     };
     let manifest_json = serde_json::to_vec_pretty(&manifest)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
@@ -2112,8 +2172,20 @@ fn collect_library_file_paths(
     song_dir: &Path,
     song: Option<&Song>,
 ) -> Result<Vec<String>, DesktopError> {
-    let mut file_paths =
-        read_library_manifest(song_dir)?.unwrap_or(collect_scanned_library_file_paths(song_dir)?);
+    let manifest = read_library_manifest(song_dir)?;
+    let mut file_paths = if let Some(manifest) = manifest {
+        if !manifest.assets.is_empty() {
+            manifest
+                .assets
+                .into_iter()
+                .map(|entry| normalize_library_file_path(&entry.file_path))
+                .collect::<Vec<_>>()
+        } else {
+            manifest.file_paths
+        }
+    } else {
+        collect_scanned_library_file_paths(song_dir)?
+    };
 
     if let Some(song) = song {
         for clip in &song.clips {
@@ -2130,6 +2202,20 @@ fn list_library_assets(
     song_dir: &Path,
     song: Option<&Song>,
 ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+    let manifest_detected_bpms = read_library_manifest(song_dir)?
+        .map(|manifest| {
+            manifest
+                .assets
+                .into_iter()
+                .map(|entry| {
+                    (
+                        normalize_library_file_path(&entry.file_path),
+                        entry.detected_bpm,
+                    )
+                })
+                .collect::<HashMap<_, _>>()
+        })
+        .unwrap_or_default();
     let mut assets = Vec::new();
     for file_path in collect_library_file_paths(song_dir, song)? {
         let path = song_dir.join(&file_path);
@@ -2145,9 +2231,9 @@ fn list_library_assets(
         let metadata = read_wav_metadata(&path)?;
         assets.push(LibraryAssetSummary {
             file_name: file_name.clone(),
-            file_path,
+            file_path: file_path.clone(),
             duration_seconds: metadata.duration_seconds,
-            detected_bpm: metadata.tempo_candidate.map(|candidate| candidate.bpm),
+            detected_bpm: manifest_detected_bpms.get(&file_path).copied().flatten(),
         });
     }
 
@@ -2836,8 +2922,8 @@ mod tests {
 
     use super::{
         build_empty_song, list_library_assets, musical_position_summary, song_to_view,
-        write_library_manifest, CreateClipRequest, DesktopSession, TransportClock,
-        WaveformMemoryCache,
+        write_library_manifest, write_library_manifest_assets, CreateClipRequest, DesktopSession,
+        LibraryAssetSummary, TransportClock, WaveformMemoryCache,
     };
 
     fn demo_song() -> Song {
@@ -3666,6 +3752,32 @@ mod tests {
         assert_eq!(assets[0].file_path, "audio/alpha.wav");
         assert!((assets[0].duration_seconds - 2.0).abs() < 0.001);
         assert_eq!(assets[1].file_name, "beta.wav");
+    }
+
+    #[test]
+    fn get_library_assets_preserves_detected_bpm_from_manifest() {
+        let root = tempdir().expect("temp dir should exist");
+        let root_path = root.keep();
+        let song_dir =
+            create_song_folder(&root_path, "library-bpm-demo").expect("song dir should exist");
+        let audio_path = song_dir.join("audio").join("click.wav");
+        write_silent_test_wav(&audio_path, 2);
+        write_library_manifest_assets(
+            &song_dir,
+            &[LibraryAssetSummary {
+                file_name: "click.wav".into(),
+                file_path: "audio/click.wav".into(),
+                duration_seconds: 2.0,
+                detected_bpm: Some(128.0),
+            }],
+        )
+        .expect("manifest should save");
+
+        let assets = list_library_assets(&song_dir, None).expect("library assets should load");
+
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].file_path, "audio/click.wav");
+        assert_eq!(assets[0].detected_bpm, Some(128.0));
     }
 
     #[test]
