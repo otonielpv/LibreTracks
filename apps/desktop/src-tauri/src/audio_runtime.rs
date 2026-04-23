@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
-    io::ErrorKind,
     mem::size_of,
     path::{Path, PathBuf},
     sync::{
@@ -18,19 +17,10 @@ use cpal::{
     Device, SampleFormat, Stream, StreamConfig,
 };
 use libretracks_core::{Song, Track, TrackKind};
+use memmap2::Mmap;
 use rayon::prelude::*;
 use rtrb::{Consumer, Producer, RingBuffer};
 use serde::Serialize;
-use symphonia::core::{
-    audio::{AudioBufferRef, SampleBuffer},
-    codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL},
-    errors::Error as SymphoniaError,
-    formats::{FormatOptions, FormatReader, SeekMode, SeekTo},
-    io::MediaSourceStream,
-    meta::MetadataOptions,
-    probe::Hint,
-    units::Time,
-};
 use tauri::{AppHandle, Emitter};
 
 use crate::state::DesktopError;
@@ -282,10 +272,28 @@ struct PlaybackClipPlan {
 struct SharedAudioSource {
     file_path: PathBuf,
     preload_samples: Vec<f32>,
+    mapped_audio: Option<MappedAudioSource>,
     preload_frame_count: usize,
     sample_rate: u32,
     channels: usize,
     fully_cached: bool,
+}
+
+struct MappedAudioSource {
+    mmap: Mmap,
+    data_offset: usize,
+    data_len: usize,
+    bytes_per_sample: usize,
+    encoding: WavSampleEncoding,
+}
+
+#[derive(Clone, Copy)]
+enum WavSampleEncoding {
+    Float32,
+    SignedInt8,
+    SignedInt16,
+    SignedInt24,
+    SignedInt32,
 }
 
 #[derive(Clone, Default)]
@@ -349,24 +357,6 @@ struct MemoryClipReader {
     output_sample_rate: u32,
     current_frame: usize,
     source_frame_cursor: f64,
-    eof: bool,
-    streaming_reader: Option<StreamingAudioReader>,
-}
-
-struct OpenAudioSource {
-    format: Box<dyn FormatReader>,
-    decoder: Box<dyn Decoder>,
-    track_id: u32,
-    sample_rate: u32,
-    channels: usize,
-}
-
-struct StreamingAudioReader {
-    source: OpenAudioSource,
-    decoded_samples: Vec<f32>,
-    decoded_start_frame: usize,
-    decoded_frame_count: usize,
-    next_source_frame: usize,
     eof: bool,
 }
 
@@ -432,7 +422,10 @@ impl SharedAudioSource {
     }
 
     fn preload_bytes(&self) -> usize {
-        self.preload_samples.len().saturating_mul(size_of::<f32>())
+        self.mapped_audio
+            .as_ref()
+            .map(MappedAudioSource::data_bytes)
+            .unwrap_or_else(|| self.preload_samples.len().saturating_mul(size_of::<f32>()))
     }
 
     fn read_preloaded_sample(
@@ -443,6 +436,26 @@ impl SharedAudioSource {
     ) -> f32 {
         if frame_index >= self.preload_frame_count {
             return 0.0;
+        }
+
+        if let Some(mapped_audio) = &self.mapped_audio {
+            if output_channels == 1 && self.channels > 1 {
+                let left = mapped_audio.read_sample(frame_index, 0, self.channels);
+                let right = mapped_audio.read_sample(
+                    frame_index,
+                    1.min(self.channels.saturating_sub(1)),
+                    self.channels,
+                );
+                return (left + right) * 0.5;
+            }
+
+            let source_channel = if self.channels == 1 {
+                0
+            } else {
+                channel.min(self.channels - 1)
+            };
+
+            return mapped_audio.read_sample(frame_index, source_channel, self.channels);
         }
 
         let sample_index = frame_index.saturating_mul(self.channels);
@@ -464,6 +477,58 @@ impl SharedAudioSource {
 
         self.preload_samples[sample_index + source_channel]
     }
+}
+
+impl MappedAudioSource {
+    fn data_bytes(&self) -> usize {
+        self.data_len
+    }
+
+    fn read_sample(&self, frame_index: usize, channel: usize, channels: usize) -> f32 {
+        let sample_index = frame_index
+            .saturating_mul(channels)
+            .saturating_add(channel.min(channels.saturating_sub(1)));
+        let byte_offset = self
+            .data_offset
+            .saturating_add(sample_index.saturating_mul(self.bytes_per_sample));
+        if byte_offset.saturating_add(self.bytes_per_sample) > self.mmap.len() {
+            return 0.0;
+        }
+
+        let bytes = &self.mmap[byte_offset..byte_offset + self.bytes_per_sample];
+        match self.encoding {
+            WavSampleEncoding::Float32 => {
+                let mut sample = [0_u8; 4];
+                sample.copy_from_slice(bytes);
+                f32::from_le_bytes(sample)
+            }
+            WavSampleEncoding::SignedInt8 => bytes[0] as i8 as f32 / i8::MAX as f32,
+            WavSampleEncoding::SignedInt16 => {
+                let mut sample = [0_u8; 2];
+                sample.copy_from_slice(bytes);
+                i16::from_le_bytes(sample) as f32 / i16::MAX as f32
+            }
+            WavSampleEncoding::SignedInt24 => {
+                let sign = if bytes[2] & 0x80 == 0 { 0 } else { 0xFF };
+                let sample = i32::from_le_bytes([bytes[0], bytes[1], bytes[2], sign]);
+                sample as f32 / 8_388_607.0
+            }
+            WavSampleEncoding::SignedInt32 => {
+                let mut sample = [0_u8; 4];
+                sample.copy_from_slice(bytes);
+                i32::from_le_bytes(sample) as f32 / i32::MAX as f32
+            }
+        }
+    }
+}
+
+struct ParsedWavLayout {
+    sample_rate: u32,
+    channels: usize,
+    bits_per_sample: u16,
+    data_offset: usize,
+    data_len: usize,
+    encoding: WavSampleEncoding,
 }
 
 impl AudioBufferCache {
@@ -1082,7 +1147,6 @@ impl MemoryClipReader {
             current_frame: 0,
             source_frame_cursor: 0.0,
             eof: false,
-            streaming_reader: None,
         };
         let source_start_frame = source_frame_for_timeline_position(
             plan,
@@ -1097,24 +1161,12 @@ impl MemoryClipReader {
     fn seek_to_internal(&mut self, target_frame: usize) -> Result<(), String> {
         self.current_frame = target_frame;
         self.source_frame_cursor = self.current_frame as f64;
-        self.eof = false;
-
-        if self.shared_source.fully_cached {
-            self.streaming_reader = None;
-            self.eof = self.current_frame >= self.shared_source.preload_frame_count();
-            return Ok(());
-        }
-
-        if target_frame < self.shared_source.preload_frame_count() {
-            self.streaming_reader = None;
-            return Ok(());
-        }
-
-        self.streaming_reader = Some(StreamingAudioReader::open(
-            &self.shared_source.file_path,
-            target_frame,
-        )?);
+        self.eof = self.current_frame >= self.shared_source.preload_frame_count();
         Ok(())
+    }
+
+    fn seek_to(&mut self, target_frame: usize) {
+        let _ = self.seek_to_internal(target_frame);
     }
 
     fn mix_into_with_channel_gains(
@@ -1177,9 +1229,7 @@ impl MemoryClipReader {
             self.current_frame = self.source_frame_cursor.round().max(0.0) as usize;
         }
 
-        if self.shared_source.fully_cached
-            && self.current_frame >= self.shared_source.preload_frame_count()
-        {
+        if self.current_frame >= self.shared_source.preload_frame_count() {
             self.eof = true;
         }
 
@@ -1187,30 +1237,7 @@ impl MemoryClipReader {
     }
 
     fn ensure_frame_available(&mut self, frame_index: usize) -> bool {
-        if frame_index < self.shared_source.preload_frame_count() {
-            return true;
-        }
-
-        if self.shared_source.fully_cached {
-            return false;
-        }
-
-        if self.streaming_reader.is_none() {
-            match StreamingAudioReader::open(&self.shared_source.file_path, frame_index) {
-                Ok(reader) => self.streaming_reader = Some(reader),
-                Err(error) => {
-                    eprintln!(
-                        "[libretracks-audio] failed to open streaming reader for {}: {error}",
-                        self.shared_source.file_path.display()
-                    );
-                    return false;
-                }
-            }
-        }
-
-        self.streaming_reader
-            .as_mut()
-            .is_some_and(|reader| reader.ensure_frame_available(frame_index))
+        frame_index < self.shared_source.preload_frame_count()
     }
 
     fn read_sample(&self, frame_index: usize, channel: usize, output_channels: usize) -> f32 {
@@ -1220,23 +1247,9 @@ impl MemoryClipReader {
                 .read_preloaded_sample(frame_index, channel, output_channels);
         }
 
-        self.streaming_reader
-            .as_ref()
-            .map(|reader| reader.read_sample(frame_index, channel, output_channels))
-            .unwrap_or(0.0)
+        self.shared_source
+            .read_preloaded_sample(frame_index, channel, output_channels)
     }
-}
-
-fn append_decoded_samples(target: &mut Vec<f32>, decoded: AudioBufferRef<'_>) {
-    let mut sample_buffer = SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
-    sample_buffer.copy_interleaved_ref(decoded);
-    target.extend_from_slice(sample_buffer.samples());
-}
-
-fn decoded_samples_from_ref(decoded: AudioBufferRef<'_>) -> Vec<f32> {
-    let mut samples = Vec::new();
-    append_decoded_samples(&mut samples, decoded);
-    samples
 }
 
 fn source_start_seconds_floor(seconds: f64) -> f64 {
@@ -1261,243 +1274,117 @@ fn source_frame_for_timeline_position(
     ) as usize
 }
 
-fn open_audio_source(file_path: &Path) -> Result<OpenAudioSource, String> {
-    let file = File::open(file_path).map_err(|error| error.to_string())?;
-    let mut hint = Hint::new();
-    if let Some(extension) = file_path.extension().and_then(|value| value.to_str()) {
-        hint.with_extension(extension);
-    }
-
-    let media_source_stream = MediaSourceStream::new(Box::new(file), Default::default());
-    let probed = symphonia::default::get_probe()
-        .format(
-            &hint,
-            media_source_stream,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        )
-        .map_err(|error| error.to_string())?;
-
-    let format = probed.format;
-    let track = format
-        .default_track()
-        .or_else(|| {
-            format
-                .tracks()
-                .iter()
-                .find(|track| track.codec_params.codec != CODEC_TYPE_NULL)
-        })
-        .ok_or_else(|| "no decodable audio track found".to_string())?;
-
-    let sample_rate = track
-        .codec_params
-        .sample_rate
-        .ok_or_else(|| "audio track sample rate is unavailable".to_string())?;
-    let channels = track
-        .codec_params
-        .channels
-        .map(|channels| channels.count())
-        .unwrap_or(1);
-    let track_id = track.id;
-    let decoder = symphonia::default::get_codecs()
-        .make(&track.codec_params, &DecoderOptions::default())
-        .map_err(|error| error.to_string())?;
-
-    Ok(OpenAudioSource {
-        format,
-        decoder,
-        track_id,
-        sample_rate,
-        channels,
-    })
-}
-
 fn prepare_audio_source(file_path: &Path) -> Result<SharedAudioSource, String> {
-    let mut source = open_audio_source(file_path)?;
-    let preload_frame_limit = (source.sample_rate as f64 * AUDIO_PRELOAD_SECONDS)
-        .ceil()
-        .max(1.0) as usize;
-    let preload_sample_limit = preload_frame_limit.saturating_mul(source.channels.max(1));
-    let mut preload_samples = Vec::new();
-    let mut fully_cached = false;
-
-    loop {
-        let packet = match source.format.next_packet() {
-            Ok(packet) => packet,
-            Err(SymphoniaError::IoError(error)) if error.kind() == ErrorKind::UnexpectedEof => {
-                fully_cached = true;
-                break;
-            }
-            Err(error) => return Err(error.to_string()),
-        };
-
-        if packet.track_id() != source.track_id {
-            continue;
-        }
-
-        let decoded = match source.decoder.decode(&packet) {
-            Ok(decoded) => decoded,
-            Err(SymphoniaError::DecodeError(_)) => continue,
-            Err(SymphoniaError::IoError(error)) if error.kind() == ErrorKind::UnexpectedEof => {
-                fully_cached = true;
-                break;
-            }
-            Err(error) => return Err(error.to_string()),
-        };
-
-        append_decoded_samples(&mut preload_samples, decoded);
-        if preload_samples.len() >= preload_sample_limit {
-            preload_samples.truncate(preload_sample_limit);
-            break;
-        }
-    }
-
-    let preload_frame_count = preload_samples.len() / source.channels.max(1);
+    let file = File::open(file_path).map_err(|error| error.to_string())?;
+    let mmap = unsafe { Mmap::map(&file).map_err(|error| error.to_string())? };
+    let layout = parse_wav_layout(&mmap, file_path)?;
+    let preload_frame_count = layout
+        .data_len
+        .checked_div(layout.channels.saturating_mul(usize::from(layout.bits_per_sample / 8)))
+        .unwrap_or(0);
 
     Ok(SharedAudioSource {
         file_path: file_path.to_path_buf(),
-        preload_samples,
+        preload_samples: Vec::new(),
+        mapped_audio: Some(MappedAudioSource {
+            mmap,
+            data_offset: layout.data_offset,
+            data_len: layout.data_len,
+            bytes_per_sample: usize::from(layout.bits_per_sample / 8),
+            encoding: layout.encoding,
+        }),
         preload_frame_count,
-        sample_rate: source.sample_rate.max(1),
-        channels: source.channels.max(1),
-        fully_cached,
+        sample_rate: layout.sample_rate.max(1),
+        channels: layout.channels.max(1),
+        fully_cached: true,
     })
 }
 
-impl StreamingAudioReader {
-    fn open(file_path: &Path, target_frame: usize) -> Result<Self, String> {
-        let source = open_audio_source(file_path)?;
-        let mut reader = Self {
-            source,
-            decoded_samples: Vec::new(),
-            decoded_start_frame: 0,
-            decoded_frame_count: 0,
-            next_source_frame: 0,
-            eof: false,
-        };
-        reader.seek_to_frame(target_frame)?;
-        let _ = reader.ensure_frame_available(target_frame);
-        Ok(reader)
+fn parse_wav_layout(bytes: &[u8], file_path: &Path) -> Result<ParsedWavLayout, String> {
+    if bytes.len() < 44 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
+        return Err(format!("unsupported wav container: {}", file_path.display()));
     }
 
-    fn seek_to_frame(&mut self, target_frame: usize) -> Result<(), String> {
-        self.decoded_samples.clear();
-        self.decoded_frame_count = 0;
-        self.eof = false;
+    let mut cursor = 12usize;
+    let mut sample_rate = 0u32;
+    let mut channels = 0usize;
+    let mut bits_per_sample = 0u16;
+    let mut encoding = None;
+    let mut data_offset = None;
+    let mut data_len = None;
 
-        let seeked_to = self
-            .source
-            .format
-            .seek(
-                SeekMode::Accurate,
-                SeekTo::Time {
-                    time: Time::from(target_frame as f64 / self.source.sample_rate.max(1) as f64),
-                    track_id: Some(self.source.track_id),
-                },
-            )
-            .map_err(|error| error.to_string())?;
+    while cursor.saturating_add(8) <= bytes.len() {
+        let chunk_id = &bytes[cursor..cursor + 4];
+        let chunk_len = u32::from_le_bytes([
+            bytes[cursor + 4],
+            bytes[cursor + 5],
+            bytes[cursor + 6],
+            bytes[cursor + 7],
+        ]) as usize;
+        let chunk_data_start = cursor + 8;
+        let chunk_data_end = chunk_data_start.saturating_add(chunk_len).min(bytes.len());
 
-        self.source.decoder.reset();
-        self.decoded_start_frame = seeked_to.actual_ts as usize;
-        self.next_source_frame = seeked_to.actual_ts as usize;
-        Ok(())
-    }
-
-    fn ensure_frame_available(&mut self, frame_index: usize) -> bool {
-        while !self.eof {
-            let decoded_end_frame = self
-                .decoded_start_frame
-                .saturating_add(self.decoded_frame_count);
-            if frame_index >= self.decoded_start_frame && frame_index < decoded_end_frame {
-                return true;
+        match chunk_id {
+            b"fmt " if chunk_len >= 16 && chunk_data_end <= bytes.len() => {
+                let audio_format = u16::from_le_bytes([
+                    bytes[chunk_data_start],
+                    bytes[chunk_data_start + 1],
+                ]);
+                channels = usize::from(u16::from_le_bytes([
+                    bytes[chunk_data_start + 2],
+                    bytes[chunk_data_start + 3],
+                ])
+                .max(1));
+                sample_rate = u32::from_le_bytes([
+                    bytes[chunk_data_start + 4],
+                    bytes[chunk_data_start + 5],
+                    bytes[chunk_data_start + 6],
+                    bytes[chunk_data_start + 7],
+                ]);
+                bits_per_sample = u16::from_le_bytes([
+                    bytes[chunk_data_start + 14],
+                    bytes[chunk_data_start + 15],
+                ]);
+                encoding = Some(match (audio_format, bits_per_sample) {
+                    (1, 8) => WavSampleEncoding::SignedInt8,
+                    (1, 16) => WavSampleEncoding::SignedInt16,
+                    (1, 24) => WavSampleEncoding::SignedInt24,
+                    (1, 32) => WavSampleEncoding::SignedInt32,
+                    (3, 32) => WavSampleEncoding::Float32,
+                    _ => {
+                        return Err(format!(
+                            "unsupported wav sample format {audio_format}/{bits_per_sample} for {}",
+                            file_path.display()
+                        ))
+                    }
+                });
             }
-
-            if !self.decode_next_chunk() {
-                break;
+            b"data" => {
+                data_offset = Some(chunk_data_start);
+                data_len = Some(chunk_len.min(bytes.len().saturating_sub(chunk_data_start)));
             }
+            _ => {}
         }
 
-        let decoded_end_frame = self
-            .decoded_start_frame
-            .saturating_add(self.decoded_frame_count);
-        frame_index >= self.decoded_start_frame && frame_index < decoded_end_frame
+        let padded_chunk_len = chunk_len + (chunk_len % 2);
+        cursor = chunk_data_start.saturating_add(padded_chunk_len);
     }
 
-    fn decode_next_chunk(&mut self) -> bool {
-        loop {
-            let packet = match self.source.format.next_packet() {
-                Ok(packet) => packet,
-                Err(SymphoniaError::IoError(error)) if error.kind() == ErrorKind::UnexpectedEof => {
-                    self.eof = true;
-                    self.decoded_frame_count = 0;
-                    return false;
-                }
-                Err(_) => {
-                    self.eof = true;
-                    self.decoded_frame_count = 0;
-                    return false;
-                }
-            };
-
-            if packet.track_id() != self.source.track_id {
-                continue;
-            }
-
-            let decoded = match self.source.decoder.decode(&packet) {
-                Ok(decoded) => decoded,
-                Err(SymphoniaError::DecodeError(_)) => continue,
-                Err(SymphoniaError::IoError(error)) if error.kind() == ErrorKind::UnexpectedEof => {
-                    self.eof = true;
-                    self.decoded_frame_count = 0;
-                    return false;
-                }
-                Err(_) => {
-                    self.eof = true;
-                    self.decoded_frame_count = 0;
-                    return false;
-                }
-            };
-
-            let decoded_samples = decoded_samples_from_ref(decoded);
-            let decoded_frame_count = decoded_samples.len() / self.source.channels.max(1);
-            self.decoded_start_frame = self.next_source_frame;
-            self.decoded_frame_count = decoded_frame_count;
-            self.next_source_frame = self.next_source_frame.saturating_add(decoded_frame_count);
-            self.decoded_samples = decoded_samples;
-            return decoded_frame_count > 0;
-        }
+    let encoding = encoding.ok_or_else(|| format!("missing fmt chunk in {}", file_path.display()))?;
+    let data_offset = data_offset.ok_or_else(|| format!("missing data chunk in {}", file_path.display()))?;
+    let data_len = data_len.ok_or_else(|| format!("missing data chunk in {}", file_path.display()))?;
+    if channels == 0 || bits_per_sample == 0 || sample_rate == 0 {
+        return Err(format!("invalid wav metadata in {}", file_path.display()));
     }
 
-    fn read_sample(&self, frame_index: usize, channel: usize, output_channels: usize) -> f32 {
-        if frame_index < self.decoded_start_frame
-            || frame_index
-                >= self
-                    .decoded_start_frame
-                    .saturating_add(self.decoded_frame_count)
-        {
-            return 0.0;
-        }
-
-        let local_frame_index = frame_index - self.decoded_start_frame;
-        let sample_index = local_frame_index.saturating_mul(self.source.channels);
-        if sample_index >= self.decoded_samples.len() {
-            return 0.0;
-        }
-
-        if output_channels == 1 && self.source.channels > 1 {
-            let left = self.decoded_samples[sample_index];
-            let right = self.decoded_samples[sample_index + 1.min(self.source.channels - 1)];
-            return (left + right) * 0.5;
-        }
-
-        let source_channel = if self.source.channels == 1 {
-            0
-        } else {
-            channel.min(self.source.channels - 1)
-        };
-
-        self.decoded_samples[sample_index + source_channel]
-    }
+    Ok(ParsedWavLayout {
+        sample_rate,
+        channels,
+        bits_per_sample,
+        data_offset,
+        data_len,
+        encoding,
+    })
 }
 
 fn spawn_disk_reader(state: DiskReaderState) -> JoinHandle<DiskReaderReport> {
@@ -2713,6 +2600,7 @@ mod tests {
                 path.to_path_buf(),
                 Arc::new(SharedAudioSource {
                     file_path: path.to_path_buf(),
+                    mapped_audio: None,
                     preload_frame_count: samples.len() / channels.max(1),
                     preload_samples: samples,
                     sample_rate,
@@ -3202,6 +3090,7 @@ mod tests {
                     song_dir.join("audio/intro.wav"),
                     Arc::new(SharedAudioSource {
                         file_path: song_dir.join("audio/intro.wav"),
+                        mapped_audio: None,
                         preload_frame_count: 48_000 * 5,
                         preload_samples: vec![0.0; 48_000 * 10],
                         sample_rate: 48_000,
@@ -3213,6 +3102,7 @@ mod tests {
                     song_dir.join("audio/late.wav"),
                     Arc::new(SharedAudioSource {
                         file_path: song_dir.join("audio/late.wav"),
+                        mapped_audio: None,
                         preload_frame_count: 48_000 * 5,
                         preload_samples: vec![0.0; 48_000 * 10],
                         sample_rate: 48_000,
@@ -3362,7 +3252,7 @@ mod tests {
     }
 
     #[test]
-    fn prepared_audio_source_preloads_only_the_head_for_long_files() {
+    fn prepared_audio_source_maps_entire_pcm_payload_for_long_files() {
         let root = tempdir().expect("temp dir should exist");
         let audio_path = root.path().join("long.wav");
         write_counting_test_wav(&audio_path, 8_000, 8_000 * 4);
@@ -3371,12 +3261,13 @@ mod tests {
 
         assert_eq!(source.sample_rate, 8_000);
         assert_eq!(source.channels, 1);
-        assert_eq!(source.preload_frame_count, 8_000 * 2);
-        assert!(!source.fully_cached);
+        assert_eq!(source.preload_frame_count, 8_000 * 4);
+        assert!(source.fully_cached);
+        assert!(source.mapped_audio.is_some());
     }
 
     #[test]
-    fn memory_clip_reader_streams_past_the_preloaded_head() {
+    fn memory_clip_reader_reads_past_the_old_preload_boundary() {
         let root = tempdir().expect("temp dir should exist");
         let audio_path = root.path().join("streaming.wav");
         write_counting_test_wav(&audio_path, 8_000, 8_000 * 3);
@@ -3416,7 +3307,7 @@ mod tests {
 
         assert!(mixed[0].abs() > 0.01);
         assert!(right_peak.abs() > 0.01);
-        assert!(reader.streaming_reader.is_some());
+        assert!(reader.shared_source.mapped_audio.is_some());
     }
 
     #[test]
@@ -3433,6 +3324,7 @@ mod tests {
                     song_dir.join("audio/intro.wav"),
                     Arc::new(SharedAudioSource {
                         file_path: song_dir.join("audio/intro.wav"),
+                        mapped_audio: None,
                         preload_frame_count: 48_000 * 5,
                         preload_samples: vec![0.0; 48_000 * 5],
                         sample_rate: 48_000,
@@ -3444,6 +3336,7 @@ mod tests {
                     song_dir.join("audio/late.wav"),
                     Arc::new(SharedAudioSource {
                         file_path: song_dir.join("audio/late.wav"),
+                        mapped_audio: None,
                         preload_frame_count: 48_000 * 5,
                         preload_samples: vec![0.0; 48_000 * 5],
                         sample_rate: 48_000,
@@ -3566,7 +3459,7 @@ mod tests {
     }
 
     #[test]
-    fn symphonia_probes_wav_assets() {
+    fn wav_pcm_cache_probes_assets() {
         let temp_dir = tempdir().expect("temp dir should exist");
         let audio_path = temp_dir.path().join("clip.wav");
         write_silent_test_wav(&audio_path);
@@ -3575,7 +3468,7 @@ mod tests {
     }
 
     #[test]
-    fn symphonia_probe_fails_for_missing_file() {
+    fn wav_pcm_cache_probe_fails_for_missing_file() {
         let missing = PathBuf::from("missing-audio-file.wav");
         assert!(probe_audio_file(&missing).is_err());
     }
