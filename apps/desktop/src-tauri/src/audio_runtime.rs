@@ -348,6 +348,7 @@ struct LiveMixSnapshot {
 
 struct MeterEmitterState {
     app_handle: SharedAppHandle,
+    resolved_app_handle: Option<AppHandle>,
     pending_track_meters: Vec<AudioMeterLevel>,
     last_emit_at: Option<Instant>,
 }
@@ -1666,6 +1667,8 @@ fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
             break;
         }
 
+        state.mixer.refresh_cached_live_mix();
+
         let free_frames = state.producer.slots() / state.mixer.output_channels.max(1);
         if free_frames == 0 {
             thread::yield_now();
@@ -1788,10 +1791,10 @@ impl Mixer {
         let block_start = self.timeline_cursor_frame;
         let block_end = block_start + block_frames as u64;
         let mut mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
-        let should_capture_track_meters = self.meter_emitter.is_enabled();
+        let should_capture_track_meters = self.meter_emitter.capture_enabled();
         let mut track_meters = should_capture_track_meters.then(|| self.empty_track_meters());
 
-        self.refresh_cached_live_mix();
+        self.prune_inactive_clips(block_start);
         self.activate_due_clips(block_end);
         {
             let live_mix_state = &self.cached_live_mix.tracks;
@@ -1867,6 +1870,12 @@ impl Mixer {
         self.timeline_cursor_frame += block_frames as u64;
 
         mixed
+    }
+
+    fn prune_inactive_clips(&mut self, timeline_frame: u64) {
+        self.active_clips.retain(|clip_state| {
+            !clip_state.reader.eof && timeline_frame < clip_state.plan.timeline_end_frame()
+        });
     }
 
     fn activate_due_clips(&mut self, window_end_frame: u64) {
@@ -1982,26 +1991,30 @@ impl MeterEmitterState {
     fn new(app_handle: SharedAppHandle) -> Self {
         Self {
             app_handle,
+            resolved_app_handle: None,
             pending_track_meters: Vec::new(),
             last_emit_at: None,
         }
     }
 
-    fn is_enabled(&self) -> bool {
-        self.app_handle
-            .read()
-            .ok()
-            .and_then(|app_handle| app_handle.as_ref().cloned())
-            .is_some()
+    fn capture_enabled(&mut self) -> bool {
+        self.cached_app_handle().is_some()
+    }
+
+    fn cached_app_handle(&mut self) -> Option<AppHandle> {
+        if self.resolved_app_handle.is_none() {
+            self.resolved_app_handle = self
+                .app_handle
+                .read()
+                .ok()
+                .and_then(|app_handle| app_handle.as_ref().cloned());
+        }
+
+        self.resolved_app_handle.clone()
     }
 
     fn emit(&mut self, track_meters: &[AudioMeterLevel]) {
-        let Some(app_handle) = self
-            .app_handle
-            .read()
-            .ok()
-            .and_then(|app_handle| app_handle.as_ref().cloned())
-        else {
+        let Some(app_handle) = self.cached_app_handle() else {
             return;
         };
 
