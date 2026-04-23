@@ -41,6 +41,7 @@ type TimelineCanvasPaneProps = {
   waveformCache: Record<string, WaveformSummaryDto>;
   cameraXRef: MutableRefObject<number>;
   pixelsPerSecond: number;
+  livePixelsPerSecondRef: MutableRefObject<number>;
   timelineGrid: TimelineGrid;
   timelineHeaderMarkers: TimelineGrid["markers"];
   selectedClipId: string | null;
@@ -97,6 +98,7 @@ export function TimelineCanvasPane({
   waveformCache,
   cameraXRef,
   pixelsPerSecond,
+  livePixelsPerSecondRef,
   timelineGrid,
   timelineHeaderMarkers,
   selectedClipId,
@@ -148,6 +150,7 @@ export function TimelineCanvasPane({
             height={64}
             cameraXRef={cameraXRef}
             pixelsPerSecond={pixelsPerSecond}
+            livePixelsPerSecondRef={livePixelsPerSecondRef}
             timelineGrid={timelineGrid}
             markers={song?.sectionMarkers ?? []}
             selectedMarkerId={selectedSectionId}
@@ -196,6 +199,7 @@ export function TimelineCanvasPane({
             className="lt-playhead is-handle"
             durationSeconds={song?.durationSeconds ?? 0}
             pixelsPerSecond={pixelsPerSecond}
+            livePixelsPerSecondRef={livePixelsPerSecondRef}
             cameraXRef={cameraXRef}
             dragStateRef={playheadDragRef}
             positionSecondsRef={displayPositionSecondsRef}
@@ -228,6 +232,7 @@ export function TimelineCanvasPane({
               waveformCache={waveformCache}
               cameraXRef={cameraXRef}
               pixelsPerSecond={pixelsPerSecond}
+              livePixelsPerSecondRef={livePixelsPerSecondRef}
               timelineGrid={timelineGrid}
               selectedClipId={selectedClipId}
               clipPreviewSecondsRef={clipPreviewSecondsRef}
@@ -239,6 +244,7 @@ export function TimelineCanvasPane({
               className="lt-track-playhead"
               durationSeconds={song?.durationSeconds ?? 0}
               pixelsPerSecond={pixelsPerSecond}
+              livePixelsPerSecondRef={livePixelsPerSecondRef}
               cameraXRef={cameraXRef}
               dragStateRef={playheadDragRef}
               positionSecondsRef={displayPositionSecondsRef}

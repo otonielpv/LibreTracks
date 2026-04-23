@@ -13,6 +13,7 @@ type PlayheadOverlayProps = {
   className: string;
   durationSeconds: number;
   pixelsPerSecond: number;
+  livePixelsPerSecondRef?: MutableRefObject<number>;
   cameraXRef?: MutableRefObject<number>;
   dragStateRef: MutableRefObject<PlayheadDragState>;
   positionSecondsRef?: MutableRefObject<number>;
@@ -53,6 +54,7 @@ export function PlayheadOverlay({
   className,
   durationSeconds,
   pixelsPerSecond,
+  livePixelsPerSecondRef,
   cameraXRef,
   dragStateRef,
   positionSecondsRef,
@@ -72,6 +74,7 @@ export function PlayheadOverlay({
   const latestPropsRef = useRef({
     durationSeconds,
     pixelsPerSecond,
+    livePixelsPerSecondRef,
     cameraXRef,
     positionSecondsRef,
     normalizePositionSeconds,
@@ -85,6 +88,7 @@ export function PlayheadOverlay({
   latestPropsRef.current = {
     durationSeconds,
     pixelsPerSecond,
+    livePixelsPerSecondRef,
     cameraXRef,
     positionSecondsRef,
     normalizePositionSeconds,
@@ -115,6 +119,8 @@ export function PlayheadOverlay({
 
     const render = () => {
       const activeDrag = dragStateRef.current;
+      const effectivePixelsPerSecond =
+        latestPropsRef.current.livePixelsPerSecondRef?.current ?? latestPropsRef.current.pixelsPerSecond;
       const nextSeconds = activeDrag
         ? activeDrag.currentSeconds
         : playbackRef.current.playbackState === "playing" && playbackRef.current.transportClock?.running
@@ -124,7 +130,7 @@ export function PlayheadOverlay({
               0,
               Math.max(0, latestPropsRef.current.durationSeconds),
             );
-      const absoluteX = secondsToAbsoluteX(nextSeconds, latestPropsRef.current.pixelsPerSecond);
+      const absoluteX = secondsToAbsoluteX(nextSeconds, effectivePixelsPerSecond);
       const cameraX = latestPropsRef.current.cameraXRef?.current ?? 0;
       const nextTransform = `translate3d(${absoluteX - cameraX}px, 0, 0)`;
 
@@ -167,7 +173,7 @@ export function PlayheadOverlay({
         event.clientX,
         boundsElement,
         latestPropsRef.current.scrollContainerRef?.current ?? null,
-        latestPropsRef.current.pixelsPerSecond,
+        latestPropsRef.current.livePixelsPerSecondRef?.current ?? latestPropsRef.current.pixelsPerSecond,
       ),
       0,
       Math.max(0, latestPropsRef.current.durationSeconds),
@@ -193,7 +199,7 @@ export function PlayheadOverlay({
           pointerEvent.clientX,
           boundsElement,
           latestPropsRef.current.scrollContainerRef?.current ?? null,
-          latestPropsRef.current.pixelsPerSecond,
+          latestPropsRef.current.livePixelsPerSecondRef?.current ?? latestPropsRef.current.pixelsPerSecond,
         ),
         0,
         Math.max(0, latestPropsRef.current.durationSeconds),

@@ -16,6 +16,7 @@ type RulerCanvasProps = {
   height: number;
   cameraXRef: MutableRefObject<number>;
   pixelsPerSecond: number;
+  livePixelsPerSecondRef: MutableRefObject<number>;
   timelineGrid: TimelineGrid;
   markers: SectionMarkerSummary[];
   selectedMarkerId: string | null;
@@ -35,12 +36,13 @@ type TrackCanvasProps = {
   waveformCache: Record<string, WaveformSummaryDto>;
   cameraXRef: MutableRefObject<number>;
   pixelsPerSecond: number;
+  livePixelsPerSecondRef: MutableRefObject<number>;
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
 };
 
-type TrackSceneSnapshot = Omit<TrackCanvasProps, "cameraXRef">;
+type TrackSceneSnapshot = Omit<TrackCanvasProps, "cameraXRef" | "livePixelsPerSecondRef">;
 
 type WaveformBitmap = HTMLCanvasElement;
 
@@ -382,20 +384,14 @@ function createWaveformBitmap(width: number, height: number) {
 function getWaveformBitmapKey(
   clip: ClipSummary,
   waveform: WaveformSummaryDto | undefined,
-  pixelsPerSecond: number,
-  clipHeight: number,
 ) {
   return [
-    clip.id,
     clip.waveformKey,
     waveform?.version ?? "missing",
     waveform?.isPreview ? "preview" : "ready",
-    clip.timelineStartSeconds.toFixed(4),
     clip.durationSeconds.toFixed(4),
     clip.sourceStartSeconds.toFixed(4),
     clip.sourceDurationSeconds.toFixed(4),
-    pixelsPerSecond.toFixed(4),
-    Math.round(clipHeight),
   ].join("|");
 }
 
@@ -406,7 +402,7 @@ function getOrCreateWaveformBitmap(
   pixelsPerSecond: number,
   clipHeight: number,
 ) {
-  const cacheKey = getWaveformBitmapKey(clip, waveform, pixelsPerSecond, clipHeight);
+  const cacheKey = getWaveformBitmapKey(clip, waveform);
   const cached = cache.get(cacheKey);
   if (cached) {
     return cached;
@@ -477,6 +473,7 @@ function drawTrackScene(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
   cameraX: number,
+  pixelsPerSecond: number,
   waveformBitmapCache: Map<string, WaveformBitmap>,
 ) {
   context.clearRect(0, 0, snapshot.width, snapshot.height);
@@ -499,7 +496,7 @@ function drawTrackScene(
     snapshot.width,
     snapshot.height,
     cameraX,
-    snapshot.pixelsPerSecond,
+    pixelsPerSecond,
   );
 
   snapshot.visibleTracks.forEach((track, trackIndex) => {
@@ -528,7 +525,7 @@ function drawTrackScene(
         clip,
         previewStartSeconds,
         cameraX,
-        snapshot.pixelsPerSecond,
+        pixelsPerSecond,
       );
       const right = left + clipWidth;
 
@@ -558,7 +555,7 @@ function drawTrackScene(
         waveformBitmapCache,
         clip,
         snapshot.waveformCache[clip.waveformKey],
-        snapshot.pixelsPerSecond,
+        pixelsPerSecond,
         clipHeight,
       );
 
@@ -569,6 +566,7 @@ function drawTrackScene(
         const sourceWidth = Math.max(1, (sourceRightRatio - sourceLeftRatio) * waveformBitmap.width);
 
         context.save();
+        context.imageSmoothingEnabled = true;
         context.beginPath();
         context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
         context.clip();
@@ -623,6 +621,7 @@ export function TimelineRulerCanvas({
   height,
   cameraXRef,
   pixelsPerSecond,
+  livePixelsPerSecondRef,
   timelineGrid,
   markers,
   selectedMarkerId,
@@ -688,7 +687,9 @@ export function TimelineRulerCanvas({
     let animationFrameId = 0;
     let lastBaseSceneVersion = -1;
     let lastBaseCameraX = Number.NaN;
+    let lastBasePixelsPerSecond = Number.NaN;
     let lastOverlayTransformCameraX = Number.NaN;
+    let lastOverlayTransformScaleX = Number.NaN;
 
     const render = () => {
       const snapshot = snapshotRef.current;
@@ -698,9 +699,14 @@ export function TimelineRulerCanvas({
       }
 
       const cameraX = cameraXRef.current;
+      const livePixelsPerSecond = livePixelsPerSecondRef.current;
 
       try {
-        if (lastBaseSceneVersion !== sceneVersionRef.current || lastBaseCameraX !== cameraX) {
+        if (
+          lastBaseSceneVersion !== sceneVersionRef.current ||
+          lastBaseCameraX !== cameraX ||
+          lastBasePixelsPerSecond !== livePixelsPerSecond
+        ) {
           const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
           if (baseContext) {
             baseContext.clearRect(0, 0, snapshot.width, snapshot.height);
@@ -712,17 +718,29 @@ export function TimelineRulerCanvas({
               snapshot.width,
               snapshot.height,
               cameraX,
-              snapshot.pixelsPerSecond,
+              livePixelsPerSecond,
             );
           }
 
           lastBaseSceneVersion = sceneVersionRef.current;
           lastBaseCameraX = cameraX;
+          lastBasePixelsPerSecond = livePixelsPerSecond;
         }
 
-        if (overlayContentRef.current && lastOverlayTransformCameraX !== cameraX) {
-          overlayContentRef.current.style.transform = `translate3d(${-cameraX}px, 0, 0)`;
-          lastOverlayTransformCameraX = cameraX;
+        if (overlayContentRef.current) {
+          const overlayScaleX =
+            snapshot.pixelsPerSecond > 0 ? livePixelsPerSecond / snapshot.pixelsPerSecond : 1;
+
+          if (
+            lastOverlayTransformCameraX !== cameraX ||
+            lastOverlayTransformScaleX !== overlayScaleX
+          ) {
+            overlayContentRef.current.style.left = `${-cameraX}px`;
+            overlayContentRef.current.style.transform = `scaleX(${overlayScaleX})`;
+            overlayContentRef.current.style.transformOrigin = "0 0";
+            lastOverlayTransformCameraX = cameraX;
+            lastOverlayTransformScaleX = overlayScaleX;
+          }
         }
 
         const overlayContext = setupCanvas(overlayCanvas, snapshot.width, snapshot.height);
@@ -735,7 +753,7 @@ export function TimelineRulerCanvas({
               snapshot.width,
               snapshot.height,
               cameraX,
-              snapshot.pixelsPerSecond,
+              livePixelsPerSecond,
               snapshot.pendingMarkerJump.executeAtSeconds,
             );
           }
@@ -754,7 +772,7 @@ export function TimelineRulerCanvas({
               snapshot.width,
               snapshot.height,
               cameraX,
-              snapshot.pixelsPerSecond,
+              livePixelsPerSecond,
               {
                 isSelected: snapshot.selectedMarkerId === marker.id,
                 isArmed: snapshot.pendingMarkerJump?.targetMarkerId === marker.id,
@@ -776,7 +794,7 @@ export function TimelineRulerCanvas({
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [cameraXRef, playheadSecondsRef]);
+  }, [cameraXRef, livePixelsPerSecondRef, playheadSecondsRef]);
 
   return (
     <div
@@ -788,8 +806,16 @@ export function TimelineRulerCanvas({
     >
       <canvas className="lt-ruler-canvas" ref={baseCanvasRef} aria-hidden="true" />
       <canvas className="lt-ruler-canvas-overlay" ref={overlayCanvasRef} aria-hidden="true" />
-      <div className="lt-ruler-overlay" ref={overlayContentRef}>
-        {children}
+      <div className="lt-ruler-overlay">
+        <div
+          ref={overlayContentRef}
+          style={{
+            position: "absolute",
+            inset: 0,
+          }}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -805,6 +831,7 @@ export function TimelineTrackCanvas({
   waveformCache,
   cameraXRef,
   pixelsPerSecond,
+  livePixelsPerSecondRef,
   timelineGrid,
   selectedClipId,
   clipPreviewSecondsRef,
@@ -866,7 +893,7 @@ export function TimelineTrackCanvas({
   useEffect(() => {
     waveformBitmapCacheRef.current.clear();
     sceneVersionRef.current += 1;
-  }, [clipSceneSignature, pixelsPerSecond, trackHeight, waveformCacheSignature]);
+  }, [pixelsPerSecond, trackHeight]);
 
   useEffect(() => {
     const baseCanvas = baseCanvasRef.current;
@@ -877,24 +904,34 @@ export function TimelineTrackCanvas({
     let animationFrameId = 0;
     let lastBaseSceneVersion = -1;
     let lastBaseCameraX = Number.NaN;
+    let lastBasePixelsPerSecond = Number.NaN;
     let lastPreviewClipState = clipPreviewSecondsRef.current;
 
     const render = () => {
       const snapshot = snapshotRef.current;
       const cameraX = cameraXRef.current;
+      const livePixelsPerSecond = livePixelsPerSecondRef.current;
 
       if (
         lastBaseSceneVersion !== sceneVersionRef.current ||
         lastBaseCameraX !== cameraX ||
+        lastBasePixelsPerSecond !== livePixelsPerSecond ||
         lastPreviewClipState !== snapshot.clipPreviewSecondsRef.current
       ) {
         const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
         if (baseContext) {
-          drawTrackScene(baseContext, snapshot, cameraX, waveformBitmapCacheRef.current);
+          drawTrackScene(
+            baseContext,
+            snapshot,
+            cameraX,
+            livePixelsPerSecond,
+            waveformBitmapCacheRef.current,
+          );
         }
 
         lastBaseSceneVersion = sceneVersionRef.current;
         lastBaseCameraX = cameraX;
+        lastBasePixelsPerSecond = livePixelsPerSecond;
         lastPreviewClipState = snapshot.clipPreviewSecondsRef.current;
       }
 
@@ -906,7 +943,7 @@ export function TimelineTrackCanvas({
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [cameraXRef]);
+  }, [cameraXRef, livePixelsPerSecondRef]);
 
   return (
     <div className="lt-track-canvas-layer" style={{ width, height }}>

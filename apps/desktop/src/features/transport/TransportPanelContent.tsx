@@ -104,6 +104,7 @@ const ZOOM_MAX = 64;
 const DRAG_THRESHOLD_PX = 6;
 const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
 const INSTANT_WAVEFORM_BUCKET_COUNT = 96;
+const LIVE_ZOOM_COMMIT_DEBOUNCE_MS = 150;
 
 type ContextMenuAction = {
   label: string;
@@ -740,6 +741,7 @@ export function TransportPanelContent() {
     horizontalVelocity: 0,
     verticalVelocity: 0,
   });
+  const zoomDebounceTimerRef = useRef<number | null>(null);
   const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
   const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
   const playbackSongDir = useTransportStore((state) => state.playback?.songDir ?? null);
@@ -760,7 +762,6 @@ export function TransportPanelContent() {
 
   songRef.current = song;
   tracksByIdRef.current = tracksById;
-  cameraXRef.current = cameraX;
 
   const runAction = useCallback(async (work: () => Promise<void>, options?: { busy?: boolean }) => {
     try {
@@ -2147,7 +2148,7 @@ export function TransportPanelContent() {
     return clampCameraX(
       options?.cameraX ?? cameraXRef.current,
       options?.durationSeconds ?? songRef.current?.durationSeconds ?? 0,
-      options?.pixelsPerSecond ?? pixelsPerSecond,
+      options?.pixelsPerSecond ?? livePixelsPerSecondRef.current,
       options?.viewportWidth ?? laneViewportWidth,
     );
   }
@@ -2187,11 +2188,12 @@ export function TransportPanelContent() {
       pixelsPerSecond?: number;
       viewportWidth?: number;
       syncPlayhead?: boolean;
+      commitToStore?: boolean;
     },
   ) {
     const durationSeconds = options?.durationSeconds ?? songRef.current?.durationSeconds ?? 0;
     const contentEndSeconds = options?.contentEndSeconds ?? timelineContentEndSeconds;
-    const effectivePixelsPerSecond = options?.pixelsPerSecond ?? pixelsPerSecond;
+    const effectivePixelsPerSecond = options?.pixelsPerSecond ?? livePixelsPerSecondRef.current;
     const viewportWidth = options?.viewportWidth ?? laneViewportWidth;
     const clampedCameraX = clampCameraX(
       nextCameraX,
@@ -2202,7 +2204,9 @@ export function TransportPanelContent() {
     );
 
     cameraXRef.current = clampedCameraX;
-    setCameraX(clampedCameraX);
+    if (options?.commitToStore !== false) {
+      setCameraX(clampedCameraX);
+    }
     panelRef.current?.style.setProperty("--lt-camera-x", `${clampedCameraX}px`);
 
     const shell = timelineShellRef.current;
@@ -2339,6 +2343,8 @@ export function TransportPanelContent() {
     : ZOOM_MIN;
   const effectiveZoomMin = song ? fitAllZoomLevel : ZOOM_MIN;
   const pixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
+  const liveZoomLevelRef = useRef(zoomLevel);
+  const livePixelsPerSecondRef = useRef(pixelsPerSecond);
   const maxTimelineCameraX = getMaxCameraX(
     song?.durationSeconds ?? 0,
     pixelsPerSecond,
@@ -2466,6 +2472,25 @@ export function TransportPanelContent() {
   }, [effectiveZoomMin]);
 
   useEffect(() => {
+    liveZoomLevelRef.current = zoomLevel;
+    livePixelsPerSecondRef.current = pixelsPerSecond;
+  }, [pixelsPerSecond, zoomLevel]);
+
+  useEffect(() => {
+    if (zoomDebounceTimerRef.current === null || Math.abs(cameraXRef.current - cameraX) <= 0.5) {
+      cameraXRef.current = cameraX;
+    }
+  }, [cameraX]);
+
+  useEffect(() => {
+    return () => {
+      if (zoomDebounceTimerRef.current !== null) {
+        window.clearTimeout(zoomDebounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     updateCameraX(cameraXRef.current, {
       durationSeconds: song?.durationSeconds ?? 0,
       contentEndSeconds: timelineContentEndSeconds,
@@ -2508,6 +2533,7 @@ export function TransportPanelContent() {
   function applyZoom(nextZoomLevel: number, anchorViewportX = laneViewportWidth / 2) {
     const clampedZoom = clamp(nextZoomLevel, effectiveZoomMin, ZOOM_MAX);
     const nextPixelsPerSecond = clampedZoom * BASE_PIXELS_PER_SECOND;
+    const previousPixelsPerSecond = livePixelsPerSecondRef.current;
     const durationSeconds = song?.durationSeconds ?? 0;
     const nextCameraX = zoomCameraAtViewportX({
       durationSeconds,
@@ -2515,17 +2541,29 @@ export function TransportPanelContent() {
       viewportWidth: laneViewportWidth,
       viewportX: clamp(anchorViewportX, 0, laneViewportWidth),
       currentCameraX: getCameraX(),
-      previousPixelsPerSecond: pixelsPerSecond,
+      previousPixelsPerSecond,
       nextPixelsPerSecond,
     });
 
-    setZoomLevel(clampedZoom);
+    liveZoomLevelRef.current = clampedZoom;
+    livePixelsPerSecondRef.current = nextPixelsPerSecond;
     updateCameraX(nextCameraX, {
       durationSeconds,
       contentEndSeconds: timelineContentEndSeconds,
       pixelsPerSecond: nextPixelsPerSecond,
       viewportWidth: laneViewportWidth,
+      commitToStore: false,
     });
+
+    if (zoomDebounceTimerRef.current !== null) {
+      window.clearTimeout(zoomDebounceTimerRef.current);
+    }
+
+    zoomDebounceTimerRef.current = window.setTimeout(() => {
+      zoomDebounceTimerRef.current = null;
+      setZoomLevel(liveZoomLevelRef.current);
+      setCameraX(cameraXRef.current);
+    }, LIVE_ZOOM_COMMIT_DEBOUNCE_MS);
   }
 
   function applyTrackHeight(nextTrackHeight: number) {
@@ -2582,7 +2620,7 @@ export function TransportPanelContent() {
 
     applyZoom(
       getZoomLevelDelta(
-        zoomLevel,
+        liveZoomLevelRef.current,
         event.deltaY < 0 ? "in" : "out",
         TIMELINE_ZOOM_MULTIPLIER,
       ),
@@ -4081,6 +4119,7 @@ export function TransportPanelContent() {
                 waveformCache={waveformCache}
                 cameraXRef={cameraXRef}
                 pixelsPerSecond={pixelsPerSecond}
+                livePixelsPerSecondRef={livePixelsPerSecondRef}
                 timelineGrid={timelineGrid}
                 timelineHeaderMarkers={timelineHeaderMarkers}
                 selectedClipId={selectedClipId}
