@@ -7,6 +7,7 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
   assignSectionMarkerDigit,
@@ -567,7 +568,7 @@ function isTimelineZoomTarget(target: EventTarget | null) {
   return target instanceof HTMLElement
     ? Boolean(
         target.closest(
-          ".lt-ruler-track, .lt-ruler-content, .lt-ruler-canvas, .lt-ruler-canvas-overlay, .lt-track-list, .lt-track-row, .lt-track-lane, .lt-track-canvas-layer, .lt-track-canvas, .lt-track-canvas-overlay",
+          ".lt-ruler-track, .lt-ruler-content, .lt-ruler-canvas, .lt-ruler-canvas-overlay, .lt-track-list, .lt-track-list-dropzone, .lt-track-row, .lt-track-lane, .lt-track-canvas-layer, .lt-track-canvas, .lt-track-canvas-overlay",
         ),
       )
     : false;
@@ -699,9 +700,9 @@ export function TransportPanelContent() {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const menuBarRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
-  const trackHeadersListRef = useRef<HTMLDivElement | null>(null);
   const rulerTrackRef = useRef<HTMLDivElement | null>(null);
   const timelineShellRef = useRef<HTMLDivElement | null>(null);
+  const timelineScrollViewportRef = useRef<HTMLDivElement | null>(null);
   const horizontalScrollbarRef = useRef<HTMLDivElement | null>(null);
   const playbackVisualAnchorRef = useRef({
     anchorPositionSeconds: 0,
@@ -1398,7 +1399,11 @@ export function TransportPanelContent() {
     }
 
     const updateViewportWidth = () => {
-      setTimelineViewportWidth(shell.clientWidth || DEFAULT_TIMELINE_VIEWPORT_WIDTH);
+      const viewportWidth =
+        timelineScrollViewportRef.current?.clientWidth ??
+        shell.clientWidth ??
+        DEFAULT_TIMELINE_VIEWPORT_WIDTH;
+      setTimelineViewportWidth(viewportWidth || DEFAULT_TIMELINE_VIEWPORT_WIDTH);
     };
 
     updateViewportWidth();
@@ -1406,6 +1411,9 @@ export function TransportPanelContent() {
     if (typeof ResizeObserver !== "undefined") {
       const observer = new ResizeObserver(updateViewportWidth);
       observer.observe(shell);
+      if (timelineScrollViewportRef.current) {
+        observer.observe(timelineScrollViewportRef.current);
+      }
       return () => observer.disconnect();
     }
 
@@ -2524,12 +2532,26 @@ export function TransportPanelContent() {
     setTrackHeight(clamp(Math.round(nextTrackHeight), TRACK_HEIGHT_MIN, TRACK_HEIGHT_MAX));
   }
 
-  function handleTimelineWheel(event: WheelEvent, shell: HTMLDivElement) {
-    if (!song) {
+  function handleTrackHeadersWheel(event: ReactWheelEvent<HTMLDivElement>) {
+    if (event.defaultPrevented) {
       return;
     }
 
+    const shouldScrollHorizontally = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    if (!shouldScrollHorizontally) {
+      return;
+    }
+
+    event.preventDefault();
+    updateCameraX(cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0));
+  }
+
+  function handleTimelineWheel(event: WheelEvent, shell: HTMLDivElement) {
     if (event.ctrlKey || event.metaKey) {
+      if (!song) {
+        return;
+      }
+
       event.preventDefault();
       applyTrackHeight(trackHeight + (event.deltaY < 0 ? TRACK_HEIGHT_STEP : -TRACK_HEIGHT_STEP));
       return;
@@ -2539,11 +2561,22 @@ export function TransportPanelContent() {
       return;
     }
 
-    event.preventDefault();
-    if (!isTimelineZoomTarget(event.target)) {
+    const shouldScrollHorizontally = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    if (shouldScrollHorizontally) {
+      if (!isTimelineZoomTarget(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+      updateCameraX(cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0));
       return;
     }
 
+    if (!song || !isTimelineZoomTarget(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
     const bounds = shell.getBoundingClientRect();
     const anchorViewportX = clamp(event.clientX - bounds.left - HEADER_WIDTH, 0, laneViewportWidth);
 
@@ -3395,6 +3428,7 @@ export function TransportPanelContent() {
   function tickLibraryDragAutoScroll() {
     const autoScrollState = libraryDragAutoScrollRef.current;
     const laneArea = laneAreaRef.current;
+    const verticalScrollViewport = timelineScrollViewportRef.current;
     const hoverState = libraryDragHoverRef.current;
 
     if (!hoverState || (!autoScrollState.horizontalVelocity && !autoScrollState.verticalVelocity)) {
@@ -3406,8 +3440,8 @@ export function TransportPanelContent() {
       updateCameraX(cameraXRef.current + autoScrollState.horizontalVelocity);
     }
 
-    if (laneArea && autoScrollState.verticalVelocity) {
-      laneArea.scrollTop += autoScrollState.verticalVelocity;
+    if (verticalScrollViewport && autoScrollState.verticalVelocity) {
+      verticalScrollViewport.scrollTop += autoScrollState.verticalVelocity;
     }
 
     const hoverElement =
@@ -3424,7 +3458,7 @@ export function TransportPanelContent() {
   function updateLibraryDragAutoScroll(event: ReactDragEvent<HTMLElement>) {
     const autoScrollState = libraryDragAutoScrollRef.current;
     const horizontalBounds = rulerTrackRef.current?.getBoundingClientRect() ?? timelineShellRef.current?.getBoundingClientRect();
-    const verticalBounds = laneAreaRef.current?.getBoundingClientRect();
+    const verticalBounds = timelineScrollViewportRef.current?.getBoundingClientRect();
 
     let horizontalVelocity = 0;
     if (horizontalBounds) {
@@ -4012,130 +4046,142 @@ export function TransportPanelContent() {
         />
 
         <div className="lt-timeline-shell" ref={timelineShellRef}>
-          <div className="lt-timeline-main-grid">
-            <TrackHeadersPane
-              song={song}
-              visibleTracks={visibleTracks}
-              selectedTrackId={selectedTrackId}
-              trackHeight={trackHeight}
-              collapsedFolders={collapsedFolders}
-              previewTrackDensityClass={previewTrackDensityClass}
-              libraryPreviewRows={libraryPreviewRows}
-              shouldShowEmptyArrangementHint={shouldShowEmptyArrangementHint}
-              headersScrollRef={trackHeadersListRef}
-              getTrackChildCount={(trackId) => (song ? trackChildrenCount(song, trackId) : 0)}
-              onSelectTrack={handleTrackHeaderSelect}
-              onOpenContextMenu={handleTrackHeaderContextMenu}
-              onStartTrackDrag={handleTrackHeaderDragStart}
-              onToggleFolder={handleTrackHeaderFolderToggle}
-              onToggleMute={handleTrackHeaderMuteToggle}
-              onToggleSolo={handleTrackHeaderSoloToggle}
-              onVolumeChange={handleTrackHeaderVolumeChange}
-              onCommitVolume={handleTrackHeaderVolumeCommit}
-              onPanChange={handleTrackHeaderPanChange}
-              onCommitPan={handleTrackHeaderPanCommit}
-            />
+          <div className="lt-timeline-scroll-viewport" ref={timelineScrollViewportRef}>
+            <div className="lt-timeline-main-grid">
+              <TrackHeadersPane
+                song={song}
+                visibleTracks={visibleTracks}
+                selectedTrackId={selectedTrackId}
+                trackHeight={trackHeight}
+                collapsedFolders={collapsedFolders}
+                previewTrackDensityClass={previewTrackDensityClass}
+                libraryPreviewRows={libraryPreviewRows}
+                shouldShowEmptyArrangementHint={shouldShowEmptyArrangementHint}
+                onHeadersWheel={handleTrackHeadersWheel}
+                getTrackChildCount={(trackId) => (song ? trackChildrenCount(song, trackId) : 0)}
+                onSelectTrack={handleTrackHeaderSelect}
+                onOpenContextMenu={handleTrackHeaderContextMenu}
+                onStartTrackDrag={handleTrackHeaderDragStart}
+                onToggleFolder={handleTrackHeaderFolderToggle}
+                onToggleMute={handleTrackHeaderMuteToggle}
+                onToggleSolo={handleTrackHeaderSoloToggle}
+                onVolumeChange={handleTrackHeaderVolumeChange}
+                onCommitVolume={handleTrackHeaderVolumeCommit}
+                onPanChange={handleTrackHeaderPanChange}
+                onCommitPan={handleTrackHeaderPanCommit}
+              />
 
-            <TimelineCanvasPane
-              laneViewportWidth={laneViewportWidth}
-              trackHeight={trackHeight}
-              maxTimelineCameraX={maxTimelineCameraX}
-              song={song}
-              visibleTracks={visibleTracks}
-              renderedClipsByTrack={renderedClipsByTrack}
-              clipsByTrack={clipsByTrack}
-              waveformCache={waveformCache}
-              cameraXRef={cameraXRef}
-              pixelsPerSecond={pixelsPerSecond}
-              timelineGrid={timelineGrid}
-              timelineHeaderMarkers={timelineHeaderMarkers}
-              selectedClipId={selectedClipId}
-              selectedSectionId={selectedSectionId}
-              pendingMarkerJump={pendingMarkerJump}
-              displayPositionSecondsRef={displayPositionSecondsRef}
-              playheadDragRef={playheadDragRef}
-              clipPreviewSecondsRef={clipPreviewSecondsRef}
-              rulerTrackRef={rulerTrackRef}
-              horizontalScrollbarRef={horizontalScrollbarRef}
-              laneAreaRef={laneAreaRef}
-              libraryClipPreview={libraryClipPreview}
-              libraryPreviewRows={libraryPreviewRows}
-              shouldShowEmptyArrangementHint={shouldShowEmptyArrangementHint}
-              normalizePositionSeconds={(positionSeconds) =>
-                normalizeTimelineSeekSeconds(positionSeconds, song?.durationSeconds ?? 0)}
-              resolveLibraryGhostLeft={resolveLibraryGhostLeft}
-              formatTimelineHeaderMusicalPosition={formatTimelineHeaderMusicalPosition}
-              formatTimelineHeaderTime={formatTimelineHeaderTime}
-              onRulerMouseDown={(event) => {
-                if (!song || event.button !== 0 || !rulerTrackRef.current) {
-                  return;
-                }
+              <TimelineCanvasPane
+                laneViewportWidth={laneViewportWidth}
+                trackHeight={trackHeight}
+                song={song}
+                visibleTracks={visibleTracks}
+                renderedClipsByTrack={renderedClipsByTrack}
+                clipsByTrack={clipsByTrack}
+                waveformCache={waveformCache}
+                cameraXRef={cameraXRef}
+                pixelsPerSecond={pixelsPerSecond}
+                timelineGrid={timelineGrid}
+                timelineHeaderMarkers={timelineHeaderMarkers}
+                selectedClipId={selectedClipId}
+                selectedSectionId={selectedSectionId}
+                pendingMarkerJump={pendingMarkerJump}
+                displayPositionSecondsRef={displayPositionSecondsRef}
+                playheadDragRef={playheadDragRef}
+                clipPreviewSecondsRef={clipPreviewSecondsRef}
+                rulerTrackRef={rulerTrackRef}
+                horizontalScrollbarRef={horizontalScrollbarRef}
+                laneAreaRef={laneAreaRef}
+                libraryClipPreview={libraryClipPreview}
+                libraryPreviewRows={libraryPreviewRows}
+                shouldShowEmptyArrangementHint={shouldShowEmptyArrangementHint}
+                normalizePositionSeconds={(positionSeconds) =>
+                  normalizeTimelineSeekSeconds(positionSeconds, song?.durationSeconds ?? 0)}
+                resolveLibraryGhostLeft={resolveLibraryGhostLeft}
+                formatTimelineHeaderMusicalPosition={formatTimelineHeaderMusicalPosition}
+                formatTimelineHeaderTime={formatTimelineHeaderTime}
+                onRulerMouseDown={(event) => {
+                  if (!song || event.button !== 0 || !rulerTrackRef.current) {
+                    return;
+                  }
 
-                event.preventDefault();
-                const startSeconds = snappedRulerSeconds(event, song.durationSeconds);
-                clearSelection();
-                setContextMenu(null);
-                void runAction(async () => {
-                  await performSeek(startSeconds);
-                });
-              }}
-              onRulerContextMenu={(event) => {
-                if (!song || !rulerTrackRef.current) {
-                  return;
-                }
+                  event.preventDefault();
+                  const startSeconds = snappedRulerSeconds(event, song.durationSeconds);
+                  clearSelection();
+                  setContextMenu(null);
+                  void runAction(async () => {
+                    await performSeek(startSeconds);
+                  });
+                }}
+                onRulerContextMenu={(event) => {
+                  if (!song || !rulerTrackRef.current) {
+                    return;
+                  }
 
-                const positionSeconds = snappedRulerSeconds(event, song.durationSeconds);
-                clearSelection();
-                openMenu(event, `Timeline ${formatClock(positionSeconds)}`, rulerContextMenu(positionSeconds));
-              }}
-              onMarkerPrimaryAction={(sectionId) => {
-                const section = song?.sectionMarkers.find((candidate) => candidate.id === sectionId);
-                if (!section) {
-                  return;
-                }
+                  const positionSeconds = snappedRulerSeconds(event, song.durationSeconds);
+                  clearSelection();
+                  openMenu(event, `Timeline ${formatClock(positionSeconds)}`, rulerContextMenu(positionSeconds));
+                }}
+                onMarkerPrimaryAction={(sectionId) => {
+                  const section = song?.sectionMarkers.find((candidate) => candidate.id === sectionId);
+                  if (!section) {
+                    return;
+                  }
 
-                void runAction(async () => {
-                  await handleMarkerPrimaryAction(section);
-                });
-              }}
-              onMarkerContextMenu={(event, sectionId) => {
-                const section = song?.sectionMarkers.find((candidate) => candidate.id === sectionId);
-                if (!section) {
-                  return;
-                }
+                  void runAction(async () => {
+                    await handleMarkerPrimaryAction(section);
+                  });
+                }}
+                onMarkerContextMenu={(event, sectionId) => {
+                  const section = song?.sectionMarkers.find((candidate) => candidate.id === sectionId);
+                  if (!section) {
+                    return;
+                  }
 
-                selectSection(section.id);
-                openMenu(event, section.name, sectionContextMenu(section));
-              }}
-              onPreviewPositionChange={syncLivePosition}
-              onPlayheadSeekCommit={(positionSeconds) => {
-                setContextMenu(null);
-                void runAction(async () => {
-                  await performSeek(positionSeconds);
-                });
-              }}
-              onTrackListContextMenu={handleTrackListContextMenu}
-              onTrackListScroll={(scrollTop) => {
-                if (trackHeadersListRef.current) {
-                  trackHeadersListRef.current.scrollTop = scrollTop;
-                }
-              }}
-              onTrackListLibraryDragOver={handleTrackListLibraryDragOver}
-              onTrackListLibraryDrop={handleTrackListLibraryDrop}
-              onTrackListLibraryDragLeave={handleTrackListLibraryDragLeave}
-              onEmptyArrangementLibraryDragOver={handleEmptyArrangementLibraryDragOver}
-              onEmptyArrangementLibraryDrop={handleEmptyArrangementLibraryDrop}
-              onTrackLaneMouseDown={handleTrackLaneMouseDown}
-              onTrackLaneContextMenu={handleTrackLaneContextMenu}
-              onTrackLaneLibraryDragOver={handleTrackLaneLibraryDragOver}
-              onTrackLaneLibraryDrop={handleTrackLaneLibraryDrop}
-              onLibraryPreviewLaneDragOver={handleLibraryPreviewLaneDragOver}
-              onLibraryPreviewLaneDrop={handleLibraryPreviewLaneDrop}
-              onHorizontalScroll={(scrollLeft) => {
-                cameraXRef.current = scrollLeft;
-                updateCameraX(scrollLeft);
-              }}
-            />
+                  selectSection(section.id);
+                  openMenu(event, section.name, sectionContextMenu(section));
+                }}
+                onPreviewPositionChange={syncLivePosition}
+                onPlayheadSeekCommit={(positionSeconds) => {
+                  setContextMenu(null);
+                  void runAction(async () => {
+                    await performSeek(positionSeconds);
+                  });
+                }}
+                onTrackListContextMenu={handleTrackListContextMenu}
+                onTrackListLibraryDragOver={handleTrackListLibraryDragOver}
+                onTrackListLibraryDrop={handleTrackListLibraryDrop}
+                onTrackListLibraryDragLeave={handleTrackListLibraryDragLeave}
+                onEmptyArrangementLibraryDragOver={handleEmptyArrangementLibraryDragOver}
+                onEmptyArrangementLibraryDrop={handleEmptyArrangementLibraryDrop}
+                onTrackLaneMouseDown={handleTrackLaneMouseDown}
+                onTrackLaneContextMenu={handleTrackLaneContextMenu}
+                onTrackLaneLibraryDragOver={handleTrackLaneLibraryDragOver}
+                onTrackLaneLibraryDrop={handleTrackLaneLibraryDrop}
+                onLibraryPreviewLaneDragOver={handleLibraryPreviewLaneDragOver}
+                onLibraryPreviewLaneDrop={handleLibraryPreviewLaneDrop}
+              />
+            </div>
+          </div>
+          <div className="lt-timeline-bottom-grid" aria-hidden={!song}>
+            <div className="lt-horizontal-scrollbar-spacer" />
+            <div className="lt-horizontal-scrollbar">
+              <div
+                ref={horizontalScrollbarRef}
+                className="lt-horizontal-scrollbar-rail"
+                aria-label="Desplazamiento horizontal del timeline"
+                onScroll={(event) => {
+                  const scrollLeft = event.currentTarget.scrollLeft;
+                  cameraXRef.current = scrollLeft;
+                  updateCameraX(scrollLeft);
+                }}
+              >
+                <div
+                  className="lt-horizontal-scrollbar-content"
+                  style={{ width: laneViewportWidth + maxTimelineCameraX }}
+                />
+              </div>
+            </div>
           </div>
         </div>
 

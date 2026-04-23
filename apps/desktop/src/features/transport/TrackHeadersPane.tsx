@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
+import type { MouseEvent as ReactMouseEvent, WheelEvent as ReactWheelEvent } from "react";
 
 import type { SongView, TrackSummary } from "./desktopApi";
 import { TrackHeaderItem } from "./TrackHeaderItem";
@@ -18,7 +18,7 @@ type TrackHeadersPaneProps = {
   previewTrackDensityClass: string;
   libraryPreviewRows: LibraryPreviewRow[];
   shouldShowEmptyArrangementHint: boolean;
-  headersScrollRef: RefObject<HTMLDivElement | null>;
+  onHeadersWheel: (event: ReactWheelEvent<HTMLDivElement>) => void;
   getTrackChildCount: (trackId: string) => number;
   onSelectTrack: (trackId: string, trackName: string) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
@@ -41,7 +41,7 @@ export function TrackHeadersPane({
   previewTrackDensityClass,
   libraryPreviewRows,
   shouldShowEmptyArrangementHint,
-  headersScrollRef,
+  onHeadersWheel,
   getTrackChildCount,
   onSelectTrack,
   onOpenContextMenu,
@@ -59,7 +59,11 @@ export function TrackHeadersPane({
       <div className="lt-ruler-header">
         <span>Tracks</span>
       </div>
-      <div className="lt-track-headers-list" ref={headersScrollRef} aria-hidden={!song}>
+      <div
+        className="lt-track-headers-list"
+        aria-hidden={!song}
+        onWheel={onHeadersWheel}
+      >
         {song?.tracks && visibleTracks.map((track) => {
           const isTrackSelected = selectedTrackId === track.id;
           const childCount = getTrackChildCount(track.id);
@@ -67,7 +71,12 @@ export function TrackHeadersPane({
             trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
 
           return (
-            <div key={track.id} className="lt-track-header-row" data-track-id={track.id}>
+            <div
+              key={track.id}
+              className="lt-track-header-row"
+              data-track-id={track.id}
+              style={{ height: trackHeight }}
+            >
               <TrackHeaderItem
                 trackId={track.id}
                 trackName={track.name}
@@ -102,7 +111,11 @@ export function TrackHeadersPane({
 
         {!shouldShowEmptyArrangementHint
           ? libraryPreviewRows.map((previewRow) => (
-              <div key={`library-preview-row-${previewRow.rowOffset}`} className="lt-track-header-row">
+              <div
+                key={`library-preview-row-${previewRow.rowOffset}`}
+                className="lt-track-header-row"
+                style={{ height: trackHeight }}
+              >
                 <div
                   className={`lt-track-header ${previewTrackDensityClass} is-library-preview`}
                   style={{ height: trackHeight, paddingLeft: 16 }}

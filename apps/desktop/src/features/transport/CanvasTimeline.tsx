@@ -44,8 +44,8 @@ type TrackSceneSnapshot = Omit<TrackCanvasProps, "cameraXRef">;
 
 type WaveformBitmap = HTMLCanvasElement;
 
-const TRACK_CLIP_TOP_PADDING = 2;
-const TRACK_CLIP_BOTTOM_PADDING = 6;
+const TRACK_CLIP_TOP_PADDING = 1;
+const TRACK_CLIP_BOTTOM_PADDING = 1;
 
 function isRenderableCanvasSize(value: number) {
   return Number.isFinite(value) && value > 0;
@@ -485,7 +485,7 @@ function drawTrackScene(
 
   context.strokeStyle = "rgba(229, 226, 225, 0.05)";
   context.lineWidth = 1;
-  for (let index = 0; index <= snapshot.visibleTracks.length; index += 1) {
+  for (let index = 1; index <= snapshot.visibleTracks.length; index += 1) {
     const y = Math.round(index * snapshot.trackHeight) + 0.5;
     context.beginPath();
     context.moveTo(0, y);
@@ -605,6 +605,17 @@ function drawTrackScene(
       }
     }
   });
+
+  // Redraw row separators on top of clips so the visual lane grid stays aligned with track headers.
+  context.strokeStyle = "rgba(229, 226, 225, 0.05)";
+  context.lineWidth = 1;
+  for (let index = 1; index <= snapshot.visibleTracks.length; index += 1) {
+    const y = Math.round(index * snapshot.trackHeight) + 0.5;
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(snapshot.width, y);
+    context.stroke();
+  }
 }
 
 export function TimelineRulerCanvas({

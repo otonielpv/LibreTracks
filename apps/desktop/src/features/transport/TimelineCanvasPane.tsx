@@ -34,7 +34,6 @@ type LibraryPreviewRow = {
 type TimelineCanvasPaneProps = {
   laneViewportWidth: number;
   trackHeight: number;
-  maxTimelineCameraX: number;
   song: SongView | null;
   visibleTracks: TrackSummary[];
   renderedClipsByTrack: Record<string, ClipSummary[]>;
@@ -67,7 +66,6 @@ type TimelineCanvasPaneProps = {
   onPreviewPositionChange: (positionSeconds: number) => void;
   onPlayheadSeekCommit: (positionSeconds: number) => void;
   onTrackListContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
-  onTrackListScroll: (scrollTop: number) => void;
   onTrackListLibraryDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
   onTrackListLibraryDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   onTrackListLibraryDragLeave: (event: ReactDragEvent<HTMLDivElement>) => void;
@@ -87,13 +85,11 @@ type TimelineCanvasPaneProps = {
   onTrackLaneLibraryDrop: (event: ReactDragEvent<HTMLDivElement>, track: TrackSummary) => void;
   onLibraryPreviewLaneDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
   onLibraryPreviewLaneDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
-  onHorizontalScroll: (scrollLeft: number) => void;
 };
 
 export function TimelineCanvasPane({
   laneViewportWidth,
   trackHeight,
-  maxTimelineCameraX,
   song,
   visibleTracks,
   renderedClipsByTrack,
@@ -126,7 +122,6 @@ export function TimelineCanvasPane({
   onPreviewPositionChange,
   onPlayheadSeekCommit,
   onTrackListContextMenu,
-  onTrackListScroll,
   onTrackListLibraryDragOver,
   onTrackListLibraryDrop,
   onTrackListLibraryDragLeave,
@@ -138,7 +133,6 @@ export function TimelineCanvasPane({
   onTrackLaneLibraryDrop,
   onLibraryPreviewLaneDragOver,
   onLibraryPreviewLaneDrop,
-  onHorizontalScroll,
 }: TimelineCanvasPaneProps) {
   return (
     <div className="lt-timeline-canvas-pane">
@@ -218,7 +212,6 @@ export function TimelineCanvasPane({
         className={`lt-track-list ${libraryClipPreview.length ? "is-library-drag-over" : ""}`}
         ref={laneAreaRef}
         onContextMenu={onTrackListContextMenu}
-        onScroll={(event) => onTrackListScroll(event.currentTarget.scrollTop)}
         onDragOver={onTrackListLibraryDragOver}
         onDrop={onTrackListLibraryDrop}
         onDragLeave={onTrackListLibraryDragLeave}
@@ -352,22 +345,19 @@ export function TimelineCanvasPane({
                 </div>
               ))
             : null}
+
+          {!shouldShowEmptyArrangementHint ? (
+            <div
+              className="lt-track-list-dropzone"
+              aria-label="Dropzone para nuevas pistas"
+              onDragOver={onTrackListLibraryDragOver}
+              onDrop={onTrackListLibraryDrop}
+              onDragLeave={onTrackListLibraryDragLeave}
+            />
+          ) : null}
         </div>
       </div>
 
-      <div className="lt-horizontal-scrollbar">
-        <div
-          ref={horizontalScrollbarRef}
-          className="lt-horizontal-scrollbar-rail"
-          aria-label="Desplazamiento horizontal del timeline"
-          onScroll={(event) => onHorizontalScroll(event.currentTarget.scrollLeft)}
-        >
-          <div
-            className="lt-horizontal-scrollbar-content"
-            style={{ width: laneViewportWidth + maxTimelineCameraX }}
-          />
-        </div>
-      </div>
     </div>
   );
 }
