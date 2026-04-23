@@ -2,6 +2,7 @@ mod audio_runtime;
 mod state;
 
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{collections::HashSet, path::PathBuf};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -10,8 +11,9 @@ use audio_runtime::AudioDebugSnapshot;
 use libretracks_audio::JumpTrigger;
 use libretracks_core::TrackKind;
 use state::{
-    DesktopError, DesktopPerformanceSnapshot, DesktopState, LibraryAssetSummary, SongView,
-    TransportSnapshot, WaveformSummaryDto,
+    CreateClipRequest, DesktopError, DesktopPerformanceSnapshot, DesktopSession, DesktopState,
+    LibraryAssetSummary, SongView, TransportSnapshot, WaveformReadyEvent, WaveformSummaryDto,
+    WAVEFORM_READY_EVENT,
 };
 
 const TRANSPORT_LIFECYCLE_EVENT: &str = "transport:lifecycle";
@@ -50,6 +52,53 @@ fn emit_transport_lifecycle_event(app: &AppHandle, kind: &str, snapshot: &Transp
     }
 }
 
+fn emit_ready_library_waveforms(
+    app: &AppHandle,
+    state: &DesktopState,
+    session: &mut DesktopSession,
+    song_dir: &str,
+    file_paths: &[String],
+) -> Result<(), String> {
+    let normalized_paths = file_paths
+        .iter()
+        .map(|file_path| file_path.replace('\\', "/"))
+        .collect::<Vec<_>>();
+    let summaries = session
+        .load_library_waveforms(&normalized_paths)
+        .map_err(|error| error.to_string())?;
+    let ready_keys = summaries
+        .iter()
+        .map(|summary| summary.waveform_key.clone())
+        .collect::<HashSet<_>>();
+    let normalized_song_dir = song_dir.replace('\\', "/");
+
+    for summary in summaries {
+        let waveform_key = summary.waveform_key.clone();
+        app.emit(
+            WAVEFORM_READY_EVENT,
+            WaveformReadyEvent {
+                song_dir: normalized_song_dir.clone(),
+                waveform_key,
+                summary,
+            },
+        )
+        .map_err(|error| error.to_string())?;
+    }
+
+    for waveform_key in normalized_paths {
+        if ready_keys.contains(&waveform_key) {
+            continue;
+        }
+
+        state
+            .waveform_jobs
+            .enqueue(app.clone(), PathBuf::from(song_dir), waveform_key)
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 fn healthcheck() -> &'static str {
     "libretracks-ready"
@@ -84,12 +133,15 @@ fn get_library_assets(state: State<'_, DesktopState>) -> Result<Vec<LibraryAsset
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session.get_library_assets().map_err(|error| error.to_string())
+    session
+        .get_library_assets()
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 fn get_waveform_summaries(
     waveform_keys: Vec<String>,
+    app: AppHandle,
     state: State<'_, DesktopState>,
 ) -> Result<Vec<WaveformSummaryDto>, String> {
     let mut session = state
@@ -98,7 +150,22 @@ fn get_waveform_summaries(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .load_waveforms(&waveform_keys)
+        .load_waveforms(&waveform_keys, &state.waveform_jobs, &app)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_library_waveform_summaries(
+    file_paths: Vec<String>,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<WaveformSummaryDto>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .load_library_waveforms(&file_paths)
         .map_err(|error| error.to_string())
 }
 
@@ -520,6 +587,7 @@ fn create_track(
 
 #[tauri::command]
 fn create_clip(
+    app: AppHandle,
     track_id: String,
     file_path: String,
     timeline_start_seconds: f64,
@@ -530,9 +598,41 @@ fn create_clip(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session
+    let snapshot = session
         .create_clip(&track_id, &file_path, timeline_start_seconds, &state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+
+    if let Some(song_dir) = snapshot.song_dir.as_deref() {
+        emit_ready_library_waveforms(&app, &state, &mut session, song_dir, &[file_path])?;
+    }
+
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn create_clips_batch(
+    app: AppHandle,
+    requests: Vec<CreateClipRequest>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    let snapshot = session
+        .create_clips_batch(&requests, &state.audio)
+        .map_err(|error| error.to_string())?;
+
+    if let Some(song_dir) = snapshot.song_dir.as_deref() {
+        let requested_paths = requests
+            .iter()
+            .map(|request| request.file_path.clone())
+            .collect::<Vec<_>>();
+        emit_ready_library_waveforms(&app, &state, &mut session, song_dir, &requested_paths)?;
+    }
+
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -686,6 +786,7 @@ fn main() {
             get_song_view,
             get_library_assets,
             get_waveform_summaries,
+            get_library_waveform_summaries,
             get_audio_debug_snapshot,
             get_desktop_performance_snapshot,
             report_ui_render_metric,
@@ -717,6 +818,7 @@ fn main() {
             update_song_tempo,
             create_track,
             create_clip,
+            create_clips_batch,
             move_track,
             update_track_mix_live,
             update_track,

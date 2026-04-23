@@ -363,7 +363,7 @@ function drawWaveformShape(
     return;
   }
 
-  context.fillStyle = "rgba(20, 20, 20, 0.72)";
+  context.fillStyle = waveform?.isPreview ? "rgba(20, 20, 20, 0.34)" : "rgba(20, 20, 20, 0.72)";
   context.beginPath();
 
   for (let index = 0; index < max.length; index += 1) {
@@ -384,6 +384,32 @@ function drawWaveformShape(
 
   context.closePath();
   context.fill();
+}
+
+function drawWaveformPlaceholder(
+  context: CanvasRenderingContext2D,
+  left: number,
+  width: number,
+  top: number,
+  height: number,
+) {
+  context.save();
+  context.beginPath();
+  context.roundRect(left, top, width, height, 2);
+  context.clip();
+
+  context.fillStyle = "rgba(255, 255, 255, 0.12)";
+  for (let offset = left - 24; offset < left + width + 24; offset += 18) {
+    context.fillRect(offset, top + 6, 8, Math.max(4, height - 12));
+  }
+
+  context.strokeStyle = "rgba(36, 38, 36, 0.18)";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(left + 8, top + height * 0.5);
+  context.lineTo(left + width - 8, top + height * 0.5);
+  context.stroke();
+  context.restore();
 }
 
 function createWaveformBitmap(width: number, height: number) {
@@ -407,6 +433,7 @@ function getWaveformBitmapKey(
     clip.id,
     clip.waveformKey,
     waveform?.version ?? "missing",
+    waveform?.isPreview ? "preview" : "ready",
     clip.timelineStartSeconds.toFixed(4),
     clip.durationSeconds.toFixed(4),
     clip.sourceStartSeconds.toFixed(4),
@@ -483,7 +510,10 @@ function buildClipSceneSignature(clipsByTrack: Record<string, ClipSummary[]>) {
 function buildWaveformCacheSignature(waveformCache: Record<string, WaveformSummaryDto>) {
   return Object.entries(waveformCache)
     .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
-    .map(([waveformKey, summary]) => `${waveformKey}:${summary.version}:${summary.bucketCount}`)
+    .map(
+      ([waveformKey, summary]) =>
+        `${waveformKey}:${summary.version}:${summary.bucketCount}:${summary.isPreview ? "preview" : "ready"}`,
+    )
     .join("|");
 }
 
@@ -598,6 +628,8 @@ function drawTrackScene(
           clipHeight,
         );
         context.restore();
+      } else {
+        drawWaveformPlaceholder(context, clippedLeft, visibleWidth, clipTop, clipHeight);
       }
 
       if (visibleWidth >= 52) {

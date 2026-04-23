@@ -12,7 +12,7 @@ import {
   assignSectionMarkerDigit,
   cancelMarkerJump,
   createSectionMarker,
-  createClip,
+  createClipsBatch,
   createSong,
   createTrack,
   deleteClip,
@@ -21,6 +21,7 @@ import {
   duplicateClip,
   deleteLibraryAsset,
   getLibraryAssets,
+  getLibraryWaveformSummaries,
   getSongView,
   getTransportSnapshot,
   getWaveformSummaries,
@@ -29,6 +30,7 @@ import {
   listenToLibraryImportProgress,
   listenToAudioMeters,
   listenToTransportLifecycle,
+  listenToWaveformReady,
   moveClip,
   moveClipLive,
   moveTrack,
@@ -91,6 +93,7 @@ const ZOOM_MAX = 48;
 const ZOOM_WHEEL_STEP = 1.25;
 const DRAG_THRESHOLD_PX = 6;
 const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
+const INSTANT_WAVEFORM_BUCKET_COUNT = 96;
 
 type ContextMenuAction = {
   label: string;
@@ -191,6 +194,12 @@ type LibraryDragAutoScrollState = {
   verticalVelocity: number;
 };
 
+type OptimisticClipOperation = {
+  id: string;
+  clearAfterProjectRevision: number | null;
+  clips: ClipSummary[];
+};
+
 type TransportAnchorMeta = {
   snapshotKey: string;
   anchorPositionSeconds: number;
@@ -289,6 +298,52 @@ function formatMusicalPosition(seconds: number, bpm: number, timeSignature: stri
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function hashWaveformPreviewSeed(value: string) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+function buildInstantWaveformPreview(
+  waveformKey: string,
+  durationSeconds: number,
+): WaveformSummaryDto {
+  const bucketCount = Math.max(32, Math.round(INSTANT_WAVEFORM_BUCKET_COUNT));
+  const minPeaks: number[] = [];
+  const maxPeaks: number[] = [];
+  let state = hashWaveformPreviewSeed(`${waveformKey}:${durationSeconds.toFixed(3)}`) || 1;
+  const cadence = 3 + (state % 5);
+  const accentStride = 5 + (state % 7);
+
+  for (let index = 0; index < bucketCount; index += 1) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const normalizedIndex = index / Math.max(1, bucketCount - 1);
+    const envelope = 0.2 + Math.sin(normalizedIndex * Math.PI) * 0.2;
+    const phrase = 0.16 + Math.abs(Math.sin(normalizedIndex * Math.PI * cadence)) * 0.26;
+    const accent = index % accentStride === 0 ? 0.12 : 0;
+    const jitter = ((state >>> 8) & 0xffff) / 0xffff;
+    const maxPeak = clamp(envelope + phrase + accent + jitter * 0.16, 0.12, 0.92);
+    const symmetry = 0.68 + (((state >>> 24) & 0xff) / 0xff) * 0.24;
+    maxPeaks.push(maxPeak);
+    minPeaks.push(-maxPeak * symmetry);
+  }
+
+  return {
+    waveformKey,
+    version: 0,
+    durationSeconds,
+    bucketCount,
+    minPeaks,
+    maxPeaks,
+    isPreview: true,
+  };
 }
 
 function keyboardDigit(eventCode: string) {
@@ -408,6 +463,44 @@ function buildMemoizedClipsByTrack(
   }
 
   return hasChanged ? nextClipsByTrack : current;
+}
+
+function isSameClipPlacement(left: ClipSummary, right: ClipSummary) {
+  return (
+    left.trackId === right.trackId &&
+    left.filePath === right.filePath &&
+    Math.abs(left.timelineStartSeconds - right.timelineStartSeconds) < 0.0001 &&
+    Math.abs(left.sourceStartSeconds - right.sourceStartSeconds) < 0.0001 &&
+    Math.abs(left.durationSeconds - right.durationSeconds) < 0.0001
+  );
+}
+
+function mergeOptimisticClipsByTrack(
+  clipsByTrack: Record<string, ClipSummary[]>,
+  operations: OptimisticClipOperation[],
+) {
+  if (!operations.length) {
+    return clipsByTrack;
+  }
+
+  const nextClipsByTrack: Record<string, ClipSummary[]> = Object.fromEntries(
+    Object.entries(clipsByTrack).map(([trackId, clips]) => [trackId, [...clips]]),
+  );
+
+  for (const operation of operations) {
+    for (const clip of operation.clips) {
+      const currentTrackClips = nextClipsByTrack[clip.trackId] ?? [];
+      if (currentTrackClips.some((currentClip) => isSameClipPlacement(currentClip, clip))) {
+        continue;
+      }
+
+      nextClipsByTrack[clip.trackId] = [...currentTrackClips, clip].sort(
+        (left, right) => left.timelineStartSeconds - right.timelineStartSeconds,
+      );
+    }
+  }
+
+  return nextClipsByTrack;
 }
 
 function isTrackDescendant(song: SongView, candidateTrackId: string | null, trackId: string) {
@@ -543,6 +636,7 @@ export function TransportPanel() {
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>(null);
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
   const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState[]>([]);
+  const [optimisticClipOperations, setOptimisticClipOperations] = useState<OptimisticClipOperation[]>([]);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
   const [isImportingLibrary, setIsImportingLibrary] = useState(false);
   const [libraryImportProgress, setLibraryImportProgress] = useState<LibraryImportProgressEvent | null>(null);
@@ -665,6 +759,36 @@ export function TransportPanel() {
     },
     [getTrackOptimisticMix, setTrackOptimisticMix],
   );
+
+  const startOptimisticClipOperation = useCallback((clips: ClipSummary[]) => {
+    const operationId = `optimistic-clip-op-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setOptimisticClipOperations((current) => [
+      ...current,
+      {
+        id: operationId,
+        clearAfterProjectRevision: null,
+        clips,
+      },
+    ]);
+    return operationId;
+  }, []);
+
+  const completeOptimisticClipOperation = useCallback((operationId: string, projectRevision: number) => {
+    setOptimisticClipOperations((current) =>
+      current.map((operation) =>
+        operation.id === operationId
+          ? {
+              ...operation,
+              clearAfterProjectRevision: projectRevision,
+            }
+          : operation,
+      ),
+    );
+  }, []);
+
+  const discardOptimisticClipOperation = useCallback((operationId: string) => {
+    setOptimisticClipOperations((current) => current.filter((operation) => operation.id !== operationId));
+  }, []);
 
   const resolveTrackMix = useCallback(
     (track: TrackSummary, trackId: string) => {
@@ -1154,6 +1278,42 @@ export function TransportPanel() {
     let active = true;
     let unlisten: (() => void) | undefined;
 
+    void listenToWaveformReady((event) => {
+      if (!active) {
+        return;
+      }
+
+      if (playbackSongDir && event.songDir !== playbackSongDir.replace(/\\/g, "/")) {
+        return;
+      }
+
+      setWaveformCache((current) => ({
+        ...current,
+        [event.waveformKey]: event.summary,
+      }));
+    }).then((nextUnlisten) => {
+      if (!active) {
+        nextUnlisten();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [playbackSongDir]);
+
+  useEffect(() => {
+    if (!isTauriApp) {
+      return () => {};
+    }
+
+    let active = true;
+    let unlisten: (() => void) | undefined;
+
     void listenToLibraryImportProgress((event) => {
       if (!active) {
         return;
@@ -1259,12 +1419,67 @@ export function TransportPanel() {
   }, [playbackSongDir]);
 
   useEffect(() => {
+    let active = true;
+
+    async function warmLibraryWaveforms() {
+      if (!playbackSongDir || !libraryAssets.length) {
+        return;
+      }
+
+      const missingWaveformKeys = libraryAssets
+        .map((asset) => asset.filePath)
+        .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index)
+        .filter((waveformKey) => {
+          const summary = waveformCache[waveformKey];
+          return !summary || summary.isPreview;
+        });
+
+      if (!missingWaveformKeys.length) {
+        return;
+      }
+
+      const summaries = await getLibraryWaveformSummaries(missingWaveformKeys);
+      if (!active || !summaries.length) {
+        return;
+      }
+
+      setWaveformCache((current) => ({
+        ...current,
+        ...Object.fromEntries(summaries.map((summary) => [summary.waveformKey, summary])),
+      }));
+    }
+
+    void warmLibraryWaveforms();
+
+    return () => {
+      active = false;
+    };
+  }, [libraryAssets, playbackSongDir, waveformCache]);
+
+  useEffect(() => {
     if (!song) {
       setWaveformCache({});
     }
     // Mantenemos la caché viva entre revisiones del mismo proyecto.
     // Solo se limpia si cerramos la canción (!song) o cambiamos de proyecto.
   }, [song?.id]);
+
+  useEffect(() => {
+    if (!song) {
+      setOptimisticClipOperations([]);
+      return;
+    }
+
+    setOptimisticClipOperations((current) =>
+      current.filter((operation) => {
+        if (operation.clearAfterProjectRevision === null) {
+          return true;
+        }
+
+        return operation.clearAfterProjectRevision > song.projectRevision;
+      }),
+    );
+  }, [song?.id, song?.projectRevision]);
 
   useEffect(() => {
     if (!song) {
@@ -1285,7 +1500,10 @@ export function TransportPanel() {
       const missingWaveformKeys = song.clips
         .map((clip) => clip.waveformKey)
         .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index)
-        .filter((waveformKey) => !waveformCache[waveformKey]);
+        .filter((waveformKey) => {
+          const summary = waveformCache[waveformKey];
+          return !summary || summary.isPreview;
+        });
 
       if (!missingWaveformKeys.length) {
         return;
@@ -1293,6 +1511,9 @@ export function TransportPanel() {
 
       const summaries = await getWaveformSummaries(missingWaveformKeys);
       if (!active) {
+        return;
+      }
+      if (!summaries.length) {
         return;
       }
 
@@ -2032,6 +2253,10 @@ export function TransportPanel() {
   const pendingMarkerJump = pendingMarkerJumpSignature
     ? snapshotRef.current?.pendingMarkerJump ?? null
     : null;
+  const renderedClipsByTrack = useMemo(
+    () => mergeOptimisticClipsByTrack(clipsByTrack, optimisticClipOperations),
+    [clipsByTrack, optimisticClipOperations],
+  );
   const readoutPositionSeconds = displayPositionSecondsRef.current;
   const musicalPositionLabel = song
     ? formatMusicalPosition(readoutPositionSeconds, song.bpm, song.timeSignature)
@@ -3160,54 +3385,6 @@ export function TransportPanel() {
     setTempoDraft(String(asset.detectedBpm));
   }
 
-  async function placeLibraryAssetOnTimeline(args: {
-    filePath: string;
-    durationSeconds: number;
-    timelineStartSeconds: number;
-    targetTrackId: string | null;
-    skipTempoPrompt?: boolean;
-    pendingTrackSnapshot?: TransportSnapshot | null;
-  }) {
-    const asset = resolveDraggedLibraryAsset(args.filePath, args.durationSeconds);
-    if (!args.skipTempoPrompt) {
-      await maybePromptForInitialTempo(asset);
-    }
-
-    let targetTrackId = args.targetTrackId;
-    let pendingTrackSnapshot = args.pendingTrackSnapshot ?? null;
-    if (!targetTrackId) {
-      const createdTrack = await createLibraryTrackForAsset(asset);
-      pendingTrackSnapshot = createdTrack.snapshot;
-      targetTrackId = createdTrack.trackId;
-    }
-
-    if (!targetTrackId) {
-      if (pendingTrackSnapshot) {
-        applyPlaybackSnapshot(pendingTrackSnapshot);
-      }
-      return;
-    }
-
-    try {
-      const clipSnapshot = await createClip({
-        trackId: targetTrackId,
-        filePath: asset.filePath,
-        timelineStartSeconds: args.timelineStartSeconds,
-      });
-      applyPlaybackSnapshot(clipSnapshot);
-    } catch (error) {
-      if (pendingTrackSnapshot) {
-        applyPlaybackSnapshot(pendingTrackSnapshot);
-      }
-
-      throw error;
-    }
-
-    setSelectedTrackId(targetTrackId);
-    setSelectedSectionId(null);
-    setStatus(`Clip agregado: ${asset.fileName}`);
-  }
-
   async function createLibraryTrackForAsset(asset: LibraryAssetSummary) {
     const snapshot = await createTrack({
       name: humanizeLibraryTrackName(asset.filePath),
@@ -3219,6 +3396,75 @@ export function TransportPanel() {
       snapshot,
       trackId: nextSong?.tracks.at(-1)?.id ?? null,
     };
+  }
+
+  async function commitLibraryClipPlacements(args: {
+    placements: Array<{
+      asset: LibraryAssetSummary;
+      trackId: string;
+      timelineStartSeconds: number;
+    }>;
+    pendingTrackSnapshot?: TransportSnapshot | null;
+  }) {
+    if (!args.placements.length) {
+      if (args.pendingTrackSnapshot) {
+        applyPlaybackSnapshot(args.pendingTrackSnapshot);
+      }
+      return;
+    }
+
+    if (args.pendingTrackSnapshot) {
+      applyPlaybackSnapshot(args.pendingTrackSnapshot);
+    }
+
+    setWaveformCache((current) => {
+      const nextCache = { ...current };
+
+      for (const placement of args.placements) {
+        const waveformKey = placement.asset.filePath;
+        if (nextCache[waveformKey] && !nextCache[waveformKey].isPreview) {
+          continue;
+        }
+
+        nextCache[waveformKey] = buildInstantWaveformPreview(
+          waveformKey,
+          placement.asset.durationSeconds,
+        );
+      }
+
+      return nextCache;
+    });
+
+    const optimisticOperationId = startOptimisticClipOperation(
+      args.placements.map((placement, index) => ({
+        id: `optimistic-clip-${Date.now()}-${index}`,
+        trackId: placement.trackId,
+        trackName:
+          tracksByIdRef.current[placement.trackId]?.name ?? humanizeLibraryTrackName(placement.asset.filePath),
+        filePath: placement.asset.filePath,
+        waveformKey: placement.asset.filePath,
+        timelineStartSeconds: Math.max(0, placement.timelineStartSeconds),
+        sourceStartSeconds: 0,
+        sourceDurationSeconds: placement.asset.durationSeconds,
+        durationSeconds: placement.asset.durationSeconds,
+        gain: 1,
+      })),
+    );
+
+    try {
+      const clipSnapshot = await createClipsBatch(
+        args.placements.map((placement) => ({
+          trackId: placement.trackId,
+          filePath: placement.asset.filePath,
+          timelineStartSeconds: placement.timelineStartSeconds,
+        })),
+      );
+      completeOptimisticClipOperation(optimisticOperationId, clipSnapshot.projectRevision);
+      applyPlaybackSnapshot(clipSnapshot);
+    } catch (error) {
+      discardOptimisticClipOperation(optimisticOperationId);
+      throw error;
+    }
   }
 
   async function placeLibraryAssetsOnTimeline(args: {
@@ -3251,21 +3497,30 @@ export function TransportPanel() {
       }
 
       let clipStartSeconds = args.timelineStartSeconds;
-      for (const [index, asset] of assets.entries()) {
-        await placeLibraryAssetOnTimeline({
-          filePath: asset.filePath,
-          durationSeconds: asset.durationSeconds,
+      const placements = assets.map((asset) => {
+        const nextPlacement = {
+          asset,
+          trackId: targetTrackId as string,
           timelineStartSeconds: clipStartSeconds,
-          targetTrackId,
-          skipTempoPrompt: true,
-          pendingTrackSnapshot: index === 0 ? pendingTrackSnapshot : null,
-        });
+        };
         clipStartSeconds += asset.durationSeconds;
-      }
+        return nextPlacement;
+      });
+
+      await commitLibraryClipPlacements({
+        placements,
+        pendingTrackSnapshot,
+      });
 
       setSelectedTrackId(targetTrackId);
     } else {
       let selectedTrackId: string | null = args.targetTrackId;
+      let pendingTrackSnapshot: TransportSnapshot | null = null;
+      const placements: Array<{
+        asset: LibraryAssetSummary;
+        trackId: string;
+        timelineStartSeconds: number;
+      }> = [];
 
       for (const [index, asset] of assets.entries()) {
         const createdTrack =
@@ -3278,16 +3533,22 @@ export function TransportPanel() {
           continue;
         }
 
-        await placeLibraryAssetOnTimeline({
-          filePath: asset.filePath,
-          durationSeconds: asset.durationSeconds,
+        if (createdTrack?.snapshot) {
+          pendingTrackSnapshot = createdTrack.snapshot;
+        }
+
+        placements.push({
+          asset,
+          trackId: targetTrackId,
           timelineStartSeconds: args.timelineStartSeconds,
-          targetTrackId,
-          skipTempoPrompt: true,
-          pendingTrackSnapshot: createdTrack?.snapshot ?? null,
         });
         selectedTrackId = targetTrackId;
       }
+
+      await commitLibraryClipPlacements({
+        placements,
+        pendingTrackSnapshot,
+      });
 
       if (selectedTrackId) {
         setSelectedTrackId(selectedTrackId);
@@ -3928,7 +4189,7 @@ export function TransportPanel() {
                 trackHeight={trackHeight}
                 song={song}
                 visibleTracks={visibleTracks}
-                clipsByTrack={clipsByTrack}
+                clipsByTrack={renderedClipsByTrack}
                 waveformCache={waveformCache}
                 cameraXRef={cameraXRef}
                 pixelsPerSecond={pixelsPerSecond}

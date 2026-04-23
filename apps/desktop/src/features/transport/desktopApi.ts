@@ -73,6 +73,7 @@ export type WaveformSummaryDto = {
   bucketCount: number;
   minPeaks: number[];
   maxPeaks: number[];
+  isPreview?: boolean;
 };
 
 export type LibraryAssetSummary = {
@@ -140,6 +141,18 @@ export type AudioMeterLevel = {
 export type LibraryImportProgressEvent = {
   percent: number;
   message: string;
+};
+
+export type WaveformReadyEvent = {
+  songDir: string;
+  waveformKey: string;
+  summary: WaveformSummaryDto;
+};
+
+export type CreateClipArgs = {
+  trackId: string;
+  filePath: string;
+  timelineStartSeconds: number;
 };
 
 const tauriWindow = window as Window & {
@@ -212,6 +225,19 @@ export async function listenToLibraryImportProgress(
 
   const { listen } = await import("@tauri-apps/api/event");
   return listen<LibraryImportProgressEvent>("library:import-progress", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenToWaveformReady(
+  handler: (event: WaveformReadyEvent) => void,
+): Promise<() => void> {
+  if (!isTauriApp) {
+    return () => {};
+  }
+
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<WaveformReadyEvent>("waveform:ready", (event) => {
     handler(event.payload);
   });
 }
@@ -337,6 +363,19 @@ export async function getWaveformSummaries(
   }
 
   return invokeCommand<WaveformSummaryDto[]>("get_waveform_summaries", { waveformKeys });
+}
+
+export async function getLibraryWaveformSummaries(
+  filePaths: string[],
+): Promise<WaveformSummaryDto[]> {
+  if (!isTauriApp) {
+    return filePaths
+      .map((filePath) => demoWaveforms[filePath])
+      .filter((summary): summary is WaveformSummaryDto => Boolean(summary))
+      .map((summary) => cloneSnapshot(summary));
+  }
+
+  return invokeCommand<WaveformSummaryDto[]>("get_library_waveform_summaries", { filePaths });
 }
 
 export async function getLibraryAssets(): Promise<LibraryAssetSummary[]> {
@@ -914,48 +953,60 @@ export async function createClip(args: {
   filePath: string;
   timelineStartSeconds: number;
 }): Promise<TransportSnapshot> {
-  if (!isTauriApp) {
-    const track = demoSong.tracks.find((entry) => entry.id === args.trackId);
-    if (!track || track.kind === "folder") {
-      return buildDemoSnapshot();
-    }
+  return createClipsBatch([args]);
+}
 
-    const asset = demoLibraryAssets.find((entry) => entry.filePath === args.filePath);
-    const durationSeconds = asset?.durationSeconds ?? 8;
-    if (!demoWaveforms[args.filePath]) {
-      const generatedWaveform = buildWaveform(96, "smooth");
-      demoWaveforms[args.filePath] = {
-        waveformKey: args.filePath,
-        version: 2,
-        durationSeconds,
-        bucketCount: generatedWaveform.max.length,
-        minPeaks: generatedWaveform.min,
-        maxPeaks: generatedWaveform.max,
-      };
+export async function createClipsBatch(args: CreateClipArgs[]): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const nextArgs = args.filter((entry) => {
+      const track = demoSong.tracks.find((candidate) => candidate.id === entry.trackId);
+      return Boolean(track && track.kind !== "folder");
+    });
+
+    if (!nextArgs.length) {
+      return buildDemoSnapshot();
     }
 
     updateDemoSong((song) => ({
       ...song,
       clips: [
         ...song.clips,
-        {
-          id: `clip-demo-${Date.now()}`,
-          trackId: args.trackId,
-          trackName: track.name,
-          filePath: args.filePath,
-          waveformKey: args.filePath,
-          timelineStartSeconds: Math.max(0, args.timelineStartSeconds),
-          sourceStartSeconds: 0,
-          sourceDurationSeconds: durationSeconds,
-          durationSeconds,
-          gain: 1,
-        },
+        ...nextArgs.map((entry, index) => {
+          const track = song.tracks.find((candidate) => candidate.id === entry.trackId);
+          const asset = demoLibraryAssets.find((candidate) => candidate.filePath === entry.filePath);
+          const durationSeconds = asset?.durationSeconds ?? 8;
+
+          if (!demoWaveforms[entry.filePath]) {
+            const generatedWaveform = buildWaveform(96, "smooth");
+            demoWaveforms[entry.filePath] = {
+              waveformKey: entry.filePath,
+              version: 2,
+              durationSeconds,
+              bucketCount: generatedWaveform.max.length,
+              minPeaks: generatedWaveform.min,
+              maxPeaks: generatedWaveform.max,
+            };
+          }
+
+          return {
+            id: `clip-demo-${Date.now()}-${index}`,
+            trackId: entry.trackId,
+            trackName: track?.name ?? entry.trackId,
+            filePath: entry.filePath,
+            waveformKey: entry.filePath,
+            timelineStartSeconds: Math.max(0, entry.timelineStartSeconds),
+            sourceStartSeconds: 0,
+            sourceDurationSeconds: durationSeconds,
+            durationSeconds,
+            gain: 1,
+          };
+        }),
       ],
     }));
     return buildDemoSnapshot();
   }
 
-  return invokeCommand<TransportSnapshot>("create_clip", args);
+  return invokeCommand<TransportSnapshot>("create_clips_batch", { requests: args });
 }
 
 export async function moveTrack(args: {

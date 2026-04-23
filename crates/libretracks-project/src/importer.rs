@@ -1,8 +1,7 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
     thread,
     time::Instant,
 };
@@ -10,6 +9,7 @@ use std::{
 use libretracks_core::{
     validate_song, Clip, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
 };
+use rayon::prelude::*;
 
 use crate::{
     analyze_wav_file, create_song_folder, save_song, waveform_file_path_for_source,
@@ -85,13 +85,16 @@ pub struct ImportOperationMetrics {
 pub fn read_wav_metadata(path: impl AsRef<Path>) -> Result<WavMetadata, ProjectError> {
     let path = path.as_ref();
     ensure_wav_extension(path)?;
-    let analysis = analyze_wav_file(path)?;
+    let reader = hound::WavReader::open(path)?;
+    let spec = reader.spec();
+    let frame_count = reader.duration() as f64;
+    let duration_seconds = frame_count / f64::from(spec.sample_rate.max(1));
 
     Ok(WavMetadata {
-        channels: analysis.channels,
-        sample_rate: analysis.sample_rate,
-        duration_seconds: analysis.duration_seconds,
-        tempo_candidate: analysis.tempo_candidate,
+        channels: spec.channels,
+        sample_rate: spec.sample_rate,
+        duration_seconds,
+        tempo_candidate: None,
     })
 }
 
@@ -108,16 +111,16 @@ pub fn import_wav_files_to_library(
     let mut metrics = ImportOperationMetrics::default();
     let planned_files = plan_import_files(song_dir, wav_files, &mut used_file_names)?;
     metrics.copy_millis = copy_import_files(&planned_files)?;
-    let (analyzed_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
+    let (imported_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
     merge_import_metrics(&mut metrics, &analysis_metrics);
 
-    let assets = analyzed_files
+    let assets = imported_files
         .into_iter()
         .map(|file| ImportedLibraryAsset {
             source_path: file.source_path,
             imported_relative_path: file.imported_relative_path,
             duration_seconds: file.metadata.duration_seconds,
-            detected_bpm: file.metadata.tempo_candidate.map(|candidate| candidate.bpm),
+            detected_bpm: file.metadata.tempo_candidate.map(|tempo| tempo.bpm),
         })
         .collect();
 
@@ -409,97 +412,44 @@ fn analyze_import_files_in_parallel(
         return Ok((Vec::new(), ImportOperationMetrics::default()));
     }
 
-    let worker_count = planned_files
-        .len()
-        .min(
-            thread::available_parallelism()
-                .map(|count| count.get())
-                .unwrap_or(1),
-        )
-        .min(4);
-    let queue = Arc::new(Mutex::new(VecDeque::from(planned_files)));
-    let results = Arc::new(Mutex::new(Vec::new()));
-    let first_error = Arc::new(Mutex::new(None));
-
-    thread::scope(|scope| {
-        for _ in 0..worker_count {
-            let queue = Arc::clone(&queue);
-            let results = Arc::clone(&results);
-            let first_error = Arc::clone(&first_error);
-
-            scope.spawn(move || loop {
-                let next_file = {
-                    let mut queue = queue.lock().expect("import queue lock should not poison");
-                    queue.pop_front()
-                };
-
-                let Some(next_file) = next_file else {
-                    break;
-                };
-
-                let analysis_started_at = Instant::now();
-                let analysis = match analyze_wav_file(&next_file.destination_path) {
-                    Ok(analysis) => analysis,
-                    Err(error) => {
-                        let mut first_error =
-                            first_error.lock().expect("error lock should not poison");
-                        if first_error.is_none() {
-                            *first_error = Some(error);
-                        }
-                        break;
-                    }
-                };
-                let wav_analysis_millis = analysis_started_at.elapsed().as_millis();
-
-                let waveform_write_started_at = Instant::now();
-                let waveform_path = waveform_file_path_for_source(&next_file.destination_path);
-                if let Err(error) = write_waveform_summary(&waveform_path, &analysis.waveform) {
-                    let mut first_error = first_error.lock().expect("error lock should not poison");
-                    if first_error.is_none() {
-                        *first_error = Some(error);
-                    }
-                    break;
-                }
-                let waveform_write_millis = waveform_write_started_at.elapsed().as_millis();
-
-                let metadata = WavMetadata {
-                    channels: analysis.channels,
-                    sample_rate: analysis.sample_rate,
-                    duration_seconds: analysis.duration_seconds,
-                    tempo_candidate: analysis.tempo_candidate,
-                };
-
-                results
-                    .lock()
-                    .expect("results lock should not poison")
-                    .push((
-                        next_file,
-                        metadata,
-                        wav_analysis_millis,
-                        waveform_write_millis,
-                    ));
-            });
-        }
-    });
-
-    if let Some(error) = first_error
-        .lock()
-        .expect("error lock should not poison")
-        .take()
-    {
-        return Err(error);
-    }
+    let worker_count = planned_files.len().min(
+        thread::available_parallelism()
+            .map(|count| count.get())
+            .unwrap_or(1),
+    );
 
     let mut metrics = ImportOperationMetrics {
         analysis_workers: worker_count,
         ..ImportOperationMetrics::default()
     };
     let mut analyzed_files = Vec::new();
-    let mut collected_results = results
-        .lock()
-        .expect("results lock should not poison")
-        .drain(..)
-        .collect::<Vec<_>>();
+    let mut collected_results = planned_files
+        .into_par_iter()
+        .map(|next_file| {
+            let analysis_started_at = Instant::now();
+            let analysis = analyze_wav_file(&next_file.destination_path)?;
+            let wav_analysis_millis = analysis_started_at.elapsed().as_millis();
+
+            let waveform_write_started_at = Instant::now();
+            let waveform_path = waveform_file_path_for_source(&next_file.destination_path);
+            write_waveform_summary(&waveform_path, &analysis.waveform)?;
+            let waveform_write_millis = waveform_write_started_at.elapsed().as_millis();
+
+            let metadata = WavMetadata {
+                channels: analysis.channels,
+                sample_rate: analysis.sample_rate,
+                duration_seconds: analysis.duration_seconds,
+                tempo_candidate: analysis.tempo_candidate,
+            };
+
+            Ok((
+                next_file,
+                metadata,
+                wav_analysis_millis,
+                waveform_write_millis,
+            ))
+        })
+        .collect::<Result<Vec<_>, ProjectError>>()?;
     collected_results.sort_by_key(|(planned, _, _, _)| planned.index);
 
     for (planned_file, metadata, wav_analysis_millis, waveform_write_millis) in collected_results {
