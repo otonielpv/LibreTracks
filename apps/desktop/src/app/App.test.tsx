@@ -208,7 +208,7 @@ describe("App", () => {
     };
 
     await act(async () => {
-      fireEvent.dragStart(screen.getByRole("button", { name: /drums\.wav/i }), { dataTransfer });
+      fireEvent.dragStart(screen.getByLabelText(/drums\.wav/i), { dataTransfer });
     });
 
     expect(dataTransfer.effectAllowed).toBe("copy");
@@ -238,7 +238,7 @@ describe("App", () => {
     };
 
     await act(async () => {
-      fireEvent.dragStart(screen.getByRole("button", { name: /drums\.wav/i }), { dataTransfer });
+      fireEvent.dragStart(screen.getByLabelText(/drums\.wav/i), { dataTransfer });
     });
 
     const drumsRow = screen.getByText("Drums").closest(".lt-track-row");

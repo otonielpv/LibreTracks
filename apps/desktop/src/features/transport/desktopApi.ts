@@ -504,6 +504,20 @@ export async function importLibraryAssetsFromDialog(): Promise<LibraryAssetSumma
   return invokeCommand<LibraryAssetSummary[] | null>("import_library_assets_from_dialog");
 }
 
+export async function deleteLibraryAsset(filePath: string): Promise<LibraryAssetSummary[]> {
+  if (!isTauriApp) {
+    if (demoSong.clips.some((clip) => clip.filePath === filePath)) {
+      throw new Error("cannot delete a library asset that is already used on the timeline");
+    }
+
+    demoLibraryAssets = demoLibraryAssets.filter((asset) => asset.filePath !== filePath);
+    delete demoWaveforms[filePath];
+    return cloneSnapshot(demoLibraryAssets);
+  }
+
+  return invokeCommand<LibraryAssetSummary[]>("delete_library_asset", { filePath });
+}
+
 export async function playTransport(): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     syncDemoPlayback();

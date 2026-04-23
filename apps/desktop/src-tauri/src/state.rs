@@ -20,13 +20,14 @@ use libretracks_project::{
     ProjectImportRequest, WaveformSummary, SONG_FILE_NAME,
 };
 use rfd::FileDialog;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::to_vec;
 use tauri::{AppHandle, Manager};
 
 use crate::audio_runtime::{AudioController, PlaybackStartReason};
 
 const TIMELINE_TIMEBASE_HZ: u32 = 48_000;
+const LIBRARY_MANIFEST_FILE_NAME: &str = "library.json";
 
 pub struct DesktopState {
     pub audio: AudioController,
@@ -394,6 +395,7 @@ impl DesktopSession {
             })?;
         fs::create_dir_all(song_dir.join("audio"))?;
         fs::create_dir_all(song_dir.join("cache").join("waveforms"))?;
+        write_library_manifest(&song_dir, &[])?;
 
         let save_started_at = Instant::now();
         save_song_to_file(&target_song_file, &song)?;
@@ -446,7 +448,9 @@ impl DesktopSession {
             })?;
 
         let save_started_at = Instant::now();
-        copy_project_audio_files(&source_song_dir, &target_song_dir, &song)?;
+        let library_file_paths = collect_library_file_paths(&source_song_dir, Some(&song))?;
+        copy_project_audio_files(&source_song_dir, &target_song_dir, &song, &library_file_paths)?;
+        write_library_manifest(&target_song_dir, &library_file_paths)?;
         save_song_to_file(&target_song_file, &song)?;
         self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
 
@@ -558,13 +562,65 @@ impl DesktopSession {
     ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let imported_assets = import_wav_files_to_library(&song_dir, files)?;
+        let current_song = self.engine.song().cloned();
+        let mut library_file_paths = collect_library_file_paths(&song_dir, current_song.as_ref())?;
+        for asset in &imported_assets.assets {
+            let normalized_path = normalize_library_file_path(
+                asset.imported_relative_path.to_string_lossy().as_ref(),
+            );
+            if !library_file_paths.contains(&normalized_path) {
+                library_file_paths.push(normalized_path);
+            }
+        }
+        write_library_manifest(&song_dir, &library_file_paths)?;
         self.record_import_metrics(&imported_assets.metrics);
-        list_library_assets(&song_dir)
+        list_library_assets(&song_dir, current_song.as_ref())
     }
 
     pub fn get_library_assets(&self) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        list_library_assets(&song_dir)
+        list_library_assets(&song_dir, self.engine.song())
+    }
+
+    pub fn delete_library_asset(
+        &mut self,
+        file_path: &str,
+    ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let normalized_file_path = normalize_library_file_path(file_path);
+
+        if song
+            .clips
+            .iter()
+            .any(|clip| normalize_library_file_path(&clip.file_path) == normalized_file_path)
+        {
+            return Err(DesktopError::AudioCommand(
+                "cannot delete a library asset that is already used on the timeline".into(),
+            ));
+        }
+
+        let mut library_file_paths = collect_library_file_paths(&song_dir, Some(&song))?;
+        library_file_paths.retain(|path| path != &normalized_file_path);
+        write_library_manifest(&song_dir, &library_file_paths)?;
+
+        let audio_file_path = song_dir.join(&normalized_file_path);
+        if audio_file_path.exists() {
+            fs::remove_file(&audio_file_path)?;
+        }
+
+        let waveform_path = waveform_file_path(&song_dir, &normalized_file_path);
+        if waveform_path.exists() {
+            fs::remove_file(waveform_path)?;
+        }
+
+        self.waveform_cache.remove(&song_dir, &normalized_file_path);
+
+        list_library_assets(&song_dir, Some(&song))
     }
 
     pub fn song_view(&mut self) -> Result<Option<SongView>, DesktopError> {
@@ -1817,13 +1873,55 @@ fn build_empty_song(song_id: String, title: String) -> Song {
     }
 }
 
-fn list_library_assets(song_dir: &Path) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryManifest {
+    file_paths: Vec<String>,
+}
+
+fn library_manifest_path(song_dir: &Path) -> PathBuf {
+    song_dir.join(LIBRARY_MANIFEST_FILE_NAME)
+}
+
+fn normalize_library_file_path(file_path: &str) -> String {
+    file_path.replace('\\', "/")
+}
+
+fn read_library_manifest(song_dir: &Path) -> Result<Option<Vec<String>>, DesktopError> {
+    let manifest_path = library_manifest_path(song_dir);
+    if !manifest_path.exists() {
+        return Ok(None);
+    }
+
+    let manifest = serde_json::from_slice::<LibraryManifest>(&fs::read(&manifest_path)?)
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    Ok(Some(manifest.file_paths))
+}
+
+fn write_library_manifest(song_dir: &Path, file_paths: &[String]) -> Result<(), DesktopError> {
+    let mut normalized_paths = file_paths
+        .iter()
+        .map(|file_path| normalize_library_file_path(file_path))
+        .collect::<Vec<_>>();
+    normalized_paths.sort();
+    normalized_paths.dedup();
+
+    let manifest = LibraryManifest {
+        file_paths: normalized_paths,
+    };
+    let manifest_json = serde_json::to_vec_pretty(&manifest)
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    fs::write(library_manifest_path(song_dir), manifest_json)?;
+    Ok(())
+}
+
+fn collect_scanned_library_file_paths(song_dir: &Path) -> Result<Vec<String>, DesktopError> {
     let audio_dir = song_dir.join("audio");
     if !audio_dir.exists() {
         return Ok(Vec::new());
     }
 
-    let mut assets = Vec::new();
+    let mut file_paths = Vec::new();
     for entry in fs::read_dir(audio_dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -1840,10 +1938,47 @@ fn list_library_assets(song_dir: &Path) -> Result<Vec<LibraryAssetSummary>, Desk
         }
 
         let file_name = entry.file_name().to_string_lossy().to_string();
+        file_paths.push(format!("audio/{file_name}"));
+    }
+
+    file_paths.sort();
+    Ok(file_paths)
+}
+
+fn collect_library_file_paths(
+    song_dir: &Path,
+    song: Option<&Song>,
+) -> Result<Vec<String>, DesktopError> {
+    let mut file_paths = read_library_manifest(song_dir)?.unwrap_or(collect_scanned_library_file_paths(song_dir)?);
+
+    if let Some(song) = song {
+        for clip in &song.clips {
+            file_paths.push(normalize_library_file_path(&clip.file_path));
+        }
+    }
+
+    file_paths.sort();
+    file_paths.dedup();
+    Ok(file_paths)
+}
+
+fn list_library_assets(song_dir: &Path, song: Option<&Song>) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+    let mut assets = Vec::new();
+    for file_path in collect_library_file_paths(song_dir, song)? {
+        let path = song_dir.join(&file_path);
+        if !path.is_file() {
+            continue;
+        }
+
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(&file_path)
+            .to_string();
         let metadata = read_wav_metadata(&path)?;
         assets.push(LibraryAssetSummary {
             file_name: file_name.clone(),
-            file_path: format!("audio/{file_name}"),
+            file_path,
             duration_seconds: metadata.duration_seconds,
             detected_bpm: metadata.tempo_candidate.map(|candidate| candidate.bpm),
         });
@@ -2109,6 +2244,12 @@ impl WaveformMemoryCache {
     fn reset_if_song_changed(&mut self, song_dir: &Path) {
         if self.song_dir.as_deref() != Some(song_dir) {
             self.reset(song_dir);
+        }
+    }
+
+    fn remove(&mut self, song_dir: &Path, waveform_key: &str) {
+        if self.song_dir.as_deref() == Some(song_dir) {
+            self.entries.remove(waveform_key);
         }
     }
 }
@@ -2400,6 +2541,7 @@ fn copy_project_audio_files(
     source_song_dir: &Path,
     target_song_dir: &Path,
     song: &Song,
+    library_file_paths: &[String],
 ) -> Result<(), DesktopError> {
     fs::create_dir_all(target_song_dir.join("audio"))?;
     fs::create_dir_all(target_song_dir.join("cache").join("waveforms"))?;
@@ -2414,6 +2556,29 @@ fn copy_project_audio_files(
         let source_path = source_song_dir.join(relative_path);
         let target_path = target_song_dir.join(relative_path);
 
+        if source_path == target_path {
+            continue;
+        }
+
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        fs::copy(source_path, target_path)?;
+    }
+
+    for file_path in library_file_paths {
+        let relative_path = Path::new(file_path);
+        if !copied_relative_paths.insert(relative_path.to_path_buf()) {
+            continue;
+        }
+
+        let source_path = source_song_dir.join(relative_path);
+        if !source_path.exists() {
+            continue;
+        }
+
+        let target_path = target_song_dir.join(relative_path);
         if source_path == target_path {
             continue;
         }
@@ -3248,6 +3413,51 @@ mod tests {
         assert_eq!(assets[0].file_path, "audio/alpha.wav");
         assert!((assets[0].duration_seconds - 2.0).abs() < 0.001);
         assert_eq!(assets[1].file_name, "beta.wav");
+    }
+
+    #[test]
+    fn library_manifest_overrides_audio_directory_scanning_for_empty_songs() {
+        let root = tempdir().expect("temp dir should exist");
+        let root_path = root.keep();
+        let song_dir = create_song_folder(&root_path, "library-manifest-demo")
+            .expect("song dir should exist");
+        write_silent_test_wav(&song_dir.join("audio").join("carry-over.wav"), 3);
+        write_library_manifest(&song_dir, &[]).expect("manifest should save");
+
+        let assets = list_library_assets(&song_dir, Some(&build_empty_song("song_1".into(), "Nueva".into())))
+            .expect("library assets should load");
+
+        assert!(assets.is_empty());
+    }
+
+    #[test]
+    fn delete_library_asset_removes_unused_files_from_the_song_library() {
+        let mut session = session_with_song_dir("library-delete-demo", build_empty_song("song_1".into(), "Nueva".into()));
+        let song_dir = session.song_dir.clone().expect("song dir should exist");
+        let audio_path = song_dir.join("audio").join("remove-me.wav");
+        write_silent_test_wav(&audio_path, 5);
+        write_library_manifest(&song_dir, &["audio/remove-me.wav".to_string()])
+            .expect("manifest should save");
+
+        let assets = session
+            .delete_library_asset("audio/remove-me.wav")
+            .expect("delete should succeed");
+
+        assert!(assets.is_empty());
+        assert!(!audio_path.exists());
+    }
+
+    #[test]
+    fn delete_library_asset_rejects_files_used_by_existing_clips() {
+        let mut session = session_with_song_dir("library-delete-used-demo", demo_song());
+
+        let error = session
+            .delete_library_asset("audio/test.wav")
+            .expect_err("delete should be rejected");
+
+        assert!(error
+            .to_string()
+            .contains("already used on the timeline"));
     }
 
     #[test]

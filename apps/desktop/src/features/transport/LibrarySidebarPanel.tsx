@@ -6,8 +6,10 @@ type LibrarySidebarPanelProps = {
   assets: LibraryAssetSummary[];
   isLoading: boolean;
   isImporting: boolean;
+  deletingFilePath: string | null;
   canImport: boolean;
   onImport: () => void;
+  onDelete: (filePath: string, fileName: string) => void;
 };
 
 function formatAssetDuration(durationSeconds: number) {
@@ -21,10 +23,12 @@ export function LibrarySidebarPanel({
   assets,
   isLoading,
   isImporting,
+  deletingFilePath,
   canImport,
   onImport,
+  onDelete,
 }: LibrarySidebarPanelProps) {
-  const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, asset: LibraryAssetSummary) => {
+  const handleAssetDragStart = (event: DragEvent<HTMLDivElement>, asset: LibraryAssetSummary) => {
     const payload = JSON.stringify({
       file_path: asset.filePath,
       durationSeconds: asset.durationSeconds,
@@ -70,11 +74,11 @@ export function LibrarySidebarPanel({
         {!isLoading && assets.length ? (
           <div className="lt-library-asset-list" role="list" aria-label="Library assets">
             {assets.map((asset) => (
-              <button
+              <div
                 key={asset.filePath}
-                type="button"
                 role="listitem"
                 className="lt-library-asset"
+                aria-label={asset.fileName}
                 draggable
                 onDragStart={(event) => handleAssetDragStart(event, asset)}
               >
@@ -86,7 +90,19 @@ export function LibrarySidebarPanel({
                     {asset.detectedBpm ? ` | ${asset.detectedBpm.toFixed(1)} BPM` : ""}
                   </small>
                 </span>
-              </button>
+                <button
+                  type="button"
+                  className="lt-library-asset-delete"
+                  aria-label={`Delete ${asset.fileName}`}
+                  disabled={deletingFilePath === asset.filePath}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDelete(asset.filePath, asset.fileName);
+                  }}
+                >
+                  <span className="material-symbols-outlined">delete</span>
+                </button>
+              </div>
             ))}
           </div>
         ) : null}

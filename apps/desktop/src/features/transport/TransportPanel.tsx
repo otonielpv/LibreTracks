@@ -19,6 +19,7 @@ import {
   deleteSectionMarker,
   deleteTrack,
   duplicateClip,
+  deleteLibraryAsset,
   getLibraryAssets,
   getSongView,
   getTransportSnapshot,
@@ -502,6 +503,7 @@ export function TransportPanel() {
   const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState | null>(null);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
   const [isImportingLibrary, setIsImportingLibrary] = useState(false);
+  const [deletingLibraryFilePath, setDeletingLibraryFilePath] = useState<string | null>(null);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const menuBarRef = useRef<HTMLDivElement | null>(null);
@@ -2745,6 +2747,24 @@ export function TransportPanel() {
     setIsImportingLibrary(false);
   }
 
+  async function handleDeleteLibraryAsset(filePath: string, fileName: string) {
+    if (!window.confirm(`Delete ${fileName} from this song library?`)) {
+      return;
+    }
+
+    setDeletingLibraryFilePath(filePath);
+    try {
+      await runAction(async () => {
+        const assets = await deleteLibraryAsset(filePath);
+        setLibraryAssets(assets);
+        setLibraryClipPreview((current) => (current?.filePath === filePath ? null : current));
+        setStatus(`Asset eliminado: ${fileName}`);
+      });
+    } finally {
+      setDeletingLibraryFilePath((current) => (current === filePath ? null : current));
+    }
+  }
+
   function resolveDraggedLibraryAsset(filePath: string, durationSeconds: number): LibraryAssetSummary {
     return (
       libraryAssets.find((asset) => asset.filePath === filePath) ?? {
@@ -3143,9 +3163,13 @@ export function TransportPanel() {
           assets={libraryAssets}
           isLoading={isLibraryLoading}
           isImporting={isImportingLibrary}
+          deletingFilePath={deletingLibraryFilePath}
           canImport={Boolean(playbackSongDir)}
           onImport={() => {
             void handleImportLibraryAssetsClick();
+          }}
+          onDelete={(filePath, fileName) => {
+            void handleDeleteLibraryAsset(filePath, fileName);
           }}
         />
       ) : null}

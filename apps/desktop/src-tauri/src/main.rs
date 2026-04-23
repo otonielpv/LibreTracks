@@ -180,6 +180,21 @@ fn import_library_assets_from_dialog(
 }
 
 #[tauri::command]
+fn delete_library_asset(
+    file_path: String,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<LibraryAssetSummary>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .delete_library_asset(&file_path)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
@@ -675,6 +690,7 @@ fn main() {
             report_ui_render_metric,
             create_song,
             import_library_assets_from_dialog,
+            delete_library_asset,
             save_project,
             save_project_as,
             open_project_from_dialog,

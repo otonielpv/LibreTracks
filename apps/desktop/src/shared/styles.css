@@ -527,7 +527,7 @@ body {
 .lt-library-asset {
   width: 100%;
   display: grid;
-  grid-template-columns: 1.8rem minmax(0, 1fr);
+  grid-template-columns: 1.8rem minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.7rem;
   border-radius: 0.7rem;
@@ -573,6 +573,34 @@ body {
   font: 600 10px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.lt-library-asset-delete {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(14 14 14 / 0.82);
+  color: rgb(229 226 225 / 0.72);
+  flex-shrink: 0;
+}
+
+.lt-library-asset-delete:hover:not(:disabled) {
+  border-color: rgb(255 109 91 / 0.38);
+  background: rgb(83 24 24 / 0.62);
+  color: #ffe4df;
+}
+
+.lt-library-asset-delete:disabled {
+  opacity: 0.45;
+  cursor: progress;
+}
+
+.lt-library-asset-delete .material-symbols-outlined {
+  font-size: 16px;
 }
 
 .lt-main-stage {
