@@ -1328,38 +1328,32 @@ fn parse_wav_layout(bytes: &[u8], file_path: &Path) -> Result<ParsedWavLayout, S
 
         match chunk_id {
             b"fmt " if chunk_len >= 16 && chunk_data_end <= bytes.len() => {
+                let fmt_bytes = &bytes[chunk_data_start..chunk_data_end];
                 let audio_format = u16::from_le_bytes([
-                    bytes[chunk_data_start],
-                    bytes[chunk_data_start + 1],
+                    fmt_bytes[0],
+                    fmt_bytes[1],
                 ]);
                 channels = usize::from(u16::from_le_bytes([
-                    bytes[chunk_data_start + 2],
-                    bytes[chunk_data_start + 3],
+                    fmt_bytes[2],
+                    fmt_bytes[3],
                 ])
                 .max(1));
                 sample_rate = u32::from_le_bytes([
-                    bytes[chunk_data_start + 4],
-                    bytes[chunk_data_start + 5],
-                    bytes[chunk_data_start + 6],
-                    bytes[chunk_data_start + 7],
+                    fmt_bytes[4],
+                    fmt_bytes[5],
+                    fmt_bytes[6],
+                    fmt_bytes[7],
                 ]);
                 bits_per_sample = u16::from_le_bytes([
-                    bytes[chunk_data_start + 14],
-                    bytes[chunk_data_start + 15],
+                    fmt_bytes[14],
+                    fmt_bytes[15],
                 ]);
-                encoding = Some(match (audio_format, bits_per_sample) {
-                    (1, 8) => WavSampleEncoding::SignedInt8,
-                    (1, 16) => WavSampleEncoding::SignedInt16,
-                    (1, 24) => WavSampleEncoding::SignedInt24,
-                    (1, 32) => WavSampleEncoding::SignedInt32,
-                    (3, 32) => WavSampleEncoding::Float32,
-                    _ => {
-                        return Err(format!(
-                            "unsupported wav sample format {audio_format}/{bits_per_sample} for {}",
-                            file_path.display()
-                        ))
-                    }
-                });
+                encoding = Some(resolve_wav_sample_encoding(
+                    audio_format,
+                    bits_per_sample,
+                    fmt_bytes,
+                    file_path,
+                )?);
             }
             b"data" => {
                 data_offset = Some(chunk_data_start);
@@ -1387,6 +1381,52 @@ fn parse_wav_layout(bytes: &[u8], file_path: &Path) -> Result<ParsedWavLayout, S
         data_len,
         encoding,
     })
+}
+
+fn resolve_wav_sample_encoding(
+    audio_format: u16,
+    bits_per_sample: u16,
+    fmt_bytes: &[u8],
+    file_path: &Path,
+) -> Result<WavSampleEncoding, String> {
+    let canonical_format = match audio_format {
+        0xFFFE => parse_wave_format_extensible_subformat(fmt_bytes, file_path)?,
+        other => other,
+    };
+
+    match (canonical_format, bits_per_sample) {
+        (1, 8) => Ok(WavSampleEncoding::SignedInt8),
+        (1, 16) => Ok(WavSampleEncoding::SignedInt16),
+        (1, 24) => Ok(WavSampleEncoding::SignedInt24),
+        (1, 32) => Ok(WavSampleEncoding::SignedInt32),
+        (3, 32) => Ok(WavSampleEncoding::Float32),
+        _ => Err(format!(
+            "unsupported wav sample format {audio_format}/{bits_per_sample} for {}",
+            file_path.display()
+        )),
+    }
+}
+
+fn parse_wave_format_extensible_subformat(
+    fmt_bytes: &[u8],
+    file_path: &Path,
+) -> Result<u16, String> {
+    if fmt_bytes.len() < 40 {
+        return Err(format!(
+            "unsupported wav extensible fmt chunk in {}",
+            file_path.display()
+        ));
+    }
+
+    let extension_size = u16::from_le_bytes([fmt_bytes[16], fmt_bytes[17]]) as usize;
+    if extension_size < 22 {
+        return Err(format!(
+            "unsupported wav extensible metadata in {}",
+            file_path.display()
+        ));
+    }
+
+    Ok(u16::from_le_bytes([fmt_bytes[24], fmt_bytes[25]]))
 }
 
 fn spawn_disk_reader(state: DiskReaderState) -> JoinHandle<DiskReaderReport> {
@@ -2599,6 +2639,52 @@ mod tests {
         writer.finalize().expect("wav should finalize");
     }
 
+    fn write_extensible_float_test_wav(path: &std::path::Path) {
+        let channels = 1u16;
+        let sample_rate = 48_000u32;
+        let bits_per_sample = 32u16;
+        let bytes_per_sample = usize::from(bits_per_sample / 8);
+        let samples = [0.25_f32, -0.5_f32];
+
+        let mut data_bytes = Vec::with_capacity(samples.len() * bytes_per_sample);
+        for sample in samples {
+            data_bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+
+        let fmt_chunk_len = 40u32;
+        let data_chunk_len = data_bytes.len() as u32;
+        let riff_chunk_len = 4 + (8 + fmt_chunk_len) + (8 + data_chunk_len);
+        let byte_rate = sample_rate * u32::from(channels) * u32::from(bits_per_sample / 8);
+        let block_align = channels * (bits_per_sample / 8);
+
+        let mut wav_bytes = Vec::with_capacity((riff_chunk_len + 8) as usize);
+        wav_bytes.extend_from_slice(b"RIFF");
+        wav_bytes.extend_from_slice(&riff_chunk_len.to_le_bytes());
+        wav_bytes.extend_from_slice(b"WAVE");
+
+        wav_bytes.extend_from_slice(b"fmt ");
+        wav_bytes.extend_from_slice(&fmt_chunk_len.to_le_bytes());
+        wav_bytes.extend_from_slice(&0xFFFEu16.to_le_bytes());
+        wav_bytes.extend_from_slice(&channels.to_le_bytes());
+        wav_bytes.extend_from_slice(&sample_rate.to_le_bytes());
+        wav_bytes.extend_from_slice(&byte_rate.to_le_bytes());
+        wav_bytes.extend_from_slice(&block_align.to_le_bytes());
+        wav_bytes.extend_from_slice(&bits_per_sample.to_le_bytes());
+        wav_bytes.extend_from_slice(&22u16.to_le_bytes());
+        wav_bytes.extend_from_slice(&bits_per_sample.to_le_bytes());
+        wav_bytes.extend_from_slice(&0u32.to_le_bytes());
+        wav_bytes.extend_from_slice(&[
+            0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38,
+            0x9B, 0x71,
+        ]);
+
+        wav_bytes.extend_from_slice(b"data");
+        wav_bytes.extend_from_slice(&data_chunk_len.to_le_bytes());
+        wav_bytes.extend_from_slice(&data_bytes);
+
+        fs::write(path, wav_bytes).expect("wav should be created");
+    }
+
     fn cache_with_shared_buffer(
         path: &Path,
         samples: Vec<f32>,
@@ -3278,6 +3364,22 @@ mod tests {
         assert_eq!(source.preload_frame_count, 8_000 * 4);
         assert!(source.fully_cached);
         assert!(source.mapped_audio.is_some());
+    }
+
+    #[test]
+    fn prepared_audio_source_accepts_wave_format_extensible_float32() {
+        let root = tempdir().expect("temp dir should exist");
+        let audio_path = root.path().join("extensible-float.wav");
+        write_extensible_float_test_wav(&audio_path);
+
+        let source = prepare_audio_source(&audio_path).expect("audio source should prepare");
+
+        assert_eq!(source.sample_rate, 48_000);
+        assert_eq!(source.channels, 1);
+        assert_eq!(source.preload_frame_count, 2);
+        assert!(source.mapped_audio.is_some());
+        assert!((source.read_preloaded_sample(0, 0, 1) - 0.25).abs() < 0.000_001);
+        assert!((source.read_preloaded_sample(1, 0, 1) + 0.5).abs() < 0.000_001);
     }
 
     #[test]
