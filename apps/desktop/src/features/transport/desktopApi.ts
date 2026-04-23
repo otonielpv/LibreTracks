@@ -877,6 +877,55 @@ export async function createTrack(args: {
   return invokeCommand<TransportSnapshot>("create_track", args);
 }
 
+export async function createClip(args: {
+  trackId: string;
+  filePath: string;
+  timelineStartSeconds: number;
+}): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    const track = demoSong.tracks.find((entry) => entry.id === args.trackId);
+    if (!track || track.kind === "folder") {
+      return buildDemoSnapshot();
+    }
+
+    const asset = demoLibraryAssets.find((entry) => entry.filePath === args.filePath);
+    const durationSeconds = asset?.durationSeconds ?? 8;
+    if (!demoWaveforms[args.filePath]) {
+      const generatedWaveform = buildWaveform(96, "smooth");
+      demoWaveforms[args.filePath] = {
+        waveformKey: args.filePath,
+        version: 2,
+        durationSeconds,
+        bucketCount: generatedWaveform.max.length,
+        minPeaks: generatedWaveform.min,
+        maxPeaks: generatedWaveform.max,
+      };
+    }
+
+    updateDemoSong((song) => ({
+      ...song,
+      clips: [
+        ...song.clips,
+        {
+          id: `clip-demo-${Date.now()}`,
+          trackId: args.trackId,
+          trackName: track.name,
+          filePath: args.filePath,
+          waveformKey: args.filePath,
+          timelineStartSeconds: Math.max(0, args.timelineStartSeconds),
+          sourceStartSeconds: 0,
+          sourceDurationSeconds: durationSeconds,
+          durationSeconds,
+          gain: 1,
+        },
+      ],
+    }));
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("create_clip", args);
+}
+
 export async function moveTrack(args: {
   trackId: string;
   insertAfterTrackId?: string | null;

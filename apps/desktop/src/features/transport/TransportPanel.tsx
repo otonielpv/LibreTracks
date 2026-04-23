@@ -5,12 +5,14 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
   assignSectionMarkerDigit,
   cancelMarkerJump,
   createSectionMarker,
+  createClip,
   createSong,
   createTrack,
   deleteClip,
@@ -153,6 +155,19 @@ type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
 
 type SidebarTab = "browser" | "markers" | "library" | "routing" | "settings";
 
+type LibraryAssetDragPayload = {
+  file_path: string;
+  durationSeconds: number;
+};
+
+type LibraryClipPreviewState = {
+  trackId: string | null;
+  filePath: string;
+  label: string;
+  timelineStartSeconds: number;
+  durationSeconds: number;
+};
+
 type TransportAnchorMeta = {
   snapshotKey: string;
   anchorPositionSeconds: number;
@@ -171,6 +186,49 @@ function formatCompactTime(seconds: number) {
   const minutes = Math.floor(safeSeconds / 60);
   const remainder = Math.floor(safeSeconds % 60);
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+function libraryAssetFileName(filePath: string) {
+  return filePath.split("/").at(-1) ?? filePath;
+}
+
+function humanizeLibraryTrackName(filePath: string) {
+  return libraryAssetFileName(filePath)
+    .replace(/\.[^.]+$/, "")
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(" ") || "Audio";
+}
+
+function readLibraryAssetDragPayload(dataTransfer: DataTransfer | null): LibraryAssetDragPayload | null {
+  if (!dataTransfer) {
+    return null;
+  }
+
+  const payload = dataTransfer.getData("application/libretracks-library-asset");
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(payload) as Partial<LibraryAssetDragPayload>;
+    if (
+      typeof parsed.file_path !== "string" ||
+      !parsed.file_path ||
+      typeof parsed.durationSeconds !== "number" ||
+      !Number.isFinite(parsed.durationSeconds)
+    ) {
+      return null;
+    }
+
+    return {
+      file_path: parsed.file_path,
+      durationSeconds: Math.max(0.05, parsed.durationSeconds),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function formatTimelineHeaderTime(seconds: number) {
@@ -445,6 +503,7 @@ export function TransportPanel() {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>("library");
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
+  const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState | null>(null);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
   const [isImportingLibrary, setIsImportingLibrary] = useState(false);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
@@ -1907,9 +1966,10 @@ export function TransportPanel() {
   const canPersistProject = Boolean(song);
   const isProjectEmpty = !song || song.tracks.length === 0;
   const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
-  const shouldShowEmptyState = !isProjectPending && isProjectEmpty;
+  const shouldShowEmptyState = !isProjectPending && !song;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
+  const shouldShowEmptyArrangementHint = Boolean(song && visibleTracks.length === 0);
   const timelineGrid = useTimelineGrid({
     durationSeconds: song?.durationSeconds ?? 0,
     bpm: song?.bpm ?? 120,
@@ -2669,6 +2729,184 @@ export function TransportPanel() {
     setIsImportingLibrary(false);
   }
 
+  function resolveDraggedLibraryAsset(filePath: string, durationSeconds: number): LibraryAssetSummary {
+    return (
+      libraryAssets.find((asset) => asset.filePath === filePath) ?? {
+        fileName: libraryAssetFileName(filePath),
+        filePath,
+        durationSeconds,
+        detectedBpm: null,
+      }
+    );
+  }
+
+  function resolveLibraryDropSeconds(
+    event: ReactDragEvent<HTMLElement>,
+    element: HTMLElement,
+  ) {
+    const bounds = element.getBoundingClientRect();
+    const viewportX = clamp(event.clientX - bounds.left, 0, bounds.width);
+    const rawSeconds = screenXToSeconds(viewportX, getCameraX(), pixelsPerSecond);
+
+    return snapEnabled
+      ? snapToTimelineGrid(rawSeconds, song?.bpm ?? 120, song?.timeSignature ?? "4/4", zoomLevel, pixelsPerSecond)
+      : rawSeconds;
+  }
+
+  async function maybePromptForInitialTempo(asset: LibraryAssetSummary) {
+    const currentSong = songRef.current;
+    if (
+      !currentSong ||
+      currentSong.clips.length > 0 ||
+      asset.detectedBpm == null ||
+      !Number.isFinite(asset.detectedBpm) ||
+      Math.abs(asset.detectedBpm - currentSong.bpm) < 0.01
+    ) {
+      return;
+    }
+
+    const shouldUpdateTempo = window.confirm(
+      `Detected BPM: ${asset.detectedBpm.toFixed(1)}. Do you want to adjust the project tempo?`,
+    );
+    if (!shouldUpdateTempo) {
+      return;
+    }
+
+    const nextSnapshot = await updateSongTempo(asset.detectedBpm);
+    applyPlaybackSnapshot(nextSnapshot);
+    setTempoDraft(String(asset.detectedBpm));
+  }
+
+  async function placeLibraryAssetOnTimeline(args: {
+    filePath: string;
+    durationSeconds: number;
+    timelineStartSeconds: number;
+    targetTrackId: string | null;
+  }) {
+    const asset = resolveDraggedLibraryAsset(args.filePath, args.durationSeconds);
+    await maybePromptForInitialTempo(asset);
+
+    let targetTrackId = args.targetTrackId;
+    if (!targetTrackId) {
+      const trackSnapshot = await createTrack({
+        name: humanizeLibraryTrackName(asset.filePath),
+        kind: "audio",
+      });
+      applyPlaybackSnapshot(trackSnapshot);
+      const nextSong = await getSongView();
+      targetTrackId = nextSong?.tracks.at(-1)?.id ?? null;
+    }
+
+    if (!targetTrackId) {
+      return;
+    }
+
+    const clipSnapshot = await createClip({
+      trackId: targetTrackId,
+      filePath: asset.filePath,
+      timelineStartSeconds: args.timelineStartSeconds,
+    });
+    applyPlaybackSnapshot(clipSnapshot);
+    setSelectedTrackId(targetTrackId);
+    setSelectedSectionId(null);
+    setStatus(`Clip agregado: ${asset.fileName}`);
+  }
+
+  function handleTrackListLibraryDragLeave(event: ReactDragEvent<HTMLDivElement>) {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+
+    setLibraryClipPreview(null);
+  }
+
+  function handleTrackLaneLibraryDragOver(
+    event: ReactDragEvent<HTMLDivElement>,
+    track: TrackSummary,
+  ) {
+    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    if (!payload || track.kind === "folder") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+
+    const asset = resolveDraggedLibraryAsset(payload.file_path, payload.durationSeconds);
+    setLibraryClipPreview({
+      trackId: track.id,
+      filePath: asset.filePath,
+      label: asset.fileName,
+      timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
+      durationSeconds: asset.durationSeconds,
+    });
+  }
+
+  function handleTrackLaneLibraryDrop(
+    event: ReactDragEvent<HTMLDivElement>,
+    track: TrackSummary,
+  ) {
+    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    if (!payload || track.kind === "folder") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setLibraryClipPreview(null);
+
+    void runAction(async () => {
+      await placeLibraryAssetOnTimeline({
+        filePath: payload.file_path,
+        durationSeconds: payload.durationSeconds,
+        timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
+        targetTrackId: track.id,
+      });
+    });
+  }
+
+  function handleTrackListLibraryDragOver(event: ReactDragEvent<HTMLDivElement>) {
+    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (!payload || target?.closest(".lt-track-lane")) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+
+    const asset = resolveDraggedLibraryAsset(payload.file_path, payload.durationSeconds);
+    setLibraryClipPreview({
+      trackId: null,
+      filePath: asset.filePath,
+      label: asset.fileName,
+      timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
+      durationSeconds: asset.durationSeconds,
+    });
+  }
+
+  function handleTrackListLibraryDrop(event: ReactDragEvent<HTMLDivElement>) {
+    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (!payload || target?.closest(".lt-track-lane")) {
+      return;
+    }
+
+    event.preventDefault();
+    setLibraryClipPreview(null);
+
+    void runAction(async () => {
+      await placeLibraryAssetOnTimeline({
+        filePath: payload.file_path,
+        durationSeconds: payload.durationSeconds,
+        timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
+        targetTrackId: null,
+      });
+    });
+  }
+
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
       <div className="lt-daw-shell" ref={panelRef} onContextMenu={(event) => event.preventDefault()}>
@@ -3134,7 +3372,14 @@ export function TransportPanel() {
             </div>
           </div>
 
-          <div className="lt-track-list" ref={laneAreaRef} style={{ width: timelineRowWidth }}>
+          <div
+            className={`lt-track-list ${libraryClipPreview ? "is-library-drag-over" : ""}`}
+            ref={laneAreaRef}
+            style={{ width: timelineRowWidth }}
+            onDragOver={handleTrackListLibraryDragOver}
+            onDrop={handleTrackListLibraryDrop}
+            onDragLeave={handleTrackListLibraryDragLeave}
+          >
             {song ? (
               <TimelineTrackCanvas
                 width={laneViewportWidth}
@@ -3152,6 +3397,27 @@ export function TransportPanel() {
                 playheadSecondsRef={displayPositionSecondsRef}
                 playheadDragRef={playheadDragRef}
               />
+            ) : null}
+
+            {shouldShowEmptyArrangementHint ? (
+              <div className="lt-empty-arrangement-dropzone" aria-label="Empty arrangement dropzone">
+                <strong>Drop audio from the Library to create the first track</strong>
+                <p>
+                  LibreTracks will create an audio track automatically and place the clip at the snapped
+                  timeline position.
+                </p>
+                {libraryClipPreview && libraryClipPreview.trackId === null ? (
+                  <div
+                    className="lt-library-clip-ghost is-floating"
+                    style={{
+                      left: HEADER_WIDTH + libraryClipPreview.timelineStartSeconds * pixelsPerSecond,
+                      width: Math.max(libraryClipPreview.durationSeconds * pixelsPerSecond, 36),
+                    }}
+                  >
+                    <span>{libraryClipPreview.label}</span>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
 
             {song?.tracks && visibleTracks.map((track) => {
@@ -3206,7 +3472,21 @@ export function TransportPanel() {
                     aria-label={`Lane ${track.name}`}
                     onMouseDown={(event) => handleTrackLaneMouseDown(event, track, trackClips)}
                     onContextMenu={(event) => handleTrackLaneContextMenu(event, track, trackClips)}
-                  />
+                    onDragOver={(event) => handleTrackLaneLibraryDragOver(event, track)}
+                    onDrop={(event) => handleTrackLaneLibraryDrop(event, track)}
+                  >
+                    {libraryClipPreview?.trackId === track.id ? (
+                      <div
+                        className="lt-library-clip-ghost"
+                        style={{
+                          left: libraryClipPreview.timelineStartSeconds * pixelsPerSecond,
+                          width: Math.max(libraryClipPreview.durationSeconds * pixelsPerSecond, 36),
+                        }}
+                      >
+                        <span>{libraryClipPreview.label}</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               );
             })}

@@ -194,6 +194,38 @@ describe("App", () => {
     });
   });
 
+  it("drops a library asset onto a track lane and creates a new clip", async () => {
+    const { container } = await renderApp();
+    mockLaneBounds(container);
+
+    const transferData = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: vi.fn((type: string, value: string) => {
+        transferData.set(type, value);
+      }),
+      getData: vi.fn((type: string) => transferData.get(type) ?? ""),
+    };
+
+    await act(async () => {
+      fireEvent.dragStart(screen.getByRole("button", { name: /drums\.wav/i }), { dataTransfer });
+    });
+
+    const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
+    expect(drumsRow).toBeTruthy();
+    const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(drumsLane).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.dragOver(drumsLane as HTMLElement, { dataTransfer, clientX: 420, clientY: 160 });
+      fireEvent.drop(drumsLane as HTMLElement, { dataTransfer, clientX: 420, clientY: 160 });
+    });
+
+    expect(await screen.findByText(/clip agregado: drums\.wav/i)).toBeTruthy();
+    expect(screen.getByText("5 clips")).toBeTruthy();
+  });
+
   it("creates a marker from the ruler right-click context menu", async () => {
     const { container } = await renderApp();
     mockRulerBounds(container);

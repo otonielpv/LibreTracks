@@ -1091,6 +1091,52 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn create_clip(
+        &mut self,
+        track_id: &str,
+        file_path: &str,
+        timeline_start_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        let track = song
+            .tracks
+            .iter()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+        if track.kind == TrackKind::Folder {
+            return Err(DesktopError::AudioCommand(
+                "clip cannot target a folder track".into(),
+            ));
+        }
+
+        let normalized_file_path = file_path.replace('\\', "/");
+        let wav_metadata = read_wav_metadata(song_dir.join(&normalized_file_path))?;
+
+        song.clips.push(Clip {
+            id: format!("clip_{}", timestamp_suffix()),
+            track_id: track_id.to_string(),
+            file_path: normalized_file_path,
+            timeline_start_seconds: timeline_start_seconds.max(0.0),
+            source_start_seconds: 0.0,
+            duration_seconds: wav_metadata.duration_seconds,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+        });
+        refresh_song_duration(&mut song);
+
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn move_track(
         &mut self,
         track_id: &str,
@@ -3147,6 +3193,36 @@ mod tests {
         assert_eq!(before.tracks.len(), after.tracks.len());
         assert_eq!(before.clips.len(), after.clips.len());
         assert!(assets.iter().any(|asset| asset.file_path == "audio/click.wav"));
+    }
+
+    #[test]
+    fn create_clip_adds_a_library_asset_to_an_existing_audio_track() {
+        let mut session = session_with_song_dir("create-clip-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        session
+            .create_clip("track_1", "audio/test.wav", 4.0, &audio)
+            .expect("clip should be created");
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song should exist");
+        assert_eq!(song_view.clips.len(), 2);
+        assert!(song_view.clips.iter().any(|clip| {
+            clip.track_id == "track_1"
+                && clip.file_path == "audio/test.wav"
+                && (clip.timeline_start_seconds - 4.0).abs() < 0.0001
+        }));
+
+        let saved_song = load_song(
+            session
+                .song_dir
+                .as_ref()
+                .expect("song dir should remain available"),
+        )
+        .expect("song file should save");
+        assert_eq!(saved_song.clips.len(), 2);
     }
 
     #[test]

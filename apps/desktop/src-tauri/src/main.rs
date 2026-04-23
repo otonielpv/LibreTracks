@@ -503,6 +503,23 @@ fn create_track(
 }
 
 #[tauri::command]
+fn create_clip(
+    track_id: String,
+    file_path: String,
+    timeline_start_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .create_clip(&track_id, &file_path, timeline_start_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn move_track(
     track_id: String,
     insert_after_track_id: Option<String>,
@@ -682,6 +699,7 @@ fn main() {
             assign_section_marker_digit,
             update_song_tempo,
             create_track,
+            create_clip,
             move_track,
             update_track_mix_live,
             update_track,
