@@ -1270,6 +1270,8 @@ body {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
   color: #e5e2e1;
   z-index: 2;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .lt-track-header-body {
@@ -1545,6 +1547,7 @@ body {
   right: 0;
   bottom: 0;
   left: 260px;
+  overflow: hidden;
   pointer-events: none;
   z-index: 6;
 }
