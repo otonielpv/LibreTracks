@@ -63,10 +63,12 @@ import {
 } from "./desktopApi";
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import { LibrarySidebarPanel } from "./LibrarySidebarPanel";
+import { PlayheadOverlay } from "./PlayheadOverlay";
 import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
 import {
   BASE_PIXELS_PER_SECOND,
   clampCameraX,
+  clientXToTimelineSeconds,
   getMusicalPosition,
   getMaxCameraX,
   screenXToSeconds,
@@ -113,6 +115,7 @@ type ClipDragState = {
   pointerId: number;
   originSeconds: number;
   previewSeconds: number;
+  clickSeekSeconds: number;
   startClientX: number;
   hasMoved: boolean;
 } | null;
@@ -142,6 +145,8 @@ type TimelinePanState = {
   pointerId: number;
   startClientX: number;
   originCameraX: number;
+  previewSeconds: number;
+  hasMoved: boolean;
 } | null;
 
 type LiveClipMoveState = {
@@ -353,6 +358,32 @@ function keyboardDigit(eventCode: string) {
   }
 
   return null;
+}
+
+function isTextEntryTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.isContentEditable || target.tagName === "TEXTAREA") {
+    return true;
+  }
+
+  if (target.tagName !== "INPUT") {
+    return false;
+  }
+
+  const textEntryTypes = new Set([
+    "",
+    "email",
+    "password",
+    "search",
+    "tel",
+    "text",
+    "url",
+  ]);
+
+  return textEntryTypes.has((target as HTMLInputElement).type.toLowerCase());
 }
 
 function resolveMarkerShortcut(markers: SectionMarkerSummary[], digit: number) {
@@ -578,14 +609,17 @@ function resolveTrackDropState(
 function rulerPointerToSeconds(
   event: MouseEvent | ReactMouseEvent,
   element: HTMLElement,
+  scrollContainerElement: HTMLElement | null,
   durationSeconds: number,
-  cameraX: number,
   pixelsPerSecond: number,
 ) {
-  const bounds = element.getBoundingClientRect();
-  const x = clamp(event.clientX - bounds.left, 0, bounds.width);
   return clamp(
-    screenXToSeconds(x, cameraX, pixelsPerSecond),
+    clientXToTimelineSeconds(
+      event.clientX,
+      element,
+      scrollContainerElement,
+      pixelsPerSecond,
+    ),
     0,
     Math.max(0, durationSeconds),
   );
@@ -648,7 +682,6 @@ export function TransportPanel() {
   const rulerTrackRef = useRef<HTMLDivElement | null>(null);
   const timelineShellRef = useRef<HTMLDivElement | null>(null);
   const horizontalScrollbarRef = useRef<HTMLDivElement | null>(null);
-  const playheadHandleRef = useRef<HTMLDivElement | null>(null);
   const playbackVisualAnchorRef = useRef({
     anchorPositionSeconds: 0,
     anchorReceivedAtMs: 0,
@@ -1776,18 +1809,11 @@ export function TransportPanel() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isTypingTarget =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "SELECT" ||
-        target?.isContentEditable;
-
-      if (isTypingTarget) {
-        return;
-      }
-
       if (event.code === "Space") {
+        if (isTextEntryTarget(event.target)) {
+          return;
+        }
+
         event.preventDefault();
         void runAction(async () => {
           if (snapshotRef.current?.playbackState === "playing") {
@@ -1801,6 +1827,17 @@ export function TransportPanel() {
           applyPlaybackSnapshot(nextSnapshot);
           setStatus("Reproduccion iniciada.");
         });
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+
+      if (isTypingTarget) {
         return;
       }
 
@@ -1916,6 +1953,9 @@ export function TransportPanel() {
       if (clipDrag && effectSong) {
         const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
         const exceededThreshold = Math.abs(event.clientX - clipDrag.startClientX) > DRAG_THRESHOLD_PX;
+        if (!clipDrag.hasMoved && exceededThreshold) {
+          restoreConfirmedTransportVisual();
+        }
         const deltaSeconds = (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
         const nextSeconds = snapEnabled
           ? snapToTimelineGrid(
@@ -1937,38 +1977,6 @@ export function TransportPanel() {
         if (nextDrag.hasMoved) {
           queueClipMoveLiveUpdate(nextDrag.clipId, nextDrag.previewSeconds);
         }
-      }
-
-      const playheadDrag = playheadDragRef.current;
-      if (playheadDrag && songRef.current && rulerTrackRef.current) {
-        const effectSong = songRef.current;
-        const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
-        const effectCameraX = getCameraX({
-          durationSeconds: effectSong.durationSeconds,
-          pixelsPerSecond: effectPixelsPerSecond,
-        });
-        const rawSeconds = rulerPointerToSeconds(
-          event,
-          rulerTrackRef.current,
-          effectSong.durationSeconds,
-          effectCameraX,
-          effectPixelsPerSecond,
-        );
-        const nextSeconds = snapEnabled
-          ? snapToTimelineGrid(
-              rawSeconds,
-              effectSong.bpm,
-              effectSong.timeSignature,
-              zoomLevel,
-              effectPixelsPerSecond,
-            )
-          : rawSeconds;
-
-        playheadDragRef.current = {
-          ...playheadDrag,
-          currentSeconds: nextSeconds,
-        };
-        syncLivePosition(nextSeconds);
       }
 
       const trackDrag = trackDragRef.current;
@@ -2020,18 +2028,12 @@ export function TransportPanel() {
           });
         } else {
           clipPreviewSecondsRef.current = {};
+          void runAction(async () => {
+            await performSeek(activeClipDrag.clickSeekSeconds);
+          });
         }
       } else {
         clipPreviewSecondsRef.current = {};
-      }
-
-      const activePlayheadDrag = playheadDragRef.current;
-      if (activePlayheadDrag) {
-        playheadDragRef.current = null;
-        playheadHandleRef.current?.classList.remove("is-dragging");
-        void runAction(async () => {
-          await performSeek(activePlayheadDrag.currentSeconds);
-        });
       }
 
       const activeTrackDrag = trackDragRef.current;
@@ -2084,7 +2086,6 @@ export function TransportPanel() {
   useEffect(() => {
     return () => {
       clearTrackDragVisuals();
-      playheadHandleRef.current?.classList.remove("is-dragging");
     };
   }, [clearTrackDragVisuals]);
 
@@ -2113,15 +2114,8 @@ export function TransportPanel() {
   ) {
     const durationSeconds = options?.durationSeconds ?? songRef.current?.durationSeconds ?? 0;
     const clampedPosition = clamp(positionSeconds, 0, durationSeconds || Number.MAX_SAFE_INTEGER);
-    const playheadOffset = secondsToScreenX(
-      clampedPosition,
-      getCameraX(options),
-      options?.pixelsPerSecond ?? pixelsPerSecond,
-    );
-    const snappedPlayheadOffset = Math.round(playheadOffset) + 0.5;
 
     displayPositionSecondsRef.current = clampedPosition;
-    panelRef.current?.style.setProperty("--lt-playhead-left", `${snappedPlayheadOffset}px`);
 
     if (transportReadoutValueRef.current) {
       transportReadoutValueRef.current.textContent = formatClock(clampedPosition);
@@ -2221,18 +2215,39 @@ export function TransportPanel() {
     }
   }
 
-  function snappedRulerSeconds(event: MouseEvent | ReactMouseEvent, durationSeconds: number) {
-    const rawSeconds = rulerPointerToSeconds(
-      event,
-      rulerTrackRef.current as HTMLElement,
-      durationSeconds,
-      getCameraX(),
-      pixelsPerSecond,
-    );
+  function normalizeTimelineSeekSeconds(positionSeconds: number, durationSeconds = song?.durationSeconds ?? 0) {
+    const clampedPosition = clamp(positionSeconds, 0, Math.max(0, durationSeconds));
 
     return snapEnabled
-      ? snapToTimelineGrid(rawSeconds, song?.bpm ?? 120, song?.timeSignature ?? "4/4", zoomLevel, pixelsPerSecond)
-      : rawSeconds;
+      ? clamp(
+          snapToTimelineGrid(
+            clampedPosition,
+            song?.bpm ?? 120,
+            song?.timeSignature ?? "4/4",
+            zoomLevel,
+            pixelsPerSecond,
+          ),
+          0,
+          Math.max(0, durationSeconds),
+        )
+      : clampedPosition;
+  }
+
+  function getTimelineScrollContainer() {
+    return timelineShellRef.current ?? horizontalScrollbarRef.current;
+  }
+
+  function snappedRulerSeconds(event: MouseEvent | ReactMouseEvent, durationSeconds: number) {
+    return normalizeTimelineSeekSeconds(
+      rulerPointerToSeconds(
+        event,
+        rulerTrackRef.current as HTMLElement,
+        getTimelineScrollContainer(),
+        durationSeconds,
+        pixelsPerSecond,
+      ),
+      durationSeconds,
+    );
   }
 
   const laneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
@@ -2839,6 +2854,17 @@ export function TransportPanel() {
 
     if (hitClip) {
       event.preventDefault();
+      const clickSeekSeconds = normalizeTimelineSeekSeconds(
+        rulerPointerToSeconds(
+          event,
+          event.currentTarget,
+          getTimelineScrollContainer(),
+          songRef.current?.durationSeconds ?? 0,
+          pixelsPerSecond,
+        ),
+        songRef.current?.durationSeconds ?? 0,
+      );
+      previewSeek(clickSeekSeconds);
       setSelectedClipId(hitClip.id);
       setSelectedTrackId(track.id);
       setSelectedSectionId(null);
@@ -2848,6 +2874,7 @@ export function TransportPanel() {
         pointerId: 1,
         originSeconds: hitClip.timelineStartSeconds,
         previewSeconds: hitClip.timelineStartSeconds,
+        clickSeekSeconds,
         startClientX: event.clientX,
         hasMoved: false,
       };
@@ -2857,16 +2884,39 @@ export function TransportPanel() {
 
     event.preventDefault();
     setContextMenu(null);
-    const panOriginCameraX = timelineShellRef.current?.scrollLeft ?? getCameraX();
+    const previewSeconds = normalizeTimelineSeekSeconds(
+      rulerPointerToSeconds(
+        event,
+        event.currentTarget,
+        getTimelineScrollContainer(),
+        songRef.current?.durationSeconds ?? 0,
+        pixelsPerSecond,
+      ),
+      songRef.current?.durationSeconds ?? 0,
+    );
+    previewSeek(previewSeconds);
+
     const activePan: NonNullable<TimelinePanState> = {
       pointerId: 1,
       startClientX: event.clientX,
-      originCameraX: panOriginCameraX,
+      originCameraX: getCameraX(),
+      previewSeconds,
+      hasMoved: false,
     };
     timelinePanRef.current = activePan;
 
     const onMouseMove = (windowEvent: MouseEvent) => {
       const deltaX = activePan.startClientX - windowEvent.clientX;
+      const exceededThreshold = Math.abs(deltaX) > DRAG_THRESHOLD_PX;
+      if (!activePan.hasMoved && !exceededThreshold) {
+        return;
+      }
+
+      if (!activePan.hasMoved) {
+        activePan.hasMoved = true;
+        restoreConfirmedTransportVisual();
+      }
+
       updateCameraX(activePan.originCameraX + deltaX);
     };
 
@@ -2878,6 +2928,12 @@ export function TransportPanel() {
       timelinePanRef.current = null;
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+
+      if (!activePan.hasMoved) {
+        void runAction(async () => {
+          await performSeek(activePan.previewSeconds);
+        });
+      }
     };
 
     window.addEventListener("mousemove", onMouseMove);
@@ -4060,22 +4116,13 @@ export function TransportPanel() {
                 }
 
                 event.preventDefault();
-                const startSeconds = rulerPointerToSeconds(
-                  event,
-                  rulerTrackRef.current,
-                  song.durationSeconds,
-                  getCameraX(),
-                  pixelsPerSecond,
-                );
-                const snappedSeconds = snapEnabled
-                  ? snapToTimelineGrid(startSeconds, song.bpm, song.timeSignature, zoomLevel, pixelsPerSecond)
-                  : startSeconds;
+                const startSeconds = snappedRulerSeconds(event, song.durationSeconds);
                 setSelectedSectionId(null);
                 setSelectedClipId(null);
                 setSelectedTrackId(null);
                 setContextMenu(null);
                 void runAction(async () => {
-                  await performSeek(snappedSeconds);
+                  await performSeek(startSeconds);
                 });
               }}
               onContextMenu={(event) => {
@@ -4151,22 +4198,22 @@ export function TransportPanel() {
                   })}
                 </TimelineRulerCanvas>
 
-                <div
+                <PlayheadOverlay
                   className="lt-playhead is-handle"
-                  ref={playheadHandleRef}
-                  onMouseDown={(event) => {
-                    if (!song || event.button !== 0) {
-                      return;
-                    }
-
-                    event.preventDefault();
-                    event.stopPropagation();
+                  durationSeconds={song?.durationSeconds ?? 0}
+                  pixelsPerSecond={pixelsPerSecond}
+                  dragStateRef={playheadDragRef}
+                  positionSecondsRef={displayPositionSecondsRef}
+                  normalizePositionSeconds={(positionSeconds) =>
+                    normalizeTimelineSeekSeconds(positionSeconds, song?.durationSeconds ?? 0)}
+                  positionBoundsRef={rulerTrackRef}
+                  scrollContainerRef={timelineShellRef}
+                  onPreviewPositionChange={syncLivePosition}
+                  onSeekCommit={(positionSeconds) => {
                     setContextMenu(null);
-                    playheadDragRef.current = {
-                      pointerId: 1,
-                      currentSeconds: displayPositionSecondsRef.current,
-                    };
-                    playheadHandleRef.current?.classList.add("is-dragging");
+                    void runAction(async () => {
+                      await performSeek(positionSeconds);
+                    });
                   }}
                 />
               </div>
@@ -4196,10 +4243,18 @@ export function TransportPanel() {
                 timelineGrid={timelineGrid}
                 selectedClipId={selectedClipId}
                 clipPreviewSecondsRef={clipPreviewSecondsRef}
-                playheadSecondsRef={displayPositionSecondsRef}
-                playheadDragRef={playheadDragRef}
               />
             ) : null}
+
+            <div className="lt-track-playhead-layer" aria-hidden="true">
+              <PlayheadOverlay
+                className="lt-track-playhead"
+                durationSeconds={song?.durationSeconds ?? 0}
+                pixelsPerSecond={pixelsPerSecond}
+                dragStateRef={playheadDragRef}
+                positionSecondsRef={displayPositionSecondsRef}
+              />
+            </div>
 
             {shouldShowEmptyArrangementHint ? (
               <div

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildVisibleTimelineGrid,
+  clientXToTimelineSeconds,
   getMusicalPosition,
+  secondsToAbsoluteX,
   snapToTimelineGrid,
 } from "./timelineMath";
 
@@ -34,5 +36,20 @@ describe("timelineMath", () => {
 
     expect(grid.markers.some((marker) => marker.seconds === 3600)).toBe(true);
     expect(grid.markers.find((marker) => marker.seconds === 3600)?.barNumber).toBe(1801);
+  });
+
+  it("maps client coordinates into absolute timeline seconds using scroll offset", () => {
+    const boundsElement = {
+      getBoundingClientRect: () =>
+        ({
+          left: 100,
+        }) as DOMRect,
+    };
+
+    expect(clientXToTimelineSeconds(160, boundsElement, { scrollLeft: 240 }, 20)).toBe(15);
+  });
+
+  it("converts seconds into absolute timeline pixels", () => {
+    expect(secondsToAbsoluteX(12.5, 36)).toBe(450);
   });
 });

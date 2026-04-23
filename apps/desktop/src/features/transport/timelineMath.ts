@@ -118,12 +118,27 @@ export function secondsToScreenX(
   return seconds * pixelsPerSecond - cameraX;
 }
 
+export function secondsToAbsoluteX(seconds: number, pixelsPerSecond: number) {
+  return Math.max(0, seconds) * clampPositive(pixelsPerSecond, 1);
+}
+
 export function screenXToSeconds(
   screenX: number,
   cameraX: number,
   pixelsPerSecond: number,
 ) {
   return (cameraX + screenX) / clampPositive(pixelsPerSecond, 1);
+}
+
+export function clientXToTimelineSeconds(
+  clientX: number,
+  boundsElement: Pick<HTMLElement, "getBoundingClientRect">,
+  scrollContainerElement: Pick<HTMLElement, "scrollLeft"> | null,
+  pixelsPerSecond: number,
+) {
+  const bounds = boundsElement.getBoundingClientRect();
+  const x = Math.max(0, clientX - bounds.left + (scrollContainerElement?.scrollLeft ?? 0));
+  return x / clampPositive(pixelsPerSecond, 1);
 }
 
 export function getContentWidth(durationSeconds: number, pixelsPerSecond: number) {

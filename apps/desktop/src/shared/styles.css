@@ -873,7 +873,7 @@ body {
 
 .lt-empty-arrangement-dropzone {
   min-height: 16rem;
-  margin: 1rem;
+  margin: 1rem 0;
   border: 1px dashed rgb(87 241 219 / 0.22);
   border-radius: 1rem;
   background:
@@ -1489,12 +1489,13 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: var(--lt-playhead-left, 0px);
+  left: 0;
   width: 1px;
   color: #57f1db;
   background: #57f1db;
   z-index: 20;
   box-shadow: 0 0 8px rgb(87 241 219 / 0.55);
+  will-change: transform;
 }
 
 .lt-playhead.is-handle {
@@ -1502,6 +1503,8 @@ body {
   margin-left: -8px;
   background: transparent;
   box-shadow: none;
+  cursor: ew-resize;
+  touch-action: none;
 }
 
 .lt-playhead::before {
@@ -1549,6 +1552,29 @@ body {
   bottom: 0;
   background: rgb(87 241 219 / 0.10);
   z-index: 3;
+}
+
+.lt-track-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: #57f1db;
+  box-shadow: 0 0 8px rgb(87 241 219 / 0.55);
+  pointer-events: none;
+  z-index: 6;
+  will-change: transform;
+}
+
+.lt-track-playhead-layer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 260px;
+  pointer-events: none;
+  z-index: 6;
 }
 
 .lt-marker-hotspot {

@@ -38,8 +38,6 @@ type TrackCanvasProps = {
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
-  playheadSecondsRef: MutableRefObject<number>;
-  playheadDragRef: MutableRefObject<{ currentSeconds: number } | null>;
 };
 
 type TrackSceneSnapshot = Omit<TrackCanvasProps, "cameraXRef">;
@@ -130,48 +128,6 @@ function drawGridLines(
     context.lineTo(x, height);
   }
   context.stroke();
-}
-
-function drawPlayhead(
-  context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  cameraX: number,
-  pixelsPerSecond: number,
-  playheadSeconds: number,
-  color: string,
-  includeHandle: boolean,
-) {
-  const x = secondsToScreenX(playheadSeconds, cameraX, pixelsPerSecond);
-  context.clearRect(0, 0, width, height);
-
-  if (x < -12 || x > width + 12) {
-    return;
-  }
-
-  const snappedX = Math.round(x) + 0.5;
-
-  context.strokeStyle = color;
-  context.lineWidth = 1;
-  context.shadowColor = color;
-  context.shadowBlur = 8;
-  context.beginPath();
-  context.moveTo(snappedX, 0);
-  context.lineTo(snappedX, height);
-  context.stroke();
-  context.shadowBlur = 0;
-
-  if (!includeHandle) {
-    return;
-  }
-
-  context.fillStyle = color;
-  context.beginPath();
-  context.moveTo(snappedX - 5, 0);
-  context.lineTo(snappedX + 5, 0);
-  context.lineTo(snappedX, 7);
-  context.closePath();
-  context.fill();
 }
 
 function drawPendingExecutionLine(
@@ -773,12 +729,12 @@ export function TimelineRulerCanvas({
             );
           }
 
-          const pulseAlpha = 0.72 + Math.sin(performance.now() / 160) * 0.18;
-          const currentMarkerId = snapshot.markers
-            .filter((marker) => playheadSecondsRef.current >= marker.startSeconds)
-            .at(-1)?.id ?? null;
           const playheadSeconds =
             snapshot.playheadDragRef.current?.currentSeconds ?? playheadSecondsRef.current;
+          const pulseAlpha = 0.72 + Math.sin(performance.now() / 160) * 0.18;
+          const currentMarkerId = snapshot.markers
+            .filter((marker) => playheadSeconds >= marker.startSeconds)
+            .at(-1)?.id ?? null;
 
           for (const marker of snapshot.markers) {
             drawRulerMarker(
@@ -796,17 +752,6 @@ export function TimelineRulerCanvas({
               },
             );
           }
-
-          drawPlayhead(
-            overlayContext,
-            snapshot.width,
-            snapshot.height,
-            cameraX,
-            snapshot.pixelsPerSecond,
-            playheadSeconds,
-            snapshot.playheadDragRef.current ? "#ffe2ab" : "#57f1db",
-            true,
-          );
         }
       } catch (error) {
         console.error("TimelineRulerCanvas render failed", error);
@@ -852,11 +797,8 @@ export function TimelineTrackCanvas({
   timelineGrid,
   selectedClipId,
   clipPreviewSecondsRef,
-  playheadSecondsRef,
-  playheadDragRef,
 }: TrackCanvasProps) {
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const waveformBitmapCacheRef = useRef<Map<string, WaveformBitmap>>(new Map());
   const snapshotRef = useRef<TrackSceneSnapshot>({
     width,
@@ -870,8 +812,6 @@ export function TimelineTrackCanvas({
     timelineGrid,
     selectedClipId,
     clipPreviewSecondsRef,
-    playheadSecondsRef,
-    playheadDragRef,
   });
   const sceneVersionRef = useRef(0);
   const trackStructureSignature = useMemo(
@@ -896,8 +836,6 @@ export function TimelineTrackCanvas({
     timelineGrid,
     selectedClipId,
     clipPreviewSecondsRef,
-    playheadSecondsRef,
-    playheadDragRef,
   };
 
   useEffect(() => {
@@ -921,8 +859,7 @@ export function TimelineTrackCanvas({
 
   useEffect(() => {
     const baseCanvas = baseCanvasRef.current;
-    const overlayCanvas = overlayCanvasRef.current;
-    if (!baseCanvas || !overlayCanvas) {
+    if (!baseCanvas) {
       return;
     }
 
@@ -950,22 +887,6 @@ export function TimelineTrackCanvas({
         lastPreviewClipState = snapshot.clipPreviewSecondsRef.current;
       }
 
-      const overlayContext = setupCanvas(overlayCanvas, snapshot.width, snapshot.height);
-      if (overlayContext) {
-        const playheadSeconds =
-          snapshot.playheadDragRef.current?.currentSeconds ?? playheadSecondsRef.current;
-        drawPlayhead(
-          overlayContext,
-          snapshot.width,
-          snapshot.height,
-          cameraX,
-          snapshot.pixelsPerSecond,
-          playheadSeconds,
-          snapshot.playheadDragRef.current ? "#ffe2ab" : "#57f1db",
-          false,
-        );
-      }
-
       animationFrameId = window.requestAnimationFrame(render);
     };
 
@@ -974,12 +895,11 @@ export function TimelineTrackCanvas({
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [cameraXRef, playheadSecondsRef]);
+  }, [cameraXRef]);
 
   return (
     <div className="lt-track-canvas-layer" style={{ width, height }}>
       <canvas className="lt-track-canvas" ref={baseCanvasRef} aria-hidden="true" />
-      <canvas className="lt-track-canvas-overlay" ref={overlayCanvasRef} aria-hidden="true" />
     </div>
   );
 }

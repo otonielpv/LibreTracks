@@ -123,6 +123,8 @@ export type TransportSnapshot = {
   isNativeRuntime: boolean;
 };
 
+export type TransportClock = NonNullable<TransportSnapshot["transportClock"]>;
+
 export type TransportLifecycleEventKind = "play" | "pause" | "stop" | "seek";
 
 export type TransportLifecycleEvent = {
