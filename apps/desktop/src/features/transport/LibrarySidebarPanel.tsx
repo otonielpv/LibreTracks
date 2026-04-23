@@ -1,11 +1,12 @@
 import type { DragEvent } from "react";
 
-import type { LibraryAssetSummary } from "./desktopApi";
+import type { LibraryAssetSummary, LibraryImportProgressEvent } from "./desktopApi";
 
 type LibrarySidebarPanelProps = {
   assets: LibraryAssetSummary[];
   isLoading: boolean;
   isImporting: boolean;
+  importProgress: LibraryImportProgressEvent | null;
   deletingFilePath: string | null;
   canImport: boolean;
   onImport: () => void;
@@ -23,12 +24,13 @@ export function LibrarySidebarPanel({
   assets,
   isLoading,
   isImporting,
+  importProgress,
   deletingFilePath,
   canImport,
   onImport,
   onDelete,
 }: LibrarySidebarPanelProps) {
-  const handleAssetDragStart = (event: DragEvent<HTMLDivElement>, asset: LibraryAssetSummary) => {
+  const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, asset: LibraryAssetSummary) => {
     const payload = JSON.stringify({
       file_path: asset.filePath,
       durationSeconds: asset.durationSeconds,
@@ -59,8 +61,23 @@ export function LibrarySidebarPanel({
 
       <div className="lt-library-panel-meta" aria-live="polite">
         <span>{assets.length} assets</span>
-        <span>{canImport ? "Ready" : "Open or create a session"}</span>
+        <span>{isImporting && importProgress ? `${Math.round(importProgress.percent)}%` : canImport ? "Ready" : "Open or create a session"}</span>
       </div>
+
+      {isImporting && importProgress ? (
+        <div className="lt-library-progress" aria-live="polite">
+          <div className="lt-library-progress-copy">
+            <strong>{importProgress.message}</strong>
+            <span>{Math.max(0, Math.min(100, Math.round(importProgress.percent)))}%</span>
+          </div>
+          <div className="lt-library-progress-bar" aria-hidden="true">
+            <div
+              className="lt-library-progress-fill"
+              style={{ width: `${Math.max(0, Math.min(100, importProgress.percent))}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div className="lt-library-panel-body">
         {isLoading ? <p className="lt-library-panel-empty">Loading library assets...</p> : null}
@@ -77,19 +94,25 @@ export function LibrarySidebarPanel({
               <div
                 key={asset.filePath}
                 role="listitem"
-                className="lt-library-asset"
-                aria-label={asset.fileName}
-                draggable
-                onDragStart={(event) => handleAssetDragStart(event, asset)}
+                className="lt-library-asset-row"
               >
-                <span className="lt-library-asset-icon material-symbols-outlined">music_note</span>
-                <span className="lt-library-asset-copy">
-                  <strong>{asset.fileName}</strong>
-                  <small>
-                    {formatAssetDuration(asset.durationSeconds)}
-                    {asset.detectedBpm ? ` | ${asset.detectedBpm.toFixed(1)} BPM` : ""}
-                  </small>
-                </span>
+                <button
+                  type="button"
+                  className="lt-library-asset"
+                  aria-label={asset.fileName}
+                  title={asset.fileName}
+                  draggable
+                  onDragStart={(event) => handleAssetDragStart(event, asset)}
+                >
+                  <span className="lt-library-asset-icon material-symbols-outlined">music_note</span>
+                  <span className="lt-library-asset-copy">
+                    <strong>{asset.fileName}</strong>
+                    <small>
+                      {formatAssetDuration(asset.durationSeconds)}
+                      {asset.detectedBpm ? ` | ${asset.detectedBpm.toFixed(1)} BPM` : ""}
+                    </small>
+                  </span>
+                </button>
                 <button
                   type="button"
                   className="lt-library-asset-delete"

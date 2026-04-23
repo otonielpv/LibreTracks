@@ -137,6 +137,11 @@ export type AudioMeterLevel = {
   rightPeak: number;
 };
 
+export type LibraryImportProgressEvent = {
+  percent: number;
+  message: string;
+};
+
 const tauriWindow = window as Window & {
   __TAURI_INTERNALS__?: unknown;
 };
@@ -194,6 +199,19 @@ export async function listenToAudioMeters(
 
   const { listen } = await import("@tauri-apps/api/event");
   return listen<AudioMeterLevel[]>("audio:meters", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenToLibraryImportProgress(
+  handler: (event: LibraryImportProgressEvent) => void,
+): Promise<() => void> {
+  if (!isTauriApp) {
+    return () => {};
+  }
+
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<LibraryImportProgressEvent>("library:import-progress", (event) => {
     handler(event.payload);
   });
 }

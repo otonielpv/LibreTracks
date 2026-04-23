@@ -504,6 +504,51 @@ body {
   text-transform: uppercase;
 }
 
+.lt-library-progress {
+  margin: 0 1rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgb(87 241 219 / 0.12);
+  background: rgb(24 24 24 / 0.92);
+}
+
+.lt-library-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.lt-library-progress-copy strong,
+.lt-library-progress-copy span {
+  color: #e5e2e1;
+  font: 700 10px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-library-progress-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-library-progress-bar {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.08);
+  overflow: hidden;
+}
+
+.lt-library-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #57f1db, #f8d38a);
+  transition: width 180ms ease;
+}
+
 .lt-library-panel-body {
   min-height: 0;
   flex: 1;
@@ -524,10 +569,19 @@ body {
   gap: 0.35rem;
 }
 
+.lt-library-asset-row {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 .lt-library-asset {
   width: 100%;
   display: grid;
-  grid-template-columns: 1.8rem minmax(0, 1fr) auto;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
   align-items: center;
   gap: 0.7rem;
   border-radius: 0.7rem;
@@ -537,6 +591,7 @@ body {
   padding: 0.7rem 0.75rem;
   text-align: left;
   cursor: grab;
+  min-width: 0;
 }
 
 .lt-library-asset:hover {
@@ -573,6 +628,9 @@ body {
   font: 600 10px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lt-library-asset-delete {

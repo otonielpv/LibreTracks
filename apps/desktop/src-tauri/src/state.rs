@@ -22,12 +22,20 @@ use libretracks_project::{
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::to_vec;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio_runtime::{AudioController, PlaybackStartReason};
 
 const TIMELINE_TIMEBASE_HZ: u32 = 48_000;
 const LIBRARY_MANIFEST_FILE_NAME: &str = "library.json";
+const LIBRARY_IMPORT_PROGRESS_EVENT: &str = "library:import-progress";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryImportProgressEvent {
+    percent: u8,
+    message: String,
+}
 
 pub struct DesktopState {
     pub audio: AudioController,
@@ -520,6 +528,7 @@ impl DesktopSession {
 
     pub fn import_library_assets_from_dialog(
         &mut self,
+        app: &AppHandle,
     ) -> Result<Option<Vec<LibraryAssetSummary>>, DesktopError> {
         let files = FileDialog::new()
             .add_filter("Wave Audio", &["wav"])
@@ -530,7 +539,19 @@ impl DesktopSession {
             return Ok(None);
         };
 
+        emit_library_import_progress(
+            app,
+            10,
+            format!("Preparando {} archivo(s) para importar...", files.len()),
+        );
+
         let assets = self.import_audio_files_into_library(&files)?;
+        emit_library_import_progress(app, 85, "Actualizando libreria de la sesion...".into());
+        emit_library_import_progress(
+            app,
+            100,
+            format!("Importacion completada. {} asset(s) disponibles.", assets.len()),
+        );
         Ok(Some(assets))
     }
 
@@ -1870,6 +1891,14 @@ fn build_empty_song(song_id: String, title: String) -> Song {
         tracks: vec![],
         clips: vec![],
         section_markers: vec![],
+    }
+}
+
+fn emit_library_import_progress(app: &AppHandle, percent: u8, message: String) {
+    let payload = LibraryImportProgressEvent { percent, message };
+
+    if let Err(error) = app.emit(LIBRARY_IMPORT_PROGRESS_EVENT, payload) {
+        eprintln!("[libretracks-library] failed to emit import progress: {error}");
     }
 }
 

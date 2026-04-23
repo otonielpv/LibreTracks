@@ -167,6 +167,7 @@ fn create_song(
 
 #[tauri::command]
 fn import_library_assets_from_dialog(
+    app: AppHandle,
     state: State<'_, DesktopState>,
 ) -> Result<Option<Vec<LibraryAssetSummary>>, String> {
     let mut session = state
@@ -175,7 +176,7 @@ fn import_library_assets_from_dialog(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .import_library_assets_from_dialog()
+        .import_library_assets_from_dialog(&app)
         .map_err(|error| error.to_string())
 }
 

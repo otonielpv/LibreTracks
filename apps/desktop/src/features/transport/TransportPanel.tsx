@@ -26,6 +26,7 @@ import {
   getWaveformSummaries,
   importLibraryAssetsFromDialog,
   isTauriApp,
+  listenToLibraryImportProgress,
   listenToAudioMeters,
   listenToTransportLifecycle,
   moveClip,
@@ -48,6 +49,7 @@ import {
   updateTrackMixLive,
   type ClipSummary,
   type LibraryAssetSummary,
+  type LibraryImportProgressEvent,
   type SectionMarkerSummary,
   type SongView,
   type TrackKind,
@@ -503,6 +505,7 @@ export function TransportPanel() {
   const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState | null>(null);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
   const [isImportingLibrary, setIsImportingLibrary] = useState(false);
+  const [libraryImportProgress, setLibraryImportProgress] = useState<LibraryImportProgressEvent | null>(null);
   const [deletingLibraryFilePath, setDeletingLibraryFilePath] = useState<string | null>(null);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -1092,6 +1095,35 @@ export function TransportPanel() {
         window.cancelAnimationFrame(frameId);
       }
       pendingMeters = null;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriApp) {
+      return () => {};
+    }
+
+    let active = true;
+    let unlisten: (() => void) | undefined;
+
+    void listenToLibraryImportProgress((event) => {
+      if (!active) {
+        return;
+      }
+
+      setLibraryImportProgress(event);
+    }).then((nextUnlisten) => {
+      if (!active) {
+        nextUnlisten();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      active = false;
       unlisten?.();
     };
   }, []);
@@ -2735,16 +2767,28 @@ export function TransportPanel() {
     }
 
     setIsImportingLibrary(true);
+    setLibraryImportProgress({
+      percent: 5,
+      message: "Esperando seleccion de archivos...",
+    });
     await runAction(async () => {
       const assets = await importLibraryAssetsFromDialog();
       if (!assets) {
+        setLibraryImportProgress(null);
         return;
       }
 
       setLibraryAssets(assets);
+      setLibraryImportProgress({
+        percent: 100,
+        message: `Importacion completada. ${assets.length} asset(s) disponibles.`,
+      });
       setStatus(`Libreria actualizada con ${assets.length} assets.`);
     });
     setIsImportingLibrary(false);
+    window.setTimeout(() => {
+      setLibraryImportProgress((current) => (current?.percent === 100 ? null : current));
+    }, 1200);
   }
 
   async function handleDeleteLibraryAsset(filePath: string, fileName: string) {
@@ -3163,6 +3207,7 @@ export function TransportPanel() {
           assets={libraryAssets}
           isLoading={isLibraryLoading}
           isImporting={isImportingLibrary}
+          importProgress={libraryImportProgress}
           deletingFilePath={deletingLibraryFilePath}
           canImport={Boolean(playbackSongDir)}
           onImport={() => {
