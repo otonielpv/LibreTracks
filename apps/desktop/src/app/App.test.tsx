@@ -167,6 +167,33 @@ describe("App", () => {
     expect(screen.getByRole("slider", { name: /volumen de drums/i })).toBeTruthy();
   });
 
+  it("shows library assets and exposes the drag payload for timeline drops", async () => {
+    await renderApp();
+
+    expect(screen.getByText("drums.wav")).toBeTruthy();
+    expect(screen.getByText("bass.wav")).toBeTruthy();
+
+    const transferData = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "",
+      setData: vi.fn((type: string, value: string) => {
+        transferData.set(type, value);
+      }),
+      getData: vi.fn((type: string) => transferData.get(type) ?? ""),
+    };
+
+    await act(async () => {
+      fireEvent.dragStart(screen.getByRole("button", { name: /drums\.wav/i }), { dataTransfer });
+    });
+
+    expect(dataTransfer.effectAllowed).toBe("copy");
+    expect(dataTransfer.setData).toHaveBeenCalledWith("text/plain", "audio/drums.wav");
+    expect(JSON.parse(transferData.get("application/libretracks-library-asset") ?? "{}")).toEqual({
+      file_path: "audio/drums.wav",
+      durationSeconds: 180,
+    });
+  });
+
   it("creates a marker from the ruler right-click context menu", async () => {
     const { container } = await renderApp();
     mockRulerBounds(container);

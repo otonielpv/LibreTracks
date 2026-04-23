@@ -423,6 +423,158 @@ body {
   overflow: hidden;
 }
 
+.lt-workspace-body {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.lt-library-panel {
+  width: 18rem;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid rgb(87 241 219 / 0.08);
+  background: linear-gradient(180deg, #121212 0%, #0d0d0d 100%);
+}
+
+.lt-library-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-bottom: 1px solid rgb(87 241 219 / 0.08);
+}
+
+.lt-library-panel-header h2 {
+  margin: 0.3rem 0 0;
+  color: #f3f0ef;
+  font: 800 1.15rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.lt-library-panel-eyebrow {
+  color: rgb(87 241 219 / 0.78);
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.lt-library-import-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid rgb(87 241 219 / 0.16);
+  background: rgb(32 31 31 / 0.95);
+  color: #e5e2e1;
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-library-import-button:hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.32);
+  color: #57f1db;
+}
+
+.lt-library-import-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lt-library-import-button .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.lt-library-panel-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  color: rgb(229 226 225 / 0.6);
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-library-panel-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 0 0.75rem 0.75rem;
+}
+
+.lt-library-panel-empty {
+  margin: 0.25rem 0;
+  padding: 0.9rem 0.55rem;
+  color: rgb(229 226 225 / 0.68);
+  font: 500 0.92rem/1.55 "Space Grotesk", sans-serif;
+}
+
+.lt-library-asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lt-library-asset {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.8rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+  border-radius: 0.7rem;
+  border: 1px solid transparent;
+  background: rgb(32 31 31 / 0.78);
+  color: #e5e2e1;
+  padding: 0.7rem 0.75rem;
+  text-align: left;
+  cursor: grab;
+}
+
+.lt-library-asset:hover {
+  border-color: rgb(87 241 219 / 0.16);
+  background: rgb(42 42 42 / 0.92);
+}
+
+.lt-library-asset:active {
+  cursor: grabbing;
+}
+
+.lt-library-asset-icon {
+  color: #57f1db;
+  font-size: 18px;
+}
+
+.lt-library-asset-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.lt-library-asset-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f3f0ef;
+  font: 700 0.9rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-library-asset-copy small {
+  color: rgb(229 226 225 / 0.62);
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .lt-main-stage {
   display: flex;
   flex-direction: column;

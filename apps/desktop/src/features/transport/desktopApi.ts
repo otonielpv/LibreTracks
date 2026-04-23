@@ -75,6 +75,13 @@ export type WaveformSummaryDto = {
   maxPeaks: number[];
 };
 
+export type LibraryAssetSummary = {
+  fileName: string;
+  filePath: string;
+  durationSeconds: number;
+  detectedBpm?: number | null;
+};
+
 export type DesktopPerformanceSnapshot = {
   copyMillis: number;
   wavAnalysisMillis: number;
@@ -146,6 +153,7 @@ type DemoClock = {
 
 let demoSong = buildDemoSong();
 let demoWaveforms = buildDemoWaveforms();
+let demoLibraryAssets = buildDemoLibraryAssets(demoSong);
 let demoPlaybackState: PlaybackState = "stopped";
 let demoPendingJump: PendingJumpSummary | null = null;
 let demoProjectRevision = demoSong.projectRevision;
@@ -313,6 +321,14 @@ export async function getWaveformSummaries(
   return invokeCommand<WaveformSummaryDto[]>("get_waveform_summaries", { waveformKeys });
 }
 
+export async function getLibraryAssets(): Promise<LibraryAssetSummary[]> {
+  if (!isTauriApp) {
+    return cloneSnapshot(demoLibraryAssets);
+  }
+
+  return invokeCommand<LibraryAssetSummary[]>("get_library_assets");
+}
+
 export async function getDesktopPerformanceSnapshot(): Promise<DesktopPerformanceSnapshot> {
   if (!isTauriApp) {
     return {
@@ -364,6 +380,7 @@ export async function createSong(): Promise<TransportSnapshot | null> {
       projectRevision: demoProjectRevision + 1,
     });
     demoWaveforms = {};
+    demoLibraryAssets = [];
     demoProjectRevision = demoSong.projectRevision;
     demoUndoStack = [];
     demoRedoStack = [];
@@ -447,6 +464,7 @@ export async function openProject(): Promise<TransportSnapshot | null> {
   if (!isTauriApp) {
     demoSong = buildDemoSong();
     demoWaveforms = buildDemoWaveforms();
+    demoLibraryAssets = buildDemoLibraryAssets(demoSong);
     demoProjectRevision = demoSong.projectRevision;
     demoUndoStack = [];
     demoRedoStack = [];
@@ -466,6 +484,24 @@ export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
   }
 
   return invokeCommand<TransportSnapshot | null>("pick_and_import_song_from_dialog");
+}
+
+export async function importLibraryAssetsFromDialog(): Promise<LibraryAssetSummary[] | null> {
+  if (!isTauriApp) {
+    const nextIndex = demoLibraryAssets.length + 1;
+    demoLibraryAssets = [
+      ...demoLibraryAssets,
+      {
+        fileName: `imported-${nextIndex}.wav`,
+        filePath: `audio/imported-${nextIndex}.wav`,
+        durationSeconds: 12 + nextIndex * 4,
+        detectedBpm: 120,
+      },
+    ];
+    return cloneSnapshot(demoLibraryAssets);
+  }
+
+  return invokeCommand<LibraryAssetSummary[] | null>("import_library_assets_from_dialog");
 }
 
 export async function playTransport(): Promise<TransportSnapshot> {
@@ -1296,6 +1332,26 @@ function buildDemoWaveforms(): Record<string, WaveformSummaryDto> {
       maxPeaks: vocalWave.max,
     },
   };
+}
+
+function buildDemoLibraryAssets(song: SongView): LibraryAssetSummary[] {
+  const assetsByPath = new Map<string, LibraryAssetSummary>();
+
+  for (const clip of song.clips) {
+    if (assetsByPath.has(clip.filePath)) {
+      continue;
+    }
+
+    const fileName = clip.filePath.split("/").at(-1) ?? clip.filePath;
+    assetsByPath.set(clip.filePath, {
+      fileName,
+      filePath: clip.filePath,
+      durationSeconds: clip.sourceDurationSeconds,
+      detectedBpm: clip.filePath.includes("click") ? 120 : null,
+    });
+  }
+
+  return [...assetsByPath.values()].sort((left, right) => left.fileName.localeCompare(right.fileName));
 }
 
 function buildWaveform(sampleCount: number, mode: "smooth" | "pulse" | "ticks" | "phrases") {

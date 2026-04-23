@@ -1,0 +1,96 @@
+import type { DragEvent } from "react";
+
+import type { LibraryAssetSummary } from "./desktopApi";
+
+type LibrarySidebarPanelProps = {
+  assets: LibraryAssetSummary[];
+  isLoading: boolean;
+  isImporting: boolean;
+  canImport: boolean;
+  onImport: () => void;
+};
+
+function formatAssetDuration(durationSeconds: number) {
+  const safeDuration = Math.max(0, durationSeconds);
+  const minutes = Math.floor(safeDuration / 60);
+  const seconds = Math.floor(safeDuration % 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+export function LibrarySidebarPanel({
+  assets,
+  isLoading,
+  isImporting,
+  canImport,
+  onImport,
+}: LibrarySidebarPanelProps) {
+  const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, asset: LibraryAssetSummary) => {
+    const payload = JSON.stringify({
+      file_path: asset.filePath,
+      durationSeconds: asset.durationSeconds,
+    });
+
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("application/libretracks-library-asset", payload);
+    event.dataTransfer.setData("text/plain", asset.filePath);
+  };
+
+  return (
+    <aside className="lt-library-panel" aria-label="Library panel">
+      <div className="lt-library-panel-header">
+        <div>
+          <span className="lt-library-panel-eyebrow">Session Assets</span>
+          <h2>Library</h2>
+        </div>
+        <button
+          type="button"
+          className="lt-library-import-button"
+          onClick={onImport}
+          disabled={!canImport || isImporting}
+        >
+          <span className="material-symbols-outlined">audio_file</span>
+          {isImporting ? "Importing..." : "Import audio"}
+        </button>
+      </div>
+
+      <div className="lt-library-panel-meta" aria-live="polite">
+        <span>{assets.length} assets</span>
+        <span>{canImport ? "Ready" : "Open or create a session"}</span>
+      </div>
+
+      <div className="lt-library-panel-body">
+        {isLoading ? <p className="lt-library-panel-empty">Loading library assets...</p> : null}
+
+        {!isLoading && !assets.length ? (
+          <p className="lt-library-panel-empty">
+            Import WAV files to build the library before arranging them on the timeline.
+          </p>
+        ) : null}
+
+        {!isLoading && assets.length ? (
+          <div className="lt-library-asset-list" role="list" aria-label="Library assets">
+            {assets.map((asset) => (
+              <button
+                key={asset.filePath}
+                type="button"
+                role="listitem"
+                className="lt-library-asset"
+                draggable
+                onDragStart={(event) => handleAssetDragStart(event, asset)}
+              >
+                <span className="lt-library-asset-icon material-symbols-outlined">music_note</span>
+                <span className="lt-library-asset-copy">
+                  <strong>{asset.fileName}</strong>
+                  <small>
+                    {formatAssetDuration(asset.durationSeconds)}
+                    {asset.detectedBpm ? ` | ${asset.detectedBpm.toFixed(1)} BPM` : ""}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </aside>
+  );
+}

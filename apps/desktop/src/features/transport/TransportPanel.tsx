@@ -17,9 +17,11 @@ import {
   deleteSectionMarker,
   deleteTrack,
   duplicateClip,
+  getLibraryAssets,
   getSongView,
   getTransportSnapshot,
   getWaveformSummaries,
+  importLibraryAssetsFromDialog,
   isTauriApp,
   listenToAudioMeters,
   listenToTransportLifecycle,
@@ -43,6 +45,7 @@ import {
   updateTrack,
   updateTrackMixLive,
   type ClipSummary,
+  type LibraryAssetSummary,
   type SectionMarkerSummary,
   type SongView,
   type TrackKind,
@@ -54,6 +57,7 @@ import {
 } from "./desktopApi";
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import { ImportAudioModal } from "./ImportAudioModal";
+import { LibrarySidebarPanel } from "./LibrarySidebarPanel";
 import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
 import {
   BASE_PIXELS_PER_SECOND,
@@ -146,6 +150,8 @@ type LiveTrackMixRequestState = {
 };
 
 type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
+
+type SidebarTab = "browser" | "markers" | "library" | "routing" | "settings";
 
 type TransportAnchorMeta = {
   snapshotKey: string;
@@ -437,6 +443,10 @@ export function TransportPanel() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>("library");
+  const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
+  const [isLibraryLoading, setIsLibraryLoading] = useState(false);
+  const [isImportingLibrary, setIsImportingLibrary] = useState(false);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const menuBarRef = useRef<HTMLDivElement | null>(null);
@@ -476,6 +486,7 @@ export function TransportPanel() {
   const droppedTrackRowRef = useRef<HTMLDivElement | null>(null);
   const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
   const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
+  const playbackSongDir = useTransportStore((state) => state.playback?.songDir ?? null);
   const pendingMarkerJumpSignature = useTransportStore((state) => {
     const pendingJump = state.playback?.pendingMarkerJump;
     if (!pendingJump) {
@@ -1075,6 +1086,41 @@ export function TransportPanel() {
       active = false;
     };
   }, [playbackProjectRevision]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadLibraryAssets() {
+      if (!playbackSongDir) {
+        setLibraryAssets([]);
+        return;
+      }
+
+      setIsLibraryLoading(true);
+      try {
+        const assets = await getLibraryAssets();
+        if (!active) {
+          return;
+        }
+
+        setLibraryAssets(assets);
+      } catch (error) {
+        if (active) {
+          setStatus(`Error: ${String(error)}`);
+        }
+      } finally {
+        if (active) {
+          setIsLibraryLoading(false);
+        }
+      }
+    }
+
+    void loadLibraryAssets();
+
+    return () => {
+      active = false;
+    };
+  }, [playbackProjectRevision, playbackSongDir]);
 
   useEffect(() => {
     if (!song) {
@@ -2603,6 +2649,26 @@ export function TransportPanel() {
     setIsImportModalOpen(true);
   }
 
+  async function handleImportLibraryAssetsClick() {
+    if (!playbackSongDir) {
+      setStatus("Crea o abre una sesion antes de importar audio a la libreria.");
+      return;
+    }
+
+    setIsImportingLibrary(true);
+    await runAction(async () => {
+      const assets = await importLibraryAssetsFromDialog();
+      if (!assets) {
+        return;
+      }
+
+      setLibraryAssets(assets);
+      setActiveSidebarTab("library");
+      setStatus(`Libreria actualizada con ${assets.length} assets.`);
+    });
+    setIsImportingLibrary(false);
+  }
+
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
       <div className="lt-daw-shell" ref={panelRef} onContextMenu={(event) => event.preventDefault()}>
@@ -2782,41 +2848,84 @@ export function TransportPanel() {
 
       <div className="lt-shell-body">
         <aside className="lt-side-nav" aria-label="Navegacion principal">
-          <button type="button" className="is-active" aria-label="Browser">
+          <button
+            type="button"
+            className={activeSidebarTab === "browser" ? "is-active" : ""}
+            aria-label="Browser"
+            onClick={() => setActiveSidebarTab("browser")}
+          >
             <span className="material-symbols-outlined">folder_open</span>
             Browser
           </button>
-          <button type="button" aria-label="Markers">
+          <button
+            type="button"
+            className={activeSidebarTab === "markers" ? "is-active" : ""}
+            aria-label="Markers"
+            onClick={() => setActiveSidebarTab("markers")}
+          >
             <span className="material-symbols-outlined">sell</span>
             Markers
           </button>
-          <button type="button" aria-label="Library">
+          <button
+            type="button"
+            className={activeSidebarTab === "library" ? "is-active" : ""}
+            aria-label="Library"
+            onClick={() => setActiveSidebarTab("library")}
+          >
             <span className="material-symbols-outlined">library_music</span>
             Library
           </button>
-          <button type="button" aria-label="Routing">
+          <button
+            type="button"
+            className={activeSidebarTab === "routing" ? "is-active" : ""}
+            aria-label="Routing"
+            onClick={() => setActiveSidebarTab("routing")}
+          >
             <span className="material-symbols-outlined">settings_input_component</span>
             Routing
           </button>
-          <button type="button" aria-label="Settings">
+          <button
+            type="button"
+            className={activeSidebarTab === "settings" ? "is-active" : ""}
+            aria-label="Settings"
+            onClick={() => setActiveSidebarTab("settings")}
+          >
             <span className="material-symbols-outlined">settings</span>
             Settings
           </button>
         </aside>
 
         <div className="lt-workspace">
+      <div className="lt-workspace-body">
+      {activeSidebarTab === "library" ? (
+        <LibrarySidebarPanel
+          assets={libraryAssets}
+          isLoading={isLibraryLoading}
+          isImporting={isImportingLibrary}
+          canImport={Boolean(playbackSongDir)}
+          onImport={() => {
+            void handleImportLibraryAssetsClick();
+          }}
+        />
+      ) : null}
       {shouldShowEmptyState ? (
         <div className="lt-empty-state">
           <div className="lt-empty-state-card">
             <span className="lt-empty-state-eyebrow">LibreTracks DAW</span>
             <h1>Import tracks to start</h1>
-            <p>Open an existing session or import WAV stems to start building the arrangement.</p>
+            <p>
+              Open an existing session or create an empty one and use the Library tab to import WAV
+              assets before arranging them.
+            </p>
             <div className="lt-empty-state-actions">
               <button type="button" className="is-primary" onClick={handleOpenProjectClick}>
                 Open
               </button>
-              <button type="button" onClick={handleImportWavsClick}>
-                Import WAVs
+              <button
+                type="button"
+                onClick={playbackSongDir ? () => void handleImportLibraryAssetsClick() : handleImportWavsClick}
+              >
+                {playbackSongDir ? "Import to Library" : "Import WAVs"}
               </button>
             </div>
           </div>
@@ -3123,6 +3232,7 @@ export function TransportPanel() {
 
   </section>
   )}
+  </div>
 
         {contextMenu ? (
         <div
