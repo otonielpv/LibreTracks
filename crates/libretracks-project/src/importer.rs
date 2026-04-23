@@ -1,20 +1,34 @@
 use std::{
     collections::HashSet,
+    fs::File,
     fs,
     path::{Path, PathBuf},
     thread,
     time::Instant,
 };
 
+use hound::{SampleFormat, WavSpec, WavWriter};
 use libretracks_core::{
     validate_song, Clip, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
 };
 use rayon::prelude::*;
+use symphonia::core::{
+    audio::{AudioBufferRef, SampleBuffer},
+    codecs::{DecoderOptions, CODEC_TYPE_NULL},
+    errors::Error as SymphoniaError,
+    formats::FormatOptions,
+    io::MediaSourceStream,
+    meta::MetadataOptions,
+    probe::Hint,
+};
 
 use crate::{
     analyze_wav_file, create_song_folder, save_song, waveform_file_path_for_source,
     write_waveform_summary, ProjectError, TempoCandidate,
 };
+
+const INTERNAL_SAMPLE_RATE: u32 = 48_000;
+const INTERNAL_BITS_PER_SAMPLE: u16 = 32;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectImportRequest {
@@ -329,11 +343,6 @@ fn unique_file_name(
         .file_stem()
         .and_then(|value| value.to_str())
         .ok_or_else(|| ProjectError::InvalidFileName(source_path.to_path_buf()))?;
-    let extension = source_path
-        .extension()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| ProjectError::InvalidFileName(source_path.to_path_buf()))?;
-
     let base_slug = slugify(stem);
     let mut index = 0_u32;
 
@@ -343,7 +352,7 @@ fn unique_file_name(
         } else {
             format!("-{index}")
         };
-        let candidate = format!("{base_slug}{suffix}.{extension}");
+        let candidate = format!("{base_slug}{suffix}.wav");
 
         if used_file_names.insert(candidate.clone()) {
             return Ok(candidate);
@@ -399,10 +408,164 @@ fn copy_import_files(planned_files: &[PlannedImportFile]) -> Result<u128, Projec
     let started_at = Instant::now();
 
     for planned_file in planned_files {
-        fs::copy(&planned_file.source_path, &planned_file.destination_path)?;
+        transcode_to_project_wav(&planned_file.source_path, &planned_file.destination_path)?;
     }
 
     Ok(started_at.elapsed().as_millis())
+}
+
+fn transcode_to_project_wav(
+    source_path: &Path,
+    destination_path: &Path,
+) -> Result<(), ProjectError> {
+    let file = File::open(source_path)?;
+    let mut hint = Hint::new();
+    if let Some(extension) = source_path.extension().and_then(|value| value.to_str()) {
+        hint.with_extension(extension);
+    }
+
+    let media_source_stream = MediaSourceStream::new(Box::new(file), Default::default());
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            media_source_stream,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .map_err(|_| ProjectError::UnsupportedAudioFormat {
+            path: source_path.to_path_buf(),
+        })?;
+
+    let mut format = probed.format;
+    let track = format
+        .default_track()
+        .or_else(|| {
+            format
+                .tracks()
+                .iter()
+                .find(|track| track.codec_params.codec != CODEC_TYPE_NULL)
+        })
+        .ok_or_else(|| ProjectError::UnsupportedAudioFormat {
+            path: source_path.to_path_buf(),
+        })?;
+
+    let track_id = track.id;
+    let input_sample_rate = track.codec_params.sample_rate.ok_or_else(|| {
+        ProjectError::AudioDecode(format!(
+            "missing sample rate for {}",
+            source_path.display()
+        ))
+    })?;
+    let channel_count = track
+        .codec_params
+        .channels
+        .map(|channels| channels.count())
+        .unwrap_or(1)
+        .max(1);
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+
+    let mut decoded_samples = Vec::new();
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(packet) => packet,
+            Err(SymphoniaError::IoError(error))
+                if error.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
+            Err(error) => return Err(ProjectError::AudioDecode(error.to_string())),
+        };
+
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        let decoded = match decoder.decode(&packet) {
+            Ok(decoded) => decoded,
+            Err(SymphoniaError::DecodeError(_)) => continue,
+            Err(SymphoniaError::IoError(error))
+                if error.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
+            Err(error) => return Err(ProjectError::AudioDecode(error.to_string())),
+        };
+
+        append_decoded_samples(&mut decoded_samples, decoded);
+    }
+
+    let normalized_samples = resample_interleaved(
+        &decoded_samples,
+        channel_count,
+        input_sample_rate,
+        INTERNAL_SAMPLE_RATE,
+    );
+    write_normalized_wav(destination_path, &normalized_samples, channel_count as u16)?;
+    Ok(())
+}
+
+fn append_decoded_samples(target: &mut Vec<f32>, decoded: AudioBufferRef<'_>) {
+    let mut sample_buffer = SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
+    sample_buffer.copy_interleaved_ref(decoded);
+    target.extend_from_slice(sample_buffer.samples());
+}
+
+fn resample_interleaved(
+    samples: &[f32],
+    channels: usize,
+    source_sample_rate: u32,
+    target_sample_rate: u32,
+) -> Vec<f32> {
+    if samples.is_empty() || channels == 0 || source_sample_rate == target_sample_rate {
+        return samples.to_vec();
+    }
+
+    let source_frame_count = samples.len() / channels;
+    if source_frame_count <= 1 {
+        return samples.to_vec();
+    }
+
+    let ratio = target_sample_rate as f64 / source_sample_rate.max(1) as f64;
+    let target_frame_count = ((source_frame_count as f64) * ratio).round().max(1.0) as usize;
+    let mut output = vec![0.0_f32; target_frame_count * channels];
+
+    for target_frame in 0..target_frame_count {
+        let source_position = target_frame as f64 / ratio;
+        let base_frame = source_position.floor() as usize;
+        let next_frame = (base_frame + 1).min(source_frame_count - 1);
+        let blend = (source_position - base_frame as f64) as f32;
+
+        for channel in 0..channels {
+            let base_sample = samples[base_frame * channels + channel];
+            let next_sample = samples[next_frame * channels + channel];
+            output[target_frame * channels + channel] =
+                base_sample + (next_sample - base_sample) * blend;
+        }
+    }
+
+    output
+}
+
+fn write_normalized_wav(
+    destination_path: &Path,
+    samples: &[f32],
+    channels: u16,
+) -> Result<(), ProjectError> {
+    let spec = WavSpec {
+        channels: channels.max(1),
+        sample_rate: INTERNAL_SAMPLE_RATE,
+        bits_per_sample: INTERNAL_BITS_PER_SAMPLE,
+        sample_format: SampleFormat::Float,
+    };
+    let mut writer = WavWriter::create(destination_path, spec)?;
+    for &sample in samples {
+        writer.write_sample(sample)?;
+    }
+    writer.finalize()?;
+    Ok(())
 }
 
 fn analyze_import_files_in_parallel(

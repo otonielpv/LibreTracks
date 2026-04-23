@@ -10,6 +10,7 @@ libretracks-core = { path = "../libretracks-core" }
 rayon = "1.10"
 serde.workspace = true
 serde_json.workspace = true
+symphonia = { version = "0.5", default-features = false, features = ["pcm", "wav"] }
 thiserror.workspace = true
 
 [dev-dependencies]

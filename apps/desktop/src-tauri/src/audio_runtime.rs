@@ -25,10 +25,11 @@ use symphonia::core::{
     audio::{AudioBufferRef, SampleBuffer},
     codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL},
     errors::Error as SymphoniaError,
-    formats::{FormatOptions, FormatReader},
+    formats::{FormatOptions, FormatReader, SeekMode, SeekTo},
     io::MediaSourceStream,
     meta::MetadataOptions,
     probe::Hint,
+    units::Time,
 };
 use tauri::{AppHandle, Emitter};
 
@@ -1374,8 +1375,32 @@ impl StreamingAudioReader {
             next_source_frame: 0,
             eof: false,
         };
+        reader.seek_to_frame(target_frame)?;
         let _ = reader.ensure_frame_available(target_frame);
         Ok(reader)
+    }
+
+    fn seek_to_frame(&mut self, target_frame: usize) -> Result<(), String> {
+        self.decoded_samples.clear();
+        self.decoded_frame_count = 0;
+        self.eof = false;
+
+        let seeked_to = self
+            .source
+            .format
+            .seek(
+                SeekMode::Accurate,
+                SeekTo::Time {
+                    time: Time::from(target_frame as f64 / self.source.sample_rate.max(1) as f64),
+                    track_id: Some(self.source.track_id),
+                },
+            )
+            .map_err(|error| error.to_string())?;
+
+        self.source.decoder.reset();
+        self.decoded_start_frame = seeked_to.actual_ts as usize;
+        self.next_source_frame = seeked_to.actual_ts as usize;
+        Ok(())
     }
 
     fn ensure_frame_available(&mut self, frame_index: usize) -> bool {

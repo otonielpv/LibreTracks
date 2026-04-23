@@ -37,6 +37,8 @@ pub enum ProjectError {
     LegacyGroupFormatUnsupported,
     #[error("wav error: {0}")]
     Wav(#[from] hound::Error),
+    #[error("audio decode error: {0}")]
+    AudioDecode(String),
     #[error("waveform summary is invalid or stale: {0}")]
     InvalidWaveformSummary(PathBuf),
 }

@@ -4270,6 +4270,7 @@ export function TransportPanel() {
                 className="lt-track-playhead"
                 durationSeconds={song?.durationSeconds ?? 0}
                 pixelsPerSecond={pixelsPerSecond}
+                cameraXRef={cameraXRef}
                 dragStateRef={playheadDragRef}
                 positionSecondsRef={displayPositionSecondsRef}
               />

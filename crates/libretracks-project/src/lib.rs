@@ -293,6 +293,20 @@ mod tests {
         assert!(imported.song_dir.join("audio").join("bass.wav").exists());
         assert!(waveform_file_path(&imported.song_dir, "audio/drums.wav").exists());
 
+        let drums_reader = hound::WavReader::open(imported.song_dir.join("audio").join("drums.wav"))
+            .expect("normalized drums wav should open");
+        let drums_spec = drums_reader.spec();
+        assert_eq!(drums_spec.sample_rate, 48_000);
+        assert_eq!(drums_spec.bits_per_sample, 32);
+        assert_eq!(drums_spec.sample_format, SampleFormat::Float);
+        assert_eq!(drums_spec.channels, 2);
+
+        let bass_metadata = read_wav_metadata(imported.song_dir.join("audio").join("bass.wav"))
+            .expect("normalized bass metadata should load");
+        assert_eq!(bass_metadata.sample_rate, 48_000);
+        assert_eq!(bass_metadata.channels, 1);
+        assert!((bass_metadata.duration_seconds - 2.0).abs() < 0.01);
+
         let loaded = load_song(&imported.song_dir).expect("imported song should load");
         assert_eq!(loaded.tracks.len(), 2);
         assert_eq!(loaded.clips[0].timeline_start_seconds, 0.0);

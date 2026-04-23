@@ -13,6 +13,7 @@ type PlayheadOverlayProps = {
   className: string;
   durationSeconds: number;
   pixelsPerSecond: number;
+  cameraXRef?: MutableRefObject<number>;
   dragStateRef: MutableRefObject<PlayheadDragState>;
   positionSecondsRef?: MutableRefObject<number>;
   normalizePositionSeconds?: (positionSeconds: number) => number;
@@ -52,6 +53,7 @@ export function PlayheadOverlay({
   className,
   durationSeconds,
   pixelsPerSecond,
+  cameraXRef,
   dragStateRef,
   positionSecondsRef,
   normalizePositionSeconds,
@@ -70,6 +72,7 @@ export function PlayheadOverlay({
   const latestPropsRef = useRef({
     durationSeconds,
     pixelsPerSecond,
+    cameraXRef,
     positionSecondsRef,
     normalizePositionSeconds,
     onPreviewPositionChange,
@@ -82,6 +85,7 @@ export function PlayheadOverlay({
   latestPropsRef.current = {
     durationSeconds,
     pixelsPerSecond,
+    cameraXRef,
     positionSecondsRef,
     normalizePositionSeconds,
     onPreviewPositionChange,
@@ -121,7 +125,8 @@ export function PlayheadOverlay({
               Math.max(0, latestPropsRef.current.durationSeconds),
             );
       const absoluteX = secondsToAbsoluteX(nextSeconds, latestPropsRef.current.pixelsPerSecond);
-      const nextTransform = `translate3d(${absoluteX}px, 0, 0)`;
+      const cameraX = latestPropsRef.current.cameraXRef?.current ?? 0;
+      const nextTransform = `translate3d(${absoluteX - cameraX}px, 0, 0)`;
 
       if (playheadRef.current && nextTransform !== lastTransform) {
         playheadRef.current.style.transform = nextTransform;
@@ -157,7 +162,19 @@ export function PlayheadOverlay({
     event.preventDefault();
     event.stopPropagation();
 
-    const startSeconds = resolveClockPositionSeconds(playbackRef.current, latestPropsRef.current.durationSeconds);
+    const rawStartSeconds = clamp(
+      clientXToTimelineSeconds(
+        event.clientX,
+        boundsElement,
+        latestPropsRef.current.scrollContainerRef?.current ?? null,
+        latestPropsRef.current.pixelsPerSecond,
+      ),
+      0,
+      Math.max(0, latestPropsRef.current.durationSeconds),
+    );
+    const startSeconds = latestPropsRef.current.normalizePositionSeconds
+      ? latestPropsRef.current.normalizePositionSeconds(rawStartSeconds)
+      : rawStartSeconds;
     dragStateRef.current = {
       pointerId: event.pointerId,
       currentSeconds: startSeconds,
