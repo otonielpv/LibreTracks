@@ -432,7 +432,7 @@ body {
 }
 
 .lt-library-panel {
-  width: 18rem;
+  width: 20rem;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;

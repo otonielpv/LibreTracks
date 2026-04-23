@@ -1112,7 +1112,10 @@ export function TransportPanel() {
         return;
       }
 
-      setLibraryImportProgress(event);
+      setLibraryImportProgress((current) => ({
+        percent: Math.max(current?.percent ?? 0, event.percent),
+        message: event.message,
+      }));
     }).then((nextUnlisten) => {
       if (!active) {
         nextUnlisten();
@@ -1127,6 +1130,36 @@ export function TransportPanel() {
       unlisten?.();
     };
   }, []);
+
+  useEffect(() => {
+    if (!isImportingLibrary) {
+      return () => {};
+    }
+
+    const timerId = window.setInterval(() => {
+      setLibraryImportProgress((current) => {
+        if (!current) {
+          return {
+            percent: 8,
+            message: "Preparando importacion...",
+          };
+        }
+
+        if (current.percent >= 92) {
+          return current;
+        }
+
+        return {
+          ...current,
+          percent: Math.min(current.percent + 4, 92),
+        };
+      });
+    }, 220);
+
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [isImportingLibrary]);
 
   useEffect(() => {
     const shell = timelineShellRef.current;
@@ -2987,6 +3020,46 @@ export function TransportPanel() {
     });
   }
 
+  function handleEmptyArrangementLibraryDragOver(event: ReactDragEvent<HTMLDivElement>) {
+    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    if (!payload) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+
+    const asset = resolveDraggedLibraryAsset(payload.file_path, payload.durationSeconds);
+    setLibraryClipPreview({
+      trackId: null,
+      filePath: asset.filePath,
+      label: asset.fileName,
+      timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
+      durationSeconds: asset.durationSeconds,
+    });
+  }
+
+  function handleEmptyArrangementLibraryDrop(event: ReactDragEvent<HTMLDivElement>) {
+    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    if (!payload) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setLibraryClipPreview(null);
+
+    void runAction(async () => {
+      await placeLibraryAssetOnTimeline({
+        filePath: payload.file_path,
+        durationSeconds: payload.durationSeconds,
+        timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
+        targetTrackId: null,
+      });
+    });
+  }
+
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
       <div className="lt-daw-shell" ref={panelRef} onContextMenu={(event) => event.preventDefault()}>
@@ -3466,7 +3539,12 @@ export function TransportPanel() {
             ) : null}
 
             {shouldShowEmptyArrangementHint ? (
-              <div className="lt-empty-arrangement-dropzone" aria-label="Empty arrangement dropzone">
+              <div
+                className="lt-empty-arrangement-dropzone"
+                aria-label="Empty arrangement dropzone"
+                onDragOver={handleEmptyArrangementLibraryDragOver}
+                onDrop={handleEmptyArrangementLibraryDrop}
+              >
                 <strong>Drop audio from the Library to create the first track</strong>
                 <p>
                   LibreTracks will create an audio track automatically and place the clip at the snapped
