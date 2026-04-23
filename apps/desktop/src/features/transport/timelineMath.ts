@@ -1,5 +1,7 @@
 export const BASE_PIXELS_PER_SECOND = 18;
 export const TIMELINE_TIMEBASE_HZ = 48_000;
+export const TIMELINE_ZOOM_MULTIPLIER = 1.15;
+export const TIMELINE_WORKSPACE_TAIL_SECONDS = 3600;
 
 export type TimelineGridParams = {
   durationSeconds: number;
@@ -110,6 +112,18 @@ export function getPixelsPerSecond(zoomLevel: number) {
   return zoomLevel * BASE_PIXELS_PER_SECOND;
 }
 
+export function getZoomLevelDelta(
+  currentZoomLevel: number,
+  direction: "in" | "out",
+  multiplier = TIMELINE_ZOOM_MULTIPLIER,
+) {
+  const safeZoomLevel = clampPositive(currentZoomLevel, 1);
+  const safeMultiplier = Math.max(1.01, multiplier);
+  return direction === "in"
+    ? safeZoomLevel * safeMultiplier
+    : safeZoomLevel / safeMultiplier;
+}
+
 export function secondsToScreenX(
   seconds: number,
   cameraX: number,
@@ -141,16 +155,32 @@ export function clientXToTimelineSeconds(
   return x / clampPositive(pixelsPerSecond, 1);
 }
 
-export function getContentWidth(durationSeconds: number, pixelsPerSecond: number) {
-  return Math.max(0, durationSeconds) * clampPositive(pixelsPerSecond, 1);
+export function getTimelineWorkspaceEndSeconds(
+  durationSeconds: number,
+  contentEndSeconds = durationSeconds,
+  tailSeconds = TIMELINE_WORKSPACE_TAIL_SECONDS,
+) {
+  return Math.max(0, durationSeconds, contentEndSeconds) + Math.max(0, tailSeconds);
 }
 
 export function getMaxCameraX(
   durationSeconds: number,
   pixelsPerSecond: number,
   viewportWidth: number,
+  contentEndSeconds = durationSeconds,
 ) {
-  return Math.max(0, getContentWidth(durationSeconds, pixelsPerSecond) - Math.max(0, viewportWidth));
+  return Math.max(
+    0,
+    getContentWidth(durationSeconds, pixelsPerSecond, contentEndSeconds) - Math.max(0, viewportWidth),
+  );
+}
+
+export function getContentWidth(
+  durationSeconds: number,
+  pixelsPerSecond: number,
+  contentEndSeconds = durationSeconds,
+) {
+  return getTimelineWorkspaceEndSeconds(durationSeconds, contentEndSeconds) * clampPositive(pixelsPerSecond, 1);
 }
 
 export function clampCameraX(
@@ -158,16 +188,18 @@ export function clampCameraX(
   durationSeconds: number,
   pixelsPerSecond: number,
   viewportWidth: number,
+  contentEndSeconds = durationSeconds,
 ) {
   return clamp(
     nextCameraX,
     0,
-    getMaxCameraX(durationSeconds, pixelsPerSecond, viewportWidth),
+    getMaxCameraX(durationSeconds, pixelsPerSecond, viewportWidth, contentEndSeconds),
   );
 }
 
 export function zoomCameraAtViewportX(params: {
   durationSeconds: number;
+  contentEndSeconds?: number;
   viewportWidth: number;
   viewportX: number;
   currentCameraX: number;
@@ -185,6 +217,7 @@ export function zoomCameraAtViewportX(params: {
     params.durationSeconds,
     params.nextPixelsPerSecond,
     params.viewportWidth,
+    params.contentEndSeconds ?? params.durationSeconds,
   );
 }
 

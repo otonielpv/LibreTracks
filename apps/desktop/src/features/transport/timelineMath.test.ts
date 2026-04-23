@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildVisibleTimelineGrid,
   clientXToTimelineSeconds,
+  getContentWidth,
   getMusicalPosition,
+  getTimelineWorkspaceEndSeconds,
+  getZoomLevelDelta,
   secondsToAbsoluteX,
   snapToTimelineGrid,
 } from "./timelineMath";
@@ -51,5 +54,15 @@ describe("timelineMath", () => {
 
   it("converts seconds into absolute timeline pixels", () => {
     expect(secondsToAbsoluteX(12.5, 36)).toBe(450);
+  });
+
+  it("uses multiplicative zoom deltas instead of additive steps", () => {
+    expect(getZoomLevelDelta(8, "in")).toBeCloseTo(9.2);
+    expect(getZoomLevelDelta(8, "out")).toBeCloseTo(8 / 1.15);
+  });
+
+  it("extends the workspace by one hour past the furthest content", () => {
+    expect(getTimelineWorkspaceEndSeconds(12, 45)).toBe(3645);
+    expect(getContentWidth(12, 18, 45)).toBe(3645 * 18);
   });
 });
