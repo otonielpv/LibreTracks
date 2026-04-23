@@ -1,6 +1,7 @@
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{JumpTrigger, PendingMarkerJump};
 use libretracks_core::{Clip, Marker, Song, TempoMetadata, TempoSource, TrackKind};
-use libretracks_project::WaveformSummary;
+use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
 
 use crate::error::DesktopError;
@@ -118,13 +119,21 @@ pub struct ClipSummary {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WaveformLodDto {
+    pub resolution_frames: usize,
+    pub bucket_count: usize,
+    pub min_peaks_base64: String,
+    pub max_peaks_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WaveformSummaryDto {
     pub waveform_key: String,
     pub version: u32,
     pub duration_seconds: f64,
-    pub bucket_count: usize,
-    pub min_peaks: Vec<f32>,
-    pub max_peaks: Vec<f32>,
+    pub sample_rate: u32,
+    pub lods: Vec<WaveformLodDto>,
     #[serde(default)]
     pub is_preview: bool,
 }
@@ -242,11 +251,28 @@ pub(crate) fn waveform_summary_to_dto(
         waveform_key: waveform_key.to_string(),
         version: summary.version,
         duration_seconds: summary.duration_seconds,
-        bucket_count: summary.bucket_count,
-        min_peaks: summary.min_peaks.clone(),
-        max_peaks: summary.max_peaks.clone(),
+        sample_rate: summary.sample_rate,
+        lods: summary.lods.iter().map(waveform_lod_to_dto).collect(),
         is_preview: false,
     }
+}
+
+fn waveform_lod_to_dto(lod: &WaveformLod) -> WaveformLodDto {
+    WaveformLodDto {
+        resolution_frames: lod.resolution_frames,
+        bucket_count: lod.max_peaks.len(),
+        min_peaks_base64: encode_peaks_base64(&lod.min_peaks),
+        max_peaks_base64: encode_peaks_base64(&lod.max_peaks),
+    }
+}
+
+fn encode_peaks_base64(values: &[f32]) -> String {
+    let mut bytes = Vec::with_capacity(values.len() * std::mem::size_of::<f32>());
+    for value in values {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    STANDARD.encode(bytes)
 }
 
 pub(crate) fn marker_to_summary(marker: &Marker) -> MarkerSummary {

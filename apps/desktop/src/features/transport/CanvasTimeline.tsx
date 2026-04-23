@@ -6,6 +6,7 @@ import type {
   SectionMarkerSummary,
   SongView,
   TrackSummary,
+  WaveformLodDto,
   WaveformSummaryDto,
 } from "./desktopApi";
 import type { TimelineGrid } from "./timelineMath";
@@ -44,10 +45,16 @@ type TrackCanvasProps = {
 
 type TrackSceneSnapshot = Omit<TrackCanvasProps, "cameraXRef" | "livePixelsPerSecondRef">;
 
-type WaveformBitmap = HTMLCanvasElement;
-
 const TRACK_CLIP_TOP_PADDING = 1;
 const TRACK_CLIP_BOTTOM_PADDING = 1;
+const decodedWaveformLodCache = new WeakMap<WaveformLodDto, ResolvedWaveformLod>();
+
+type ResolvedWaveformLod = {
+  resolutionFrames: number;
+  bucketCount: number;
+  minPeaks: Float32Array;
+  maxPeaks: Float32Array;
+};
 
 function isRenderableCanvasSize(value: number) {
   return Number.isFinite(value) && value > 0;
@@ -281,16 +288,16 @@ function clipScreenBounds(
 
 function cropWaveform(
   clip: ClipSummary,
-  waveform: WaveformSummaryDto | undefined,
+  waveformLod: ResolvedWaveformLod | null,
   visibleStartRatio = 0,
   visibleEndRatio = 1,
 ) {
-  const maxPeaks = waveform?.maxPeaks ?? [];
-  const minPeaks = waveform?.minPeaks?.length ? waveform.minPeaks : maxPeaks.map((peak) => -peak);
+  const maxPeaks = waveformLod?.maxPeaks ?? new Float32Array(0);
+  const minPeaks = waveformLod?.minPeaks ?? new Float32Array(0);
   if (!maxPeaks.length || clip.sourceDurationSeconds <= 0) {
     return {
-      min: [] as number[],
-      max: [] as number[],
+      min: new Float32Array(0),
+      max: new Float32Array(0),
     };
   }
 
@@ -311,31 +318,50 @@ function drawWaveformShape(
   context: CanvasRenderingContext2D,
   clip: ClipSummary,
   waveform: WaveformSummaryDto | undefined,
+  pixelsPerSecond: number,
+  canvasWidth: number,
   left: number,
   width: number,
   top: number,
   height: number,
 ) {
-  const { min, max } = cropWaveform(clip, waveform, 0, 1);
+  const waveformLod = selectWaveformLod(waveform, pixelsPerSecond);
+  const { min, max } = cropWaveform(clip, waveformLod, 0, 1);
   if (!max.length || !min.length || width < 2 || height < 2) {
+    return;
+  }
+
+  const visiblePixelStart = Math.max(0, -left);
+  const visiblePixelEnd = Math.min(width, canvasWidth - left);
+  if (visiblePixelStart >= visiblePixelEnd) {
+    return;
+  }
+
+  const startIndex = Math.max(0, Math.floor((visiblePixelStart / width) * max.length));
+  const endIndex = Math.min(
+    max.length,
+    Math.max(startIndex + 1, Math.ceil((visiblePixelEnd / width) * max.length)),
+  );
+  if (startIndex >= endIndex || startIndex >= min.length) {
     return;
   }
 
   context.fillStyle = waveform?.isPreview ? "rgba(20, 20, 20, 0.34)" : "rgba(20, 20, 20, 0.72)";
   context.beginPath();
+  const xDenominator = Math.max(1, max.length - 1);
 
-  for (let index = 0; index < max.length; index += 1) {
-    const x = left + (index / Math.max(1, max.length - 1)) * width;
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const x = left + (index / xDenominator) * width;
     const y = top + height * 0.5 - clamp(max[index], -1, 1) * height * 0.42;
-    if (index === 0) {
+    if (index === startIndex) {
       context.moveTo(x, y);
     } else {
       context.lineTo(x, y);
     }
   }
 
-  for (let index = min.length - 1; index >= 0; index -= 1) {
-    const x = left + (index / Math.max(1, min.length - 1)) * width;
+  for (let index = endIndex - 1; index >= startIndex; index -= 1) {
+    const x = left + (index / xDenominator) * width;
     const y = top + height * 0.5 - clamp(min[index], -1, 1) * height * 0.42;
     context.lineTo(x, y);
   }
@@ -370,60 +396,81 @@ function drawWaveformPlaceholder(
   context.restore();
 }
 
-function createWaveformBitmap(width: number, height: number) {
-  if (typeof document === "undefined") {
-    return null;
+function decodeBase64ToBytes(base64: string) {
+  if (typeof atob === "function") {
+    const decoded = atob(base64);
+    const bytes = new Uint8Array(decoded.length);
+    for (let index = 0; index < decoded.length; index += 1) {
+      bytes[index] = decoded.charCodeAt(index);
+    }
+
+    return bytes;
   }
 
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(width));
-  canvas.height = Math.max(1, Math.round(height));
-  return canvas;
+  return new Uint8Array(0);
 }
 
-function getWaveformBitmapKey(
-  clip: ClipSummary,
-  waveform: WaveformSummaryDto | undefined,
-) {
-  return [
-    clip.waveformKey,
-    waveform?.version ?? "missing",
-    waveform?.isPreview ? "preview" : "ready",
-    clip.durationSeconds.toFixed(4),
-    clip.sourceStartSeconds.toFixed(4),
-    clip.sourceDurationSeconds.toFixed(4),
-  ].join("|");
+function decodeFloat32Peaks(base64: string | undefined, expectedCount: number) {
+  if (!base64 || expectedCount <= 0) {
+    return new Float32Array(0);
+  }
+
+  const bytes = decodeBase64ToBytes(base64);
+  const availableCount = Math.min(expectedCount, Math.floor(bytes.byteLength / 4));
+  const values = new Float32Array(availableCount);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+  for (let index = 0; index < availableCount; index += 1) {
+    values[index] = view.getFloat32(index * 4, true);
+  }
+
+  return values;
 }
 
-function getOrCreateWaveformBitmap(
-  cache: Map<string, WaveformBitmap>,
-  clip: ClipSummary,
-  waveform: WaveformSummaryDto | undefined,
-  pixelsPerSecond: number,
-  clipHeight: number,
-) {
-  const cacheKey = getWaveformBitmapKey(clip, waveform);
-  const cached = cache.get(cacheKey);
+function resolveWaveformLod(lod: WaveformLodDto): ResolvedWaveformLod {
+  const cached = decodedWaveformLodCache.get(lod);
   if (cached) {
     return cached;
   }
 
-  const clipWidth = Math.max(2, Math.round(clip.durationSeconds * pixelsPerSecond));
-  const bitmapHeight = Math.max(2, Math.round(clipHeight));
-  const bitmap = createWaveformBitmap(clipWidth, bitmapHeight);
-  if (!bitmap) {
+  const resolved = {
+    resolutionFrames: lod.resolutionFrames,
+    bucketCount: lod.bucketCount,
+    minPeaks: lod.minPeaks
+      ? Float32Array.from(lod.minPeaks)
+      : decodeFloat32Peaks(lod.minPeaksBase64, lod.bucketCount),
+    maxPeaks: lod.maxPeaks
+      ? Float32Array.from(lod.maxPeaks)
+      : decodeFloat32Peaks(lod.maxPeaksBase64, lod.bucketCount),
+  };
+  decodedWaveformLodCache.set(lod, resolved);
+  return resolved;
+}
+
+function selectWaveformLod(
+  waveform: WaveformSummaryDto | undefined,
+  pixelsPerSecond: number,
+): ResolvedWaveformLod | null {
+  if (!waveform?.lods.length) {
     return null;
   }
 
-  const context = bitmap.getContext("2d");
-  if (!context) {
-    return null;
+  const framesPerPixel =
+    waveform.sampleRate > 0 && pixelsPerSecond > 0
+      ? waveform.sampleRate / pixelsPerSecond
+      : waveform.lods[0].resolutionFrames;
+  let selectedLod = waveform.lods[0];
+
+  for (const lod of waveform.lods) {
+    if (lod.resolutionFrames <= framesPerPixel) {
+      selectedLod = lod;
+      continue;
+    }
+
+    break;
   }
 
-  context.clearRect(0, 0, clipWidth, bitmapHeight);
-  drawWaveformShape(context, clip, waveform, 0, clipWidth, 0, bitmapHeight);
-  cache.set(cacheKey, bitmap);
-  return bitmap;
+  return resolveWaveformLod(selectedLod);
 }
 
 function buildTrackStructureSignature(song: SongView, visibleTracks: TrackSummary[]) {
@@ -464,7 +511,13 @@ function buildWaveformCacheSignature(waveformCache: Record<string, WaveformSumma
     .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
     .map(
       ([waveformKey, summary]) =>
-        `${waveformKey}:${summary.version}:${summary.bucketCount}:${summary.isPreview ? "preview" : "ready"}`,
+        `${waveformKey}:${summary.version}:${summary.sampleRate}:${summary.lods
+          .map((lod) => {
+            const rawMin = lod.minPeaks?.[0]?.toFixed(4) ?? lod.minPeaksBase64?.slice(0, 12) ?? "0";
+            const rawMax = lod.maxPeaks?.[0]?.toFixed(4) ?? lod.maxPeaksBase64?.slice(0, 12) ?? "0";
+            return `${lod.resolutionFrames}:${lod.bucketCount}:${rawMin}:${rawMax}`;
+          })
+          .join(",")}:${summary.isPreview ? "preview" : "ready"}`,
     )
     .join("|");
 }
@@ -474,7 +527,6 @@ function drawTrackScene(
   snapshot: TrackSceneSnapshot,
   cameraX: number,
   pixelsPerSecond: number,
-  waveformBitmapCache: Map<string, WaveformBitmap>,
 ) {
   context.clearRect(0, 0, snapshot.width, snapshot.height);
   context.fillStyle = "#0e0e0e";
@@ -551,34 +603,21 @@ function drawTrackScene(
       context.fill();
       context.stroke();
 
-      const waveformBitmap = getOrCreateWaveformBitmap(
-        waveformBitmapCache,
-        clip,
-        snapshot.waveformCache[clip.waveformKey],
-        pixelsPerSecond,
-        clipHeight,
-      );
-
-      if (waveformBitmap) {
-        const sourceLeftRatio = clipWidth > 0 ? clamp((clippedLeft - left) / clipWidth, 0, 1) : 0;
-        const sourceRightRatio = clipWidth > 0 ? clamp((clippedRight - left) / clipWidth, 0, 1) : 1;
-        const sourceLeft = sourceLeftRatio * waveformBitmap.width;
-        const sourceWidth = Math.max(1, (sourceRightRatio - sourceLeftRatio) * waveformBitmap.width);
-
+      const waveform = snapshot.waveformCache[clip.waveformKey];
+      if (waveform) {
         context.save();
-        context.imageSmoothingEnabled = true;
         context.beginPath();
         context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
         context.clip();
-        context.drawImage(
-          waveformBitmap,
-          sourceLeft,
-          0,
-          sourceWidth,
-          waveformBitmap.height,
-          clippedLeft,
+        drawWaveformShape(
+          context,
+          clip,
+          waveform,
+          pixelsPerSecond,
+          snapshot.width,
+          left,
+          clipWidth,
           clipTop,
-          visibleWidth,
           clipHeight,
         );
         context.restore();
@@ -837,7 +876,6 @@ export function TimelineTrackCanvas({
   clipPreviewSecondsRef,
 }: TrackCanvasProps) {
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const waveformBitmapCacheRef = useRef<Map<string, WaveformBitmap>>(new Map());
   const snapshotRef = useRef<TrackSceneSnapshot>({
     width,
     height,
@@ -891,11 +929,6 @@ export function TimelineTrackCanvas({
   ]);
 
   useEffect(() => {
-    waveformBitmapCacheRef.current.clear();
-    sceneVersionRef.current += 1;
-  }, [pixelsPerSecond, trackHeight]);
-
-  useEffect(() => {
     const baseCanvas = baseCanvasRef.current;
     if (!baseCanvas) {
       return;
@@ -920,13 +953,7 @@ export function TimelineTrackCanvas({
       ) {
         const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
         if (baseContext) {
-          drawTrackScene(
-            baseContext,
-            snapshot,
-            cameraX,
-            livePixelsPerSecond,
-            waveformBitmapCacheRef.current,
-          );
+          drawTrackScene(baseContext, snapshot, cameraX, livePixelsPerSecond);
         }
 
         lastBaseSceneVersion = sceneVersionRef.current;

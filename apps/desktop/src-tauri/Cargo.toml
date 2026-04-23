@@ -7,6 +7,7 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+base64 = "0.22"
 cpal = "0.15"
 libretracks-audio = { path = "../../../crates/libretracks-audio" }
 libretracks-project = { path = "../../../crates/libretracks-project" }

@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
-    fs::File,
     fs,
+    fs::File,
     path::{Path, PathBuf},
     thread,
     time::Instant,
@@ -451,10 +451,7 @@ fn transcode_to_project_wav(
 
     let track_id = track.id;
     let input_sample_rate = track.codec_params.sample_rate.ok_or_else(|| {
-        ProjectError::AudioDecode(format!(
-            "missing sample rate for {}",
-            source_path.display()
-        ))
+        ProjectError::AudioDecode(format!("missing sample rate for {}", source_path.display()))
     })?;
     let channel_count = track
         .codec_params

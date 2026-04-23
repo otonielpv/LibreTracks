@@ -16,6 +16,7 @@ import {
   createClipsBatch,
   createSong,
   createTrack,
+  buildWaveformLodsFromPeaks,
   deleteClip,
   deleteSectionMarker,
   deleteTrack,
@@ -349,11 +350,10 @@ function buildInstantWaveformPreview(
 
   return {
     waveformKey,
-    version: 0,
+    version: 3,
     durationSeconds,
-    bucketCount,
-    minPeaks,
-    maxPeaks,
+    sampleRate: 48_000,
+    lods: buildWaveformLodsFromPeaks(minPeaks, maxPeaks, durationSeconds, 48_000),
     isPreview: true,
   };
 }

@@ -70,10 +70,18 @@ export type WaveformSummaryDto = {
   waveformKey: string;
   version: number;
   durationSeconds: number;
-  bucketCount: number;
-  minPeaks: number[];
-  maxPeaks: number[];
+  sampleRate: number;
+  lods: WaveformLodDto[];
   isPreview?: boolean;
+};
+
+export type WaveformLodDto = {
+  resolutionFrames: number;
+  bucketCount: number;
+  minPeaks?: number[];
+  maxPeaks?: number[];
+  minPeaksBase64?: string;
+  maxPeaksBase64?: string;
 };
 
 export type LibraryAssetSummary = {
@@ -98,6 +106,68 @@ export type DesktopPerformanceSnapshot = {
   projectRevision: number;
   cachedWaveforms: number;
 };
+
+function downsampleWaveformLod(lod: WaveformLodDto, targetResolutionFrames: number): WaveformLodDto {
+  const sourceMin = lod.minPeaks ?? [];
+  const sourceMax = lod.maxPeaks ?? [];
+  const chunkSize = Math.max(1, Math.ceil(targetResolutionFrames / Math.max(1, lod.resolutionFrames)));
+  const minPeaks: number[] = [];
+  const maxPeaks: number[] = [];
+
+  for (let chunkStart = 0; chunkStart < sourceMax.length; chunkStart += chunkSize) {
+    const chunkEnd = Math.min(sourceMax.length, chunkStart + chunkSize);
+    let minPeak = 1;
+    let maxPeak = -1;
+
+    for (let index = chunkStart; index < chunkEnd; index += 1) {
+      minPeak = Math.min(minPeak, sourceMin[index] ?? 0);
+      maxPeak = Math.max(maxPeak, sourceMax[index] ?? 0);
+    }
+
+    minPeaks.push(minPeak);
+    maxPeaks.push(maxPeak);
+  }
+
+  return {
+    resolutionFrames: targetResolutionFrames,
+    bucketCount: maxPeaks.length,
+    minPeaks,
+    maxPeaks,
+  };
+}
+
+export function buildWaveformLodsFromPeaks(
+  minPeaks: number[],
+  maxPeaks: number[],
+  durationSeconds: number,
+  sampleRate: number,
+): WaveformLodDto[] {
+  const safeSampleRate = Math.max(1, Math.round(sampleRate));
+  const safeDurationSeconds = Math.max(durationSeconds, 0.001);
+  const baseResolutionFrames = Math.max(
+    1,
+    Math.ceil((safeDurationSeconds * safeSampleRate) / Math.max(1, maxPeaks.length)),
+  );
+  const lods: WaveformLodDto[] = [
+    {
+      resolutionFrames: baseResolutionFrames,
+      bucketCount: maxPeaks.length,
+      minPeaks,
+      maxPeaks,
+    },
+  ];
+
+  for (const targetResolutionFrames of [2048, 16384, 131072]) {
+    const previous = lods[lods.length - 1];
+    if (targetResolutionFrames <= previous.resolutionFrames) {
+      continue;
+    }
+
+    lods.push(downsampleWaveformLod(previous, targetResolutionFrames));
+  }
+
+  return lods;
+}
 
 export type TransportSnapshot = {
   playbackState: PlaybackState;
@@ -982,11 +1052,15 @@ export async function createClipsBatch(args: CreateClipArgs[]): Promise<Transpor
             const generatedWaveform = buildWaveform(96, "smooth");
             demoWaveforms[entry.filePath] = {
               waveformKey: entry.filePath,
-              version: 2,
+              version: 3,
               durationSeconds,
-              bucketCount: generatedWaveform.max.length,
-              minPeaks: generatedWaveform.min,
-              maxPeaks: generatedWaveform.max,
+              sampleRate: 48_000,
+              lods: buildWaveformLodsFromPeaks(
+                generatedWaveform.min,
+                generatedWaveform.max,
+                durationSeconds,
+                48_000,
+              ),
             };
           }
 
@@ -1435,35 +1509,31 @@ function buildDemoWaveforms(): Record<string, WaveformSummaryDto> {
   return {
     "audio/drums.wav": {
       waveformKey: "audio/drums.wav",
-      version: 2,
+      version: 3,
       durationSeconds: 180,
-      bucketCount: rhythmWave.max.length,
-      minPeaks: rhythmWave.min,
-      maxPeaks: rhythmWave.max,
+      sampleRate: 48_000,
+      lods: buildWaveformLodsFromPeaks(rhythmWave.min, rhythmWave.max, 180, 48_000),
     },
     "audio/bass.wav": {
       waveformKey: "audio/bass.wav",
-      version: 2,
+      version: 3,
       durationSeconds: 164,
-      bucketCount: bassWave.max.length,
-      minPeaks: bassWave.min,
-      maxPeaks: bassWave.max,
+      sampleRate: 48_000,
+      lods: buildWaveformLodsFromPeaks(bassWave.min, bassWave.max, 164, 48_000),
     },
     "audio/click.wav": {
       waveformKey: "audio/click.wav",
-      version: 2,
+      version: 3,
       durationSeconds: 180,
-      bucketCount: clickWave.max.length,
-      minPeaks: clickWave.min,
-      maxPeaks: clickWave.max,
+      sampleRate: 48_000,
+      lods: buildWaveformLodsFromPeaks(clickWave.min, clickWave.max, 180, 48_000),
     },
     "audio/guide.wav": {
       waveformKey: "audio/guide.wav",
-      version: 2,
+      version: 3,
       durationSeconds: 140,
-      bucketCount: vocalWave.max.length,
-      minPeaks: vocalWave.min,
-      maxPeaks: vocalWave.max,
+      sampleRate: 48_000,
+      lods: buildWaveformLodsFromPeaks(vocalWave.min, vocalWave.max, 140, 48_000),
     },
   };
 }

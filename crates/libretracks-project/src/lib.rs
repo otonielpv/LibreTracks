@@ -16,7 +16,7 @@ pub use song_store::{
 pub use waveform::{
     analyze_wav_file, generate_waveform_summary, load_waveform_summary, waveform_file_path,
     waveform_file_path_for_source, write_waveform_summary, AnalyzedWav, TempoCandidate,
-    WaveformSummary,
+    WaveformLod, WaveformSummary,
 };
 
 #[cfg(test)]
@@ -293,8 +293,9 @@ mod tests {
         assert!(imported.song_dir.join("audio").join("bass.wav").exists());
         assert!(waveform_file_path(&imported.song_dir, "audio/drums.wav").exists());
 
-        let drums_reader = hound::WavReader::open(imported.song_dir.join("audio").join("drums.wav"))
-            .expect("normalized drums wav should open");
+        let drums_reader =
+            hound::WavReader::open(imported.song_dir.join("audio").join("drums.wav"))
+                .expect("normalized drums wav should open");
         let drums_spec = drums_reader.spec();
         assert_eq!(drums_spec.sample_rate, 48_000);
         assert_eq!(drums_spec.bits_per_sample, 32);
@@ -313,11 +314,12 @@ mod tests {
 
         let waveform = load_waveform_summary(&imported.song_dir, "audio/drums.wav")
             .expect("waveform should load");
-        assert_eq!(waveform.bucket_count, waveform.peaks.len());
-        assert_eq!(waveform.bucket_count, waveform.min_peaks.len());
-        assert_eq!(waveform.bucket_count, waveform.max_peaks.len());
-        assert!(waveform.bucket_count >= 2048);
+        let base_lod = waveform.primary_lod().expect("waveform lod should exist");
+        assert_eq!(base_lod.min_peaks.len(), base_lod.max_peaks.len());
+        assert_eq!(base_lod.resolution_frames, 256);
+        assert!(waveform.lods.len() >= 3);
         assert!(waveform.duration_seconds > 0.0);
+        assert!(waveform.sample_rate > 0);
     }
 
     #[test]
@@ -364,14 +366,13 @@ mod tests {
         assert_eq!(analysis.channels, 2);
         assert_eq!(analysis.sample_rate, 48_000);
         assert!((analysis.duration_seconds - 2.0).abs() < 0.001);
-        assert_eq!(
-            analysis.waveform.bucket_count,
-            analysis.waveform.max_peaks.len()
-        );
-        assert_eq!(
-            analysis.waveform.bucket_count,
-            analysis.waveform.min_peaks.len()
-        );
+        let base_lod = analysis
+            .waveform
+            .primary_lod()
+            .expect("analysis waveform lod should exist");
+        assert_eq!(base_lod.min_peaks.len(), base_lod.max_peaks.len());
+        assert_eq!(base_lod.resolution_frames, 256);
+        assert!(analysis.waveform.lods.len() >= 3);
     }
 
     #[test]
@@ -384,7 +385,7 @@ mod tests {
 
         fs::write(
             waveform_file_path(&song_dir, "audio/click.wav"),
-            r#"{"version":1,"durationSeconds":0.0,"bucketCount":0,"peaks":[],"minPeaks":[],"maxPeaks":[]}"#,
+            b"not-a-valid-waveform-cache",
         )
         .expect("invalid waveform should be written");
 
