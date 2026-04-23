@@ -4401,9 +4401,6 @@ export function TransportPanel() {
                           <div className="lt-track-header-summary">
                             <div className="lt-track-header-main">
                               <div className="lt-track-title-row">
-                                <span className="lt-track-drag-handle is-static" aria-hidden="true">
-                                  <span>::</span>
-                                </span>
                                 <strong>{previewRow.title}</strong>
                               </div>
                               <span className="lt-track-meta">{previewRow.meta}</span>

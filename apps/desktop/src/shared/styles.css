@@ -228,7 +228,6 @@ body {
 .lt-context-menu button,
 .lt-track-toggle-group button,
 .lt-side-nav button,
-.lt-track-drag-handle,
 .lt-folder-toggle {
   border: 0;
   cursor: pointer;
@@ -1076,34 +1075,6 @@ body {
   color: #57f1db;
 }
 
-.lt-track-header {
-  position: sticky;
-  left: 0;
-  z-index: 10;
-  height: 94px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  gap: 0.55rem;
-  padding: 0.5rem 0.75rem;
-  overflow: hidden;
-  user-select: none;
-  background: linear-gradient(180deg, #232222 0%, #1c1b1b 100%);
-  border-top: 1px solid rgb(229 226 225 / 0.04);
-  border-right: 1px solid rgb(60 74 70 / 0.22);
-  border-bottom: 1px solid rgb(60 74 70 / 0.22);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03), 1px 0 0 rgb(19 19 19 / 0.55), 10px 0 18px rgb(0 0 0 / 0.12);
-}
-
-.lt-track-header-body {
-  display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
-  align-items: stretch;
-  gap: 0.55rem;
-}
 
 .lt-track-header-content {
   display: flex;
@@ -1267,31 +1238,6 @@ body {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-}
-
-.lt-track-drag-handle {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 4px;
-  background: rgb(255 255 255 / 0.04);
-  color: #bacac5;
-  cursor: grab;
-  font: 600 9px/1 "Space Grotesk", sans-serif;
-  letter-spacing: 0.08em;
-}
-
-.lt-track-drag-handle:active {
-  cursor: grabbing;
-}
-
-.lt-track-drag-handle.is-static {
-  cursor: default;
-  pointer-events: none;
-  opacity: 0.62;
 }
 
 .lt-track-title-row strong {
