@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Receiver, RecvTimeoutError, Sender},
         Arc, RwLock,
     },
     thread::{self, JoinHandle},
@@ -37,6 +37,8 @@ const DISK_RENDER_BLOCK_FRAMES: usize = 512;
 const GAIN_EPSILON: f32 = 0.000_001;
 const AUDIO_METER_EVENT: &str = "audio:meters";
 const AUDIO_METER_EMIT_INTERVAL: Duration = Duration::from_millis(16);
+const AUDIO_COMMAND_RESPONSE_TIMEOUT: Duration = Duration::from_millis(250);
+const MAX_HIERARCHY_DEPTH: usize = 16;
 
 type SharedAppHandle = Arc<RwLock<Option<AppHandle>>>;
 type SharedTrackMixState = Arc<RwLock<HashMap<String, LiveTrackMix>>>;
@@ -291,6 +293,7 @@ struct OutputSample {
 struct Mixer {
     song: Song,
     live_mix_state: SharedTrackMixState,
+    cached_live_mix: LiveMixSnapshot,
     audio_buffers: AudioBufferCache,
     output_sample_rate: u32,
     output_channels: usize,
@@ -311,6 +314,12 @@ struct MixClipState {
     reader: MemoryClipReader,
     current_gain: f32,
     current_pan: f32,
+}
+
+#[derive(Clone, Default)]
+struct LiveMixSnapshot {
+    tracks: HashMap<String, LiveTrackMix>,
+    is_any_track_soloed: bool,
 }
 
 struct MeterEmitterState {
@@ -370,6 +379,23 @@ impl LiveTrackMix {
             pan: track.pan as f32,
             muted: track.muted,
             solo: track.solo,
+        }
+    }
+}
+
+impl LiveMixSnapshot {
+    fn from_tracks(tracks: &HashMap<String, LiveTrackMix>) -> Self {
+        Self {
+            tracks: tracks.clone(),
+            is_any_track_soloed: tracks.values().any(|track| track.solo),
+        }
+    }
+
+    fn from_song(song: &Song) -> Self {
+        let tracks = build_live_mix_map(song);
+        Self {
+            is_any_track_soloed: tracks.values().any(|track| track.solo),
+            tracks,
         }
     }
 }
@@ -832,9 +858,7 @@ impl AudioController {
             .send(AudioCommand::DebugSnapshot { respond_to })
             .map_err(|_| DesktopError::AudioThreadUnavailable)?;
 
-        response
-            .recv()
-            .map_err(|_| DesktopError::AudioThreadUnavailable)
+        recv_audio_response(response)
     }
 
     pub fn replace_song_buffers(&self, song_dir: &Path, song: &Song) -> Result<(), DesktopError> {
@@ -853,10 +877,7 @@ impl AudioController {
             .send(command(respond_to))
             .map_err(|_| DesktopError::AudioThreadUnavailable)?;
 
-        response
-            .recv()
-            .map_err(|_| DesktopError::AudioThreadUnavailable)?
-            .map_err(DesktopError::AudioCommand)
+        recv_audio_response(response)?.map_err(DesktopError::AudioCommand)
     }
 }
 
@@ -1558,6 +1579,7 @@ impl Mixer {
         let mut mixer = Self {
             song,
             live_mix_state,
+            cached_live_mix: LiveMixSnapshot::default(),
             audio_buffers,
             output_sample_rate,
             output_channels,
@@ -1572,6 +1594,7 @@ impl Mixer {
             track_child_indices,
             meter_emitter: MeterEmitterState::new(app_handle),
         };
+        mixer.cached_live_mix = LiveMixSnapshot::from_song(&mixer.song);
         mixer.seek(mixer.song.clone(), position_seconds);
         mixer
     }
@@ -1579,12 +1602,14 @@ impl Mixer {
     fn apply_song_update(&mut self, song: Song) {
         let _ = replace_shared_live_mix(&self.live_mix_state, &song);
         self.song = song;
+        self.cached_live_mix = LiveMixSnapshot::from_song(&self.song);
         self.rebuild_track_meter_indices();
     }
 
     fn seek(&mut self, song: Song, position_seconds: f64) {
         let _ = replace_shared_live_mix(&self.live_mix_state, &song);
         self.song = song;
+        self.cached_live_mix = LiveMixSnapshot::from_song(&self.song);
         self.rebuild_track_meter_indices();
         self.song_duration_frames =
             seconds_to_frames(self.song.duration_seconds, self.output_sample_rate);
@@ -1608,69 +1633,64 @@ impl Mixer {
         let should_capture_track_meters = self.meter_emitter.is_enabled();
         let mut track_meters = should_capture_track_meters.then(|| self.empty_track_meters());
 
+        self.refresh_cached_live_mix();
         self.activate_due_clips(block_end);
-        let live_mix_state = self.live_mix_state.read().ok();
+        {
+            let live_mix_state = &self.cached_live_mix.tracks;
+            let is_any_track_soloed = self.cached_live_mix.is_any_track_soloed;
 
-        for clip_state in &mut self.active_clips {
-            let overlap_start = block_start.max(clip_state.plan.timeline_start_frame);
-            let overlap_end = block_end.min(clip_state.plan.timeline_end_frame());
-            if overlap_end <= overlap_start {
-                continue;
-            }
+            for clip_state in &mut self.active_clips {
+                let overlap_start = block_start.max(clip_state.plan.timeline_start_frame);
+                let overlap_end = block_end.min(clip_state.plan.timeline_end_frame());
+                if overlap_end <= overlap_start {
+                    continue;
+                }
 
-            let offset_frames = (overlap_start - block_start) as usize;
-            let overlap_frames = (overlap_end - overlap_start) as usize;
-            let target_gain = live_mix_state
-                .as_deref()
-                .map(|shared_mix| {
-                    resolve_clip_runtime_gain(
-                        shared_mix,
-                        &clip_state.plan.track_id,
-                        clip_state.plan.clip_gain,
-                    )
-                })
-                .unwrap_or(0.0);
-            let target_pan = live_mix_state
-                .as_deref()
-                .map(|shared_mix| resolve_track_runtime_pan(shared_mix, &clip_state.plan.track_id))
-                .unwrap_or(0.0);
-            let parent_gain = live_mix_state
-                .as_deref()
-                .and_then(|shared_mix| {
-                    resolve_parent_track_runtime_gain(shared_mix, &clip_state.plan.track_id)
-                })
-                .unwrap_or(1.0);
+                let offset_frames = (overlap_start - block_start) as usize;
+                let overlap_frames = (overlap_end - overlap_start) as usize;
+                let target_gain = resolve_clip_runtime_gain(
+                    live_mix_state,
+                    &clip_state.plan.track_id,
+                    clip_state.plan.clip_gain,
+                    is_any_track_soloed,
+                );
+                let target_pan =
+                    resolve_track_runtime_pan(live_mix_state, &clip_state.plan.track_id);
+                let parent_gain =
+                    resolve_parent_track_runtime_gain(live_mix_state, &clip_state.plan.track_id)
+                        .unwrap_or(1.0);
 
-            let (left_peak, right_peak) = clip_state.mix_into(
-                &mut mixed,
-                offset_frames,
-                overlap_frames,
-                self.output_channels,
-                overlap_start,
-                target_gain,
-                target_pan,
-            );
+                let (left_peak, right_peak) = clip_state.mix_into(
+                    &mut mixed,
+                    offset_frames,
+                    overlap_frames,
+                    self.output_channels,
+                    overlap_start,
+                    target_gain,
+                    target_pan,
+                );
 
-            if let Some(index) = track_meters.as_ref().and_then(|_| {
-                self.track_meter_indices
-                    .get(clip_state.plan.track_id.as_str())
-                    .copied()
-            }) {
-                if let Some(track_meter_levels) = track_meters.as_mut() {
-                    let meter_left_peak = if parent_gain.abs() <= GAIN_EPSILON {
-                        0.0
-                    } else {
-                        left_peak / parent_gain
-                    };
-                    let meter_right_peak = if parent_gain.abs() <= GAIN_EPSILON {
-                        0.0
-                    } else {
-                        right_peak / parent_gain
-                    };
-                    track_meter_levels[index].left_peak =
-                        track_meter_levels[index].left_peak.max(meter_left_peak);
-                    track_meter_levels[index].right_peak =
-                        track_meter_levels[index].right_peak.max(meter_right_peak);
+                if let Some(index) = track_meters.as_ref().and_then(|_| {
+                    self.track_meter_indices
+                        .get(clip_state.plan.track_id.as_str())
+                        .copied()
+                }) {
+                    if let Some(track_meter_levels) = track_meters.as_mut() {
+                        let meter_left_peak = if parent_gain.abs() <= GAIN_EPSILON {
+                            0.0
+                        } else {
+                            left_peak / parent_gain
+                        };
+                        let meter_right_peak = if parent_gain.abs() <= GAIN_EPSILON {
+                            0.0
+                        } else {
+                            right_peak / parent_gain
+                        };
+                        track_meter_levels[index].left_peak =
+                            track_meter_levels[index].left_peak.max(meter_left_peak);
+                        track_meter_levels[index].right_peak =
+                            track_meter_levels[index].right_peak.max(meter_right_peak);
+                    }
                 }
             }
         }
@@ -1710,17 +1730,14 @@ impl Mixer {
                 activation_start_frame,
             ) {
                 Ok(reader) => {
-                    let live_mix_state = self.live_mix_state.read().ok();
-                    let current_gain = live_mix_state
-                        .as_deref()
-                        .map(|shared_mix| {
-                            resolve_clip_runtime_gain(shared_mix, &plan.track_id, plan.clip_gain)
-                        })
-                        .unwrap_or(0.0);
-                    let current_pan = live_mix_state
-                        .as_deref()
-                        .map(|shared_mix| resolve_track_runtime_pan(shared_mix, &plan.track_id))
-                        .unwrap_or(0.0);
+                    let current_gain = resolve_clip_runtime_gain(
+                        &self.cached_live_mix.tracks,
+                        &plan.track_id,
+                        plan.clip_gain,
+                        self.cached_live_mix.is_any_track_soloed,
+                    );
+                    let current_pan =
+                        resolve_track_runtime_pan(&self.cached_live_mix.tracks, &plan.track_id);
                     self.active_clips.push(MixClipState {
                         plan,
                         reader,
@@ -1771,8 +1788,6 @@ impl Mixer {
     }
 
     fn roll_up_folder_track_meters(&self, track_meters: &mut [AudioMeterLevel]) {
-        let live_mix_state = self.live_mix_state.read().ok();
-
         for track_index in (0..self.song.tracks.len()).rev() {
             let track = &self.song.tracks[track_index];
             if track.kind != TrackKind::Folder {
@@ -1787,13 +1802,20 @@ impl Mixer {
                 right_peak = right_peak.max(track_meters[child_index].right_peak);
             }
 
-            let folder_gain = live_mix_state
-                .as_deref()
-                .and_then(|shared_mix| shared_mix.get(track.id.as_str()))
+            let folder_gain = self
+                .cached_live_mix
+                .tracks
+                .get(track.id.as_str())
                 .map(|track_mix| track_mix.volume.clamp(0.0, 1.0))
                 .unwrap_or(0.0);
             track_meters[track_index].left_peak = (left_peak * folder_gain).clamp(0.0, 1.0);
             track_meters[track_index].right_peak = (right_peak * folder_gain).clamp(0.0, 1.0);
+        }
+    }
+
+    fn refresh_cached_live_mix(&mut self) {
+        if let Ok(live_mix_state) = self.live_mix_state.try_read() {
+            self.cached_live_mix = LiveMixSnapshot::from_tracks(&live_mix_state);
         }
     }
 }
@@ -1808,8 +1830,7 @@ impl MeterEmitterState {
     }
 
     fn is_enabled(&self) -> bool {
-        self
-            .app_handle
+        self.app_handle
             .read()
             .ok()
             .and_then(|app_handle| app_handle.as_ref().cloned())
@@ -1919,12 +1940,32 @@ fn interpolated_gain(
         return target_gain;
     }
 
-    if frame_count <= 1 {
+    if frame_count == 0 {
+        return start_gain;
+    }
+
+    if frame_count == 1 {
         return target_gain;
     }
 
-    let gain_ratio = frame_offset as f32 / frame_count.saturating_sub(1).max(1) as f32;
+    let gain_ratio = frame_offset as f32 / frame_count.saturating_sub(1) as f32;
     start_gain + (target_gain - start_gain) * gain_ratio
+}
+
+fn recv_audio_response<T>(response: Receiver<T>) -> Result<T, DesktopError> {
+    response
+        .recv_timeout(AUDIO_COMMAND_RESPONSE_TIMEOUT)
+        .map_err(map_audio_response_error)
+}
+
+fn map_audio_response_error(error: RecvTimeoutError) -> DesktopError {
+    match error {
+        RecvTimeoutError::Timeout => DesktopError::AudioCommand(format!(
+            "audio thread did not respond within {} ms",
+            AUDIO_COMMAND_RESPONSE_TIMEOUT.as_millis()
+        )),
+        RecvTimeoutError::Disconnected => DesktopError::AudioThreadUnavailable,
+    }
 }
 
 fn push_block_into_ring(
@@ -2082,8 +2123,9 @@ fn resolve_clip_runtime_gain(
     live_mix_state: &HashMap<String, LiveTrackMix>,
     track_id: &str,
     clip_gain: f32,
+    is_any_track_soloed: bool,
 ) -> f32 {
-    resolve_track_clip_gain(live_mix_state, track_id, clip_gain).unwrap_or(0.0)
+    resolve_track_clip_gain(live_mix_state, track_id, clip_gain, is_any_track_soloed).unwrap_or(0.0)
 }
 
 fn resolve_track_runtime_pan(
@@ -2096,8 +2138,13 @@ fn resolve_track_runtime_pan(
 
     let mut pan = track.pan;
     let mut cursor = track.parent_track_id.as_deref();
+    let mut depth = 0;
 
     while let Some(parent_track_id) = cursor {
+        if depth >= MAX_HIERARCHY_DEPTH {
+            return 0.0;
+        }
+
         let Some(parent_track) = live_mix_state.get(parent_track_id) else {
             return 0.0;
         };
@@ -2108,6 +2155,7 @@ fn resolve_track_runtime_pan(
 
         pan += parent_track.pan;
         cursor = parent_track.parent_track_id.as_deref();
+        depth += 1;
     }
 
     pan.clamp(-1.0, 1.0)
@@ -2120,8 +2168,13 @@ fn resolve_parent_track_runtime_gain(
     let track = live_mix_state.get(track_id)?;
     let mut gain = 1.0_f32;
     let mut cursor = track.parent_track_id.as_deref();
+    let mut depth = 0;
 
     while let Some(parent_track_id) = cursor {
+        if depth >= MAX_HIERARCHY_DEPTH {
+            return None;
+        }
+
         let parent_track = live_mix_state.get(parent_track_id)?;
         if parent_track.kind != TrackKind::Folder {
             return None;
@@ -2129,6 +2182,7 @@ fn resolve_parent_track_runtime_gain(
 
         gain *= parent_track.volume;
         cursor = parent_track.parent_track_id.as_deref();
+        depth += 1;
     }
 
     Some(gain)
@@ -2138,9 +2192,9 @@ fn resolve_track_clip_gain(
     live_mix_state: &HashMap<String, LiveTrackMix>,
     track_id: &str,
     clip_gain: f32,
+    is_any_track_soloed: bool,
 ) -> Option<f32> {
     let track = live_mix_state.get(track_id)?;
-    let is_any_track_soloed = live_mix_state.values().any(|candidate| candidate.solo);
 
     if is_any_track_soloed && !is_track_soloed_in_hierarchy(live_mix_state, track) {
         return Some(0.0);
@@ -2152,8 +2206,13 @@ fn resolve_track_clip_gain(
 
     let mut gain = track.volume;
     let mut cursor = track.parent_track_id.as_deref();
+    let mut depth = 0;
 
     while let Some(parent_track_id) = cursor {
+        if depth >= MAX_HIERARCHY_DEPTH {
+            return None;
+        }
+
         let parent_track = live_mix_state.get(parent_track_id)?;
         if parent_track.kind != TrackKind::Folder {
             return None;
@@ -2165,6 +2224,7 @@ fn resolve_track_clip_gain(
 
         gain *= parent_track.volume;
         cursor = parent_track.parent_track_id.as_deref();
+        depth += 1;
     }
 
     Some(gain * clip_gain)
@@ -2179,8 +2239,13 @@ fn is_track_soloed_in_hierarchy(
     }
 
     let mut cursor = track.parent_track_id.as_deref();
+    let mut depth = 0;
 
     while let Some(parent_track_id) = cursor {
+        if depth >= MAX_HIERARCHY_DEPTH {
+            return false;
+        }
+
         let Some(parent_track) = live_mix_state.get(parent_track_id) else {
             return false;
         };
@@ -2194,6 +2259,7 @@ fn is_track_soloed_in_hierarchy(
         }
 
         cursor = parent_track.parent_track_id.as_deref();
+        depth += 1;
     }
 
     false
@@ -2243,11 +2309,11 @@ mod tests {
         fs,
         path::{Path, PathBuf},
         sync::{
-            atomic::{AtomicU64, Ordering},
+            atomic::{AtomicBool, AtomicU64, Ordering},
             mpsc, Arc, RwLock,
         },
         thread,
-        time::Duration,
+        time::{Duration, Instant},
     };
 
     use libretracks_core::{Clip, OutputBus, Song, TempoMetadata, TempoSource, Track};
@@ -2257,11 +2323,11 @@ mod tests {
     use super::{
         apply_runtime_pan, build_live_mix_map, build_playback_plans, coalesce_sync_song_commands,
         drain_consumer_samples, env_flag, interpolated_gain, playback_reason_label,
-        probe_audio_file, resolve_track_runtime_pan, scheduled_clip_count, AudioBufferCache,
-        AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState,
-        AudioMeterLevel, MemoryClipReader, Mixer, OutputSample, PlaybackBackend, PlaybackClipPlan,
-        PlaybackSession, PlaybackStartReason, RestartReport, SharedAudioBuffer, StopReport,
-        SyncReport,
+        probe_audio_file, resolve_track_runtime_pan, scheduled_clip_count, update_shared_track_mix,
+        AudioBufferCache, AudioCommand, AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot,
+        AudioDebugState, AudioMeterLevel, MemoryClipReader, Mixer, OutputSample, PlaybackBackend,
+        PlaybackClipPlan, PlaybackSession, PlaybackStartReason, RestartReport, SharedAudioBuffer,
+        StopReport, SyncReport,
     };
 
     fn demo_song() -> Song {
@@ -2584,6 +2650,12 @@ mod tests {
     }
 
     #[test]
+    fn interpolated_gain_handles_empty_and_single_frame_blocks() {
+        assert!((interpolated_gain(0.2, 1.0, 0, 0) - 0.2).abs() < 0.000_001);
+        assert!((interpolated_gain(0.2, 1.0, 0, 1) - 1.0).abs() < 0.000_001);
+    }
+
+    #[test]
     fn playback_plan_edge_gain_applies_fades_in_sample_domain() {
         let plan = PlaybackClipPlan {
             clip_id: "clip".into(),
@@ -2721,6 +2793,65 @@ mod tests {
     }
 
     #[test]
+    fn resolve_track_runtime_pan_rejects_circular_folder_hierarchies() {
+        let song = Song {
+            id: "cycle_song".into(),
+            title: "Cycle".into(),
+            artist: None,
+            bpm: 120.0,
+            tempo_metadata: TempoMetadata {
+                source: TempoSource::Manual,
+                confidence: None,
+                reference_file_path: None,
+            },
+            key: None,
+            time_signature: "4/4".into(),
+            duration_seconds: 1.0,
+            tracks: vec![
+                Track {
+                    id: "folder_a".into(),
+                    name: "Folder A".into(),
+                    kind: libretracks_core::TrackKind::Folder,
+                    parent_track_id: Some("folder_b".into()),
+                    volume: 1.0,
+                    pan: 0.25,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Main.id(),
+                },
+                Track {
+                    id: "folder_b".into(),
+                    name: "Folder B".into(),
+                    kind: libretracks_core::TrackKind::Folder,
+                    parent_track_id: Some("folder_a".into()),
+                    volume: 1.0,
+                    pan: 0.25,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Main.id(),
+                },
+                Track {
+                    id: "track_cycle".into(),
+                    name: "Track".into(),
+                    kind: libretracks_core::TrackKind::Audio,
+                    parent_track_id: Some("folder_a".into()),
+                    volume: 1.0,
+                    pan: 0.25,
+                    muted: false,
+                    solo: false,
+                    output_bus_id: OutputBus::Main.id(),
+                },
+            ],
+            clips: vec![],
+            section_markers: vec![],
+        };
+
+        let pan = resolve_track_runtime_pan(&build_live_mix_map(&song), "track_cycle");
+
+        assert_eq!(pan, 0.0);
+    }
+
+    #[test]
     fn mixer_rolls_child_meter_peaks_up_to_folder_tracks() {
         let song = demo_song();
         let mixer = Mixer::new(
@@ -2754,6 +2885,115 @@ mod tests {
 
         assert!((track_meters[0].left_peak - 0.35).abs() < 0.000_001);
         assert!((track_meters[0].right_peak - 0.175).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn mixer_render_stays_responsive_during_live_mix_updates() {
+        let song = demo_song();
+        let song_dir = PathBuf::from("song");
+        let cache = AudioBufferCache::default();
+        cache
+            .entries
+            .write()
+            .expect("audio cache should lock")
+            .extend([
+                (
+                    song_dir.join("audio/intro.wav"),
+                    Arc::new(SharedAudioBuffer {
+                        samples: vec![0.0; 48_000 * 10],
+                        sample_rate: 48_000,
+                        channels: 2,
+                    }),
+                ),
+                (
+                    song_dir.join("audio/late.wav"),
+                    Arc::new(SharedAudioBuffer {
+                        samples: vec![0.0; 48_000 * 10],
+                        sample_rate: 48_000,
+                        channels: 2,
+                    }),
+                ),
+            ]);
+
+        let live_mix_state = shared_mix_state(&song);
+        let render_iterations = Arc::new(AtomicU64::new(0));
+        let update_iterations = Arc::new(AtomicU64::new(0));
+        let should_stop = Arc::new(AtomicBool::new(false));
+
+        let render_handle = {
+            let live_mix_state = live_mix_state.clone();
+            let render_iterations = render_iterations.clone();
+            let should_stop = should_stop.clone();
+            let cache = cache.clone();
+            let song = song.clone();
+            let song_dir = song_dir.clone();
+
+            thread::spawn(move || {
+                let mut mixer = Mixer::new(
+                    song_dir,
+                    song,
+                    0.0,
+                    48_000,
+                    2,
+                    Arc::new(RwLock::new(None)),
+                    live_mix_state,
+                    AudioDebugConfig {
+                        enabled: false,
+                        log_commands: false,
+                    },
+                    cache,
+                );
+                let started_at = Instant::now();
+
+                while started_at.elapsed() < Duration::from_millis(150) {
+                    let _ = mixer.render_next_block(64);
+                    render_iterations.fetch_add(1, Ordering::Relaxed);
+                }
+
+                should_stop.store(true, Ordering::Release);
+            })
+        };
+
+        let update_handle = {
+            let live_mix_state = live_mix_state.clone();
+            let update_iterations = update_iterations.clone();
+            let should_stop = should_stop.clone();
+
+            thread::spawn(move || {
+                let mut volume = 0.0_f64;
+                let mut solo = false;
+                let started_at = Instant::now();
+
+                while !should_stop.load(Ordering::Acquire)
+                    && started_at.elapsed() < Duration::from_millis(300)
+                {
+                    update_shared_track_mix(
+                        &live_mix_state,
+                        "track_drums",
+                        Some(volume),
+                        Some(volume * 2.0 - 1.0),
+                        Some(false),
+                        Some(solo),
+                    )
+                    .expect("track mix update should succeed");
+                    update_iterations.fetch_add(1, Ordering::Relaxed);
+                    volume = (volume + 0.07).fract();
+                    solo = !solo;
+                    thread::sleep(Duration::from_millis(1));
+                }
+            })
+        };
+
+        render_handle
+            .join()
+            .expect("render thread should not panic");
+        should_stop.store(true, Ordering::Release);
+        update_handle
+            .join()
+            .expect("update thread should not panic");
+
+        assert!(render_iterations.load(Ordering::Relaxed) > 10);
+        assert!(update_iterations.load(Ordering::Relaxed) > 10);
     }
 
     #[test]
