@@ -1253,6 +1253,9 @@ body {
   color: #bacac5;
   font: 600 10px/1.2 "Space Grotesk", sans-serif;
   text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
 .lt-track-header {
   position: relative;
   min-width: 0;
@@ -1266,6 +1269,7 @@ body {
   border-bottom: 1px solid rgb(19 19 19 / 0.55);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
   color: #e5e2e1;
+  z-index: 2;
 }
 
 .lt-track-header-body {
@@ -1276,9 +1280,6 @@ body {
   align-items: stretch;
   gap: 0.55rem;
   padding: 0.7rem 0.85rem 0.7rem 0.8rem;
-}
-
-  letter-spacing: 0.12em;
 }
 
 .lt-track-meter {

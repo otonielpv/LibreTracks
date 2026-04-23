@@ -2253,7 +2253,7 @@ export function TransportPanel() {
   }
 
   function getTimelineScrollContainer() {
-    return timelineShellRef.current ?? horizontalScrollbarRef.current;
+    return horizontalScrollbarRef.current ?? timelineShellRef.current;
   }
 
   function snappedRulerSeconds(event: MouseEvent | ReactMouseEvent, durationSeconds: number) {
@@ -4227,7 +4227,7 @@ export function TransportPanel() {
                   normalizePositionSeconds={(positionSeconds) =>
                     normalizeTimelineSeekSeconds(positionSeconds, song?.durationSeconds ?? 0)}
                   positionBoundsRef={rulerTrackRef}
-                  scrollContainerRef={timelineShellRef}
+                  scrollContainerRef={horizontalScrollbarRef}
                   onPreviewPositionChange={syncLivePosition}
                   onSeekCommit={(positionSeconds) => {
                     setContextMenu(null);
