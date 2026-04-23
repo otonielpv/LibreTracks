@@ -279,6 +279,7 @@ struct SharedAudioSource {
     fully_cached: bool,
 }
 
+#[derive(Debug)]
 struct MappedAudioSource {
     mmap: Mmap,
     data_offset: usize,
@@ -287,7 +288,7 @@ struct MappedAudioSource {
     encoding: WavSampleEncoding,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum WavSampleEncoding {
     Float32,
     SignedInt8,
