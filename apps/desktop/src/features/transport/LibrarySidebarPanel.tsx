@@ -1,4 +1,11 @@
-import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 
 import type { LibraryAssetSummary, LibraryImportProgressEvent } from "./desktopApi";
 
@@ -37,14 +44,20 @@ export function LibrarySidebarPanel({
   onDelete,
 }: LibrarySidebarPanelProps) {
   const [selectedAssetPaths, setSelectedAssetPaths] = useState<string[]>([]);
+  const dragPreviewElementRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setSelectedAssetPaths((current) => current.filter((filePath) => assets.some((asset) => asset.filePath === filePath)));
   }, [assets]);
 
-  const handleAssetSelect = (event: MouseEvent<HTMLButtonElement>, asset: LibraryAssetSummary) => {
-    const isToggleSelection = event.ctrlKey || event.metaKey;
+  useEffect(() => {
+    return () => {
+      dragPreviewElementRef.current?.remove();
+      dragPreviewElementRef.current = null;
+    };
+  }, []);
 
+  const updateAssetSelection = (asset: LibraryAssetSummary, isToggleSelection: boolean) => {
     setSelectedAssetPaths((current) => {
       if (!isToggleSelection) {
         return [asset.filePath];
@@ -56,7 +69,20 @@ export function LibrarySidebarPanel({
     });
   };
 
-  const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, asset: LibraryAssetSummary) => {
+  const handleAssetSelect = (event: MouseEvent<HTMLDivElement>, asset: LibraryAssetSummary) => {
+    updateAssetSelection(asset, event.ctrlKey || event.metaKey);
+  };
+
+  const handleAssetKeyDown = (event: KeyboardEvent<HTMLDivElement>, asset: LibraryAssetSummary) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    event.preventDefault();
+    updateAssetSelection(asset, event.ctrlKey || event.metaKey);
+  };
+
+  const handleAssetDragStart = (event: DragEvent<HTMLDivElement>, asset: LibraryAssetSummary) => {
     const draggedAssets =
       selectedAssetPaths.includes(asset.filePath) && selectedAssetPaths.length > 1
         ? assets.filter((candidate) => selectedAssetPaths.includes(candidate.filePath))
@@ -70,7 +96,32 @@ export function LibrarySidebarPanel({
     event.dataTransfer.effectAllowed = "copy";
     event.dataTransfer.setData(LIBRARY_ASSET_DRAG_MIME, payload);
     event.dataTransfer.setData("text/plain", dragPayload.map((item) => item.file_path).join("\n"));
+
+    dragPreviewElementRef.current?.remove();
+    dragPreviewElementRef.current = null;
+
+    const dragPreviewElement = event.currentTarget.cloneNode(true);
+    if (dragPreviewElement instanceof HTMLElement) {
+      dragPreviewElement.style.position = "fixed";
+      dragPreviewElement.style.top = "-10000px";
+      dragPreviewElement.style.left = "-10000px";
+      dragPreviewElement.style.width = `${Math.round(event.currentTarget.getBoundingClientRect().width)}px`;
+      dragPreviewElement.style.pointerEvents = "none";
+      dragPreviewElement.style.zIndex = "9999";
+      dragPreviewElement.style.opacity = "0.96";
+      document.body.appendChild(dragPreviewElement);
+      dragPreviewElementRef.current = dragPreviewElement;
+      if (typeof event.dataTransfer.setDragImage === "function") {
+        event.dataTransfer.setDragImage(dragPreviewElement, 22, 18);
+      }
+    }
     onDragAssetsStart?.(dragPayload);
+  };
+
+  const handleAssetDragEnd = () => {
+    dragPreviewElementRef.current?.remove();
+    dragPreviewElementRef.current = null;
+    onDragAssetsEnd?.();
   };
 
   return (
@@ -128,15 +179,17 @@ export function LibrarySidebarPanel({
                 role="listitem"
                 className={`lt-library-asset-row ${selectedAssetPaths.includes(asset.filePath) ? "is-selected" : ""}`}
               >
-                <button
-                  type="button"
+                <div
                   className="lt-library-asset"
+                  role="button"
+                  tabIndex={0}
                   aria-label={asset.fileName}
                   aria-pressed={selectedAssetPaths.includes(asset.filePath)}
                   title={asset.fileName}
                   draggable
                   onClick={(event) => handleAssetSelect(event, asset)}
-                  onDragEnd={() => onDragAssetsEnd?.()}
+                  onKeyDown={(event) => handleAssetKeyDown(event, asset)}
+                  onDragEnd={handleAssetDragEnd}
                   onDragStart={(event) => handleAssetDragStart(event, asset)}
                 >
                   <span className="lt-library-asset-icon material-symbols-outlined">music_note</span>
@@ -147,7 +200,7 @@ export function LibrarySidebarPanel({
                       {asset.detectedBpm ? ` | ${asset.detectedBpm.toFixed(1)} BPM` : ""}
                     </small>
                   </span>
-                </button>
+                </div>
                 <button
                   type="button"
                   className="lt-library-asset-delete"

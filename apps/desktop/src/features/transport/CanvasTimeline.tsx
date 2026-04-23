@@ -46,6 +46,9 @@ type TrackSceneSnapshot = Omit<TrackCanvasProps, "cameraXRef">;
 
 type WaveformBitmap = HTMLCanvasElement;
 
+const TRACK_CLIP_TOP_PADDING = 2;
+const TRACK_CLIP_BOTTOM_PADDING = 6;
+
 function isRenderableCanvasSize(value: number) {
   return Number.isFinite(value) && value > 0;
 }
@@ -550,8 +553,11 @@ function drawTrackScene(
       const clippedLeft = clamp(left, 0, snapshot.width);
       const clippedRight = clamp(right, 0, snapshot.width);
       const visibleWidth = Math.max(2, clippedRight - clippedLeft);
-      const clipTop = trackTop + 8;
-      const clipHeight = snapshot.trackHeight - 18;
+      const clipTop = trackTop + TRACK_CLIP_TOP_PADDING;
+      const clipHeight = Math.max(
+        12,
+        snapshot.trackHeight - TRACK_CLIP_TOP_PADDING - TRACK_CLIP_BOTTOM_PADDING,
+      );
 
       context.fillStyle = "rgba(210, 212, 209, 0.92)";
       context.strokeStyle =

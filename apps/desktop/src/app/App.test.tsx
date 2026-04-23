@@ -246,7 +246,7 @@ describe("App", () => {
     });
 
     expect(dataTransfer.effectAllowed).toBe("copy");
-    expect(dataTransfer.setData).toHaveBeenCalledTimes(1);
+    expect(dataTransfer.setData).toHaveBeenCalledTimes(2);
     expect(JSON.parse(transferData.get(LIBRARY_ASSET_DRAG_MIME) ?? "[]")).toEqual([
       {
         file_path: "audio/drums.wav",
@@ -404,6 +404,45 @@ describe("App", () => {
     await act(async () => {
       fireEvent.dragOver(drumsLane as HTMLElement, { dataTransfer, clientX: 420, clientY: 160 });
       fireEvent.drop(drumsLane as HTMLElement, { dataTransfer, clientX: 420, clientY: 160 });
+    });
+
+    expect(await screen.findByText(/clip agregado: drums\.wav/i)).toBeTruthy();
+    expect(screen.getByText("5 clips")).toBeTruthy();
+  });
+
+  it("accepts library drags when the runtime strips both payload and MIME types during hover", async () => {
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTrackListBounds(container);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /library/i }));
+    });
+
+    const dragStartTransfer = {
+      effectAllowed: "",
+      setData: vi.fn(),
+    };
+
+    await act(async () => {
+      fireEvent.dragStart(getLibraryAssetButton("drums.wav"), { dataTransfer: dragStartTransfer });
+    });
+
+    const hoverTransfer = {
+      dropEffect: "",
+      getData: vi.fn(() => ""),
+      types: [],
+    };
+
+    const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
+    expect(drumsRow).toBeTruthy();
+    const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(drumsLane).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.dragOver(drumsLane as HTMLElement, { dataTransfer: hoverTransfer, clientX: 420, clientY: 160 });
+      fireEvent.drop(drumsLane as HTMLElement, { dataTransfer: hoverTransfer, clientX: 420, clientY: 160 });
     });
 
     expect(await screen.findByText(/clip agregado: drums\.wav/i)).toBeTruthy();

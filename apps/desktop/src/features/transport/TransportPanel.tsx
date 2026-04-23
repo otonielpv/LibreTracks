@@ -1256,7 +1256,7 @@ export function TransportPanel() {
     return () => {
       active = false;
     };
-  }, [playbackProjectRevision, playbackSongDir]);
+  }, [playbackSongDir]);
 
   useEffect(() => {
     if (!song) {
@@ -2047,6 +2047,40 @@ export function TransportPanel() {
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
   const shouldShowEmptyArrangementHint = Boolean(song && visibleTracks.length === 0);
+  const previewTrackDensityClass =
+    trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
+  const libraryPreviewRows = useMemo(() => {
+    const rows = new Map<number, LibraryClipPreviewState[]>();
+
+    for (const preview of libraryClipPreview) {
+      if (preview.trackId !== null) {
+        continue;
+      }
+
+      const currentRow = rows.get(preview.rowOffset);
+      if (currentRow) {
+        currentRow.push(preview);
+        continue;
+      }
+
+      rows.set(preview.rowOffset, [preview]);
+    }
+
+    return [...rows.entries()]
+      .sort(([leftOffset], [rightOffset]) => leftOffset - rightOffset)
+      .map(([rowOffset, previews]) => ({
+        rowOffset,
+        previews,
+        title:
+          previews.length === 1
+            ? humanizeLibraryTrackName(previews[0].filePath)
+            : "New track",
+        meta:
+          previews.length === 1
+            ? "Drop to create track"
+            : `${previews.length} clips on new track`,
+      }));
+  }, [libraryClipPreview]);
   const timelineGrid = useTimelineGrid({
     durationSeconds: song?.durationSeconds ?? 0,
     bpm: song?.bpm ?? 120,
@@ -2839,7 +2873,7 @@ export function TransportPanel() {
       await runAction(async () => {
         const assets = await deleteLibraryAsset(filePath);
         setLibraryAssets(assets);
-        setLibraryClipPreview((current) => (current?.filePath === filePath ? null : current));
+        setLibraryClipPreview((current) => current.filter((preview) => preview.filePath !== filePath));
         setStatus(`Asset eliminado: ${fileName}`);
       });
     } finally {
@@ -2865,6 +2899,10 @@ export function TransportPanel() {
       return payload;
     }
 
+    if (activeLibraryDragPayloadRef.current?.length) {
+      return activeLibraryDragPayloadRef.current;
+    }
+
     if (hasLibraryAssetDragType(dataTransfer)) {
       return activeLibraryDragPayloadRef.current;
     }
@@ -2872,8 +2910,21 @@ export function TransportPanel() {
     return null;
   }
 
-  function resolveLibraryDropLayout(payload: LibraryAssetDragPayload[], ctrlKey: boolean, metaKey: boolean) {
-    return payload.length > 1 && (ctrlKey || metaKey) ? "vertical" : "horizontal";
+  function resolveLibraryDropLayout(
+    payload: LibraryAssetDragPayload[],
+    targetTrackId: string | null,
+    ctrlKey: boolean,
+    metaKey: boolean,
+  ) {
+    if (payload.length <= 1) {
+      return "horizontal";
+    }
+
+    if (!targetTrackId) {
+      return "vertical";
+    }
+
+    return ctrlKey || metaKey ? "vertical" : "horizontal";
   }
 
   function resolveLibraryPreviewTrackId(targetTrackId: string | null, layout: LibraryDropLayout, index: number) {
@@ -2943,7 +2994,12 @@ export function TransportPanel() {
   }
 
   function updateLibraryClipPreview(hoverState: LibraryDragHoverState, element: HTMLElement) {
-    const layout = resolveLibraryDropLayout(hoverState.payload, hoverState.ctrlKey, hoverState.metaKey);
+    const layout = resolveLibraryDropLayout(
+      hoverState.payload,
+      hoverState.targetTrackId,
+      hoverState.ctrlKey,
+      hoverState.metaKey,
+    );
     const timelineStartSeconds = resolveLibraryDropSeconds(
       {
         clientX: hoverState.clientX,
@@ -3110,6 +3166,7 @@ export function TransportPanel() {
     timelineStartSeconds: number;
     targetTrackId: string | null;
     skipTempoPrompt?: boolean;
+    pendingTrackSnapshot?: TransportSnapshot | null;
   }) {
     const asset = resolveDraggedLibraryAsset(args.filePath, args.durationSeconds);
     if (!args.skipTempoPrompt) {
@@ -3117,40 +3174,51 @@ export function TransportPanel() {
     }
 
     let targetTrackId = args.targetTrackId;
+    let pendingTrackSnapshot = args.pendingTrackSnapshot ?? null;
     if (!targetTrackId) {
-      const trackSnapshot = await createTrack({
-        name: humanizeLibraryTrackName(asset.filePath),
-        kind: "audio",
-      });
-      applyPlaybackSnapshot(trackSnapshot);
-      const nextSong = await getSongView();
-      targetTrackId = nextSong?.tracks.at(-1)?.id ?? null;
+      const createdTrack = await createLibraryTrackForAsset(asset);
+      pendingTrackSnapshot = createdTrack.snapshot;
+      targetTrackId = createdTrack.trackId;
     }
 
     if (!targetTrackId) {
+      if (pendingTrackSnapshot) {
+        applyPlaybackSnapshot(pendingTrackSnapshot);
+      }
       return;
     }
 
-    const clipSnapshot = await createClip({
-      trackId: targetTrackId,
-      filePath: asset.filePath,
-      timelineStartSeconds: args.timelineStartSeconds,
-    });
-    applyPlaybackSnapshot(clipSnapshot);
+    try {
+      const clipSnapshot = await createClip({
+        trackId: targetTrackId,
+        filePath: asset.filePath,
+        timelineStartSeconds: args.timelineStartSeconds,
+      });
+      applyPlaybackSnapshot(clipSnapshot);
+    } catch (error) {
+      if (pendingTrackSnapshot) {
+        applyPlaybackSnapshot(pendingTrackSnapshot);
+      }
+
+      throw error;
+    }
+
     setSelectedTrackId(targetTrackId);
     setSelectedSectionId(null);
     setStatus(`Clip agregado: ${asset.fileName}`);
   }
 
   async function createLibraryTrackForAsset(asset: LibraryAssetSummary) {
-    const trackSnapshot = await createTrack({
+    const snapshot = await createTrack({
       name: humanizeLibraryTrackName(asset.filePath),
       kind: "audio",
     });
-    applyPlaybackSnapshot(trackSnapshot);
 
     const nextSong = await getSongView();
-    return nextSong?.tracks.at(-1)?.id ?? null;
+    return {
+      snapshot,
+      trackId: nextSong?.tracks.at(-1)?.id ?? null,
+    };
   }
 
   async function placeLibraryAssetsOnTimeline(args: {
@@ -3168,22 +3236,29 @@ export function TransportPanel() {
 
     if (args.layout === "horizontal") {
       let targetTrackId = args.targetTrackId;
+      let pendingTrackSnapshot: TransportSnapshot | null = null;
       if (!targetTrackId) {
-        targetTrackId = await createLibraryTrackForAsset(assets[0]);
+        const createdTrack = await createLibraryTrackForAsset(assets[0]);
+        targetTrackId = createdTrack.trackId;
+        pendingTrackSnapshot = createdTrack.snapshot;
       }
 
       if (!targetTrackId) {
+        if (pendingTrackSnapshot) {
+          applyPlaybackSnapshot(pendingTrackSnapshot);
+        }
         return;
       }
 
       let clipStartSeconds = args.timelineStartSeconds;
-      for (const asset of assets) {
+      for (const [index, asset] of assets.entries()) {
         await placeLibraryAssetOnTimeline({
           filePath: asset.filePath,
           durationSeconds: asset.durationSeconds,
           timelineStartSeconds: clipStartSeconds,
           targetTrackId,
           skipTempoPrompt: true,
+          pendingTrackSnapshot: index === 0 ? pendingTrackSnapshot : null,
         });
         clipStartSeconds += asset.durationSeconds;
       }
@@ -3193,8 +3268,13 @@ export function TransportPanel() {
       let selectedTrackId: string | null = args.targetTrackId;
 
       for (const [index, asset] of assets.entries()) {
-        const targetTrackId = index === 0 && args.targetTrackId ? args.targetTrackId : await createLibraryTrackForAsset(asset);
+        const createdTrack =
+          index === 0 && args.targetTrackId ? null : await createLibraryTrackForAsset(asset);
+        const targetTrackId = createdTrack?.trackId ?? args.targetTrackId;
         if (!targetTrackId) {
+          if (createdTrack?.snapshot) {
+            applyPlaybackSnapshot(createdTrack.snapshot);
+          }
           continue;
         }
 
@@ -3204,6 +3284,7 @@ export function TransportPanel() {
           timelineStartSeconds: args.timelineStartSeconds,
           targetTrackId,
           skipTempoPrompt: true,
+          pendingTrackSnapshot: createdTrack?.snapshot ?? null,
         });
         selectedTrackId = targetTrackId;
       }
@@ -3264,7 +3345,7 @@ export function TransportPanel() {
         payload,
         timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
         targetTrackId: track.id,
-        layout: resolveLibraryDropLayout(payload, event.ctrlKey, event.metaKey),
+        layout: resolveLibraryDropLayout(payload, track.id, event.ctrlKey, event.metaKey),
       });
     });
   }
@@ -3303,7 +3384,40 @@ export function TransportPanel() {
         payload,
         timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
         targetTrackId: null,
-        layout: resolveLibraryDropLayout(payload, event.ctrlKey, event.metaKey),
+        layout: resolveLibraryDropLayout(payload, null, event.ctrlKey, event.metaKey),
+      });
+    });
+  }
+
+  function handleLibraryPreviewLaneDragOver(event: ReactDragEvent<HTMLDivElement>) {
+    const payload = resolveLibraryDragPayload(event.dataTransfer);
+    if (!payload) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    beginLibraryDragHover(event, payload, null);
+  }
+
+  function handleLibraryPreviewLaneDrop(event: ReactDragEvent<HTMLDivElement>) {
+    const payload = resolveLibraryDragPayload(event.dataTransfer);
+    if (!payload) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    clearLibraryDragPreview();
+    clearActiveLibraryDragPayload();
+
+    void runAction(async () => {
+      await placeLibraryAssetsOnTimeline({
+        payload,
+        timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
+        targetTrackId: null,
+        layout: resolveLibraryDropLayout(payload, null, event.ctrlKey, event.metaKey),
       });
     });
   }
@@ -3336,7 +3450,7 @@ export function TransportPanel() {
         payload,
         timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
         targetTrackId: null,
-        layout: resolveLibraryDropLayout(payload, event.ctrlKey, event.metaKey),
+        layout: resolveLibraryDropLayout(payload, null, event.ctrlKey, event.metaKey),
       });
     });
   }
@@ -3826,26 +3940,6 @@ export function TransportPanel() {
               />
             ) : null}
 
-            {!shouldShowEmptyArrangementHint
-              ? libraryClipPreview
-                  .filter((preview) => preview.trackId === null)
-                  .map((preview) => (
-                    <div
-                      key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
-                      className="lt-library-clip-ghost is-floating"
-                      style={{
-                        left: HEADER_WIDTH + resolveLibraryGhostLeft(preview.timelineStartSeconds),
-                        top: 12 + preview.rowOffset * (trackHeight + 8),
-                        bottom: "auto",
-                        height: Math.max(trackHeight - 24, 40),
-                        width: Math.max(preview.durationSeconds * pixelsPerSecond, 36),
-                      }}
-                    >
-                      <span>{preview.label}</span>
-                    </div>
-                  ))
-              : null}
-
             {shouldShowEmptyArrangementHint ? (
               <div
                 className="lt-empty-arrangement-dropzone"
@@ -3951,6 +4045,62 @@ export function TransportPanel() {
                 </div>
               );
             })}
+
+            {!shouldShowEmptyArrangementHint
+              ? libraryPreviewRows.map((previewRow) => (
+                  <div
+                    key={`library-preview-row-${previewRow.rowOffset}`}
+                    className="lt-track-row is-library-preview"
+                    style={{
+                      width: timelineRowWidth,
+                      gridTemplateColumns: `${HEADER_WIDTH}px ${laneViewportWidth}px`,
+                    }}
+                  >
+                    <div
+                      className={`lt-track-header ${previewTrackDensityClass} is-library-preview`}
+                      style={{ height: trackHeight, paddingLeft: 16 }}
+                      aria-hidden="true"
+                    >
+                      <div className="lt-track-header-body">
+                        <div className="lt-track-header-content">
+                          <div className="lt-track-header-summary">
+                            <div className="lt-track-header-main">
+                              <div className="lt-track-title-row">
+                                <span className="lt-track-drag-handle is-static" aria-hidden="true">
+                                  <span>::</span>
+                                </span>
+                                <strong>{previewRow.title}</strong>
+                              </div>
+                              <span className="lt-track-meta">{previewRow.meta}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      className="lt-track-lane is-library-preview"
+                      style={{ height: trackHeight }}
+                      aria-label={`Preview lane ${previewRow.title}`}
+                      onDragOver={handleLibraryPreviewLaneDragOver}
+                      onDrop={handleLibraryPreviewLaneDrop}
+                    >
+                      {previewRow.previews.map((preview) => (
+                        <div
+                          key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
+                          className="lt-library-clip-ghost"
+                          style={{
+                            left: resolveLibraryGhostLeft(preview.timelineStartSeconds),
+                            width: Math.max(preview.durationSeconds * pixelsPerSecond, 36),
+                          }}
+                        >
+                          <span>{preview.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              : null}
           </div>
           <div className="lt-horizontal-scrollbar">
             <div className="lt-horizontal-scrollbar-spacer" aria-hidden="true" />

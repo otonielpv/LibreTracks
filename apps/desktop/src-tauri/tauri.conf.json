@@ -15,7 +15,8 @@
         "title": "LibreTracks",
         "width": 1440,
         "height": 900,
-        "maximized": true
+        "maximized": true,
+        "dragDropEnabled": false
       }
     ]
   },
