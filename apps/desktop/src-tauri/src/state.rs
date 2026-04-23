@@ -14,10 +14,10 @@ use libretracks_core::{
     Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
 };
 use libretracks_project::{
-    append_wav_files_to_song, generate_waveform_summary, import_wav_song, load_song_from_file,
-    load_waveform_summary, read_wav_metadata, save_song_to_file, waveform_file_path,
-    ImportOperationMetrics, ImportedSong, ProjectError, ProjectImportRequest, WaveformSummary,
-    SONG_FILE_NAME,
+    append_wav_files_to_song, generate_waveform_summary, import_wav_files_to_library,
+    import_wav_song, load_song_from_file, load_waveform_summary, read_wav_metadata,
+    save_song_to_file, waveform_file_path, ImportOperationMetrics, ImportedSong, ProjectError,
+    ProjectImportRequest, WaveformSummary, SONG_FILE_NAME,
 };
 use rfd::FileDialog;
 use serde::Serialize;
@@ -300,6 +300,15 @@ pub struct WaveformSummaryDto {
     pub max_peaks: Vec<f32>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAssetSummary {
+    pub file_name: String,
+    pub file_path: String,
+    pub duration_seconds: f64,
+    pub detected_bpm: Option<f64>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopPerformanceSnapshot {
@@ -505,6 +514,22 @@ impl DesktopSession {
         Ok(Some(self.snapshot()))
     }
 
+    pub fn import_library_assets_from_dialog(
+        &mut self,
+    ) -> Result<Option<Vec<LibraryAssetSummary>>, DesktopError> {
+        let files = FileDialog::new()
+            .add_filter("Wave Audio", &["wav"])
+            .set_title("Importar audio a la libreria")
+            .pick_files();
+
+        let Some(files) = files else {
+            return Ok(None);
+        };
+
+        let assets = self.import_audio_files_into_library(&files)?;
+        Ok(Some(assets))
+    }
+
     fn import_audio_files_into_current_song(
         &mut self,
         files: &[PathBuf],
@@ -525,6 +550,21 @@ impl DesktopSession {
             true,
         )?;
         Ok(self.snapshot())
+    }
+
+    fn import_audio_files_into_library(
+        &mut self,
+        files: &[PathBuf],
+    ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let imported_assets = import_wav_files_to_library(&song_dir, files)?;
+        self.record_import_metrics(&imported_assets.metrics);
+        list_library_assets(&song_dir)
+    }
+
+    pub fn get_library_assets(&self) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        list_library_assets(&song_dir)
     }
 
     pub fn song_view(&mut self) -> Result<Option<SongView>, DesktopError> {
@@ -1729,6 +1769,42 @@ fn build_empty_song(song_id: String, title: String) -> Song {
         clips: vec![],
         section_markers: vec![],
     }
+}
+
+fn list_library_assets(song_dir: &Path) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+    let audio_dir = song_dir.join("audio");
+    if !audio_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut assets = Vec::new();
+    for entry in fs::read_dir(audio_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let extension = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+        if !extension.eq_ignore_ascii_case("wav") {
+            continue;
+        }
+
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        let metadata = read_wav_metadata(&path)?;
+        assets.push(LibraryAssetSummary {
+            file_name: file_name.clone(),
+            file_path: format!("audio/{file_name}"),
+            duration_seconds: metadata.duration_seconds,
+            detected_bpm: metadata.tempo_candidate.map(|candidate| candidate.bpm),
+        });
+    }
+
+    assets.sort_by(|left, right| left.file_name.cmp(&right.file_name));
+    Ok(assets)
 }
 
 fn infer_song_title(files: &[PathBuf]) -> String {
@@ -3047,6 +3123,65 @@ mod tests {
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.tracks.len(), 1);
         assert_eq!(saved_song.clips.len(), 1);
+    }
+
+    #[test]
+    fn importing_library_assets_keeps_the_current_arrangement_unchanged() {
+        let mut session = session_with_song_dir("library-import-demo", demo_song());
+        let imports_root = tempdir().expect("temp dir should exist");
+        let imported_click = imports_root.path().join("click.wav");
+        write_silent_test_wav(&imported_click, 6);
+
+        let before = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song should be loaded");
+        let assets = session
+            .import_audio_files_into_library(&[imported_click])
+            .expect("library import should succeed");
+        let after = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song should stay loaded");
+
+        assert_eq!(before.tracks.len(), after.tracks.len());
+        assert_eq!(before.clips.len(), after.clips.len());
+        assert!(assets.iter().any(|asset| asset.file_path == "audio/click.wav"));
+    }
+
+    #[test]
+    fn get_library_assets_reads_audio_files_from_the_session_audio_directory() {
+        let root = tempdir().expect("temp dir should exist");
+        let root_path = root.keep();
+        let song_dir = create_song_folder(&root_path, "library-assets-demo")
+            .expect("song dir should exist");
+        let imported_a = song_dir.join("audio").join("alpha.wav");
+        let imported_b = song_dir.join("audio").join("beta.wav");
+        write_silent_test_wav(&imported_b, 4);
+        write_silent_test_wav(&imported_a, 2);
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir);
+
+        let assets = session
+            .get_library_assets()
+            .expect("library assets should load");
+
+        assert_eq!(assets.len(), 2);
+        assert_eq!(assets[0].file_name, "alpha.wav");
+        assert_eq!(assets[0].file_path, "audio/alpha.wav");
+        assert!((assets[0].duration_seconds - 2.0).abs() < 0.001);
+        assert_eq!(assets[1].file_name, "beta.wav");
+    }
+
+    #[test]
+    fn build_empty_song_starts_with_an_empty_arrangement_at_120_bpm() {
+        let song = super::build_empty_song("song_empty".into(), "Nueva Cancion".into());
+
+        assert_eq!(song.bpm, 120.0);
+        assert!(song.tracks.is_empty());
+        assert!(song.clips.is_empty());
+        assert!(song.section_markers.is_empty());
     }
 
     #[test]

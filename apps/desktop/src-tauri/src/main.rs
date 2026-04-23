@@ -10,8 +10,8 @@ use audio_runtime::AudioDebugSnapshot;
 use libretracks_audio::JumpTrigger;
 use libretracks_core::TrackKind;
 use state::{
-    DesktopError, DesktopPerformanceSnapshot, DesktopState, SongView, TransportSnapshot,
-    WaveformSummaryDto,
+    DesktopError, DesktopPerformanceSnapshot, DesktopState, LibraryAssetSummary, SongView,
+    TransportSnapshot, WaveformSummaryDto,
 };
 
 const TRANSPORT_LIFECYCLE_EVENT: &str = "transport:lifecycle";
@@ -75,6 +75,16 @@ fn get_song_view(state: State<'_, DesktopState>) -> Result<Option<SongView>, Str
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session.song_view().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_library_assets(state: State<'_, DesktopState>) -> Result<Vec<LibraryAssetSummary>, String> {
+    let session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session.get_library_assets().map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -152,6 +162,20 @@ fn create_song(
 
     session
         .create_song(&app, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn import_library_assets_from_dialog(
+    state: State<'_, DesktopState>,
+) -> Result<Option<Vec<LibraryAssetSummary>>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .import_library_assets_from_dialog()
         .map_err(|error| error.to_string())
 }
 
@@ -627,11 +651,13 @@ fn main() {
             healthcheck,
             get_transport_snapshot,
             get_song_view,
+            get_library_assets,
             get_waveform_summaries,
             get_audio_debug_snapshot,
             get_desktop_performance_snapshot,
             report_ui_render_metric,
             create_song,
+            import_library_assets_from_dialog,
             save_project,
             save_project_as,
             open_project_from_dialog,

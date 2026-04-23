@@ -5,8 +5,10 @@ mod song_store;
 mod waveform;
 
 pub use importer::{
-    append_wav_files_to_song, import_wav_song, read_wav_metadata, AppendWavFilesResult,
-    ImportOperationMetrics, ImportedAudioFile, ImportedSong, ProjectImportRequest, WavMetadata,
+    append_wav_files_to_song, import_wav_files_to_library, import_wav_song,
+    read_wav_metadata, AppendWavFilesResult, ImportLibraryAssetsResult,
+    ImportOperationMetrics, ImportedAudioFile, ImportedLibraryAsset, ImportedSong,
+    ProjectImportRequest, WavMetadata,
 };
 pub use song_store::{
     create_song_folder, load_song, load_song_from_file, save_song, save_song_to_file,
@@ -29,9 +31,10 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        analyze_wav_file, append_wav_files_to_song, create_song_folder, import_wav_song, load_song,
-        load_waveform_summary, read_wav_metadata, save_song, song_file_path, waveform_file_path,
-        ProjectError, ProjectImportRequest,
+        analyze_wav_file, append_wav_files_to_song, create_song_folder,
+        import_wav_files_to_library, import_wav_song, load_song, load_waveform_summary,
+        read_wav_metadata, save_song, song_file_path, waveform_file_path, ProjectError,
+        ProjectImportRequest,
     };
 
     fn demo_song() -> Song {
@@ -443,6 +446,31 @@ mod tests {
         assert!(song_dir.join("audio").join("click-1.wav").exists());
         assert!(waveform_file_path(&song_dir, "audio/click-1.wav").exists());
         assert!((appended_song.song.duration_seconds - 4.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn imports_wav_files_into_library_without_creating_song_structure() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "library-demo").expect("song dir should exist");
+        let imports_dir = root.path().join("imports");
+        fs::create_dir_all(&imports_dir).expect("imports dir should exist");
+
+        let click_path = imports_dir.join("click.wav");
+        write_test_wav(&click_path, 44_100, 2, 3);
+
+        let imported = import_wav_files_to_library(&song_dir, &[click_path])
+            .expect("library import should succeed");
+
+        assert_eq!(imported.assets.len(), 1);
+        assert_eq!(
+            imported.assets[0].imported_relative_path,
+            Path::new("audio").join("click.wav")
+        );
+        assert!((imported.assets[0].duration_seconds - 3.0).abs() < 0.001);
+        assert!(song_dir.join("audio").join("click.wav").exists());
+        assert!(waveform_file_path(&song_dir, "audio/click.wav").exists());
+        assert!(!song_file_path(&song_dir).exists());
     }
 
     #[test]

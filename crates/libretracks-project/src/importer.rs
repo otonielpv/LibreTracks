@@ -54,6 +54,20 @@ pub struct ImportedSong {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ImportedLibraryAsset {
+    pub source_path: PathBuf,
+    pub imported_relative_path: PathBuf,
+    pub duration_seconds: f64,
+    pub detected_bpm: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportLibraryAssetsResult {
+    pub assets: Vec<ImportedLibraryAsset>,
+    pub metrics: ImportOperationMetrics,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AppendWavFilesResult {
     pub song: Song,
     pub metrics: ImportOperationMetrics,
@@ -79,6 +93,35 @@ pub fn read_wav_metadata(path: impl AsRef<Path>) -> Result<WavMetadata, ProjectE
         duration_seconds: analysis.duration_seconds,
         tempo_candidate: analysis.tempo_candidate,
     })
+}
+
+pub fn import_wav_files_to_library(
+    song_dir: impl AsRef<Path>,
+    wav_files: &[PathBuf],
+) -> Result<ImportLibraryAssetsResult, ProjectError> {
+    if wav_files.is_empty() {
+        return Err(ProjectError::EmptyImportSet);
+    }
+
+    let song_dir = song_dir.as_ref();
+    let mut used_file_names = collect_existing_file_names(song_dir)?;
+    let mut metrics = ImportOperationMetrics::default();
+    let planned_files = plan_import_files(song_dir, wav_files, &mut used_file_names)?;
+    metrics.copy_millis = copy_import_files(&planned_files)?;
+    let (analyzed_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
+    merge_import_metrics(&mut metrics, &analysis_metrics);
+
+    let assets = analyzed_files
+        .into_iter()
+        .map(|file| ImportedLibraryAsset {
+            source_path: file.source_path,
+            imported_relative_path: file.imported_relative_path,
+            duration_seconds: file.metadata.duration_seconds,
+            detected_bpm: file.metadata.tempo_candidate.map(|candidate| candidate.bpm),
+        })
+        .collect();
+
+    Ok(ImportLibraryAssetsResult { assets, metrics })
 }
 
 pub fn import_wav_song(
@@ -555,18 +598,8 @@ fn merge_import_metrics(target: &mut ImportOperationMetrics, source: &ImportOper
     target.analysis_workers = target.analysis_workers.max(source.analysis_workers);
 }
 
-fn collect_used_file_names(song_dir: &Path, song: &Song) -> Result<HashSet<String>, ProjectError> {
+fn collect_existing_file_names(song_dir: &Path) -> Result<HashSet<String>, ProjectError> {
     let mut used_file_names = HashSet::new();
-
-    for clip in &song.clips {
-        if let Some(file_name) = Path::new(&clip.file_path)
-            .file_name()
-            .and_then(|value| value.to_str())
-        {
-            used_file_names.insert(file_name.to_string());
-        }
-    }
-
     let audio_dir = song_dir.join("audio");
     if audio_dir.exists() {
         for entry in fs::read_dir(audio_dir)? {
@@ -574,6 +607,21 @@ fn collect_used_file_names(song_dir: &Path, song: &Song) -> Result<HashSet<Strin
             if let Some(file_name) = entry.file_name().to_str() {
                 used_file_names.insert(file_name.to_string());
             }
+        }
+    }
+
+    Ok(used_file_names)
+}
+
+fn collect_used_file_names(song_dir: &Path, song: &Song) -> Result<HashSet<String>, ProjectError> {
+    let mut used_file_names = collect_existing_file_names(song_dir)?;
+
+    for clip in &song.clips {
+        if let Some(file_name) = Path::new(&clip.file_path)
+            .file_name()
+            .and_then(|value| value.to_str())
+        {
+            used_file_names.insert(file_name.to_string());
         }
     }
 
