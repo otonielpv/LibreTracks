@@ -226,6 +226,34 @@ describe("App", () => {
     expect(screen.getByText("5 clips")).toBeTruthy();
   });
 
+  it("opens the global track-list context menu in an empty project and creates the first track", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    await desktopApi.createSong();
+
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Narration");
+    const { container } = await renderApp();
+
+    expect(screen.getByLabelText(/empty arrangement dropzone/i)).toBeTruthy();
+
+    const trackList = container.querySelector(".lt-track-list") as HTMLElement | null;
+    expect(trackList).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.contextMenu(trackList as HTMLElement, { clientX: 160, clientY: 240 });
+    });
+
+    expect(await screen.findByRole("button", { name: /add audio track/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /add folder track/i })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add audio track/i }));
+    });
+
+    expect(promptSpy).toHaveBeenCalledWith("Nombre del track", "Audio track");
+    expect(await screen.findByText(/track creado: narration/i)).toBeTruthy();
+    expect(screen.getByText("Narration")).toBeTruthy();
+  });
+
   it("creates a marker from the ruler right-click context menu", async () => {
     const { container } = await renderApp();
     mockRulerBounds(container);

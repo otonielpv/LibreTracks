@@ -2311,6 +2311,19 @@ export function TransportPanel() {
     ];
   }
 
+  function globalTrackListContextMenu() {
+    return [
+      {
+        label: "Add audio track",
+        onSelect: () => handleCreateTrack("audio", null, null),
+      },
+      {
+        label: "Add folder track",
+        onSelect: () => handleCreateTrack("folder", null, null),
+      },
+    ];
+  }
+
   const handleTrackHeaderSelect = useCallback((trackId: string, trackName: string) => {
     if (suppressTrackClickRef.current) {
       suppressTrackClickRef.current = false;
@@ -2560,6 +2573,22 @@ export function TransportPanel() {
     setSelectedTrackId(track.id);
     setSelectedSectionId(null);
     openMenu(event, track.name, trackContextMenu(track));
+  }
+
+  function handleTrackListContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
+    if (!songRef.current) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest(".lt-track-row")) {
+      return;
+    }
+
+    setSelectedClipId(null);
+    setSelectedTrackId(null);
+    setSelectedSectionId(null);
+    openMenu(event, "Tracks", globalTrackListContextMenu());
   }
 
   function sectionContextMenu(section: SectionMarkerSummary) {
@@ -3376,6 +3405,7 @@ export function TransportPanel() {
             className={`lt-track-list ${libraryClipPreview ? "is-library-drag-over" : ""}`}
             ref={laneAreaRef}
             style={{ width: timelineRowWidth }}
+            onContextMenu={handleTrackListContextMenu}
             onDragOver={handleTrackListLibraryDragOver}
             onDrop={handleTrackListLibraryDrop}
             onDragLeave={handleTrackListLibraryDragLeave}
