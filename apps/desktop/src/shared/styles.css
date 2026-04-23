@@ -1253,6 +1253,31 @@ body {
   color: #bacac5;
   font: 600 10px/1.2 "Space Grotesk", sans-serif;
   text-transform: uppercase;
+.lt-track-header {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: linear-gradient(180deg, #2a2a2a 0%, #232323 100%);
+  border-right: 1px solid rgb(19 19 19 / 0.55);
+  border-bottom: 1px solid rgb(19 19 19 / 0.55);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
+  color: #e5e2e1;
+}
+
+.lt-track-header-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  align-items: stretch;
+  gap: 0.55rem;
+  padding: 0.7rem 0.85rem 0.7rem 0.8rem;
+}
+
   letter-spacing: 0.12em;
 }
 

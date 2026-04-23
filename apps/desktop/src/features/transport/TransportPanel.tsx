@@ -4221,6 +4221,7 @@ export function TransportPanel() {
                   className="lt-playhead is-handle"
                   durationSeconds={song?.durationSeconds ?? 0}
                   pixelsPerSecond={pixelsPerSecond}
+                  cameraXRef={cameraXRef}
                   dragStateRef={playheadDragRef}
                   positionSecondsRef={displayPositionSecondsRef}
                   normalizePositionSeconds={(positionSeconds) =>
