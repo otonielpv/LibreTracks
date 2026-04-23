@@ -67,12 +67,9 @@ export function LibrarySidebarPanel({
     }));
     const payload = JSON.stringify(dragPayload);
 
-    if (!selectedAssetPaths.includes(asset.filePath) || selectedAssetPaths.length <= 1) {
-      setSelectedAssetPaths([asset.filePath]);
-    }
-
     event.dataTransfer.effectAllowed = "copy";
     event.dataTransfer.setData(LIBRARY_ASSET_DRAG_MIME, payload);
+    event.dataTransfer.setData("text/plain", dragPayload.map((item) => item.file_path).join("\n"));
     onDragAssetsStart?.(dragPayload);
   };
 

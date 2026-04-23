@@ -268,7 +268,8 @@ function hasLibraryAssetDragType(dataTransfer: DataTransfer | null) {
     return false;
   }
 
-  return Array.from(dataTransfer.types ?? []).includes(LIBRARY_ASSET_DRAG_MIME);
+  const dragTypes = Array.from(dataTransfer.types ?? []);
+  return dragTypes.includes(LIBRARY_ASSET_DRAG_MIME) || dragTypes.includes("text/plain");
 }
 
 function formatTimelineHeaderTime(seconds: number) {
