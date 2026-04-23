@@ -263,6 +263,14 @@ function readLibraryAssetDragPayload(dataTransfer: DataTransfer | null): Library
   }
 }
 
+function hasLibraryAssetDragType(dataTransfer: DataTransfer | null) {
+  if (!dataTransfer) {
+    return false;
+  }
+
+  return Array.from(dataTransfer.types ?? []).includes(LIBRARY_ASSET_DRAG_MIME);
+}
+
 function formatTimelineHeaderTime(seconds: number) {
   const safeSeconds = Math.max(0, seconds);
   const minutes = Math.floor(safeSeconds / 60);
@@ -576,6 +584,7 @@ export function TransportPanel() {
   const draggedTrackRowRef = useRef<HTMLDivElement | null>(null);
   const droppedTrackRowRef = useRef<HTMLDivElement | null>(null);
   const libraryDragHoverRef = useRef<LibraryDragHoverState | null>(null);
+  const activeLibraryDragPayloadRef = useRef<LibraryAssetDragPayload[] | null>(null);
   const libraryDragAutoScrollRef = useRef<LibraryDragAutoScrollState>({
     frameId: null,
     horizontalVelocity: 0,
@@ -2848,6 +2857,20 @@ export function TransportPanel() {
     );
   }
 
+  function resolveLibraryDragPayload(dataTransfer: DataTransfer | null) {
+    const payload = readLibraryAssetDragPayload(dataTransfer);
+    if (payload?.length) {
+      activeLibraryDragPayloadRef.current = payload;
+      return payload;
+    }
+
+    if (hasLibraryAssetDragType(dataTransfer)) {
+      return activeLibraryDragPayloadRef.current;
+    }
+
+    return null;
+  }
+
   function resolveLibraryDropLayout(payload: LibraryAssetDragPayload[], ctrlKey: boolean, metaKey: boolean) {
     return payload.length > 1 && (ctrlKey || metaKey) ? "vertical" : "horizontal";
   }
@@ -2953,6 +2976,10 @@ export function TransportPanel() {
     libraryDragHoverRef.current = null;
     stopLibraryDragAutoScroll();
     setLibraryClipPreview([]);
+  }
+
+  function clearActiveLibraryDragPayload() {
+    activeLibraryDragPayloadRef.current = null;
   }
 
   function resolveLibraryAutoScrollVelocity(distancePx: number) {
@@ -3206,7 +3233,7 @@ export function TransportPanel() {
     event: ReactDragEvent<HTMLDivElement>,
     track: TrackSummary,
   ) {
-    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload || track.kind === "folder") {
       return;
     }
@@ -3221,7 +3248,7 @@ export function TransportPanel() {
     event: ReactDragEvent<HTMLDivElement>,
     track: TrackSummary,
   ) {
-    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload || track.kind === "folder") {
       return;
     }
@@ -3229,6 +3256,7 @@ export function TransportPanel() {
     event.preventDefault();
     event.stopPropagation();
     clearLibraryDragPreview();
+    clearActiveLibraryDragPayload();
 
     void runAction(async () => {
       await placeLibraryAssetsOnTimeline({
@@ -3241,7 +3269,7 @@ export function TransportPanel() {
   }
 
   function handleTrackListLibraryDragOver(event: ReactDragEvent<HTMLDivElement>) {
-    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
     }
@@ -3259,7 +3287,7 @@ export function TransportPanel() {
   }
 
   function handleTrackListLibraryDrop(event: ReactDragEvent<HTMLDivElement>) {
-    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    const payload = resolveLibraryDragPayload(event.dataTransfer);
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (!payload || target?.closest(".lt-track-lane")) {
       return;
@@ -3267,6 +3295,7 @@ export function TransportPanel() {
 
     event.preventDefault();
     clearLibraryDragPreview();
+    clearActiveLibraryDragPayload();
 
     void runAction(async () => {
       await placeLibraryAssetsOnTimeline({
@@ -3279,7 +3308,7 @@ export function TransportPanel() {
   }
 
   function handleEmptyArrangementLibraryDragOver(event: ReactDragEvent<HTMLDivElement>) {
-    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
     }
@@ -3291,7 +3320,7 @@ export function TransportPanel() {
   }
 
   function handleEmptyArrangementLibraryDrop(event: ReactDragEvent<HTMLDivElement>) {
-    const payload = readLibraryAssetDragPayload(event.dataTransfer);
+    const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
     }
@@ -3299,6 +3328,7 @@ export function TransportPanel() {
     event.preventDefault();
     event.stopPropagation();
     clearLibraryDragPreview();
+    clearActiveLibraryDragPayload();
 
     void runAction(async () => {
       await placeLibraryAssetsOnTimeline({
@@ -3533,6 +3563,13 @@ export function TransportPanel() {
           importProgress={libraryImportProgress}
           deletingFilePath={deletingLibraryFilePath}
           canImport={Boolean(playbackSongDir)}
+          onDragAssetsStart={(payload) => {
+            activeLibraryDragPayloadRef.current = payload;
+          }}
+          onDragAssetsEnd={() => {
+            clearLibraryDragPreview();
+            clearActiveLibraryDragPayload();
+          }}
           onImport={() => {
             void handleImportLibraryAssetsClick();
           }}

@@ -11,6 +11,8 @@ type LibrarySidebarPanelProps = {
   importProgress: LibraryImportProgressEvent | null;
   deletingFilePath: string | null;
   canImport: boolean;
+  onDragAssetsStart?: (assets: Array<{ file_path: string; durationSeconds: number }>) => void;
+  onDragAssetsEnd?: () => void;
   onImport: () => void;
   onDelete: (filePath: string, fileName: string) => void;
 };
@@ -29,6 +31,8 @@ export function LibrarySidebarPanel({
   importProgress,
   deletingFilePath,
   canImport,
+  onDragAssetsStart,
+  onDragAssetsEnd,
   onImport,
   onDelete,
 }: LibrarySidebarPanelProps) {
@@ -57,12 +61,11 @@ export function LibrarySidebarPanel({
       selectedAssetPaths.includes(asset.filePath) && selectedAssetPaths.length > 1
         ? assets.filter((candidate) => selectedAssetPaths.includes(candidate.filePath))
         : [asset];
-    const payload = JSON.stringify(
-      draggedAssets.map((draggedAsset) => ({
-        file_path: draggedAsset.filePath,
-        durationSeconds: draggedAsset.durationSeconds,
-      })),
-    );
+    const dragPayload = draggedAssets.map((draggedAsset) => ({
+      file_path: draggedAsset.filePath,
+      durationSeconds: draggedAsset.durationSeconds,
+    }));
+    const payload = JSON.stringify(dragPayload);
 
     if (!selectedAssetPaths.includes(asset.filePath) || selectedAssetPaths.length <= 1) {
       setSelectedAssetPaths([asset.filePath]);
@@ -70,6 +73,7 @@ export function LibrarySidebarPanel({
 
     event.dataTransfer.effectAllowed = "copy";
     event.dataTransfer.setData(LIBRARY_ASSET_DRAG_MIME, payload);
+    onDragAssetsStart?.(dragPayload);
   };
 
   return (
@@ -135,6 +139,7 @@ export function LibrarySidebarPanel({
                   title={asset.fileName}
                   draggable
                   onClick={(event) => handleAssetSelect(event, asset)}
+                  onDragEnd={() => onDragAssetsEnd?.()}
                   onDragStart={(event) => handleAssetDragStart(event, asset)}
                 >
                   <span className="lt-library-asset-icon material-symbols-outlined">music_note</span>
