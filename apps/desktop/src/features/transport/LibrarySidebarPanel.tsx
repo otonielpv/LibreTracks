@@ -1,6 +1,8 @@
-import type { DragEvent } from "react";
+import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
 
 import type { LibraryAssetSummary, LibraryImportProgressEvent } from "./desktopApi";
+
+const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 
 type LibrarySidebarPanelProps = {
   assets: LibraryAssetSummary[];
@@ -30,15 +32,44 @@ export function LibrarySidebarPanel({
   onImport,
   onDelete,
 }: LibrarySidebarPanelProps) {
-  const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, asset: LibraryAssetSummary) => {
-    const payload = JSON.stringify({
-      file_path: asset.filePath,
-      durationSeconds: asset.durationSeconds,
+  const [selectedAssetPaths, setSelectedAssetPaths] = useState<string[]>([]);
+
+  useEffect(() => {
+    setSelectedAssetPaths((current) => current.filter((filePath) => assets.some((asset) => asset.filePath === filePath)));
+  }, [assets]);
+
+  const handleAssetSelect = (event: MouseEvent<HTMLButtonElement>, asset: LibraryAssetSummary) => {
+    const isToggleSelection = event.ctrlKey || event.metaKey;
+
+    setSelectedAssetPaths((current) => {
+      if (!isToggleSelection) {
+        return [asset.filePath];
+      }
+
+      return current.includes(asset.filePath)
+        ? current.filter((filePath) => filePath !== asset.filePath)
+        : [...current, asset.filePath];
     });
+  };
+
+  const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, asset: LibraryAssetSummary) => {
+    const draggedAssets =
+      selectedAssetPaths.includes(asset.filePath) && selectedAssetPaths.length > 1
+        ? assets.filter((candidate) => selectedAssetPaths.includes(candidate.filePath))
+        : [asset];
+    const payload = JSON.stringify(
+      draggedAssets.map((draggedAsset) => ({
+        file_path: draggedAsset.filePath,
+        durationSeconds: draggedAsset.durationSeconds,
+      })),
+    );
+
+    if (!selectedAssetPaths.includes(asset.filePath) || selectedAssetPaths.length <= 1) {
+      setSelectedAssetPaths([asset.filePath]);
+    }
 
     event.dataTransfer.effectAllowed = "copy";
-    event.dataTransfer.setData("application/libretracks-library-asset", payload);
-    event.dataTransfer.setData("text/plain", asset.filePath);
+    event.dataTransfer.setData(LIBRARY_ASSET_DRAG_MIME, payload);
   };
 
   return (
@@ -61,7 +92,13 @@ export function LibrarySidebarPanel({
 
       <div className="lt-library-panel-meta" aria-live="polite">
         <span>{assets.length} assets</span>
-        <span>{canImport ? "Ready" : "Open or create a session"}</span>
+        <span>
+          {selectedAssetPaths.length > 1
+            ? `${selectedAssetPaths.length} selected`
+            : canImport
+              ? "Ready"
+              : "Open or create a session"}
+        </span>
       </div>
 
       {isImporting && importProgress ? (
@@ -88,14 +125,16 @@ export function LibrarySidebarPanel({
               <div
                 key={asset.filePath}
                 role="listitem"
-                className="lt-library-asset-row"
+                className={`lt-library-asset-row ${selectedAssetPaths.includes(asset.filePath) ? "is-selected" : ""}`}
               >
                 <button
                   type="button"
                   className="lt-library-asset"
                   aria-label={asset.fileName}
+                  aria-pressed={selectedAssetPaths.includes(asset.filePath)}
                   title={asset.fileName}
                   draggable
+                  onClick={(event) => handleAssetSelect(event, asset)}
                   onDragStart={(event) => handleAssetDragStart(event, asset)}
                 >
                   <span className="lt-library-asset-icon material-symbols-outlined">music_note</span>

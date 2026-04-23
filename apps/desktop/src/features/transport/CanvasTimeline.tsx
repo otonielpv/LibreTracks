@@ -452,6 +452,10 @@ function buildTrackStructureSignature(song: SongView, visibleTracks: TrackSummar
   return `${trackStructureSignature}#visible=${visibleTrackOrderSignature}`;
 }
 
+function formatClipSignatureNumber(value: number | null | undefined) {
+  return (typeof value === "number" && Number.isFinite(value) ? value : 0).toFixed(6);
+}
+
 function buildClipSceneSignature(clipsByTrack: Record<string, ClipSummary[]>) {
   return Object.keys(clipsByTrack)
     .sort()
@@ -462,10 +466,10 @@ function buildClipSceneSignature(clipsByTrack: Record<string, ClipSummary[]>) {
             clip.id,
             clip.trackId,
             clip.waveformKey,
-            clip.timelineStartSeconds.toFixed(6),
-            clip.sourceStartSeconds.toFixed(6),
-            clip.sourceDurationSeconds.toFixed(6),
-            clip.durationSeconds.toFixed(6),
+            formatClipSignatureNumber(clip.timelineStartSeconds),
+            formatClipSignatureNumber(clip.sourceStartSeconds),
+            formatClipSignatureNumber(clip.sourceDurationSeconds),
+            formatClipSignatureNumber(clip.durationSeconds),
           ].join(":"),
         )
         .join("|")}`,

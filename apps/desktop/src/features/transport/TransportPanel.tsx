@@ -156,10 +156,16 @@ type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
 
 type SidebarTab = "markers" | "library" | "routing" | "settings";
 
+const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
+const LIBRARY_DRAG_EDGE_BUFFER_PX = 50;
+const LIBRARY_DRAG_MAX_SCROLL_SPEED_PX = 22;
+
 type LibraryAssetDragPayload = {
   file_path: string;
   durationSeconds: number;
 };
+
+type LibraryDropLayout = "horizontal" | "vertical";
 
 type LibraryClipPreviewState = {
   trackId: string | null;
@@ -167,6 +173,22 @@ type LibraryClipPreviewState = {
   label: string;
   timelineStartSeconds: number;
   durationSeconds: number;
+  rowOffset: number;
+};
+
+type LibraryDragHoverState = {
+  clientX: number;
+  clientY: number;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  payload: LibraryAssetDragPayload[];
+  targetTrackId: string | null;
+};
+
+type LibraryDragAutoScrollState = {
+  frameId: number | null;
+  horizontalVelocity: number;
+  verticalVelocity: number;
 };
 
 type TransportAnchorMeta = {
@@ -202,39 +224,40 @@ function humanizeLibraryTrackName(filePath: string) {
     .join(" ") || "Audio";
 }
 
-function readLibraryAssetDragPayload(dataTransfer: DataTransfer | null): LibraryAssetDragPayload | null {
+function readLibraryAssetDragPayload(dataTransfer: DataTransfer | null): LibraryAssetDragPayload[] | null {
   if (!dataTransfer) {
     return null;
   }
 
-  const payload = dataTransfer.getData("application/libretracks-library-asset");
+  const payload = dataTransfer.getData(LIBRARY_ASSET_DRAG_MIME).trim();
   if (!payload) {
-    const filePath = dataTransfer.getData("text/plain").trim();
-    if (!filePath) {
-      return null;
-    }
-
-    return {
-      file_path: filePath,
-      durationSeconds: 0,
-    };
+    return null;
   }
 
   try {
-    const parsed = JSON.parse(payload) as Partial<LibraryAssetDragPayload>;
-    if (
-      typeof parsed.file_path !== "string" ||
-      !parsed.file_path ||
-      typeof parsed.durationSeconds !== "number" ||
-      !Number.isFinite(parsed.durationSeconds)
-    ) {
+    const parsed = JSON.parse(payload) as Partial<LibraryAssetDragPayload> | Array<Partial<LibraryAssetDragPayload>>;
+    const items = Array.isArray(parsed) ? parsed : [parsed];
+    const normalizedPayload = items.flatMap((item) => {
+      if (
+        typeof item.file_path !== "string" ||
+        !item.file_path ||
+        typeof item.durationSeconds !== "number" ||
+        !Number.isFinite(item.durationSeconds)
+      ) {
+        return [];
+      }
+
+      return [{
+        file_path: item.file_path,
+        durationSeconds: Math.max(0.05, item.durationSeconds),
+      }];
+    });
+
+    if (!normalizedPayload.length) {
       return null;
     }
 
-    return {
-      file_path: parsed.file_path,
-      durationSeconds: Math.max(0.05, parsed.durationSeconds),
-    };
+    return normalizedPayload;
   } catch {
     return null;
   }
@@ -510,7 +533,7 @@ export function TransportPanel() {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>(null);
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
-  const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState | null>(null);
+  const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState[]>([]);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
   const [isImportingLibrary, setIsImportingLibrary] = useState(false);
   const [libraryImportProgress, setLibraryImportProgress] = useState<LibraryImportProgressEvent | null>(null);
@@ -552,6 +575,12 @@ export function TransportPanel() {
   const trackDropStateRef = useRef<TrackDropState>(null);
   const draggedTrackRowRef = useRef<HTMLDivElement | null>(null);
   const droppedTrackRowRef = useRef<HTMLDivElement | null>(null);
+  const libraryDragHoverRef = useRef<LibraryDragHoverState | null>(null);
+  const libraryDragAutoScrollRef = useRef<LibraryDragAutoScrollState>({
+    frameId: null,
+    horizontalVelocity: 0,
+    verticalVelocity: 0,
+  });
   const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
   const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
   const playbackSongDir = useTransportStore((state) => state.playback?.songDir ?? null);
@@ -2819,17 +2848,208 @@ export function TransportPanel() {
     );
   }
 
+  function resolveLibraryDropLayout(payload: LibraryAssetDragPayload[], ctrlKey: boolean, metaKey: boolean) {
+    return payload.length > 1 && (ctrlKey || metaKey) ? "vertical" : "horizontal";
+  }
+
+  function resolveLibraryPreviewTrackId(targetTrackId: string | null, layout: LibraryDropLayout, index: number) {
+    if (layout === "horizontal" || !targetTrackId) {
+      return targetTrackId;
+    }
+
+    const baseIndex = visibleTracks.findIndex((track) => track.id === targetTrackId);
+    if (baseIndex < 0) {
+      return index === 0 ? targetTrackId : null;
+    }
+
+    return visibleTracks[baseIndex + index]?.id ?? null;
+  }
+
+  function buildLibraryClipPreview(args: {
+    payload: LibraryAssetDragPayload[];
+    targetTrackId: string | null;
+    timelineStartSeconds: number;
+    layout: LibraryDropLayout;
+  }) {
+    let accumulatedDurationSeconds = 0;
+
+    return args.payload.map((item, index) => {
+      const asset = resolveDraggedLibraryAsset(item.file_path, item.durationSeconds);
+      const timelineStartSeconds =
+        args.layout === "horizontal"
+          ? args.timelineStartSeconds + accumulatedDurationSeconds
+          : args.timelineStartSeconds;
+
+      accumulatedDurationSeconds += asset.durationSeconds;
+
+      return {
+        trackId: resolveLibraryPreviewTrackId(args.targetTrackId, args.layout, index),
+        filePath: asset.filePath,
+        label: asset.fileName,
+        timelineStartSeconds,
+        durationSeconds: asset.durationSeconds,
+        rowOffset: args.layout === "vertical" ? index : 0,
+      } satisfies LibraryClipPreviewState;
+    });
+  }
+
+  function getLibraryDragViewportBounds(element: HTMLElement) {
+    if (element.classList.contains("lt-track-lane")) {
+      return element.getBoundingClientRect();
+    }
+
+    return rulerTrackRef.current?.getBoundingClientRect() ?? element.getBoundingClientRect();
+  }
+
   function resolveLibraryDropSeconds(
     event: ReactDragEvent<HTMLElement>,
     element: HTMLElement,
   ) {
-    const bounds = element.getBoundingClientRect();
+    const bounds = getLibraryDragViewportBounds(element);
     const viewportX = clamp(event.clientX - bounds.left, 0, bounds.width);
     const rawSeconds = screenXToSeconds(viewportX, getCameraX(), pixelsPerSecond);
 
     return snapEnabled
       ? snapToTimelineGrid(rawSeconds, song?.bpm ?? 120, song?.timeSignature ?? "4/4", zoomLevel, pixelsPerSecond)
       : rawSeconds;
+  }
+
+  function resolveLibraryGhostLeft(timelineStartSeconds: number) {
+    return secondsToScreenX(timelineStartSeconds, getCameraX(), pixelsPerSecond);
+  }
+
+  function updateLibraryClipPreview(hoverState: LibraryDragHoverState, element: HTMLElement) {
+    const layout = resolveLibraryDropLayout(hoverState.payload, hoverState.ctrlKey, hoverState.metaKey);
+    const timelineStartSeconds = resolveLibraryDropSeconds(
+      {
+        clientX: hoverState.clientX,
+        currentTarget: element,
+      } as ReactDragEvent<HTMLElement>,
+      element,
+    );
+
+    setLibraryClipPreview(
+      buildLibraryClipPreview({
+        payload: hoverState.payload,
+        targetTrackId: hoverState.targetTrackId,
+        timelineStartSeconds,
+        layout,
+      }),
+    );
+  }
+
+  function stopLibraryDragAutoScroll() {
+    const autoScrollState = libraryDragAutoScrollRef.current;
+    autoScrollState.horizontalVelocity = 0;
+    autoScrollState.verticalVelocity = 0;
+
+    if (autoScrollState.frameId !== null) {
+      window.cancelAnimationFrame(autoScrollState.frameId);
+      autoScrollState.frameId = null;
+    }
+  }
+
+  function clearLibraryDragPreview() {
+    libraryDragHoverRef.current = null;
+    stopLibraryDragAutoScroll();
+    setLibraryClipPreview([]);
+  }
+
+  function resolveLibraryAutoScrollVelocity(distancePx: number) {
+    if (distancePx >= LIBRARY_DRAG_EDGE_BUFFER_PX) {
+      return 0;
+    }
+
+    const intensity = (LIBRARY_DRAG_EDGE_BUFFER_PX - Math.max(0, distancePx)) / LIBRARY_DRAG_EDGE_BUFFER_PX;
+    return Math.max(1, Math.round(intensity * intensity * LIBRARY_DRAG_MAX_SCROLL_SPEED_PX));
+  }
+
+  function tickLibraryDragAutoScroll() {
+    const autoScrollState = libraryDragAutoScrollRef.current;
+    const laneArea = laneAreaRef.current;
+    const hoverState = libraryDragHoverRef.current;
+
+    if (!hoverState || (!autoScrollState.horizontalVelocity && !autoScrollState.verticalVelocity)) {
+      autoScrollState.frameId = null;
+      return;
+    }
+
+    if (autoScrollState.horizontalVelocity) {
+      updateCameraX(cameraXRef.current + autoScrollState.horizontalVelocity);
+    }
+
+    if (laneArea && autoScrollState.verticalVelocity) {
+      laneArea.scrollTop += autoScrollState.verticalVelocity;
+    }
+
+    const hoverElement =
+      hoverState.targetTrackId != null
+        ? (laneArea?.querySelector(`[data-track-id="${hoverState.targetTrackId}"] .lt-track-lane`) as HTMLDivElement | null)
+        : laneArea;
+    if (hoverElement) {
+      updateLibraryClipPreview(hoverState, hoverElement);
+    }
+
+    autoScrollState.frameId = window.requestAnimationFrame(tickLibraryDragAutoScroll);
+  }
+
+  function updateLibraryDragAutoScroll(event: ReactDragEvent<HTMLElement>) {
+    const autoScrollState = libraryDragAutoScrollRef.current;
+    const horizontalBounds = rulerTrackRef.current?.getBoundingClientRect() ?? timelineShellRef.current?.getBoundingClientRect();
+    const verticalBounds = laneAreaRef.current?.getBoundingClientRect();
+
+    let horizontalVelocity = 0;
+    if (horizontalBounds) {
+      const distanceToLeft = event.clientX - horizontalBounds.left;
+      const distanceToRight = horizontalBounds.right - event.clientX;
+
+      if (distanceToLeft < LIBRARY_DRAG_EDGE_BUFFER_PX) {
+        horizontalVelocity = -resolveLibraryAutoScrollVelocity(distanceToLeft);
+      } else if (distanceToRight < LIBRARY_DRAG_EDGE_BUFFER_PX) {
+        horizontalVelocity = resolveLibraryAutoScrollVelocity(distanceToRight);
+      }
+    }
+
+    let verticalVelocity = 0;
+    if (verticalBounds) {
+      const distanceToTop = event.clientY - verticalBounds.top;
+      const distanceToBottom = verticalBounds.bottom - event.clientY;
+
+      if (distanceToTop < LIBRARY_DRAG_EDGE_BUFFER_PX) {
+        verticalVelocity = -resolveLibraryAutoScrollVelocity(distanceToTop);
+      } else if (distanceToBottom < LIBRARY_DRAG_EDGE_BUFFER_PX) {
+        verticalVelocity = resolveLibraryAutoScrollVelocity(distanceToBottom);
+      }
+    }
+
+    autoScrollState.horizontalVelocity = horizontalVelocity;
+    autoScrollState.verticalVelocity = verticalVelocity;
+
+    if (!horizontalVelocity && !verticalVelocity) {
+      stopLibraryDragAutoScroll();
+      return;
+    }
+
+    if (autoScrollState.frameId === null) {
+      autoScrollState.frameId = window.requestAnimationFrame(tickLibraryDragAutoScroll);
+    }
+  }
+
+  function beginLibraryDragHover(
+    event: ReactDragEvent<HTMLDivElement>,
+    payload: LibraryAssetDragPayload[],
+    targetTrackId: string | null,
+  ) {
+    libraryDragHoverRef.current = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      payload,
+      targetTrackId,
+    };
+    updateLibraryClipPreview(libraryDragHoverRef.current, event.currentTarget);
+    updateLibraryDragAutoScroll(event);
   }
 
   async function maybePromptForInitialTempo(asset: LibraryAssetSummary) {
@@ -2861,9 +3081,12 @@ export function TransportPanel() {
     durationSeconds: number;
     timelineStartSeconds: number;
     targetTrackId: string | null;
+    skipTempoPrompt?: boolean;
   }) {
     const asset = resolveDraggedLibraryAsset(args.filePath, args.durationSeconds);
-    await maybePromptForInitialTempo(asset);
+    if (!args.skipTempoPrompt) {
+      await maybePromptForInitialTempo(asset);
+    }
 
     let targetTrackId = args.targetTrackId;
     if (!targetTrackId) {
@@ -2891,13 +3114,92 @@ export function TransportPanel() {
     setStatus(`Clip agregado: ${asset.fileName}`);
   }
 
+  async function createLibraryTrackForAsset(asset: LibraryAssetSummary) {
+    const trackSnapshot = await createTrack({
+      name: humanizeLibraryTrackName(asset.filePath),
+      kind: "audio",
+    });
+    applyPlaybackSnapshot(trackSnapshot);
+
+    const nextSong = await getSongView();
+    return nextSong?.tracks.at(-1)?.id ?? null;
+  }
+
+  async function placeLibraryAssetsOnTimeline(args: {
+    payload: LibraryAssetDragPayload[];
+    timelineStartSeconds: number;
+    targetTrackId: string | null;
+    layout: LibraryDropLayout;
+  }) {
+    const assets = args.payload.map((item) => resolveDraggedLibraryAsset(item.file_path, item.durationSeconds));
+    if (!assets.length) {
+      return;
+    }
+
+    await maybePromptForInitialTempo(assets[0]);
+
+    if (args.layout === "horizontal") {
+      let targetTrackId = args.targetTrackId;
+      if (!targetTrackId) {
+        targetTrackId = await createLibraryTrackForAsset(assets[0]);
+      }
+
+      if (!targetTrackId) {
+        return;
+      }
+
+      let clipStartSeconds = args.timelineStartSeconds;
+      for (const asset of assets) {
+        await placeLibraryAssetOnTimeline({
+          filePath: asset.filePath,
+          durationSeconds: asset.durationSeconds,
+          timelineStartSeconds: clipStartSeconds,
+          targetTrackId,
+          skipTempoPrompt: true,
+        });
+        clipStartSeconds += asset.durationSeconds;
+      }
+
+      setSelectedTrackId(targetTrackId);
+    } else {
+      let selectedTrackId: string | null = args.targetTrackId;
+
+      for (const [index, asset] of assets.entries()) {
+        const targetTrackId = index === 0 && args.targetTrackId ? args.targetTrackId : await createLibraryTrackForAsset(asset);
+        if (!targetTrackId) {
+          continue;
+        }
+
+        await placeLibraryAssetOnTimeline({
+          filePath: asset.filePath,
+          durationSeconds: asset.durationSeconds,
+          timelineStartSeconds: args.timelineStartSeconds,
+          targetTrackId,
+          skipTempoPrompt: true,
+        });
+        selectedTrackId = targetTrackId;
+      }
+
+      if (selectedTrackId) {
+        setSelectedTrackId(selectedTrackId);
+      }
+    }
+
+    setSelectedSectionId(null);
+    setStatus(
+      assets.length === 1
+        ? `Clip agregado: ${assets[0].fileName}`
+        : `${assets.length} clips agregados desde la biblioteca.`,
+    );
+  }
+
   function handleTrackListLibraryDragLeave(event: ReactDragEvent<HTMLDivElement>) {
     const nextTarget = event.relatedTarget;
     if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
       return;
     }
 
-    setLibraryClipPreview(null);
+    clearLibraryDragPreview();
   }
 
   function handleTrackLaneLibraryDragOver(
@@ -2912,15 +3214,7 @@ export function TransportPanel() {
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
-
-    const asset = resolveDraggedLibraryAsset(payload.file_path, payload.durationSeconds);
-    setLibraryClipPreview({
-      trackId: track.id,
-      filePath: asset.filePath,
-      label: asset.fileName,
-      timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
-      durationSeconds: asset.durationSeconds,
-    });
+    beginLibraryDragHover(event, payload, track.id);
   }
 
   function handleTrackLaneLibraryDrop(
@@ -2934,36 +3228,34 @@ export function TransportPanel() {
 
     event.preventDefault();
     event.stopPropagation();
-    setLibraryClipPreview(null);
+    clearLibraryDragPreview();
 
     void runAction(async () => {
-      await placeLibraryAssetOnTimeline({
-        filePath: payload.file_path,
-        durationSeconds: payload.durationSeconds,
+      await placeLibraryAssetsOnTimeline({
+        payload,
         timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
         targetTrackId: track.id,
+        layout: resolveLibraryDropLayout(payload, event.ctrlKey, event.metaKey),
       });
     });
   }
 
   function handleTrackListLibraryDragOver(event: ReactDragEvent<HTMLDivElement>) {
     const payload = readLibraryAssetDragPayload(event.dataTransfer);
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    if (!payload || target?.closest(".lt-track-lane")) {
+    if (!payload) {
       return;
     }
 
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
 
-    const asset = resolveDraggedLibraryAsset(payload.file_path, payload.durationSeconds);
-    setLibraryClipPreview({
-      trackId: null,
-      filePath: asset.filePath,
-      label: asset.fileName,
-      timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
-      durationSeconds: asset.durationSeconds,
-    });
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.closest(".lt-track-lane")) {
+      updateLibraryDragAutoScroll(event);
+      return;
+    }
+
+    beginLibraryDragHover(event, payload, null);
   }
 
   function handleTrackListLibraryDrop(event: ReactDragEvent<HTMLDivElement>) {
@@ -2974,14 +3266,14 @@ export function TransportPanel() {
     }
 
     event.preventDefault();
-    setLibraryClipPreview(null);
+    clearLibraryDragPreview();
 
     void runAction(async () => {
-      await placeLibraryAssetOnTimeline({
-        filePath: payload.file_path,
-        durationSeconds: payload.durationSeconds,
+      await placeLibraryAssetsOnTimeline({
+        payload,
         timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
         targetTrackId: null,
+        layout: resolveLibraryDropLayout(payload, event.ctrlKey, event.metaKey),
       });
     });
   }
@@ -2995,15 +3287,7 @@ export function TransportPanel() {
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
-
-    const asset = resolveDraggedLibraryAsset(payload.file_path, payload.durationSeconds);
-    setLibraryClipPreview({
-      trackId: null,
-      filePath: asset.filePath,
-      label: asset.fileName,
-      timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
-      durationSeconds: asset.durationSeconds,
-    });
+    beginLibraryDragHover(event, payload, null);
   }
 
   function handleEmptyArrangementLibraryDrop(event: ReactDragEvent<HTMLDivElement>) {
@@ -3014,14 +3298,14 @@ export function TransportPanel() {
 
     event.preventDefault();
     event.stopPropagation();
-    setLibraryClipPreview(null);
+    clearLibraryDragPreview();
 
     void runAction(async () => {
-      await placeLibraryAssetOnTimeline({
-        filePath: payload.file_path,
-        durationSeconds: payload.durationSeconds,
+      await placeLibraryAssetsOnTimeline({
+        payload,
         timelineStartSeconds: resolveLibraryDropSeconds(event, event.currentTarget),
         targetTrackId: null,
+        layout: resolveLibraryDropLayout(payload, event.ctrlKey, event.metaKey),
       });
     });
   }
@@ -3477,7 +3761,7 @@ export function TransportPanel() {
           </div>
 
           <div
-            className={`lt-track-list ${libraryClipPreview ? "is-library-drag-over" : ""}`}
+            className={`lt-track-list ${libraryClipPreview.length ? "is-library-drag-over" : ""}`}
             ref={laneAreaRef}
             style={{ width: timelineRowWidth }}
             onContextMenu={handleTrackListContextMenu}
@@ -3504,6 +3788,26 @@ export function TransportPanel() {
               />
             ) : null}
 
+            {!shouldShowEmptyArrangementHint
+              ? libraryClipPreview
+                  .filter((preview) => preview.trackId === null)
+                  .map((preview) => (
+                    <div
+                      key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
+                      className="lt-library-clip-ghost is-floating"
+                      style={{
+                        left: HEADER_WIDTH + resolveLibraryGhostLeft(preview.timelineStartSeconds),
+                        top: 12 + preview.rowOffset * (trackHeight + 8),
+                        bottom: "auto",
+                        height: Math.max(trackHeight - 24, 40),
+                        width: Math.max(preview.durationSeconds * pixelsPerSecond, 36),
+                      }}
+                    >
+                      <span>{preview.label}</span>
+                    </div>
+                  ))
+              : null}
+
             {shouldShowEmptyArrangementHint ? (
               <div
                 className="lt-empty-arrangement-dropzone"
@@ -3516,17 +3820,23 @@ export function TransportPanel() {
                   LibreTracks will create an audio track automatically and place the clip at the snapped
                   timeline position.
                 </p>
-                {libraryClipPreview && libraryClipPreview.trackId === null ? (
-                  <div
-                    className="lt-library-clip-ghost is-floating"
-                    style={{
-                      left: HEADER_WIDTH + libraryClipPreview.timelineStartSeconds * pixelsPerSecond,
-                      width: Math.max(libraryClipPreview.durationSeconds * pixelsPerSecond, 36),
-                    }}
-                  >
-                    <span>{libraryClipPreview.label}</span>
-                  </div>
-                ) : null}
+                {libraryClipPreview
+                  .filter((preview) => preview.trackId === null)
+                  .map((preview) => (
+                    <div
+                      key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
+                      className="lt-library-clip-ghost is-floating"
+                      style={{
+                        left: HEADER_WIDTH + resolveLibraryGhostLeft(preview.timelineStartSeconds),
+                        top: 16 + preview.rowOffset * 72,
+                        bottom: "auto",
+                        height: 56,
+                        width: Math.max(preview.durationSeconds * pixelsPerSecond, 36),
+                      }}
+                    >
+                      <span>{preview.label}</span>
+                    </div>
+                  ))}
               </div>
             ) : null}
 
@@ -3585,17 +3895,20 @@ export function TransportPanel() {
                     onDragOver={(event) => handleTrackLaneLibraryDragOver(event, track)}
                     onDrop={(event) => handleTrackLaneLibraryDrop(event, track)}
                   >
-                    {libraryClipPreview?.trackId === track.id ? (
-                      <div
-                        className="lt-library-clip-ghost"
-                        style={{
-                          left: libraryClipPreview.timelineStartSeconds * pixelsPerSecond,
-                          width: Math.max(libraryClipPreview.durationSeconds * pixelsPerSecond, 36),
-                        }}
-                      >
-                        <span>{libraryClipPreview.label}</span>
-                      </div>
-                    ) : null}
+                    {libraryClipPreview
+                      .filter((preview) => preview.trackId === track.id)
+                      .map((preview) => (
+                        <div
+                          key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
+                          className="lt-library-clip-ghost"
+                          style={{
+                            left: resolveLibraryGhostLeft(preview.timelineStartSeconds),
+                            width: Math.max(preview.durationSeconds * pixelsPerSecond, 36),
+                          }}
+                        >
+                          <span>{preview.label}</span>
+                        </div>
+                      ))}
                   </div>
                 </div>
               );

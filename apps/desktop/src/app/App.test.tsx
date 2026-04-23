@@ -10,6 +10,8 @@ afterEach(() => {
   cleanup();
 });
 
+const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
+
 async function renderApp() {
   const { App } = await import("./App");
   const view = render(<App />);
@@ -92,6 +94,38 @@ function mockLaneBounds(container: HTMLElement, width = 1140) {
       }),
     });
   });
+}
+
+function mockTrackListBounds(container: HTMLElement, width = 1400, height = 500) {
+  const trackList = container.querySelector(".lt-track-list") as HTMLDivElement | null;
+  expect(trackList).toBeTruthy();
+
+  Object.defineProperty(trackList, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      left: 0,
+      right: width,
+      top: 64,
+      bottom: 64 + height,
+      width,
+      height,
+      x: 0,
+      y: 64,
+      toJSON: () => ({}),
+    }),
+  });
+
+  Object.defineProperty(trackList, "scrollTop", {
+    configurable: true,
+    writable: true,
+    value: 0,
+  });
+}
+
+function getLibraryAssetButton(fileName: string) {
+  const assetButton = document.querySelector(`.lt-library-asset[aria-label="${fileName}"]`);
+  expect(assetButton).toBeTruthy();
+  return assetButton as HTMLButtonElement;
 }
 
 function mockTrackRowDragGeometry(container: HTMLElement) {
@@ -208,20 +242,63 @@ describe("App", () => {
     };
 
     await act(async () => {
-      fireEvent.dragStart(screen.getByRole("button", { name: /drums\.wav/i }), { dataTransfer });
+      fireEvent.dragStart(getLibraryAssetButton("drums.wav"), { dataTransfer });
     });
 
     expect(dataTransfer.effectAllowed).toBe("copy");
-    expect(dataTransfer.setData).toHaveBeenCalledWith("text/plain", "audio/drums.wav");
-    expect(JSON.parse(transferData.get("application/libretracks-library-asset") ?? "{}")).toEqual({
-      file_path: "audio/drums.wav",
-      durationSeconds: 180,
+    expect(dataTransfer.setData).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(transferData.get(LIBRARY_ASSET_DRAG_MIME) ?? "[]")).toEqual([
+      {
+        file_path: "audio/drums.wav",
+        durationSeconds: 180,
+      },
+    ]);
+  });
+
+  it("emits a multi-asset drag payload from the current library selection", async () => {
+    await renderApp();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /library/i }));
     });
+
+    await act(async () => {
+      fireEvent.click(getLibraryAssetButton("drums.wav"));
+      fireEvent.click(getLibraryAssetButton("bass.wav"), { ctrlKey: true });
+    });
+
+    expect(screen.getByText("2 selected")).toBeTruthy();
+
+    const transferData = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "",
+      setData: vi.fn((type: string, value: string) => {
+        transferData.set(type, value);
+      }),
+    };
+
+    await act(async () => {
+      fireEvent.dragStart(getLibraryAssetButton("drums.wav"), { dataTransfer });
+    });
+
+    expect(dataTransfer.effectAllowed).toBe("copy");
+    expect(JSON.parse(transferData.get(LIBRARY_ASSET_DRAG_MIME) ?? "[]")).toEqual([
+      {
+        file_path: "audio/bass.wav",
+        durationSeconds: 164,
+      },
+      {
+        file_path: "audio/drums.wav",
+        durationSeconds: 180,
+      },
+    ]);
   });
 
   it("drops a library asset onto a track lane and creates a new clip", async () => {
     const { container } = await renderApp();
+    mockRulerBounds(container);
     mockLaneBounds(container);
+    mockTrackListBounds(container);
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /library/i }));
@@ -238,7 +315,7 @@ describe("App", () => {
     };
 
     await act(async () => {
-      fireEvent.dragStart(screen.getByRole("button", { name: /drums\.wav/i }), { dataTransfer });
+      fireEvent.dragStart(getLibraryAssetButton("drums.wav"), { dataTransfer });
     });
 
     const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
@@ -253,6 +330,57 @@ describe("App", () => {
 
     expect(await screen.findByText(/clip agregado: drums\.wav/i)).toBeTruthy();
     expect(screen.getByText("5 clips")).toBeTruthy();
+  });
+
+  it("drops multiple library assets with the vertical modifier and creates stacked tracks and clips", async () => {
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTrackListBounds(container);
+
+    const transferData = new Map<string, string>();
+    transferData.set(
+      LIBRARY_ASSET_DRAG_MIME,
+      JSON.stringify([
+        {
+          file_path: "audio/drums.wav",
+          durationSeconds: 180,
+        },
+        {
+          file_path: "audio/bass.wav",
+          durationSeconds: 160,
+        },
+      ]),
+    );
+
+    const dataTransfer = {
+      dropEffect: "",
+      getData: vi.fn((type: string) => transferData.get(type) ?? ""),
+    };
+
+    const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
+    expect(drumsRow).toBeTruthy();
+    const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(drumsLane).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.dragOver(drumsLane as HTMLElement, {
+        dataTransfer,
+        clientX: 420,
+        clientY: 160,
+        ctrlKey: true,
+      });
+      fireEvent.drop(drumsLane as HTMLElement, {
+        dataTransfer,
+        clientX: 420,
+        clientY: 160,
+        ctrlKey: true,
+      });
+    });
+
+    expect(await screen.findByText(/2 clips agregados desde la biblioteca\./i)).toBeTruthy();
+    expect(await screen.findByText("8 tracks")).toBeTruthy();
+    expect(await screen.findByText("6 clips")).toBeTruthy();
   });
 
   it("opens the global track-list context menu in an empty project and creates the first track", async () => {

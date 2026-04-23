@@ -588,6 +588,18 @@ body {
   gap: 0.55rem;
 }
 
+.lt-library-asset-row.is-selected .lt-library-asset {
+  border-color: rgb(87 241 219 / 0.42);
+  background:
+    linear-gradient(135deg, rgb(87 241 219 / 0.18), rgb(45 212 191 / 0.08)),
+    rgb(42 42 42 / 0.96);
+  box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.12);
+}
+
+.lt-library-asset-row.is-selected .lt-library-asset-copy small {
+  color: rgb(234 255 251 / 0.8);
+}
+
 .lt-library-asset {
   width: 100%;
   display: grid;
