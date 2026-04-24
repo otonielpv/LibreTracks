@@ -1162,11 +1162,33 @@ export async function updateSongRegion(
   });
 }
 
+export async function updateSongRegionBpm(
+  regionId: string,
+  bpm: number,
+): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => ({
+      ...song,
+      regions: song.regions.map((region) =>
+        region.id === regionId
+          ? {
+              ...region,
+              bpm: Math.max(0.0001, bpm),
+            }
+          : region,
+      ),
+    }));
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("update_song_region_bpm", { regionId, bpm });
+}
+
 export async function deleteSongRegion(regionId: string): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     updateDemoSong((song) => {
       const regionIndex = song.regions.findIndex((region) => region.id === regionId);
-      if (regionIndex === -1 || song.regions.length <= 1) {
+      if (regionIndex === -1) {
         return song;
       }
 
@@ -1174,6 +1196,13 @@ export async function deleteSongRegion(regionId: string): Promise<TransportSnaps
       const [deletedRegion] = regions.splice(regionIndex, 1);
       if (!deletedRegion) {
         return song;
+      }
+
+      if (regions.length === 0) {
+        return {
+          ...song,
+          regions,
+        };
       }
 
       if (regionIndex > 0) {

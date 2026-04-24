@@ -1302,6 +1302,35 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn update_song_region_bpm(
+        &mut self,
+        region_id: &str,
+        bpm: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if !bpm.is_finite() || bpm <= 0.0 {
+            return Err(DesktopError::AudioCommand(
+                "region bpm must be greater than zero".into(),
+            ));
+        }
+
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let region = song
+            .regions
+            .iter_mut()
+            .find(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        region.bpm = bpm;
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn delete_song_region(
         &mut self,
         region_id: &str,
@@ -1318,13 +1347,12 @@ impl DesktopSession {
             .position(|region| region.id == region_id)
             .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
 
-        if song.regions.len() == 1 {
-            return Err(DesktopError::AudioCommand(
-                "song must contain at least one region".into(),
-            ));
+        let deleted_region = song.regions.remove(region_index);
+        if song.regions.is_empty() {
+            self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+            return Ok(self.snapshot());
         }
 
-        let deleted_region = song.regions.remove(region_index);
         if region_index > 0 {
             if let Some(previous_region) = song.regions.get_mut(region_index - 1) {
                 previous_region.end_seconds = deleted_region.end_seconds;
@@ -4862,6 +4890,46 @@ mod tests {
         assert_eq!(song_view.regions[1].id, "region_3");
         assert_eq!(song_view.regions[1].start_seconds, 14.0);
         assert_eq!(song_view.regions[1].end_seconds, 18.0);
+    }
+
+    #[test]
+    fn deleting_the_last_song_region_leaves_the_song_without_regions() {
+        let mut session = session_with_song_dir("region-delete-last-demo", demo_song_with_section());
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .delete_song_region("region_1", &audio)
+            .expect("last song region should delete");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert_eq!(snapshot.project_revision, song_view.project_revision);
+        assert!(song_view.regions.is_empty());
+    }
+
+    #[test]
+    fn updating_a_song_region_bpm_only_changes_the_target_region() {
+        let mut session = session_with_song_dir(
+            "region-bpm-demo",
+            demo_song_with_region_changes_and_sections(),
+        );
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .update_song_region_bpm("region_2", 98.5, &audio)
+            .expect("song region bpm should update");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert!(snapshot.project_revision > 0);
+        assert_eq!(song_view.regions[0].bpm, 120.0);
+        assert_eq!(song_view.regions[1].id, "region_2");
+        assert_eq!(song_view.regions[1].bpm, 98.5);
+        assert_eq!(song_view.regions[2].bpm, 60.0);
     }
 
     #[test]

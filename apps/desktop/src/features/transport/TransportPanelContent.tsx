@@ -58,6 +58,7 @@ import {
   undoAction,
   updateSectionMarker,
   updateSongRegion,
+  updateSongRegionBpm,
   updateSongTempo,
   updateTrack,
   updateTrackMixLive,
@@ -647,6 +648,18 @@ function rulerPointerToSeconds(
     0,
     Math.max(0, durationSeconds),
   );
+}
+
+function rulerClientXToSeconds(
+  clientX: number,
+  element: HTMLElement,
+  cameraX: number,
+  durationSeconds: number,
+  pixelsPerSecond: number,
+) {
+  const bounds = element.getBoundingClientRect();
+  const viewportX = clamp(clientX - bounds.left, 0, bounds.width);
+  return clamp(screenXToSeconds(viewportX, cameraX, pixelsPerSecond), 0, Math.max(0, durationSeconds));
 }
 
 function lanePointerToClip(
@@ -2379,6 +2392,18 @@ export function TransportPanelContent() {
     );
   }
 
+  function snappedRulerSecondsAtClientX(clientX: number, durationSeconds: number) {
+    const rulerTrack = rulerTrackRef.current;
+    if (!rulerTrack) {
+      return 0;
+    }
+
+    return normalizeTimelineSeekSeconds(
+      rulerClientXToSeconds(clientX, rulerTrack, getCameraX(), durationSeconds, pixelsPerSecond),
+      durationSeconds,
+    );
+  }
+
   const laneViewportWidth = Math.max(320, timelineViewportWidth);
   const timelineFitViewportWidth = Math.max(
     320,
@@ -2685,6 +2710,21 @@ export function TransportPanelContent() {
             );
             applyPlaybackSnapshot(nextSnapshot);
             setStatus(`Cancion renombrada: ${nextName}.`);
+          });
+        },
+      },
+      {
+        label: "Cambiar BPM",
+        onSelect: async () => {
+          const nextBpm = Number(window.prompt("Nuevo BPM de la cancion", region.bpm.toFixed(2)));
+          if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = await updateSongRegionBpm(region.id, nextBpm);
+            applyPlaybackSnapshot(nextSnapshot);
+            setStatus(`BPM actualizado a ${nextBpm.toFixed(2)} para ${region.name}.`);
           });
         },
       },
@@ -4461,6 +4501,65 @@ export function TransportPanelContent() {
 
                   const startClientX = event.clientX;
                   let hasMoved = false;
+                  let autoScrollFrameId: number | null = null;
+                  let autoScrollVelocity = 0;
+                  let latestClientX = startClientX;
+
+                  const stopRangeAutoScroll = () => {
+                    autoScrollVelocity = 0;
+                    if (autoScrollFrameId !== null) {
+                      window.cancelAnimationFrame(autoScrollFrameId);
+                      autoScrollFrameId = null;
+                    }
+                  };
+
+                  const updateRangeSelection = (clientX: number) => {
+                    const currentSeconds = snappedRulerSecondsAtClientX(clientX, song.durationSeconds);
+                    setSelectedTimelineRange({
+                      startSeconds: Math.min(startSeconds, currentSeconds),
+                      endSeconds: Math.max(startSeconds, currentSeconds),
+                    });
+                  };
+
+                  const tickRangeAutoScroll = () => {
+                    if (!autoScrollVelocity) {
+                      autoScrollFrameId = null;
+                      return;
+                    }
+
+                    updateCameraX(cameraXRef.current + autoScrollVelocity, {
+                      commitToStore: false,
+                    });
+                    updateRangeSelection(latestClientX);
+                    autoScrollFrameId = window.requestAnimationFrame(tickRangeAutoScroll);
+                  };
+
+                  const updateRangeAutoScroll = (clientX: number) => {
+                    const bounds = rulerTrackRef.current?.getBoundingClientRect();
+                    if (!bounds) {
+                      stopRangeAutoScroll();
+                      return;
+                    }
+
+                    const distanceToLeft = clientX - bounds.left;
+                    const distanceToRight = bounds.right - clientX;
+                    if (distanceToLeft < LIBRARY_DRAG_EDGE_BUFFER_PX) {
+                      autoScrollVelocity = -resolveLibraryAutoScrollVelocity(distanceToLeft);
+                    } else if (distanceToRight < LIBRARY_DRAG_EDGE_BUFFER_PX) {
+                      autoScrollVelocity = resolveLibraryAutoScrollVelocity(distanceToRight);
+                    } else {
+                      autoScrollVelocity = 0;
+                    }
+
+                    if (!autoScrollVelocity) {
+                      stopRangeAutoScroll();
+                      return;
+                    }
+
+                    if (autoScrollFrameId === null) {
+                      autoScrollFrameId = window.requestAnimationFrame(tickRangeAutoScroll);
+                    }
+                  };
 
                   const onMouseMove = (windowEvent: MouseEvent) => {
                     const exceededThreshold = Math.abs(windowEvent.clientX - startClientX) > DRAG_THRESHOLD_PX;
@@ -4469,11 +4568,9 @@ export function TransportPanelContent() {
                     }
 
                     hasMoved = true;
-                    const currentSeconds = snappedRulerSeconds(windowEvent, song.durationSeconds);
-                    setSelectedTimelineRange({
-                      startSeconds: Math.min(startSeconds, currentSeconds),
-                      endSeconds: Math.max(startSeconds, currentSeconds),
-                    });
+                    latestClientX = windowEvent.clientX;
+                    updateRangeSelection(windowEvent.clientX);
+                    updateRangeAutoScroll(windowEvent.clientX);
                   };
 
                   const onMouseUp = (windowEvent: MouseEvent) => {
@@ -4483,6 +4580,7 @@ export function TransportPanelContent() {
 
                     window.removeEventListener("mousemove", onMouseMove);
                     window.removeEventListener("mouseup", onMouseUp);
+                    stopRangeAutoScroll();
 
                     if (!hasMoved) {
                       setSelectedTimelineRange(null);
