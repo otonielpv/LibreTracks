@@ -167,18 +167,14 @@ impl WaveformGenerationQueue {
 }
 
 impl TransportClock {
-    fn current_position(&self, playback_state: PlaybackState, song_duration: Option<f64>) -> f64 {
+    fn current_position(&self, playback_state: PlaybackState) -> f64 {
         let unclamped_position = if playback_state == PlaybackState::Playing {
             self.anchor_position_seconds + self.elapsed_since_anchor()
         } else {
             self.anchor_position_seconds
         };
 
-        let bounded_position = unclamped_position.max(0.0);
-        match song_duration {
-            Some(song_duration) => bounded_position.min(song_duration),
-            None => bounded_position,
-        }
+        unclamped_position.max(0.0)
     }
 
     fn elapsed_since_anchor(&self) -> f64 {
@@ -864,15 +860,11 @@ impl DesktopSession {
 
     pub fn play(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
-        let current_position = self.current_position();
         let song = self
             .engine
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        if current_position >= song.duration_seconds {
-            self.engine.stop()?;
-        }
 
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let start_reason = if self.engine.position_seconds() > 0.0 {
@@ -1797,12 +1789,7 @@ impl DesktopSession {
         }
         self.prune_waveform_cache_for_current_song();
 
-        let restored_position = position_seconds.min(
-            self.engine
-                .song()
-                .map(|loaded_song| loaded_song.duration_seconds)
-                .ok_or(DesktopError::NoSongLoaded)?,
-        );
+        let restored_position = position_seconds;
         self.engine.seek(restored_position)?;
 
         let loaded_song = self
@@ -1979,31 +1966,12 @@ impl DesktopSession {
     }
 
     fn current_position(&self) -> f64 {
-        self.transport_clock.current_position(
-            self.engine.playback_state(),
-            self.engine.song().map(|song| song.duration_seconds),
-        )
+        self.transport_clock
+            .current_position(self.engine.playback_state())
     }
 
     fn sync_position(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
         if self.engine.playback_state() != PlaybackState::Playing {
-            return Ok(());
-        }
-
-        let song_duration = self
-            .engine
-            .song()
-            .map(|song| song.duration_seconds)
-            .ok_or(DesktopError::NoSongLoaded)?;
-        let linear_position = self
-            .transport_clock
-            .current_position(PlaybackState::Playing, Some(song_duration));
-
-        if linear_position >= song_duration {
-            audio.stop()?;
-            self.capture_transport_drift_sample(audio, "song_end", song_duration, song_duration);
-            self.engine.stop()?;
-            self.transport_clock.stop();
             return Ok(());
         }
 
@@ -3442,13 +3410,13 @@ mod tests {
         clock.start_from(1.25);
 
         thread::sleep(Duration::from_millis(20));
-        let running_position = clock.current_position(PlaybackState::Playing, Some(8.0));
+        let running_position = clock.current_position(PlaybackState::Playing);
         assert!(running_position > 1.25);
 
         clock.pause_at(running_position);
         thread::sleep(Duration::from_millis(20));
 
-        let paused_position = clock.current_position(PlaybackState::Paused, Some(8.0));
+        let paused_position = clock.current_position(PlaybackState::Paused);
         assert!((paused_position - running_position).abs() < 0.02);
     }
 
@@ -3458,18 +3426,18 @@ mod tests {
         clock.start_from(0.5);
 
         thread::sleep(Duration::from_millis(12));
-        let advanced_position = clock.current_position(PlaybackState::Playing, Some(8.0));
+        let advanced_position = clock.current_position(PlaybackState::Playing);
         assert!(advanced_position > 0.5);
 
         clock.seek_to(3.0);
         thread::sleep(Duration::from_millis(12));
 
-        let seek_position = clock.current_position(PlaybackState::Paused, Some(8.0));
+        let seek_position = clock.current_position(PlaybackState::Paused);
         assert!((seek_position - 3.0).abs() < 0.001);
 
         clock.start_from(seek_position);
         thread::sleep(Duration::from_millis(12));
-        let resumed_position = clock.current_position(PlaybackState::Playing, Some(8.0));
+        let resumed_position = clock.current_position(PlaybackState::Playing);
         assert!(resumed_position > 3.0);
         assert!(resumed_position < 3.2);
     }
@@ -3748,7 +3716,7 @@ mod tests {
     }
 
     #[test]
-    fn playback_stops_cleanly_when_song_end_is_reached() {
+    fn playback_continues_after_song_end_is_reached() {
         let mut session = session_with_song_dir("song-end-demo", demo_song());
         let audio = crate::audio_runtime::AudioController::default();
 
@@ -3758,25 +3726,18 @@ mod tests {
         thread::sleep(Duration::from_millis(60));
         let snapshot = session
             .snapshot_with_sync(&audio)
-            .expect("sync should stop transport at song end");
+            .expect("sync should keep transport running past song end");
 
-        assert_eq!(snapshot.playback_state, "stopped");
-        assert_eq!(snapshot.position_seconds, 0.0);
-        assert!(!snapshot.transport_clock.running);
-        assert_eq!(snapshot.transport_clock.anchor_position_seconds, 0.0);
-
-        let drift = snapshot
-            .last_drift_sample
-            .expect("song end should capture drift sample");
-        assert_eq!(drift.event, "song_end");
-        assert_eq!(drift.transport_position_seconds, 12.0);
-        assert_eq!(drift.engine_position_seconds, 12.0);
-        assert!(!drift.runtime_running);
+        assert_eq!(snapshot.playback_state, "playing");
+        assert!(snapshot.position_seconds > 12.0);
+        assert!(snapshot.transport_clock.running);
+        assert!(snapshot.transport_clock.anchor_position_seconds > 12.0);
+        assert!(snapshot.last_drift_sample.is_none());
 
         let debug_snapshot = audio
             .debug_snapshot()
             .expect("debug snapshot should succeed");
-        assert!(!debug_snapshot.playhead.running);
+        assert!(debug_snapshot.playhead.running);
     }
 
     #[test]

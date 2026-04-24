@@ -129,7 +129,7 @@ pub(crate) fn drain_consumer_samples<T>(
 }
 
 pub(crate) fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
-    while state.mixer.timeline_cursor_frame < state.mixer.song_duration_frames {
+    loop {
         if state.consume_commands() {
             break;
         }
@@ -142,11 +142,7 @@ pub(crate) fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
             continue;
         }
 
-        let remaining_frames =
-            (state.mixer.song_duration_frames - state.mixer.timeline_cursor_frame) as usize;
-        let block_frames = DISK_RENDER_BLOCK_FRAMES
-            .min(free_frames)
-            .min(remaining_frames);
+        let block_frames = DISK_RENDER_BLOCK_FRAMES.min(free_frames);
         if block_frames == 0 {
             break;
         }

@@ -179,8 +179,7 @@ impl Mixer {
         self.rebuild_track_meter_indices();
         self.song_duration_frames =
             seconds_to_frames(self.song.duration_seconds, self.output_sample_rate);
-        self.timeline_cursor_frame = seconds_to_frames(position_seconds, self.output_sample_rate)
-            .min(self.song_duration_frames);
+        self.timeline_cursor_frame = seconds_to_frames(position_seconds, self.output_sample_rate);
         self.next_plan_index = self
             .plans
             .partition_point(|plan| plan.timeline_end_frame() <= self.timeline_cursor_frame);

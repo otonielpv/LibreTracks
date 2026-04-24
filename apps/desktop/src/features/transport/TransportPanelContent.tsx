@@ -1255,7 +1255,7 @@ export function TransportPanelContent() {
     playbackVisualAnchorRef.current = {
       anchorPositionSeconds,
       anchorReceivedAtMs: performance.now(),
-      durationSeconds,
+      durationSeconds: timelineDurationSecondsRef.current || durationSeconds,
       running: isRunning,
     };
 
@@ -1808,41 +1808,7 @@ export function TransportPanelContent() {
       const elapsedSeconds = anchor.running
         ? (performance.now() - anchor.anchorReceivedAtMs) / 1000
         : 0;
-      const nextPositionSeconds = Math.min(
-        anchor.durationSeconds || Number.MAX_SAFE_INTEGER,
-        anchor.anchorPositionSeconds + elapsedSeconds,
-      );
-
-      if (anchor.durationSeconds > 0 && nextPositionSeconds >= anchor.durationSeconds) {
-        const currentSnapshot = snapshotRef.current;
-        const stoppedSnapshot =
-          currentSnapshot?.playbackState === "playing"
-            ? {
-                ...currentSnapshot,
-                playbackState: "stopped" as const,
-                positionSeconds: 0,
-                transportClock: currentSnapshot.transportClock
-                  ? {
-                      ...currentSnapshot.transportClock,
-                      anchorPositionSeconds: 0,
-                      running: false,
-                    }
-                  : currentSnapshot.transportClock,
-              }
-            : null;
-
-        playbackVisualAnchorRef.current = {
-          anchorPositionSeconds: 0,
-          anchorReceivedAtMs: performance.now(),
-          durationSeconds: anchor.durationSeconds,
-          running: false,
-        };
-        displayPositionSecondsRef.current = 0;
-        if (stoppedSnapshot) {
-          applyPlaybackSnapshot(stoppedSnapshot);
-        }
-        return;
-      }
+      const nextPositionSeconds = anchor.anchorPositionSeconds + elapsedSeconds;
 
       syncLivePosition(nextPositionSeconds);
       animationFrameId = window.requestAnimationFrame(tick);

@@ -46,7 +46,7 @@ pub enum AudioEngineError {
     InvalidSong(#[from] DomainError),
     #[error("no song is loaded")]
     NoSongLoaded,
-    #[error("position must be within song duration")]
+    #[error("position must be non-negative")]
     PositionOutOfRange,
     #[error("track not found: {0}")]
     TrackNotFound(String),
@@ -126,8 +126,8 @@ impl AudioEngine {
     }
 
     pub fn seek(&mut self, position_seconds: f64) -> Result<(), AudioEngineError> {
-        let song = self.ensure_song_loaded()?;
-        if !(0.0..=song.duration_seconds).contains(&position_seconds) {
+        self.ensure_song_loaded()?;
+        if position_seconds < 0.0 {
             return Err(AudioEngineError::PositionOutOfRange);
         }
 
@@ -194,7 +194,7 @@ impl AudioEngine {
         }
 
         let song = self.ensure_song_loaded()?.clone();
-        let mut next_position = (self.position_seconds + delta_seconds).min(song.duration_seconds);
+        let mut next_position = self.position_seconds + delta_seconds;
         let mut jump_executed = false;
 
         if let Some(pending_jump) = self.pending_marker_jump.clone() {
@@ -203,19 +203,13 @@ impl AudioEngine {
 
             if execute_at <= next_position {
                 let overshoot = next_position - execute_at;
-                next_position =
-                    (target_marker.start_seconds + overshoot).min(song.duration_seconds);
+                next_position = target_marker.start_seconds + overshoot;
                 self.pending_marker_jump = None;
                 jump_executed = true;
             }
         }
 
         self.position_seconds = next_position;
-
-        if self.position_seconds >= song.duration_seconds {
-            self.playback_state = PlaybackState::Stopped;
-            self.pending_marker_jump = None;
-        }
 
         Ok((self.position_seconds, jump_executed))
     }
@@ -498,7 +492,7 @@ fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, Audi
 mod tests {
     use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind};
 
-    use crate::{AudioEngine, JumpTrigger, PlaybackState};
+    use crate::{AudioEngine, AudioEngineError, JumpTrigger, PlaybackState};
 
     fn demo_song() -> Song {
         Song {
@@ -752,6 +746,43 @@ mod tests {
         engine.seek(12.5).expect("seek should work");
 
         assert_eq!(engine.position_seconds(), 12.5);
+    }
+
+    #[test]
+    fn seek_allows_positions_after_song_end() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+
+        engine.seek(30.0).expect("seek past song end should work");
+
+        assert_eq!(engine.position_seconds(), 30.0);
+    }
+
+    #[test]
+    fn seek_rejects_negative_positions() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+
+        let error = engine.seek(-0.1).expect_err("negative seek should fail");
+
+        assert_eq!(error, AudioEngineError::PositionOutOfRange);
+        assert_eq!(engine.position_seconds(), 0.0);
+    }
+
+    #[test]
+    fn advance_transport_continues_after_song_end() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(11.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        let (position, jump_executed) = engine
+            .advance_transport(3.0)
+            .expect("transport should advance past song end");
+
+        assert_eq!(engine.playback_state(), PlaybackState::Playing);
+        assert!((position - 14.0).abs() < 0.0001);
+        assert!(!jump_executed);
     }
 
     #[test]

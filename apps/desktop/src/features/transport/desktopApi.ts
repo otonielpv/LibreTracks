@@ -375,7 +375,7 @@ function currentDemoPosition() {
   }
 
   const elapsed = nowSeconds() - demoClock.anchorStartedAt;
-  return Math.min(demoSong.durationSeconds, demoClock.anchorPositionSeconds + elapsed);
+  return demoClock.anchorPositionSeconds + elapsed;
 }
 
 function syncDemoPlayback() {
@@ -384,11 +384,6 @@ function syncDemoPlayback() {
 
   if (demoPlaybackState === "playing") {
     demoClock.anchorStartedAt = nowSeconds();
-  }
-
-  if (nextPosition >= demoSong.durationSeconds) {
-    demoPlaybackState = "stopped";
-    demoClock.anchorStartedAt = null;
   }
 }
 
@@ -409,7 +404,7 @@ function updateDemoSong(mutator: (song: SongView) => SongView) {
       .map((waveformKey) => [waveformKey, demoWaveforms[waveformKey]])
       .filter((entry): entry is [string, WaveformSummaryDto] => Boolean(entry[1])),
   );
-  demoClock.anchorPositionSeconds = Math.min(demoClock.anchorPositionSeconds, demoSong.durationSeconds);
+  demoClock.anchorPositionSeconds = Math.max(0, demoClock.anchorPositionSeconds);
 }
 
 function applyDemoHistorySong(song: SongView) {
@@ -424,7 +419,7 @@ function applyDemoHistorySong(song: SongView) {
       .map((waveformKey) => [waveformKey, demoWaveforms[waveformKey]])
       .filter((entry): entry is [string, WaveformSummaryDto] => Boolean(entry[1])),
   );
-  demoClock.anchorPositionSeconds = Math.min(demoClock.anchorPositionSeconds, demoSong.durationSeconds);
+  demoClock.anchorPositionSeconds = Math.max(0, demoClock.anchorPositionSeconds);
 }
 
 function buildDemoSnapshot(): TransportSnapshot {
@@ -917,7 +912,7 @@ export async function stopTransport(): Promise<TransportSnapshot> {
 
 export async function seekTransport(positionSeconds: number): Promise<TransportSnapshot> {
   if (!isTauriApp) {
-    demoClock.anchorPositionSeconds = clamp(positionSeconds, 0, demoSong.durationSeconds);
+    demoClock.anchorPositionSeconds = Math.max(0, positionSeconds);
     demoClock.anchorStartedAt = demoPlaybackState === "playing" ? nowSeconds() : null;
     demoClock.lastSeekPositionSeconds = demoClock.anchorPositionSeconds;
     return buildDemoSnapshot();
