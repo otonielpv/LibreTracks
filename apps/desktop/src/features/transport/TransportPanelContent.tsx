@@ -3897,13 +3897,13 @@ export function TransportPanelContent() {
   async function maybePromptForInitialTempo(asset: LibraryAssetSummary) {
     const currentSong = songRef.current;
     const currentRegion = getPrimarySongRegion(currentSong);
+    const currentBpm = currentRegion?.bpm ?? 120;
     if (
       !currentSong ||
       currentSong.clips.length > 0 ||
-      !currentRegion ||
       asset.detectedBpm == null ||
       !Number.isFinite(asset.detectedBpm) ||
-      Math.abs(asset.detectedBpm - currentRegion.bpm) < 0.01
+      Math.abs(asset.detectedBpm - currentBpm) < 0.01
     ) {
       return;
     }
