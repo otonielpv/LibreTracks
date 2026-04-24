@@ -32,6 +32,8 @@ fn main() {
             commands::library::delete_library_asset,
             commands::library::move_library_asset,
             commands::library::create_library_folder,
+            commands::library::rename_library_folder,
+            commands::library::delete_library_folder,
             commands::project::save_project,
             commands::project::save_project_as,
             commands::project::open_project_from_dialog,

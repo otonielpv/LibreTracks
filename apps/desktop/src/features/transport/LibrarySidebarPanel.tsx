@@ -13,6 +13,19 @@ import type { LibraryAssetSummary, LibraryImportProgressEvent } from "./desktopA
 const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 const ROOT_GROUP_ID = "__root__";
 
+type ContextMenuAction = {
+  label: string;
+  disabled?: boolean;
+  onSelect: () => void;
+};
+
+type ContextMenuState = {
+  x: number;
+  y: number;
+  title: string;
+  actions: ContextMenuAction[];
+} | null;
+
 type LibrarySidebarPanelProps = {
   assets: LibraryAssetSummary[];
   folders: string[];
@@ -26,6 +39,8 @@ type LibrarySidebarPanelProps = {
   onImport: () => void;
   onCreateFolder: () => void;
   onMoveAssetsToFolder: (filePaths: string[], folderPath: string | null) => void;
+  onRenameFolder: (folderPath: string) => void;
+  onDeleteFolder: (folderPath: string) => void;
   onDeleteRequested: (assets: LibraryAssetSummary[]) => void;
 };
 
@@ -69,11 +84,15 @@ export function LibrarySidebarPanel({
   onImport,
   onCreateFolder,
   onMoveAssetsToFolder,
+  onRenameFolder,
+  onDeleteFolder,
   onDeleteRequested,
 }: LibrarySidebarPanelProps) {
   const [selectedAssetPaths, setSelectedAssetPaths] = useState<string[]>([]);
   const [dragTargetGroupId, setDragTargetGroupId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const dragPreviewElementRef = useRef<HTMLElement | null>(null);
+  const activeDraggedFilePathsRef = useRef<string[]>([]);
 
   useEffect(() => {
     setSelectedAssetPaths((current) => current.filter((filePath) => assets.some((asset) => asset.filePath === filePath)));
@@ -85,6 +104,21 @@ export function LibrarySidebarPanel({
       dragPreviewElementRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const handleClose = () => setContextMenu(null);
+    window.addEventListener("pointerdown", handleClose);
+    window.addEventListener("blur", handleClose);
+
+    return () => {
+      window.removeEventListener("pointerdown", handleClose);
+      window.removeEventListener("blur", handleClose);
+    };
+  }, [contextMenu]);
 
   const selectedAssetPathSet = useMemo(() => new Set(selectedAssetPaths), [selectedAssetPaths]);
   const selectedAssets = useMemo(
@@ -137,6 +171,69 @@ export function LibrarySidebarPanel({
     updateAssetSelection(asset, event.ctrlKey || event.metaKey);
   };
 
+  const openContextMenu = (
+    event: MouseEvent<HTMLElement>,
+    title: string,
+    actions: ContextMenuAction[],
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      title,
+      actions,
+    });
+  };
+
+  const resolveDraggedFilePaths = (dataTransfer: DataTransfer | null) => {
+    const payload = readDraggedLibraryFilePaths(dataTransfer);
+    if (payload.length) {
+      return payload;
+    }
+
+    return activeDraggedFilePathsRef.current;
+  };
+
+  const assetContextMenu = (asset: LibraryAssetSummary) => {
+    const contextAssets = selectedAssetPathSet.has(asset.filePath) ? selectedAssets : [asset];
+
+    return [
+      {
+        label: contextAssets.length > 1 ? `Borrar ${contextAssets.length} assets` : `Borrar ${asset.fileName}`,
+        disabled: contextAssets.some((candidate) => deletingFilePath === candidate.filePath),
+        onSelect: () => onDeleteRequested(contextAssets),
+      },
+      {
+        label: asset.folderPath ? "Mover a la raiz" : "Mover a la raiz (ya esta aqui)",
+        disabled: !asset.folderPath,
+        onSelect: () => onMoveAssetsToFolder(contextAssets.map((candidate) => candidate.filePath), null),
+      },
+    ];
+  };
+
+  const folderContextMenu = (folderPath: string | null) => {
+    if (!folderPath) {
+      return [
+        {
+          label: "Crear carpeta virtual",
+          onSelect: onCreateFolder,
+        },
+      ];
+    }
+
+    return [
+      {
+        label: "Renombrar carpeta",
+        onSelect: () => onRenameFolder(folderPath),
+      },
+      {
+        label: "Eliminar carpeta",
+        onSelect: () => onDeleteFolder(folderPath),
+      },
+    ];
+  };
+
   const handleAssetKeyDown = (event: KeyboardEvent<HTMLDivElement>, asset: LibraryAssetSummary) => {
     if (event.key === "Delete" && selectedAssets.length > 0) {
       event.preventDefault();
@@ -171,6 +268,7 @@ export function LibrarySidebarPanel({
       durationSeconds: draggedAsset.durationSeconds,
     }));
     const payload = JSON.stringify(dragPayload);
+    activeDraggedFilePathsRef.current = dragPayload.map((item) => item.file_path);
 
     event.dataTransfer.effectAllowed = "copyMove";
     event.dataTransfer.setData(LIBRARY_ASSET_DRAG_MIME, payload);
@@ -201,12 +299,13 @@ export function LibrarySidebarPanel({
   const handleAssetDragEnd = () => {
     dragPreviewElementRef.current?.remove();
     dragPreviewElementRef.current = null;
+    activeDraggedFilePathsRef.current = [];
     setDragTargetGroupId(null);
     onDragAssetsEnd?.();
   };
 
   const handleGroupDragOver = (event: DragEvent<HTMLElement>, folderPath: string | null) => {
-    const draggedFilePaths = readDraggedLibraryFilePaths(event.dataTransfer);
+    const draggedFilePaths = resolveDraggedFilePaths(event.dataTransfer);
     if (!draggedFilePaths.length) {
       return;
     }
@@ -225,13 +324,15 @@ export function LibrarySidebarPanel({
   };
 
   const handleGroupDrop = (event: DragEvent<HTMLElement>, folderPath: string | null) => {
-    const draggedFilePaths = readDraggedLibraryFilePaths(event.dataTransfer);
+    const draggedFilePaths = resolveDraggedFilePaths(event.dataTransfer);
     if (!draggedFilePaths.length) {
       return;
     }
 
     event.preventDefault();
+    event.stopPropagation();
     setDragTargetGroupId(null);
+    activeDraggedFilePathsRef.current = [];
     onMoveAssetsToFolder(draggedFilePaths, folderPath);
   };
 
@@ -242,11 +343,7 @@ export function LibrarySidebarPanel({
           const isSelected = selectedAssetPathSet.has(asset.filePath);
 
           return (
-            <div
-              key={asset.filePath}
-              role="listitem"
-              className={`lt-library-asset-row ${isSelected ? "is-selected" : ""}`}
-            >
+            <div key={asset.filePath} role="listitem" className={`lt-library-asset-row ${isSelected ? "is-selected" : ""}`}>
               <div
                 className="lt-library-asset"
                 role="button"
@@ -256,6 +353,12 @@ export function LibrarySidebarPanel({
                 title={asset.fileName}
                 draggable
                 onClick={(event) => handleAssetSelect(event, asset)}
+                onContextMenu={(event) => {
+                  if (!selectedAssetPathSet.has(asset.filePath)) {
+                    updateAssetSelection(asset, event.ctrlKey || event.metaKey);
+                  }
+                  openContextMenu(event, asset.fileName, assetContextMenu(asset));
+                }}
                 onKeyDown={(event) => handleAssetKeyDown(event, asset)}
                 onDragEnd={handleAssetDragEnd}
                 onDragStart={(event) => handleAssetDragStart(event, asset)}
@@ -265,18 +368,6 @@ export function LibrarySidebarPanel({
                 <span className="lt-library-asset-bpm">{formatAssetBpm(asset.detectedBpm)}</span>
                 <span className="lt-library-asset-duration">{formatAssetDuration(asset.durationSeconds)}</span>
               </div>
-              <button
-                type="button"
-                className="lt-library-asset-delete"
-                aria-label={`Delete ${asset.fileName}`}
-                disabled={deletingFilePath === asset.filePath}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDeleteRequested([asset]);
-                }}
-              >
-                <span className="material-symbols-outlined">delete</span>
-              </button>
             </div>
           );
         })}
@@ -351,6 +442,7 @@ export function LibrarySidebarPanel({
             <section className="lt-library-root-group">
               <div
                 className={`lt-library-folder-summary ${dragTargetGroupId === ROOT_GROUP_ID ? "is-drag-target" : ""}`}
+                onContextMenu={(event) => openContextMenu(event, "Sin carpeta", folderContextMenu(null))}
                 onDragLeave={handleGroupDragLeave}
                 onDragOver={(event) => handleGroupDragOver(event, null)}
                 onDrop={(event) => handleGroupDrop(event, null)}
@@ -368,6 +460,7 @@ export function LibrarySidebarPanel({
               <details key={group.folderPath} className="lt-library-folder-group" open>
                 <summary
                   className={`lt-library-folder-summary ${dragTargetGroupId === group.folderPath ? "is-drag-target" : ""}`}
+                  onContextMenu={(event) => openContextMenu(event, group.folderPath, folderContextMenu(group.folderPath))}
                   onDragLeave={handleGroupDragLeave}
                   onDragOver={(event) => handleGroupDragOver(event, group.folderPath)}
                   onDrop={(event) => handleGroupDrop(event, group.folderPath)}
@@ -380,6 +473,29 @@ export function LibrarySidebarPanel({
                 </summary>
                 <div className="lt-library-group-list">{renderAssetRows(group.assets)}</div>
               </details>
+            ))}
+          </div>
+        ) : null}
+
+        {contextMenu ? (
+          <div
+            className="lt-context-menu"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <strong>{contextMenu.title}</strong>
+            {contextMenu.actions.map((action) => (
+              <button
+                key={action.label}
+                type="button"
+                disabled={action.disabled}
+                onClick={() => {
+                  setContextMenu(null);
+                  action.onSelect();
+                }}
+              >
+                {action.label}
+              </button>
             ))}
           </div>
         ) : null}

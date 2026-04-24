@@ -638,6 +638,113 @@ impl DesktopSession {
         Ok(folders)
     }
 
+    pub fn rename_library_folder(
+        &mut self,
+        old_folder_path: &str,
+        new_folder_path: &str,
+    ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let normalized_old_folder_path = normalize_library_folder_path(old_folder_path)
+            .ok_or_else(|| DesktopError::AudioCommand("folder path cannot be empty".into()))?;
+        let normalized_new_folder_path = normalize_library_folder_path(new_folder_path)
+            .ok_or_else(|| DesktopError::AudioCommand("folder path cannot be empty".into()))?;
+
+        if normalized_new_folder_path == normalized_old_folder_path
+            || is_library_folder_in_branch(&normalized_new_folder_path, &normalized_old_folder_path)
+        {
+            return Err(DesktopError::AudioCommand(
+                "new folder path must not target the same folder or one of its descendants".into(),
+            ));
+        }
+
+        let mut library_assets = list_library_assets(&song_dir, Some(&song))?;
+        let mut folders = list_library_folders(&song_dir, &library_assets)?;
+        if !folders
+            .iter()
+            .any(|folder_path| folder_path == &normalized_old_folder_path)
+        {
+            return Err(DesktopError::AudioCommand("library folder was not found".into()));
+        }
+
+        for asset in &mut library_assets {
+            if let Some(folder_path) = asset.folder_path.clone() {
+                if is_library_folder_in_branch(&folder_path, &normalized_old_folder_path) {
+                    asset.folder_path = Some(rename_library_folder_branch(
+                        &folder_path,
+                        &normalized_old_folder_path,
+                        &normalized_new_folder_path,
+                    ));
+                }
+            }
+        }
+
+        folders = folders
+            .into_iter()
+            .map(|folder_path| {
+                if is_library_folder_in_branch(&folder_path, &normalized_old_folder_path) {
+                    rename_library_folder_branch(
+                        &folder_path,
+                        &normalized_old_folder_path,
+                        &normalized_new_folder_path,
+                    )
+                } else {
+                    folder_path
+                }
+            })
+            .collect::<Vec<_>>();
+        folders.sort();
+        folders.dedup();
+
+        write_library_manifest_state(&song_dir, &library_assets, &folders)?;
+
+        list_library_assets(&song_dir, Some(&song))
+    }
+
+    pub fn delete_library_folder(
+        &mut self,
+        folder_path: &str,
+    ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let normalized_folder_path = normalize_library_folder_path(folder_path)
+            .ok_or_else(|| DesktopError::AudioCommand("folder path cannot be empty".into()))?;
+        let mut library_assets = list_library_assets(&song_dir, Some(&song))?;
+        let folders = list_library_folders(&song_dir, &library_assets)?;
+        if !folders
+            .iter()
+            .any(|existing_folder_path| existing_folder_path == &normalized_folder_path)
+        {
+            return Err(DesktopError::AudioCommand("library folder was not found".into()));
+        }
+
+        for asset in &mut library_assets {
+            if let Some(existing_folder_path) = asset.folder_path.as_deref() {
+                if is_library_folder_in_branch(existing_folder_path, &normalized_folder_path) {
+                    asset.folder_path = None;
+                }
+            }
+        }
+
+        let next_folders = folders
+            .into_iter()
+            .filter(|existing_folder_path| {
+                !is_library_folder_in_branch(existing_folder_path, &normalized_folder_path)
+            })
+            .collect::<Vec<_>>();
+        write_library_manifest_state(&song_dir, &library_assets, &next_folders)?;
+
+        list_library_assets(&song_dir, Some(&song))
+    }
+
     pub fn song_view(&mut self) -> Result<Option<SongView>, DesktopError> {
         let started_at = Instant::now();
         let song_view = self
@@ -1985,6 +2092,30 @@ fn normalize_library_folder_path(folder_path: &str) -> Option<String> {
             .collect::<Vec<_>>()
             .join("/"),
     )
+}
+
+fn is_library_folder_in_branch(folder_path: &str, branch_root: &str) -> bool {
+    folder_path == branch_root || folder_path.starts_with(&format!("{branch_root}/"))
+}
+
+fn rename_library_folder_branch(
+    folder_path: &str,
+    old_folder_path: &str,
+    new_folder_path: &str,
+) -> String {
+    if folder_path == old_folder_path {
+        return new_folder_path.to_string();
+    }
+
+    let suffix = folder_path
+        .strip_prefix(old_folder_path)
+        .unwrap_or_default()
+        .trim_start_matches('/');
+    if suffix.is_empty() {
+        new_folder_path.to_string()
+    } else {
+        format!("{new_folder_path}/{suffix}")
+    }
 }
 
 fn read_library_manifest(song_dir: &Path) -> Result<Option<LibraryManifest>, DesktopError> {
@@ -3634,6 +3765,86 @@ mod tests {
                 .get_library_folders()
                 .expect("folders should still exist"),
             vec!["Set A".to_string()]
+        );
+    }
+
+    #[test]
+    fn rename_library_folder_updates_assets_and_nested_folders() {
+        let mut session = session_with_song_dir(
+            "library-rename-folder-demo",
+            build_empty_song("song_1".into(), "Nueva".into()),
+        );
+        let song_dir = session.song_dir.clone().expect("song dir should exist");
+        let audio_path = song_dir.join("audio").join("move-me.wav");
+        write_silent_test_wav(&audio_path, 3);
+        write_library_manifest_assets(
+            &song_dir,
+            &[LibraryAssetSummary {
+                file_name: "move-me.wav".into(),
+                file_path: "audio/move-me.wav".into(),
+                duration_seconds: 3.0,
+                detected_bpm: Some(96.0),
+                folder_path: Some("Set A/Sub".into()),
+            }],
+        )
+        .expect("manifest should save");
+        session
+            .create_library_folder("Set A")
+            .expect("parent folder should exist");
+        session
+            .create_library_folder("Set A/Sub")
+            .expect("child folder should exist");
+
+        let assets = session
+            .rename_library_folder("Set A", "Set B")
+            .expect("folder should rename");
+
+        assert_eq!(assets[0].folder_path.as_deref(), Some("Set B/Sub"));
+        assert_eq!(
+            session
+                .get_library_folders()
+                .expect("folders should load"),
+            vec!["Set B".to_string(), "Set B/Sub".to_string()]
+        );
+    }
+
+    #[test]
+    fn delete_library_folder_moves_assets_back_to_root() {
+        let mut session = session_with_song_dir(
+            "library-delete-folder-demo",
+            build_empty_song("song_1".into(), "Nueva".into()),
+        );
+        let song_dir = session.song_dir.clone().expect("song dir should exist");
+        let audio_path = song_dir.join("audio").join("move-me.wav");
+        write_silent_test_wav(&audio_path, 3);
+        write_library_manifest_assets(
+            &song_dir,
+            &[LibraryAssetSummary {
+                file_name: "move-me.wav".into(),
+                file_path: "audio/move-me.wav".into(),
+                duration_seconds: 3.0,
+                detected_bpm: Some(96.0),
+                folder_path: Some("Set A/Sub".into()),
+            }],
+        )
+        .expect("manifest should save");
+        session
+            .create_library_folder("Set A")
+            .expect("parent folder should exist");
+        session
+            .create_library_folder("Set A/Sub")
+            .expect("child folder should exist");
+
+        let assets = session
+            .delete_library_folder("Set A")
+            .expect("folder should delete");
+
+        assert_eq!(assets[0].folder_path, None);
+        assert!(
+            session
+                .get_library_folders()
+                .expect("folders should load")
+                .is_empty()
         );
     }
 

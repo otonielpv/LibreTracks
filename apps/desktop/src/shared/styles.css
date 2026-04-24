@@ -675,10 +675,7 @@ body {
 .lt-library-asset-row {
   width: 100%;
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.45rem;
+  display: block;
 }
 
 .lt-library-asset-row.is-selected .lt-library-asset {

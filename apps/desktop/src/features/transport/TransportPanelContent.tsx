@@ -17,6 +17,7 @@ import {
   createLibraryFolder,
   createSong,
   createTrack,
+  deleteLibraryFolder,
   buildWaveformLodsFromPeaks,
   deleteClip,
   deleteSectionMarker,
@@ -43,6 +44,7 @@ import {
   pauseTransport,
   playTransport,
   redoAction,
+  renameLibraryFolder,
   saveProject,
   saveProjectAs,
   scheduleMarkerJump,
@@ -3404,6 +3406,40 @@ export function TransportPanelContent() {
     });
   }
 
+  async function handleRenameLibraryFolder(folderPath: string) {
+    if (!playbackSongDir) {
+      setStatus("Crea o abre una sesion antes de renombrar carpetas virtuales.");
+      return;
+    }
+
+    const nextFolderPath = window.prompt("Nuevo nombre de la carpeta virtual", folderPath);
+    if (nextFolderPath === null) {
+      return;
+    }
+
+    await runAction(async () => {
+      const assets = await renameLibraryFolder(folderPath, nextFolderPath);
+      const { folders } = await loadLibraryState();
+      setLibraryAssets(assets);
+      setLibraryFolders(folders);
+      setStatus(`Carpeta virtual renombrada: ${folderPath} -> ${nextFolderPath.trim()}`);
+    });
+  }
+
+  async function handleDeleteLibraryFolder(folderPath: string) {
+    if (!window.confirm(`Delete virtual folder ${folderPath}? Assets inside it will move back to the library root.`)) {
+      return;
+    }
+
+    await runAction(async () => {
+      const assets = await deleteLibraryFolder(folderPath);
+      const { folders } = await loadLibraryState();
+      setLibraryAssets(assets);
+      setLibraryFolders(folders);
+      setStatus(`Carpeta virtual eliminada: ${folderPath}`);
+    });
+  }
+
   function resolveDraggedLibraryAsset(filePath: string, durationSeconds: number): LibraryAssetSummary {
     return (
       libraryAssets.find((asset) => asset.filePath === filePath) ?? {
@@ -4150,6 +4186,12 @@ export function TransportPanelContent() {
           }}
           onMoveAssetsToFolder={(filePaths, folderPath) => {
             void handleMoveLibraryAssets(filePaths, folderPath);
+          }}
+          onRenameFolder={(folderPath) => {
+            void handleRenameLibraryFolder(folderPath);
+          }}
+          onDeleteFolder={(folderPath) => {
+            void handleDeleteLibraryFolder(folderPath);
           }}
           onDeleteRequested={(assets) => {
             void handleDeleteLibraryAssets(assets);

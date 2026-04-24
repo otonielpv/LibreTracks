@@ -106,3 +106,34 @@ pub fn create_library_folder(
         .create_library_folder(&folder_path)
         .map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub fn rename_library_folder(
+    old_folder_path: String,
+    new_folder_path: String,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<LibraryAssetSummary>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .rename_library_folder(&old_folder_path, &new_folder_path)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn delete_library_folder(
+    folder_path: String,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<LibraryAssetSummary>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .delete_library_folder(&folder_path)
+        .map_err(|error| error.to_string())
+}

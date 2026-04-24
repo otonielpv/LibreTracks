@@ -745,6 +745,93 @@ export async function createLibraryFolder(folderPath: string): Promise<string[]>
   return invokeCommand<string[]>("create_library_folder", { folderPath });
 }
 
+export async function renameLibraryFolder(
+  oldFolderPath: string,
+  newFolderPath: string,
+): Promise<LibraryAssetSummary[]> {
+  if (!isTauriApp) {
+    const normalizedOldFolderPath = normalizeLibraryFolderPath(oldFolderPath);
+    const normalizedNewFolderPath = normalizeLibraryFolderPath(newFolderPath);
+    if (!normalizedOldFolderPath || !normalizedNewFolderPath) {
+      throw new Error("folder path cannot be empty");
+    }
+
+    demoLibraryAssets = sortLibraryAssets(
+      demoLibraryAssets.map((asset) => {
+        const folderPath = normalizeLibraryFolderPath(asset.folderPath);
+        if (!folderPath) {
+          return asset;
+        }
+
+        if (folderPath !== normalizedOldFolderPath && !folderPath.startsWith(`${normalizedOldFolderPath}/`)) {
+          return asset;
+        }
+
+        const suffix = folderPath.slice(normalizedOldFolderPath.length).replace(/^\//, "");
+        return {
+          ...asset,
+          folderPath: suffix ? `${normalizedNewFolderPath}/${suffix}` : normalizedNewFolderPath,
+        };
+      }),
+    );
+    demoLibraryFolders = [...new Set(
+      demoLibraryFolders.map((folderPath) => {
+        const normalizedFolderPath = normalizeLibraryFolderPath(folderPath) ?? "";
+        if (
+          normalizedFolderPath !== normalizedOldFolderPath &&
+          !normalizedFolderPath.startsWith(`${normalizedOldFolderPath}/`)
+        ) {
+          return normalizedFolderPath;
+        }
+
+        const suffix = normalizedFolderPath.slice(normalizedOldFolderPath.length).replace(/^\//, "");
+        return suffix ? `${normalizedNewFolderPath}/${suffix}` : normalizedNewFolderPath;
+      }),
+    )].sort((left, right) => left.localeCompare(right));
+    return cloneSnapshot(demoLibraryAssets);
+  }
+
+  return invokeCommand<LibraryAssetSummary[]>("rename_library_folder", {
+    oldFolderPath,
+    newFolderPath,
+  });
+}
+
+export async function deleteLibraryFolder(folderPath: string): Promise<LibraryAssetSummary[]> {
+  if (!isTauriApp) {
+    const normalizedFolderPath = normalizeLibraryFolderPath(folderPath);
+    if (!normalizedFolderPath) {
+      throw new Error("folder path cannot be empty");
+    }
+
+    demoLibraryAssets = sortLibraryAssets(
+      demoLibraryAssets.map((asset) => {
+        const assetFolderPath = normalizeLibraryFolderPath(asset.folderPath);
+        if (!assetFolderPath) {
+          return asset;
+        }
+
+        return assetFolderPath === normalizedFolderPath || assetFolderPath.startsWith(`${normalizedFolderPath}/`)
+          ? {
+              ...asset,
+              folderPath: null,
+            }
+          : asset;
+      }),
+    );
+    demoLibraryFolders = demoLibraryFolders.filter((existingFolderPath) => {
+      const normalizedExistingFolderPath = normalizeLibraryFolderPath(existingFolderPath);
+      return !normalizedExistingFolderPath || (
+        normalizedExistingFolderPath !== normalizedFolderPath &&
+        !normalizedExistingFolderPath.startsWith(`${normalizedFolderPath}/`)
+      );
+    });
+    return cloneSnapshot(demoLibraryAssets);
+  }
+
+  return invokeCommand<LibraryAssetSummary[]>("delete_library_folder", { folderPath });
+}
+
 export async function playTransport(): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     syncDemoPlayback();
