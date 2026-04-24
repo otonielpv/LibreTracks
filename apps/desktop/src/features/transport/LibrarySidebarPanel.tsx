@@ -372,7 +372,7 @@ export function LibrarySidebarPanel({
                 onDragStart={(event) => handleAssetDragStart(event, asset)}
               >
                 <span className="lt-library-asset-icon material-symbols-outlined">music_note</span>
-                <span className="lt-library-asset-copy">{asset.fileName}</span>
+                <span className="lt-library-asset-copy" title={asset.fileName}>{asset.fileName}</span>
                 <span className="lt-library-asset-bpm">{formatAssetBpm(asset.detectedBpm)}</span>
                 <span className="lt-library-asset-duration">{formatAssetDuration(asset.durationSeconds)}</span>
               </div>
@@ -447,8 +447,8 @@ export function LibrarySidebarPanel({
 
         {!isLoading && (assets.length || folders.length) ? (
           <div className="lt-library-asset-groups">
-            <section className="lt-library-root-group">
-              <div
+            <details className="lt-library-root-group" open>
+              <summary
                 className={`lt-library-folder-summary ${dragTargetGroupId === ROOT_GROUP_ID ? "is-drag-target" : ""}`}
                 onContextMenu={(event) => openContextMenu(event, "Sin carpeta", folderContextMenu(null))}
                 onDragLeave={handleGroupDragLeave}
@@ -457,12 +457,12 @@ export function LibrarySidebarPanel({
               >
                 <span className="material-symbols-outlined">home_storage</span>
                 <span className="lt-library-folder-copy">
-                  <strong>Sin carpeta</strong>
+                  <strong title="Sin carpeta">Sin carpeta</strong>
                   <small>{rootAssets.length} asset(s)</small>
                 </span>
-              </div>
+              </summary>
               <div className="lt-library-group-list">{renderAssetRows(rootAssets)}</div>
-            </section>
+            </details>
 
             {folderGroups.map((group) => (
               <details key={group.folderPath} className="lt-library-folder-group" open>
@@ -475,7 +475,7 @@ export function LibrarySidebarPanel({
                 >
                   <span className="material-symbols-outlined">folder</span>
                   <span className="lt-library-folder-copy">
-                    <strong>{group.folderPath}</strong>
+                    <strong title={group.folderPath}>{group.folderPath}</strong>
                     <small>{group.assets.length} asset(s)</small>
                   </span>
                 </summary>
