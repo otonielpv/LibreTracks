@@ -1418,14 +1418,7 @@ impl DesktopSession {
         if let Some(region) = song.regions.first_mut() {
             region.bpm = bpm;
         } else {
-            song.regions.push(SongRegion {
-                id: format!("region_{}", timestamp_suffix()),
-                name: song.title.clone(),
-                start_seconds: 0.0,
-                end_seconds: song.duration_seconds.max(1.0),
-                bpm,
-                time_signature: "4/4".into(),
-            });
+            return Ok(self.snapshot());
         }
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
@@ -4930,6 +4923,28 @@ mod tests {
         assert_eq!(song_view.regions[1].id, "region_2");
         assert_eq!(song_view.regions[1].bpm, 98.5);
         assert_eq!(song_view.regions[2].bpm, 60.0);
+    }
+
+    #[test]
+    fn updating_song_tempo_without_regions_does_not_create_one() {
+        let mut session = session_with_song_dir("song-tempo-without-regions", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        {
+            let song = Arc::make_mut(session.engine.song_mut().expect("song should exist"));
+            song.regions.clear();
+        }
+
+        let snapshot = session
+            .update_song_tempo(148.0, &audio)
+            .expect("song tempo update should not fail without regions");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert_eq!(snapshot.project_revision, 0);
+        assert!(song_view.regions.is_empty());
     }
 
     #[test]

@@ -38,6 +38,7 @@ type TimelineCanvasPaneProps = {
   laneViewportWidth: number;
   trackHeight: number;
   playheadDurationSeconds: number;
+  showTimelineHeaderTime: boolean;
   song: SongView | null;
   visibleTracks: TrackSummary[];
   renderedClipsByTrack: Record<string, ClipSummary[]>;
@@ -100,6 +101,7 @@ export function TimelineCanvasPane({
   laneViewportWidth,
   trackHeight,
   playheadDurationSeconds,
+  showTimelineHeaderTime,
   song,
   visibleTracks,
   renderedClipsByTrack,
@@ -221,7 +223,7 @@ export function TimelineCanvasPane({
                 style={{ left: marker.seconds * pixelsPerSecond }}
               >
                 <strong>{formatTimelineHeaderMusicalPosition(marker.barNumber, marker.beatInBar)}</strong>
-                <small>{formatTimelineHeaderTime(marker.seconds)}</small>
+                {showTimelineHeaderTime ? <small>{formatTimelineHeaderTime(marker.seconds)}</small> : null}
               </div>
             ))}
 

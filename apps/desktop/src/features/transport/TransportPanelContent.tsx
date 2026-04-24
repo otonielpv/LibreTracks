@@ -2531,14 +2531,31 @@ export function TransportPanelContent() {
     viewportEndSeconds: workspaceDurationSeconds,
   });
   const timelineHeaderMarkers = useMemo(
-    () =>
-      timelineGrid.markers.filter((marker) =>
+    () => {
+      const baseMarkers = timelineGrid.markers.filter((marker) =>
         timelineGrid.showBeatLabels
           ? true
           : marker.isBarStart && (marker.barNumber - 1) % timelineGrid.barLabelStep === 0,
-      ),
-    [timelineGrid.barLabelStep, timelineGrid.markers, timelineGrid.showBeatLabels],
+      );
+      const minimumLabelGapPx = timelineGrid.showBeatLabels ? 72 : 96;
+      const filteredMarkers: typeof baseMarkers = [];
+      let lastAcceptedX = Number.NEGATIVE_INFINITY;
+
+      for (const marker of baseMarkers) {
+        const markerX = marker.seconds * pixelsPerSecond;
+        if (markerX - lastAcceptedX < minimumLabelGapPx) {
+          continue;
+        }
+
+        filteredMarkers.push(marker);
+        lastAcceptedX = markerX;
+      }
+
+      return filteredMarkers;
+    },
+    [pixelsPerSecond, timelineGrid.barLabelStep, timelineGrid.markers, timelineGrid.showBeatLabels],
   );
+  const showTimelineHeaderTime = timelineGrid.showBeatLabels || pixelsPerSecond >= 48;
 
   async function scheduleMarkerJumpWithGlobalMode(markerId: string, markerName: string) {
     const trigger =
@@ -3898,6 +3915,9 @@ export function TransportPanelContent() {
   async function maybePromptForInitialTempo(asset: LibraryAssetSummary) {
     const currentSong = songRef.current;
     const currentRegion = getPrimarySongRegion(currentSong);
+    if (!currentRegion) {
+      return;
+    }
     const currentBpm = currentRegion?.bpm ?? 120;
     if (
       !currentSong ||
@@ -4308,6 +4328,12 @@ export function TransportPanelContent() {
         onTempoCommit={() => {
           const nextBpm = Number(tempoDraft);
           const currentBpm = primaryRegion?.bpm ?? 120;
+          if (!primaryRegion) {
+            setTempoDraft(String(currentBpm));
+            setStatus("Crea una Cancion (Region) antes de cambiar el BPM del timeline.");
+            return;
+          }
+
           if (!song || !Number.isFinite(nextBpm) || nextBpm <= 0 || nextBpm === currentBpm) {
             setTempoDraft(String(currentBpm));
             return;
@@ -4490,6 +4516,7 @@ export function TransportPanelContent() {
                 playheadDragRef={playheadDragRef}
                 clipPreviewSecondsRef={clipPreviewSecondsRef}
                 playheadDurationSeconds={workspaceDurationSeconds}
+                showTimelineHeaderTime={showTimelineHeaderTime}
                 rulerTrackRef={rulerTrackRef}
                 horizontalScrollbarRef={horizontalScrollbarRef}
                 laneAreaRef={laneAreaRef}

@@ -627,20 +627,9 @@ export async function updateSongTempo(bpm: number): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     updateDemoSong((song) => ({
       ...song,
-      regions: song.regions.length
-        ? song.regions.map((region, index) =>
-            index === 0 ? { ...region, bpm: Math.max(1, bpm) } : region,
-          )
-        : [
-            {
-              id: "region_1",
-              name: song.title,
-              startSeconds: 0,
-              endSeconds: song.durationSeconds,
-              bpm: Math.max(1, bpm),
-              timeSignature: "4/4",
-            },
-          ],
+      regions: song.regions.map((region, index) =>
+        index === 0 ? { ...region, bpm: Math.max(1, bpm) } : region,
+      ),
     }));
     return buildDemoSnapshot();
   }
