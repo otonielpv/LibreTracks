@@ -400,23 +400,44 @@ function normalizeTimelineRegions(
     .filter((region) => region.endSeconds > region.startSeconds)
     .sort((left, right) => left.startSeconds - right.startSeconds);
 
-  if (inputRegions.length > 0) {
-    const lastRegion = inputRegions[inputRegions.length - 1];
-    if (lastRegion.endSeconds < params.durationSeconds) {
-      lastRegion.endSeconds = params.durationSeconds;
-    }
-  }
+  const fallbackRegion = {
+    startSeconds: 0,
+    endSeconds: Math.max(0, params.durationSeconds),
+    bpm: clampPositive(params.bpm, 120),
+    timeSignature: params.timeSignature,
+  };
 
   const fallbackRegions = inputRegions.length
-    ? inputRegions
-    : [
-        {
-          startSeconds: 0,
-          endSeconds: Math.max(0, params.durationSeconds),
-          bpm: clampPositive(params.bpm, 120),
-          timeSignature: params.timeSignature,
-        },
-      ];
+    ? (() => {
+        const coveredRegions: TimelineRegion[] = [];
+        let nextStartSeconds = 0;
+
+        for (const region of inputRegions) {
+          if (region.startSeconds > nextStartSeconds) {
+            coveredRegions.push({
+              startSeconds: nextStartSeconds,
+              endSeconds: region.startSeconds,
+              bpm: fallbackRegion.bpm,
+              timeSignature: fallbackRegion.timeSignature,
+            });
+          }
+
+          coveredRegions.push(region);
+          nextStartSeconds = Math.max(nextStartSeconds, region.endSeconds);
+        }
+
+        if (nextStartSeconds < params.durationSeconds) {
+          coveredRegions.push({
+            startSeconds: nextStartSeconds,
+            endSeconds: Math.max(nextStartSeconds, params.durationSeconds),
+            bpm: fallbackRegion.bpm,
+            timeSignature: fallbackRegion.timeSignature,
+          });
+        }
+
+        return coveredRegions;
+      })()
+    : [fallbackRegion];
 
   const resolvedRegions: ResolvedTimelineRegion[] = [];
   let cumulativeBarStart = 0;

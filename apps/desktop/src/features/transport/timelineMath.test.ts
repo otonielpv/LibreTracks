@@ -110,6 +110,32 @@ describe("timelineMath", () => {
     expect(grid.markers.find((marker) => marker.seconds === 8)?.beatInBar).toBe(1);
   });
 
+  it("fills implicit timing before a late explicit region so the timeline does not restart", () => {
+    const grid = buildVisibleTimelineGrid({
+      durationSeconds: 20,
+      bpm: 120,
+      timeSignature: "4/4",
+      regions: [
+        { startSeconds: 8, endSeconds: 14, bpm: 120, timeSignature: "6/8" },
+      ],
+      zoomLevel: 8,
+      pixelsPerSecond: 144,
+      viewportStartSeconds: 0,
+      viewportEndSeconds: 10,
+    });
+
+    expect(grid.markers.find((marker) => marker.seconds === 0)).toMatchObject({
+      barNumber: 1,
+      beatInBar: 1,
+      isBarStart: true,
+    });
+    expect(grid.markers.find((marker) => marker.seconds === 8)).toMatchObject({
+      barNumber: 5,
+      beatInBar: 1,
+      isBarStart: true,
+    });
+  });
+
   it("falls back to a single implicit region when all provided regions are invalid", () => {
     const grid = buildVisibleTimelineGrid({
       durationSeconds: 4,
