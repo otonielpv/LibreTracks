@@ -400,6 +400,13 @@ function normalizeTimelineRegions(
     .filter((region) => region.endSeconds > region.startSeconds)
     .sort((left, right) => left.startSeconds - right.startSeconds);
 
+  if (inputRegions.length > 0) {
+    const lastRegion = inputRegions[inputRegions.length - 1];
+    if (lastRegion.endSeconds < params.durationSeconds) {
+      lastRegion.endSeconds = params.durationSeconds;
+    }
+  }
+
   const fallbackRegions = inputRegions.length
     ? inputRegions
     : [

@@ -2738,6 +2738,12 @@ fn refresh_song_duration(song: &mut Song) {
         .max(max_marker_start)
         .max(song.duration_seconds)
         .max(1.0);
+
+    if let Some(last_region) = song.regions.last_mut() {
+        if last_region.end_seconds < song.duration_seconds {
+            last_region.end_seconds = song.duration_seconds;
+        }
+    }
 }
 
 fn slugify(value: &str) -> String {
