@@ -44,6 +44,7 @@ type TimelineCanvasPaneProps = {
   livePixelsPerSecondRef: MutableRefObject<number>;
   timelineGrid: TimelineGrid;
   timelineHeaderMarkers: TimelineGrid["markers"];
+  selectedTimelineRange: { startSeconds: number; endSeconds: number } | null;
   selectedClipId: string | null;
   selectedSectionId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
@@ -102,6 +103,7 @@ export function TimelineCanvasPane({
   livePixelsPerSecondRef,
   timelineGrid,
   timelineHeaderMarkers,
+  selectedTimelineRange,
   selectedClipId,
   selectedSectionId,
   pendingMarkerJump,
@@ -160,6 +162,19 @@ export function TimelineCanvasPane({
             playheadSecondsRef={displayPositionSecondsRef}
             playheadDragRef={playheadDragRef}
           >
+            {selectedTimelineRange ? (
+              <div
+                className="lt-ruler-range-selection"
+                style={{
+                  left: selectedTimelineRange.startSeconds * pixelsPerSecond,
+                  width: Math.max(
+                    2,
+                    (selectedTimelineRange.endSeconds - selectedTimelineRange.startSeconds) * pixelsPerSecond,
+                  ),
+                }}
+              />
+            ) : null}
+
             {timelineHeaderMarkers.map((marker) => (
               <div
                 key={`marker-${marker.seconds.toFixed(4)}`}

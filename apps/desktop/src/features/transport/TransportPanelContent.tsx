@@ -167,6 +167,11 @@ type TimelinePanState = {
   hasMoved: boolean;
 } | null;
 
+type TimelineRangeSelection = {
+  startSeconds: number;
+  endSeconds: number;
+};
+
 type LiveClipMoveState = {
   inFlight: boolean;
   queuedSeconds: number | null;
@@ -678,6 +683,7 @@ export function TransportPanelContent() {
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
   const [libraryFolders, setLibraryFolders] = useState<string[]>([]);
   const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState[]>([]);
+  const [selectedTimelineRange, setSelectedTimelineRange] = useState<TimelineRangeSelection | null>(null);
   const [optimisticClipOperations, setOptimisticClipOperations] = useState<OptimisticClipOperation[]>([]);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
   const [isImportingLibrary, setIsImportingLibrary] = useState(false);
@@ -1422,11 +1428,13 @@ export function TransportPanelContent() {
     }
 
     const updateViewportWidth = () => {
-      const viewportWidth =
-        timelineScrollViewportRef.current?.clientWidth ??
-        shell.clientWidth ??
-        DEFAULT_TIMELINE_VIEWPORT_WIDTH;
-      setTimelineViewportWidth(viewportWidth || DEFAULT_TIMELINE_VIEWPORT_WIDTH);
+      const paneWidth = rulerTrackRef.current?.clientWidth ?? laneAreaRef.current?.clientWidth ?? null;
+      const fallbackWidth = Math.max(
+        320,
+        (timelineScrollViewportRef.current?.clientWidth ?? shell.clientWidth ?? DEFAULT_TIMELINE_VIEWPORT_WIDTH) -
+          HEADER_WIDTH,
+      );
+      setTimelineViewportWidth(Math.max(320, paneWidth ?? fallbackWidth));
     };
 
     updateViewportWidth();
@@ -1436,6 +1444,12 @@ export function TransportPanelContent() {
       observer.observe(shell);
       if (timelineScrollViewportRef.current) {
         observer.observe(timelineScrollViewportRef.current);
+      }
+      if (rulerTrackRef.current) {
+        observer.observe(rulerTrackRef.current);
+      }
+      if (laneAreaRef.current) {
+        observer.observe(laneAreaRef.current);
       }
       return () => observer.disconnect();
     }
@@ -2353,7 +2367,7 @@ export function TransportPanelContent() {
     );
   }
 
-  const laneViewportWidth = Math.max(320, timelineViewportWidth - HEADER_WIDTH);
+  const laneViewportWidth = Math.max(320, timelineViewportWidth);
   const timelineFitViewportWidth = Math.max(
     320,
     laneViewportWidth - Math.min(TIMELINE_FIT_RIGHT_GUTTER_PX, laneViewportWidth * 0.16),
@@ -2559,21 +2573,36 @@ export function TransportPanelContent() {
 
   function clearSelections(message: string) {
     clearSelection();
+    setSelectedTimelineRange(null);
     setContextMenu(null);
     setStatus(message);
   }
 
-  function rulerContextMenu(positionSeconds: number): ContextMenuAction[] {
+  function rulerContextMenu(
+    positionSeconds: number,
+    timelineRange: TimelineRangeSelection | null,
+  ): ContextMenuAction[] {
+    const targetSeconds = timelineRange?.startSeconds ?? positionSeconds;
+
     return [
       {
-        label: "Create marker",
+        label: timelineRange ? "Create section at selection start" : "Create marker",
         onSelect: async () => {
           await runAction(async () => {
-            const nextSnapshot = await createSectionMarker(positionSeconds);
+            const nextSnapshot = await createSectionMarker(targetSeconds);
             applyPlaybackSnapshot(nextSnapshot);
             clearSelection();
-            setStatus(`Marca creada en ${formatClock(positionSeconds)}.`);
+            setSelectedTimelineRange(null);
+            setStatus(`Marca creada en ${formatClock(targetSeconds)}.`);
           });
+        },
+      },
+      {
+        label: "Clear timeline selection",
+        disabled: !timelineRange,
+        onSelect: () => {
+          setSelectedTimelineRange(null);
+          setStatus("Seleccion del timeline limpiada.");
         },
       },
     ];
@@ -4327,9 +4356,58 @@ export function TransportPanelContent() {
                   const startSeconds = snappedRulerSeconds(event, song.durationSeconds);
                   clearSelection();
                   setContextMenu(null);
-                  void runAction(async () => {
-                    await performSeek(startSeconds);
+                  setSelectedTimelineRange({
+                    startSeconds,
+                    endSeconds: startSeconds,
                   });
+
+                  const startClientX = event.clientX;
+                  let hasMoved = false;
+
+                  const onMouseMove = (windowEvent: MouseEvent) => {
+                    const exceededThreshold = Math.abs(windowEvent.clientX - startClientX) > DRAG_THRESHOLD_PX;
+                    if (!hasMoved && !exceededThreshold) {
+                      return;
+                    }
+
+                    hasMoved = true;
+                    const currentSeconds = snappedRulerSeconds(windowEvent, song.durationSeconds);
+                    setSelectedTimelineRange({
+                      startSeconds: Math.min(startSeconds, currentSeconds),
+                      endSeconds: Math.max(startSeconds, currentSeconds),
+                    });
+                  };
+
+                  const onMouseUp = (windowEvent: MouseEvent) => {
+                    if (windowEvent.button !== 0) {
+                      return;
+                    }
+
+                    window.removeEventListener("mousemove", onMouseMove);
+                    window.removeEventListener("mouseup", onMouseUp);
+
+                    if (!hasMoved) {
+                      setSelectedTimelineRange(null);
+                      void runAction(async () => {
+                        await performSeek(startSeconds);
+                      });
+                      return;
+                    }
+
+                    const endSeconds = snappedRulerSeconds(windowEvent, song.durationSeconds);
+                    const normalizedStartSeconds = Math.min(startSeconds, endSeconds);
+                    const normalizedEndSeconds = Math.max(startSeconds, endSeconds);
+                    setSelectedTimelineRange({
+                      startSeconds: normalizedStartSeconds,
+                      endSeconds: normalizedEndSeconds,
+                    });
+                    setStatus(
+                      `Rango seleccionado: ${formatClock(normalizedStartSeconds)} - ${formatClock(normalizedEndSeconds)}.`,
+                    );
+                  };
+
+                  window.addEventListener("mousemove", onMouseMove);
+                  window.addEventListener("mouseup", onMouseUp);
                 }}
                 onRulerContextMenu={(event) => {
                   if (!song || !rulerTrackRef.current) {
@@ -4338,8 +4416,24 @@ export function TransportPanelContent() {
 
                   const positionSeconds = snappedRulerSeconds(event, song.durationSeconds);
                   clearSelection();
-                  openMenu(event, `Timeline ${formatClock(positionSeconds)}`, rulerContextMenu(positionSeconds));
+                  const activeTimelineRange =
+                    selectedTimelineRange &&
+                    positionSeconds >= selectedTimelineRange.startSeconds &&
+                    positionSeconds <= selectedTimelineRange.endSeconds
+                      ? selectedTimelineRange
+                      : null;
+                  if (!activeTimelineRange) {
+                    setSelectedTimelineRange(null);
+                  }
+                  openMenu(
+                    event,
+                    activeTimelineRange
+                      ? `Selection ${formatClock(activeTimelineRange.startSeconds)} - ${formatClock(activeTimelineRange.endSeconds)}`
+                      : `Timeline ${formatClock(positionSeconds)}`,
+                    rulerContextMenu(positionSeconds, activeTimelineRange),
+                  );
                 }}
+                                selectedTimelineRange={selectedTimelineRange}
                 onMarkerPrimaryAction={(sectionId) => {
                   const section = song?.sectionMarkers.find((candidate) => candidate.id === sectionId);
                   if (!section) {
