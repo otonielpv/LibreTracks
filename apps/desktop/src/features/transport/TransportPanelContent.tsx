@@ -80,9 +80,9 @@ import {
   BASE_PIXELS_PER_SECOND,
   clampCameraX,
   clientXToTimelineSeconds,
+  getCumulativeMusicalPosition,
   getTimelineWorkspaceEndSeconds,
   getZoomLevelDelta,
-  getMusicalPosition,
   getMaxCameraX,
   screenXToSeconds,
   secondsToScreenX,
@@ -313,8 +313,8 @@ function formatTimelineHeaderMusicalPosition(barNumber: number, beatInBar: numbe
   return `${barNumber}.${beatInBar}.00`;
 }
 
-function formatMusicalPosition(seconds: number, bpm: number, timeSignature: string) {
-  return getMusicalPosition(seconds, bpm, timeSignature).display;
+function formatMusicalPosition(seconds: number, regions: SongView["regions"] | undefined) {
+  return getCumulativeMusicalPosition(seconds, regions ?? []).display;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -2042,6 +2042,7 @@ export function TransportPanelContent() {
               timingRegion?.timeSignature ?? "4/4",
               zoomLevel,
               effectPixelsPerSecond,
+              effectSong.regions,
             )
           : clipDrag.originSeconds + deltaSeconds;
 
@@ -2203,9 +2204,8 @@ export function TransportPanelContent() {
       const timingRegion =
         getSongRegionAtPosition(songRef.current, clampedPosition) ?? getPrimarySongRegion(songRef.current);
       transportReadoutBarRef.current.textContent = formatMusicalPosition(
-        clampedPosition - (timingRegion?.startSeconds ?? 0),
-        timingRegion?.bpm ?? 120,
-        timingRegion?.timeSignature ?? "4/4",
+        clampedPosition,
+        songRef.current?.regions,
       );
     }
   }
@@ -2328,6 +2328,7 @@ export function TransportPanelContent() {
             timingRegion?.timeSignature ?? "4/4",
             zoomLevel,
             pixelsPerSecond,
+            song?.regions ?? [],
           ),
           0,
           Math.max(0, durationSeconds),
@@ -2407,11 +2408,7 @@ export function TransportPanelContent() {
   const readoutRegion = getSongRegionAtPosition(song, readoutPositionSeconds) ?? getPrimarySongRegion(song);
   const primaryRegion = getPrimarySongRegion(song);
   const musicalPositionLabel = song
-    ? formatMusicalPosition(
-        readoutPositionSeconds - (readoutRegion?.startSeconds ?? 0),
-        readoutRegion?.bpm ?? 120,
-        readoutRegion?.timeSignature ?? "4/4",
-      )
+    ? formatMusicalPosition(readoutPositionSeconds, song.regions)
     : "1.1.00";
   const tempoSourceLabel = readoutRegion ? readoutRegion.name : "Song 1";
   const canPersistProject = Boolean(song);
@@ -2458,6 +2455,7 @@ export function TransportPanelContent() {
   const timelineGrid = useTimelineGrid({
     durationSeconds: workspaceDurationSeconds,
     bpm: primaryRegion?.bpm ?? 120,
+    regions: song?.regions ?? [],
     timeSignature: primaryRegion?.timeSignature ?? "4/4",
     zoomLevel,
     pixelsPerSecond,
@@ -3563,6 +3561,7 @@ export function TransportPanelContent() {
           timingRegion?.timeSignature ?? "4/4",
           zoomLevel,
           pixelsPerSecond,
+          song?.regions ?? [],
         )
       : rawSeconds;
   }

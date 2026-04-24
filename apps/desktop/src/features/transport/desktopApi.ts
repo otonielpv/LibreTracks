@@ -1,4 +1,4 @@
-import { getMusicalPosition } from "./timelineMath";
+import { getCumulativeMusicalPosition } from "./timelineMath";
 
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
 export type TrackKind = "audio" | "folder";
@@ -432,7 +432,7 @@ function buildDemoSnapshot(): TransportSnapshot {
     positionSeconds,
     currentMarker,
     pendingMarkerJump: demoPendingJump ? cloneSnapshot(demoPendingJump) : null,
-    musicalPosition: buildMusicalPosition(positionSeconds, timingRegion),
+    musicalPosition: buildMusicalPosition(positionSeconds, demoSong.regions),
     transportClock: {
       anchorPositionSeconds: demoClock.anchorPositionSeconds,
       running: demoPlaybackState === "playing",
@@ -1481,16 +1481,8 @@ export function getSongRegionAtPosition(
   );
 }
 
-function buildMusicalPosition(positionSeconds: number, region: SongRegionSummary | null) {
-  if (!region) {
-    return getMusicalPosition(positionSeconds, 120, "4/4");
-  }
-
-  return getMusicalPosition(
-    Math.max(0, positionSeconds - region.startSeconds),
-    region.bpm,
-    region.timeSignature,
-  );
+function buildMusicalPosition(positionSeconds: number, regions: SongRegionSummary[]) {
+  return getCumulativeMusicalPosition(positionSeconds, regions);
 }
 
 function insertTrack(

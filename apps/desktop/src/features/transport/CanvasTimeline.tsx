@@ -114,27 +114,18 @@ function drawGridLines(
   cameraX: number,
   pixelsPerSecond: number,
 ) {
-  if (grid.beatDurationSeconds <= 0 || grid.beatsPerBar <= 0) {
+  if (grid.bars.length === 0 && grid.beats.length === 0) {
     return;
   }
 
   const visibleStartSeconds = Math.max(0, screenXToSeconds(0, cameraX, pixelsPerSecond));
   const visibleEndSeconds = screenXToSeconds(width, cameraX, pixelsPerSecond);
-  const startBeatIndex = Math.max(0, Math.floor(visibleStartSeconds / grid.beatDurationSeconds));
-  const endBeatIndex = Math.max(startBeatIndex, Math.ceil(visibleEndSeconds / grid.beatDurationSeconds));
   const beatPath = grid.showBeatGridLines ? new Path2D() : null;
   const barPath = new Path2D();
 
-  for (let index = startBeatIndex; index <= endBeatIndex; index += 1) {
-    const seconds = index * grid.beatDurationSeconds;
+  for (const seconds of grid.beats) {
     const x = Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;
-    if (x < 0 || x > width) {
-      continue;
-    }
-
-    if (index % grid.beatsPerBar === 0) {
-      barPath.moveTo(x, 0);
-      barPath.lineTo(x, height);
+    if (seconds < visibleStartSeconds || seconds > visibleEndSeconds || x < 0 || x > width) {
       continue;
     }
 
@@ -142,6 +133,16 @@ function drawGridLines(
       beatPath.moveTo(x, 0);
       beatPath.lineTo(x, height);
     }
+  }
+
+  for (const seconds of grid.bars) {
+    const x = Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;
+    if (seconds < visibleStartSeconds || seconds > visibleEndSeconds || x < 0 || x > width) {
+      continue;
+    }
+
+    barPath.moveTo(x, 0);
+    barPath.lineTo(x, height);
   }
 
   if (beatPath) {

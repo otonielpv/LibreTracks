@@ -4,6 +4,7 @@ import {
   buildVisibleTimelineGrid,
   clientXToTimelineSeconds,
   getContentWidth,
+  getCumulativeMusicalPosition,
   getMusicalPosition,
   getTimelineWorkspaceEndSeconds,
   getZoomLevelDelta,
@@ -39,6 +40,137 @@ describe("timelineMath", () => {
 
     expect(grid.markers.some((marker) => marker.seconds === 3600)).toBe(true);
     expect(grid.markers.find((marker) => marker.seconds === 3600)?.barNumber).toBe(1801);
+  });
+
+  it("accumulates bar numbers across consecutive regions", () => {
+    const regions = [
+      { startSeconds: 0, endSeconds: 8, bpm: 120, timeSignature: "4/4" },
+      { startSeconds: 8, endSeconds: 14, bpm: 120, timeSignature: "6/8" },
+    ];
+
+    expect(getCumulativeMusicalPosition(8.25, regions)).toEqual({
+      barNumber: 5,
+      beatInBar: 2,
+      subBeat: 0,
+      display: "5.2.00",
+    });
+  });
+
+  it("falls back to global timing when no regions are provided", () => {
+    expect(getCumulativeMusicalPosition(3.25, [])).toEqual(
+      getMusicalPosition(3.25, 120, "4/4"),
+    );
+  });
+
+  it("uses the next region exactly at the shared boundary", () => {
+    const regions = [
+      { startSeconds: 0, endSeconds: 8, bpm: 120, timeSignature: "4/4" },
+      { startSeconds: 8, endSeconds: 14, bpm: 120, timeSignature: "6/8" },
+    ];
+
+    expect(getCumulativeMusicalPosition(8, regions)).toEqual({
+      barNumber: 5,
+      beatInBar: 1,
+      subBeat: 0,
+      display: "5.1.00",
+    });
+  });
+
+  it("sorts unsorted regions and ignores invalid zero-length entries", () => {
+    const regions = [
+      { startSeconds: 8, endSeconds: 14, bpm: 120, timeSignature: "6/8" },
+      { startSeconds: 4, endSeconds: 4, bpm: 300, timeSignature: "7/8" },
+      { startSeconds: 0, endSeconds: 8, bpm: 120, timeSignature: "4/4" },
+    ];
+
+    expect(getCumulativeMusicalPosition(8.5, regions)).toEqual({
+      barNumber: 5,
+      beatInBar: 3,
+      subBeat: 0,
+      display: "5.3.00",
+    });
+  });
+
+  it("builds visible markers cumulatively across region boundaries", () => {
+    const grid = buildVisibleTimelineGrid({
+      durationSeconds: 14,
+      bpm: 120,
+      timeSignature: "4/4",
+      regions: [
+        { startSeconds: 0, endSeconds: 8, bpm: 120, timeSignature: "4/4" },
+        { startSeconds: 8, endSeconds: 14, bpm: 120, timeSignature: "6/8" },
+      ],
+      zoomLevel: 8,
+      pixelsPerSecond: 144,
+      viewportStartSeconds: 7.75,
+      viewportEndSeconds: 8.75,
+    });
+
+    expect(grid.markers.find((marker) => marker.seconds === 8)?.barNumber).toBe(5);
+    expect(grid.markers.find((marker) => marker.seconds === 8)?.beatInBar).toBe(1);
+  });
+
+  it("falls back to a single implicit region when all provided regions are invalid", () => {
+    const grid = buildVisibleTimelineGrid({
+      durationSeconds: 4,
+      bpm: 120,
+      timeSignature: "4/4",
+      regions: [{ startSeconds: 2, endSeconds: 2, bpm: 90, timeSignature: "5/4" }],
+      zoomLevel: 8,
+      pixelsPerSecond: 144,
+      viewportStartSeconds: 0,
+      viewportEndSeconds: 1,
+    });
+
+    expect(grid.markers[0]).toMatchObject({
+      seconds: 0,
+      barNumber: 1,
+      beatInBar: 1,
+      isBarStart: true,
+    });
+    expect(grid.beatDurationSeconds).toBe(0.5);
+  });
+
+  it("clamps visible start and end seconds to the declared duration", () => {
+    const grid = buildVisibleTimelineGrid({
+      durationSeconds: 10,
+      bpm: 120,
+      timeSignature: "4/4",
+      zoomLevel: 8,
+      pixelsPerSecond: 144,
+      viewportStartSeconds: -5,
+      viewportEndSeconds: 99,
+    });
+
+    expect(grid.visibleStartSeconds).toBe(0);
+    expect(grid.visibleEndSeconds).toBe(10);
+  });
+
+  it("snaps using the active region beat grid", () => {
+    const regions = [
+      { startSeconds: 0, endSeconds: 8, bpm: 120, timeSignature: "4/4" },
+      { startSeconds: 8, endSeconds: 14, bpm: 60, timeSignature: "4/4" },
+    ];
+
+    expect(snapToTimelineGrid(8.49, 120, "4/4", 1, 1, regions)).toBe(8);
+    expect(snapToTimelineGrid(8.51, 120, "4/4", 1, 1, regions)).toBe(9);
+  });
+
+  it("clamps snapping to the end of the active region", () => {
+    const regions = [{ startSeconds: 8, endSeconds: 8.6, bpm: 60, timeSignature: "4/4" }];
+
+    expect(snapToTimelineGrid(8.59, 120, "4/4", 1, 1, regions)).toBe(8.6);
+  });
+
+  it("uses fallback bpm and time signature when region values are invalid", () => {
+    const regions = [{ startSeconds: 0, endSeconds: 2, bpm: 0, timeSignature: "" }];
+
+    expect(getCumulativeMusicalPosition(0.5, regions, 120, "3/4")).toEqual({
+      barNumber: 1,
+      beatInBar: 2,
+      subBeat: 0,
+      display: "1.2.00",
+    });
   });
 
   it("maps client coordinates into absolute timeline seconds using scroll offset", () => {

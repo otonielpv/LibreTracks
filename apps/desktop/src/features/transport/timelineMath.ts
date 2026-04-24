@@ -7,10 +7,18 @@ export type TimelineGridParams = {
   durationSeconds: number;
   bpm: number;
   timeSignature: string;
+  regions?: TimelineRegion[];
   zoomLevel: number;
   pixelsPerSecond: number;
   viewportStartSeconds: number;
   viewportEndSeconds: number;
+};
+
+export type TimelineRegion = {
+  startSeconds: number;
+  endSeconds: number;
+  bpm: number;
+  timeSignature: string;
 };
 
 export type TimelineGrid = {
@@ -39,6 +47,13 @@ export type MusicalPosition = {
   beatInBar: number;
   subBeat: number;
   display: string;
+};
+
+type ResolvedTimelineRegion = TimelineRegion & {
+  beatsPerBar: number;
+  beatFrames: number;
+  beatDurationSeconds: number;
+  cumulativeBarStart: number;
 };
 
 export function clamp(value: number, min: number, max: number) {
@@ -99,6 +114,44 @@ export function getMusicalPosition(
   const barNumber = Math.floor(totalWholeBeats / beatsPerBar) + 1;
   const beatInBar = (totalWholeBeats % beatsPerBar) + 1;
   const subBeat = Math.min(99, Math.floor((beatOffsetFrames * 100) / beatFrames));
+
+  return {
+    barNumber,
+    beatInBar,
+    subBeat,
+    display: `${barNumber}.${beatInBar}.${String(subBeat).padStart(2, "0")}`,
+  };
+}
+
+export function getCumulativeMusicalPosition(
+  seconds: number,
+  regions: TimelineRegion[],
+  fallbackBpm = 120,
+  fallbackTimeSignature = "4/4",
+  timebaseHz = TIMELINE_TIMEBASE_HZ,
+): MusicalPosition {
+  if (!regions.length) {
+    return getMusicalPosition(seconds, fallbackBpm, fallbackTimeSignature, timebaseHz);
+  }
+
+  const resolvedRegions = normalizeTimelineRegions({
+    durationSeconds: Math.max(0, ...regions.map((region) => region.endSeconds), seconds),
+    bpm: fallbackBpm,
+    timeSignature: fallbackTimeSignature,
+    regions,
+  });
+  const region = resolveTimelineRegionAtSeconds(seconds, resolvedRegions) ?? resolvedRegions[0];
+  if (!region) {
+    return getMusicalPosition(seconds, fallbackBpm, fallbackTimeSignature, timebaseHz);
+  }
+
+  const localSeconds = clamp(seconds - region.startSeconds, 0, region.endSeconds - region.startSeconds);
+  const totalFrames = secondsToTimebaseFrames(localSeconds, timebaseHz);
+  const totalWholeBeats = Math.floor(totalFrames / region.beatFrames);
+  const beatOffsetFrames = totalFrames - totalWholeBeats * region.beatFrames;
+  const barNumber = region.cumulativeBarStart + Math.floor(totalWholeBeats / region.beatsPerBar) + 1;
+  const beatInBar = (totalWholeBeats % region.beatsPerBar) + 1;
+  const subBeat = Math.min(99, Math.floor((beatOffsetFrames * 100) / region.beatFrames));
 
   return {
     barNumber,
@@ -224,9 +277,12 @@ export function zoomCameraAtViewportX(params: {
 export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGrid {
   const safeDuration = Math.max(0, params.durationSeconds);
   const safePixelsPerSecond = clampPositive(params.pixelsPerSecond, 1);
-  const { beatsPerBar } = parseTimeSignature(params.timeSignature);
-  const beatFrames = getBeatFrames(params.bpm, params.timeSignature);
-  const beatDuration = timebaseFramesToSeconds(beatFrames);
+  const resolvedRegions = normalizeTimelineRegions(params);
+  const primaryVisibleRegion =
+    resolveTimelineRegionAtSeconds(params.viewportStartSeconds, resolvedRegions) ?? resolvedRegions[0];
+  const beatsPerBar = primaryVisibleRegion?.beatsPerBar ?? parseTimeSignature(params.timeSignature).beatsPerBar;
+  const beatFrames = primaryVisibleRegion?.beatFrames ?? getBeatFrames(params.bpm, params.timeSignature);
+  const beatDuration = primaryVisibleRegion?.beatDurationSeconds ?? timebaseFramesToSeconds(beatFrames);
   const beatPixels = beatDuration * safePixelsPerSecond;
   const barPixels = beatPixels * beatsPerBar;
   const subdivisionPerBeat = 1;
@@ -242,36 +298,43 @@ export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGr
     0,
     Math.max(safeDuration, visibleStartSeconds),
   );
-  const safeDurationFrames = secondsToTimebaseFrames(safeDuration);
-  const visibleStartFrames = secondsToTimebaseFrames(visibleStartSeconds);
-  const visibleEndFrames = secondsToTimebaseFrames(visibleEndSeconds);
-  const startBeatIndex = Math.max(0, Math.floor(visibleStartFrames / beatFrames) - 1);
-  const endBeatIndex = Math.max(
-    startBeatIndex,
-    Math.ceil(visibleEndFrames / beatFrames) + 1,
-  );
 
   const bars: number[] = [];
   const beats: number[] = [];
   const markers: TimelineGrid["markers"] = [];
 
-  for (let beatIndex = startBeatIndex; beatIndex <= endBeatIndex; beatIndex += 1) {
-    const frame = beatIndex * beatFrames;
-    if (frame < visibleStartFrames - beatFrames || frame > safeDurationFrames + beatFrames) {
+  for (const region of resolvedRegions) {
+    const regionVisibleStart = Math.max(visibleStartSeconds, region.startSeconds);
+    const regionVisibleEnd = Math.min(visibleEndSeconds, region.endSeconds);
+    if (regionVisibleEnd < regionVisibleStart) {
       continue;
     }
-    const seconds = timebaseFramesToSeconds(frame);
 
-    const barNumber = Math.floor(beatIndex / beatsPerBar) + 1;
-    const beatInBar = (beatIndex % beatsPerBar) + 1;
-    const isBarStart = beatInBar === 1;
+    const localVisibleStartFrames = secondsToTimebaseFrames(regionVisibleStart - region.startSeconds);
+    const localVisibleEndFrames = secondsToTimebaseFrames(regionVisibleEnd - region.startSeconds);
+    const startBeatIndex = Math.max(0, Math.floor(localVisibleStartFrames / region.beatFrames) - 1);
+    const endBeatIndex = Math.max(startBeatIndex, Math.ceil(localVisibleEndFrames / region.beatFrames) + 1);
 
-    markers.push({ seconds, barNumber, beatInBar, isBarStart });
+    for (let beatIndex = startBeatIndex; beatIndex <= endBeatIndex; beatIndex += 1) {
+      const seconds = region.startSeconds + timebaseFramesToSeconds(beatIndex * region.beatFrames);
+      if (seconds < visibleStartSeconds - region.beatDurationSeconds || seconds > safeDuration + region.beatDurationSeconds) {
+        continue;
+      }
+      if (seconds >= region.endSeconds - timebaseFramesToSeconds(1)) {
+        continue;
+      }
 
-    if (isBarStart) {
-      bars.push(seconds);
-    } else {
-      beats.push(seconds);
+      const barNumber = region.cumulativeBarStart + Math.floor(beatIndex / region.beatsPerBar) + 1;
+      const beatInBar = (beatIndex % region.beatsPerBar) + 1;
+      const isBarStart = beatInBar === 1;
+
+      markers.push({ seconds, barNumber, beatInBar, isBarStart });
+
+      if (isBarStart) {
+        bars.push(seconds);
+      } else {
+        beats.push(seconds);
+      }
     }
   }
 
@@ -298,8 +361,85 @@ export function snapToTimelineGrid(
   timeSignature: string,
   _zoomLevel: number,
   _pixelsPerSecond: number,
+  regions: TimelineRegion[] = [],
 ) {
+  if (regions.length > 0) {
+    const resolvedRegions = normalizeTimelineRegions({
+      durationSeconds: Math.max(0, ...regions.map((region) => region.endSeconds), seconds),
+      bpm,
+      timeSignature,
+      regions,
+    });
+    const region = resolveTimelineRegionAtSeconds(seconds, resolvedRegions) ?? resolvedRegions[0];
+    if (region) {
+      const localFrames = secondsToTimebaseFrames(seconds - region.startSeconds);
+      const snappedFrames = Math.round(localFrames / region.beatFrames) * region.beatFrames;
+      return clamp(
+        region.startSeconds + timebaseFramesToSeconds(snappedFrames),
+        region.startSeconds,
+        region.endSeconds,
+      );
+    }
+  }
+
   const beatFrames = getBeatFrames(bpm, timeSignature);
   const positionFrames = secondsToTimebaseFrames(seconds);
   return timebaseFramesToSeconds(Math.round(positionFrames / beatFrames) * beatFrames);
+}
+
+function normalizeTimelineRegions(
+  params: Pick<TimelineGridParams, "durationSeconds" | "bpm" | "timeSignature" | "regions">,
+) {
+  const inputRegions = [...(params.regions ?? [])]
+    .map((region) => ({
+      startSeconds: Math.max(0, region.startSeconds),
+      endSeconds: Math.max(0, region.endSeconds),
+      bpm: clampPositive(region.bpm, params.bpm),
+      timeSignature: region.timeSignature || params.timeSignature,
+    }))
+    .filter((region) => region.endSeconds > region.startSeconds)
+    .sort((left, right) => left.startSeconds - right.startSeconds);
+
+  const fallbackRegions = inputRegions.length
+    ? inputRegions
+    : [
+        {
+          startSeconds: 0,
+          endSeconds: Math.max(0, params.durationSeconds),
+          bpm: clampPositive(params.bpm, 120),
+          timeSignature: params.timeSignature,
+        },
+      ];
+
+  const resolvedRegions: ResolvedTimelineRegion[] = [];
+  let cumulativeBarStart = 0;
+
+  for (const region of fallbackRegions) {
+    const beatFrames = getBeatFrames(region.bpm, region.timeSignature);
+    const beatDurationSeconds = timebaseFramesToSeconds(beatFrames);
+    const { beatsPerBar } = parseTimeSignature(region.timeSignature);
+    resolvedRegions.push({
+      ...region,
+      beatsPerBar,
+      beatFrames,
+      beatDurationSeconds,
+      cumulativeBarStart,
+    });
+    cumulativeBarStart += Math.max(
+      1,
+      Math.ceil(
+        secondsToTimebaseFrames(region.endSeconds - region.startSeconds) / beatFrames / beatsPerBar,
+      ),
+    );
+  }
+
+  return resolvedRegions;
+}
+
+function resolveTimelineRegionAtSeconds(seconds: number, regions: ResolvedTimelineRegion[]) {
+  return (
+    regions.find((region) => seconds >= region.startSeconds && seconds < region.endSeconds) ??
+    [...regions].reverse().find((region) => seconds >= region.endSeconds) ??
+    regions[0]
+  );
 }

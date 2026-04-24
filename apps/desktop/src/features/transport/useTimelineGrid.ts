@@ -16,6 +16,7 @@ export function useTimelineGrid(params: TimelineGridParams): TimelineGrid {
       params.bpm,
       params.durationSeconds,
       params.pixelsPerSecond,
+      params.regions,
       params.timeSignature,
       params.viewportEndSeconds,
       params.viewportStartSeconds,
