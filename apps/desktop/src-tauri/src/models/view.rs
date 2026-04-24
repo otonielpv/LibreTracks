@@ -145,6 +145,7 @@ pub struct LibraryAssetSummary {
     pub file_path: String,
     pub duration_seconds: f64,
     pub detected_bpm: Option<f64>,
+    pub folder_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

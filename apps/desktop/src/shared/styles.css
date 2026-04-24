@@ -449,6 +449,12 @@ body {
   border-bottom: 1px solid rgb(87 241 219 / 0.08);
 }
 
+.lt-library-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .lt-library-panel-header h2 {
   margin: 0.3rem 0 0;
   color: #f3f0ef;
@@ -463,12 +469,13 @@ body {
   text-transform: uppercase;
 }
 
-.lt-library-import-button {
+.lt-library-import-button,
+.lt-library-folder-button {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   border-radius: 999px;
-  padding: 0.65rem 0.85rem;
+  padding: 0.6rem 0.8rem;
   border: 1px solid rgb(87 241 219 / 0.16);
   background: rgb(32 31 31 / 0.95);
   color: #e5e2e1;
@@ -477,24 +484,27 @@ body {
   text-transform: uppercase;
 }
 
-.lt-library-import-button:hover:not(:disabled) {
+.lt-library-import-button:hover:not(:disabled),
+.lt-library-folder-button:hover:not(:disabled) {
   border-color: rgb(87 241 219 / 0.32);
   color: #57f1db;
 }
 
-.lt-library-import-button:disabled {
+.lt-library-import-button:disabled,
+.lt-library-folder-button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.lt-library-import-button .material-symbols-outlined {
+.lt-library-import-button .material-symbols-outlined,
+.lt-library-folder-button .material-symbols-outlined {
   font-size: 16px;
 }
 
 .lt-library-panel-meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
   color: rgb(229 226 225 / 0.6);
@@ -565,6 +575,11 @@ body {
   padding: 0 0.75rem 0.75rem;
 }
 
+.lt-library-panel-body:focus-visible {
+  outline: 1px solid rgb(87 241 219 / 0.32);
+  outline-offset: -1px;
+}
+
 .lt-library-panel-empty {
   margin: 0.25rem 0;
   padding: 0.9rem 0.55rem;
@@ -572,10 +587,89 @@ body {
   font: 500 0.92rem/1.55 "Space Grotesk", sans-serif;
 }
 
+.lt-library-asset-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.lt-library-root-group,
+.lt-library-folder-group {
+  border-radius: 0.9rem;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  background: rgb(19 19 19 / 0.78);
+  overflow: hidden;
+}
+
+.lt-library-folder-group summary {
+  list-style: none;
+}
+
+.lt-library-folder-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.lt-library-group-list {
+  padding: 0.25rem 0.35rem 0.35rem;
+}
+
+.lt-library-folder-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.05);
+  background: linear-gradient(180deg, rgb(26 26 26 / 0.98), rgb(20 20 20 / 0.96));
+  cursor: pointer;
+}
+
+.lt-library-folder-summary.is-drag-target {
+  background:
+    linear-gradient(135deg, rgb(87 241 219 / 0.18), rgb(45 212 191 / 0.08)),
+    rgb(28 34 33 / 0.98);
+  box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.18);
+}
+
+.lt-library-folder-summary .material-symbols-outlined {
+  font-size: 18px;
+  color: #57f1db;
+}
+
+.lt-library-folder-copy {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex: 1;
+}
+
+.lt-library-folder-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f3f0ef;
+  font: 700 0.86rem/1.15 "Space Grotesk", sans-serif;
+}
+
+.lt-library-folder-copy small,
+.lt-library-folder-empty {
+  color: rgb(229 226 225 / 0.56);
+  font: 600 10px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-library-folder-empty {
+  margin: 0;
+  padding: 0.85rem 0.65rem;
+}
+
 .lt-library-asset-list {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 
 .lt-library-asset-row {
@@ -584,7 +678,7 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 
 .lt-library-asset-row.is-selected .lt-library-asset {
@@ -595,21 +689,17 @@ body {
   box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.12);
 }
 
-.lt-library-asset-row.is-selected .lt-library-asset-copy small {
-  color: rgb(234 255 251 / 0.8);
-}
-
 .lt-library-asset {
   width: 100%;
   display: grid;
-  grid-template-columns: 1.5rem minmax(0, 1fr);
+  grid-template-columns: 1.25rem minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 0.7rem;
-  border-radius: 0.7rem;
+  gap: 0.55rem;
+  border-radius: 0.65rem;
   border: 1px solid transparent;
   background: rgb(32 31 31 / 0.78);
   color: #e5e2e1;
-  padding: 0.7rem 0.75rem;
+  padding: 0.55rem 0.65rem;
   text-align: left;
   cursor: grab;
   min-width: 0;
@@ -626,37 +716,33 @@ body {
 
 .lt-library-asset-icon {
   color: #57f1db;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .lt-library-asset-copy {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.lt-library-asset-copy strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #f3f0ef;
-  font: 700 0.9rem/1.2 "Space Grotesk", sans-serif;
+  font: 700 0.86rem/1.2 "Space Grotesk", sans-serif;
 }
 
-.lt-library-asset-copy small {
+.lt-library-asset-bpm,
+.lt-library-asset-duration {
   color: rgb(229 226 225 / 0.62);
   font: 600 10px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .lt-library-asset-delete {
-  width: 2rem;
-  height: 2rem;
+  width: 1.85rem;
+  height: 1.85rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;

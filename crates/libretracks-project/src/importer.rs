@@ -73,6 +73,7 @@ pub struct ImportedLibraryAsset {
     pub imported_relative_path: PathBuf,
     pub duration_seconds: f64,
     pub detected_bpm: Option<f64>,
+    pub folder_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -135,6 +136,7 @@ pub fn import_wav_files_to_library(
             imported_relative_path: file.imported_relative_path,
             duration_seconds: file.metadata.duration_seconds,
             detected_bpm: file.metadata.tempo_candidate.map(|tempo| tempo.bpm),
+            folder_path: None,
         })
         .collect();
 

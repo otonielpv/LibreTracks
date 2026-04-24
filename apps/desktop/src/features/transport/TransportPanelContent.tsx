@@ -14,6 +14,7 @@ import {
   cancelMarkerJump,
   createSectionMarker,
   createClipsBatch,
+  createLibraryFolder,
   createSong,
   createTrack,
   buildWaveformLodsFromPeaks,
@@ -23,6 +24,7 @@ import {
   duplicateClip,
   deleteLibraryAsset,
   getLibraryAssets,
+  getLibraryFolders,
   getLibraryWaveformSummaries,
   getSongView,
   getTransportSnapshot,
@@ -35,6 +37,7 @@ import {
   listenToWaveformReady,
   moveClip,
   moveClipLive,
+  moveLibraryAsset,
   moveTrack,
   openProject,
   pauseTransport,
@@ -669,6 +672,7 @@ export function TransportPanelContent() {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>(null);
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
+  const [libraryFolders, setLibraryFolders] = useState<string[]>([]);
   const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState[]>([]);
   const [optimisticClipOperations, setOptimisticClipOperations] = useState<OptimisticClipOperation[]>([]);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
@@ -779,6 +783,18 @@ export function TransportPanelContent() {
       }
     }
   }, []);
+
+  const loadLibraryState = useCallback(async () => {
+    if (!playbackSongDir) {
+      return {
+        assets: [] as LibraryAssetSummary[],
+        folders: [] as string[],
+      };
+    }
+
+    const [assets, folders] = await Promise.all([getLibraryAssets(), getLibraryFolders()]);
+    return { assets, folders };
+  }, [playbackSongDir]);
 
   const applyPlaybackSnapshot = useCallback((nextSnapshot: TransportSnapshot | null) => {
     snapshotRef.current = nextSnapshot;
@@ -1471,20 +1487,23 @@ export function TransportPanelContent() {
     async function loadLibraryAssets() {
       if (!playbackSongDir) {
         setLibraryAssets([]);
+        setLibraryFolders([]);
         setLibraryClipPreview([]);
         return;
       }
 
       setLibraryAssets([]);
+      setLibraryFolders([]);
       setLibraryClipPreview([]);
       setIsLibraryLoading(true);
       try {
-        const assets = await getLibraryAssets();
+        const { assets, folders } = await loadLibraryState();
         if (!active) {
           return;
         }
 
         setLibraryAssets(assets);
+        setLibraryFolders(folders);
       } catch (error) {
         if (active) {
           setStatus(`Error: ${String(error)}`);
@@ -1501,7 +1520,7 @@ export function TransportPanelContent() {
     return () => {
       active = false;
     };
-  }, [playbackSongDir, song?.id]);
+  }, [loadLibraryState, playbackSongDir, song?.id]);
 
   useEffect(() => {
     let active = true;
@@ -3297,28 +3316,92 @@ export function TransportPanelContent() {
       }
 
       setLibraryAssets(assets);
+      setLibraryFolders(await getLibraryFolders());
       setStatus(`Libreria actualizada con ${assets.length} assets.`);
     });
     setIsImportingLibrary(false);
     setLibraryImportProgress(null);
   }
 
-  async function handleDeleteLibraryAsset(filePath: string, fileName: string) {
-    if (!window.confirm(`Delete ${fileName} from this song library?`)) {
+  async function handleDeleteLibraryAssets(assetsToDelete: LibraryAssetSummary[]) {
+    const uniqueAssets = [...new Map(assetsToDelete.map((asset) => [asset.filePath, asset])).values()];
+    if (!uniqueAssets.length) {
       return;
     }
 
-    setDeletingLibraryFilePath(filePath);
+    const confirmationMessage =
+      uniqueAssets.length === 1
+        ? `Delete ${uniqueAssets[0].fileName} from this song library?`
+        : `Delete ${uniqueAssets.length} selected assets from this song library?`;
+    if (!window.confirm(confirmationMessage)) {
+      return;
+    }
+
     try {
       await runAction(async () => {
-        const assets = await deleteLibraryAsset(filePath);
-        setLibraryAssets(assets);
-        setLibraryClipPreview((current) => current.filter((preview) => preview.filePath !== filePath));
-        setStatus(`Asset eliminado: ${fileName}`);
+        let nextAssets = libraryAssets;
+        const deletedFilePaths = new Set(uniqueAssets.map((asset) => asset.filePath));
+
+        for (const asset of uniqueAssets) {
+          setDeletingLibraryFilePath(asset.filePath);
+          nextAssets = await deleteLibraryAsset(asset.filePath);
+        }
+
+        const { folders } = await loadLibraryState();
+        setLibraryAssets(nextAssets);
+        setLibraryFolders(folders);
+        setLibraryClipPreview((current) => current.filter((preview) => !deletedFilePaths.has(preview.filePath)));
+        setStatus(
+          uniqueAssets.length === 1
+            ? `Asset eliminado: ${uniqueAssets[0].fileName}`
+            : `${uniqueAssets.length} assets eliminados de la libreria.`,
+        );
       });
     } finally {
-      setDeletingLibraryFilePath((current) => (current === filePath ? null : current));
+      setDeletingLibraryFilePath(null);
     }
+  }
+
+  async function handleCreateLibraryFolder() {
+    if (!playbackSongDir) {
+      setStatus("Crea o abre una sesion antes de crear carpetas virtuales.");
+      return;
+    }
+
+    const folderPath = window.prompt("Nombre de la carpeta virtual", "Set A");
+    if (folderPath === null) {
+      return;
+    }
+
+    await runAction(async () => {
+      const folders = await createLibraryFolder(folderPath);
+      setLibraryFolders(folders);
+      setStatus(`Carpeta virtual creada: ${folderPath.trim() || "(sin nombre)"}`);
+    });
+  }
+
+  async function handleMoveLibraryAssets(filePaths: string[], newFolderPath: string | null) {
+    const uniqueFilePaths = [...new Set(filePaths)];
+    if (!uniqueFilePaths.length) {
+      return;
+    }
+
+    await runAction(async () => {
+      let nextAssets = libraryAssets;
+
+      for (const filePath of uniqueFilePaths) {
+        nextAssets = await moveLibraryAsset(filePath, newFolderPath);
+      }
+
+      const { folders } = await loadLibraryState();
+      setLibraryAssets(nextAssets);
+      setLibraryFolders(folders);
+      setStatus(
+        newFolderPath
+          ? `${uniqueFilePaths.length} asset(s) movidos a ${newFolderPath}.`
+          : `${uniqueFilePaths.length} asset(s) movidos a la raiz de la libreria.`,
+      );
+    });
   }
 
   function resolveDraggedLibraryAsset(filePath: string, durationSeconds: number): LibraryAssetSummary {
@@ -3328,6 +3411,7 @@ export function TransportPanelContent() {
         filePath,
         durationSeconds,
         detectedBpm: null,
+        folderPath: null,
       }
     );
   }
@@ -4045,6 +4129,7 @@ export function TransportPanelContent() {
       {activeSidebarTab === "library" ? (
         <LibrarySidebarPanel
           assets={libraryAssets}
+          folders={libraryFolders}
           isLoading={isLibraryLoading}
           isImporting={isImportingLibrary}
           importProgress={libraryImportProgress}
@@ -4060,8 +4145,14 @@ export function TransportPanelContent() {
           onImport={() => {
             void handleImportLibraryAssetsClick();
           }}
-          onDelete={(filePath, fileName) => {
-            void handleDeleteLibraryAsset(filePath, fileName);
+          onCreateFolder={() => {
+            void handleCreateLibraryFolder();
+          }}
+          onMoveAssetsToFolder={(filePaths, folderPath) => {
+            void handleMoveLibraryAssets(filePaths, folderPath);
+          }}
+          onDeleteRequested={(assets) => {
+            void handleDeleteLibraryAssets(assets);
           }}
         />
       ) : null}

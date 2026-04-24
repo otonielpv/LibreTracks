@@ -527,10 +527,15 @@ impl DesktopSession {
                     file_path: normalized_path,
                     duration_seconds: asset.duration_seconds,
                     detected_bpm: asset.detected_bpm,
+                    folder_path: asset.folder_path.clone(),
                 });
             }
         }
-        library_assets.sort_by(|left, right| left.file_name.cmp(&right.file_name));
+        library_assets.sort_by(|left, right| {
+            left.folder_path
+                .cmp(&right.folder_path)
+                .then_with(|| left.file_name.cmp(&right.file_name))
+        });
         write_library_manifest_assets(&song_dir, &library_assets)?;
         self.record_import_metrics(&imported_assets.metrics);
         Ok(library_assets)
@@ -539,6 +544,12 @@ impl DesktopSession {
     pub fn get_library_assets(&self) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         list_library_assets(&song_dir, self.engine.song())
+    }
+
+    pub fn get_library_folders(&self) -> Result<Vec<String>, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let assets = list_library_assets(&song_dir, self.engine.song())?;
+        list_library_folders(&song_dir, &assets)
     }
 
     pub fn delete_library_asset(
@@ -580,6 +591,51 @@ impl DesktopSession {
         self.waveform_cache.remove(&song_dir, &normalized_file_path);
 
         list_library_assets(&song_dir, Some(&song))
+    }
+
+    pub fn move_library_asset(
+        &mut self,
+        file_path: &str,
+        new_folder_path: Option<String>,
+    ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let normalized_file_path = normalize_library_file_path(file_path);
+        let normalized_folder_path = new_folder_path
+            .as_deref()
+            .and_then(normalize_library_folder_path);
+        let mut library_assets = list_library_assets(&song_dir, Some(&song))?;
+        let target_asset = library_assets
+            .iter_mut()
+            .find(|asset| asset.file_path == normalized_file_path)
+            .ok_or_else(|| DesktopError::AudioCommand("library asset was not found".into()))?;
+        target_asset.folder_path = normalized_folder_path;
+
+        let folders = list_library_folders(&song_dir, &library_assets)?;
+        write_library_manifest_state(&song_dir, &library_assets, &folders)?;
+
+        list_library_assets(&song_dir, Some(&song))
+    }
+
+    pub fn create_library_folder(
+        &mut self,
+        folder_path: &str,
+    ) -> Result<Vec<String>, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let assets = list_library_assets(&song_dir, self.engine.song())?;
+        let normalized_folder_path = normalize_library_folder_path(folder_path).ok_or_else(|| {
+            DesktopError::AudioCommand("folder path cannot be empty".into())
+        })?;
+        let mut folders = list_library_folders(&song_dir, &assets)?;
+        folders.push(normalized_folder_path);
+        folders.sort();
+        folders.dedup();
+        write_library_manifest_state(&song_dir, &assets, &folders)?;
+        Ok(folders)
     }
 
     pub fn song_view(&mut self) -> Result<Option<SongView>, DesktopError> {
@@ -1893,6 +1949,8 @@ struct LibraryManifest {
     file_paths: Vec<String>,
     #[serde(default)]
     assets: Vec<LibraryManifestAssetEntry>,
+    #[serde(default)]
+    folders: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1901,6 +1959,8 @@ struct LibraryManifestAssetEntry {
     file_path: String,
     #[serde(default)]
     detected_bpm: Option<f64>,
+    #[serde(default)]
+    folder_path: Option<String>,
 }
 
 fn library_manifest_path(song_dir: &Path) -> PathBuf {
@@ -1909,6 +1969,22 @@ fn library_manifest_path(song_dir: &Path) -> PathBuf {
 
 fn normalize_library_file_path(file_path: &str) -> String {
     file_path.replace('\\', "/")
+}
+
+fn normalize_library_folder_path(folder_path: &str) -> Option<String> {
+    let normalized = folder_path.trim().replace('\\', "/");
+    let normalized = normalized.trim_matches('/');
+    if normalized.is_empty() {
+        return None;
+    }
+
+    Some(
+        normalized
+            .split('/')
+            .filter(|segment| !segment.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("/"),
+    )
 }
 
 fn read_library_manifest(song_dir: &Path) -> Result<Option<LibraryManifest>, DesktopError> {
@@ -1930,14 +2006,26 @@ fn write_library_manifest(song_dir: &Path, file_paths: &[String]) -> Result<(), 
             file_path: normalize_library_file_path(file_path),
             duration_seconds: 0.0,
             detected_bpm: None,
+            folder_path: None,
         })
         .collect::<Vec<_>>();
-    write_library_manifest_assets(song_dir, &assets)
+    write_library_manifest_state(song_dir, &assets, &[])
 }
 
 fn write_library_manifest_assets(
     song_dir: &Path,
     assets: &[LibraryAssetSummary],
+) -> Result<(), DesktopError> {
+    let folders = read_library_manifest(song_dir)?
+        .map(|manifest| manifest.folders)
+        .unwrap_or_default();
+    write_library_manifest_state(song_dir, assets, &folders)
+}
+
+fn write_library_manifest_state(
+    song_dir: &Path,
+    assets: &[LibraryAssetSummary],
+    folders: &[String],
 ) -> Result<(), DesktopError> {
     let mut normalized_paths = assets
         .iter()
@@ -1951,19 +2039,57 @@ fn write_library_manifest_assets(
         .map(|asset| LibraryManifestAssetEntry {
             file_path: normalize_library_file_path(&asset.file_path),
             detected_bpm: asset.detected_bpm,
+            folder_path: asset
+                .folder_path
+                .as_deref()
+                .and_then(normalize_library_folder_path),
         })
         .collect::<Vec<_>>();
     normalized_assets.sort_by(|left, right| left.file_path.cmp(&right.file_path));
     normalized_assets.dedup_by(|left, right| left.file_path == right.file_path);
 
+    let mut normalized_folders = folders
+        .iter()
+        .filter_map(|folder_path| normalize_library_folder_path(folder_path))
+        .collect::<Vec<_>>();
+    normalized_folders.extend(
+        normalized_assets
+            .iter()
+            .filter_map(|asset| asset.folder_path.clone()),
+    );
+    normalized_folders.sort();
+    normalized_folders.dedup();
+
     let manifest = LibraryManifest {
         file_paths: normalized_paths,
         assets: normalized_assets,
+        folders: normalized_folders,
     };
     let manifest_json = serde_json::to_vec_pretty(&manifest)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
     fs::write(library_manifest_path(song_dir), manifest_json)?;
     Ok(())
+}
+
+fn list_library_folders(
+    song_dir: &Path,
+    assets: &[LibraryAssetSummary],
+) -> Result<Vec<String>, DesktopError> {
+    let mut folders = read_library_manifest(song_dir)?
+        .map(|manifest| manifest.folders)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|folder_path| normalize_library_folder_path(&folder_path))
+        .collect::<Vec<_>>();
+    folders.extend(
+        assets
+            .iter()
+            .filter_map(|asset| asset.folder_path.as_deref())
+            .filter_map(normalize_library_folder_path),
+    );
+    folders.sort();
+    folders.dedup();
+    Ok(folders)
 }
 
 fn collect_scanned_library_file_paths(song_dir: &Path) -> Result<Vec<String>, DesktopError> {
@@ -2030,17 +2156,12 @@ fn list_library_assets(
     song_dir: &Path,
     song: Option<&Song>,
 ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
-    let manifest_detected_bpms = read_library_manifest(song_dir)?
+    let manifest_assets = read_library_manifest(song_dir)?
         .map(|manifest| {
             manifest
                 .assets
                 .into_iter()
-                .map(|entry| {
-                    (
-                        normalize_library_file_path(&entry.file_path),
-                        entry.detected_bpm,
-                    )
-                })
+                .map(|entry| (normalize_library_file_path(&entry.file_path), entry))
                 .collect::<HashMap<_, _>>()
         })
         .unwrap_or_default();
@@ -2057,15 +2178,23 @@ fn list_library_assets(
             .unwrap_or(&file_path)
             .to_string();
         let metadata = read_wav_metadata(&path)?;
+        let manifest_entry = manifest_assets.get(&file_path);
         assets.push(LibraryAssetSummary {
             file_name: file_name.clone(),
             file_path: file_path.clone(),
             duration_seconds: metadata.duration_seconds,
-            detected_bpm: manifest_detected_bpms.get(&file_path).copied().flatten(),
+            detected_bpm: manifest_entry.and_then(|entry| entry.detected_bpm),
+            folder_path: manifest_entry
+                .and_then(|entry| entry.folder_path.clone())
+                .and_then(|folder_path| normalize_library_folder_path(&folder_path)),
         });
     }
 
-    assets.sort_by(|left, right| left.file_name.cmp(&right.file_name));
+    assets.sort_by(|left, right| {
+        left.folder_path
+            .cmp(&right.folder_path)
+            .then_with(|| left.file_name.cmp(&right.file_name))
+    });
     Ok(assets)
 }
 
@@ -3387,6 +3516,7 @@ mod tests {
                 file_path: "audio/click.wav".into(),
                 duration_seconds: 2.0,
                 detected_bpm: Some(128.0),
+                folder_path: Some("Percusion/Clicks".into()),
             }],
         )
         .expect("manifest should save");
@@ -3396,6 +3526,7 @@ mod tests {
         assert_eq!(assets.len(), 1);
         assert_eq!(assets[0].file_path, "audio/click.wav");
         assert_eq!(assets[0].detected_bpm, Some(128.0));
+        assert_eq!(assets[0].folder_path.as_deref(), Some("Percusion/Clicks"));
     }
 
     #[test]
@@ -3445,6 +3576,65 @@ mod tests {
             .expect_err("delete should be rejected");
 
         assert!(error.to_string().contains("already used on the timeline"));
+    }
+
+    #[test]
+    fn create_library_folder_persists_empty_virtual_folders() {
+        let mut session = session_with_song_dir(
+            "library-create-folder-demo",
+            build_empty_song("song_1".into(), "Nueva".into()),
+        );
+
+        let folders = session
+            .create_library_folder("Sets/Intro")
+            .expect("folder should be created");
+
+        assert_eq!(folders, vec!["Sets/Intro".to_string()]);
+        assert_eq!(
+            session
+                .get_library_folders()
+                .expect("folders should load after creation"),
+            vec!["Sets/Intro".to_string()]
+        );
+    }
+
+    #[test]
+    fn move_library_asset_updates_virtual_folder_without_moving_files() {
+        let mut session = session_with_song_dir(
+            "library-move-folder-demo",
+            build_empty_song("song_1".into(), "Nueva".into()),
+        );
+        let song_dir = session.song_dir.clone().expect("song dir should exist");
+        let audio_path = song_dir.join("audio").join("move-me.wav");
+        write_silent_test_wav(&audio_path, 3);
+        write_library_manifest_assets(
+            &song_dir,
+            &[LibraryAssetSummary {
+                file_name: "move-me.wav".into(),
+                file_path: "audio/move-me.wav".into(),
+                duration_seconds: 3.0,
+                detected_bpm: Some(96.0),
+                folder_path: None,
+            }],
+        )
+        .expect("manifest should save");
+
+        session
+            .create_library_folder("Set A")
+            .expect("folder should be created");
+        let assets = session
+            .move_library_asset("audio/move-me.wav", Some("Set A".into()))
+            .expect("asset should move logically");
+
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].folder_path.as_deref(), Some("Set A"));
+        assert!(audio_path.exists());
+        assert_eq!(
+            session
+                .get_library_folders()
+                .expect("folders should still exist"),
+            vec!["Set A".to_string()]
+        );
     }
 
     #[test]

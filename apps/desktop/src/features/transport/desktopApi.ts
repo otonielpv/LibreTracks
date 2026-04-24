@@ -89,6 +89,7 @@ export type LibraryAssetSummary = {
   filePath: string;
   durationSeconds: number;
   detectedBpm?: number | null;
+  folderPath?: string | null;
 };
 
 export type DesktopPerformanceSnapshot = {
@@ -244,6 +245,7 @@ type DemoClock = {
 let demoSong = buildDemoSong();
 let demoWaveforms = buildDemoWaveforms();
 let demoLibraryAssets = buildDemoLibraryAssets(demoSong);
+let demoLibraryFolders = collectDemoLibraryFolders(demoLibraryAssets);
 let demoPlaybackState: PlaybackState = "stopped";
 let demoPendingJump: PendingJumpSummary | null = null;
 let demoProjectRevision = demoSong.projectRevision;
@@ -260,6 +262,41 @@ let demoClock: DemoClock = {
 async function invokeCommand<T>(command: string, args?: Record<string, unknown>) {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(command, args);
+}
+
+function normalizeLibraryFolderPath(folderPath: string | null | undefined) {
+  const normalized = folderPath?.trim().replace(/\\/g, "/").replace(/^\/|\/$/g, "") ?? "";
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join("/");
+}
+
+function collectDemoLibraryFolders(assets: LibraryAssetSummary[]) {
+  const folders = new Set<string>();
+
+  for (const asset of assets) {
+    const folderPath = normalizeLibraryFolderPath(asset.folderPath);
+    if (folderPath) {
+      folders.add(folderPath);
+    }
+  }
+
+  return [...folders].sort((left, right) => left.localeCompare(right));
+}
+
+function sortLibraryAssets(assets: LibraryAssetSummary[]) {
+  return [...assets].sort((left, right) => {
+    const leftFolder = normalizeLibraryFolderPath(left.folderPath) ?? "";
+    const rightFolder = normalizeLibraryFolderPath(right.folderPath) ?? "";
+
+    return leftFolder.localeCompare(rightFolder) || left.fileName.localeCompare(right.fileName);
+  });
 }
 
 export async function listenToTransportLifecycle(
@@ -452,10 +489,22 @@ export async function getLibraryWaveformSummaries(
 
 export async function getLibraryAssets(): Promise<LibraryAssetSummary[]> {
   if (!isTauriApp) {
-    return cloneSnapshot(demoLibraryAssets);
+    return cloneSnapshot(sortLibraryAssets(demoLibraryAssets));
   }
 
   return invokeCommand<LibraryAssetSummary[]>("get_library_assets");
+}
+
+export async function getLibraryFolders(): Promise<string[]> {
+  if (!isTauriApp) {
+    const folders = new Set<string>(demoLibraryFolders);
+    for (const folderPath of collectDemoLibraryFolders(demoLibraryAssets)) {
+      folders.add(folderPath);
+    }
+    return [...folders].sort((left, right) => left.localeCompare(right));
+  }
+
+  return invokeCommand<string[]>("get_library_folders");
 }
 
 export async function getDesktopPerformanceSnapshot(): Promise<DesktopPerformanceSnapshot> {
@@ -510,6 +559,7 @@ export async function createSong(): Promise<TransportSnapshot | null> {
     });
     demoWaveforms = {};
     demoLibraryAssets = [];
+    demoLibraryFolders = [];
     demoProjectRevision = demoSong.projectRevision;
     demoUndoStack = [];
     demoRedoStack = [];
@@ -594,6 +644,7 @@ export async function openProject(): Promise<TransportSnapshot | null> {
     demoSong = buildDemoSong();
     demoWaveforms = buildDemoWaveforms();
     demoLibraryAssets = buildDemoLibraryAssets(demoSong);
+    demoLibraryFolders = collectDemoLibraryFolders(demoLibraryAssets);
     demoProjectRevision = demoSong.projectRevision;
     demoUndoStack = [];
     demoRedoStack = [];
@@ -625,8 +676,10 @@ export async function importLibraryAssetsFromDialog(): Promise<LibraryAssetSumma
         filePath: `audio/imported-${nextIndex}.wav`,
         durationSeconds: 12 + nextIndex * 4,
         detectedBpm: 120,
+        folderPath: null,
       },
     ];
+    demoLibraryAssets = sortLibraryAssets(demoLibraryAssets);
     return cloneSnapshot(demoLibraryAssets);
   }
 
@@ -645,6 +698,51 @@ export async function deleteLibraryAsset(filePath: string): Promise<LibraryAsset
   }
 
   return invokeCommand<LibraryAssetSummary[]>("delete_library_asset", { filePath });
+}
+
+export async function moveLibraryAsset(
+  filePath: string,
+  newFolderPath: string | null,
+): Promise<LibraryAssetSummary[]> {
+  if (!isTauriApp) {
+    const normalizedFolderPath = normalizeLibraryFolderPath(newFolderPath);
+    demoLibraryAssets = sortLibraryAssets(
+      demoLibraryAssets.map((asset) =>
+        asset.filePath === filePath
+          ? {
+              ...asset,
+              folderPath: normalizedFolderPath,
+            }
+          : asset,
+      ),
+    );
+    if (normalizedFolderPath) {
+      demoLibraryFolders = [...new Set([...demoLibraryFolders, normalizedFolderPath])].sort((left, right) =>
+        left.localeCompare(right),
+      );
+    }
+    return cloneSnapshot(demoLibraryAssets);
+  }
+
+  return invokeCommand<LibraryAssetSummary[]>("move_library_asset", {
+    filePath,
+    newFolderPath,
+  });
+}
+
+export async function createLibraryFolder(folderPath: string): Promise<string[]> {
+  if (!isTauriApp) {
+    const normalizedFolderPath = normalizeLibraryFolderPath(folderPath);
+    if (!normalizedFolderPath) {
+      throw new Error("folder path cannot be empty");
+    }
+    demoLibraryFolders = [...new Set([...demoLibraryFolders, normalizedFolderPath])].sort((left, right) =>
+      left.localeCompare(right),
+    );
+    return cloneSnapshot(demoLibraryFolders);
+  }
+
+  return invokeCommand<string[]>("create_library_folder", { folderPath });
 }
 
 export async function playTransport(): Promise<TransportSnapshot> {
@@ -1552,10 +1650,11 @@ function buildDemoLibraryAssets(song: SongView): LibraryAssetSummary[] {
       filePath: clip.filePath,
       durationSeconds: clip.sourceDurationSeconds,
       detectedBpm: clip.filePath.includes("click") ? 120 : null,
+      folderPath: null,
     });
   }
 
-  return [...assetsByPath.values()].sort((left, right) => left.fileName.localeCompare(right.fileName));
+  return sortLibraryAssets([...assetsByPath.values()]);
 }
 
 function buildWaveform(sampleCount: number, mode: "smooth" | "pulse" | "ticks" | "phrases") {

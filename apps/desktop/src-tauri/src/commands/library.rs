@@ -19,6 +19,18 @@ pub fn get_library_assets(
 }
 
 #[tauri::command]
+pub fn get_library_folders(state: State<'_, DesktopState>) -> Result<Vec<String>, String> {
+    let session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .get_library_folders()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn get_waveform_summaries(
     waveform_keys: Vec<String>,
     app: AppHandle,
@@ -61,5 +73,36 @@ pub fn delete_library_asset(
 
     session
         .delete_library_asset(&file_path)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn move_library_asset(
+    file_path: String,
+    new_folder_path: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<LibraryAssetSummary>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .move_library_asset(&file_path, new_folder_path)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn create_library_folder(
+    folder_path: String,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<String>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .create_library_folder(&folder_path)
         .map_err(|error| error.to_string())
 }
