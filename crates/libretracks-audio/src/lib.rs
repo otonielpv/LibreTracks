@@ -296,31 +296,95 @@ fn jump_execute_at(
         JumpTrigger::NextMarker => Ok(song
             .next_marker_after(current_position)
             .map(|marker| marker.start_seconds)),
-        JumpTrigger::AfterBars(bars) => {
-            let bar_duration = song_bar_duration_seconds(song, current_position)?;
-            let current_bar_index = (current_position / bar_duration).floor();
-            Ok(Some(
-                ((current_bar_index + f64::from(*bars)) * bar_duration).min(song.duration_seconds),
-            ))
-        }
+        JumpTrigger::AfterBars(bars) => Ok(Some(jump_execute_at_after_bars(
+            song,
+            current_position,
+            *bars,
+        )?)),
     }
 }
 
-fn song_bar_duration_seconds(song: &Song, position_seconds: f64) -> Result<f64, AudioEngineError> {
-    let region = resolve_region_for_position(song, position_seconds)
+fn jump_execute_at_after_bars(
+    song: &Song,
+    current_position: f64,
+    bars: u32,
+) -> Result<f64, AudioEngineError> {
+    let resolved_regions = resolve_song_regions(song)?;
+    let current_region = resolve_resolved_region_for_position(&resolved_regions, current_position)
         .ok_or_else(|| AudioEngineError::InvalidTimeSignature("missing song region".into()))?;
+    let local_position = (current_position - current_region.start_seconds).max(0.0);
+    let current_bar_index = ((local_position / current_region.bar_duration_seconds).floor() as usize)
+        .min(current_region.bar_count.saturating_sub(1));
+    let target_bar_index = current_region.cumulative_bar_start + current_bar_index + bars as usize;
+
+    Ok(cumulative_bar_start_seconds(&resolved_regions, target_bar_index).min(song.duration_seconds))
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ResolvedSongRegion {
+    start_seconds: f64,
+    end_seconds: f64,
+    bar_duration_seconds: f64,
+    bar_count: usize,
+    cumulative_bar_start: usize,
+}
+
+fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEngineError> {
+    let mut resolved_regions = Vec::with_capacity(song.regions.len());
+    let mut cumulative_bar_start = 0usize;
+
+    for region in &song.regions {
+        let bar_duration_seconds = song_bar_duration_seconds_for_region(region)?;
+        let duration_seconds = (region.end_seconds - region.start_seconds).max(0.0);
+        let bar_count = ((duration_seconds / bar_duration_seconds).ceil() as usize).max(1);
+        resolved_regions.push(ResolvedSongRegion {
+            start_seconds: region.start_seconds,
+            end_seconds: region.end_seconds,
+            bar_duration_seconds,
+            bar_count,
+            cumulative_bar_start,
+        });
+        cumulative_bar_start += bar_count;
+    }
+
+    Ok(resolved_regions)
+}
+
+fn resolve_resolved_region_for_position(
+    resolved_regions: &[ResolvedSongRegion],
+    position_seconds: f64,
+) -> Option<&ResolvedSongRegion> {
+    resolved_regions
+        .iter()
+        .find(|region| position_seconds >= region.start_seconds && position_seconds < region.end_seconds)
+        .or_else(|| resolved_regions.iter().rev().find(|region| position_seconds >= region.end_seconds))
+        .or_else(|| resolved_regions.first())
+}
+
+fn cumulative_bar_start_seconds(
+    resolved_regions: &[ResolvedSongRegion],
+    target_bar_index: usize,
+) -> f64 {
+    for region in resolved_regions {
+        let region_bar_end = region.cumulative_bar_start + region.bar_count;
+        if target_bar_index < region_bar_end {
+            let local_bar_index = target_bar_index - region.cumulative_bar_start;
+            let local_start_seconds = local_bar_index as f64 * region.bar_duration_seconds;
+            return (region.start_seconds + local_start_seconds).min(region.end_seconds);
+        }
+    }
+
+    resolved_regions
+        .last()
+        .map(|region| region.end_seconds)
+        .unwrap_or(0.0)
+}
+
+fn song_bar_duration_seconds_for_region(region: &SongRegion) -> Result<f64, AudioEngineError> {
     let (numerator, denominator) = parse_time_signature(&region.time_signature)?;
     let beat_duration_seconds = 60.0 / region.bpm;
     let quarter_notes_per_bar = f64::from(numerator) * (4.0 / f64::from(denominator));
     Ok(beat_duration_seconds * quarter_notes_per_bar)
-}
-
-fn resolve_region_for_position(song: &Song, position_seconds: f64) -> Option<&SongRegion> {
-    song.regions
-        .iter()
-        .find(|region| position_seconds >= region.start_seconds && position_seconds < region.end_seconds)
-        .or_else(|| song.regions.iter().rev().find(|region| position_seconds >= region.end_seconds))
-        .or_else(|| song.regions.first())
 }
 
 fn parse_time_signature(time_signature: &str) -> Result<(u32, u32), AudioEngineError> {
@@ -533,6 +597,78 @@ mod tests {
         }
     }
 
+    fn multi_region_song() -> Song {
+        Song {
+            id: "song_regions".into(),
+            title: "Regions Demo".into(),
+            artist: None,
+            key: None,
+            duration_seconds: 18.0,
+            regions: vec![
+                SongRegion {
+                    id: "region_intro".into(),
+                    name: "Intro".into(),
+                    start_seconds: 0.0,
+                    end_seconds: 8.0,
+                    bpm: 120.0,
+                    time_signature: "4/4".into(),
+                },
+                SongRegion {
+                    id: "region_bridge".into(),
+                    name: "Bridge".into(),
+                    start_seconds: 8.0,
+                    end_seconds: 14.0,
+                    bpm: 120.0,
+                    time_signature: "6/8".into(),
+                },
+                SongRegion {
+                    id: "region_outro".into(),
+                    name: "Outro".into(),
+                    start_seconds: 14.0,
+                    end_seconds: 18.0,
+                    bpm: 60.0,
+                    time_signature: "4/4".into(),
+                },
+            ],
+            tracks: vec![Track {
+                id: "track_main".into(),
+                name: "Main".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                output_bus_id: OutputBus::Main.id(),
+            }],
+            clips: vec![Clip {
+                id: "clip_main".into(),
+                track_id: "track_main".into(),
+                file_path: "audio/main.wav".into(),
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 18.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            }],
+            section_markers: vec![
+                Marker {
+                    id: "section_intro".into(),
+                    name: "Intro".into(),
+                    digit: Some(1),
+                    start_seconds: 0.0,
+                },
+                Marker {
+                    id: "section_outro".into(),
+                    name: "Outro".into(),
+                    digit: Some(2),
+                    start_seconds: 15.0,
+                },
+            ],
+        }
+    }
+
     #[test]
     fn starts_empty() {
         let engine = AudioEngine::new();
@@ -675,6 +811,56 @@ mod tests {
             .expect("transport should advance");
 
         assert!((position - 13.0).abs() < 0.0001);
+        assert!(jump_executed);
+        assert!(engine.pending_marker_jump().is_none());
+    }
+
+    #[test]
+    fn jump_after_bars_crosses_region_boundaries_using_cumulative_bars() {
+        let mut engine = AudioEngine::new();
+        engine
+            .load_song(multi_region_song())
+            .expect("song should load");
+        engine.seek(7.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        let scheduled = engine
+            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2))
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        assert!((scheduled.execute_at_seconds - 9.5).abs() < 0.0001);
+
+        let (position, jump_executed) = engine
+            .advance_transport(3.0)
+            .expect("transport should advance");
+
+        assert!((position - 15.5).abs() < 0.0001);
+        assert!(jump_executed);
+        assert!(engine.pending_marker_jump().is_none());
+    }
+
+    #[test]
+    fn jump_after_bars_clamps_to_song_end_when_target_bar_exceeds_resolved_regions() {
+        let mut engine = AudioEngine::new();
+        engine
+            .load_song(multi_region_song())
+            .expect("song should load");
+        engine.seek(16.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        let scheduled = engine
+            .schedule_marker_jump("section_intro", JumpTrigger::AfterBars(4))
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        assert!((scheduled.execute_at_seconds - 18.0).abs() < 0.0001);
+
+        let (position, jump_executed) = engine
+            .advance_transport(2.0)
+            .expect("transport should advance");
+
+        assert!((position - 0.0).abs() < 0.0001);
         assert!(jump_executed);
         assert!(engine.pending_marker_jump().is_none());
     }
