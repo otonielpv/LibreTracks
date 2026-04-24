@@ -691,6 +691,7 @@ body {
 }
 
 .lt-library-asset {
+  box-sizing: border-box;
   width: 100%;
   display: grid;
   grid-template-columns: 0.9rem minmax(0, 1fr) 4rem 3.5rem;
