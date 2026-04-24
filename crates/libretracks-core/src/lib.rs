@@ -2,16 +2,14 @@ pub mod model;
 pub mod validation;
 
 pub use model::{
-    Clip, Marker, OutputBus, Project, Song, SongRegion, TempoMarker, TempoMetadata,
-    TempoSource, Track, TrackKind,
+    Clip, Marker, OutputBus, Project, Song, SongRegion, TempoMarker, TempoMetadata, TempoSource,
+    Track, TrackKind,
 };
 pub use validation::{validate_song, DomainError};
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        validate_song, Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind,
-    };
+    use crate::{validate_song, Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind};
 
     fn valid_song() -> Song {
         Song {

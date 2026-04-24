@@ -727,6 +727,7 @@ mod tests {
             bpm: 120.0,
             time_signature: "4/4".into(),
             duration_seconds: 20.0,
+            tempo_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_1".into(),
                 name: "Audio Runtime".into(),
@@ -1270,6 +1271,7 @@ mod tests {
             bpm: 120.0,
             time_signature: "4/4".into(),
             duration_seconds: 1.0,
+            tempo_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_1".into(),
                 name: "Cycle".into(),

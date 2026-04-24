@@ -9,9 +9,7 @@ use std::{
 };
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState};
-use libretracks_core::{
-    Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, Track, TrackKind,
-};
+use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, Track, TrackKind};
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary, import_wav_files_to_library,
     import_wav_song, load_song_from_file, load_waveform_summary, read_wav_metadata,
@@ -629,9 +627,8 @@ impl DesktopSession {
     ) -> Result<Vec<String>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let assets = list_library_assets(&song_dir, self.engine.song())?;
-        let normalized_folder_path = normalize_library_folder_path(folder_path).ok_or_else(|| {
-            DesktopError::AudioCommand("folder path cannot be empty".into())
-        })?;
+        let normalized_folder_path = normalize_library_folder_path(folder_path)
+            .ok_or_else(|| DesktopError::AudioCommand("folder path cannot be empty".into()))?;
         let mut folders = list_library_folders(&song_dir, &assets)?;
         folders.push(normalized_folder_path);
         folders.sort();
@@ -670,7 +667,9 @@ impl DesktopSession {
             .iter()
             .any(|folder_path| folder_path == &normalized_old_folder_path)
         {
-            return Err(DesktopError::AudioCommand("library folder was not found".into()));
+            return Err(DesktopError::AudioCommand(
+                "library folder was not found".into(),
+            ));
         }
 
         for asset in &mut library_assets {
@@ -725,7 +724,9 @@ impl DesktopSession {
             .iter()
             .any(|existing_folder_path| existing_folder_path == &normalized_folder_path)
         {
-            return Err(DesktopError::AudioCommand("library folder was not found".into()));
+            return Err(DesktopError::AudioCommand(
+                "library folder was not found".into(),
+            ));
         }
 
         for asset in &mut library_assets {
@@ -1243,7 +1244,8 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let (start_seconds, end_seconds) = sanitize_region_bounds(&song, start_seconds, end_seconds)?;
+        let (start_seconds, end_seconds) =
+            sanitize_region_bounds(&song, start_seconds, end_seconds)?;
         let template = region_template_for_range(&song, start_seconds, end_seconds);
         let region = SongRegion {
             id: format!("region_{}_{}", timestamp_suffix(), song.regions.len()),
@@ -1286,7 +1288,8 @@ impl DesktopSession {
             .find(|region| region.id == region_id)
             .cloned()
             .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
-        let (start_seconds, end_seconds) = sanitize_region_bounds(&song, start_seconds, end_seconds)?;
+        let (start_seconds, end_seconds) =
+            sanitize_region_bounds(&song, start_seconds, end_seconds)?;
         let updated_region = SongRegion {
             id: existing_region.id,
             name: trimmed_name.to_string(),
@@ -2011,7 +2014,12 @@ impl DesktopSession {
             self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
             self.transport_clock
                 .note_jump_while_playing(advanced_position);
-            self.capture_transport_drift_sample(audio, "jump", advanced_position, advanced_position);
+            self.capture_transport_drift_sample(
+                audio,
+                "jump",
+                advanced_position,
+                advanced_position,
+            );
         } else {
             self.transport_clock.reanchor_playing(advanced_position);
         }
@@ -2034,8 +2042,7 @@ impl DesktopSession {
             .as_ref()
             .map(|snapshot| snapshot.playhead.running)
             .unwrap_or(false);
-        let transport_minus_engine_seconds =
-            transport_position_seconds - engine_position_seconds;
+        let transport_minus_engine_seconds = transport_position_seconds - engine_position_seconds;
         let runtime_minus_transport_seconds = runtime_estimated_position_seconds
             .map(|runtime_position| runtime_position - transport_position_seconds);
         let runtime_minus_engine_seconds = runtime_estimated_position_seconds
@@ -2944,8 +2951,8 @@ fn sanitize_region_bounds(
 }
 
 fn region_template_for_range(song: &Song, start_seconds: f64, end_seconds: f64) -> SongRegion {
-    let probe_seconds = ((start_seconds + end_seconds) * 0.5)
-        .min((song.duration_seconds - 0.0001).max(0.0));
+    let probe_seconds =
+        ((start_seconds + end_seconds) * 0.5).min((song.duration_seconds - 0.0001).max(0.0));
     let fallback_bpm = song
         .tempo_markers
         .iter()
@@ -3162,7 +3169,7 @@ mod tests {
 
     use libretracks_audio::{JumpTrigger, PlaybackState};
     use libretracks_core::{
-        Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
+        Clip, Marker, OutputBus, Song, SongRegion, TempoMetadata, TempoSource, Track, TrackKind,
     };
     use libretracks_project::{
         create_song_folder, generate_waveform_summary, load_song, save_song, SONG_FILE_NAME,
@@ -3187,6 +3194,7 @@ mod tests {
             bpm: 120.0,
             time_signature: "4/4".into(),
             duration_seconds: 12.0,
+            tempo_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_1".into(),
                 name: "Move Demo".into(),
@@ -3368,6 +3376,7 @@ mod tests {
             bpm: 120.0,
             time_signature: "4/4".into(),
             duration_seconds: 12.0,
+            tempo_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_1".into(),
                 name: "Hierarchy Demo".into(),
@@ -3637,6 +3646,7 @@ mod tests {
             bpm: 120.0,
             time_signature: "4/4".into(),
             duration_seconds: 8.0,
+            tempo_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_1".into(),
                 name: "ID Audit".into(),
@@ -4270,9 +4280,7 @@ mod tests {
 
         assert_eq!(assets[0].folder_path.as_deref(), Some("Set B/Sub"));
         assert_eq!(
-            session
-                .get_library_folders()
-                .expect("folders should load"),
+            session.get_library_folders().expect("folders should load"),
             vec!["Set B".to_string(), "Set B/Sub".to_string()]
         );
     }
@@ -4309,12 +4317,10 @@ mod tests {
             .expect("folder should delete");
 
         assert_eq!(assets[0].folder_path, None);
-        assert!(
-            session
-                .get_library_folders()
-                .expect("folders should load")
-                .is_empty()
-        );
+        assert!(session
+            .get_library_folders()
+            .expect("folders should load")
+            .is_empty());
     }
 
     #[test]
@@ -4949,7 +4955,8 @@ mod tests {
 
     #[test]
     fn deleting_the_last_song_region_leaves_the_song_without_regions() {
-        let mut session = session_with_song_dir("region-delete-last-demo", demo_song_with_section());
+        let mut session =
+            session_with_song_dir("region-delete-last-demo", demo_song_with_section());
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session

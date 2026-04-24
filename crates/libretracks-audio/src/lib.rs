@@ -1,6 +1,8 @@
 //! Motor de audio y transporte.
 
-use libretracks_core::{validate_song, Clip, DomainError, Marker, Song, SongRegion, Track, TrackKind};
+use libretracks_core::{
+    validate_song, Clip, DomainError, Marker, Song, SongRegion, Track, TrackKind,
+};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -313,11 +315,15 @@ fn jump_execute_at_after_bars(
     let current_region = resolve_resolved_region_for_position(&resolved_regions, current_position)
         .ok_or_else(|| AudioEngineError::InvalidTimeSignature("missing song region".into()))?;
     let local_position = (current_position - current_region.start_seconds).max(0.0);
-    let current_bar_index = ((local_position / current_region.bar_duration_seconds).floor() as usize)
+    let current_bar_index = ((local_position / current_region.bar_duration_seconds).floor()
+        as usize)
         .min(current_region.bar_count.saturating_sub(1));
     let target_bar_index = current_region.cumulative_bar_start + current_bar_index + bars as usize;
 
-    Ok(cumulative_bar_start_seconds(&resolved_regions, target_bar_index).min(song.duration_seconds))
+    Ok(
+        cumulative_bar_start_seconds(&resolved_regions, target_bar_index)
+            .min(song.duration_seconds),
+    )
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -356,8 +362,15 @@ fn resolve_resolved_region_for_position(
 ) -> Option<&ResolvedSongRegion> {
     resolved_regions
         .iter()
-        .find(|region| position_seconds >= region.start_seconds && position_seconds < region.end_seconds)
-        .or_else(|| resolved_regions.iter().rev().find(|region| position_seconds >= region.end_seconds))
+        .find(|region| {
+            position_seconds >= region.start_seconds && position_seconds < region.end_seconds
+        })
+        .or_else(|| {
+            resolved_regions
+                .iter()
+                .rev()
+                .find(|region| position_seconds >= region.end_seconds)
+        })
         .or_else(|| resolved_regions.first())
 }
 
@@ -483,9 +496,7 @@ fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, Audi
 
 #[cfg(test)]
 mod tests {
-    use libretracks_core::{
-        Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind,
-    };
+    use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind};
 
     use crate::{AudioEngine, JumpTrigger, PlaybackState};
 
@@ -498,6 +509,7 @@ mod tests {
             bpm: 72.0,
             time_signature: "4/4".into(),
             duration_seconds: 24.0,
+            tempo_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_1".into(),
                 name: "Digno y Santo".into(),
@@ -608,6 +620,7 @@ mod tests {
             bpm: 120.0,
             time_signature: "4/4".into(),
             duration_seconds: 18.0,
+            tempo_markers: vec![],
             regions: vec![
                 SongRegion {
                     id: "region_intro".into(),

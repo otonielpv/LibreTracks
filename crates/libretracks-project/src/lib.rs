@@ -24,9 +24,7 @@ mod tests {
     use std::{fs, path::Path};
 
     use hound::{SampleFormat, WavSpec, WavWriter};
-    use libretracks_core::{
-        Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind,
-    };
+    use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind};
     use tempfile::tempdir;
 
     use crate::{
@@ -45,6 +43,7 @@ mod tests {
             bpm: 72.0,
             time_signature: "4/4".into(),
             duration_seconds: 240.0,
+            tempo_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_intro".into(),
                 name: "Cancion".into(),
@@ -429,6 +428,8 @@ mod tests {
 
         let mut song = demo_song();
         song.duration_seconds = 4.0;
+        song.regions[0].end_seconds = 4.0;
+        song.clips[0].duration_seconds = 4.0;
         save_song(&song_dir, &song).expect("song should save");
 
         let imports_dir = root.path().join("imports");

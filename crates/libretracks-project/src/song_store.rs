@@ -201,6 +201,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
         bpm: document.bpm,
         time_signature: document.time_signature.clone(),
         duration_seconds: document.duration_seconds,
+        tempo_markers: vec![],
         regions: vec![SongRegion {
             id: "region_1".into(),
             name: "Song 1".into(),
@@ -228,6 +229,7 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
         bpm: document.bpm,
         time_signature: document.time_signature.clone(),
         duration_seconds: document.duration_seconds,
+        tempo_markers: vec![],
         regions: vec![SongRegion {
             id: "region_1".into(),
             name: region_name,

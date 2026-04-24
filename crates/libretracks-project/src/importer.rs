@@ -200,6 +200,7 @@ pub fn import_wav_song(
         bpm: detected_tempo.bpm,
         time_signature: request.time_signature.clone(),
         duration_seconds,
+        tempo_markers: vec![],
         regions: vec![SongRegion {
             id: format!("region_{}", slugify(&request.title)),
             name: request.title.clone(),

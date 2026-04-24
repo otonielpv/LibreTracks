@@ -206,7 +206,11 @@ pub(crate) fn song_to_view(
         bpm: song.bpm,
         time_signature: song.time_signature.clone(),
         duration_seconds: song.duration_seconds,
-        tempo_markers: song.tempo_markers.iter().map(tempo_marker_to_summary).collect(),
+        tempo_markers: song
+            .tempo_markers
+            .iter()
+            .map(tempo_marker_to_summary)
+            .collect(),
         regions: song.regions.iter().map(region_to_summary).collect(),
         section_markers: song.section_markers.iter().map(marker_to_summary).collect(),
         clips: song
@@ -375,8 +379,8 @@ pub(crate) fn musical_position_summary(
             let beat_offset_frames = total_frames % beat_frames;
             let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
             let beat_in_bar = (total_whole_beats % u64::from(beats_per_bar)) as u32 + 1;
-            let sub_beat = (((u128::from(beat_offset_frames)) * 100) / u128::from(beat_frames))
-                .min(99) as u32;
+            let sub_beat =
+                (((u128::from(beat_offset_frames)) * 100) / u128::from(beat_frames)).min(99) as u32;
 
             return MusicalPositionSummary {
                 bar_number,
@@ -443,17 +447,24 @@ fn build_tempo_regions(song: &Song, horizon_seconds: f64) -> Vec<TempoRegion> {
 
     regions.push(TempoRegion {
         start_seconds,
-        end_seconds: horizon_seconds.max(song.duration_seconds).max(start_seconds),
+        end_seconds: horizon_seconds
+            .max(song.duration_seconds)
+            .max(start_seconds),
         bpm,
     });
 
     regions
 }
 
-fn resolve_region_for_position<'a>(song: &'a Song, position_seconds: f64) -> Option<&'a SongRegion> {
+fn resolve_region_for_position<'a>(
+    song: &'a Song,
+    position_seconds: f64,
+) -> Option<&'a SongRegion> {
     song.regions
         .iter()
-        .find(|region| position_seconds >= region.start_seconds && position_seconds < region.end_seconds)
+        .find(|region| {
+            position_seconds >= region.start_seconds && position_seconds < region.end_seconds
+        })
         .or_else(|| {
             song.regions
                 .iter()
