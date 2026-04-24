@@ -2406,11 +2406,12 @@ export function TransportPanelContent() {
   const liveZoomLevelRef = useRef(zoomLevel);
   const livePixelsPerSecondRef = useRef(pixelsPerSecond);
   const maxTimelineCameraX = getMaxCameraX(
-    song?.durationSeconds ?? 0,
+    workspaceDurationSeconds,
     pixelsPerSecond,
     laneViewportWidth,
-    timelineContentEndSeconds,
+    workspaceDurationSeconds,
   );
+  const timelineContentWidth = Math.max(laneViewportWidth, laneViewportWidth + maxTimelineCameraX);
   const pendingMarkerJump = pendingMarkerJumpSignature
     ? snapshotRef.current?.pendingMarkerJump ?? null
     : null;
@@ -4318,6 +4319,7 @@ export function TransportPanelContent() {
 
               <TimelineCanvasPane
                 laneViewportWidth={laneViewportWidth}
+                timelineContentWidth={timelineContentWidth}
                 trackHeight={trackHeight}
                 song={song}
                 visibleTracks={visibleTracks}
