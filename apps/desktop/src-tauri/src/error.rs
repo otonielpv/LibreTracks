@@ -21,6 +21,8 @@ pub enum DesktopError {
     ClipNotFound(String),
     #[error("track not found: {0}")]
     TrackNotFound(String),
+    #[error("region not found: {0}")]
+    RegionNotFound(String),
     #[error("section not found: {0}")]
     SectionNotFound(String),
     #[error("clip range is invalid")]

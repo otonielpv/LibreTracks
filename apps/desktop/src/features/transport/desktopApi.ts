@@ -1109,6 +1109,105 @@ export async function splitClip(
   return invokeCommand<TransportSnapshot>("split_clip", { clipId, splitSeconds });
 }
 
+export async function createSongRegion(
+  startSeconds: number,
+  endSeconds: number,
+): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => {
+      const bounds = sanitizeDemoRegionBounds(song, startSeconds, endSeconds);
+      if (!bounds) {
+        return song;
+      }
+
+      const [clampedStartSeconds, clampedEndSeconds] = bounds;
+      const template = getDemoRegionTemplate(song, clampedStartSeconds, clampedEndSeconds);
+      return replaceDemoRegionRange(song, {
+        id: `region-demo-${Date.now()}-${song.regions.length}`,
+        name: `Region ${song.regions.length}`,
+        startSeconds: clampedStartSeconds,
+        endSeconds: clampedEndSeconds,
+        bpm: template.bpm,
+        timeSignature: template.timeSignature,
+      });
+    });
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("create_song_region", { startSeconds, endSeconds });
+}
+
+export async function updateSongRegion(
+  regionId: string,
+  name: string,
+  startSeconds: number,
+  endSeconds: number,
+): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => {
+      const existingRegion = song.regions.find((region) => region.id === regionId);
+      const trimmedName = name.trim();
+      const bounds = sanitizeDemoRegionBounds(song, startSeconds, endSeconds);
+      if (!existingRegion || !trimmedName || !bounds) {
+        return song;
+      }
+
+      const [clampedStartSeconds, clampedEndSeconds] = bounds;
+      return replaceDemoRegionRange(song, {
+        ...existingRegion,
+        name: trimmedName,
+        startSeconds: clampedStartSeconds,
+        endSeconds: clampedEndSeconds,
+      });
+    });
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("update_song_region", {
+    regionId,
+    name,
+    startSeconds,
+    endSeconds,
+  });
+}
+
+export async function deleteSongRegion(regionId: string): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => {
+      const regionIndex = song.regions.findIndex((region) => region.id === regionId);
+      if (regionIndex === -1 || song.regions.length <= 1) {
+        return song;
+      }
+
+      const regions = [...song.regions];
+      const [deletedRegion] = regions.splice(regionIndex, 1);
+      if (!deletedRegion) {
+        return song;
+      }
+
+      if (regionIndex > 0) {
+        const previousRegion = regions[regionIndex - 1];
+        if (previousRegion) {
+          previousRegion.endSeconds = deletedRegion.endSeconds;
+        }
+      } else {
+        const nextRegion = regions[0];
+        if (nextRegion) {
+          nextRegion.startSeconds = deletedRegion.startSeconds;
+        }
+      }
+
+      return {
+        ...song,
+        regions,
+      };
+    });
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("delete_song_region", { regionId });
+}
+
 export async function createSectionMarker(startSeconds: number): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     updateDemoSong((song) => ({
@@ -1452,6 +1551,88 @@ function normalizeSong(song: SongView): SongView {
     tracks: normalizedTracks,
     clips: normalizedClips,
     sectionMarkers,
+  };
+}
+
+function sanitizeDemoRegionBounds(
+  song: SongView,
+  startSeconds: number,
+  endSeconds: number,
+): [number, number] | null {
+  if (!Number.isFinite(startSeconds) || !Number.isFinite(endSeconds)) {
+    return null;
+  }
+
+  const clampedStartSeconds = clamp(startSeconds, 0, Math.max(song.durationSeconds - 0.0001, 0));
+  const clampedEndSeconds = clamp(endSeconds, 0, song.durationSeconds);
+  if (clampedEndSeconds <= clampedStartSeconds) {
+    return null;
+  }
+
+  return [clampedStartSeconds, clampedEndSeconds];
+}
+
+function getDemoRegionTemplate(
+  song: SongView,
+  startSeconds: number,
+  endSeconds: number,
+): SongRegionSummary {
+  const probeSeconds = Math.min(
+    (startSeconds + endSeconds) * 0.5,
+    Math.max(song.durationSeconds - 0.0001, 0),
+  );
+
+  return (
+    song.regions.find(
+      (region) => probeSeconds >= region.startSeconds && probeSeconds < region.endSeconds,
+    ) ??
+    song.regions.find(
+      (region) => startSeconds >= region.startSeconds && startSeconds < region.endSeconds,
+    ) ??
+    song.regions[0] ?? {
+      id: "region-template",
+      name: song.title,
+      startSeconds: 0,
+      endSeconds: song.durationSeconds,
+      bpm: 120,
+      timeSignature: "4/4",
+    }
+  );
+}
+
+function replaceDemoRegionRange(song: SongView, replacement: SongRegionSummary): SongView {
+  const timestamp = Date.now();
+  let fragmentIndex = 0;
+  const regions: SongRegionSummary[] = [];
+
+  for (const region of song.regions) {
+    if (region.endSeconds <= replacement.startSeconds || region.startSeconds >= replacement.endSeconds) {
+      regions.push(region);
+      continue;
+    }
+
+    if (region.startSeconds < replacement.startSeconds) {
+      fragmentIndex += 1;
+      regions.push({
+        ...region,
+        id: `${region.id}-fragment-${timestamp}-${fragmentIndex}`,
+        endSeconds: replacement.startSeconds,
+      });
+    }
+
+    if (region.endSeconds > replacement.endSeconds) {
+      fragmentIndex += 1;
+      regions.push({
+        ...region,
+        id: `${region.id}-fragment-${timestamp}-${fragmentIndex}`,
+        startSeconds: replacement.endSeconds,
+      });
+    }
+  }
+
+  return {
+    ...song,
+    regions: [...regions, replacement],
   };
 }
 

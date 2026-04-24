@@ -4,6 +4,7 @@ import type {
   ClipSummary,
   PendingJumpSummary,
   SectionMarkerSummary,
+  SongRegionSummary,
   SongView,
   TrackSummary,
   WaveformLodDto,
@@ -19,7 +20,9 @@ type RulerCanvasProps = {
   pixelsPerSecond: number;
   livePixelsPerSecondRef: MutableRefObject<number>;
   timelineGrid: TimelineGrid;
+  regions: SongRegionSummary[];
   markers: SectionMarkerSummary[];
+  selectedRegionId: string | null;
   selectedMarkerId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
   playheadSecondsRef: MutableRefObject<number>;
@@ -288,6 +291,45 @@ function drawRulerMarker(
   context.lineTo(snappedX, stemBottom + 6);
   context.closePath();
   context.fill();
+  context.restore();
+}
+
+function drawRulerRegion(
+  context: CanvasRenderingContext2D,
+  region: SongRegionSummary,
+  width: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+  isSelected: boolean,
+) {
+  const left = secondsToScreenX(region.startSeconds, cameraX, pixelsPerSecond);
+  const regionWidth = (region.endSeconds - region.startSeconds) * pixelsPerSecond;
+  const right = left + regionWidth;
+  if (right < -8 || left > width + 8 || regionWidth <= 0) {
+    return;
+  }
+
+  const blockLeft = Math.max(-8, left);
+  const blockWidth = Math.max(12, Math.min(width + 8, right) - blockLeft);
+  const blockTop = 3;
+  const blockHeight = 18;
+
+  context.save();
+  context.fillStyle = isSelected ? "rgba(255, 226, 171, 0.28)" : "rgba(255, 226, 171, 0.14)";
+  context.strokeStyle = isSelected ? "rgba(255, 226, 171, 0.72)" : "rgba(255, 226, 171, 0.32)";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.roundRect(blockLeft, blockTop, blockWidth, blockHeight, 6);
+  context.fill();
+  context.stroke();
+
+  context.beginPath();
+  context.rect(blockLeft + 6, blockTop, Math.max(0, blockWidth - 12), blockHeight);
+  context.clip();
+  context.fillStyle = isSelected ? "#fff4d6" : "rgba(255, 244, 214, 0.92)";
+  context.font = '700 10px "Space Grotesk", sans-serif';
+  context.textBaseline = "middle";
+  context.fillText(region.name, blockLeft + 7, blockTop + blockHeight / 2 + 0.5);
   context.restore();
 }
 
@@ -730,7 +772,9 @@ export function TimelineRulerCanvas({
   pixelsPerSecond,
   livePixelsPerSecondRef,
   timelineGrid,
+  regions,
   markers,
+  selectedRegionId,
   selectedMarkerId,
   pendingMarkerJump,
   playheadSecondsRef,
@@ -745,7 +789,9 @@ export function TimelineRulerCanvas({
     height,
     pixelsPerSecond,
     timelineGrid,
+    regions,
     markers,
+    selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
     playheadDragRef,
@@ -757,11 +803,18 @@ export function TimelineRulerCanvas({
     height,
     pixelsPerSecond,
     timelineGrid,
+    regions,
     markers,
+    selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
     playheadDragRef,
   };
+
+  const regionsSignature = useMemo(
+    () => regions.map((region) => `${region.id}:${region.name}:${region.startSeconds}:${region.endSeconds}`).join("|"),
+    [regions],
+  );
 
   const markersSignature = useMemo(
     () => markers.map((m) => `${m.id}:${m.startSeconds}`).join("|"),
@@ -776,9 +829,11 @@ export function TimelineRulerCanvas({
     sceneVersionRef.current += 1;
   }, [
     height,
+    regionsSignature,
     markersSignature,
     pendingJumpSignature,
     pixelsPerSecond,
+    selectedRegionId,
     selectedMarkerId,
     timelineGrid,
     width,
@@ -824,6 +879,16 @@ export function TimelineRulerCanvas({
             baseContext.clearRect(0, 0, snapshot.width, snapshot.height);
             baseContext.fillStyle = "#2a2a2a";
             baseContext.fillRect(0, 0, snapshot.width, snapshot.height);
+            for (const region of snapshot.regions) {
+              drawRulerRegion(
+                baseContext,
+                region,
+                snapshot.width,
+                cameraX,
+                livePixelsPerSecond,
+                snapshot.selectedRegionId === region.id,
+              );
+            }
             drawGridLines(
               baseContext,
               snapshot.timelineGrid,

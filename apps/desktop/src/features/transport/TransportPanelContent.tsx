@@ -13,6 +13,7 @@ import {
   assignSectionMarkerDigit,
   cancelMarkerJump,
   createSectionMarker,
+  createSongRegion,
   createClipsBatch,
   createLibraryFolder,
   createSong,
@@ -20,6 +21,7 @@ import {
   deleteLibraryFolder,
   buildWaveformLodsFromPeaks,
   deleteClip,
+  deleteSongRegion,
   deleteSectionMarker,
   deleteTrack,
   duplicateClip,
@@ -55,6 +57,7 @@ import {
   stopTransport,
   undoAction,
   updateSectionMarker,
+  updateSongRegion,
   updateSongTempo,
   updateTrack,
   updateTrackMixLive,
@@ -62,6 +65,7 @@ import {
   type LibraryAssetSummary,
   type LibraryImportProgressEvent,
   type SectionMarkerSummary,
+  type SongRegionSummary,
   type SongView,
   type TrackKind,
   type TransportLifecycleEvent,
@@ -683,6 +687,7 @@ export function TransportPanelContent() {
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
   const [libraryFolders, setLibraryFolders] = useState<string[]>([]);
   const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState[]>([]);
+  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [selectedTimelineRange, setSelectedTimelineRange] = useState<TimelineRangeSelection | null>(null);
   const [optimisticClipOperations, setOptimisticClipOperations] = useState<OptimisticClipOperation[]>([]);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
@@ -2522,6 +2527,7 @@ export function TransportPanelContent() {
 
   async function handleMarkerPrimaryAction(section: SectionMarkerSummary) {
     selectSection(section.id);
+    setSelectedRegionId(null);
     setContextMenu(null);
 
     if (snapshotRef.current?.pendingMarkerJump?.targetMarkerId === section.id) {
@@ -2619,6 +2625,7 @@ export function TransportPanelContent() {
 
   function clearSelections(message: string) {
     clearSelection();
+    setSelectedRegionId(null);
     setSelectedTimelineRange(null);
     setContextMenu(null);
     setStatus(message);
@@ -2628,27 +2635,68 @@ export function TransportPanelContent() {
     positionSeconds: number,
     timelineRange: TimelineRangeSelection | null,
   ): ContextMenuAction[] {
-    const targetSeconds = timelineRange?.startSeconds ?? positionSeconds;
-
     return [
       {
-        label: timelineRange ? "Create section at selection start" : "Create marker",
+        label: timelineRange ? "Crear Cancion (Region) desde seleccion" : "Crear Marca",
         onSelect: async () => {
           await runAction(async () => {
-            const nextSnapshot = await createSectionMarker(targetSeconds);
+            const nextSnapshot = timelineRange
+              ? await createSongRegion(timelineRange.startSeconds, timelineRange.endSeconds)
+              : await createSectionMarker(positionSeconds);
             applyPlaybackSnapshot(nextSnapshot);
             clearSelection();
+            setSelectedRegionId(null);
             setSelectedTimelineRange(null);
-            setStatus(`Marca creada en ${formatClock(targetSeconds)}.`);
+            setStatus(
+              timelineRange
+                ? `Cancion creada entre ${formatClock(timelineRange.startSeconds)} y ${formatClock(timelineRange.endSeconds)}.`
+                : `Marca creada en ${formatClock(positionSeconds)}.`,
+            );
           });
         },
       },
       {
-        label: "Clear timeline selection",
+        label: "Limpiar seleccion del timeline",
         disabled: !timelineRange,
         onSelect: () => {
           setSelectedTimelineRange(null);
           setStatus("Seleccion del timeline limpiada.");
+        },
+      },
+    ];
+  }
+
+  function songRegionContextMenu(region: SongRegionSummary) {
+    return [
+      {
+        label: "Renombrar Cancion",
+        onSelect: async () => {
+          const nextName = window.prompt("Nuevo nombre de la cancion", region.name)?.trim();
+          if (!nextName) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = await updateSongRegion(
+              region.id,
+              nextName,
+              region.startSeconds,
+              region.endSeconds,
+            );
+            applyPlaybackSnapshot(nextSnapshot);
+            setStatus(`Cancion renombrada: ${nextName}.`);
+          });
+        },
+      },
+      {
+        label: "Borrar Cancion",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await deleteSongRegion(region.id);
+            applyPlaybackSnapshot(nextSnapshot);
+            setSelectedRegionId(null);
+            setStatus(`Cancion eliminada: ${region.name}.`);
+          });
         },
       },
     ];
@@ -3244,6 +3292,7 @@ export function TransportPanelContent() {
     }
 
     clearSelection();
+    setSelectedRegionId(null);
     openMenu(event, "Tracks", globalTrackListContextMenu());
   }
 
@@ -4375,7 +4424,9 @@ export function TransportPanelContent() {
                 livePixelsPerSecondRef={livePixelsPerSecondRef}
                 timelineGrid={timelineGrid}
                 timelineHeaderMarkers={timelineHeaderMarkers}
+                selectedTimelineRange={selectedTimelineRange}
                 selectedClipId={selectedClipId}
+                selectedRegionId={selectedRegionId}
                 selectedSectionId={selectedSectionId}
                 pendingMarkerJump={pendingMarkerJump}
                 displayPositionSecondsRef={displayPositionSecondsRef}
@@ -4401,6 +4452,7 @@ export function TransportPanelContent() {
                   event.preventDefault();
                   const startSeconds = snappedRulerSeconds(event, song.durationSeconds);
                   clearSelection();
+                  setSelectedRegionId(null);
                   setContextMenu(null);
                   setSelectedTimelineRange({
                     startSeconds,
@@ -4462,6 +4514,7 @@ export function TransportPanelContent() {
 
                   const positionSeconds = snappedRulerSeconds(event, song.durationSeconds);
                   clearSelection();
+                  setSelectedRegionId(null);
                   const activeTimelineRange =
                     selectedTimelineRange &&
                     positionSeconds >= selectedTimelineRange.startSeconds &&
@@ -4479,7 +4532,6 @@ export function TransportPanelContent() {
                     rulerContextMenu(positionSeconds, activeTimelineRange),
                   );
                 }}
-                                selectedTimelineRange={selectedTimelineRange}
                 onMarkerPrimaryAction={(sectionId) => {
                   const section = song?.sectionMarkers.find((candidate) => candidate.id === sectionId);
                   if (!section) {
@@ -4496,8 +4548,20 @@ export function TransportPanelContent() {
                     return;
                   }
 
+                  setSelectedRegionId(null);
                   selectSection(section.id);
                   openMenu(event, section.name, sectionContextMenu(section));
+                }}
+                onRegionContextMenu={(event, regionId) => {
+                  const region = song?.regions.find((candidate) => candidate.id === regionId);
+                  if (!region) {
+                    return;
+                  }
+
+                  clearSelection();
+                  setSelectedTimelineRange(null);
+                  setSelectedRegionId(region.id);
+                  openMenu(event, region.name, songRegionContextMenu(region));
                 }}
                 onPreviewPositionChange={syncLivePosition}
                 onPlayheadSeekCommit={(positionSeconds) => {

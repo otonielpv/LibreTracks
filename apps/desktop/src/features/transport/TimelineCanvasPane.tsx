@@ -9,6 +9,7 @@ import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import type {
   ClipSummary,
   PendingJumpSummary,
+  SongRegionSummary,
   SongView,
   TrackSummary,
   WaveformSummaryDto,
@@ -46,6 +47,7 @@ type TimelineCanvasPaneProps = {
   timelineHeaderMarkers: TimelineGrid["markers"];
   selectedTimelineRange: { startSeconds: number; endSeconds: number } | null;
   selectedClipId: string | null;
+  selectedRegionId: string | null;
   selectedSectionId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
   displayPositionSecondsRef: MutableRefObject<number>;
@@ -66,6 +68,7 @@ type TimelineCanvasPaneProps = {
   onRulerContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onMarkerPrimaryAction: (sectionId: string) => void;
   onMarkerContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, sectionId: string) => void;
+  onRegionContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, regionId: string) => void;
   onPreviewPositionChange: (positionSeconds: number) => void;
   onPlayheadSeekCommit: (positionSeconds: number) => void;
   onTrackListContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
@@ -105,6 +108,7 @@ export function TimelineCanvasPane({
   timelineHeaderMarkers,
   selectedTimelineRange,
   selectedClipId,
+  selectedRegionId,
   selectedSectionId,
   pendingMarkerJump,
   displayPositionSecondsRef,
@@ -125,6 +129,7 @@ export function TimelineCanvasPane({
   onRulerContextMenu,
   onMarkerPrimaryAction,
   onMarkerContextMenu,
+  onRegionContextMenu,
   onPreviewPositionChange,
   onPlayheadSeekCommit,
   onTrackListContextMenu,
@@ -156,12 +161,42 @@ export function TimelineCanvasPane({
             pixelsPerSecond={pixelsPerSecond}
             livePixelsPerSecondRef={livePixelsPerSecondRef}
             timelineGrid={timelineGrid}
+            regions={(song?.regions ?? []) as SongRegionSummary[]}
             markers={song?.sectionMarkers ?? []}
+            selectedRegionId={selectedRegionId}
             selectedMarkerId={selectedSectionId}
             pendingMarkerJump={pendingMarkerJump}
             playheadSecondsRef={displayPositionSecondsRef}
             playheadDragRef={playheadDragRef}
           >
+            {song?.regions.map((region) => (
+              <button
+                key={region.id}
+                type="button"
+                className={`lt-region-hotspot ${selectedRegionId === region.id ? "is-selected" : ""}`}
+                aria-label={region.name}
+                title={region.name}
+                style={{
+                  left: region.startSeconds * pixelsPerSecond,
+                  width: Math.max(24, (region.endSeconds - region.startSeconds) * pixelsPerSecond),
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onContextMenu={(event) => {
+                  event.stopPropagation();
+                  onRegionContextMenu(event, region.id);
+                }}
+              >
+                <span className="lt-sr-only">{region.name}</span>
+              </button>
+            ))}
+
             {selectedTimelineRange ? (
               <div
                 className="lt-ruler-range-selection"

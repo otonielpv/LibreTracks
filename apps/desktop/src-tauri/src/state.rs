@@ -1232,6 +1232,113 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn create_song_region(
+        &mut self,
+        start_seconds: f64,
+        end_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let (start_seconds, end_seconds) = sanitize_region_bounds(&song, start_seconds, end_seconds)?;
+        let template = region_template_for_range(&song, start_seconds, end_seconds);
+        let region = SongRegion {
+            id: format!("region_{}_{}", timestamp_suffix(), song.regions.len()),
+            name: format!("Region {}", song.regions.len()),
+            start_seconds,
+            end_seconds,
+            bpm: template.bpm,
+            time_signature: template.time_signature,
+        };
+
+        replace_song_region_range(&mut song, region);
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn update_song_region(
+        &mut self,
+        region_id: &str,
+        name: &str,
+        start_seconds: f64,
+        end_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let trimmed_name = name.trim();
+        if trimmed_name.is_empty() {
+            return Err(DesktopError::AudioCommand(
+                "region name must not be empty".into(),
+            ));
+        }
+
+        let existing_region = song
+            .regions
+            .iter()
+            .find(|region| region.id == region_id)
+            .cloned()
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        let (start_seconds, end_seconds) = sanitize_region_bounds(&song, start_seconds, end_seconds)?;
+        let updated_region = SongRegion {
+            id: existing_region.id,
+            name: trimmed_name.to_string(),
+            start_seconds,
+            end_seconds,
+            bpm: existing_region.bpm,
+            time_signature: existing_region.time_signature,
+        };
+
+        replace_song_region_range(&mut song, updated_region);
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn delete_song_region(
+        &mut self,
+        region_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let region_index = song
+            .regions
+            .iter()
+            .position(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+
+        if song.regions.len() == 1 {
+            return Err(DesktopError::AudioCommand(
+                "song must contain at least one region".into(),
+            ));
+        }
+
+        let deleted_region = song.regions.remove(region_index);
+        if region_index > 0 {
+            if let Some(previous_region) = song.regions.get_mut(region_index - 1) {
+                previous_region.end_seconds = deleted_region.end_seconds;
+            }
+        } else if let Some(next_region) = song.regions.first_mut() {
+            next_region.start_seconds = deleted_region.start_seconds;
+        }
+
+        sort_song_regions(&mut song.regions);
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn assign_section_marker_digit(
         &mut self,
         section_id: &str,
@@ -2744,6 +2851,119 @@ fn refresh_song_duration(song: &mut Song) {
             last_region.end_seconds = song.duration_seconds;
         }
     }
+}
+
+fn sanitize_region_bounds(
+    song: &Song,
+    start_seconds: f64,
+    end_seconds: f64,
+) -> Result<(f64, f64), DesktopError> {
+    if !start_seconds.is_finite() || !end_seconds.is_finite() {
+        return Err(DesktopError::AudioCommand(
+            "region bounds must be finite".into(),
+        ));
+    }
+
+    let clamped_start_seconds = start_seconds
+        .max(0.0)
+        .min((song.duration_seconds - 0.0001).max(0.0));
+    let clamped_end_seconds = end_seconds.max(0.0).min(song.duration_seconds);
+    if clamped_end_seconds <= clamped_start_seconds {
+        return Err(DesktopError::AudioCommand(
+            "region end must be greater than region start".into(),
+        ));
+    }
+
+    Ok((clamped_start_seconds, clamped_end_seconds))
+}
+
+fn region_template_for_range(song: &Song, start_seconds: f64, end_seconds: f64) -> SongRegion {
+    let probe_seconds = ((start_seconds + end_seconds) * 0.5)
+        .min((song.duration_seconds - 0.0001).max(0.0));
+
+    song.regions
+        .iter()
+        .find(|region| probe_seconds >= region.start_seconds && probe_seconds < region.end_seconds)
+        .or_else(|| {
+            song.regions.iter().find(|region| {
+                start_seconds >= region.start_seconds && start_seconds < region.end_seconds
+            })
+        })
+        .or_else(|| song.regions.first())
+        .cloned()
+        .unwrap_or(SongRegion {
+            id: "region_template".into(),
+            name: song.title.clone(),
+            start_seconds: 0.0,
+            end_seconds: song.duration_seconds.max(1.0),
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+        })
+}
+
+fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
+    let mut next_regions = Vec::with_capacity(song.regions.len() + 2);
+    let mut fragment_index = 0usize;
+
+    for region in &song.regions {
+        if region.end_seconds <= replacement.start_seconds
+            || region.start_seconds >= replacement.end_seconds
+        {
+            next_regions.push(region.clone());
+            continue;
+        }
+
+        if region.start_seconds < replacement.start_seconds {
+            fragment_index += 1;
+            next_regions.push(SongRegion {
+                id: format!(
+                    "{}_fragment_{}_{}",
+                    region.id,
+                    timestamp_suffix(),
+                    fragment_index
+                ),
+                name: region.name.clone(),
+                start_seconds: region.start_seconds,
+                end_seconds: replacement.start_seconds,
+                bpm: region.bpm,
+                time_signature: region.time_signature.clone(),
+            });
+        }
+
+        if region.end_seconds > replacement.end_seconds {
+            fragment_index += 1;
+            next_regions.push(SongRegion {
+                id: format!(
+                    "{}_fragment_{}_{}",
+                    region.id,
+                    timestamp_suffix(),
+                    fragment_index
+                ),
+                name: region.name.clone(),
+                start_seconds: replacement.end_seconds,
+                end_seconds: region.end_seconds,
+                bpm: region.bpm,
+                time_signature: region.time_signature.clone(),
+            });
+        }
+    }
+
+    next_regions.push(replacement);
+    sort_song_regions(&mut next_regions);
+    song.regions = next_regions;
+}
+
+fn sort_song_regions(regions: &mut Vec<SongRegion>) {
+    regions.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                left.end_seconds
+                    .partial_cmp(&right.end_seconds)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    });
 }
 
 fn slugify(value: &str) -> String {
@@ -4555,6 +4775,92 @@ mod tests {
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.section_markers.len(), 1);
+    }
+
+    #[test]
+    fn creating_a_song_region_splits_the_existing_range_and_inherits_tempo() {
+        let mut session = session_with_song_dir("region-create-demo", demo_song());
+        let song_dir = session.song_dir.clone().expect("song dir should exist");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .create_song_region(2.0, 5.0, &audio)
+            .expect("song region should be created");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+        let created_region = song_view
+            .regions
+            .iter()
+            .find(|region| region.start_seconds == 2.0 && region.end_seconds == 5.0)
+            .expect("created region should exist");
+
+        assert_eq!(snapshot.project_revision, song_view.project_revision);
+        assert_eq!(song_view.regions.len(), 3);
+        assert_eq!(created_region.bpm, 120.0);
+        assert_eq!(created_region.time_signature, "4/4");
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        assert_eq!(saved_song.regions.len(), 1);
+    }
+
+    #[test]
+    fn updating_a_song_region_reflows_neighbors_and_preserves_coverage() {
+        let mut session = session_with_song_dir(
+            "region-update-demo",
+            demo_song_with_region_changes_and_sections(),
+        );
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .update_song_region("region_2", "Song B", 6.0, 16.0, &audio)
+            .expect("song region should update");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+        let updated_region = song_view
+            .regions
+            .iter()
+            .find(|region| region.id == "region_2")
+            .expect("updated region should exist");
+
+        assert!(snapshot.project_revision > 0);
+        assert_eq!(song_view.regions.len(), 3);
+        assert_eq!(song_view.regions[0].start_seconds, 0.0);
+        assert_eq!(song_view.regions[0].end_seconds, 6.0);
+        assert_eq!(updated_region.name, "Song B");
+        assert_eq!(updated_region.start_seconds, 6.0);
+        assert_eq!(updated_region.end_seconds, 16.0);
+        assert_eq!(song_view.regions[2].start_seconds, 16.0);
+        assert_eq!(song_view.regions[2].end_seconds, 18.0);
+    }
+
+    #[test]
+    fn deleting_a_song_region_expands_the_previous_region() {
+        let mut session = session_with_song_dir(
+            "region-delete-demo",
+            demo_song_with_region_changes_and_sections(),
+        );
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .delete_song_region("region_2", &audio)
+            .expect("song region should delete");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert_eq!(snapshot.project_revision, song_view.project_revision);
+        assert_eq!(song_view.regions.len(), 2);
+        assert_eq!(song_view.regions[0].id, "region_1");
+        assert_eq!(song_view.regions[0].start_seconds, 0.0);
+        assert_eq!(song_view.regions[0].end_seconds, 14.0);
+        assert_eq!(song_view.regions[1].id, "region_3");
+        assert_eq!(song_view.regions[1].start_seconds, 14.0);
+        assert_eq!(song_view.regions[1].end_seconds, 18.0);
     }
 
     #[test]
