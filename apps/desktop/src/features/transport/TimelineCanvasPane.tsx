@@ -37,6 +37,7 @@ type LibraryPreviewRow = {
 type TimelineCanvasPaneProps = {
   laneViewportWidth: number;
   trackHeight: number;
+  playheadDurationSeconds: number;
   song: SongView | null;
   visibleTracks: TrackSummary[];
   renderedClipsByTrack: Record<string, ClipSummary[]>;
@@ -98,6 +99,7 @@ type TimelineCanvasPaneProps = {
 export function TimelineCanvasPane({
   laneViewportWidth,
   trackHeight,
+  playheadDurationSeconds,
   song,
   visibleTracks,
   renderedClipsByTrack,
@@ -251,7 +253,7 @@ export function TimelineCanvasPane({
 
           <PlayheadOverlay
             className="lt-playhead is-handle"
-            durationSeconds={song?.durationSeconds ?? 0}
+            durationSeconds={playheadDurationSeconds}
             pixelsPerSecond={pixelsPerSecond}
             livePixelsPerSecondRef={livePixelsPerSecondRef}
             cameraXRef={cameraXRef}
@@ -297,7 +299,7 @@ export function TimelineCanvasPane({
           <div className="lt-track-playhead-layer" aria-hidden="true">
             <PlayheadOverlay
               className="lt-track-playhead"
-              durationSeconds={song?.durationSeconds ?? 0}
+              durationSeconds={playheadDurationSeconds}
               pixelsPerSecond={pixelsPerSecond}
               livePixelsPerSecondRef={livePixelsPerSecondRef}
               cameraXRef={cameraXRef}

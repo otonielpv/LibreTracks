@@ -112,7 +112,7 @@ const TRACK_HEIGHT_MIN = 68;
 const TRACK_HEIGHT_MAX = 148;
 const TRACK_HEIGHT_STEP = 8;
 const RULER_HEIGHT = 64;
-const ZOOM_MIN = 0.125;
+const ZOOM_MIN = 0.0625;
 const ZOOM_MAX = 64;
 const DRAG_THRESHOLD_PX = 6;
 const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
@@ -751,6 +751,7 @@ export function TransportPanelContent() {
   const transportReadoutValueRef = useRef<HTMLElement | null>(null);
   const transportReadoutBarRef = useRef<HTMLElement | null>(null);
   const songDurationSecondsRef = useRef(0);
+  const timelineDurationSecondsRef = useRef(0);
   const transportAnchorMetaRef = useRef<TransportAnchorMeta | null>(null);
   const viewportFitStateRef = useRef<{
     projectIdentity: string | null;
@@ -1231,7 +1232,11 @@ export function TransportPanelContent() {
         ? Math.max(0, (Date.now() - anchorMeta.emittedAtUnixMs) / 1000)
         : 0;
     const durationSeconds = songDurationSecondsRef.current;
-    const maxDuration = durationSeconds > 0 ? durationSeconds : Number.MAX_SAFE_INTEGER;
+    const maxDuration = timelineDurationSecondsRef.current > 0
+      ? timelineDurationSecondsRef.current
+      : durationSeconds > 0
+        ? durationSeconds
+        : Number.MAX_SAFE_INTEGER;
     const anchorPositionSeconds = clamp(
       baseAnchorPositionSeconds + emittedLatencySeconds,
       0,
@@ -1256,7 +1261,7 @@ export function TransportPanelContent() {
         playbackVisualAnchorRef.current = {
           anchorPositionSeconds: 0,
           anchorReceivedAtMs: performance.now(),
-          durationSeconds: songDurationSecondsRef.current,
+          durationSeconds: timelineDurationSecondsRef.current || songDurationSecondsRef.current,
           running: false,
         };
         syncLivePosition(0);
@@ -2230,7 +2235,10 @@ export function TransportPanelContent() {
       viewportWidth?: number;
     },
   ) {
-    const durationSeconds = options?.durationSeconds ?? songRef.current?.durationSeconds ?? 0;
+    const durationSeconds = options?.durationSeconds
+      ?? timelineDurationSecondsRef.current
+      ?? songRef.current?.durationSeconds
+      ?? 0;
     const clampedPosition = clamp(positionSeconds, 0, durationSeconds || Number.MAX_SAFE_INTEGER);
 
     displayPositionSecondsRef.current = clampedPosition;
@@ -2305,7 +2313,7 @@ export function TransportPanelContent() {
     if (options?.syncPlayhead !== false) {
       syncLivePosition(playheadDragRef.current?.currentSeconds ?? displayPositionSecondsRef.current, {
         cameraX: clampedCameraX,
-        durationSeconds,
+        durationSeconds: timelineDurationSecondsRef.current || durationSeconds,
         pixelsPerSecond: effectivePixelsPerSecond,
         viewportWidth,
       });
@@ -2315,7 +2323,7 @@ export function TransportPanelContent() {
   }
 
   function previewSeek(positionSeconds: number) {
-    const durationSeconds = song?.durationSeconds ?? 0;
+    const durationSeconds = timelineDurationSecondsRef.current || song?.durationSeconds || 0;
     const clampedPosition = clamp(positionSeconds, 0, durationSeconds || Number.MAX_SAFE_INTEGER);
 
     playbackVisualAnchorRef.current = {
@@ -2324,7 +2332,7 @@ export function TransportPanelContent() {
       durationSeconds,
       running: false,
     };
-    syncLivePosition(clampedPosition);
+    syncLivePosition(clampedPosition, { durationSeconds });
   }
 
   function restoreConfirmedTransportVisual() {
@@ -2336,7 +2344,7 @@ export function TransportPanelContent() {
     playbackVisualAnchorRef.current = {
       anchorPositionSeconds: 0,
       anchorReceivedAtMs: performance.now(),
-      durationSeconds: songDurationSecondsRef.current,
+      durationSeconds: timelineDurationSecondsRef.current || songDurationSecondsRef.current,
       running: false,
     };
     syncLivePosition(0);
@@ -2355,7 +2363,10 @@ export function TransportPanelContent() {
     }
   }
 
-  function normalizeTimelineSeekSeconds(positionSeconds: number, durationSeconds = song?.durationSeconds ?? 0) {
+  function normalizeTimelineSeekSeconds(
+    positionSeconds: number,
+    durationSeconds = timelineDurationSecondsRef.current || song?.durationSeconds || 0,
+  ) {
     const clampedPosition = clamp(positionSeconds, 0, Math.max(0, durationSeconds));
     const timingRegion = getSongRegionAtPosition(song, clampedPosition) ?? getPrimarySongRegion(song);
 
@@ -2438,7 +2449,7 @@ export function TransportPanelContent() {
         ZOOM_MAX,
       )
     : ZOOM_MIN;
-  const effectiveZoomMin = song ? fitAllZoomLevel : ZOOM_MIN;
+  const effectiveZoomMin = ZOOM_MIN;
   const pixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
   const liveZoomLevelRef = useRef(zoomLevel);
   const livePixelsPerSecondRef = useRef(pixelsPerSecond);
@@ -2480,6 +2491,11 @@ export function TransportPanelContent() {
       }
 
       const currentRow = rows.get(preview.rowOffset);
+
+        useEffect(() => {
+          timelineDurationSecondsRef.current = workspaceDurationSeconds;
+        }, [workspaceDurationSeconds]);
+
       if (currentRow) {
         currentRow.push(preview);
         continue;
@@ -4472,6 +4488,7 @@ export function TransportPanelContent() {
                 displayPositionSecondsRef={displayPositionSecondsRef}
                 playheadDragRef={playheadDragRef}
                 clipPreviewSecondsRef={clipPreviewSecondsRef}
+                playheadDurationSeconds={workspaceDurationSeconds}
                 rulerTrackRef={rulerTrackRef}
                 horizontalScrollbarRef={horizontalScrollbarRef}
                 laneAreaRef={laneAreaRef}
@@ -4480,7 +4497,7 @@ export function TransportPanelContent() {
                 libraryPreviewRows={libraryPreviewRows}
                 shouldShowEmptyArrangementHint={shouldShowEmptyArrangementHint}
                 normalizePositionSeconds={(positionSeconds) =>
-                  normalizeTimelineSeekSeconds(positionSeconds, song?.durationSeconds ?? 0)}
+                  normalizeTimelineSeekSeconds(positionSeconds, workspaceDurationSeconds)}
                 resolveLibraryGhostLeft={resolveLibraryGhostLeft}
                 formatTimelineHeaderMusicalPosition={formatTimelineHeaderMusicalPosition}
                 formatTimelineHeaderTime={formatTimelineHeaderTime}
@@ -4490,6 +4507,7 @@ export function TransportPanelContent() {
                   }
 
                   event.preventDefault();
+                  const seekStartSeconds = snappedRulerSeconds(event, workspaceDurationSeconds);
                   const startSeconds = snappedRulerSeconds(event, song.durationSeconds);
                   clearSelection();
                   setSelectedRegionId(null);
@@ -4585,7 +4603,7 @@ export function TransportPanelContent() {
                     if (!hasMoved) {
                       setSelectedTimelineRange(null);
                       void runAction(async () => {
-                        await performSeek(startSeconds);
+                        await performSeek(seekStartSeconds);
                       });
                       return;
                     }
