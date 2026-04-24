@@ -93,6 +93,7 @@ export function LibrarySidebarPanel({
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const dragPreviewElementRef = useRef<HTMLElement | null>(null);
   const activeDraggedFilePathsRef = useRef<string[]>([]);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setSelectedAssetPaths((current) => current.filter((filePath) => assets.some((asset) => asset.filePath === filePath)));
@@ -110,13 +111,20 @@ export function LibrarySidebarPanel({
       return;
     }
 
-    const handleClose = () => setContextMenu(null);
+    const handleClose = (event: PointerEvent) => {
+      if (contextMenuRef.current?.contains(event.target as Node | null)) {
+        return;
+      }
+
+      setContextMenu(null);
+    };
+    const handleBlur = () => setContextMenu(null);
     window.addEventListener("pointerdown", handleClose);
-    window.addEventListener("blur", handleClose);
+    window.addEventListener("blur", handleBlur);
 
     return () => {
       window.removeEventListener("pointerdown", handleClose);
-      window.removeEventListener("blur", handleClose);
+      window.removeEventListener("blur", handleBlur);
     };
   }, [contextMenu]);
 
@@ -480,6 +488,7 @@ export function LibrarySidebarPanel({
         {contextMenu ? (
           <div
             className="lt-context-menu"
+            ref={contextMenuRef}
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(event) => event.stopPropagation()}
           >

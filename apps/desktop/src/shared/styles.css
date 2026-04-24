@@ -572,7 +572,7 @@ body {
   min-height: 0;
   flex: 1;
   overflow: auto;
-  padding: 0 0.75rem 0.75rem;
+  padding: 0 0.45rem 0.45rem;
 }
 
 .lt-library-panel-body:focus-visible {
@@ -590,12 +590,12 @@ body {
 .lt-library-asset-groups {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.35rem;
 }
 
 .lt-library-root-group,
 .lt-library-folder-group {
-  border-radius: 0.9rem;
+  border-radius: 0.72rem;
   border: 1px solid rgb(255 255 255 / 0.06);
   background: rgb(19 19 19 / 0.78);
   overflow: hidden;
@@ -610,14 +610,14 @@ body {
 }
 
 .lt-library-group-list {
-  padding: 0.25rem 0.35rem 0.35rem;
+  padding: 0.16rem 0.2rem 0.2rem;
 }
 
 .lt-library-folder-summary {
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  padding: 0.7rem 0.8rem;
+  padding: 0.55rem 0.6rem;
   border-bottom: 1px solid rgb(255 255 255 / 0.05);
   background: linear-gradient(180deg, rgb(26 26 26 / 0.98), rgb(20 20 20 / 0.96));
   cursor: pointer;
@@ -640,7 +640,7 @@ body {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: 0.35rem;
   flex: 1;
 }
 
@@ -663,13 +663,13 @@ body {
 
 .lt-library-folder-empty {
   margin: 0;
-  padding: 0.85rem 0.65rem;
+  padding: 0.6rem 0.5rem;
 }
 
 .lt-library-asset-list {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.18rem;
 }
 
 .lt-library-asset-row {
@@ -689,14 +689,14 @@ body {
 .lt-library-asset {
   width: 100%;
   display: grid;
-  grid-template-columns: 1.25rem minmax(0, 1fr) auto auto;
+  grid-template-columns: 1rem minmax(0, 1fr) minmax(4.4rem, auto) 3.2rem;
   align-items: center;
-  gap: 0.55rem;
-  border-radius: 0.65rem;
+  gap: 0.42rem;
+  border-radius: 0.5rem;
   border: 1px solid transparent;
   background: rgb(32 31 31 / 0.78);
   color: #e5e2e1;
-  padding: 0.55rem 0.65rem;
+  padding: 0.45rem 0.5rem;
   text-align: left;
   cursor: grab;
   min-width: 0;
@@ -713,7 +713,7 @@ body {
 
 .lt-library-asset-icon {
   color: #57f1db;
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .lt-library-asset-copy {
@@ -722,19 +722,25 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #f3f0ef;
-  font: 700 0.86rem/1.2 "Space Grotesk", sans-serif;
+  font: 700 0.82rem/1.15 "Space Grotesk", sans-serif;
 }
 
 .lt-library-asset-bpm,
 .lt-library-asset-duration {
   color: rgb(229 226 225 / 0.62);
-  font: 600 10px/1 "Space Grotesk", sans-serif;
+  font: 600 9px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.lt-library-asset-bpm {
+  text-align: right;
+}
+
+.lt-library-asset-duration {
+  text-align: right;
 }
 
 .lt-library-asset-delete {
