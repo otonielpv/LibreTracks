@@ -31,7 +31,7 @@ use crate::models::view::{
 };
 use crate::models::{
     DesktopPerformanceSnapshot, LibraryAssetSummary, SongView, TransportClockSummary,
-    TransportSnapshot, WaveformSummaryDto,
+    TransportDriftSummary, TransportSnapshot, WaveformSummaryDto,
 };
 
 const LIBRARY_MANIFEST_FILE_NAME: &str = "library.json";
@@ -79,6 +79,7 @@ pub struct DesktopSession {
     transport_clock: TransportClock,
     pub song_dir: Option<PathBuf>,
     song_file_path: Option<PathBuf>,
+    last_drift_sample: Option<TransportDriftSummary>,
     project_revision: u64,
     undo_stack: Vec<Song>,
     redo_stack: Vec<Song>,
@@ -103,6 +104,7 @@ impl Default for DesktopSession {
             transport_clock: TransportClock::default(),
             song_dir: None,
             song_file_path: None,
+            last_drift_sample: None,
             project_revision: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -883,6 +885,12 @@ impl DesktopSession {
         self.engine.play()?;
         self.transport_clock
             .start_from(self.engine.position_seconds());
+        self.capture_transport_drift_sample(
+            audio,
+            "play",
+            self.current_position(),
+            self.engine.position_seconds(),
+        );
 
         Ok(self.snapshot())
     }
@@ -919,10 +927,22 @@ impl DesktopSession {
             self.reposition_audio(audio, PlaybackStartReason::Seek)?;
             self.transport_clock
                 .seek_while_playing(self.engine.position_seconds());
+            self.capture_transport_drift_sample(
+                audio,
+                "seek",
+                self.current_position(),
+                self.engine.position_seconds(),
+            );
             return Ok(self.snapshot());
         }
 
         self.transport_clock.seek_to(self.engine.position_seconds());
+        self.capture_transport_drift_sample(
+            audio,
+            "seek",
+            self.current_position(),
+            self.engine.position_seconds(),
+        );
 
         Ok(self.snapshot())
     }
@@ -947,6 +967,12 @@ impl DesktopSession {
             } else {
                 self.transport_clock.seek_to(self.engine.position_seconds());
             }
+            self.capture_transport_drift_sample(
+                audio,
+                "jump",
+                self.current_position(),
+                self.engine.position_seconds(),
+            );
         }
 
         Ok(self.snapshot())
@@ -1528,6 +1554,7 @@ impl DesktopSession {
         self.transport_clock.stop();
         self.song_dir = Some(song_dir.clone());
         self.song_file_path = Some(song_dir.join(SONG_FILE_NAME));
+        self.last_drift_sample = None;
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.live_history_anchor = None;
@@ -1794,6 +1821,7 @@ impl DesktopSession {
 
         if linear_position >= song_duration {
             audio.stop()?;
+            self.capture_transport_drift_sample(audio, "song_end", song_duration, song_duration);
             self.engine.stop()?;
             self.transport_clock.stop();
             return Ok(());
@@ -1806,11 +1834,54 @@ impl DesktopSession {
             self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
             self.transport_clock
                 .note_jump_while_playing(advanced_position);
+            self.capture_transport_drift_sample(audio, "jump", advanced_position, advanced_position);
         } else {
             self.transport_clock.reanchor_playing(advanced_position);
         }
 
         Ok(())
+    }
+
+    fn capture_transport_drift_sample(
+        &mut self,
+        audio: &AudioController,
+        event: &str,
+        transport_position_seconds: f64,
+        engine_position_seconds: f64,
+    ) {
+        let runtime_snapshot = audio.debug_snapshot().ok();
+        let runtime_estimated_position_seconds = runtime_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.playhead.estimated_position_seconds);
+        let runtime_running = runtime_snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.playhead.running)
+            .unwrap_or(false);
+        let transport_minus_engine_seconds =
+            transport_position_seconds - engine_position_seconds;
+        let runtime_minus_transport_seconds = runtime_estimated_position_seconds
+            .map(|runtime_position| runtime_position - transport_position_seconds);
+        let runtime_minus_engine_seconds = runtime_estimated_position_seconds
+            .map(|runtime_position| runtime_position - engine_position_seconds);
+        let mut max_observed_delta_seconds = transport_minus_engine_seconds.abs();
+        if let Some(delta) = runtime_minus_transport_seconds {
+            max_observed_delta_seconds = max_observed_delta_seconds.max(delta.abs());
+        }
+        if let Some(delta) = runtime_minus_engine_seconds {
+            max_observed_delta_seconds = max_observed_delta_seconds.max(delta.abs());
+        }
+
+        self.last_drift_sample = Some(TransportDriftSummary {
+            event: event.to_string(),
+            transport_position_seconds,
+            engine_position_seconds,
+            runtime_estimated_position_seconds,
+            runtime_running,
+            transport_minus_engine_seconds,
+            runtime_minus_transport_seconds,
+            runtime_minus_engine_seconds,
+            max_observed_delta_seconds,
+        });
     }
 
     fn snapshot(&mut self) -> TransportSnapshot {
@@ -1834,6 +1905,7 @@ impl DesktopSession {
                 .map(|song| musical_position_summary(song, self.current_position()))
                 .unwrap_or_else(empty_musical_position_summary),
             transport_clock: self.transport_clock.summary(),
+            last_drift_sample: self.last_drift_sample.clone(),
             project_revision: self.project_revision,
             song_dir: self
                 .song_dir
@@ -2902,6 +2974,53 @@ mod tests {
         song
     }
 
+    fn demo_song_with_region_changes_and_sections() -> Song {
+        let mut song = demo_song();
+        song.duration_seconds = 18.0;
+        song.regions = vec![
+            SongRegion {
+                id: "region_1".into(),
+                name: "Intro".into(),
+                start_seconds: 0.0,
+                end_seconds: 8.0,
+                bpm: 120.0,
+                time_signature: "4/4".into(),
+            },
+            SongRegion {
+                id: "region_2".into(),
+                name: "Bridge".into(),
+                start_seconds: 8.0,
+                end_seconds: 14.0,
+                bpm: 120.0,
+                time_signature: "6/8".into(),
+            },
+            SongRegion {
+                id: "region_3".into(),
+                name: "Outro".into(),
+                start_seconds: 14.0,
+                end_seconds: 18.0,
+                bpm: 60.0,
+                time_signature: "4/4".into(),
+            },
+        ];
+        song.clips[0].duration_seconds = 18.0;
+        song.section_markers = vec![
+            Marker {
+                id: "section_1".into(),
+                name: "Intro".into(),
+                start_seconds: 1.0,
+                digit: Some(1),
+            },
+            Marker {
+                id: "section_2".into(),
+                name: "Outro".into(),
+                start_seconds: 15.0,
+                digit: Some(2),
+            },
+        ];
+        song
+    }
+
     fn write_silent_test_wav(path: &Path, duration_seconds: u32) {
         let spec = hound::WavSpec {
             channels: 2,
@@ -3082,6 +3201,14 @@ mod tests {
         assert_eq!(snapshot.transport_clock.last_start_position_seconds, None);
         assert_eq!(snapshot.transport_clock.last_jump_position_seconds, None);
         assert!(!snapshot.transport_clock.running);
+
+        let drift = snapshot
+            .last_drift_sample
+            .expect("seek should capture drift sample");
+        assert_eq!(drift.event, "seek");
+        assert_eq!(drift.transport_position_seconds, 2.75);
+        assert_eq!(drift.engine_position_seconds, 2.75);
+        assert_eq!(drift.transport_minus_engine_seconds, 0.0);
     }
 
     #[test]
@@ -3091,6 +3218,14 @@ mod tests {
 
         let playing_snapshot = session.play(&audio).expect("play should succeed");
         assert_eq!(playing_snapshot.playback_state, "playing");
+
+        let drift = playing_snapshot
+            .last_drift_sample
+            .expect("play should capture drift sample");
+        assert_eq!(drift.event, "play");
+        assert!(drift.runtime_running);
+        assert!(drift.max_observed_delta_seconds < 0.05);
+
         thread::sleep(Duration::from_millis(35));
 
         let paused_snapshot = session.pause(&audio).expect("pause should succeed");
@@ -3148,6 +3283,13 @@ mod tests {
                 .unwrap_or_default()
                 >= 3.5
         );
+
+        let drift = snapshot
+            .last_drift_sample
+            .expect("seek should capture drift sample while playing");
+        assert_eq!(drift.event, "seek");
+        assert!(drift.runtime_running);
+        assert!(drift.runtime_estimated_position_seconds.unwrap_or_default() >= 3.5);
     }
 
     #[test]
@@ -3269,6 +3411,14 @@ mod tests {
                 >= 8.0
         );
 
+        let drift = snapshot
+            .last_drift_sample
+            .expect("jump should capture drift sample");
+        assert_eq!(drift.event, "jump");
+        assert!(drift.runtime_running);
+        assert!(drift.transport_position_seconds >= 8.0);
+        assert!(drift.max_observed_delta_seconds < 0.1);
+
         let debug_snapshot = audio
             .debug_snapshot()
             .expect("debug snapshot should succeed");
@@ -3295,6 +3445,14 @@ mod tests {
         assert_eq!(snapshot.position_seconds, 0.0);
         assert!(!snapshot.transport_clock.running);
         assert_eq!(snapshot.transport_clock.anchor_position_seconds, 0.0);
+
+        let drift = snapshot
+            .last_drift_sample
+            .expect("song end should capture drift sample");
+        assert_eq!(drift.event, "song_end");
+        assert_eq!(drift.transport_position_seconds, 12.0);
+        assert_eq!(drift.engine_position_seconds, 12.0);
+        assert!(!drift.runtime_running);
 
         let debug_snapshot = audio
             .debug_snapshot()
@@ -4131,6 +4289,63 @@ mod tests {
             .cancel_marker_jump(&audio)
             .expect("jump should cancel");
         assert!(cancelled_snapshot.pending_marker_jump.is_none());
+    }
+
+    #[test]
+    fn scheduling_after_bars_across_regions_exposes_cumulative_execute_time_in_snapshot() {
+        let mut session = DesktopSession::default();
+        session
+            .engine
+            .load_song(demo_song_with_region_changes_and_sections())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        session.seek(7.0, &audio).expect("seek should work");
+
+        let snapshot = session
+            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), &audio)
+            .expect("jump should schedule");
+
+        let pending_jump = snapshot
+            .pending_marker_jump
+            .expect("pending jump should exist");
+        assert_eq!(pending_jump.target_marker_id, "section_2");
+        assert_eq!(pending_jump.target_marker_name, "Outro");
+        assert_eq!(pending_jump.trigger, "after_bars:2");
+        assert!((pending_jump.execute_at_seconds - 9.5).abs() < 0.0001);
+    }
+
+    #[test]
+    fn transport_only_updates_preserve_cross_region_after_bars_schedule() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = create_song_folder(root.path(), "transport-only-cross-region-pending-jump")
+            .expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir);
+        session
+            .engine
+            .load_song(demo_song_with_region_changes_and_sections())
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        session.seek(7.0, &audio).expect("seek should work");
+        session
+            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), &audio)
+            .expect("jump should schedule");
+
+        let snapshot = session
+            .update_section_marker("section_1", "Intro B", 1.0, &audio)
+            .expect("section marker update should succeed");
+
+        let pending_jump = snapshot
+            .pending_marker_jump
+            .expect("pending jump should survive transport-only change");
+        assert_eq!(pending_jump.target_marker_id, "section_2");
+        assert_eq!(pending_jump.target_marker_name, "Outro");
+        assert_eq!(pending_jump.trigger, "after_bars:2");
+        assert!((pending_jump.execute_at_seconds - 9.5).abs() < 0.0001);
     }
 
     #[test]

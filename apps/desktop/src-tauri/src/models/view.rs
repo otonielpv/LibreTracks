@@ -18,6 +18,7 @@ pub struct TransportSnapshot {
     pub pending_marker_jump: Option<PendingJumpSummary>,
     pub musical_position: MusicalPositionSummary,
     pub transport_clock: TransportClockSummary,
+    pub last_drift_sample: Option<TransportDriftSummary>,
     pub project_revision: u64,
     pub song_dir: Option<String>,
     pub song_file_path: Option<String>,
@@ -32,6 +33,20 @@ pub struct TransportClockSummary {
     pub last_seek_position_seconds: Option<f64>,
     pub last_start_position_seconds: Option<f64>,
     pub last_jump_position_seconds: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TransportDriftSummary {
+    pub event: String,
+    pub transport_position_seconds: f64,
+    pub engine_position_seconds: f64,
+    pub runtime_estimated_position_seconds: Option<f64>,
+    pub runtime_running: bool,
+    pub transport_minus_engine_seconds: f64,
+    pub runtime_minus_transport_seconds: Option<f64>,
+    pub runtime_minus_engine_seconds: Option<f64>,
+    pub max_observed_delta_seconds: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]

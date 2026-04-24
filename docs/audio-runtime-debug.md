@@ -35,6 +35,23 @@ Campos clave:
 - `runtimeState`: estado resumido del runtime tras la ultima operacion relevante.
   Incluye `cachedAudioBuffers` para ver cuantas fuentes siguen preparadas en memoria para el proyecto actual.
 
+## Snapshot de transporte
+
+El comando Tauri `get_transport_snapshot` ahora devuelve `lastDriftSample` cuando ya se registro una muestra relevante.
+
+Campos clave:
+
+- `event`: evento que capturo la muestra. Hoy cubre `play`, `seek`, `jump` y `song_end`.
+- `transportPositionSeconds`: posicion estimada por el reloj desktop.
+- `enginePositionSeconds`: posicion logica del `AudioEngine`.
+- `runtimeEstimatedPositionSeconds`: posicion estimada por el runtime si estaba disponible.
+- `transportMinusEngineSeconds`: diferencia firmada entre reloj desktop y engine.
+- `runtimeMinusTransportSeconds`: diferencia firmada entre runtime y reloj desktop.
+- `runtimeMinusEngineSeconds`: diferencia firmada entre runtime y engine.
+- `maxObservedDeltaSeconds`: mayor desviacion absoluta observada entre las referencias disponibles para esa muestra.
+
+La muestra se conserva en el snapshot hasta que otro evento clave la reemplace o se cargue una nueva cancion.
+
 ## Sesiones manuales recomendadas
 
 ### 1. Reproduccion inicial
@@ -43,6 +60,7 @@ Campos clave:
 - Lanzar `play`.
 - Confirmar que `lastRestart.reason` sea `initial_play`.
 - Revisar `scheduledClips`, `activeSinks` y `openedFiles`.
+- Revisar `get_transport_snapshot.lastDriftSample.event == "play"`.
 
 ### 2. Mezcla en vivo
 
@@ -54,7 +72,7 @@ Campos clave:
 
 - Ejecutar varios seeks consecutivos durante reproduccion.
 - Confirmar que `lastRestart.reason` pase a `seek`.
-- Comparar `playhead.estimatedPositionSeconds` frente a `get_transport_snapshot.positionSeconds` para medir el desfase observado.
+- Comparar `playhead.estimatedPositionSeconds` frente a `get_transport_snapshot.lastDriftSample.runtimeEstimatedPositionSeconds` y `positionSeconds`.
 - Comparar `elapsedMs` entre proyectos pequenos y grandes.
 
 ### 4. Saltos musicales
@@ -63,12 +81,24 @@ Campos clave:
 - Programar un salto a final de seccion.
 - Confirmar que el salto inmediato registre `immediate_jump` y que un resync del transporte registre `transport_resync` si hubo reconstruccion.
 - Revisar si `playhead.lastStartReason` cambia a `transport_resync` cuando el runtime tiene que rehacerse tras ejecutar un salto en marcha.
+- Confirmar que `get_transport_snapshot.lastDriftSample.event == "jump"` despues de ejecutar el salto.
 
 ### 5. Cambios de timeline
 
 - Mover un clip activo o cercano al cursor.
 - Duplicar o borrar un clip.
 - Verificar si el restart queda marcado como `timeline_window` o `structure_rebuild`.
+
+## Umbrales operativos provisorios para desktop
+
+Mientras sigamos sobre `rodio` y coordinacion desktop, tomamos estos umbrales como referencia practica:
+
+- `transportMinusEngineSeconds`: idealmente <= `0.005` s. Si supera `0.010` s, hay un problema de reanclaje local.
+- `runtimeMinusTransportSeconds` y `runtimeMinusEngineSeconds`: aceptables hasta `0.020` s en eventos normales de `play`, `seek` y `jump`.
+- `maxObservedDeltaSeconds`: vigilar entre `0.020` s y `0.050` s. Por encima de `0.050` s ya es desfase perceptible en desktop y debe investigarse.
+- `song_end`: se admite una muestra final con runtime ya parado, pero la posicion estimada del runtime deberia quedar cerca del final de la cancion antes de reiniciar el transporte a `0`.
+
+Estos umbrales no pretenden ser sample-accurate. Sirven para decidir si la ruta actual sigue siendo operativamente aceptable o si la Fase 6 necesita acelerar una migracion de backend.
 
 ## Bateria automatizada actual
 
@@ -95,7 +125,7 @@ Mientras el backend siga siendo `rodio` mas coordinacion desktop, el objetivo re
 
 - no introducir reinicios globales para cambios `MixOnly`
 - mantener `play`, `pause`, `stop`, `seek` y saltos en estados consistentes
-- usar `playhead.estimatedPositionSeconds` y `positionSeconds` del transporte para detectar desfases antes de redisenar el backend
+- usar `playhead.estimatedPositionSeconds`, `positionSeconds` y `lastDriftSample` del transporte para detectar desfases antes de redisenar el backend
 - reservar un mixer propio por bloques para el momento en que las metricas y pruebas de estres demuestren que la ruta actual ya no alcanza
 
 ## Notas
