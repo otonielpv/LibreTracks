@@ -10,7 +10,7 @@ import type {
   WaveformSummaryDto,
 } from "./desktopApi";
 import type { TimelineGrid } from "./timelineMath";
-import { clamp, secondsToScreenX } from "./timelineMath";
+import { clamp, screenXToSeconds, secondsToScreenX } from "./timelineMath";
 
 type RulerCanvasProps = {
   width: number;
@@ -114,33 +114,45 @@ function drawGridLines(
   cameraX: number,
   pixelsPerSecond: number,
 ) {
-  if (grid.showBeatGridLines) {
+  if (grid.beatDurationSeconds <= 0 || grid.beatsPerBar <= 0) {
+    return;
+  }
+
+  const visibleStartSeconds = Math.max(0, screenXToSeconds(0, cameraX, pixelsPerSecond));
+  const visibleEndSeconds = screenXToSeconds(width, cameraX, pixelsPerSecond);
+  const startBeatIndex = Math.max(0, Math.floor(visibleStartSeconds / grid.beatDurationSeconds));
+  const endBeatIndex = Math.max(startBeatIndex, Math.ceil(visibleEndSeconds / grid.beatDurationSeconds));
+  const beatPath = grid.showBeatGridLines ? new Path2D() : null;
+  const barPath = new Path2D();
+
+  for (let index = startBeatIndex; index <= endBeatIndex; index += 1) {
+    const seconds = index * grid.beatDurationSeconds;
+    const x = Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;
+    if (x < 0 || x > width) {
+      continue;
+    }
+
+    if (index % grid.beatsPerBar === 0) {
+      barPath.moveTo(x, 0);
+      barPath.lineTo(x, height);
+      continue;
+    }
+
+    if (beatPath) {
+      beatPath.moveTo(x, 0);
+      beatPath.lineTo(x, height);
+    }
+  }
+
+  if (beatPath) {
     context.strokeStyle = "rgba(186, 202, 197, 0.14)";
     context.lineWidth = 1;
-    context.beginPath();
-    for (const mark of grid.beats) {
-      const x = Math.round(secondsToScreenX(mark, cameraX, pixelsPerSecond)) + 0.5;
-      if (x < 0 || x > width) {
-        continue;
-      }
-      context.moveTo(x, 0);
-      context.lineTo(x, height);
-    }
-    context.stroke();
+    context.stroke(beatPath);
   }
 
   context.strokeStyle = "rgba(186, 202, 197, 0.32)";
   context.lineWidth = 1;
-  context.beginPath();
-  for (const mark of grid.bars) {
-    const x = Math.round(secondsToScreenX(mark, cameraX, pixelsPerSecond)) + 0.5;
-    if (x < 0 || x > width) {
-      continue;
-    }
-    context.moveTo(x, 0);
-    context.lineTo(x, height);
-  }
-  context.stroke();
+  context.stroke(barPath);
 }
 
 function drawPendingExecutionLine(
@@ -341,28 +353,47 @@ function drawWaveformShape(
     return;
   }
 
+  context.save();
   context.fillStyle = waveform?.isPreview ? "rgba(20, 20, 20, 0.34)" : "rgba(20, 20, 20, 0.72)";
+  context.lineJoin = "round";
+  context.lineCap = "round";
   context.beginPath();
   const xDenominator = Math.max(1, clipSampleCount - 1);
+  const pxPerBucket = width / xDenominator;
+  const shouldUseSteppedPeaks = pxPerBucket > 5;
+  let previousTopY = 0;
 
   for (let index = startIndex; index < endIndex; index += 1) {
     const x = left + ((index - clipStartIndex) / xDenominator) * width;
     const y = top + height * 0.5 - clamp(maxPeaks[index], -1, 1) * height * 0.42;
     if (index === startIndex) {
       context.moveTo(x, y);
+      previousTopY = y;
     } else {
+      if (shouldUseSteppedPeaks) {
+        context.lineTo(x, previousTopY);
+      }
       context.lineTo(x, y);
+      previousTopY = y;
     }
   }
 
+  let previousBottomY = 0;
   for (let index = endIndex - 1; index >= startIndex; index -= 1) {
     const x = left + ((index - clipStartIndex) / xDenominator) * width;
     const y = top + height * 0.5 - clamp(minPeaks[index], -1, 1) * height * 0.42;
+    if (index === endIndex - 1) {
+      previousBottomY = y;
+    } else if (shouldUseSteppedPeaks) {
+      context.lineTo(x, previousBottomY);
+    }
     context.lineTo(x, y);
+    previousBottomY = y;
   }
 
   context.closePath();
   context.fill();
+  context.restore();
 }
 
 function drawWaveformPlaceholder(

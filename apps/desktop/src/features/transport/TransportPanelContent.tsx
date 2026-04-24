@@ -105,6 +105,7 @@ const ZOOM_MAX = 64;
 const DRAG_THRESHOLD_PX = 6;
 const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
 const INSTANT_WAVEFORM_BUCKET_COUNT = 96;
+const SCROLL_COMMIT_DEBOUNCE_MS = 100;
 const LIVE_ZOOM_COMMIT_DEBOUNCE_MS = 150;
 
 type ContextMenuAction = {
@@ -741,6 +742,7 @@ export function TransportPanelContent() {
     horizontalVelocity: 0,
     verticalVelocity: 0,
   });
+  const scrollDebounceTimerRef = useRef<number | null>(null);
   const zoomDebounceTimerRef = useRef<number | null>(null);
   const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
   const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
@@ -2204,7 +2206,21 @@ export function TransportPanelContent() {
     );
 
     cameraXRef.current = clampedCameraX;
-    if (options?.commitToStore !== false) {
+    if (options?.commitToStore === false) {
+      if (scrollDebounceTimerRef.current !== null) {
+        window.clearTimeout(scrollDebounceTimerRef.current);
+      }
+
+      scrollDebounceTimerRef.current = window.setTimeout(() => {
+        scrollDebounceTimerRef.current = null;
+        setCameraX(cameraXRef.current);
+      }, SCROLL_COMMIT_DEBOUNCE_MS);
+    } else {
+      if (scrollDebounceTimerRef.current !== null) {
+        window.clearTimeout(scrollDebounceTimerRef.current);
+        scrollDebounceTimerRef.current = null;
+      }
+
       setCameraX(clampedCameraX);
     }
     panelRef.current?.style.setProperty("--lt-camera-x", `${clampedCameraX}px`);
@@ -2484,6 +2500,9 @@ export function TransportPanelContent() {
 
   useEffect(() => {
     return () => {
+      if (scrollDebounceTimerRef.current !== null) {
+        window.clearTimeout(scrollDebounceTimerRef.current);
+      }
       if (zoomDebounceTimerRef.current !== null) {
         window.clearTimeout(zoomDebounceTimerRef.current);
       }
@@ -2581,7 +2600,9 @@ export function TransportPanelContent() {
     }
 
     event.preventDefault();
-    updateCameraX(cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0));
+    updateCameraX(cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0), {
+      commitToStore: false,
+    });
   }
 
   function handleTimelineWheel(event: WheelEvent, shell: HTMLDivElement) {
@@ -2606,7 +2627,9 @@ export function TransportPanelContent() {
       }
 
       event.preventDefault();
-      updateCameraX(cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0));
+      updateCameraX(cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0), {
+        commitToStore: false,
+      });
       return;
     }
 
@@ -3057,7 +3080,9 @@ export function TransportPanelContent() {
         restoreConfirmedTransportVisual();
       }
 
-      updateCameraX(activePan.originCameraX + deltaX);
+      updateCameraX(activePan.originCameraX + deltaX, {
+        commitToStore: false,
+      });
     };
 
     const onMouseUp = (windowEvent: MouseEvent) => {
@@ -4212,8 +4237,9 @@ export function TransportPanelContent() {
                 aria-label="Desplazamiento horizontal del timeline"
                 onScroll={(event) => {
                   const scrollLeft = event.currentTarget.scrollLeft;
-                  cameraXRef.current = scrollLeft;
-                  updateCameraX(scrollLeft);
+                  updateCameraX(scrollLeft, {
+                    commitToStore: false,
+                  });
                 }}
               >
                 <div
