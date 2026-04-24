@@ -734,6 +734,13 @@ export function TransportPanelContent() {
   const transportReadoutBarRef = useRef<HTMLElement | null>(null);
   const songDurationSecondsRef = useRef(0);
   const transportAnchorMetaRef = useRef<TransportAnchorMeta | null>(null);
+  const viewportFitStateRef = useRef<{
+    projectIdentity: string | null;
+    hadClips: boolean;
+  }>({
+    projectIdentity: null,
+    hadClips: false,
+  });
   const cameraXRef = useRef(cameraX);
   const snapshotRef = useRef<TransportSnapshot | null>(useTransportStore.getState().playback);
   const songRef = useRef<SongView | null>(null);
@@ -2530,6 +2537,45 @@ export function TransportPanelContent() {
   useEffect(() => {
     setZoomLevel((current) => (current < effectiveZoomMin ? effectiveZoomMin : current));
   }, [effectiveZoomMin]);
+
+  useEffect(() => {
+    if (!song) {
+      viewportFitStateRef.current = {
+        projectIdentity: null,
+        hadClips: false,
+      };
+      return;
+    }
+
+    const projectIdentity = playbackSongDir ? `${playbackSongDir}::${song.id}` : song.id;
+    const hadClips = viewportFitStateRef.current.projectIdentity === projectIdentity
+      ? viewportFitStateRef.current.hadClips
+      : false;
+    const hasClips = song.clips.length > 0;
+    const shouldFitViewport =
+      laneViewportWidth > 0 && (viewportFitStateRef.current.projectIdentity !== projectIdentity || (!hadClips && hasClips));
+
+    viewportFitStateRef.current = {
+      projectIdentity,
+      hadClips: hasClips,
+    };
+
+    if (!shouldFitViewport) {
+      return;
+    }
+
+    const fittedZoomLevel = clamp(fitAllZoomLevel, ZOOM_MIN, ZOOM_MAX);
+    const fittedPixelsPerSecond = fittedZoomLevel * BASE_PIXELS_PER_SECOND;
+    liveZoomLevelRef.current = fittedZoomLevel;
+    livePixelsPerSecondRef.current = fittedPixelsPerSecond;
+    setZoomLevel(fittedZoomLevel);
+    updateCameraX(0, {
+      durationSeconds: song.durationSeconds,
+      contentEndSeconds: timelineContentEndSeconds,
+      pixelsPerSecond: fittedPixelsPerSecond,
+      viewportWidth: laneViewportWidth,
+    });
+  }, [fitAllZoomLevel, laneViewportWidth, playbackSongDir, setZoomLevel, song, timelineContentEndSeconds]);
 
   useEffect(() => {
     liveZoomLevelRef.current = zoomLevel;
