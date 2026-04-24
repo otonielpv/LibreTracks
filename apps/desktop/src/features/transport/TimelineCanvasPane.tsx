@@ -33,7 +33,6 @@ type LibraryPreviewRow = {
 
 type TimelineCanvasPaneProps = {
   laneViewportWidth: number;
-  timelineContentWidth: number;
   trackHeight: number;
   song: SongView | null;
   visibleTracks: TrackSummary[];
@@ -93,7 +92,6 @@ type TimelineCanvasPaneProps = {
 
 export function TimelineCanvasPane({
   laneViewportWidth,
-  timelineContentWidth,
   trackHeight,
   song,
   visibleTracks,
@@ -150,9 +148,9 @@ export function TimelineCanvasPane({
         onMouseDown={onRulerMouseDown}
         onContextMenu={onRulerContextMenu}
       >
-        <div className="lt-ruler-content" style={{ width: timelineContentWidth }}>
+        <div className="lt-ruler-content" style={{ width: laneViewportWidth }}>
           <TimelineRulerCanvas
-            width={timelineContentWidth}
+            width={laneViewportWidth}
             height={64}
             cameraXRef={cameraXRef}
             pixelsPerSecond={pixelsPerSecond}
@@ -239,10 +237,10 @@ export function TimelineCanvasPane({
         onDrop={onTrackListLibraryDrop}
         onDragLeave={onTrackListLibraryDragLeave}
       >
-        <div className="lt-track-layers" style={{ width: timelineContentWidth }}>
+        <div className="lt-track-layers" style={{ width: laneViewportWidth }}>
           {song ? (
             <TimelineTrackCanvas
-              width={timelineContentWidth}
+              width={laneViewportWidth}
               height={visibleTracks.length * trackHeight}
               trackHeight={trackHeight}
               song={song}
