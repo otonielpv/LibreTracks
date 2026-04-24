@@ -705,7 +705,7 @@ mod tests {
         time::{Duration, Instant},
     };
 
-    use libretracks_core::{Clip, OutputBus, Song, TempoMetadata, TempoSource, Track};
+    use libretracks_core::{Clip, OutputBus, Song, SongRegion, Track};
     use rtrb::RingBuffer;
     use tempfile::tempdir;
 
@@ -724,15 +724,16 @@ mod tests {
             id: "song_audio".into(),
             title: "Audio Runtime".into(),
             artist: None,
-            bpm: 120.0,
-            tempo_metadata: TempoMetadata {
-                source: TempoSource::Manual,
-                confidence: None,
-                reference_file_path: None,
-            },
             key: None,
-            time_signature: "4/4".into(),
             duration_seconds: 20.0,
+            regions: vec![SongRegion {
+                id: "region_1".into(),
+                name: "Audio Runtime".into(),
+                start_seconds: 0.0,
+                end_seconds: 20.0,
+                bpm: 120.0,
+                time_signature: "4/4".into(),
+            }],
             tracks: vec![
                 Track {
                     id: "folder_main".into(),
@@ -1264,15 +1265,16 @@ mod tests {
             id: "cycle_song".into(),
             title: "Cycle".into(),
             artist: None,
-            bpm: 120.0,
-            tempo_metadata: TempoMetadata {
-                source: TempoSource::Manual,
-                confidence: None,
-                reference_file_path: None,
-            },
             key: None,
-            time_signature: "4/4".into(),
             duration_seconds: 1.0,
+            regions: vec![SongRegion {
+                id: "region_1".into(),
+                name: "Cycle".into(),
+                start_seconds: 0.0,
+                end_seconds: 1.0,
+                bpm: 120.0,
+                time_signature: "4/4".into(),
+            }],
             tracks: vec![
                 Track {
                     id: "folder_a".into(),

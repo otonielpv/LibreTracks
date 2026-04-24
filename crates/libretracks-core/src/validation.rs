@@ -8,10 +8,17 @@ use crate::model::{Song, TrackKind};
 pub enum DomainError {
     #[error("song must have a title")]
     MissingTitle,
-    #[error("song bpm must be greater than zero")]
-    InvalidBpm,
     #[error("song duration must be greater than zero")]
     InvalidDuration,
+    #[error("region {region_id} bpm must be greater than zero")]
+    InvalidRegionBpm { region_id: String },
+    #[error("region {region_id} has invalid bounds")]
+    InvalidRegionBounds { region_id: String },
+    #[error("regions are out of order or overlap: {previous_region_id} before {region_id}")]
+    RegionsOutOfOrder {
+        previous_region_id: String,
+        region_id: String,
+    },
     #[error("duplicate track id: {0}")]
     DuplicateTrackId(String),
     #[error("duplicate clip id: {0}")]
@@ -52,12 +59,39 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
         return Err(DomainError::MissingTitle);
     }
 
-    if song.bpm <= 0.0 {
-        return Err(DomainError::InvalidBpm);
-    }
-
     if song.duration_seconds <= 0.0 {
         return Err(DomainError::InvalidDuration);
+    }
+
+    let mut previous_region_id: Option<&str> = None;
+    let mut previous_region_end_seconds: Option<f64> = None;
+    for region in &song.regions {
+        if region.bpm <= 0.0 {
+            return Err(DomainError::InvalidRegionBpm {
+                region_id: region.id.clone(),
+            });
+        }
+
+        if !(0.0..=song.duration_seconds).contains(&region.start_seconds)
+            || !(0.0..=song.duration_seconds).contains(&region.end_seconds)
+            || region.end_seconds <= region.start_seconds
+        {
+            return Err(DomainError::InvalidRegionBounds {
+                region_id: region.id.clone(),
+            });
+        }
+
+        if let Some(previous_end_seconds) = previous_region_end_seconds {
+            if region.start_seconds < previous_end_seconds {
+                return Err(DomainError::RegionsOutOfOrder {
+                    previous_region_id: previous_region_id.unwrap_or_default().to_string(),
+                    region_id: region.id.clone(),
+                });
+            }
+        }
+
+        previous_region_id = Some(region.id.as_str());
+        previous_region_end_seconds = Some(region.end_seconds);
     }
 
     let mut track_ids = HashSet::new();

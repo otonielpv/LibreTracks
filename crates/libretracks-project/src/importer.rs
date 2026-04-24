@@ -9,7 +9,7 @@ use std::{
 
 use hound::{SampleFormat, WavSpec, WavWriter};
 use libretracks_core::{
-    validate_song, Clip, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
+    validate_song, Clip, OutputBus, Song, SongRegion, TempoSource, Track, TrackKind,
 };
 use rayon::prelude::*;
 use symphonia::core::{
@@ -196,15 +196,16 @@ pub fn import_wav_song(
         id: request.song_id.clone(),
         title: request.title.clone(),
         artist: request.artist.clone(),
-        bpm: detected_tempo.bpm,
-        tempo_metadata: TempoMetadata {
-            source: detected_tempo.source,
-            confidence: detected_tempo.confidence,
-            reference_file_path: detected_tempo.reference_file_path,
-        },
         key: request.key.clone(),
-        time_signature: request.time_signature.clone(),
         duration_seconds,
+        regions: vec![SongRegion {
+            id: format!("region_{}", slugify(&request.title)),
+            name: request.title.clone(),
+            start_seconds: 0.0,
+            end_seconds: duration_seconds,
+            bpm: detected_tempo.bpm,
+            time_signature: request.time_signature.clone(),
+        }],
         tracks: imported_files
             .iter()
             .map(|file| Track {

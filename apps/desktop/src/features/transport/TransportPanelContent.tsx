@@ -26,6 +26,8 @@ import {
   deleteLibraryAsset,
   getLibraryAssets,
   getLibraryFolders,
+  getPrimarySongRegion,
+  getSongRegionAtPosition,
   getLibraryWaveformSummaries,
   getSongView,
   getTransportSnapshot,
@@ -1592,8 +1594,8 @@ export function TransportPanelContent() {
       return;
     }
 
-    setTempoDraft(String(song.bpm));
-  }, [song?.bpm, song?.projectRevision]);
+    setTempoDraft(String(getPrimarySongRegion(song)?.bpm ?? 120));
+  }, [song, song?.projectRevision]);
 
   useEffect(() => {
     let active = true;
@@ -2030,11 +2032,14 @@ export function TransportPanelContent() {
           restoreConfirmedTransportVisual();
         }
         const deltaSeconds = (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
+        const timingRegion =
+          getSongRegionAtPosition(effectSong, clipDrag.originSeconds + deltaSeconds) ??
+          getPrimarySongRegion(effectSong);
         const nextSeconds = snapEnabled
           ? snapToTimelineGrid(
               clipDrag.originSeconds + deltaSeconds,
-              effectSong.bpm,
-              effectSong.timeSignature,
+              timingRegion?.bpm ?? 120,
+              timingRegion?.timeSignature ?? "4/4",
               zoomLevel,
               effectPixelsPerSecond,
             )
@@ -2195,10 +2200,12 @@ export function TransportPanelContent() {
     }
 
     if (transportReadoutBarRef.current) {
+      const timingRegion =
+        getSongRegionAtPosition(songRef.current, clampedPosition) ?? getPrimarySongRegion(songRef.current);
       transportReadoutBarRef.current.textContent = formatMusicalPosition(
-        clampedPosition,
-        songRef.current?.bpm ?? 120,
-        songRef.current?.timeSignature ?? "4/4",
+        clampedPosition - (timingRegion?.startSeconds ?? 0),
+        timingRegion?.bpm ?? 120,
+        timingRegion?.timeSignature ?? "4/4",
       );
     }
   }
@@ -2311,13 +2318,14 @@ export function TransportPanelContent() {
 
   function normalizeTimelineSeekSeconds(positionSeconds: number, durationSeconds = song?.durationSeconds ?? 0) {
     const clampedPosition = clamp(positionSeconds, 0, Math.max(0, durationSeconds));
+    const timingRegion = getSongRegionAtPosition(song, clampedPosition) ?? getPrimarySongRegion(song);
 
     return snapEnabled
       ? clamp(
           snapToTimelineGrid(
             clampedPosition,
-            song?.bpm ?? 120,
-            song?.timeSignature ?? "4/4",
+            timingRegion?.bpm ?? 120,
+            timingRegion?.timeSignature ?? "4/4",
             zoomLevel,
             pixelsPerSecond,
           ),
@@ -2396,13 +2404,16 @@ export function TransportPanelContent() {
     [clipsByTrack, optimisticClipOperations],
   );
   const readoutPositionSeconds = displayPositionSecondsRef.current;
+  const readoutRegion = getSongRegionAtPosition(song, readoutPositionSeconds) ?? getPrimarySongRegion(song);
+  const primaryRegion = getPrimarySongRegion(song);
   const musicalPositionLabel = song
-    ? formatMusicalPosition(readoutPositionSeconds, song.bpm, song.timeSignature)
+    ? formatMusicalPosition(
+        readoutPositionSeconds - (readoutRegion?.startSeconds ?? 0),
+        readoutRegion?.bpm ?? 120,
+        readoutRegion?.timeSignature ?? "4/4",
+      )
     : "1.1.00";
-  const tempoSourceLabel =
-    song?.tempoMetadata.source === "auto_import"
-      ? `Detectado en importacion${song.tempoMetadata.confidence != null ? ` (${Math.round(song.tempoMetadata.confidence * 100)}%)` : ""}`
-      : "Manual";
+  const tempoSourceLabel = readoutRegion ? readoutRegion.name : "Song 1";
   const canPersistProject = Boolean(song);
   const isProjectEmpty = !song || song.tracks.length === 0;
   const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
@@ -2446,8 +2457,8 @@ export function TransportPanelContent() {
   }, [libraryClipPreview]);
   const timelineGrid = useTimelineGrid({
     durationSeconds: workspaceDurationSeconds,
-    bpm: song?.bpm ?? 120,
-    timeSignature: song?.timeSignature ?? "4/4",
+    bpm: primaryRegion?.bpm ?? 120,
+    timeSignature: primaryRegion?.timeSignature ?? "4/4",
     zoomLevel,
     pixelsPerSecond,
     viewportStartSeconds: 0,
@@ -2543,9 +2554,9 @@ export function TransportPanelContent() {
     syncLivePosition(playheadDragRef.current?.currentSeconds ?? displayPositionSecondsRef.current);
   }, [
     pixelsPerSecond,
-    song?.bpm,
+    primaryRegion?.bpm,
     song?.durationSeconds,
-    song?.timeSignature,
+    primaryRegion?.timeSignature,
   ]);
 
   function clearSelections(message: string) {
@@ -3543,9 +3554,16 @@ export function TransportPanelContent() {
     const bounds = getLibraryDragViewportBounds(element);
     const viewportX = clamp(event.clientX - bounds.left, 0, bounds.width);
     const rawSeconds = screenXToSeconds(viewportX, getCameraX(), pixelsPerSecond);
+    const timingRegion = getSongRegionAtPosition(song, rawSeconds) ?? getPrimarySongRegion(song);
 
     return snapEnabled
-      ? snapToTimelineGrid(rawSeconds, song?.bpm ?? 120, song?.timeSignature ?? "4/4", zoomLevel, pixelsPerSecond)
+      ? snapToTimelineGrid(
+          rawSeconds,
+          timingRegion?.bpm ?? 120,
+          timingRegion?.timeSignature ?? "4/4",
+          zoomLevel,
+          pixelsPerSecond,
+        )
       : rawSeconds;
   }
 
@@ -3699,12 +3717,14 @@ export function TransportPanelContent() {
 
   async function maybePromptForInitialTempo(asset: LibraryAssetSummary) {
     const currentSong = songRef.current;
+    const currentRegion = getPrimarySongRegion(currentSong);
     if (
       !currentSong ||
       currentSong.clips.length > 0 ||
+      !currentRegion ||
       asset.detectedBpm == null ||
       !Number.isFinite(asset.detectedBpm) ||
-      Math.abs(asset.detectedBpm - currentSong.bpm) < 0.01
+      Math.abs(asset.detectedBpm - currentRegion.bpm) < 0.01
     ) {
       return;
     }
@@ -4107,8 +4127,9 @@ export function TransportPanelContent() {
         onTempoDraftChange={setTempoDraft}
         onTempoCommit={() => {
           const nextBpm = Number(tempoDraft);
-          if (!song || !Number.isFinite(nextBpm) || nextBpm <= 0 || nextBpm === song.bpm) {
-            setTempoDraft(String(song?.bpm ?? 120));
+          const currentBpm = primaryRegion?.bpm ?? 120;
+          if (!song || !Number.isFinite(nextBpm) || nextBpm <= 0 || nextBpm === currentBpm) {
+            setTempoDraft(String(currentBpm));
             return;
           }
 

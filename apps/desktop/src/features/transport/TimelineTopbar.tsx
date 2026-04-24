@@ -1,6 +1,6 @@
 import type { KeyboardEvent, RefObject } from "react";
 
-import type { SongView } from "./desktopApi";
+import { getPrimarySongRegion, type SongView } from "./desktopApi";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;
@@ -53,6 +53,8 @@ export function TimelineTopbar({
   onTempoDraftChange,
   onTempoCommit,
 }: TimelineTopbarProps) {
+  const primaryRegion = getPrimarySongRegion(song);
+
   const handleTempoKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") {
       return;
@@ -129,7 +131,7 @@ export function TimelineTopbar({
               onBlur={onTempoCommit}
               onKeyDown={handleTempoKeyDown}
             />
-            <small title={song?.tempoMetadata.referenceFilePath ?? undefined}>{tempoSourceLabel}</small>
+            <small>{tempoSourceLabel}</small>
           </label>
 
           <div className="lt-transport-buttons">
@@ -153,7 +155,7 @@ export function TimelineTopbar({
           <div className="lt-transport-readout">
             <div className="lt-readout-block">
               <span>Tempo</span>
-              <strong>{song ? `${song.bpm.toFixed(2)} BPM` : "120.00 BPM"}</strong>
+              <strong>{primaryRegion ? `${primaryRegion.bpm.toFixed(2)} BPM` : "120.00 BPM"}</strong>
             </div>
             <div className="lt-readout-block">
               <span>Bar</span>

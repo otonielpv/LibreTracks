@@ -1,6 +1,6 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{JumpTrigger, PendingMarkerJump};
-use libretracks_core::{Clip, Marker, Song, TempoMetadata, TempoSource, TrackKind};
+use libretracks_core::{Clip, Marker, Song, SongRegion, TrackKind};
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
 
@@ -40,15 +40,24 @@ pub struct SongView {
     pub id: String,
     pub title: String,
     pub artist: Option<String>,
-    pub bpm: f64,
-    pub tempo_metadata: TempoMetadataSummary,
     pub key: Option<String>,
-    pub time_signature: String,
     pub duration_seconds: f64,
+    pub regions: Vec<SongRegionSummary>,
     pub section_markers: Vec<MarkerSummary>,
     pub clips: Vec<ClipSummary>,
     pub tracks: Vec<TrackSummary>,
     pub project_revision: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongRegionSummary {
+    pub id: String,
+    pub name: String,
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+    pub bpm: f64,
+    pub time_signature: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -83,14 +92,6 @@ pub struct MarkerSummary {
     pub name: String,
     pub start_seconds: f64,
     pub digit: Option<u8>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TempoMetadataSummary {
-    pub source: String,
-    pub confidence: Option<f64>,
-    pub reference_file_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -175,11 +176,9 @@ pub(crate) fn song_to_view(
         id: song.id.clone(),
         title: song.title.clone(),
         artist: song.artist.clone(),
-        bpm: song.bpm,
-        tempo_metadata: tempo_metadata_to_summary(&song.tempo_metadata),
         key: song.key.clone(),
-        time_signature: song.time_signature.clone(),
         duration_seconds: song.duration_seconds,
+        regions: song.regions.iter().map(region_to_summary).collect(),
         section_markers: song.section_markers.iter().map(marker_to_summary).collect(),
         clips: song
             .clips
@@ -295,14 +294,14 @@ pub(crate) fn pending_jump_to_summary(pending_jump: &PendingMarkerJump) -> Pendi
     }
 }
 
-pub(crate) fn tempo_metadata_to_summary(metadata: &TempoMetadata) -> TempoMetadataSummary {
-    TempoMetadataSummary {
-        source: match metadata.source {
-            TempoSource::Manual => "manual".to_string(),
-            TempoSource::AutoImport => "auto_import".to_string(),
-        },
-        confidence: metadata.confidence,
-        reference_file_path: metadata.reference_file_path.clone(),
+pub(crate) fn region_to_summary(region: &SongRegion) -> SongRegionSummary {
+    SongRegionSummary {
+        id: region.id.clone(),
+        name: region.name.clone(),
+        start_seconds: region.start_seconds,
+        end_seconds: region.end_seconds,
+        bpm: region.bpm,
+        time_signature: region.time_signature.clone(),
     }
 }
 
@@ -310,16 +309,25 @@ pub(crate) fn musical_position_summary(
     song: &Song,
     position_seconds: f64,
 ) -> MusicalPositionSummary {
-    let Ok((numerator, denominator)) = parse_time_signature(&song.time_signature) else {
+    let Some(region) = resolve_region_for_position(song, position_seconds) else {
         return empty_musical_position_summary();
     };
-    if song.bpm <= 0.0 {
+    let Ok((numerator, denominator)) = parse_time_signature(&region.time_signature) else {
+        return empty_musical_position_summary();
+    };
+    if region.bpm <= 0.0 {
         return empty_musical_position_summary();
     }
 
     let beats_per_bar = numerator.max(1);
-    let beat_frames = beat_frames_for_signature(song.bpm, denominator, TIMELINE_TIMEBASE_HZ);
-    let total_frames = seconds_to_timebase_frames(position_seconds, TIMELINE_TIMEBASE_HZ);
+    let beat_frames = beat_frames_for_signature(region.bpm, denominator, TIMELINE_TIMEBASE_HZ);
+    let clamped_seconds = position_seconds
+        .max(region.start_seconds)
+        .min(region.end_seconds.max(region.start_seconds));
+    let total_frames = seconds_to_timebase_frames(
+        clamped_seconds - region.start_seconds,
+        TIMELINE_TIMEBASE_HZ,
+    );
     let total_whole_beats = total_frames / beat_frames;
     let beat_offset_frames = total_frames % beat_frames;
     let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
@@ -333,6 +341,19 @@ pub(crate) fn musical_position_summary(
         sub_beat,
         display: format!("{bar_number}.{beat_in_bar}.{sub_beat:02}"),
     }
+}
+
+fn resolve_region_for_position<'a>(song: &'a Song, position_seconds: f64) -> Option<&'a SongRegion> {
+    song.regions
+        .iter()
+        .find(|region| position_seconds >= region.start_seconds && position_seconds < region.end_seconds)
+        .or_else(|| {
+            song.regions
+                .iter()
+                .rev()
+                .find(|region| position_seconds >= region.end_seconds)
+        })
+        .or_else(|| song.regions.first())
 }
 
 fn track_kind_label(kind: TrackKind) -> &'static str {

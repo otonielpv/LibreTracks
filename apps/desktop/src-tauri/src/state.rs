@@ -10,7 +10,7 @@ use std::{
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState};
 use libretracks_core::{
-    Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
+    Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind,
 };
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary, import_wav_files_to_library,
@@ -1254,12 +1254,10 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        song.bpm = bpm;
-        song.tempo_metadata = TempoMetadata {
-            source: TempoSource::Manual,
-            confidence: None,
-            reference_file_path: None,
-        };
+        let region = song.regions.first_mut().ok_or_else(|| {
+            DesktopError::AudioCommand("song must contain at least one region".into())
+        })?;
+        region.bpm = bpm;
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
@@ -2026,15 +2024,16 @@ fn build_empty_song(song_id: String, title: String) -> Song {
         id: song_id,
         title,
         artist: None,
-        bpm: 120.0,
-        tempo_metadata: TempoMetadata {
-            source: TempoSource::Manual,
-            confidence: None,
-            reference_file_path: None,
-        },
         key: None,
-        time_signature: "4/4".into(),
         duration_seconds: 60.0,
+        regions: vec![SongRegion {
+            id: "region_1".into(),
+            name: "Song 1".into(),
+            start_seconds: 0.0,
+            end_seconds: 60.0,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+        }],
         tracks: vec![],
         clips: vec![],
         section_markers: vec![],
@@ -2809,15 +2808,16 @@ mod tests {
             id: "song_move".into(),
             title: "Move Demo".into(),
             artist: None,
-            bpm: 120.0,
-            tempo_metadata: TempoMetadata {
-                source: TempoSource::Manual,
-                confidence: None,
-                reference_file_path: None,
-            },
             key: None,
-            time_signature: "4/4".into(),
             duration_seconds: 12.0,
+            regions: vec![SongRegion {
+                id: "region_1".into(),
+                name: "Move Demo".into(),
+                start_seconds: 0.0,
+                end_seconds: 12.0,
+                bpm: 120.0,
+                time_signature: "4/4".into(),
+            }],
             tracks: vec![Track {
                 id: "track_1".into(),
                 name: "Track 1".into(),
@@ -2858,8 +2858,8 @@ mod tests {
     #[test]
     fn musical_position_summary_uses_time_signature_beat_unit() {
         let mut song = demo_song();
-        song.time_signature = "6/8".into();
-        song.bpm = 120.0;
+        song.regions[0].time_signature = "6/8".into();
+        song.regions[0].bpm = 120.0;
 
         let summary = musical_position_summary(&song, 0.25);
 
@@ -2940,15 +2940,16 @@ mod tests {
             id: "song_hierarchy".into(),
             title: "Hierarchy Demo".into(),
             artist: None,
-            bpm: 120.0,
-            tempo_metadata: TempoMetadata {
-                source: TempoSource::Manual,
-                confidence: None,
-                reference_file_path: None,
-            },
             key: None,
-            time_signature: "4/4".into(),
             duration_seconds: 12.0,
+            regions: vec![SongRegion {
+                id: "region_1".into(),
+                name: "Hierarchy Demo".into(),
+                start_seconds: 0.0,
+                end_seconds: 12.0,
+                bpm: 120.0,
+                time_signature: "4/4".into(),
+            }],
             tracks: vec![
                 Track {
                     id: "track_folder_a".into(),
@@ -3183,15 +3184,16 @@ mod tests {
             id: "song_ids".into(),
             title: "ID Audit".into(),
             artist: None,
-            bpm: 120.0,
-            tempo_metadata: TempoMetadata {
-                source: TempoSource::Manual,
-                confidence: None,
-                reference_file_path: None,
-            },
             key: None,
-            time_signature: "4/4".into(),
             duration_seconds: 8.0,
+            regions: vec![SongRegion {
+                id: "region_1".into(),
+                name: "ID Audit".into(),
+                start_seconds: 0.0,
+                end_seconds: 8.0,
+                bpm: 120.0,
+                time_signature: "4/4".into(),
+            }],
             tracks: vec![
                 Track {
                     id: "folder_main".into(),
@@ -3852,7 +3854,8 @@ mod tests {
     fn build_empty_song_starts_with_an_empty_arrangement_at_120_bpm() {
         let song = super::build_empty_song("song_empty".into(), "Nueva Cancion".into());
 
-        assert_eq!(song.bpm, 120.0);
+        assert_eq!(song.regions.len(), 1);
+        assert_eq!(song.regions[0].bpm, 120.0);
         assert!(song.tracks.is_empty());
         assert!(song.clips.is_empty());
         assert!(song.section_markers.is_empty());

@@ -1,6 +1,6 @@
 //! Motor de audio y transporte.
 
-use libretracks_core::{validate_song, Clip, DomainError, Marker, Song, Track, TrackKind};
+use libretracks_core::{validate_song, Clip, DomainError, Marker, Song, SongRegion, Track, TrackKind};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -297,7 +297,7 @@ fn jump_execute_at(
             .next_marker_after(current_position)
             .map(|marker| marker.start_seconds)),
         JumpTrigger::AfterBars(bars) => {
-            let bar_duration = song_bar_duration_seconds(song)?;
+            let bar_duration = song_bar_duration_seconds(song, current_position)?;
             let current_bar_index = (current_position / bar_duration).floor();
             Ok(Some(
                 ((current_bar_index + f64::from(*bars)) * bar_duration).min(song.duration_seconds),
@@ -306,11 +306,21 @@ fn jump_execute_at(
     }
 }
 
-fn song_bar_duration_seconds(song: &Song) -> Result<f64, AudioEngineError> {
-    let (numerator, denominator) = parse_time_signature(&song.time_signature)?;
-    let beat_duration_seconds = 60.0 / song.bpm;
+fn song_bar_duration_seconds(song: &Song, position_seconds: f64) -> Result<f64, AudioEngineError> {
+    let region = resolve_region_for_position(song, position_seconds)
+        .ok_or_else(|| AudioEngineError::InvalidTimeSignature("missing song region".into()))?;
+    let (numerator, denominator) = parse_time_signature(&region.time_signature)?;
+    let beat_duration_seconds = 60.0 / region.bpm;
     let quarter_notes_per_bar = f64::from(numerator) * (4.0 / f64::from(denominator));
     Ok(beat_duration_seconds * quarter_notes_per_bar)
+}
+
+fn resolve_region_for_position(song: &Song, position_seconds: f64) -> Option<&SongRegion> {
+    song.regions
+        .iter()
+        .find(|region| position_seconds >= region.start_seconds && position_seconds < region.end_seconds)
+        .or_else(|| song.regions.iter().rev().find(|region| position_seconds >= region.end_seconds))
+        .or_else(|| song.regions.first())
 }
 
 fn parse_time_signature(time_signature: &str) -> Result<(u32, u32), AudioEngineError> {
@@ -410,7 +420,7 @@ fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, Audi
 #[cfg(test)]
 mod tests {
     use libretracks_core::{
-        Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
+        Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind,
     };
 
     use crate::{AudioEngine, JumpTrigger, PlaybackState};
@@ -420,15 +430,16 @@ mod tests {
             id: "song_001".into(),
             title: "Digno y Santo".into(),
             artist: Some("Ejemplo".into()),
-            bpm: 72.0,
-            tempo_metadata: TempoMetadata {
-                source: TempoSource::Manual,
-                confidence: None,
-                reference_file_path: None,
-            },
             key: Some("D".into()),
-            time_signature: "4/4".into(),
             duration_seconds: 24.0,
+            regions: vec![SongRegion {
+                id: "region_1".into(),
+                name: "Digno y Santo".into(),
+                start_seconds: 0.0,
+                end_seconds: 24.0,
+                bpm: 72.0,
+                time_signature: "4/4".into(),
+            }],
             tracks: vec![
                 Track {
                     id: "folder_monitor".into(),

@@ -25,7 +25,7 @@ mod tests {
 
     use hound::{SampleFormat, WavSpec, WavWriter};
     use libretracks_core::{
-        Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
+        Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind,
     };
     use tempfile::tempdir;
 
@@ -41,15 +41,16 @@ mod tests {
             id: "song_001".into(),
             title: "Digno y Santo".into(),
             artist: Some("Ejemplo".into()),
-            bpm: 72.0,
-            tempo_metadata: TempoMetadata {
-                source: TempoSource::Manual,
-                confidence: None,
-                reference_file_path: None,
-            },
             key: Some("D".into()),
-            time_signature: "4/4".into(),
             duration_seconds: 240.0,
+            regions: vec![SongRegion {
+                id: "region_intro".into(),
+                name: "Cancion".into(),
+                start_seconds: 0.0,
+                end_seconds: 240.0,
+                bpm: 72.0,
+                time_signature: "4/4".into(),
+            }],
             tracks: vec![Track {
                 id: "track_click".into(),
                 name: "Click".into(),
@@ -115,8 +116,9 @@ mod tests {
         save_song(&song_dir, &demo_song()).expect("song should save");
 
         let json = fs::read_to_string(song_file_path(&song_dir)).expect("song file should exist");
-        assert!(json.contains("\"version\": 3"));
+        assert!(json.contains("\"version\": 4"));
         assert!(json.contains("\"timeSignature\""));
+        assert!(json.contains("\"regions\""));
         assert!(json.contains("\"timelineStartSeconds\""));
         assert!(json.contains("\"sectionMarkers\""));
     }
@@ -346,13 +348,9 @@ mod tests {
         let imported = import_wav_song(root.path(), "detected-tempo-demo", &request)
             .expect("import should work");
 
-        assert!((imported.song.bpm - 120.0).abs() < 2.0);
-        assert_eq!(imported.song.tempo_metadata.source, TempoSource::AutoImport);
-        assert_eq!(
-            imported.song.tempo_metadata.reference_file_path.as_deref(),
-            Some("audio/guide-click.wav")
-        );
-        assert!(imported.song.tempo_metadata.confidence.unwrap_or_default() > 0.1);
+        assert_eq!(imported.song.regions.len(), 1);
+        assert!((imported.song.regions[0].bpm - 120.0).abs() < 2.0);
+        assert_eq!(imported.song.regions[0].time_signature, "4/4");
     }
 
     #[test]
@@ -579,6 +577,7 @@ mod tests {
         assert_eq!(migrated.section_markers[0].start_seconds, 8.0);
         assert_eq!(migrated.section_markers[0].digit, None);
         assert_eq!(migrated.section_markers[1].id, "section_verse");
-        assert_eq!(migrated.tempo_metadata.source, TempoSource::Manual);
+        assert_eq!(migrated.regions.len(), 1);
+        assert_eq!(migrated.regions[0].bpm, 98.0);
     }
 }

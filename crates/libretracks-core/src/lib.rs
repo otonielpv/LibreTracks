@@ -2,14 +2,15 @@ pub mod model;
 pub mod validation;
 
 pub use model::{
-    Clip, Marker, OutputBus, Project, Song, TempoMetadata, TempoSource, Track, TrackKind,
+    Clip, Marker, OutputBus, Project, Song, SongRegion, TempoMetadata, TempoSource, Track,
+    TrackKind,
 };
 pub use validation::{validate_song, DomainError};
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        validate_song, Clip, Marker, OutputBus, Song, TempoMetadata, TempoSource, Track, TrackKind,
+        validate_song, Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind,
     };
 
     fn valid_song() -> Song {
@@ -17,15 +18,16 @@ mod tests {
             id: "song_001".into(),
             title: "Digno y Santo".into(),
             artist: Some("Ejemplo".into()),
-            bpm: 72.0,
-            tempo_metadata: TempoMetadata {
-                source: TempoSource::Manual,
-                confidence: None,
-                reference_file_path: None,
-            },
             key: Some("D".into()),
-            time_signature: "4/4".into(),
             duration_seconds: 240.0,
+            regions: vec![SongRegion {
+                id: "region_intro".into(),
+                name: "Cancion".into(),
+                start_seconds: 0.0,
+                end_seconds: 240.0,
+                bpm: 72.0,
+                time_signature: "4/4".into(),
+            }],
             tracks: vec![
                 Track {
                     id: "track_folder".into(),
@@ -102,6 +104,7 @@ mod tests {
         assert!(json.contains("\"title\": \"Digno y Santo\""));
         assert!(json.contains("\"tracks\""));
         assert!(json.contains("\"kind\": \"audio\""));
+        assert!(json.contains("\"regions\""));
         assert!(json.contains("\"sectionMarkers\""));
     }
 

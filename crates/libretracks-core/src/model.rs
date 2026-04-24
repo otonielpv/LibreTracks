@@ -15,15 +15,24 @@ pub struct Song {
     pub id: String,
     pub title: String,
     pub artist: Option<String>,
-    pub bpm: f64,
-    #[serde(default)]
-    pub tempo_metadata: TempoMetadata,
     pub key: Option<String>,
-    pub time_signature: String,
     pub duration_seconds: f64,
+    #[serde(default)]
+    pub regions: Vec<SongRegion>,
     pub tracks: Vec<Track>,
     pub clips: Vec<Clip>,
     pub section_markers: Vec<Marker>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SongRegion {
+    pub id: String,
+    pub name: String,
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+    pub bpm: f64,
+    pub time_signature: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
