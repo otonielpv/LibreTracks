@@ -2492,10 +2492,6 @@ export function TransportPanelContent() {
 
       const currentRow = rows.get(preview.rowOffset);
 
-        useEffect(() => {
-          timelineDurationSecondsRef.current = workspaceDurationSeconds;
-        }, [workspaceDurationSeconds]);
-
       if (currentRow) {
         currentRow.push(preview);
         continue;
@@ -2519,6 +2515,11 @@ export function TransportPanelContent() {
             : `${previews.length} clips on new track`,
       }));
   }, [libraryClipPreview]);
+
+  useEffect(() => {
+    timelineDurationSecondsRef.current = workspaceDurationSeconds;
+  }, [workspaceDurationSeconds]);
+
   const timelineGrid = useTimelineGrid({
     durationSeconds: workspaceDurationSeconds,
     bpm: primaryRegion?.bpm ?? 120,
