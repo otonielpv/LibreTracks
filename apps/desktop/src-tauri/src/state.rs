@@ -1387,10 +1387,18 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let region = song.regions.first_mut().ok_or_else(|| {
-            DesktopError::AudioCommand("song must contain at least one region".into())
-        })?;
-        region.bpm = bpm;
+        if let Some(region) = song.regions.first_mut() {
+            region.bpm = bpm;
+        } else {
+            song.regions.push(SongRegion {
+                id: format!("region_{}", timestamp_suffix()),
+                name: song.title.clone(),
+                start_seconds: 0.0,
+                end_seconds: song.duration_seconds.max(1.0),
+                bpm,
+                time_signature: "4/4".into(),
+            });
+        }
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
@@ -2205,14 +2213,7 @@ fn build_empty_song(song_id: String, title: String) -> Song {
         artist: None,
         key: None,
         duration_seconds: 60.0,
-        regions: vec![SongRegion {
-            id: "region_1".into(),
-            name: "Song 1".into(),
-            start_seconds: 0.0,
-            end_seconds: 60.0,
-            bpm: 120.0,
-            time_signature: "4/4".into(),
-        }],
+        regions: vec![],
         tracks: vec![],
         clips: vec![],
         section_markers: vec![],

@@ -980,7 +980,7 @@ body {
   width: 100%;
   min-width: 0;
   display: grid;
-  grid-template-rows: 64px auto;
+  grid-template-rows: 92px auto;
   align-content: start;
   overflow: visible;
 }
@@ -1162,8 +1162,8 @@ body {
   box-sizing: border-box;
   display: flex;
   align-items: flex-end;
-  padding: 0 1rem 0.5rem;
-  height: 64px;
+  padding: 0 1rem 0.8rem;
+  height: 92px;
   background: #2a2a2a;
   border-bottom: 1px solid rgb(19 19 19 / 0.55);
   box-shadow: 1px 0 0 rgb(19 19 19 / 0.55), 10px 0 18px rgb(0 0 0 / 0.12);
@@ -1177,7 +1177,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  height: 64px;
+  height: 92px;
   box-sizing: border-box;
   background: #2a2a2a;
   border-bottom: 1px solid rgb(19 19 19 / 0.55);
@@ -1187,7 +1187,7 @@ body {
 .lt-ruler-content {
   position: relative;
   height: 100%;
-  min-height: 64px;
+  min-height: 92px;
   background: transparent;
   overflow: visible;
 }
@@ -1196,7 +1196,7 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 64px;
+  min-height: 92px;
 }
 
 .lt-ruler-canvas,
@@ -1241,7 +1241,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.08rem;
-  top: 0.28rem;
+  top: 1.8rem;
   min-width: 3.6rem;
   padding-left: 0.3rem;
   pointer-events: none;
@@ -1755,7 +1755,7 @@ body {
 
 .lt-marker-hotspot {
   position: absolute;
-  top: 1rem;
+  top: 2.6rem;
   width: 4.25rem;
   height: 2.25rem;
   margin-left: -0.5rem;

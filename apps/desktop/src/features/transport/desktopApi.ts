@@ -547,16 +547,7 @@ export async function createSong(): Promise<TransportSnapshot | null> {
       artist: null,
       key: null,
       durationSeconds: 60,
-      regions: [
-        {
-          id: "region_1",
-          name: "Song 1",
-          startSeconds: 0,
-          endSeconds: 60,
-          bpm: 120,
-          timeSignature: "4/4",
-        },
-      ],
+      regions: [],
       sectionMarkers: [],
       clips: [],
       tracks: [],

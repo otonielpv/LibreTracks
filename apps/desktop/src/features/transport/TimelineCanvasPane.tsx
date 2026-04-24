@@ -17,6 +17,8 @@ import type {
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import type { TimelineGrid } from "./timelineMath";
 
+const RULER_HEIGHT = 92;
+
 type LibraryClipPreviewState = {
   trackId: string | null;
   filePath: string;
@@ -156,7 +158,7 @@ export function TimelineCanvasPane({
         <div className="lt-ruler-content" style={{ width: laneViewportWidth }}>
           <TimelineRulerCanvas
             width={laneViewportWidth}
-            height={64}
+            height={RULER_HEIGHT}
             cameraXRef={cameraXRef}
             pixelsPerSecond={pixelsPerSecond}
             livePixelsPerSecondRef={livePixelsPerSecondRef}

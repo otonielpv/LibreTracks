@@ -213,12 +213,12 @@ function drawRulerMarker(
   const labelWidth = Math.max(30, Math.ceil(context.measureText(label).width) + 12);
   const labelHeight = 16;
   const snappedX = Math.round(x) + 0.5;
-  const stemTop = 23;
-  const stemBottom = height - 10;
+  const stemTop = 48;
+  const stemBottom = height - 12;
   const alignRight = snappedX > width - labelWidth - 12;
   const flagLeft = alignRight ? snappedX - labelWidth - 8 : snappedX + 2;
   const flagRight = flagLeft + labelWidth;
-  const flagTop = 20;
+  const flagTop = 44;
   const flagBottom = flagTop + labelHeight;
 
   if (flagRight < -20 || flagLeft > width + 20) {
