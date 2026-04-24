@@ -197,6 +197,8 @@ pub fn import_wav_song(
         title: request.title.clone(),
         artist: request.artist.clone(),
         key: request.key.clone(),
+        bpm: detected_tempo.bpm,
+        time_signature: request.time_signature.clone(),
         duration_seconds,
         regions: vec![SongRegion {
             id: format!("region_{}", slugify(&request.title)),

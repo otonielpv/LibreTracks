@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+fn default_song_bpm() -> f64 {
+    120.0
+}
+
+fn default_song_time_signature() -> String {
+    "4/4".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
@@ -16,12 +24,26 @@ pub struct Song {
     pub title: String,
     pub artist: Option<String>,
     pub key: Option<String>,
+    #[serde(default = "default_song_bpm")]
+    pub bpm: f64,
+    #[serde(default = "default_song_time_signature")]
+    pub time_signature: String,
     pub duration_seconds: f64,
+    #[serde(default)]
+    pub tempo_markers: Vec<TempoMarker>,
     #[serde(default)]
     pub regions: Vec<SongRegion>,
     pub tracks: Vec<Track>,
     pub clips: Vec<Clip>,
     pub section_markers: Vec<Marker>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TempoMarker {
+    pub id: String,
+    pub start_seconds: f64,
+    pub bpm: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

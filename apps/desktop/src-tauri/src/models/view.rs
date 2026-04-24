@@ -1,6 +1,6 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{JumpTrigger, PendingMarkerJump};
-use libretracks_core::{Clip, Marker, Song, SongRegion, TrackKind};
+use libretracks_core::{Clip, Marker, Song, SongRegion, TempoMarker, TrackKind};
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
 
@@ -56,7 +56,10 @@ pub struct SongView {
     pub title: String,
     pub artist: Option<String>,
     pub key: Option<String>,
+    pub bpm: f64,
+    pub time_signature: String,
     pub duration_seconds: f64,
+    pub tempo_markers: Vec<TempoMarkerSummary>,
     pub regions: Vec<SongRegionSummary>,
     pub section_markers: Vec<MarkerSummary>,
     pub clips: Vec<ClipSummary>,
@@ -73,6 +76,14 @@ pub struct SongRegionSummary {
     pub end_seconds: f64,
     pub bpm: f64,
     pub time_signature: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TempoMarkerSummary {
+    pub id: String,
+    pub start_seconds: f64,
+    pub bpm: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -192,7 +203,10 @@ pub(crate) fn song_to_view(
         title: song.title.clone(),
         artist: song.artist.clone(),
         key: song.key.clone(),
+        bpm: song.bpm,
+        time_signature: song.time_signature.clone(),
         duration_seconds: song.duration_seconds,
+        tempo_markers: song.tempo_markers.iter().map(tempo_marker_to_summary).collect(),
         regions: song.regions.iter().map(region_to_summary).collect(),
         section_markers: song.section_markers.iter().map(marker_to_summary).collect(),
         clips: song
@@ -320,29 +334,60 @@ pub(crate) fn region_to_summary(region: &SongRegion) -> SongRegionSummary {
     }
 }
 
+pub(crate) fn tempo_marker_to_summary(marker: &TempoMarker) -> TempoMarkerSummary {
+    TempoMarkerSummary {
+        id: marker.id.clone(),
+        start_seconds: marker.start_seconds,
+        bpm: marker.bpm,
+    }
+}
+
 pub(crate) fn musical_position_summary(
     song: &Song,
     position_seconds: f64,
 ) -> MusicalPositionSummary {
-    let Some(region) = resolve_region_for_position(song, position_seconds) else {
+    let Ok((numerator, denominator)) = parse_time_signature(&song.time_signature) else {
         return empty_musical_position_summary();
     };
-    let Ok((numerator, denominator)) = parse_time_signature(&region.time_signature) else {
-        return empty_musical_position_summary();
-    };
-    if region.bpm <= 0.0 {
+    if song.bpm <= 0.0 {
         return empty_musical_position_summary();
     }
 
     let beats_per_bar = numerator.max(1);
-    let beat_frames = beat_frames_for_signature(region.bpm, denominator, TIMELINE_TIMEBASE_HZ);
-    let clamped_seconds = position_seconds
-        .max(region.start_seconds)
-        .min(region.end_seconds.max(region.start_seconds));
-    let total_frames = seconds_to_timebase_frames(
-        clamped_seconds - region.start_seconds,
-        TIMELINE_TIMEBASE_HZ,
-    );
+    let clamped_seconds = position_seconds.max(0.0);
+    let tempo_regions = build_tempo_regions(song, clamped_seconds.max(song.duration_seconds));
+    let mut total_frames = 0_u64;
+
+    for region in tempo_regions {
+        let beat_frames = beat_frames_for_signature(region.bpm, denominator, TIMELINE_TIMEBASE_HZ);
+        let clamped_region_end = clamped_seconds.min(region.end_seconds.max(region.start_seconds));
+        if clamped_region_end <= region.start_seconds {
+            break;
+        }
+
+        total_frames += seconds_to_timebase_frames(
+            clamped_region_end - region.start_seconds,
+            TIMELINE_TIMEBASE_HZ,
+        );
+
+        if clamped_seconds < region.end_seconds {
+            let total_whole_beats = total_frames / beat_frames;
+            let beat_offset_frames = total_frames % beat_frames;
+            let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
+            let beat_in_bar = (total_whole_beats % u64::from(beats_per_bar)) as u32 + 1;
+            let sub_beat = (((u128::from(beat_offset_frames)) * 100) / u128::from(beat_frames))
+                .min(99) as u32;
+
+            return MusicalPositionSummary {
+                bar_number,
+                beat_in_bar,
+                sub_beat,
+                display: format!("{bar_number}.{beat_in_bar}.{sub_beat:02}"),
+            };
+        }
+    }
+
+    let beat_frames = beat_frames_for_signature(song.bpm, denominator, TIMELINE_TIMEBASE_HZ);
     let total_whole_beats = total_frames / beat_frames;
     let beat_offset_frames = total_frames % beat_frames;
     let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
@@ -356,6 +401,53 @@ pub(crate) fn musical_position_summary(
         sub_beat,
         display: format!("{bar_number}.{beat_in_bar}.{sub_beat:02}"),
     }
+}
+
+#[derive(Debug, Clone)]
+struct TempoRegion {
+    start_seconds: f64,
+    end_seconds: f64,
+    bpm: f64,
+}
+
+fn build_tempo_regions(song: &Song, horizon_seconds: f64) -> Vec<TempoRegion> {
+    let mut markers = song
+        .tempo_markers
+        .iter()
+        .filter(|marker| marker.start_seconds > 0.0)
+        .collect::<Vec<_>>();
+    markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut regions = Vec::with_capacity(markers.len() + 1);
+    let mut start_seconds = 0.0;
+    let mut bpm = song.bpm;
+
+    for marker in markers {
+        if marker.start_seconds <= start_seconds {
+            bpm = marker.bpm;
+            continue;
+        }
+
+        regions.push(TempoRegion {
+            start_seconds,
+            end_seconds: marker.start_seconds,
+            bpm,
+        });
+        start_seconds = marker.start_seconds;
+        bpm = marker.bpm;
+    }
+
+    regions.push(TempoRegion {
+        start_seconds,
+        end_seconds: horizon_seconds.max(song.duration_seconds).max(start_seconds),
+        bpm,
+    });
+
+    regions
 }
 
 fn resolve_region_for_position<'a>(song: &'a Song, position_seconds: f64) -> Option<&'a SongRegion> {

@@ -42,6 +42,8 @@ mod tests {
             title: "Digno y Santo".into(),
             artist: Some("Ejemplo".into()),
             key: Some("D".into()),
+            bpm: 72.0,
+            time_signature: "4/4".into(),
             duration_seconds: 240.0,
             regions: vec![SongRegion {
                 id: "region_intro".into(),

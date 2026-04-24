@@ -1,6 +1,6 @@
 import type { KeyboardEvent, RefObject } from "react";
 
-import { getPrimarySongRegion, type SongView } from "./desktopApi";
+import { getSongBaseBpm, type SongView } from "./desktopApi";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;
@@ -9,6 +9,7 @@ type TimelineTopbarProps = {
   isProjectEmpty: boolean;
   tempoDraft: string;
   tempoSourceLabel: string;
+  displayedBpm: number;
   song: SongView | null;
   musicalPositionLabel: string;
   readoutPositionSecondsLabel: string;
@@ -35,6 +36,7 @@ export function TimelineTopbar({
   isProjectEmpty,
   tempoDraft,
   tempoSourceLabel,
+  displayedBpm,
   song,
   musicalPositionLabel,
   readoutPositionSecondsLabel,
@@ -53,7 +55,7 @@ export function TimelineTopbar({
   onTempoDraftChange,
   onTempoCommit,
 }: TimelineTopbarProps) {
-  const primaryRegion = getPrimarySongRegion(song);
+  const fallbackBpm = getSongBaseBpm(song);
 
   const handleTempoKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") {
@@ -155,7 +157,7 @@ export function TimelineTopbar({
           <div className="lt-transport-readout">
             <div className="lt-readout-block">
               <span>Tempo</span>
-              <strong>{primaryRegion ? `${primaryRegion.bpm.toFixed(2)} BPM` : "120.00 BPM"}</strong>
+              <strong>{`${(Number.isFinite(displayedBpm) ? displayedBpm : fallbackBpm).toFixed(2)} BPM`}</strong>
             </div>
             <div className="lt-readout-block">
               <span>Bar</span>

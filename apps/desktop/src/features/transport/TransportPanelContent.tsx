@@ -28,7 +28,11 @@ import {
   deleteLibraryAsset,
   getLibraryAssets,
   getLibraryFolders,
+  buildSongTempoRegions,
   getPrimarySongRegion,
+  getSongBaseBpm,
+  getSongBaseTimeSignature,
+  getSongTempoRegionAtPosition,
   getSongRegionAtPosition,
   getLibraryWaveformSummaries,
   getSongView,
@@ -58,7 +62,7 @@ import {
   undoAction,
   updateSectionMarker,
   updateSongRegion,
-  updateSongRegionBpm,
+  upsertSongTempoMarker,
   updateSongTempo,
   updateTrack,
   updateTrackMixLive,
@@ -323,8 +327,13 @@ function formatTimelineHeaderMusicalPosition(barNumber: number, beatInBar: numbe
   return `${barNumber}.${beatInBar}.00`;
 }
 
-function formatMusicalPosition(seconds: number, regions: SongView["regions"] | undefined) {
-  return getCumulativeMusicalPosition(seconds, regions ?? []).display;
+function formatMusicalPosition(seconds: number, song: SongView | null | undefined) {
+  return getCumulativeMusicalPosition(
+    seconds,
+    buildSongTempoRegions(song),
+    getSongBaseBpm(song),
+    getSongBaseTimeSignature(song),
+  ).display;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -1638,7 +1647,7 @@ export function TransportPanelContent() {
       return;
     }
 
-    setTempoDraft(String(getPrimarySongRegion(song)?.bpm ?? 120));
+    setTempoDraft(String(getSongBaseBpm(song)));
   }, [song, song?.projectRevision]);
 
   useEffect(() => {
@@ -2077,16 +2086,15 @@ export function TransportPanelContent() {
         }
         const deltaSeconds = (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
         const timingRegion =
-          getSongRegionAtPosition(effectSong, clipDrag.originSeconds + deltaSeconds) ??
-          getPrimarySongRegion(effectSong);
+          getSongTempoRegionAtPosition(effectSong, clipDrag.originSeconds + deltaSeconds);
         const nextSeconds = snapEnabled
           ? snapToTimelineGrid(
               clipDrag.originSeconds + deltaSeconds,
-              timingRegion?.bpm ?? 120,
-              timingRegion?.timeSignature ?? "4/4",
+              timingRegion?.bpm ?? effectSong.bpm,
+              timingRegion?.timeSignature ?? effectSong.timeSignature,
               zoomLevel,
               effectPixelsPerSecond,
-              effectSong.regions,
+              buildSongTempoRegions(effectSong),
             )
           : clipDrag.originSeconds + deltaSeconds;
 
@@ -2252,7 +2260,7 @@ export function TransportPanelContent() {
         getSongRegionAtPosition(songRef.current, clampedPosition) ?? getPrimarySongRegion(songRef.current);
       transportReadoutBarRef.current.textContent = formatMusicalPosition(
         clampedPosition,
-        songRef.current?.regions,
+        songRef.current,
       );
     }
   }
@@ -2368,17 +2376,17 @@ export function TransportPanelContent() {
     durationSeconds = timelineDurationSecondsRef.current || song?.durationSeconds || 0,
   ) {
     const clampedPosition = clamp(positionSeconds, 0, Math.max(0, durationSeconds));
-    const timingRegion = getSongRegionAtPosition(song, clampedPosition) ?? getPrimarySongRegion(song);
+    const timingRegion = getSongTempoRegionAtPosition(song, clampedPosition);
 
     return snapEnabled
       ? clamp(
           snapToTimelineGrid(
             clampedPosition,
-            timingRegion?.bpm ?? 120,
-            timingRegion?.timeSignature ?? "4/4",
+            timingRegion?.bpm ?? songBaseBpm,
+            timingRegion?.timeSignature ?? songBaseTimeSignature,
             zoomLevel,
             pixelsPerSecond,
-            song?.regions ?? [],
+            buildSongTempoRegions(song),
           ),
           0,
           Math.max(0, durationSeconds),
@@ -2467,12 +2475,16 @@ export function TransportPanelContent() {
     [clipsByTrack, optimisticClipOperations],
   );
   const readoutPositionSeconds = displayPositionSecondsRef.current;
-  const readoutRegion = getSongRegionAtPosition(song, readoutPositionSeconds) ?? getPrimarySongRegion(song);
-  const primaryRegion = getPrimarySongRegion(song);
+  const readoutTempoRegion = getSongTempoRegionAtPosition(song, readoutPositionSeconds);
+  const songBaseBpm = getSongBaseBpm(song);
+  const songBaseTimeSignature = getSongBaseTimeSignature(song);
+  const displayedBpm = readoutTempoRegion?.bpm ?? songBaseBpm;
   const musicalPositionLabel = song
-    ? formatMusicalPosition(readoutPositionSeconds, song.regions)
+    ? formatMusicalPosition(readoutPositionSeconds, song)
     : "1.1.00";
-  const tempoSourceLabel = readoutRegion ? readoutRegion.name : "Song 1";
+  const tempoSourceLabel = readoutTempoRegion
+    ? `Tempo @ ${formatClock(readoutTempoRegion.startSeconds)}`
+    : "BPM base";
   const canPersistProject = Boolean(song);
   const isProjectEmpty = !song || song.tracks.length === 0;
   const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
@@ -2522,9 +2534,9 @@ export function TransportPanelContent() {
 
   const timelineGrid = useTimelineGrid({
     durationSeconds: workspaceDurationSeconds,
-    bpm: primaryRegion?.bpm ?? 120,
-    regions: song?.regions ?? [],
-    timeSignature: primaryRegion?.timeSignature ?? "4/4",
+    bpm: songBaseBpm,
+    regions: buildSongTempoRegions(song),
+    timeSignature: songBaseTimeSignature,
     zoomLevel,
     pixelsPerSecond,
     viewportStartSeconds: 0,
@@ -2555,7 +2567,7 @@ export function TransportPanelContent() {
     },
     [pixelsPerSecond, timelineGrid.barLabelStep, timelineGrid.markers, timelineGrid.showBeatLabels],
   );
-  const showTimelineHeaderTime = timelineGrid.showBeatLabels || pixelsPerSecond >= 48;
+  const showTimelineHeaderTime = true;
 
   async function scheduleMarkerJumpWithGlobalMode(markerId: string, markerName: string) {
     const trigger =
@@ -2677,9 +2689,10 @@ export function TransportPanelContent() {
     syncLivePosition(playheadDragRef.current?.currentSeconds ?? displayPositionSecondsRef.current);
   }, [
     pixelsPerSecond,
-    primaryRegion?.bpm,
+    song?.projectRevision,
     song?.durationSeconds,
-    primaryRegion?.timeSignature,
+    songBaseBpm,
+    songBaseTimeSignature,
   ]);
 
   function clearSelections(message: string) {
@@ -2710,6 +2723,29 @@ export function TransportPanelContent() {
               timelineRange
                 ? `Cancion creada entre ${formatClock(timelineRange.startSeconds)} y ${formatClock(timelineRange.endSeconds)}.`
                 : `Marca creada en ${formatClock(positionSeconds)}.`,
+            );
+          });
+        },
+      },
+      {
+        label: "Cambiar BPM del timeline",
+        disabled: !song,
+        onSelect: async () => {
+          const nextBpm = Number(window.prompt("Nuevo BPM del timeline", songBaseBpm.toFixed(2)));
+          if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = positionSeconds <= 0.0001
+              ? await updateSongTempo(nextBpm)
+              : await upsertSongTempoMarker(positionSeconds, nextBpm);
+            applyPlaybackSnapshot(nextSnapshot);
+            setTempoDraft(String(nextBpm));
+            setStatus(
+              positionSeconds <= 0.0001
+                ? `BPM base del timeline actualizado a ${nextBpm.toFixed(2)}.`
+                : `Marca de BPM creada en ${formatClock(positionSeconds)} a ${nextBpm.toFixed(2)} BPM.`,
             );
           });
         },
@@ -2749,18 +2785,8 @@ export function TransportPanelContent() {
       },
       {
         label: "Cambiar BPM",
-        onSelect: async () => {
-          const nextBpm = Number(window.prompt("Nuevo BPM de la cancion", region.bpm.toFixed(2)));
-          if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
-            return;
-          }
-
-          await runAction(async () => {
-            const nextSnapshot = await updateSongRegionBpm(region.id, nextBpm);
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`BPM actualizado a ${nextBpm.toFixed(2)} para ${region.name}.`);
-          });
-        },
+        disabled: true,
+        onSelect: () => {},
       },
       {
         label: "Borrar Cancion",
@@ -3750,16 +3776,16 @@ export function TransportPanelContent() {
     const bounds = getLibraryDragViewportBounds(element);
     const viewportX = clamp(event.clientX - bounds.left, 0, bounds.width);
     const rawSeconds = screenXToSeconds(viewportX, getCameraX(), pixelsPerSecond);
-    const timingRegion = getSongRegionAtPosition(song, rawSeconds) ?? getPrimarySongRegion(song);
+    const timingRegion = getSongTempoRegionAtPosition(song, rawSeconds);
 
     return snapEnabled
       ? snapToTimelineGrid(
           rawSeconds,
-          timingRegion?.bpm ?? 120,
-          timingRegion?.timeSignature ?? "4/4",
+          timingRegion?.bpm ?? songBaseBpm,
+          timingRegion?.timeSignature ?? songBaseTimeSignature,
           zoomLevel,
           pixelsPerSecond,
-          song?.regions ?? [],
+          buildSongTempoRegions(song),
         )
       : rawSeconds;
   }
@@ -3914,11 +3940,7 @@ export function TransportPanelContent() {
 
   async function maybePromptForInitialTempo(asset: LibraryAssetSummary) {
     const currentSong = songRef.current;
-    const currentRegion = getPrimarySongRegion(currentSong);
-    if (!currentRegion) {
-      return;
-    }
-    const currentBpm = currentRegion?.bpm ?? 120;
+    const currentBpm = getSongBaseBpm(currentSong);
     if (
       !currentSong ||
       currentSong.clips.length > 0 ||
@@ -4291,6 +4313,7 @@ export function TransportPanelContent() {
         isProjectEmpty={isProjectEmpty}
         tempoDraft={tempoDraft}
         tempoSourceLabel={tempoSourceLabel}
+        displayedBpm={displayedBpm}
         song={song}
         musicalPositionLabel={musicalPositionLabel}
         readoutPositionSecondsLabel={formatClock(readoutPositionSeconds)}
@@ -4327,12 +4350,7 @@ export function TransportPanelContent() {
         onTempoDraftChange={setTempoDraft}
         onTempoCommit={() => {
           const nextBpm = Number(tempoDraft);
-          const currentBpm = primaryRegion?.bpm ?? 120;
-          if (!primaryRegion) {
-            setTempoDraft(String(currentBpm));
-            setStatus("Crea una Cancion (Region) antes de cambiar el BPM del timeline.");
-            return;
-          }
+          const currentBpm = songBaseBpm;
 
           if (!song || !Number.isFinite(nextBpm) || nextBpm <= 0 || nextBpm === currentBpm) {
             setTempoDraft(String(currentBpm));

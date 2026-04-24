@@ -2,8 +2,8 @@ pub mod model;
 pub mod validation;
 
 pub use model::{
-    Clip, Marker, OutputBus, Project, Song, SongRegion, TempoMetadata, TempoSource, Track,
-    TrackKind,
+    Clip, Marker, OutputBus, Project, Song, SongRegion, TempoMarker, TempoMetadata,
+    TempoSource, Track, TrackKind,
 };
 pub use validation::{validate_song, DomainError};
 
@@ -19,7 +19,10 @@ mod tests {
             title: "Digno y Santo".into(),
             artist: Some("Ejemplo".into()),
             key: Some("D".into()),
+            bpm: 72.0,
+            time_signature: "4/4".into(),
             duration_seconds: 240.0,
+            tempo_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_intro".into(),
                 name: "Cancion".into(),

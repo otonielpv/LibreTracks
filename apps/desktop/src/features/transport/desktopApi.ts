@@ -20,6 +20,12 @@ export type SongRegionSummary = {
   timeSignature: string;
 };
 
+export type TempoMarkerSummary = {
+  id: string;
+  startSeconds: number;
+  bpm: number;
+};
+
 export type PendingJumpSummary = {
   targetMarkerId: string;
   targetMarkerName: string;
@@ -59,7 +65,10 @@ export type SongView = {
   title: string;
   artist?: string | null;
   key?: string | null;
+  bpm: number;
+  timeSignature: string;
   durationSeconds: number;
+  tempoMarkers: TempoMarkerSummary[];
   regions: SongRegionSummary[];
   sectionMarkers: SectionMarkerSummary[];
   clips: ClipSummary[];
@@ -421,7 +430,6 @@ function applyDemoHistorySong(song: SongView) {
 function buildDemoSnapshot(): TransportSnapshot {
   syncDemoPlayback();
   const positionSeconds = demoClock.anchorPositionSeconds;
-  const timingRegion = getSongRegionAtPosition(demoSong, positionSeconds) ?? getPrimarySongRegion(demoSong);
   const currentMarker =
     [...demoSong.sectionMarkers]
       .reverse()
@@ -432,7 +440,7 @@ function buildDemoSnapshot(): TransportSnapshot {
     positionSeconds,
     currentMarker,
     pendingMarkerJump: demoPendingJump ? cloneSnapshot(demoPendingJump) : null,
-    musicalPosition: buildMusicalPosition(positionSeconds, demoSong.regions),
+    musicalPosition: buildMusicalPosition(positionSeconds, demoSong),
     transportClock: {
       anchorPositionSeconds: demoClock.anchorPositionSeconds,
       running: demoPlaybackState === "playing",
@@ -546,7 +554,10 @@ export async function createSong(): Promise<TransportSnapshot | null> {
       title: "Nueva Cancion",
       artist: null,
       key: null,
+      bpm: 120,
+      timeSignature: "4/4",
       durationSeconds: 60,
+      tempoMarkers: [],
       regions: [],
       sectionMarkers: [],
       clips: [],
@@ -627,14 +638,52 @@ export async function updateSongTempo(bpm: number): Promise<TransportSnapshot> {
   if (!isTauriApp) {
     updateDemoSong((song) => ({
       ...song,
-      regions: song.regions.map((region, index) =>
-        index === 0 ? { ...region, bpm: Math.max(1, bpm) } : region,
-      ),
+      bpm: Math.max(1, bpm),
     }));
     return buildDemoSnapshot();
   }
 
   return invokeCommand<TransportSnapshot>("update_song_tempo", { bpm });
+}
+
+export async function upsertSongTempoMarker(
+  startSeconds: number,
+  bpm: number,
+): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => {
+      const clampedStartSeconds = Math.max(0, startSeconds);
+      if (clampedStartSeconds <= 0.0001) {
+        return {
+          ...song,
+          bpm: Math.max(1, bpm),
+        };
+      }
+
+      const existingMarker = song.tempoMarkers.find(
+        (marker) => Math.abs(marker.startSeconds - clampedStartSeconds) < 0.0001,
+      );
+
+      return {
+        ...song,
+        tempoMarkers: existingMarker
+          ? song.tempoMarkers.map((marker) =>
+              marker.id === existingMarker.id ? { ...marker, bpm: Math.max(1, bpm) } : marker,
+            )
+          : [
+              ...song.tempoMarkers,
+              {
+                id: `tempo-marker-${Date.now()}`,
+                startSeconds: clampedStartSeconds,
+                bpm: Math.max(1, bpm),
+              },
+            ],
+      };
+    });
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("upsert_song_tempo_marker", { startSeconds, bpm });
 }
 
 export async function openProject(): Promise<TransportSnapshot | null> {
@@ -1508,6 +1557,15 @@ function deleteTrackFromSong(song: SongView, trackId: string): SongView {
 }
 
 function normalizeSong(song: SongView): SongView {
+  const bpm = Number.isFinite(song.bpm) && song.bpm > 0 ? song.bpm : 120;
+  const timeSignature = song.timeSignature?.trim() ? song.timeSignature : "4/4";
+  const tempoMarkers = [...(song.tempoMarkers ?? [])]
+    .map((marker) => ({
+      ...marker,
+      startSeconds: Math.max(0, marker.startSeconds),
+      bpm: Number.isFinite(marker.bpm) && marker.bpm > 0 ? marker.bpm : bpm,
+    }))
+    .sort((left, right) => left.startSeconds - right.startSeconds);
   const regions = [...song.regions].sort((left, right) => {
     if (left.startSeconds !== right.startSeconds) {
       return left.startSeconds - right.startSeconds;
@@ -1555,12 +1613,61 @@ function normalizeSong(song: SongView): SongView {
 
   return {
     ...song,
+    bpm,
+    timeSignature,
     durationSeconds,
+    tempoMarkers,
     regions,
     tracks: normalizedTracks,
     clips: normalizedClips,
     sectionMarkers,
   };
+}
+
+export function buildSongTempoRegions(song: SongView | null | undefined): SongRegionSummary[] {
+  if (!song) {
+    return [];
+  }
+
+  const markers = [...song.tempoMarkers]
+    .filter((marker) => marker.startSeconds > 0)
+    .sort((left, right) => left.startSeconds - right.startSeconds);
+  const horizonSeconds = Math.max(
+    song.durationSeconds,
+    ...markers.map((marker) => marker.startSeconds),
+  );
+  const regions: SongRegionSummary[] = [];
+  let startSeconds = 0;
+  let bpm = getSongBaseBpm(song);
+
+  for (const marker of markers) {
+    if (marker.startSeconds <= startSeconds) {
+      bpm = marker.bpm;
+      continue;
+    }
+
+    regions.push({
+      id: `tempo-region-${startSeconds.toFixed(4)}`,
+      name: `Tempo ${bpm.toFixed(2)}`,
+      startSeconds,
+      endSeconds: marker.startSeconds,
+      bpm,
+      timeSignature: getSongBaseTimeSignature(song),
+    });
+    startSeconds = marker.startSeconds;
+    bpm = marker.bpm;
+  }
+
+  regions.push({
+    id: `tempo-region-${startSeconds.toFixed(4)}-tail`,
+    name: `Tempo ${bpm.toFixed(2)}`,
+    startSeconds,
+    endSeconds: Math.max(startSeconds, horizonSeconds),
+    bpm,
+    timeSignature: getSongBaseTimeSignature(song),
+  });
+
+  return regions;
 }
 
 function sanitizeDemoRegionBounds(
@@ -1598,13 +1705,14 @@ function getDemoRegionTemplate(
     song.regions.find(
       (region) => startSeconds >= region.startSeconds && startSeconds < region.endSeconds,
     ) ??
+    getSongTempoRegionAtPosition(song, probeSeconds) ??
     song.regions[0] ?? {
       id: "region-template",
       name: song.title,
       startSeconds: 0,
       endSeconds: song.durationSeconds,
-      bpm: 120,
-      timeSignature: "4/4",
+      bpm: song.bpm,
+      timeSignature: song.timeSignature,
     }
   );
 }
@@ -1653,6 +1761,33 @@ export function getPrimarySongRegion(song: SongView | null | undefined): SongReg
   return song.regions[0] ?? null;
 }
 
+export function getSongBaseBpm(song: SongView | null | undefined): number {
+  return song?.bpm ?? 120;
+}
+
+export function getSongBaseTimeSignature(song: SongView | null | undefined): string {
+  return song?.timeSignature ?? "4/4";
+}
+
+export function getSongTempoRegionAtPosition(
+  song: SongView | null | undefined,
+  positionSeconds: number,
+): SongRegionSummary | null {
+  const tempoRegions = buildSongTempoRegions(song);
+  if (!tempoRegions.length) {
+    return null;
+  }
+
+  return (
+    tempoRegions.find(
+      (region) => positionSeconds >= region.startSeconds && positionSeconds < region.endSeconds,
+    ) ??
+    [...tempoRegions].reverse().find((region) => positionSeconds >= region.endSeconds) ??
+    tempoRegions[0] ??
+    null
+  );
+}
+
 export function getSongRegionAtPosition(
   song: SongView | null | undefined,
   positionSeconds: number,
@@ -1671,8 +1806,13 @@ export function getSongRegionAtPosition(
   );
 }
 
-function buildMusicalPosition(positionSeconds: number, regions: SongRegionSummary[]) {
-  return getCumulativeMusicalPosition(positionSeconds, regions);
+function buildMusicalPosition(positionSeconds: number, song: SongView) {
+  return getCumulativeMusicalPosition(
+    positionSeconds,
+    buildSongTempoRegions(song),
+    song.bpm,
+    song.timeSignature,
+  );
 }
 
 function insertTrack(
@@ -1774,7 +1914,10 @@ function buildDemoSong(): SongView {
     title: "LibreTracks Session",
     artist: "Demo Ensemble",
     key: "Am",
+    bpm: 120,
+    timeSignature: "4/4",
     durationSeconds: 180,
+    tempoMarkers: [],
     regions: [
       {
         id: "region_1",

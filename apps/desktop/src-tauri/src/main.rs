@@ -61,6 +61,7 @@ fn main() {
             commands::timeline::delete_song_region,
             commands::timeline::assign_section_marker_digit,
             commands::timeline::update_song_tempo,
+            commands::timeline::upsert_song_tempo_marker,
             commands::timeline::create_track,
             commands::project::create_clip,
             commands::project::create_clips_batch,

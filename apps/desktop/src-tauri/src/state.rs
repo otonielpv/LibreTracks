@@ -10,7 +10,7 @@ use std::{
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState};
 use libretracks_core::{
-    Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind,
+    Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, Track, TrackKind,
 };
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary, import_wav_files_to_library,
@@ -1415,10 +1415,51 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        if let Some(region) = song.regions.first_mut() {
-            region.bpm = bpm;
+        song.bpm = bpm;
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn upsert_song_tempo_marker(
+        &mut self,
+        start_seconds: f64,
+        bpm: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if !bpm.is_finite() || bpm <= 0.0 {
+            return Err(DesktopError::AudioCommand(
+                "song bpm marker must be greater than zero".into(),
+            ));
+        }
+
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let clamped_start_seconds = start_seconds.max(0.0).min(song.duration_seconds.max(0.0));
+
+        if clamped_start_seconds <= 0.0001 {
+            song.bpm = bpm;
+        } else if let Some(existing_marker) = song
+            .tempo_markers
+            .iter_mut()
+            .find(|marker| (marker.start_seconds - clamped_start_seconds).abs() < 0.0001)
+        {
+            existing_marker.bpm = bpm;
         } else {
-            return Ok(self.snapshot());
+            song.tempo_markers.push(TempoMarker {
+                id: format!("tempo_marker_{}", timestamp_suffix()),
+                start_seconds: clamped_start_seconds,
+                bpm,
+            });
+            song.tempo_markers.sort_by(|left, right| {
+                left.start_seconds
+                    .partial_cmp(&right.start_seconds)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
         }
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
@@ -2233,7 +2274,10 @@ fn build_empty_song(song_id: String, title: String) -> Song {
         title,
         artist: None,
         key: None,
+        bpm: 120.0,
+        time_signature: "4/4".into(),
         duration_seconds: 60.0,
+        tempo_markers: vec![],
         regions: vec![],
         tracks: vec![],
         clips: vec![],
@@ -2902,6 +2946,17 @@ fn sanitize_region_bounds(
 fn region_template_for_range(song: &Song, start_seconds: f64, end_seconds: f64) -> SongRegion {
     let probe_seconds = ((start_seconds + end_seconds) * 0.5)
         .min((song.duration_seconds - 0.0001).max(0.0));
+    let fallback_bpm = song
+        .tempo_markers
+        .iter()
+        .filter(|marker| marker.start_seconds <= probe_seconds)
+        .max_by(|left, right| {
+            left.start_seconds
+                .partial_cmp(&right.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|marker| marker.bpm)
+        .unwrap_or(song.bpm);
 
     song.regions
         .iter()
@@ -2918,8 +2973,8 @@ fn region_template_for_range(song: &Song, start_seconds: f64, end_seconds: f64) 
             name: song.title.clone(),
             start_seconds: 0.0,
             end_seconds: song.duration_seconds.max(1.0),
-            bpm: 120.0,
-            time_signature: "4/4".into(),
+            bpm: fallback_bpm,
+            time_signature: song.time_signature.clone(),
         })
 }
 
@@ -3129,6 +3184,8 @@ mod tests {
             title: "Move Demo".into(),
             artist: None,
             key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
             duration_seconds: 12.0,
             regions: vec![SongRegion {
                 id: "region_1".into(),
@@ -3308,6 +3365,8 @@ mod tests {
             title: "Hierarchy Demo".into(),
             artist: None,
             key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
             duration_seconds: 12.0,
             regions: vec![SongRegion {
                 id: "region_1".into(),
@@ -3575,6 +3634,8 @@ mod tests {
             title: "ID Audit".into(),
             artist: None,
             key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
             duration_seconds: 8.0,
             regions: vec![SongRegion {
                 id: "region_1".into(),
@@ -4260,8 +4321,9 @@ mod tests {
     fn build_empty_song_starts_with_an_empty_arrangement_at_120_bpm() {
         let song = super::build_empty_song("song_empty".into(), "Nueva Cancion".into());
 
-        assert_eq!(song.regions.len(), 1);
-        assert_eq!(song.regions[0].bpm, 120.0);
+        assert!(song.regions.is_empty());
+        assert_eq!(song.bpm, 120.0);
+        assert_eq!(song.time_signature, "4/4");
         assert!(song.tracks.is_empty());
         assert!(song.clips.is_empty());
         assert!(song.section_markers.is_empty());
@@ -4943,8 +5005,9 @@ mod tests {
             .expect("song view should build")
             .expect("song summary should exist");
 
-        assert_eq!(snapshot.project_revision, 0);
+        assert!(snapshot.project_revision > 0);
         assert!(song_view.regions.is_empty());
+        assert_eq!(song_view.bpm, 148.0);
     }
 
     #[test]

@@ -724,6 +724,8 @@ mod tests {
             title: "Audio Runtime".into(),
             artist: None,
             key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
             duration_seconds: 20.0,
             regions: vec![SongRegion {
                 id: "region_1".into(),
@@ -1265,6 +1267,8 @@ mod tests {
             title: "Cycle".into(),
             artist: None,
             key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
             duration_seconds: 1.0,
             regions: vec![SongRegion {
                 id: "region_1".into(),

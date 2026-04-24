@@ -276,6 +276,22 @@ pub fn update_song_tempo(
 }
 
 #[tauri::command]
+pub fn upsert_song_tempo_marker(
+    start_seconds: f64,
+    bpm: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .upsert_song_tempo_marker(start_seconds, bpm, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn create_track(
     name: String,
     kind: TrackKind,
