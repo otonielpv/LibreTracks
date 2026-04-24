@@ -1131,6 +1131,8 @@ body {
   min-width: 3.6rem;
   padding-left: 0.3rem;
   pointer-events: none;
+  transform-origin: 0 0;
+  transform: scaleX(var(--lt-ruler-mark-scale-x, 1));
 }
 
 .lt-ruler-mark strong,

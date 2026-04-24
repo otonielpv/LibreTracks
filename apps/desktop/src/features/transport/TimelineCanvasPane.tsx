@@ -53,6 +53,7 @@ type TimelineCanvasPaneProps = {
   rulerTrackRef: RefObject<HTMLDivElement | null>;
   horizontalScrollbarRef: RefObject<HTMLDivElement | null>;
   laneAreaRef: RefObject<HTMLDivElement | null>;
+  scrollViewportRef: RefObject<HTMLDivElement | null>;
   libraryClipPreview: LibraryClipPreviewState[];
   libraryPreviewRows: LibraryPreviewRow[];
   shouldShowEmptyArrangementHint: boolean;
@@ -110,6 +111,7 @@ export function TimelineCanvasPane({
   rulerTrackRef,
   horizontalScrollbarRef,
   laneAreaRef,
+  scrollViewportRef,
   libraryClipPreview,
   libraryPreviewRows,
   shouldShowEmptyArrangementHint,
@@ -233,6 +235,7 @@ export function TimelineCanvasPane({
               cameraXRef={cameraXRef}
               pixelsPerSecond={pixelsPerSecond}
               livePixelsPerSecondRef={livePixelsPerSecondRef}
+              scrollViewportRef={scrollViewportRef}
               timelineGrid={timelineGrid}
               selectedClipId={selectedClipId}
               clipPreviewSecondsRef={clipPreviewSecondsRef}

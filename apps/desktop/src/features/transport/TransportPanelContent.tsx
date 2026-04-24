@@ -4131,6 +4131,7 @@ export function TransportPanelContent() {
                 rulerTrackRef={rulerTrackRef}
                 horizontalScrollbarRef={horizontalScrollbarRef}
                 laneAreaRef={laneAreaRef}
+                scrollViewportRef={timelineScrollViewportRef}
                 libraryClipPreview={libraryClipPreview}
                 libraryPreviewRows={libraryPreviewRows}
                 shouldShowEmptyArrangementHint={shouldShowEmptyArrangementHint}

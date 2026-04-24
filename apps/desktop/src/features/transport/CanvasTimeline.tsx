@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type MutableRefObject, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type MutableRefObject, type ReactNode, type RefObject } from "react";
 
 import type {
   ClipSummary,
@@ -38,12 +38,16 @@ type TrackCanvasProps = {
   cameraXRef: MutableRefObject<number>;
   pixelsPerSecond: number;
   livePixelsPerSecondRef: MutableRefObject<number>;
+  scrollViewportRef: RefObject<HTMLDivElement | null>;
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
 };
 
-type TrackSceneSnapshot = Omit<TrackCanvasProps, "cameraXRef" | "livePixelsPerSecondRef">;
+type TrackSceneSnapshot = Omit<
+  TrackCanvasProps,
+  "cameraXRef" | "livePixelsPerSecondRef" | "scrollViewportRef"
+>;
 
 const TRACK_CLIP_TOP_PADDING = 1;
 const TRACK_CLIP_BOTTOM_PADDING = 1;
@@ -286,34 +290,6 @@ function clipScreenBounds(
   };
 }
 
-function cropWaveform(
-  clip: ClipSummary,
-  waveformLod: ResolvedWaveformLod | null,
-  visibleStartRatio = 0,
-  visibleEndRatio = 1,
-) {
-  const maxPeaks = waveformLod?.maxPeaks ?? new Float32Array(0);
-  const minPeaks = waveformLod?.minPeaks ?? new Float32Array(0);
-  if (!maxPeaks.length || clip.sourceDurationSeconds <= 0) {
-    return {
-      min: new Float32Array(0),
-      max: new Float32Array(0),
-    };
-  }
-
-  const clipStartRatio = clamp(clip.sourceStartSeconds / clip.sourceDurationSeconds, 0, 1);
-  const clipSpanRatio = clamp(clip.durationSeconds / clip.sourceDurationSeconds, 0, 1);
-  const startRatio = clamp(clipStartRatio + clipSpanRatio * visibleStartRatio, 0, 1);
-  const endRatio = clamp(clipStartRatio + clipSpanRatio * visibleEndRatio, 0, 1);
-  const startIndex = Math.floor(startRatio * maxPeaks.length);
-  const endIndex = Math.max(startIndex + 1, Math.ceil(endRatio * maxPeaks.length));
-
-  return {
-    min: minPeaks.slice(startIndex, endIndex),
-    max: maxPeaks.slice(startIndex, endIndex),
-  };
-}
-
 function drawWaveformShape(
   context: CanvasRenderingContext2D,
   clip: ClipSummary,
@@ -326,8 +302,9 @@ function drawWaveformShape(
   height: number,
 ) {
   const waveformLod = selectWaveformLod(waveform, pixelsPerSecond);
-  const { min, max } = cropWaveform(clip, waveformLod, 0, 1);
-  if (!max.length || !min.length || width < 2 || height < 2) {
+  const maxPeaks = waveformLod?.maxPeaks ?? new Float32Array(0);
+  const minPeaks = waveformLod?.minPeaks ?? new Float32Array(0);
+  if (!maxPeaks.length || !minPeaks.length || width < 2 || height < 2 || clip.sourceDurationSeconds <= 0) {
     return;
   }
 
@@ -337,22 +314,40 @@ function drawWaveformShape(
     return;
   }
 
-  const startIndex = Math.max(0, Math.floor((visiblePixelStart / width) * max.length));
-  const endIndex = Math.min(
-    max.length,
-    Math.max(startIndex + 1, Math.ceil((visiblePixelEnd / width) * max.length)),
+  const clipStartRatio = clamp(clip.sourceStartSeconds / clip.sourceDurationSeconds, 0, 1);
+  const clipSpanRatio = clamp(clip.durationSeconds / clip.sourceDurationSeconds, 0, 1);
+  const clipStartIndex = Math.max(0, Math.floor(clipStartRatio * maxPeaks.length));
+  const clipEndIndex = Math.min(
+    maxPeaks.length,
+    Math.max(clipStartIndex + 1, Math.ceil((clipStartRatio + clipSpanRatio) * maxPeaks.length)),
   );
-  if (startIndex >= endIndex || startIndex >= min.length) {
+  const clipSampleCount = clipEndIndex - clipStartIndex;
+  if (clipSampleCount <= 0) {
+    return;
+  }
+
+  const startIndex = Math.max(
+    clipStartIndex,
+    clipStartIndex + Math.floor((visiblePixelStart / width) * clipSampleCount),
+  );
+  const endIndex = Math.min(
+    clipEndIndex,
+    Math.max(
+      startIndex + 1,
+      clipStartIndex + Math.ceil((visiblePixelEnd / width) * clipSampleCount),
+    ),
+  );
+  if (startIndex >= endIndex || startIndex >= minPeaks.length) {
     return;
   }
 
   context.fillStyle = waveform?.isPreview ? "rgba(20, 20, 20, 0.34)" : "rgba(20, 20, 20, 0.72)";
   context.beginPath();
-  const xDenominator = Math.max(1, max.length - 1);
+  const xDenominator = Math.max(1, clipSampleCount - 1);
 
   for (let index = startIndex; index < endIndex; index += 1) {
-    const x = left + (index / xDenominator) * width;
-    const y = top + height * 0.5 - clamp(max[index], -1, 1) * height * 0.42;
+    const x = left + ((index - clipStartIndex) / xDenominator) * width;
+    const y = top + height * 0.5 - clamp(maxPeaks[index], -1, 1) * height * 0.42;
     if (index === startIndex) {
       context.moveTo(x, y);
     } else {
@@ -361,8 +356,8 @@ function drawWaveformShape(
   }
 
   for (let index = endIndex - 1; index >= startIndex; index -= 1) {
-    const x = left + (index / xDenominator) * width;
-    const y = top + height * 0.5 - clamp(min[index], -1, 1) * height * 0.42;
+    const x = left + ((index - clipStartIndex) / xDenominator) * width;
+    const y = top + height * 0.5 - clamp(minPeaks[index], -1, 1) * height * 0.42;
     context.lineTo(x, y);
   }
 
@@ -527,14 +522,29 @@ function drawTrackScene(
   snapshot: TrackSceneSnapshot,
   cameraX: number,
   pixelsPerSecond: number,
+  viewportScrollTop: number,
+  viewportHeight: number,
 ) {
-  context.clearRect(0, 0, snapshot.width, snapshot.height);
+  const { startIndex: visibleTrackStart, endIndex: visibleTrackEnd, startY, endY } =
+    resolveVisibleTrackWindow(
+      snapshot.visibleTracks.length,
+      snapshot.trackHeight,
+      viewportScrollTop,
+      viewportHeight,
+    );
+  const visibleHeight = Math.max(1, endY - startY);
+
+  context.save();
+  context.beginPath();
+  context.rect(0, startY, snapshot.width, visibleHeight);
+  context.clip();
+  context.clearRect(0, startY, snapshot.width, visibleHeight);
   context.fillStyle = "#0e0e0e";
-  context.fillRect(0, 0, snapshot.width, snapshot.height);
+  context.fillRect(0, startY, snapshot.width, visibleHeight);
 
   context.strokeStyle = "rgba(229, 226, 225, 0.05)";
   context.lineWidth = 1;
-  for (let index = 1; index <= snapshot.visibleTracks.length; index += 1) {
+  for (let index = visibleTrackStart + 1; index <= visibleTrackEnd; index += 1) {
     const y = Math.round(index * snapshot.trackHeight) + 0.5;
     context.beginPath();
     context.moveTo(0, y);
@@ -551,7 +561,8 @@ function drawTrackScene(
     pixelsPerSecond,
   );
 
-  snapshot.visibleTracks.forEach((track, trackIndex) => {
+  for (let trackIndex = visibleTrackStart; trackIndex < visibleTrackEnd; trackIndex += 1) {
+    const track = snapshot.visibleTracks[trackIndex];
     const trackTop = trackIndex * snapshot.trackHeight;
     const childCount = snapshot.song.tracks.filter((candidate) => candidate.parentTrackId === track.id).length;
 
@@ -566,7 +577,7 @@ function drawTrackScene(
         20,
         trackTop + snapshot.trackHeight / 2,
       );
-      return;
+      continue;
     }
 
     const trackClips = snapshot.clipsByTrack[track.id] ?? [];
@@ -641,18 +652,43 @@ function drawTrackScene(
         context.restore();
       }
     }
-  });
+  }
 
   // Redraw row separators on top of clips so the visual lane grid stays aligned with track headers.
   context.strokeStyle = "rgba(229, 226, 225, 0.05)";
   context.lineWidth = 1;
-  for (let index = 1; index <= snapshot.visibleTracks.length; index += 1) {
+  for (let index = visibleTrackStart + 1; index <= visibleTrackEnd; index += 1) {
     const y = Math.round(index * snapshot.trackHeight) + 0.5;
     context.beginPath();
     context.moveTo(0, y);
     context.lineTo(snapshot.width, y);
     context.stroke();
   }
+  context.restore();
+}
+
+function resolveVisibleTrackWindow(
+  trackCount: number,
+  trackHeight: number,
+  viewportScrollTop: number,
+  viewportHeight: number,
+) {
+  const safeTrackHeight = Math.max(1, trackHeight);
+  const safeScrollTop = Math.max(0, viewportScrollTop);
+  const safeViewportHeight = Math.max(safeTrackHeight, viewportHeight || safeTrackHeight);
+  const startIndex = clamp(Math.floor(safeScrollTop / safeTrackHeight) - 1, 0, trackCount);
+  const endIndex = clamp(
+    Math.ceil((safeScrollTop + safeViewportHeight) / safeTrackHeight) + 1,
+    startIndex,
+    trackCount,
+  );
+
+  return {
+    startIndex,
+    endIndex,
+    startY: startIndex * safeTrackHeight,
+    endY: endIndex * safeTrackHeight,
+  };
 }
 
 export function TimelineRulerCanvas({
@@ -727,8 +763,13 @@ export function TimelineRulerCanvas({
     let lastBaseSceneVersion = -1;
     let lastBaseCameraX = Number.NaN;
     let lastBasePixelsPerSecond = Number.NaN;
+    let lastOverlaySceneVersion = -1;
+    let lastOverlayCameraX = Number.NaN;
+    let lastOverlayPixelsPerSecond = Number.NaN;
     let lastOverlayTransformCameraX = Number.NaN;
     let lastOverlayTransformScaleX = Number.NaN;
+    let lastOverlayPlayheadSeconds = Number.NaN;
+    let lastOverlayPulseFrame = -1;
 
     const render = () => {
       const snapshot = snapshotRef.current;
@@ -777,6 +818,10 @@ export function TimelineRulerCanvas({
             overlayContentRef.current.style.left = `${-cameraX}px`;
             overlayContentRef.current.style.transform = `scaleX(${overlayScaleX})`;
             overlayContentRef.current.style.transformOrigin = "0 0";
+            overlayContentRef.current.style.setProperty(
+              "--lt-ruler-mark-scale-x",
+              `${overlayScaleX !== 0 ? 1 / overlayScaleX : 1}`,
+            );
             lastOverlayTransformCameraX = cameraX;
             lastOverlayTransformScaleX = overlayScaleX;
           }
@@ -784,41 +829,57 @@ export function TimelineRulerCanvas({
 
         const overlayContext = setupCanvas(overlayCanvas, snapshot.width, snapshot.height);
         if (overlayContext) {
-          overlayContext.clearRect(0, 0, snapshot.width, snapshot.height);
-
-          if (snapshot.pendingMarkerJump) {
-            drawPendingExecutionLine(
-              overlayContext,
-              snapshot.width,
-              snapshot.height,
-              cameraX,
-              livePixelsPerSecond,
-              snapshot.pendingMarkerJump.executeAtSeconds,
-            );
-          }
-
           const playheadSeconds =
             snapshot.playheadDragRef.current?.currentSeconds ?? playheadSecondsRef.current;
-          const pulseAlpha = 0.72 + Math.sin(performance.now() / 160) * 0.18;
+          const pulseFrame = snapshot.pendingMarkerJump ? Math.floor(performance.now() / 32) : 0;
           const currentMarkerId = snapshot.markers
             .filter((marker) => playheadSeconds >= marker.startSeconds)
             .at(-1)?.id ?? null;
+          const shouldRedrawOverlay =
+            lastOverlaySceneVersion !== sceneVersionRef.current ||
+            lastOverlayCameraX !== cameraX ||
+            lastOverlayPixelsPerSecond !== livePixelsPerSecond ||
+            lastOverlayPlayheadSeconds !== playheadSeconds ||
+            lastOverlayPulseFrame !== pulseFrame;
 
-          for (const marker of snapshot.markers) {
-            drawRulerMarker(
-              overlayContext,
-              marker,
-              snapshot.width,
-              snapshot.height,
-              cameraX,
-              livePixelsPerSecond,
-              {
-                isSelected: snapshot.selectedMarkerId === marker.id,
-                isArmed: snapshot.pendingMarkerJump?.targetMarkerId === marker.id,
-                isCurrent: currentMarkerId === marker.id,
-                pulseAlpha,
-              },
-            );
+          if (shouldRedrawOverlay) {
+            overlayContext.clearRect(0, 0, snapshot.width, snapshot.height);
+
+            if (snapshot.pendingMarkerJump) {
+              drawPendingExecutionLine(
+                overlayContext,
+                snapshot.width,
+                snapshot.height,
+                cameraX,
+                livePixelsPerSecond,
+                snapshot.pendingMarkerJump.executeAtSeconds,
+              );
+            }
+
+            const pulseAlpha = 0.72 + Math.sin(performance.now() / 160) * 0.18;
+
+            for (const marker of snapshot.markers) {
+              drawRulerMarker(
+                overlayContext,
+                marker,
+                snapshot.width,
+                snapshot.height,
+                cameraX,
+                livePixelsPerSecond,
+                {
+                  isSelected: snapshot.selectedMarkerId === marker.id,
+                  isArmed: snapshot.pendingMarkerJump?.targetMarkerId === marker.id,
+                  isCurrent: currentMarkerId === marker.id,
+                  pulseAlpha,
+                },
+              );
+            }
+
+            lastOverlaySceneVersion = sceneVersionRef.current;
+            lastOverlayCameraX = cameraX;
+            lastOverlayPixelsPerSecond = livePixelsPerSecond;
+            lastOverlayPlayheadSeconds = playheadSeconds;
+            lastOverlayPulseFrame = pulseFrame;
           }
         }
       } catch (error) {
@@ -871,6 +932,7 @@ export function TimelineTrackCanvas({
   cameraXRef,
   pixelsPerSecond,
   livePixelsPerSecondRef,
+  scrollViewportRef,
   timelineGrid,
   selectedClipId,
   clipPreviewSecondsRef,
@@ -938,27 +1000,43 @@ export function TimelineTrackCanvas({
     let lastBaseSceneVersion = -1;
     let lastBaseCameraX = Number.NaN;
     let lastBasePixelsPerSecond = Number.NaN;
+    let lastViewportScrollTop = Number.NaN;
+    let lastViewportHeight = Number.NaN;
     let lastPreviewClipState = clipPreviewSecondsRef.current;
 
     const render = () => {
       const snapshot = snapshotRef.current;
       const cameraX = cameraXRef.current;
       const livePixelsPerSecond = livePixelsPerSecondRef.current;
+      const scrollViewport = scrollViewportRef.current;
+      const viewportScrollTop = scrollViewport?.scrollTop ?? 0;
+      const viewportHeight = scrollViewport?.clientHeight ?? snapshot.height;
 
       if (
         lastBaseSceneVersion !== sceneVersionRef.current ||
         lastBaseCameraX !== cameraX ||
         lastBasePixelsPerSecond !== livePixelsPerSecond ||
+        lastViewportScrollTop !== viewportScrollTop ||
+        lastViewportHeight !== viewportHeight ||
         lastPreviewClipState !== snapshot.clipPreviewSecondsRef.current
       ) {
         const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
         if (baseContext) {
-          drawTrackScene(baseContext, snapshot, cameraX, livePixelsPerSecond);
+          drawTrackScene(
+            baseContext,
+            snapshot,
+            cameraX,
+            livePixelsPerSecond,
+            viewportScrollTop,
+            viewportHeight,
+          );
         }
 
         lastBaseSceneVersion = sceneVersionRef.current;
         lastBaseCameraX = cameraX;
         lastBasePixelsPerSecond = livePixelsPerSecond;
+        lastViewportScrollTop = viewportScrollTop;
+        lastViewportHeight = viewportHeight;
         lastPreviewClipState = snapshot.clipPreviewSecondsRef.current;
       }
 
