@@ -18,7 +18,6 @@ pub(crate) struct AudioBufferCache {
 
 #[derive(Debug)]
 pub(crate) struct SharedAudioSource {
-    file_path: PathBuf,
     preload_samples: Vec<f32>,
     mapped_audio: Option<MappedAudioSource>,
     preload_frame_count: usize,
@@ -276,6 +275,7 @@ impl MemoryClipReader {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn seek_to(&mut self, target_frame: usize) {
         let _ = self.seek_to_internal(target_frame);
     }
@@ -399,7 +399,6 @@ pub(crate) fn prepare_audio_source(file_path: &Path) -> Result<SharedAudioSource
         .unwrap_or(0);
 
     Ok(SharedAudioSource {
-        file_path: file_path.to_path_buf(),
         preload_samples: Vec::new(),
         mapped_audio: Some(MappedAudioSource {
             mmap,

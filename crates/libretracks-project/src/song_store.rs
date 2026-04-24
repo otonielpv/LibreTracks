@@ -4,8 +4,7 @@ use std::{
 };
 
 use libretracks_core::{
-    validate_song, Clip, DomainError, Marker, Song, SongRegion, TempoMetadata, TempoSource,
-    Track,
+    validate_song, Clip, DomainError, Marker, Song, SongRegion, TempoMetadata, Track,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -218,6 +217,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
 }
 
 fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError> {
+    let region_name = document.title.clone();
     let song = Song {
         id: document.id,
         title: document.title,
@@ -226,7 +226,7 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
         duration_seconds: document.duration_seconds,
         regions: vec![SongRegion {
             id: "region_1".into(),
-            name: document.title.clone(),
+            name: region_name,
             start_seconds: 0.0,
             end_seconds: document.duration_seconds,
             bpm: document.bpm,

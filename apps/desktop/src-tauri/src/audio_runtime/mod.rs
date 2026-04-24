@@ -48,7 +48,6 @@ use self::telemetry::{
 
 const PCM_RING_CAPACITY_FRAMES: usize = 4_096;
 const DISK_RENDER_BLOCK_FRAMES: usize = 512;
-const AUDIO_PRELOAD_SECONDS: f64 = 2.0;
 const GAIN_EPSILON: f32 = 0.000_001;
 const AUDIO_METER_EVENT: &str = "audio:meters";
 const AUDIO_METER_EMIT_INTERVAL: Duration = Duration::from_millis(16);
