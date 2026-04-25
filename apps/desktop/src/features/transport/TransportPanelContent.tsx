@@ -2897,6 +2897,12 @@ export function TransportPanelContent() {
       return;
     }
 
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      applyTrackHeight(trackHeight + (event.deltaY < 0 ? TRACK_HEIGHT_STEP : -TRACK_HEIGHT_STEP));
+      return;
+    }
+
     const shouldScrollHorizontally = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
     if (!shouldScrollHorizontally) {
       return;

@@ -768,6 +768,7 @@ describe("App", () => {
   it("zooms when the wheel is used over the painted timeline canvas", async () => {
     const { container } = await renderApp();
     const shell = mockTimelineShellMetrics(container, 1500);
+    mockTrackListBounds(container, 1500, 500);
 
     await act(async () => {
       fireEvent(window, new Event("resize"));
@@ -786,6 +787,7 @@ describe("App", () => {
   it("zooms when the wheel is used over the track list surface", async () => {
     const { container } = await renderApp();
     const shell = mockTimelineShellMetrics(container, 1500);
+    mockTrackListBounds(container, 1500, 500);
 
     await act(async () => {
       fireEvent(window, new Event("resize"));
@@ -801,24 +803,23 @@ describe("App", () => {
     expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
   });
 
-  it("registers a non-passive capture wheel listener on the timeline shell", async () => {
+  it("registers non-passive native wheel listeners on timeline interaction surfaces", async () => {
     const addEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, "addEventListener");
 
     await renderApp();
 
-    const wheelCall = addEventListenerSpy.mock.calls.find(([type, _listener, options]) => {
-      return (
-        type === "wheel" &&
-        typeof options === "object" &&
-        options !== null &&
-        "capture" in options &&
-        "passive" in options &&
-        options.capture === true &&
-        options.passive === false
-      );
-    });
+    const wheelCalls = addEventListenerSpy.mock.calls.filter(
+      ([type, _listener, options]) =>
+        type === "wheel" && typeof options === "object" && options !== null && "passive" in options,
+    );
 
-    expect(wheelCall).toBeTruthy();
+    expect(wheelCalls.length).toBeGreaterThanOrEqual(2);
+    expect(
+      wheelCalls.some(
+        ([, , options]) =>
+          typeof options === "object" && options !== null && "passive" in options && options.passive === false,
+      ),
+    ).toBe(true);
   });
 
   it("resizes track rows with ctrl plus wheel anywhere on the timeline shell", async () => {
@@ -838,6 +839,23 @@ describe("App", () => {
 
     expect((firstHeader as HTMLElement).style.height).toBe("102px");
     expect((firstLane as HTMLElement).style.height).toBe("102px");
+  });
+
+  it("resizes track rows with ctrl plus wheel over the native timeline lane surface", async () => {
+    const { container } = await renderApp();
+    mockTimelineShellMetrics(container, 1500);
+
+    const firstHeader = container.querySelector(".lt-track-header") as HTMLElement | null;
+    const trackList = container.querySelector(".lt-track-list") as HTMLElement | null;
+    expect(firstHeader).toBeTruthy();
+    expect(trackList).toBeTruthy();
+    expect((firstHeader as HTMLElement).style.height).toBe("94px");
+
+    await act(async () => {
+      fireEvent.wheel(trackList as HTMLElement, { deltaY: -100, ctrlKey: true });
+    });
+
+    expect((firstHeader as HTMLElement).style.height).toBe("102px");
   });
 
   it("creates a new audio track from the track context menu", async () => {

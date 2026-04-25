@@ -90,16 +90,17 @@ function isRenderableCanvasSize(value: number) {
   return Number.isFinite(value) && value > 0;
 }
 
-function setupCanvas(canvas: HTMLCanvasElement, width: number, height: number) {
-  if (typeof globalThis === "object" && "__vitest_worker__" in globalThis) {
-    return null;
-  }
+function shouldSkipCanvas2D() {
+  return (
+    (typeof globalThis === "object" && "__vitest_worker__" in globalThis) ||
+    (typeof navigator !== "undefined" &&
+      typeof navigator.userAgent === "string" &&
+      navigator.userAgent.toLowerCase().includes("jsdom"))
+  );
+}
 
-  if (
-    typeof navigator !== "undefined" &&
-    typeof navigator.userAgent === "string" &&
-    navigator.userAgent.toLowerCase().includes("jsdom")
-  ) {
+function setupCanvas(canvas: HTMLCanvasElement, width: number, height: number) {
+  if (shouldSkipCanvas2D()) {
     return null;
   }
 
@@ -130,6 +131,18 @@ function setupCanvas(canvas: HTMLCanvasElement, width: number, height: number) {
 
   context.setTransform(dpr, 0, 0, dpr, 0, 0);
   return context;
+}
+
+function safeGetCanvasContext(canvas: HTMLCanvasElement) {
+  if (shouldSkipCanvas2D()) {
+    return null;
+  }
+
+  try {
+    return canvas.getContext("2d");
+  } catch {
+    return null;
+  }
 }
 
 function formatClipSignatureNumber(value: number | null | undefined) {
@@ -582,9 +595,9 @@ export function TimelineTrackCanvas({
       return;
     }
 
-    const backgroundContext = backgroundCanvas.getContext("2d");
-    const tracksContext = tracksCanvas.getContext("2d");
-    const foregroundContext = foregroundCanvas.getContext("2d");
+    const backgroundContext = safeGetCanvasContext(backgroundCanvas);
+    const tracksContext = safeGetCanvasContext(tracksCanvas);
+    const foregroundContext = safeGetCanvasContext(foregroundCanvas);
     if (!backgroundContext || !tracksContext || !foregroundContext) {
       return;
     }
