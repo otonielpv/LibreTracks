@@ -380,7 +380,7 @@ body {
 }
 
 .lt-side-nav {
-  width: 4rem;
+  width: 5rem;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -400,6 +400,8 @@ body {
   color: rgb(186 202 197 / 0.55);
   font: 600 10px/1.1 "Space Grotesk", sans-serif;
   letter-spacing: 0.14em;
+  overflow-wrap: anywhere;
+  text-align: center;
   text-transform: uppercase;
 }
 

@@ -4,6 +4,7 @@ import type {
   MutableRefObject,
   RefObject,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import type {
@@ -160,6 +161,8 @@ export function TimelineCanvasPane({
   onLibraryPreviewLaneDragOver,
   onLibraryPreviewLaneDrop,
 }: TimelineCanvasPaneProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="lt-timeline-canvas-pane">
       <div
@@ -352,14 +355,13 @@ export function TimelineCanvasPane({
           {shouldShowEmptyArrangementHint ? (
             <div
               className="lt-empty-arrangement-dropzone"
-              aria-label="Empty arrangement dropzone"
+              aria-label={t("transport.shell.emptyArrangementDropzone")}
               onDragOver={onEmptyArrangementLibraryDragOver}
               onDrop={onEmptyArrangementLibraryDrop}
             >
-              <strong>Drop audio from the Library to create the first track</strong>
+              <strong>{t("transport.shell.emptyArrangementTitle")}</strong>
               <p>
-                LibreTracks will create an audio track automatically and place the clip at the snapped
-                timeline position.
+                {t("transport.shell.emptyArrangementDescription")}
               </p>
               {libraryClipPreview
                 .filter((preview) => preview.trackId === null)
