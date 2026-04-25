@@ -863,30 +863,6 @@ describe("App", () => {
     expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
   });
 
-  it("expands the horizontal scrollbar width immediately during wheel zoom preview", async () => {
-    const { container } = await renderApp();
-    mockTimelineShellMetrics(container, 1500);
-    mockRulerBounds(container);
-
-    await act(async () => {
-      fireEvent(window, new Event("resize"));
-    });
-
-    const ruler = container.querySelector(".lt-ruler-track") as HTMLElement | null;
-    const scrollbarContent = container.querySelector(".lt-horizontal-scrollbar-content") as HTMLDivElement | null;
-    expect(ruler).toBeTruthy();
-    expect(scrollbarContent).toBeTruthy();
-
-    const widthBefore = Number.parseFloat((scrollbarContent as HTMLDivElement).style.width);
-
-    await act(async () => {
-      fireEvent.wheel(ruler as HTMLElement, { deltaY: -100, clientX: 900 });
-    });
-
-    const widthAfter = Number.parseFloat((scrollbarContent as HTMLDivElement).style.width);
-    expect(widthAfter).toBeGreaterThan(widthBefore);
-  });
-
   it("zooms when the wheel is used over the painted timeline canvas", async () => {
     const { container } = await renderApp();
     const shell = mockTimelineShellMetrics(container, 1500);

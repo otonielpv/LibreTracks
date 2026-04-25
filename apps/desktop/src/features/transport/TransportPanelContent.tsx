@@ -243,13 +243,6 @@ type TransportAnchorMeta = {
   emittedAtUnixMs: number;
 };
 
-type ZoomLagDebugState = {
-  pending: boolean;
-  liveZoomLevel: number;
-  committedZoomLevel: number;
-  lastLagMs: number;
-};
-
 function formatClock(seconds: number) {
   const safeSeconds = Math.max(0, seconds);
   const minutes = Math.floor(safeSeconds / 60);
@@ -749,12 +742,6 @@ export function TransportPanelContent() {
   const selectTrack = useTimelineUIStore((state) => state.selectTrack);
   const selectClip = useTimelineUIStore((state) => state.selectClip);
   const selectSection = useTimelineUIStore((state) => state.selectSection);
-  const [zoomLagDebug, setZoomLagDebug] = useState<ZoomLagDebugState>({
-    pending: false,
-    liveZoomLevel: zoomLevel,
-    committedZoomLevel: zoomLevel,
-    lastLagMs: 0,
-  });
   const panelRef = useRef<HTMLDivElement | null>(null);
   const menuBarRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
@@ -762,7 +749,6 @@ export function TransportPanelContent() {
   const timelineShellRef = useRef<HTMLDivElement | null>(null);
   const timelineScrollViewportRef = useRef<HTMLDivElement | null>(null);
   const horizontalScrollbarRef = useRef<HTMLDivElement | null>(null);
-  const horizontalScrollbarContentRef = useRef<HTMLDivElement | null>(null);
   const playbackVisualAnchorRef = useRef({
     anchorPositionSeconds: 0,
     anchorReceivedAtMs: 0,
@@ -809,7 +795,6 @@ export function TransportPanelContent() {
   });
   const scrollDebounceTimerRef = useRef<number | null>(null);
   const zoomDebounceTimerRef = useRef<number | null>(null);
-  const zoomLagStartedAtRef = useRef<number | null>(null);
   const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
   const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
   const playbackSongDir = useTransportStore((state) => state.playback?.songDir ?? null);
@@ -2328,45 +2313,6 @@ export function TransportPanelContent() {
     return clampedCameraX;
   }
 
-  function resolveTimelineScrollableWidth(
-    nextPixelsPerSecond: number,
-    nextViewportWidth = laneViewportWidth,
-    nextDurationSeconds = song?.durationSeconds ?? 0,
-    nextContentEndSeconds = timelineContentEndSeconds,
-  ) {
-    const effectiveViewportWidth = Math.max(
-      320,
-      horizontalScrollbarRef.current?.clientWidth ?? nextViewportWidth,
-    );
-
-    return effectiveViewportWidth + getMaxCameraX(
-      nextDurationSeconds,
-      nextPixelsPerSecond,
-      effectiveViewportWidth,
-      nextContentEndSeconds,
-    );
-  }
-
-  function syncTimelineScrollGeometry(
-    nextPixelsPerSecond: number,
-    nextViewportWidth = laneViewportWidth,
-    nextDurationSeconds = song?.durationSeconds ?? 0,
-    nextContentEndSeconds = timelineContentEndSeconds,
-  ) {
-    const contentWidth = resolveTimelineScrollableWidth(
-      nextPixelsPerSecond,
-      nextViewportWidth,
-      nextDurationSeconds,
-      nextContentEndSeconds,
-    );
-
-    if (horizontalScrollbarContentRef.current) {
-      horizontalScrollbarContentRef.current.style.width = `${contentWidth}px`;
-    }
-
-    return contentWidth;
-  }
-
   function commitCameraXToStore(nextCameraX: number) {
     updateCameraX(nextCameraX, {
       commitToStore: true,
@@ -2504,17 +2450,12 @@ export function TransportPanelContent() {
   const pixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
   const liveZoomLevelRef = useRef(zoomLevel);
   const livePixelsPerSecondRef = useRef(pixelsPerSecond);
-  const scrollbarContentWidth = resolveTimelineScrollableWidth(
-    livePixelsPerSecondRef.current,
-    laneViewportWidth,
+  const maxTimelineCameraX = getMaxCameraX(
     song?.durationSeconds ?? 0,
+    pixelsPerSecond,
+    laneViewportWidth,
     timelineContentEndSeconds,
   );
-  const zoomLagDebugLabel = song
-    ? zoomLagDebug.pending
-      ? `zoom dbg pending | live ${zoomLagDebug.liveZoomLevel.toFixed(2)}x | store ${zoomLagDebug.committedZoomLevel.toFixed(2)}x`
-      : `zoom dbg ${zoomLagDebug.lastLagMs.toFixed(0)}ms | ${zoomLagDebug.committedZoomLevel.toFixed(2)}x`
-    : null;
   const pendingMarkerJump = pendingMarkerJumpSignature
     ? snapshotRef.current?.pendingMarkerJump ?? null
     : null;
@@ -2708,14 +2649,6 @@ export function TransportPanelContent() {
   }, [pixelsPerSecond, zoomLevel]);
 
   useEffect(() => {
-    setZoomLagDebug((current) => ({
-      ...current,
-      committedZoomLevel: zoomLevel,
-      liveZoomLevel: current.pending ? current.liveZoomLevel : zoomLevel,
-    }));
-  }, [zoomLevel]);
-
-  useEffect(() => {
     if (zoomDebounceTimerRef.current === null || Math.abs(cameraXRef.current - cameraX) <= 0.5) {
       cameraXRef.current = cameraX;
     }
@@ -2731,15 +2664,6 @@ export function TransportPanelContent() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    syncTimelineScrollGeometry(
-      pixelsPerSecond,
-      laneViewportWidth,
-      song?.durationSeconds ?? 0,
-      timelineContentEndSeconds,
-    );
-  }, [laneViewportWidth, pixelsPerSecond, song?.durationSeconds, timelineContentEndSeconds]);
 
   useEffect(() => {
     updateCameraX(cameraXRef.current, {
@@ -2909,9 +2833,6 @@ export function TransportPanelContent() {
     const nextPixelsPerSecond = clampedZoom * BASE_PIXELS_PER_SECOND;
     const previousPixelsPerSecond = livePixelsPerSecondRef.current;
     const durationSeconds = song?.durationSeconds ?? 0;
-    if (zoomLagStartedAtRef.current === null) {
-      zoomLagStartedAtRef.current = performance.now();
-    }
     const nextCameraX = zoomCameraAtViewportX({
       durationSeconds,
       contentEndSeconds: timelineContentEndSeconds,
@@ -2924,12 +2845,6 @@ export function TransportPanelContent() {
 
     liveZoomLevelRef.current = clampedZoom;
     livePixelsPerSecondRef.current = nextPixelsPerSecond;
-    syncTimelineScrollGeometry(
-      nextPixelsPerSecond,
-      laneViewportWidth,
-      durationSeconds,
-      timelineContentEndSeconds,
-    );
     const clampedCameraX = updateCameraX(nextCameraX, {
       durationSeconds,
       contentEndSeconds: timelineContentEndSeconds,
@@ -2944,13 +2859,6 @@ export function TransportPanelContent() {
       zoomLevel: clampedZoom,
     };
 
-    setZoomLagDebug((current) => ({
-      ...current,
-      pending: true,
-      liveZoomLevel: clampedZoom,
-      committedZoomLevel: zoomLevel,
-    }));
-
     if (options?.scheduleCommit !== false) {
       if (zoomDebounceTimerRef.current !== null) {
         window.clearTimeout(zoomDebounceTimerRef.current);
@@ -2960,14 +2868,6 @@ export function TransportPanelContent() {
         zoomDebounceTimerRef.current = null;
         setZoomLevel(nextView.zoomLevel);
         commitCameraXToStore(nextView.cameraX);
-        const lagMs = zoomLagStartedAtRef.current == null ? 0 : performance.now() - zoomLagStartedAtRef.current;
-        zoomLagStartedAtRef.current = null;
-        setZoomLagDebug({
-          pending: false,
-          liveZoomLevel: nextView.zoomLevel,
-          committedZoomLevel: nextView.zoomLevel,
-          lastLagMs: lagMs,
-        });
       }, LIVE_ZOOM_COMMIT_DEBOUNCE_MS);
     }
 
@@ -2988,24 +2888,10 @@ export function TransportPanelContent() {
 
     liveZoomLevelRef.current = nextView.zoomLevel;
     livePixelsPerSecondRef.current = nextView.zoomLevel * BASE_PIXELS_PER_SECOND;
-    syncTimelineScrollGeometry(
-      livePixelsPerSecondRef.current,
-      laneViewportWidth,
-      song?.durationSeconds ?? 0,
-      timelineContentEndSeconds,
-    );
     setZoomLevel(nextView.zoomLevel);
     updateCameraX(nextView.cameraX, {
       pixelsPerSecond: livePixelsPerSecondRef.current,
       commitToStore: true,
-    });
-    const lagMs = zoomLagStartedAtRef.current == null ? 0 : performance.now() - zoomLagStartedAtRef.current;
-    zoomLagStartedAtRef.current = null;
-    setZoomLagDebug({
-      pending: false,
-      liveZoomLevel: nextView.zoomLevel,
-      committedZoomLevel: nextView.zoomLevel,
-      lastLagMs: lagMs,
     });
   }
 
@@ -4589,7 +4475,6 @@ export function TransportPanelContent() {
           trackCount={song?.tracks.length ?? 0}
           clipCount={song?.clips.length ?? 0}
           markerCount={song?.sectionMarkers.length ?? 0}
-          zoomLagDebugLabel={zoomLagDebugLabel}
           onToggleSnap={toggleSnapEnabled}
           onGlobalJumpModeChange={setGlobalJumpMode}
           onGlobalJumpBarsChange={setGlobalJumpBars}
@@ -4902,9 +4787,8 @@ export function TransportPanelContent() {
                 }}
               >
                 <div
-                  ref={horizontalScrollbarContentRef}
                   className="lt-horizontal-scrollbar-content"
-                  style={{ width: scrollbarContentWidth }}
+                  style={{ width: laneViewportWidth + maxTimelineCameraX }}
                 />
               </div>
             </div>
