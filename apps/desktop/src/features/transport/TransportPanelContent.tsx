@@ -4553,7 +4553,7 @@ export function TransportPanelContent() {
 
                   event.preventDefault();
                   const seekStartSeconds = snappedRulerSeconds(event, workspaceDurationSeconds);
-                  const startSeconds = snappedRulerSeconds(event, song.durationSeconds);
+                  const startSeconds = snappedRulerSeconds(event, workspaceDurationSeconds);
                   clearSelection();
                   setSelectedRegionId(null);
                   setContextMenu(null);
@@ -4577,7 +4577,7 @@ export function TransportPanelContent() {
                   };
 
                   const updateRangeSelection = (clientX: number) => {
-                    const currentSeconds = snappedRulerSecondsAtClientX(clientX, song.durationSeconds);
+                    const currentSeconds = snappedRulerSecondsAtClientX(clientX, workspaceDurationSeconds);
                     setSelectedTimelineRange({
                       startSeconds: Math.min(startSeconds, currentSeconds),
                       endSeconds: Math.max(startSeconds, currentSeconds),
@@ -4653,7 +4653,7 @@ export function TransportPanelContent() {
                       return;
                     }
 
-                    const endSeconds = snappedRulerSeconds(windowEvent, song.durationSeconds);
+                    const endSeconds = snappedRulerSeconds(windowEvent, workspaceDurationSeconds);
                     const normalizedStartSeconds = Math.min(startSeconds, endSeconds);
                     const normalizedEndSeconds = Math.max(startSeconds, endSeconds);
                     setSelectedTimelineRange({
