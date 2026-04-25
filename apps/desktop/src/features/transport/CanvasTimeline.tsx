@@ -338,7 +338,7 @@ export function TimelineRulerCanvas({
     let lastOverlayPixelsPerSecond = Number.NaN;
     let lastOverlayTransformCameraX = Number.NaN;
     let lastOverlayTransformScaleX = Number.NaN;
-    let lastOverlayPlayheadSeconds = Number.NaN;
+    let lastOverlayCurrentMarkerId: string | null = null;
     let lastOverlayPulseFrame = -1;
 
     const render = () => {
@@ -408,7 +408,7 @@ export function TimelineRulerCanvas({
             lastOverlaySceneVersion !== sceneVersionRef.current ||
             lastOverlayCameraX !== cameraX ||
             lastOverlayPixelsPerSecond !== livePixelsPerSecond ||
-            lastOverlayPlayheadSeconds !== playheadSeconds ||
+            lastOverlayCurrentMarkerId !== currentMarkerId ||
             lastOverlayPulseFrame !== pulseFrame;
 
           if (shouldRedrawOverlay) {
@@ -431,7 +431,7 @@ export function TimelineRulerCanvas({
             lastOverlaySceneVersion = sceneVersionRef.current;
             lastOverlayCameraX = cameraX;
             lastOverlayPixelsPerSecond = livePixelsPerSecond;
-            lastOverlayPlayheadSeconds = playheadSeconds;
+            lastOverlayCurrentMarkerId = currentMarkerId;
             lastOverlayPulseFrame = pulseFrame;
           }
         }

@@ -253,6 +253,8 @@ type TransportAnchorMeta = {
   emittedAtUnixMs: number;
 };
 
+const PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS = 0.08;
+
 function formatClock(seconds: number) {
   const safeSeconds = Math.max(0, seconds);
   const minutes = Math.floor(safeSeconds / 60);
@@ -1369,8 +1371,23 @@ export function TransportPanelContent() {
     syncLivePosition(isRunning ? anchorPositionSeconds : nextSnapshot.positionSeconds);
   }
 
+  function resolveCurrentVisualPosition() {
+    const anchor = playbackVisualAnchorRef.current;
+    const elapsedSeconds = anchor.running
+      ? (performance.now() - anchor.anchorReceivedAtMs) / 1000
+      : 0;
+    const durationSeconds = anchor.durationSeconds || timelineDurationSecondsRef.current || songDurationSecondsRef.current;
+
+    return clamp(
+      anchor.anchorPositionSeconds + elapsedSeconds,
+      0,
+      durationSeconds || Number.MAX_SAFE_INTEGER,
+    );
+  }
+
   useEffect(() => {
     const syncPlaybackSnapshot = (nextSnapshot: TransportSnapshot | null) => {
+      const previousSnapshot = snapshotRef.current;
       snapshotRef.current = nextSnapshot;
 
       if (!nextSnapshot) {
@@ -1392,6 +1409,24 @@ export function TransportPanelContent() {
 
       if (anchorMeta) {
         transportAnchorMetaRef.current = null;
+      }
+
+      const shouldPreserveVisualAnchor =
+        !anchorMeta &&
+        previousSnapshot?.playbackState === "playing" &&
+        nextSnapshot.playbackState === "playing" &&
+        previousSnapshot.projectRevision === nextSnapshot.projectRevision &&
+        playbackVisualAnchorRef.current.running &&
+        Boolean(nextSnapshot.transportClock?.running);
+
+      if (shouldPreserveVisualAnchor) {
+        const polledAnchorPosition =
+          nextSnapshot.transportClock?.anchorPositionSeconds ?? nextSnapshot.positionSeconds;
+        const visualDriftSeconds = Math.abs(resolveCurrentVisualPosition() - polledAnchorPosition);
+
+        if (visualDriftSeconds <= PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS) {
+          return;
+        }
       }
 
       applyTransportVisualAnchor(nextSnapshot, anchorMeta);
