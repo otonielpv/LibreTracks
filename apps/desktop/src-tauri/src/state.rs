@@ -3161,6 +3161,25 @@ mod tests {
         assert_eq!(summary.display, "1801.1.25");
     }
 
+    #[test]
+    fn musical_position_summary_uses_tempo_markers_beyond_song_duration() {
+        let mut song = demo_song();
+        song.duration_seconds = 8.0;
+        song.bpm = 120.0;
+        song.tempo_markers = vec![TempoMarker {
+            id: "tempo_far".into(),
+            start_seconds: 12.0,
+            bpm: 60.0,
+        }];
+
+        let summary = musical_position_summary(&song, 13.0);
+
+        assert_eq!(summary.bar_number, 7);
+        assert_eq!(summary.beat_in_bar, 2);
+        assert_eq!(summary.sub_beat, 0);
+        assert_eq!(summary.display, "7.2.00");
+    }
+
     fn demo_song_with_two_sections() -> Song {
         let mut song = demo_song_with_section();
         song.section_markers.push(Marker {

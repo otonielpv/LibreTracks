@@ -355,7 +355,7 @@ pub(crate) fn musical_position_summary(
 
     let beats_per_bar = numerator.max(1);
     let clamped_seconds = position_seconds.max(0.0);
-    let tempo_regions = build_tempo_regions(song, clamped_seconds.max(song.duration_seconds));
+    let tempo_regions = build_tempo_regions(song, clamped_seconds);
     let mut total_frames = 0_u64;
 
     for region in tempo_regions {
@@ -443,9 +443,7 @@ fn build_tempo_regions(song: &Song, horizon_seconds: f64) -> Vec<TempoRegion> {
 
     regions.push(TempoRegion {
         start_seconds,
-        end_seconds: horizon_seconds
-            .max(song.duration_seconds)
-            .max(start_seconds),
+        end_seconds: horizon_seconds.max(start_seconds),
         bpm,
     });
 
