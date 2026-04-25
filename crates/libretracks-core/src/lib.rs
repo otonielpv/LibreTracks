@@ -122,6 +122,19 @@ mod tests {
     }
 
     #[test]
+    fn allows_section_markers_beyond_song_duration() {
+        let mut song = valid_song();
+        song.section_markers.push(Marker {
+            id: "section_outro".into(),
+            name: "Outro".into(),
+            start_seconds: 360.0,
+            digit: Some(2),
+        });
+
+        assert!(validate_song(&song).is_ok());
+    }
+
+    #[test]
     fn resolves_the_current_marker_at_a_position() {
         let mut song = valid_song();
         song.section_markers = vec![

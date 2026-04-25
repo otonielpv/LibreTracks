@@ -1139,9 +1139,7 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let start_seconds = start_seconds
-            .max(0.0)
-            .min((song.duration_seconds - 0.0001).max(0.0));
+        let start_seconds = start_seconds.max(0.0);
         let marker_name = song.next_marker_name();
         song.section_markers.push(Marker {
             id: format!("section_{}", timestamp_suffix()),
@@ -1179,9 +1177,7 @@ impl DesktopSession {
             ));
         }
 
-        let start_seconds = start_seconds
-            .max(0.0)
-            .min((song.duration_seconds - 0.0001).max(0.0));
+        let start_seconds = start_seconds.max(0.0);
 
         let section = song
             .section_markers
@@ -1401,7 +1397,7 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let clamped_start_seconds = start_seconds.max(0.0).min(song.duration_seconds.max(0.0));
+        let clamped_start_seconds = start_seconds.max(0.0);
 
         if clamped_start_seconds <= 0.0001 {
             song.bpm = bpm;
@@ -4912,6 +4908,45 @@ mod tests {
         assert_eq!(snapshot.project_revision, song_view.project_revision);
         assert_eq!(song_view.bpm, 91.0);
         assert!(song_view.tempo_markers.is_empty());
+    }
+
+    #[test]
+    fn creating_a_section_marker_beyond_song_duration_preserves_its_position() {
+        let mut session = session_with_song_dir("section-beyond-duration-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        let snapshot = session
+            .create_section_marker(24.0, &audio)
+            .expect("section marker should be created beyond song duration");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert!(snapshot.project_revision > 0);
+        assert_eq!(song_view.duration_seconds, 12.0);
+        assert_eq!(song_view.section_markers.len(), 1);
+        assert_eq!(song_view.section_markers[0].start_seconds, 24.0);
+    }
+
+    #[test]
+    fn creating_a_tempo_marker_beyond_song_duration_preserves_its_position() {
+        let mut session = session_with_song_dir("tempo-beyond-duration-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        let snapshot = session
+            .upsert_song_tempo_marker(24.0, 91.0, &audio)
+            .expect("tempo marker should be created beyond song duration");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert!(snapshot.project_revision > 0);
+        assert_eq!(song_view.duration_seconds, 12.0);
+        assert_eq!(song_view.tempo_markers.len(), 1);
+        assert_eq!(song_view.tempo_markers[0].start_seconds, 24.0);
+        assert_eq!(song_view.tempo_markers[0].bpm, 91.0);
     }
 
     #[test]

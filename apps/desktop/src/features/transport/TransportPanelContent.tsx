@@ -4673,7 +4673,7 @@ export function TransportPanelContent() {
                     return;
                   }
 
-                  const positionSeconds = snappedRulerSeconds(event, song.durationSeconds);
+                  const positionSeconds = snappedRulerSeconds(event, workspaceDurationSeconds);
                   clearSelection();
                   setSelectedRegionId(null);
                   const activeTimelineRange =

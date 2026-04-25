@@ -165,7 +165,7 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
     let mut used_digits = HashSet::new();
 
     for marker in &song.section_markers {
-        if !(0.0..song.duration_seconds).contains(&marker.start_seconds) {
+        if marker.start_seconds < 0.0 {
             return Err(DomainError::InvalidMarkerPosition {
                 marker_id: marker.id.clone(),
             });
