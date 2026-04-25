@@ -10,6 +10,7 @@ type TimelineToolbarProps = {
   trackCount: number;
   clipCount: number;
   markerCount: number;
+  zoomLagDebugLabel?: string | null;
   onToggleSnap: () => void;
   onGlobalJumpModeChange: (mode: GlobalJumpMode) => void;
   onGlobalJumpBarsChange: (bars: number) => void;
@@ -26,6 +27,7 @@ export function TimelineToolbar({
   trackCount,
   clipCount,
   markerCount,
+  zoomLagDebugLabel,
   onToggleSnap,
   onGlobalJumpModeChange,
   onGlobalJumpBarsChange,
@@ -87,6 +89,7 @@ export function TimelineToolbar({
           <span>{trackCount} tracks</span>
           <span>{clipCount} clips</span>
           <span>{markerCount} marcas</span>
+          {zoomLagDebugLabel ? <span>{zoomLagDebugLabel}</span> : null}
         </div>
       </div>
     </div>
