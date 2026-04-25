@@ -953,7 +953,7 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
-  z-index: 10;
+  z-index: 30;
   background: #232323;
   border-right: 1px solid rgb(19 19 19 / 0.55);
   box-shadow: 10px 0 18px rgb(0 0 0 / 0.12);
