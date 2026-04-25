@@ -313,10 +313,10 @@ fn jump_execute_at_after_bars(
         .floor() as usize;
     let target_bar_index = current_bar_index + bars as usize;
 
-    Ok(
-        cumulative_bar_start_seconds(&resolved_regions, target_bar_index)
-            .min(song.duration_seconds),
-    )
+    Ok(cumulative_bar_start_seconds(
+        &resolved_regions,
+        target_bar_index,
+    ))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -331,7 +331,7 @@ fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEng
     let mut markers = song
         .tempo_markers
         .iter()
-        .filter(|marker| marker.start_seconds > 0.0 && marker.start_seconds < song.duration_seconds)
+        .filter(|marker| marker.start_seconds > 0.0)
         .collect::<Vec<_>>();
     markers.sort_by(|left, right| {
         left.start_seconds
@@ -366,7 +366,7 @@ fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEng
     let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, &song.time_signature)?;
     resolved_regions.push(ResolvedSongRegion {
         start_seconds,
-        end_seconds: song.duration_seconds.max(start_seconds),
+        end_seconds: f64::MAX,
         bar_duration_seconds,
         cumulative_bars_start,
     });
@@ -952,7 +952,7 @@ mod tests {
     }
 
     #[test]
-    fn jump_after_bars_clamps_to_song_end_when_target_bar_exceeds_resolved_regions() {
+    fn jump_after_bars_continues_past_song_end_when_target_bar_exceeds_audio_duration() {
         let mut engine = AudioEngine::new();
         engine
             .load_song(multi_region_song())
@@ -965,15 +965,45 @@ mod tests {
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
-        assert!((scheduled.execute_at_seconds - 18.0).abs() < 0.0001);
+        assert!((scheduled.execute_at_seconds - 30.0).abs() < 0.0001);
 
         let (position, jump_executed) = engine
-            .advance_transport(2.0)
+            .advance_transport(14.0)
             .expect("transport should advance");
 
         assert!((position - 0.0).abs() < 0.0001);
         assert!(jump_executed);
         assert!(engine.pending_marker_jump().is_none());
+    }
+
+    #[test]
+    fn jump_after_bars_uses_tempo_markers_beyond_song_duration() {
+        let mut song = demo_song();
+        song.bpm = 120.0;
+        song.duration_seconds = 8.0;
+        song.tempo_markers = vec![libretracks_core::TempoMarker {
+            id: "tempo_far".into(),
+            start_seconds: 12.0,
+            bpm: 60.0,
+        }];
+        song.section_markers = vec![Marker {
+            id: "section_target".into(),
+            name: "Target".into(),
+            start_seconds: 20.0,
+            digit: None,
+        }];
+
+        let mut engine = AudioEngine::new();
+        engine.load_song(song).expect("song should load");
+        engine.seek(13.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        let scheduled = engine
+            .schedule_marker_jump("section_target", JumpTrigger::AfterBars(1))
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        assert!((scheduled.execute_at_seconds - 16.0).abs() < 0.0001);
     }
 
     #[test]
