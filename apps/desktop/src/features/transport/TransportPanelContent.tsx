@@ -598,7 +598,7 @@ function isTimelineZoomTarget(target: EventTarget | null) {
   return target instanceof HTMLElement
     ? Boolean(
         target.closest(
-          ".lt-ruler-track, .lt-ruler-content, .lt-ruler-canvas, .lt-ruler-canvas-overlay, .lt-track-list, .lt-track-list-dropzone, .lt-track-row, .lt-track-lane, .lt-track-canvas-layer, .lt-track-canvas, .lt-track-canvas-overlay",
+          ".lt-ruler-track, .lt-ruler-content, .lt-ruler-canvas, .lt-ruler-canvas-overlay, .lt-track-list, .lt-track-list-dropzone, .lt-track-row, .lt-track-lane, .lt-track-canvas-layer, .lt-track-canvas-background, .lt-track-canvas, .lt-track-canvas-overlay",
         ),
       )
     : false;

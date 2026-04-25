@@ -1201,6 +1201,7 @@ body {
 
 .lt-ruler-canvas,
 .lt-ruler-canvas-overlay,
+.lt-track-canvas-background,
 .lt-track-canvas,
 .lt-track-canvas-overlay {
   position: absolute;

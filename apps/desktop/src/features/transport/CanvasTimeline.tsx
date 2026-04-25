@@ -11,6 +11,11 @@ import type {
   WaveformLodDto,
   WaveformSummaryDto,
 } from "./desktopApi";
+import {
+  TimelineRenderer,
+  type TimelineViewportMetrics,
+  type TrackSceneSnapshot,
+} from "./Renderer/TimelineRenderer";
 import type { TimelineGrid } from "./timelineMath";
 import { clamp, screenXToSeconds, secondsToScreenX } from "./timelineMath";
 
@@ -48,11 +53,6 @@ type TrackCanvasProps = {
   selectedClipId: string | null;
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
 };
-
-type TrackSceneSnapshot = Omit<
-  TrackCanvasProps,
-  "cameraXRef" | "livePixelsPerSecondRef" | "scrollViewportRef"
->;
 
 const TRACK_CLIP_TOP_PADDING = 1;
 const TRACK_CLIP_BOTTOM_PADDING = 1;
@@ -1112,7 +1112,10 @@ export function TimelineTrackCanvas({
   selectedClipId,
   clipPreviewSecondsRef,
 }: TrackCanvasProps) {
-  const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const backgroundCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const tracksCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const foregroundCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rendererRef = useRef<TimelineRenderer | null>(null);
   const snapshotRef = useRef<TrackSceneSnapshot>({
     width,
     height,
@@ -1122,11 +1125,12 @@ export function TimelineTrackCanvas({
     clipsByTrack,
     waveformCache,
     pixelsPerSecond,
+    zoomLevel: livePixelsPerSecondRef.current,
     timelineGrid,
     selectedClipId,
     clipPreviewSecondsRef,
+    cameraX: cameraXRef.current,
   });
-  const sceneVersionRef = useRef(0);
   const trackStructureSignature = useMemo(
     () => buildTrackStructureSignature(song, visibleTracks),
     [song.tracks, visibleTracks],
@@ -1146,79 +1150,119 @@ export function TimelineTrackCanvas({
     clipsByTrack,
     waveformCache,
     pixelsPerSecond,
+    zoomLevel: livePixelsPerSecondRef.current,
     timelineGrid,
     selectedClipId,
     clipPreviewSecondsRef,
+    cameraX: cameraXRef.current,
   };
 
   useEffect(() => {
-    sceneVersionRef.current += 1;
+    const backgroundCanvas = backgroundCanvasRef.current;
+    const tracksCanvas = tracksCanvasRef.current;
+    const foregroundCanvas = foregroundCanvasRef.current;
+    if (!backgroundCanvas || !tracksCanvas || !foregroundCanvas) {
+      return;
+    }
+
+    const backgroundContext = backgroundCanvas.getContext("2d");
+    const tracksContext = tracksCanvas.getContext("2d");
+    const foregroundContext = foregroundCanvas.getContext("2d");
+    if (!backgroundContext || !tracksContext || !foregroundContext) {
+      return;
+    }
+
+    const renderer = new TimelineRenderer(
+      backgroundCanvas,
+      backgroundContext,
+      tracksCanvas,
+      tracksContext,
+      foregroundCanvas,
+      foregroundContext,
+      {
+        getViewportMetrics: (): TimelineViewportMetrics => ({
+          scrollTop: scrollViewportRef.current?.scrollTop ?? 0,
+          height: scrollViewportRef.current?.clientHeight ?? snapshotRef.current.height,
+        }),
+        renderTracks: (context, snapshot, viewport) => {
+          drawTrackScene(
+            context,
+            snapshot,
+            snapshot.cameraX,
+            snapshot.zoomLevel,
+            viewport.scrollTop,
+            viewport.height,
+          );
+        },
+      },
+    );
+    rendererRef.current = renderer;
+    renderer.updateState(snapshotRef.current);
+
+    return () => {
+      renderer.destroy();
+      if (rendererRef.current === renderer) {
+        rendererRef.current = null;
+      }
+    };
+  }, [scrollViewportRef]);
+
+  useEffect(() => {
+    snapshotRef.current = {
+      ...snapshotRef.current,
+      width,
+      height,
+      trackHeight,
+      song,
+      visibleTracks,
+      clipsByTrack,
+      waveformCache,
+      pixelsPerSecond,
+      timelineGrid,
+      selectedClipId,
+      clipPreviewSecondsRef,
+    };
+    rendererRef.current?.updateState(snapshotRef.current);
   }, [
+    clipPreviewSecondsRef,
     clipSceneSignature,
     height,
     pixelsPerSecond,
     selectedClipId,
-    trackStructureSignature,
+    song,
     timelineGrid,
     trackHeight,
+    trackStructureSignature,
+    visibleTracks,
+    waveformCache,
     waveformCacheSignature,
     width,
+    clipsByTrack,
   ]);
 
   useEffect(() => {
-    const baseCanvas = baseCanvasRef.current;
-    if (!baseCanvas) {
-      return;
-    }
-
     let animationFrameId = 0;
-    let lastBaseSceneVersion = -1;
-    let lastBaseCameraX = Number.NaN;
-    let lastBasePixelsPerSecond = Number.NaN;
-    let lastViewportScrollTop = Number.NaN;
-    let lastViewportHeight = Number.NaN;
-    let lastPreviewClipState = clipPreviewSecondsRef.current;
+    let lastCameraX = Number.NaN;
+    let lastZoomLevel = Number.NaN;
 
-    const render = () => {
-      const snapshot = snapshotRef.current;
+    const syncRendererState = () => {
       const cameraX = cameraXRef.current;
-      const livePixelsPerSecond = livePixelsPerSecondRef.current;
-      const scrollViewport = scrollViewportRef.current;
-      const viewportScrollTop = scrollViewport?.scrollTop ?? 0;
-      const viewportHeight = scrollViewport?.clientHeight ?? snapshot.height;
-
-      if (
-        lastBaseSceneVersion !== sceneVersionRef.current ||
-        lastBaseCameraX !== cameraX ||
-        lastBasePixelsPerSecond !== livePixelsPerSecond ||
-        lastViewportScrollTop !== viewportScrollTop ||
-        lastViewportHeight !== viewportHeight ||
-        lastPreviewClipState !== snapshot.clipPreviewSecondsRef.current
-      ) {
-        const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
-        if (baseContext) {
-          drawTrackScene(
-            baseContext,
-            snapshot,
-            cameraX,
-            livePixelsPerSecond,
-            viewportScrollTop,
-            viewportHeight,
-          );
-        }
-
-        lastBaseSceneVersion = sceneVersionRef.current;
-        lastBaseCameraX = cameraX;
-        lastBasePixelsPerSecond = livePixelsPerSecond;
-        lastViewportScrollTop = viewportScrollTop;
-        lastViewportHeight = viewportHeight;
-        lastPreviewClipState = snapshot.clipPreviewSecondsRef.current;
+      const zoomLevel = livePixelsPerSecondRef.current;
+      if (cameraX !== lastCameraX || zoomLevel !== lastZoomLevel) {
+        snapshotRef.current = {
+          ...snapshotRef.current,
+          cameraX,
+          zoomLevel,
+        };
+        rendererRef.current?.updateState(snapshotRef.current);
+        lastCameraX = cameraX;
+        lastZoomLevel = zoomLevel;
       }
 
-      animationFrameId = window.requestAnimationFrame(render);
+      animationFrameId = window.requestAnimationFrame(syncRendererState);
     };
 
-    animationFrameId = window.requestAnimationFrame(render);
+    animationFrameId = window.requestAnimationFrame(syncRendererState);
 
     return () => {
       window.cancelAnimationFrame(animationFrameId);
@@ -1227,7 +1271,9 @@ export function TimelineTrackCanvas({
 
   return (
     <div className="lt-track-canvas-layer" style={{ width, height }}>
-      <canvas className="lt-track-canvas" ref={baseCanvasRef} aria-hidden="true" />
+      <canvas className="lt-track-canvas-background" ref={backgroundCanvasRef} aria-hidden="true" />
+      <canvas className="lt-track-canvas" ref={tracksCanvasRef} aria-hidden="true" />
+      <canvas className="lt-track-canvas-overlay" ref={foregroundCanvasRef} aria-hidden="true" />
     </div>
   );
 }
