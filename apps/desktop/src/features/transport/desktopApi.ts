@@ -206,6 +206,8 @@ export type TransportSnapshot = {
 
 export type TransportClock = NonNullable<TransportSnapshot["transportClock"]>;
 
+const SONG_TEMPO_REGION_VISUAL_END_SECONDS = 1_000_000;
+
 export type TransportLifecycleEventKind = "play" | "pause" | "stop" | "seek";
 
 export type TransportLifecycleEvent = {
@@ -1616,10 +1618,6 @@ export function buildSongTempoRegions(song: SongView | null | undefined): SongTe
   const markers = [...song.tempoMarkers]
     .filter((marker) => marker.startSeconds > 0)
     .sort((left, right) => left.startSeconds - right.startSeconds);
-  const horizonSeconds = Math.max(
-    song.durationSeconds,
-    ...markers.map((marker) => marker.startSeconds),
-  );
   const regions: SongTempoRegionSummary[] = [];
   let startSeconds = 0;
   let bpm = getSongBaseBpm(song);
@@ -1646,7 +1644,7 @@ export function buildSongTempoRegions(song: SongView | null | undefined): SongTe
     id: `tempo-region-${startSeconds.toFixed(4)}-tail`,
     name: `Tempo ${bpm.toFixed(2)}`,
     startSeconds,
-    endSeconds: Math.max(startSeconds, horizonSeconds),
+    endSeconds: Math.max(startSeconds, SONG_TEMPO_REGION_VISUAL_END_SECONDS),
     bpm,
     timeSignature: getSongBaseTimeSignature(song),
   });

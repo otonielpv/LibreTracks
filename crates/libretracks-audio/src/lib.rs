@@ -307,10 +307,11 @@ fn jump_execute_at_after_bars(
     let current_region = resolve_resolved_region_for_position(&resolved_regions, current_position)
         .ok_or_else(|| AudioEngineError::InvalidTimeSignature("missing song region".into()))?;
     let local_position = (current_position - current_region.start_seconds).max(0.0);
-    let current_bar_index = ((local_position / current_region.bar_duration_seconds).floor()
-        as usize)
-        .min(current_region.bar_count.saturating_sub(1));
-    let target_bar_index = current_region.cumulative_bar_start + current_bar_index + bars as usize;
+    let current_bar_index = (current_region.cumulative_bars_start
+        + local_position / current_region.bar_duration_seconds
+        + f64::EPSILON)
+        .floor() as usize;
+    let target_bar_index = current_bar_index + bars as usize;
 
     Ok(
         cumulative_bar_start_seconds(&resolved_regions, target_bar_index)
@@ -323,8 +324,7 @@ struct ResolvedSongRegion {
     start_seconds: f64,
     end_seconds: f64,
     bar_duration_seconds: f64,
-    bar_count: usize,
-    cumulative_bar_start: usize,
+    cumulative_bars_start: f64,
 }
 
 fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEngineError> {
@@ -340,7 +340,7 @@ fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEng
     });
 
     let mut resolved_regions = Vec::with_capacity(markers.len() + 1);
-    let mut cumulative_bar_start = 0usize;
+    let mut cumulative_bars_start = 0.0;
     let mut start_seconds = 0.0;
     let mut bpm = song.bpm;
 
@@ -352,28 +352,23 @@ fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEng
 
         let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, &song.time_signature)?;
         let duration_seconds = (marker.start_seconds - start_seconds).max(0.0);
-        let bar_count = ((duration_seconds / bar_duration_seconds).ceil() as usize).max(1);
         resolved_regions.push(ResolvedSongRegion {
             start_seconds,
             end_seconds: marker.start_seconds,
             bar_duration_seconds,
-            bar_count,
-            cumulative_bar_start,
+            cumulative_bars_start,
         });
-        cumulative_bar_start += bar_count;
+        cumulative_bars_start += duration_seconds / bar_duration_seconds;
         start_seconds = marker.start_seconds;
         bpm = marker.bpm;
     }
 
     let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, &song.time_signature)?;
-    let duration_seconds = (song.duration_seconds - start_seconds).max(0.0);
-    let bar_count = ((duration_seconds / bar_duration_seconds).ceil() as usize).max(1);
     resolved_regions.push(ResolvedSongRegion {
         start_seconds,
         end_seconds: song.duration_seconds.max(start_seconds),
         bar_duration_seconds,
-        bar_count,
-        cumulative_bar_start,
+        cumulative_bars_start,
     });
 
     Ok(resolved_regions)
@@ -402,11 +397,14 @@ fn cumulative_bar_start_seconds(
     target_bar_index: usize,
 ) -> f64 {
     for region in resolved_regions {
-        let region_bar_end = region.cumulative_bar_start + region.bar_count;
-        if target_bar_index < region_bar_end {
-            let local_bar_index = target_bar_index - region.cumulative_bar_start;
-            let local_start_seconds = local_bar_index as f64 * region.bar_duration_seconds;
-            return (region.start_seconds + local_start_seconds).min(region.end_seconds);
+        let local_bar_index = target_bar_index as f64 - region.cumulative_bars_start;
+        let local_start_seconds = local_bar_index * region.bar_duration_seconds;
+        if local_bar_index >= -f64::EPSILON
+            && local_start_seconds
+                <= (region.end_seconds - region.start_seconds) + f64::EPSILON
+        {
+            return (region.start_seconds + local_start_seconds)
+                .clamp(region.start_seconds, region.end_seconds);
         }
     }
 
@@ -921,6 +919,36 @@ mod tests {
         assert!((position - 15.0).abs() < 0.0001);
         assert!(jump_executed);
         assert!(engine.pending_marker_jump().is_none());
+    }
+
+    #[test]
+    fn jump_after_bars_keeps_bar_phase_through_mid_bar_tempo_changes() {
+        let mut song = demo_song();
+        song.bpm = 120.0;
+        song.duration_seconds = 8.0;
+        song.tempo_markers = vec![libretracks_core::TempoMarker {
+            id: "tempo_mid_bar".into(),
+            start_seconds: 1.25,
+            bpm: 60.0,
+        }];
+        song.section_markers = vec![Marker {
+            id: "section_target".into(),
+            name: "Target".into(),
+            start_seconds: 6.0,
+            digit: None,
+        }];
+
+        let mut engine = AudioEngine::new();
+        engine.load_song(song).expect("song should load");
+        engine.seek(1.3).expect("seek should work");
+        engine.play().expect("play should work");
+
+        let scheduled = engine
+            .schedule_marker_jump("section_target", JumpTrigger::AfterBars(1))
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        assert!((scheduled.execute_at_seconds - 2.75).abs() < 0.0001);
     }
 
     #[test]

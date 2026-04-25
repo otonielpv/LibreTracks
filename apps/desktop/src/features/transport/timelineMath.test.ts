@@ -110,30 +110,43 @@ describe("timelineMath", () => {
     expect(grid.markers.find((marker) => marker.seconds === 8)?.beatInBar).toBe(1);
   });
 
-  it("fills implicit timing before a late explicit region so the timeline does not restart", () => {
-    const grid = buildVisibleTimelineGrid({
-      durationSeconds: 20,
-      bpm: 120,
-      timeSignature: "4/4",
-      regions: [
-        { startSeconds: 8, endSeconds: 14, bpm: 120, timeSignature: "6/8" },
-      ],
-      zoomLevel: 8,
-      pixelsPerSecond: 144,
-      viewportStartSeconds: 0,
-      viewportEndSeconds: 10,
+  it("keeps beat phase continuous when tempo changes mid-beat", () => {
+    const regions = [
+      { startSeconds: 0, endSeconds: 1.25, bpm: 120, timeSignature: "4/4" },
+      { startSeconds: 1.25, endSeconds: 4, bpm: 60, timeSignature: "4/4" },
+    ];
+
+    expect(getCumulativeMusicalPosition(1.25, regions)).toEqual({
+      barNumber: 1,
+      beatInBar: 3,
+      subBeat: 50,
+      display: "1.3.50",
+    });
+    expect(getCumulativeMusicalPosition(1.75, regions)).toEqual({
+      barNumber: 1,
+      beatInBar: 4,
+      subBeat: 0,
+      display: "1.4.00",
     });
 
-    expect(grid.markers.find((marker) => marker.seconds === 0)).toMatchObject({
+    const grid = buildVisibleTimelineGrid({
+      durationSeconds: 4,
+      bpm: 120,
+      timeSignature: "4/4",
+      regions,
+      zoomLevel: 8,
+      pixelsPerSecond: 144,
+      viewportStartSeconds: 1,
+      viewportEndSeconds: 2.1,
+    });
+
+    expect(grid.markers.some((marker) => marker.seconds === 1.25)).toBe(false);
+    expect(grid.markers.find((marker) => marker.seconds === 1.75)).toMatchObject({
       barNumber: 1,
-      beatInBar: 1,
-      isBarStart: true,
+      beatInBar: 4,
+      isBarStart: false,
     });
-    expect(grid.markers.find((marker) => marker.seconds === 8)).toMatchObject({
-      barNumber: 5,
-      beatInBar: 1,
-      isBarStart: true,
-    });
+    expect(snapToTimelineGrid(1.74, 120, "4/4", 1, 1, regions)).toBe(1.75);
   });
 
   it("falls back to a single implicit region when all provided regions are invalid", () => {
