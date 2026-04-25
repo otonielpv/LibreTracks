@@ -784,6 +784,8 @@ export function TransportPanelContent() {
   const clipPreviewSecondsRef = useRef<Record<string, number>>({});
   const trackDropStateRef = useRef<TrackDropState>(null);
   const draggedTrackRowRef = useRef<HTMLDivElement | null>(null);
+  const draggedTrackRowsRef = useRef<HTMLDivElement[]>([]);
+  const draggedTrackHeadersRef = useRef<HTMLElement[]>([]);
   const droppedTrackRowRef = useRef<HTMLDivElement | null>(null);
   const libraryDragHoverRef = useRef<LibraryDragHoverState | null>(null);
   const activeLibraryDragPayloadRef = useRef<LibraryAssetDragPayload[] | null>(null);
@@ -1154,16 +1156,15 @@ export function TransportPanelContent() {
   }, []);
 
   const clearTrackDragVisuals = useCallback(() => {
-    if (draggedTrackRowRef.current) {
-      draggedTrackRowRef.current.style.transform = "";
-      draggedTrackRowRef.current.style.zIndex = "";
-      draggedTrackRowRef.current.style.pointerEvents = "";
-    }
+    draggedTrackRowsRef.current.forEach((row) => {
+      row.style.transform = "";
+      row.style.zIndex = "";
+      row.style.pointerEvents = "";
+    });
 
-    const draggedHeader = draggedTrackRowRef.current?.querySelector(".lt-track-header");
-    if (draggedHeader instanceof HTMLElement) {
-      draggedHeader.classList.remove("is-dragging");
-    }
+    draggedTrackHeadersRef.current.forEach((header) => {
+      header.classList.remove("is-dragging");
+    });
 
     const dropTargets = timelineShellRef.current?.querySelectorAll(".is-drop-target");
     dropTargets?.forEach((element) => {
@@ -1175,6 +1176,8 @@ export function TransportPanelContent() {
       );
     });
 
+    draggedTrackRowsRef.current = [];
+    draggedTrackHeadersRef.current = [];
     draggedTrackRowRef.current = null;
     droppedTrackRowRef.current = null;
     trackDropStateRef.current = null;
@@ -1186,17 +1189,46 @@ export function TransportPanelContent() {
     if (draggedTrackRowRef.current !== dragState.rowElement) {
       clearTrackDragVisuals();
       draggedTrackRowRef.current = dragState.rowElement;
+
+      const dragTrackIds =
+        selectedTrackIds.includes(dragState.trackId) && selectedTrackIds.length > 1
+          ? selectedTrackIds
+          : [dragState.trackId];
+      const draggedRows: HTMLDivElement[] = [];
+      const draggedHeaders: HTMLElement[] = [];
+
+      dragTrackIds.forEach((trackId) => {
+        const matchingRows = timelineShellRef.current?.querySelectorAll(
+          `.lt-track-header-row[data-track-id="${trackId}"], .lt-track-lane-row[data-track-id="${trackId}"]`,
+        );
+
+        matchingRows?.forEach((element) => {
+          if (!(element instanceof HTMLDivElement) || draggedRows.includes(element)) {
+            return;
+          }
+
+          draggedRows.push(element);
+
+          const header = element.querySelector(".lt-track-header");
+          if (header instanceof HTMLElement) {
+            draggedHeaders.push(header);
+          }
+        });
+      });
+
+      draggedTrackRowsRef.current = draggedRows;
+      draggedTrackHeadersRef.current = draggedHeaders;
     }
 
-    if (dragState.rowElement) {
-      dragState.rowElement.style.transform = `translate3d(0, ${deltaY}px, 0)`;
-      dragState.rowElement.style.zIndex = "8";
-      dragState.rowElement.style.pointerEvents = "none";
-    }
+    draggedTrackRowsRef.current.forEach((row) => {
+      row.style.transform = `translate3d(0, ${deltaY}px, 0)`;
+      row.style.zIndex = "8";
+      row.style.pointerEvents = "none";
+    });
 
-    if (dragState.headerElement) {
-      dragState.headerElement.classList.add("is-dragging");
-    }
+    draggedTrackHeadersRef.current.forEach((header) => {
+      header.classList.add("is-dragging");
+    });
 
     const dropTargets = timelineShellRef.current?.querySelectorAll(".is-drop-target");
     dropTargets?.forEach((element) => {
@@ -1220,7 +1252,7 @@ export function TransportPanelContent() {
 
     droppedTrackRowRef.current = null;
     trackDropStateRef.current = dropState;
-  }, [clearTrackDragVisuals]);
+  }, [clearTrackDragVisuals, selectedTrackIds]);
 
   function transportSnapshotKey(nextSnapshot: TransportSnapshot) {
     return [
