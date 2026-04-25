@@ -605,7 +605,7 @@ function isTimelineZoomTarget(target: EventTarget | null) {
   return target instanceof HTMLElement
     ? Boolean(
         target.closest(
-          ".lt-ruler-track, .lt-ruler-content, .lt-ruler-canvas, .lt-ruler-canvas-overlay, .lt-track-list, .lt-track-list-dropzone, .lt-track-row, .lt-track-lane, .lt-track-canvas-layer, .lt-track-canvas-background, .lt-track-canvas, .lt-track-canvas-overlay",
+          ".lt-ruler-track, .lt-ruler-content, .lt-ruler-canvas, .lt-ruler-canvas-overlay, .lt-track-list, .lt-track-list-dropzone, .lt-track-lane-row, .lt-track-header-row, .lt-track-lane, .lt-track-canvas-layer, .lt-track-canvas-background, .lt-track-canvas, .lt-track-canvas-overlay",
         ),
       )
     : false;
@@ -621,7 +621,7 @@ function resolveTrackDropState(
   clientX: number,
   clientY: number,
 ): TrackDropState {
-  const hoveredRow = document.elementFromPoint(clientX, clientY)?.closest(".lt-track-row") as
+  const hoveredRow = document.elementFromPoint(clientX, clientY)?.closest(".lt-track-lane-row, .lt-track-header-row") as
     | HTMLElement
     | null;
   const targetTrackId = hoveredRow?.dataset.trackId ?? null;
@@ -1728,6 +1728,13 @@ export function TransportPanelContent() {
     setTracksById(nextTracksById);
     setClipsByTrack((current) => buildMemoizedClipsByTrack(song, current));
   }, [song]);
+
+  useEffect(() => {
+    libraryDragHoverRef.current = null;
+    activeLibraryDragPayloadRef.current = null;
+    stopLibraryDragAutoScroll();
+    setLibraryClipPreview([]);
+  }, [song?.projectRevision, song?.tracks.length, song?.clips.length]);
 
   useEffect(() => {
     songDurationSecondsRef.current = song?.durationSeconds ?? 0;
@@ -3239,7 +3246,7 @@ export function TransportPanelContent() {
         startClientY: event.clientY,
         currentClientY: event.clientY,
         isDragging: false,
-        rowElement: event.currentTarget.closest(".lt-track-row") as HTMLDivElement | null,
+        rowElement: event.currentTarget.closest(".lt-track-header-row") as HTMLDivElement | null,
         headerElement,
       };
     },
@@ -3495,7 +3502,7 @@ export function TransportPanelContent() {
     }
 
     const target = event.target as HTMLElement | null;
-    if (target?.closest(".lt-track-row")) {
+    if (target?.closest(".lt-track-lane-row")) {
       return;
     }
 
