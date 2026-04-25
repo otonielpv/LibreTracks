@@ -332,7 +332,7 @@ export function TimelineCanvasPane({
           {song ? (
             <TimelineTrackCanvas
               width={laneViewportWidth}
-              height={visibleTracks.length * trackHeight}
+              height={Math.max(scrollViewportRef.current?.clientHeight ?? 500, visibleTracks.length * trackHeight)}
               trackHeight={trackHeight}
               song={song}
               visibleTracks={visibleTracks}

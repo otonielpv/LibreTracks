@@ -1166,14 +1166,15 @@ export function TransportPanelContent() {
       draggedHeader.classList.remove("is-dragging");
     }
 
-    if (droppedTrackRowRef.current) {
-      droppedTrackRowRef.current.classList.remove(
+    const dropTargets = timelineShellRef.current?.querySelectorAll(".is-drop-target");
+    dropTargets?.forEach((element) => {
+      element.classList.remove(
         "is-drop-target",
         "is-drop-before",
         "is-drop-after",
         "is-drop-inside-folder",
       );
-    }
+    });
 
     draggedTrackRowRef.current = null;
     droppedTrackRowRef.current = null;
@@ -1198,31 +1199,27 @@ export function TransportPanelContent() {
       dragState.headerElement.classList.add("is-dragging");
     }
 
-    if (
-      droppedTrackRowRef.current &&
-      droppedTrackRowRef.current.dataset.trackId !== dropState?.targetTrackId
-    ) {
-      droppedTrackRowRef.current.classList.remove(
-        "is-drop-target",
-        "is-drop-before",
-        "is-drop-after",
-        "is-drop-inside-folder",
-      );
-      droppedTrackRowRef.current = null;
+    const dropTargets = timelineShellRef.current?.querySelectorAll(".is-drop-target");
+    dropTargets?.forEach((element) => {
+      if (element instanceof HTMLElement && element.dataset.trackId !== dropState?.targetTrackId) {
+        element.classList.remove(
+          "is-drop-target",
+          "is-drop-before",
+          "is-drop-after",
+          "is-drop-inside-folder",
+        );
+      }
+    });
+
+    if (dropState?.targetTrackId) {
+      const nextDropRows = timelineShellRef.current?.querySelectorAll(`[data-track-id="${dropState.targetTrackId}"]`);
+      nextDropRows?.forEach((element) => {
+        element.classList.remove("is-drop-before", "is-drop-after", "is-drop-inside-folder");
+        element.classList.add("is-drop-target", `is-drop-${dropState.mode}`);
+      });
     }
 
-    const nextDropRow = dropState?.targetTrackId
-      ? (laneAreaRef.current?.querySelector(`[data-track-id="${dropState.targetTrackId}"]`) as HTMLDivElement | null)
-      : null;
-
-    if (!dropState || !nextDropRow) {
-      trackDropStateRef.current = null;
-      return;
-    }
-
-    nextDropRow.classList.remove("is-drop-before", "is-drop-after", "is-drop-inside-folder");
-    nextDropRow.classList.add("is-drop-target", `is-drop-${dropState.mode}`);
-    droppedTrackRowRef.current = nextDropRow;
+    droppedTrackRowRef.current = null;
     trackDropStateRef.current = dropState;
   }, [clearTrackDragVisuals]);
 
