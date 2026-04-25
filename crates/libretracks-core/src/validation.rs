@@ -10,8 +10,6 @@ pub enum DomainError {
     MissingTitle,
     #[error("song duration must be greater than zero")]
     InvalidDuration,
-    #[error("region {region_id} bpm must be greater than zero")]
-    InvalidRegionBpm { region_id: String },
     #[error("region {region_id} has invalid bounds")]
     InvalidRegionBounds { region_id: String },
     #[error("regions are out of order or overlap: {previous_region_id} before {region_id}")]
@@ -66,12 +64,6 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
     let mut previous_region_id: Option<&str> = None;
     let mut previous_region_end_seconds: Option<f64> = None;
     for region in &song.regions {
-        if region.bpm <= 0.0 {
-            return Err(DomainError::InvalidRegionBpm {
-                region_id: region.id.clone(),
-            });
-        }
-
         if !(0.0..=song.duration_seconds).contains(&region.start_seconds)
             || !(0.0..=song.duration_seconds).contains(&region.end_seconds)
             || region.end_seconds <= region.start_seconds

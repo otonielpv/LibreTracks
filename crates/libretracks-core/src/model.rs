@@ -53,8 +53,6 @@ pub struct SongRegion {
     pub name: String,
     pub start_seconds: f64,
     pub end_seconds: f64,
-    pub bpm: f64,
-    pub time_signature: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

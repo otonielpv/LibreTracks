@@ -1,8 +1,6 @@
 //! Motor de audio y transporte.
 
-use libretracks_core::{
-    validate_song, Clip, DomainError, Marker, Song, SongRegion, Track, TrackKind,
-};
+use libretracks_core::{validate_song, Clip, DomainError, Marker, Song, Track, TrackKind};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -330,22 +328,53 @@ struct ResolvedSongRegion {
 }
 
 fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEngineError> {
-    let mut resolved_regions = Vec::with_capacity(song.regions.len());
-    let mut cumulative_bar_start = 0usize;
+    let mut markers = song
+        .tempo_markers
+        .iter()
+        .filter(|marker| marker.start_seconds > 0.0 && marker.start_seconds < song.duration_seconds)
+        .collect::<Vec<_>>();
+    markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
-    for region in &song.regions {
-        let bar_duration_seconds = song_bar_duration_seconds_for_region(region)?;
-        let duration_seconds = (region.end_seconds - region.start_seconds).max(0.0);
+    let mut resolved_regions = Vec::with_capacity(markers.len() + 1);
+    let mut cumulative_bar_start = 0usize;
+    let mut start_seconds = 0.0;
+    let mut bpm = song.bpm;
+
+    for marker in markers {
+        if marker.start_seconds <= start_seconds {
+            bpm = marker.bpm;
+            continue;
+        }
+
+        let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, &song.time_signature)?;
+        let duration_seconds = (marker.start_seconds - start_seconds).max(0.0);
         let bar_count = ((duration_seconds / bar_duration_seconds).ceil() as usize).max(1);
         resolved_regions.push(ResolvedSongRegion {
-            start_seconds: region.start_seconds,
-            end_seconds: region.end_seconds,
+            start_seconds,
+            end_seconds: marker.start_seconds,
             bar_duration_seconds,
             bar_count,
             cumulative_bar_start,
         });
         cumulative_bar_start += bar_count;
+        start_seconds = marker.start_seconds;
+        bpm = marker.bpm;
     }
+
+    let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, &song.time_signature)?;
+    let duration_seconds = (song.duration_seconds - start_seconds).max(0.0);
+    let bar_count = ((duration_seconds / bar_duration_seconds).ceil() as usize).max(1);
+    resolved_regions.push(ResolvedSongRegion {
+        start_seconds,
+        end_seconds: song.duration_seconds.max(start_seconds),
+        bar_duration_seconds,
+        bar_count,
+        cumulative_bar_start,
+    });
 
     Ok(resolved_regions)
 }
@@ -387,9 +416,12 @@ fn cumulative_bar_start_seconds(
         .unwrap_or(0.0)
 }
 
-fn song_bar_duration_seconds_for_region(region: &SongRegion) -> Result<f64, AudioEngineError> {
-    let (numerator, denominator) = parse_time_signature(&region.time_signature)?;
-    let beat_duration_seconds = 60.0 / region.bpm;
+fn song_bar_duration_seconds_for_region(
+    bpm: f64,
+    time_signature: &str,
+) -> Result<f64, AudioEngineError> {
+    let (numerator, denominator) = parse_time_signature(time_signature)?;
+    let beat_duration_seconds = 60.0 / bpm;
     let quarter_notes_per_bar = f64::from(numerator) * (4.0 / f64::from(denominator));
     Ok(beat_duration_seconds * quarter_notes_per_bar)
 }
@@ -509,8 +541,6 @@ mod tests {
                 name: "Digno y Santo".into(),
                 start_seconds: 0.0,
                 end_seconds: 24.0,
-                bpm: 72.0,
-                time_signature: "4/4".into(),
             }],
             tracks: vec![
                 Track {
@@ -614,31 +644,36 @@ mod tests {
             bpm: 120.0,
             time_signature: "4/4".into(),
             duration_seconds: 18.0,
-            tempo_markers: vec![],
+            tempo_markers: vec![
+                libretracks_core::TempoMarker {
+                    id: "tempo_bridge".into(),
+                    start_seconds: 8.0,
+                    bpm: 120.0,
+                },
+                libretracks_core::TempoMarker {
+                    id: "tempo_outro".into(),
+                    start_seconds: 14.0,
+                    bpm: 60.0,
+                },
+            ],
             regions: vec![
                 SongRegion {
                     id: "region_intro".into(),
                     name: "Intro".into(),
                     start_seconds: 0.0,
                     end_seconds: 8.0,
-                    bpm: 120.0,
-                    time_signature: "4/4".into(),
                 },
                 SongRegion {
                     id: "region_bridge".into(),
                     name: "Bridge".into(),
                     start_seconds: 8.0,
                     end_seconds: 14.0,
-                    bpm: 120.0,
-                    time_signature: "6/8".into(),
                 },
                 SongRegion {
                     id: "region_outro".into(),
                     name: "Outro".into(),
                     start_seconds: 14.0,
                     end_seconds: 18.0,
-                    bpm: 60.0,
-                    time_signature: "4/4".into(),
                 },
             ],
             tracks: vec![Track {
@@ -864,7 +899,7 @@ mod tests {
     }
 
     #[test]
-    fn jump_after_bars_crosses_region_boundaries_using_cumulative_bars() {
+    fn jump_after_bars_crosses_tempo_markers_using_cumulative_bars() {
         let mut engine = AudioEngine::new();
         engine
             .load_song(multi_region_song())
@@ -877,13 +912,13 @@ mod tests {
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
-        assert!((scheduled.execute_at_seconds - 9.5).abs() < 0.0001);
+        assert!((scheduled.execute_at_seconds - 10.0).abs() < 0.0001);
 
         let (position, jump_executed) = engine
             .advance_transport(3.0)
             .expect("transport should advance");
 
-        assert!((position - 15.5).abs() < 0.0001);
+        assert!((position - 15.0).abs() < 0.0001);
         assert!(jump_executed);
         assert!(engine.pending_marker_jump().is_none());
     }

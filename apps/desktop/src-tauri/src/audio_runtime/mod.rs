@@ -733,8 +733,6 @@ mod tests {
                 name: "Audio Runtime".into(),
                 start_seconds: 0.0,
                 end_seconds: 20.0,
-                bpm: 120.0,
-                time_signature: "4/4".into(),
             }],
             tracks: vec![
                 Track {
@@ -1277,8 +1275,6 @@ mod tests {
                 name: "Cycle".into(),
                 start_seconds: 0.0,
                 end_seconds: 1.0,
-                bpm: 120.0,
-                time_signature: "4/4".into(),
             }],
             tracks: vec![
                 Track {

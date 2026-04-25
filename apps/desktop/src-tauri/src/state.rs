@@ -1238,14 +1238,11 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
         let (start_seconds, end_seconds) =
             sanitize_region_bounds(&song, start_seconds, end_seconds)?;
-        let template = region_template_for_range(&song, start_seconds, end_seconds);
         let region = SongRegion {
             id: format!("region_{}_{}", timestamp_suffix(), song.regions.len()),
             name: format!("Region {}", song.regions.len()),
             start_seconds,
             end_seconds,
-            bpm: template.bpm,
-            time_signature: template.time_signature,
         };
 
         replace_song_region_range(&mut song, region);
@@ -1287,40 +1284,9 @@ impl DesktopSession {
             name: trimmed_name.to_string(),
             start_seconds,
             end_seconds,
-            bpm: existing_region.bpm,
-            time_signature: existing_region.time_signature,
         };
 
         replace_song_region_range(&mut song, updated_region);
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
-
-        Ok(self.snapshot())
-    }
-
-    pub fn update_song_region_bpm(
-        &mut self,
-        region_id: &str,
-        bpm: f64,
-        audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        if !bpm.is_finite() || bpm <= 0.0 {
-            return Err(DesktopError::AudioCommand(
-                "region bpm must be greater than zero".into(),
-            ));
-        }
-
-        let mut song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        let region = song
-            .regions
-            .iter_mut()
-            .find(|region| region.id == region_id)
-            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
-        region.bpm = bpm;
-
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
         Ok(self.snapshot())
@@ -1411,6 +1377,7 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         song.bpm = bpm;
+        song.tempo_markers.clear();
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
@@ -1456,6 +1423,28 @@ impl DesktopSession {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
         }
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn delete_song_tempo_marker(
+        &mut self,
+        marker_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let marker_index = song
+            .tempo_markers
+            .iter()
+            .position(|marker| marker.id == marker_id)
+            .ok_or_else(|| DesktopError::AudioCommand("tempo marker not found".into()))?;
+        song.tempo_markers.remove(marker_index);
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
@@ -2918,41 +2907,6 @@ fn sanitize_region_bounds(
     Ok((clamped_start_seconds, clamped_end_seconds))
 }
 
-fn region_template_for_range(song: &Song, start_seconds: f64, end_seconds: f64) -> SongRegion {
-    let probe_seconds =
-        ((start_seconds + end_seconds) * 0.5).min((song.duration_seconds - 0.0001).max(0.0));
-    let fallback_bpm = song
-        .tempo_markers
-        .iter()
-        .filter(|marker| marker.start_seconds <= probe_seconds)
-        .max_by(|left, right| {
-            left.start_seconds
-                .partial_cmp(&right.start_seconds)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .map(|marker| marker.bpm)
-        .unwrap_or(song.bpm);
-
-    song.regions
-        .iter()
-        .find(|region| probe_seconds >= region.start_seconds && probe_seconds < region.end_seconds)
-        .or_else(|| {
-            song.regions.iter().find(|region| {
-                start_seconds >= region.start_seconds && start_seconds < region.end_seconds
-            })
-        })
-        .or_else(|| song.regions.first())
-        .cloned()
-        .unwrap_or(SongRegion {
-            id: "region_template".into(),
-            name: song.title.clone(),
-            start_seconds: 0.0,
-            end_seconds: song.duration_seconds.max(1.0),
-            bpm: fallback_bpm,
-            time_signature: song.time_signature.clone(),
-        })
-}
-
 fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
     let mut next_regions = Vec::with_capacity(song.regions.len() + 2);
     let mut fragment_index = 0usize;
@@ -2977,8 +2931,6 @@ fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
                 name: region.name.clone(),
                 start_seconds: region.start_seconds,
                 end_seconds: replacement.start_seconds,
-                bpm: region.bpm,
-                time_signature: region.time_signature.clone(),
             });
         }
 
@@ -2994,8 +2946,6 @@ fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
                 name: region.name.clone(),
                 start_seconds: replacement.end_seconds,
                 end_seconds: region.end_seconds,
-                bpm: region.bpm,
-                time_signature: region.time_signature.clone(),
             });
         }
     }
@@ -3137,7 +3087,7 @@ mod tests {
 
     use libretracks_audio::{JumpTrigger, PlaybackState};
     use libretracks_core::{
-        Clip, Marker, OutputBus, Song, SongRegion, TempoMetadata, TempoSource, Track, TrackKind,
+        Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind,
     };
     use libretracks_project::{
         create_song_folder, generate_waveform_summary, load_song, save_song, SONG_FILE_NAME,
@@ -3168,8 +3118,6 @@ mod tests {
                 name: "Move Demo".into(),
                 start_seconds: 0.0,
                 end_seconds: 12.0,
-                bpm: 120.0,
-                time_signature: "4/4".into(),
             }],
             tracks: vec![Track {
                 id: "track_1".into(),
@@ -3211,8 +3159,8 @@ mod tests {
     #[test]
     fn musical_position_summary_uses_time_signature_beat_unit() {
         let mut song = demo_song();
-        song.regions[0].time_signature = "6/8".into();
-        song.regions[0].bpm = 120.0;
+        song.time_signature = "6/8".into();
+        song.bpm = 120.0;
 
         let summary = musical_position_summary(&song, 0.25);
 
@@ -3264,24 +3212,18 @@ mod tests {
                 name: "Intro".into(),
                 start_seconds: 0.0,
                 end_seconds: 8.0,
-                bpm: 120.0,
-                time_signature: "4/4".into(),
             },
             SongRegion {
                 id: "region_2".into(),
                 name: "Bridge".into(),
                 start_seconds: 8.0,
                 end_seconds: 14.0,
-                bpm: 120.0,
-                time_signature: "6/8".into(),
             },
             SongRegion {
                 id: "region_3".into(),
                 name: "Outro".into(),
                 start_seconds: 14.0,
                 end_seconds: 18.0,
-                bpm: 60.0,
-                time_signature: "4/4".into(),
             },
         ];
         song.clips[0].duration_seconds = 18.0;
@@ -3350,8 +3292,6 @@ mod tests {
                 name: "Hierarchy Demo".into(),
                 start_seconds: 0.0,
                 end_seconds: 12.0,
-                bpm: 120.0,
-                time_signature: "4/4".into(),
             }],
             tracks: vec![
                 Track {
@@ -3620,8 +3560,6 @@ mod tests {
                 name: "ID Audit".into(),
                 start_seconds: 0.0,
                 end_seconds: 8.0,
-                bpm: 120.0,
-                time_signature: "4/4".into(),
             }],
             tracks: vec![
                 Track {
@@ -4829,7 +4767,7 @@ mod tests {
     }
 
     #[test]
-    fn creating_a_song_region_splits_the_existing_range_and_inherits_tempo() {
+    fn creating_a_song_region_splits_the_existing_range() {
         let mut session = session_with_song_dir("region-create-demo", demo_song());
         let song_dir = session.song_dir.clone().expect("song dir should exist");
 
@@ -4849,8 +4787,7 @@ mod tests {
 
         assert_eq!(snapshot.project_revision, song_view.project_revision);
         assert_eq!(song_view.regions.len(), 3);
-        assert_eq!(created_region.bpm, 120.0);
-        assert_eq!(created_region.time_signature, "4/4");
+        assert_eq!(created_region.name, "Region 1");
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.regions.len(), 1);
@@ -4933,35 +4870,12 @@ mod tests {
     }
 
     #[test]
-    fn updating_a_song_region_bpm_only_changes_the_target_region() {
-        let mut session = session_with_song_dir(
-            "region-bpm-demo",
-            demo_song_with_region_changes_and_sections(),
-        );
-
-        let audio = crate::audio_runtime::AudioController::default();
-        let snapshot = session
-            .update_song_region_bpm("region_2", 98.5, &audio)
-            .expect("song region bpm should update");
-        let song_view = session
-            .song_view()
-            .expect("song view should build")
-            .expect("song summary should exist");
-
-        assert!(snapshot.project_revision > 0);
-        assert_eq!(song_view.regions[0].bpm, 120.0);
-        assert_eq!(song_view.regions[1].id, "region_2");
-        assert_eq!(song_view.regions[1].bpm, 98.5);
-        assert_eq!(song_view.regions[2].bpm, 60.0);
-    }
-
-    #[test]
     fn updating_song_tempo_without_regions_does_not_create_one() {
         let mut session = session_with_song_dir("song-tempo-without-regions", demo_song());
         let audio = crate::audio_runtime::AudioController::default();
 
         {
-            let song = Arc::make_mut(session.engine.song_mut().expect("song should exist"));
+            let song = session.engine.song_mut().expect("song should exist");
             song.regions.clear();
         }
 
@@ -4976,6 +4890,28 @@ mod tests {
         assert!(snapshot.project_revision > 0);
         assert!(song_view.regions.is_empty());
         assert_eq!(song_view.bpm, 148.0);
+    }
+
+    #[test]
+    fn updating_song_tempo_clears_existing_tempo_markers_for_a_global_reset() {
+        let mut session = session_with_song_dir("song-tempo-reset-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        session
+            .upsert_song_tempo_marker(12.0, 91.0, &audio)
+            .expect("tempo marker should be created");
+
+        let snapshot = session
+            .update_song_tempo(91.0, &audio)
+            .expect("song tempo should update");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert_eq!(snapshot.project_revision, song_view.project_revision);
+        assert_eq!(song_view.bpm, 91.0);
+        assert!(song_view.tempo_markers.is_empty());
     }
 
     #[test]

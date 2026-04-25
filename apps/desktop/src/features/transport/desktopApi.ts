@@ -1,4 +1,4 @@
-import { getCumulativeMusicalPosition } from "./timelineMath";
+import { getCumulativeMusicalPosition, type TimelineRegion } from "./timelineMath";
 
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
 export type TrackKind = "audio" | "folder";
@@ -16,9 +16,9 @@ export type SongRegionSummary = {
   name: string;
   startSeconds: number;
   endSeconds: number;
-  bpm: number;
-  timeSignature: string;
 };
+
+export type SongTempoRegionSummary = SongRegionSummary & TimelineRegion;
 
 export type TempoMarkerSummary = {
   id: string;
@@ -634,6 +634,7 @@ export async function updateSongTempo(bpm: number): Promise<TransportSnapshot> {
     updateDemoSong((song) => ({
       ...song,
       bpm: Math.max(1, bpm),
+      tempoMarkers: [],
     }));
     return buildDemoSnapshot();
   }
@@ -679,6 +680,18 @@ export async function upsertSongTempoMarker(
   }
 
   return invokeCommand<TransportSnapshot>("upsert_song_tempo_marker", { startSeconds, bpm });
+}
+
+export async function deleteSongTempoMarker(markerId: string): Promise<TransportSnapshot> {
+  if (!isTauriApp) {
+    updateDemoSong((song) => ({
+      ...song,
+      tempoMarkers: song.tempoMarkers.filter((marker) => marker.id !== markerId),
+    }));
+    return buildDemoSnapshot();
+  }
+
+  return invokeCommand<TransportSnapshot>("delete_song_tempo_marker", { markerId });
 }
 
 export async function openProject(): Promise<TransportSnapshot | null> {
@@ -1151,8 +1164,6 @@ export async function createSongRegion(
         name: `Region ${song.regions.length}`,
         startSeconds: clampedStartSeconds,
         endSeconds: clampedEndSeconds,
-        bpm: template.bpm,
-        timeSignature: template.timeSignature,
       });
     });
     return buildDemoSnapshot();
@@ -1193,28 +1204,6 @@ export async function updateSongRegion(
     startSeconds,
     endSeconds,
   });
-}
-
-export async function updateSongRegionBpm(
-  regionId: string,
-  bpm: number,
-): Promise<TransportSnapshot> {
-  if (!isTauriApp) {
-    updateDemoSong((song) => ({
-      ...song,
-      regions: song.regions.map((region) =>
-        region.id === regionId
-          ? {
-              ...region,
-              bpm: Math.max(0.0001, bpm),
-            }
-          : region,
-      ),
-    }));
-    return buildDemoSnapshot();
-  }
-
-  return invokeCommand<TransportSnapshot>("update_song_region_bpm", { regionId, bpm });
 }
 
 export async function deleteSongRegion(regionId: string): Promise<TransportSnapshot> {
@@ -1619,7 +1608,7 @@ function normalizeSong(song: SongView): SongView {
   };
 }
 
-export function buildSongTempoRegions(song: SongView | null | undefined): SongRegionSummary[] {
+export function buildSongTempoRegions(song: SongView | null | undefined): SongTempoRegionSummary[] {
   if (!song) {
     return [];
   }
@@ -1631,7 +1620,7 @@ export function buildSongTempoRegions(song: SongView | null | undefined): SongRe
     song.durationSeconds,
     ...markers.map((marker) => marker.startSeconds),
   );
-  const regions: SongRegionSummary[] = [];
+  const regions: SongTempoRegionSummary[] = [];
   let startSeconds = 0;
   let bpm = getSongBaseBpm(song);
 
@@ -1706,8 +1695,6 @@ function getDemoRegionTemplate(
       name: song.title,
       startSeconds: 0,
       endSeconds: song.durationSeconds,
-      bpm: song.bpm,
-      timeSignature: song.timeSignature,
     }
   );
 }
@@ -1767,7 +1754,7 @@ export function getSongBaseTimeSignature(song: SongView | null | undefined): str
 export function getSongTempoRegionAtPosition(
   song: SongView | null | undefined,
   positionSeconds: number,
-): SongRegionSummary | null {
+): SongTempoRegionSummary | null {
   const tempoRegions = buildSongTempoRegions(song);
   if (!tempoRegions.length) {
     return null;
@@ -1919,8 +1906,6 @@ function buildDemoSong(): SongView {
         name: "LibreTracks Session",
         startSeconds: 0,
         endSeconds: 180,
-        bpm: 120,
-        timeSignature: "4/4",
       },
     ],
     tracks: [

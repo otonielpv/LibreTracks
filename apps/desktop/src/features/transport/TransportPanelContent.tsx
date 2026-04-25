@@ -22,6 +22,7 @@ import {
   buildWaveformLodsFromPeaks,
   deleteClip,
   deleteSongRegion,
+  deleteSongTempoMarker,
   deleteSectionMarker,
   deleteTrack,
   duplicateClip,
@@ -72,6 +73,7 @@ import {
   type SectionMarkerSummary,
   type SongRegionSummary,
   type SongView,
+  type TempoMarkerSummary,
   type TrackKind,
   type TransportLifecycleEvent,
   type TrackSummary,
@@ -2768,6 +2770,37 @@ export function TransportPanelContent() {
     ];
   }
 
+  function tempoMarkerContextMenu(marker: TempoMarkerSummary) {
+    return [
+      {
+        label: "Cambiar BPM",
+        onSelect: async () => {
+          const nextBpm = Number(window.prompt("Nuevo BPM", marker.bpm.toFixed(2)));
+          if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = await upsertSongTempoMarker(marker.startSeconds, nextBpm);
+            applyPlaybackSnapshot(nextSnapshot);
+            setTempoDraft(String(nextBpm));
+            setStatus(`Marca de BPM actualizada a ${nextBpm.toFixed(2)} BPM.`);
+          });
+        },
+      },
+      {
+        label: "Borrar marca",
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await deleteSongTempoMarker(marker.id);
+            applyPlaybackSnapshot(nextSnapshot);
+            setStatus(`Marca de BPM borrada en ${formatClock(marker.startSeconds)}.`);
+          });
+        },
+      },
+    ];
+  }
+
   function applyZoom(nextZoomLevel: number, anchorViewportX = laneViewportWidth / 2) {
     const clampedZoom = clamp(nextZoomLevel, effectiveZoomMin, ZOOM_MAX);
     const nextPixelsPerSecond = clampedZoom * BASE_PIXELS_PER_SECOND;
@@ -4679,6 +4712,17 @@ export function TransportPanelContent() {
                   setSelectedRegionId(null);
                   selectSection(section.id);
                   openMenu(event, section.name, sectionContextMenu(section));
+                }}
+                onTempoMarkerContextMenu={(event, markerId) => {
+                  const marker = song?.tempoMarkers.find((candidate) => candidate.id === markerId);
+                  if (!marker) {
+                    return;
+                  }
+
+                  clearSelection();
+                  setSelectedTimelineRange(null);
+                  setSelectedRegionId(null);
+                  openMenu(event, `Tempo ${marker.bpm.toFixed(2)} BPM`, tempoMarkerContextMenu(marker));
                 }}
                 onRegionContextMenu={(event, regionId) => {
                   const region = song?.regions.find((candidate) => candidate.id === regionId);

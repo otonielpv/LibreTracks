@@ -72,6 +72,7 @@ type TimelineCanvasPaneProps = {
   onRulerContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onMarkerPrimaryAction: (sectionId: string) => void;
   onMarkerContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, sectionId: string) => void;
+  onTempoMarkerContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, markerId: string) => void;
   onRegionContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, regionId: string) => void;
   onPreviewPositionChange: (positionSeconds: number) => void;
   onPlayheadSeekCommit: (positionSeconds: number) => void;
@@ -135,6 +136,7 @@ export function TimelineCanvasPane({
   onRulerContextMenu,
   onMarkerPrimaryAction,
   onMarkerContextMenu,
+  onTempoMarkerContextMenu,
   onRegionContextMenu,
   onPreviewPositionChange,
   onPlayheadSeekCommit,
@@ -169,6 +171,7 @@ export function TimelineCanvasPane({
             timelineGrid={timelineGrid}
             regions={(song?.regions ?? []) as SongRegionSummary[]}
             markers={song?.sectionMarkers ?? []}
+            tempoMarkers={song?.tempoMarkers ?? []}
             selectedRegionId={selectedRegionId}
             selectedMarkerId={selectedSectionId}
             pendingMarkerJump={pendingMarkerJump}
@@ -249,6 +252,30 @@ export function TimelineCanvasPane({
                 }}
               >
                 <span className="lt-sr-only">{section.name}</span>
+              </button>
+            ))}
+
+            {song?.tempoMarkers.map((marker) => (
+              <button
+                key={marker.id}
+                type="button"
+                className="lt-tempo-hotspot"
+                aria-label={`Tempo ${marker.bpm.toFixed(2)} BPM`}
+                title={`Tempo ${marker.bpm.toFixed(2)} BPM`}
+                style={{ left: marker.startSeconds * pixelsPerSecond }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+                onContextMenu={(event) => {
+                  event.stopPropagation();
+                  onTempoMarkerContextMenu(event, marker.id);
+                }}
+              >
+                <span className="lt-sr-only">{marker.bpm.toFixed(2)} BPM</span>
               </button>
             ))}
           </TimelineRulerCanvas>

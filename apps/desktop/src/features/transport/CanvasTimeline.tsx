@@ -5,6 +5,7 @@ import type {
   PendingJumpSummary,
   SectionMarkerSummary,
   SongRegionSummary,
+  TempoMarkerSummary,
   SongView,
   TrackSummary,
   WaveformLodDto,
@@ -22,6 +23,7 @@ type RulerCanvasProps = {
   timelineGrid: TimelineGrid;
   regions: SongRegionSummary[];
   markers: SectionMarkerSummary[];
+  tempoMarkers: TempoMarkerSummary[];
   selectedRegionId: string | null;
   selectedMarkerId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
@@ -289,6 +291,62 @@ function drawRulerMarker(
   context.moveTo(snappedX - 4, stemBottom);
   context.lineTo(snappedX + 4, stemBottom);
   context.lineTo(snappedX, stemBottom + 6);
+  context.closePath();
+  context.fill();
+  context.restore();
+}
+
+function drawRulerTempoMarker(
+  context: CanvasRenderingContext2D,
+  marker: TempoMarkerSummary,
+  width: number,
+  height: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+) {
+  const x = secondsToScreenX(marker.startSeconds, cameraX, pixelsPerSecond);
+  const label = `${marker.bpm.toFixed(marker.bpm % 1 === 0 ? 0 : 1)}`;
+
+  context.font = '700 10px "Space Grotesk", sans-serif';
+  const labelWidth = Math.max(30, Math.ceil(context.measureText(label).width) + 14);
+  const snappedX = Math.round(x) + 0.5;
+  const flagTop = 24;
+  const flagHeight = 15;
+  const alignRight = snappedX > width - labelWidth - 12;
+  const flagLeft = alignRight ? snappedX - labelWidth - 7 : snappedX + 3;
+  const flagRight = flagLeft + labelWidth;
+
+  if (flagRight < -20 || flagLeft > width + 20) {
+    return;
+  }
+
+  context.save();
+  context.strokeStyle = "rgba(87, 241, 219, 0.78)";
+  context.fillStyle = "rgba(87, 241, 219, 0.16)";
+  context.lineWidth = 1.2;
+  context.beginPath();
+  context.moveTo(snappedX, flagTop + 2);
+  context.lineTo(snappedX, height - 24);
+  context.stroke();
+
+  context.beginPath();
+  context.moveTo(snappedX, flagTop);
+  context.lineTo(flagRight - 6, flagTop);
+  context.lineTo(flagRight, flagTop + flagHeight / 2);
+  context.lineTo(flagRight - 6, flagTop + flagHeight);
+  context.lineTo(snappedX, flagTop + flagHeight);
+  context.closePath();
+  context.fill();
+  context.stroke();
+
+  context.fillStyle = "#57f1db";
+  context.textBaseline = "middle";
+  context.fillText(label, flagLeft + 6, flagTop + flagHeight / 2 + 0.5);
+
+  context.beginPath();
+  context.moveTo(snappedX - 4, height - 24);
+  context.lineTo(snappedX + 4, height - 24);
+  context.lineTo(snappedX, height - 17);
   context.closePath();
   context.fill();
   context.restore();
@@ -774,6 +832,7 @@ export function TimelineRulerCanvas({
   timelineGrid,
   regions,
   markers,
+  tempoMarkers,
   selectedRegionId,
   selectedMarkerId,
   pendingMarkerJump,
@@ -791,6 +850,7 @@ export function TimelineRulerCanvas({
     timelineGrid,
     regions,
     markers,
+    tempoMarkers,
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
@@ -805,6 +865,7 @@ export function TimelineRulerCanvas({
     timelineGrid,
     regions,
     markers,
+    tempoMarkers,
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
@@ -821,6 +882,11 @@ export function TimelineRulerCanvas({
     [markers],
   );
 
+  const tempoMarkersSignature = useMemo(
+    () => tempoMarkers.map((m) => `${m.id}:${m.startSeconds}:${m.bpm}`).join("|"),
+    [tempoMarkers],
+  );
+
   const pendingJumpSignature = pendingMarkerJump
     ? `${pendingMarkerJump.targetMarkerId}:${pendingMarkerJump.executeAtSeconds}`
     : "";
@@ -831,6 +897,7 @@ export function TimelineRulerCanvas({
     height,
     regionsSignature,
     markersSignature,
+    tempoMarkersSignature,
     pendingJumpSignature,
     pixelsPerSecond,
     selectedRegionId,
@@ -969,6 +1036,17 @@ export function TimelineRulerCanvas({
                   isCurrent: currentMarkerId === marker.id,
                   pulseAlpha,
                 },
+              );
+            }
+
+            for (const marker of snapshot.tempoMarkers) {
+              drawRulerTempoMarker(
+                overlayContext,
+                marker,
+                snapshot.width,
+                snapshot.height,
+                cameraX,
+                livePixelsPerSecond,
               );
             }
 

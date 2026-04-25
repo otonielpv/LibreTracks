@@ -74,8 +74,6 @@ pub struct SongRegionSummary {
     pub name: String,
     pub start_seconds: f64,
     pub end_seconds: f64,
-    pub bpm: f64,
-    pub time_signature: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -333,8 +331,6 @@ pub(crate) fn region_to_summary(region: &SongRegion) -> SongRegionSummary {
         name: region.name.clone(),
         start_seconds: region.start_seconds,
         end_seconds: region.end_seconds,
-        bpm: region.bpm,
-        time_signature: region.time_signature.clone(),
     }
 }
 
@@ -454,24 +450,6 @@ fn build_tempo_regions(song: &Song, horizon_seconds: f64) -> Vec<TempoRegion> {
     });
 
     regions
-}
-
-fn resolve_region_for_position<'a>(
-    song: &'a Song,
-    position_seconds: f64,
-) -> Option<&'a SongRegion> {
-    song.regions
-        .iter()
-        .find(|region| {
-            position_seconds >= region.start_seconds && position_seconds < region.end_seconds
-        })
-        .or_else(|| {
-            song.regions
-                .iter()
-                .rev()
-                .find(|region| position_seconds >= region.end_seconds)
-        })
-        .or_else(|| song.regions.first())
 }
 
 fn track_kind_label(kind: TrackKind) -> &'static str {

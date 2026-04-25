@@ -1766,6 +1766,19 @@ body {
   z-index: 3;
 }
 
+.lt-tempo-hotspot {
+  position: absolute;
+  top: 1.35rem;
+  width: 3.25rem;
+  height: 1.9rem;
+  margin-left: -0.35rem;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  z-index: 4;
+}
+
 .lt-region-hotspot {
   position: absolute;
   top: 0.22rem;
@@ -1793,6 +1806,11 @@ body {
 
 .lt-marker-hotspot:focus-visible {
   outline: 1px solid rgb(255 226 171 / 0.88);
+  outline-offset: 1px;
+}
+
+.lt-tempo-hotspot:focus-visible {
+  outline: 1px solid rgb(87 241 219 / 0.88);
   outline-offset: 1px;
 }
 

@@ -49,8 +49,6 @@ mod tests {
                 name: "Cancion".into(),
                 start_seconds: 0.0,
                 end_seconds: 240.0,
-                bpm: 72.0,
-                time_signature: "4/4".into(),
             }],
             tracks: vec![Track {
                 id: "track_click".into(),
@@ -350,8 +348,8 @@ mod tests {
             .expect("import should work");
 
         assert_eq!(imported.song.regions.len(), 1);
-        assert!((imported.song.regions[0].bpm - 120.0).abs() < 2.0);
-        assert_eq!(imported.song.regions[0].time_signature, "4/4");
+        assert!((imported.song.bpm - 120.0).abs() < 2.0);
+        assert_eq!(imported.song.time_signature, "4/4");
     }
 
     #[test]
@@ -581,6 +579,6 @@ mod tests {
         assert_eq!(migrated.section_markers[0].digit, None);
         assert_eq!(migrated.section_markers[1].id, "section_verse");
         assert_eq!(migrated.regions.len(), 1);
-        assert_eq!(migrated.regions[0].bpm, 98.0);
+        assert_eq!(migrated.bpm, 98.0);
     }
 }

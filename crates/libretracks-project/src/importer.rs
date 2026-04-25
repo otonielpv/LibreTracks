@@ -206,8 +206,6 @@ pub fn import_wav_song(
             name: request.title.clone(),
             start_seconds: 0.0,
             end_seconds: duration_seconds,
-            bpm: detected_tempo.bpm,
-            time_signature: request.time_signature.clone(),
         }],
         tracks: imported_files
             .iter()

@@ -26,8 +26,6 @@ mod tests {
                 name: "Cancion".into(),
                 start_seconds: 0.0,
                 end_seconds: 240.0,
-                bpm: 72.0,
-                time_signature: "4/4".into(),
             }],
             tracks: vec![
                 Track {

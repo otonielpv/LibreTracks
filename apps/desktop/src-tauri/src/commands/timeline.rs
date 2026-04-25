@@ -214,22 +214,6 @@ pub fn update_song_region(
 }
 
 #[tauri::command]
-pub fn update_song_region_bpm(
-    region_id: String,
-    bpm: f64,
-    state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-
-    session
-        .update_song_region_bpm(&region_id, bpm, &state.audio)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
 pub fn delete_song_region(
     region_id: String,
     state: State<'_, DesktopState>,
@@ -288,6 +272,21 @@ pub fn upsert_song_tempo_marker(
 
     session
         .upsert_song_tempo_marker(start_seconds, bpm, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn delete_song_tempo_marker(
+    marker_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .delete_song_tempo_marker(&marker_id, &state.audio)
         .map_err(|error| error.to_string())
 }
 
