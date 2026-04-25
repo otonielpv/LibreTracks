@@ -144,6 +144,7 @@ export class TimelineRenderer {
     }
 
     if (cameraChanged) {
+      this.dirtyBackground = true;
       this.dirtyTracks = true;
       this.dirtyForeground = true;
     }
