@@ -1,60 +1,98 @@
+[🇪🇸 Leer en Español](./README.es.md)
+
 # LibreTracks
 
-Prototipo de editor/reproductor multitrack de escritorio con control remoto web.
+![Tauri](https://img.shields.io/badge/Tauri-v2-24C8DB?logo=tauri&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111827)
+![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)
+![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white)
 
-## Objetivo actual
+LibreTracks is a multitrack DAW and live playback workstation for desktop, built with a Rust audio stack and a React/Tauri shell. The current monorepo focuses on non-destructive arrangement, live section jumps, WAV import, and a desktop runtime that keeps audio concerns separate from UI concerns.
 
-Esta primera iteracion prepara la base tecnica del proyecto:
+## Architecture Overview
 
-- Monorepo con workspaces para frontend y Rust.
-- App de escritorio y app remota con estructura inicial.
-- Crates de dominio, proyecto, audio y remoto.
-- Documentacion de arquitectura y roadmap.
-- Primer modelo de dominio compartido en Rust.
+LibreTracks is split into two clear layers:
 
-## Estructura
+- `apps/desktop` is the desktop frontend. It uses React, Zustand state stores, and canvas-based timeline rendering for the arrangement view, ruler, markers, and waveform lanes.
+- `apps/desktop/src-tauri` is the native bridge. It exposes Tauri commands, manages desktop state, applies audio settings, and connects the UI to the Rust runtime.
+- `crates/libretracks-core` contains the domain model and validation rules for songs, tracks, clips, markers, buses, and tempo data.
+- `crates/libretracks-audio` contains the transport and mixing logic. It resolves active clips, effective track gain, play/pause/seek, and musical jump behavior.
+- `crates/libretracks-project` handles project persistence, `song.json`, library assets, and WAV probing/import through `symphonia`.
+- The native desktop audio path uses `cpal` for output device I/O. WAV decoding and metadata probing are handled through `symphonia` in the project/import layer.
 
-```txt
-apps/
-  desktop/    App principal Tauri + React
-  remote/     Cliente web remoto
-crates/
-  libretracks-core/
-  libretracks-project/
-  libretracks-audio/
-  libretracks-remote/
-docs/
-samples/
-tests/
+This separation matters: the frontend decides how to present and edit the session, while the Rust side owns transport rules, persistence, validation, and audio behavior.
+
+## Prerequisites
+
+The desktop workflow assumes the following tools are installed:
+
+- Node.js `>= 20`
+- Rust stable toolchain with `cargo` and `rustc`
+- Microsoft Visual C++ Build Tools on Windows
+- Windows 10/11 SDK on Windows for MSVC linking
+
+For Windows native desktop runs, `scripts/desktop-native.ps1` checks for the MSVC linker and SDK libraries. In practice, install Visual Studio Build Tools with the `Desktop development with C++` workload before running the native Tauri target.
+
+## Getting Started
+
+Install workspace dependencies from the repository root:
+
+```bash
+npm install
 ```
 
-## Primeros pasos previstos
+Useful root-level commands:
 
-1. Completar el bootstrap real de `apps/desktop` con Tauri v2.
-2. Implementar lectura/escritura de `song.json`.
-3. Importar WAV y generar `Song` desde archivos.
-4. Construir el transporte de audio minimo.
+```bash
+# Desktop UI in Vite dev mode
+npm run dev:desktop
 
-## Arranque rapido
+# Full native desktop app through Tauri + Rust
+npm run dev:desktop:native
 
-1. Instala dependencias con `npm install`.
-2. Levanta la UI desktop en modo web con `npm run dev:desktop`.
-3. Levanta la app de escritorio completa con `npm run dev:desktop:native`.
-4. Ejecuta los tests frontend con `npm run test:desktop`.
-5. Genera build del frontend con `npm run build:desktop`.
+# Production frontend bundle for the desktop app
+npm run build:desktop
 
-En Windows, `npm run dev:desktop:native` y `npm run check:desktop:native` preparan el `PATH` local para que Tauri encuentre `cargo` y `rustc`.
+# Rust tests across the workspace
+cargo test
+```
 
-Tambien puedes validar la parte Rust con `cargo test -p libretracks-core`, `cargo test -p libretracks-project` y `cargo test -p libretracks-audio`.
+Additional commands that are useful during development:
 
-## Estado
+```bash
+# Native Rust compile check through the Windows helper script
+npm run check:desktop:native
 
-Rust ya esta instalado en la maquina y los tests unitarios de `libretracks-core` y `libretracks-project` ya se han ejecutado correctamente.
+# Frontend tests and lint/typecheck
+npm run test:desktop
+npm run lint
+```
 
-El frontend desktop ya puede instalar dependencias, ejecutar tests y generar build con `npm`, y la app Tauri ya pasa `cargo check`.
+## Project Structure
 
-En Rust ya existe persistencia de `song.json` e importacion basica de WAV para copiar archivos a `audio/`, detectar duracion y crear `Track`/`Clip` automaticamente.
+```txt
+.
+├─ apps/
+│  ├─ desktop/            React + Tauri desktop application
+│  │  ├─ src/             UI, Zustand stores, i18n, timeline canvas rendering
+│  │  └─ src-tauri/       Native Tauri host, commands, audio runtime, CPAL wiring
+│  └─ remote/             Web remote client for secondary control surfaces
+├─ crates/
+│  ├─ libretracks-core/   Shared domain model, validation, transport-facing types
+│  ├─ libretracks-project/ Project I/O, song persistence, WAV import, Symphonia-based probing
+│  ├─ libretracks-audio/  Audio engine logic, transport, clip activation, jump scheduling
+│  └─ libretracks-remote/ Remote control protocol and backend-facing helpers
+├─ docs/                  Architecture notes, debugging docs, roadmap
+├─ samples/               Example song assets and demo material
+├─ scripts/               Development helpers, including Windows native bootstrap
+├─ tests/                 End-to-end and integration-oriented test surfaces
+├─ Cargo.toml             Rust workspace manifest
+└─ package.json           JavaScript workspace manifest and root scripts
+```
 
-Tambien existe ya un transporte minimo testeable en `libretracks-audio` con `play/pause/stop/seek`, clips activos y ganancia efectiva por pista/grupo.
+## Notes for Contributors
 
-La app desktop ya conecta esa UI con Tauri para importar WAVs, mostrar tracks y lanzar una primera reproduccion local con audio real.
+- The app is currently WAV-first by design.
+- Track routing starts from the `main` and `monitor` buses.
+- The transport supports immediate jumps, next-marker jumps, and quantized bar-based jumps.
+- UI labels are localized from `apps/desktop/src/shared/i18n/en.ts` and `es.ts`; documentation should follow those exact strings when describing the interface.

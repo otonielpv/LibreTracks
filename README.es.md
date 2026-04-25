@@ -1,0 +1,96 @@
+# LibreTracks
+
+![Tauri](https://img.shields.io/badge/Tauri-v2-24C8DB?logo=tauri&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111827)
+![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)
+![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white)
+
+LibreTracks es una DAW y estación de reproducción multitrack para directo, construida con un stack de audio en Rust y una shell de escritorio en React/Tauri. El monorepo actual está centrado en edición no destructiva, saltos musicales entre secciones, importación de WAV y un runtime de escritorio que separa claramente la UI de la lógica de audio.
+
+## Architecture Overview
+
+LibreTracks se divide en dos capas principales:
+
+- `apps/desktop` es el frontend de escritorio. Usa React, stores con Zustand y renderizado por canvas para el timeline, el ruler, las marcas y las formas de onda.
+- `apps/desktop/src-tauri` es el puente nativo. Expone comandos Tauri, mantiene el estado desktop, aplica ajustes de audio y conecta la UI con el runtime en Rust.
+- `crates/libretracks-core` contiene el modelo de dominio y las validaciones de canciones, tracks, clips, marcas, buses y tempo.
+- `crates/libretracks-audio` contiene la lógica de transporte y mezcla. Resuelve clips activos, ganancia efectiva por pista, `play`/`pause`/`seek` y saltos musicales.
+- `crates/libretracks-project` gestiona persistencia de proyecto, `song.json`, assets de librería e importación/probing de WAV mediante `symphonia`.
+- La salida de audio nativa del escritorio usa `cpal` para I/O del dispositivo. La decodificación y lectura de metadatos WAV se resuelve mediante `symphonia` en la capa de proyecto/importación.
+
+Esta separación es intencional: el frontend decide cómo presentar y editar la sesión; Rust mantiene las reglas del transporte, la persistencia, la validación y el comportamiento de audio.
+
+## Prerequisites
+
+El flujo desktop asume estas dependencias instaladas:
+
+- Node.js `>= 20`
+- Rust stable toolchain con `cargo` y `rustc`
+- Microsoft Visual C++ Build Tools en Windows
+- Windows 10/11 SDK en Windows para el enlazado MSVC
+
+Para ejecutar el target nativo en Windows, `scripts/desktop-native.ps1` comprueba el linker de MSVC y las librerías del SDK. En la práctica, necesitas Visual Studio Build Tools con la carga `Desktop development with C++` antes de ejecutar la app Tauri nativa.
+
+## Getting Started
+
+Instala las dependencias desde la raíz del repositorio:
+
+```bash
+npm install
+```
+
+Comandos útiles a nivel raíz:
+
+```bash
+# UI desktop en modo Vite
+npm run dev:desktop
+
+# App de escritorio completa con Tauri + Rust
+npm run dev:desktop:native
+
+# Bundle de producción del frontend desktop
+npm run build:desktop
+
+# Tests Rust del workspace
+cargo test
+```
+
+Otros comandos útiles durante desarrollo:
+
+```bash
+# Chequeo nativo de Rust mediante el script helper de Windows
+npm run check:desktop:native
+
+# Tests frontend y lint/typecheck
+npm run test:desktop
+npm run lint
+```
+
+## Project Structure
+
+```txt
+.
+├─ apps/
+│  ├─ desktop/             Aplicación principal de escritorio con React + Tauri
+│  │  ├─ src/              UI, stores Zustand, i18n y renderizado canvas del timeline
+│  │  └─ src-tauri/        Host nativo Tauri, comandos, runtime de audio y wiring con CPAL
+│  └─ remote/              Cliente web remoto para superficies de control secundarias
+├─ crates/
+│  ├─ libretracks-core/    Modelo de dominio compartido, validación y tipos base
+│  ├─ libretracks-project/ I/O de proyecto, persistencia de canción e importación WAV con Symphonia
+│  ├─ libretracks-audio/   Motor lógico de audio, transporte, activación de clips y saltos
+│  └─ libretracks-remote/  Protocolo remoto y utilidades backend
+├─ docs/                   Notas de arquitectura, depuración y roadmap
+├─ samples/                Material de ejemplo y canciones demo
+├─ scripts/                Helpers de desarrollo, incluido el bootstrap nativo de Windows
+├─ tests/                  Superficies e2e e integración
+├─ Cargo.toml              Manifest del workspace Rust
+└─ package.json            Manifest del workspace JavaScript y scripts raíz
+```
+
+## Notas para Desarrollo
+
+- La app es WAV-first en el estado actual del proyecto.
+- El routing de pistas parte de los buses `main` y `monitor`.
+- El transporte soporta saltos inmediatos, saltos a la siguiente marca y saltos cuantizados por compases.
+- Las etiquetas de UI salen de `apps/desktop/src/shared/i18n/en.ts` y `es.ts`; la documentación debe reutilizar esos textos exactos al describir la interfaz.
