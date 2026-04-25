@@ -9,7 +9,7 @@ use std::{
 
 use hound::{SampleFormat, WavSpec, WavWriter};
 use libretracks_core::{
-    validate_song, Clip, OutputBus, Song, SongRegion, TempoSource, Track, TrackKind,
+    validate_song, Clip, OutputBus, Song, SongRegion, Track, TrackKind,
 };
 use rayon::prelude::*;
 use symphonia::core::{
@@ -184,12 +184,7 @@ pub fn import_wav_song(
 
     let detected_tempo = request
         .bpm
-        .map(|bpm| ResolvedTempo {
-            bpm,
-            source: TempoSource::Manual,
-            confidence: None,
-            reference_file_path: None,
-        })
+        .map(|bpm| ResolvedTempo { bpm })
         .unwrap_or_else(|| resolve_import_tempo(&analyzed_files));
 
     let song = Song {
@@ -643,9 +638,6 @@ fn analyze_import_files_in_parallel(
 #[derive(Debug, Clone)]
 struct ResolvedTempo {
     bpm: f64,
-    source: TempoSource,
-    confidence: Option<f64>,
-    reference_file_path: Option<String>,
 }
 
 fn resolve_import_tempo(analyzed_files: &[AnalyzedImportFile]) -> ResolvedTempo {
@@ -673,20 +665,8 @@ fn resolve_import_tempo(analyzed_files: &[AnalyzedImportFile]) -> ResolvedTempo 
     match best_candidate {
         Some((file, tempo_candidate)) => ResolvedTempo {
             bpm: tempo_candidate.bpm,
-            source: TempoSource::AutoImport,
-            confidence: Some(tempo_candidate.confidence),
-            reference_file_path: Some(
-                file.imported_relative_path
-                    .to_string_lossy()
-                    .replace('\\', "/"),
-            ),
         },
-        None => ResolvedTempo {
-            bpm: 120.0,
-            source: TempoSource::AutoImport,
-            confidence: None,
-            reference_file_path: None,
-        },
+        None => ResolvedTempo { bpm: 120.0 },
     }
 }
 
