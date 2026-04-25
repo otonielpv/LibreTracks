@@ -2861,16 +2861,8 @@ fn refresh_song_duration(song: &mut Song) {
         .iter()
         .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
         .fold(0.0_f64, f64::max);
-    let max_marker_start = song
-        .section_markers
-        .iter()
-        .map(|marker| marker.start_seconds)
-        .fold(0.0_f64, f64::max);
 
-    song.duration_seconds = max_clip_end
-        .max(max_marker_start)
-        .max(song.duration_seconds)
-        .max(1.0);
+    song.duration_seconds = max_clip_end.max(1.0);
 }
 
 fn sanitize_region_bounds(
@@ -4379,6 +4371,45 @@ mod tests {
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.clips.len(), 1);
         assert_eq!(session.engine.playback_state(), PlaybackState::Stopped);
+    }
+
+    #[test]
+    fn deleting_the_last_clip_shrinks_song_duration_even_if_markers_remain() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = create_song_folder(root.path(), "clip-delete-shrink-demo")
+            .expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut song = demo_song();
+        song.section_markers.push(Marker {
+            id: "section_far".into(),
+            name: "Far".into(),
+            start_seconds: 6.0,
+            digit: None,
+        });
+        save_song(&song_dir, &song).expect("song should save");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir.clone());
+        session
+            .engine
+            .load_song(song)
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .delete_clip("clip_1", &audio)
+            .expect("clip should delete");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert_eq!(snapshot.project_revision, song_view.project_revision);
+        assert!(song_view.clips.is_empty());
+        assert_eq!(song_view.duration_seconds, 1.0);
+        assert_eq!(song_view.section_markers.len(), 1);
+        assert_eq!(song_view.section_markers[0].start_seconds, 6.0);
     }
 
     #[test]

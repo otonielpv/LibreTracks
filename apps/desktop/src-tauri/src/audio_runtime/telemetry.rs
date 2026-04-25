@@ -174,8 +174,7 @@ impl AudioDebugState {
         self.runtime_state.cached_audio_buffers = report.cache_stats.cached_buffers;
         self.runtime_state.fully_cached_audio_buffers = report.cache_stats.fully_cached_buffers;
         self.runtime_state.cached_audio_preload_bytes = report.cache_stats.preload_bytes;
-        self.playback_anchor_position_seconds =
-            Some(position_seconds.clamp(0.0, song_duration_seconds));
+        self.playback_anchor_position_seconds = Some(position_seconds.max(0.0));
         self.playback_anchor_started_at = Some(Instant::now());
         self.playback_song_duration_seconds = Some(song_duration_seconds.max(0.0));
         self.last_start_reason = Some(reason);
@@ -217,8 +216,7 @@ impl AudioDebugState {
         active_sinks: usize,
     ) {
         self.runtime_state.active_sinks = active_sinks;
-        self.playback_anchor_position_seconds =
-            Some(position_seconds.clamp(0.0, song_duration_seconds));
+        self.playback_anchor_position_seconds = Some(position_seconds.max(0.0));
         self.playback_anchor_started_at = Some(Instant::now());
         self.playback_song_duration_seconds = Some(song_duration_seconds.max(0.0));
         self.last_start_reason = Some(reason);
@@ -272,10 +270,7 @@ impl AudioDebugState {
             None => anchor_position,
         };
 
-        Some(match self.playback_song_duration_seconds {
-            Some(song_duration_seconds) => estimated_position.clamp(0.0, song_duration_seconds),
-            None => estimated_position.max(0.0),
-        })
+        Some(estimated_position.max(0.0))
     }
 }
 

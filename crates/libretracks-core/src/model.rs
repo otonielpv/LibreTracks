@@ -157,7 +157,7 @@ impl Song {
     }
 
     pub fn marker_at(&self, position_seconds: f64) -> Option<Marker> {
-        if !(0.0..self.duration_seconds).contains(&position_seconds) {
+        if position_seconds < 0.0 {
             return None;
         }
 

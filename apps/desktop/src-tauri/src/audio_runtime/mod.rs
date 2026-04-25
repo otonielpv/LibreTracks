@@ -1047,6 +1047,26 @@ mod tests {
     }
 
     #[test]
+    fn debug_state_does_not_clamp_playhead_to_song_duration() {
+        let mut debug_state = AudioDebugState::new(AudioDebugConfig {
+            enabled: true,
+            log_commands: false,
+        });
+
+        debug_state.record_seek(PlaybackStartReason::Seek, 12.0, 8.0, 0);
+
+        let snapshot = debug_state.snapshot();
+
+        assert_eq!(snapshot.playhead.anchor_position_seconds, Some(12.0));
+        assert!(snapshot
+            .playhead
+            .estimated_position_seconds
+            .unwrap_or_default()
+            >= 12.0);
+        assert_eq!(snapshot.playhead.song_duration_seconds, Some(8.0));
+    }
+
+    #[test]
     fn env_flag_accepts_common_truthy_values() {
         let key = "LIBRETRACKS_AUDIO_ENV_FLAG_TEST";
         std::env::set_var(key, "YES");

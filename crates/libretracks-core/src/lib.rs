@@ -174,6 +174,33 @@ mod tests {
     }
 
     #[test]
+    fn resolves_the_current_marker_beyond_song_duration() {
+        let mut song = valid_song();
+        song.duration_seconds = 8.0;
+        song.section_markers = vec![
+            Marker {
+                id: "section_verse".into(),
+                name: "Verse".into(),
+                start_seconds: 4.0,
+                digit: Some(2),
+            },
+            Marker {
+                id: "section_outro".into(),
+                name: "Outro".into(),
+                start_seconds: 12.0,
+                digit: Some(3),
+            },
+        ];
+
+        let marker = song
+            .marker_at(13.0)
+            .expect("marker should resolve beyond song duration");
+
+        assert_eq!(marker.id, "section_outro");
+        assert_eq!(marker.name, "Outro");
+    }
+
+    #[test]
     fn auto_names_the_next_marker() {
         let mut song = valid_song();
         song.section_markers.push(Marker {
