@@ -74,6 +74,15 @@ type TimelineCanvasPaneProps = {
   onMarkerContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, sectionId: string) => void;
   onTempoMarkerContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, markerId: string) => void;
   onRegionContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, regionId: string) => void;
+  canNativeZoom: boolean;
+  onNativeCameraXPreview: (cameraX: number) => number;
+  onNativeCameraXCommit: (cameraX: number) => void;
+  onNativeZoomPreview: (nextZoomLevel: number, anchorViewportX: number) => {
+    cameraX: number;
+    zoomLevel: number;
+  } | null;
+  onNativeZoomCommit: (view: { cameraX: number; zoomLevel: number }) => void;
+  onNativeTrackHeightChange: (trackHeight: number) => void;
   onPreviewPositionChange: (positionSeconds: number) => void;
   onPlayheadSeekCommit: (positionSeconds: number) => void;
   onTrackListContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
@@ -138,6 +147,12 @@ export function TimelineCanvasPane({
   onMarkerContextMenu,
   onTempoMarkerContextMenu,
   onRegionContextMenu,
+  canNativeZoom,
+  onNativeCameraXPreview,
+  onNativeCameraXCommit,
+  onNativeZoomPreview,
+  onNativeZoomCommit,
+  onNativeTrackHeightChange,
   onPreviewPositionChange,
   onPlayheadSeekCommit,
   onTrackListContextMenu,
@@ -165,6 +180,7 @@ export function TimelineCanvasPane({
           <TimelineRulerCanvas
             width={laneViewportWidth}
             height={RULER_HEIGHT}
+            trackHeight={trackHeight}
             cameraXRef={cameraXRef}
             pixelsPerSecond={pixelsPerSecond}
             livePixelsPerSecondRef={livePixelsPerSecondRef}
@@ -177,6 +193,13 @@ export function TimelineCanvasPane({
             pendingMarkerJump={pendingMarkerJump}
             playheadSecondsRef={displayPositionSecondsRef}
             playheadDragRef={playheadDragRef}
+            interactionContainerRef={rulerTrackRef}
+            canNativeZoom={canNativeZoom}
+            onNativeCameraXPreview={onNativeCameraXPreview}
+            onNativeCameraXCommit={onNativeCameraXCommit}
+            onNativeZoomPreview={onNativeZoomPreview}
+            onNativeZoomCommit={onNativeZoomCommit}
+            onNativeTrackHeightChange={onNativeTrackHeightChange}
           >
             {song?.regions.map((region) => (
               <button
@@ -319,9 +342,17 @@ export function TimelineCanvasPane({
               pixelsPerSecond={pixelsPerSecond}
               livePixelsPerSecondRef={livePixelsPerSecondRef}
               scrollViewportRef={scrollViewportRef}
+              interactionContainerRef={laneAreaRef}
               timelineGrid={timelineGrid}
               selectedClipId={selectedClipId}
               clipPreviewSecondsRef={clipPreviewSecondsRef}
+              trackHeightForInput={trackHeight}
+              canNativeZoom={canNativeZoom}
+              onNativeCameraXPreview={onNativeCameraXPreview}
+              onNativeCameraXCommit={onNativeCameraXCommit}
+              onNativeZoomPreview={onNativeZoomPreview}
+              onNativeZoomCommit={onNativeZoomCommit}
+              onNativeTrackHeightChange={onNativeTrackHeightChange}
             />
           ) : null}
 

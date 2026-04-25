@@ -2242,6 +2242,7 @@ export function TransportPanelContent() {
       viewportWidth?: number;
       syncPlayhead?: boolean;
       commitToStore?: boolean;
+      debounceStoreCommit?: boolean;
     },
   ) {
     const durationSeconds = options?.durationSeconds ?? songRef.current?.durationSeconds ?? 0;
@@ -2258,14 +2259,21 @@ export function TransportPanelContent() {
 
     cameraXRef.current = clampedCameraX;
     if (options?.commitToStore === false) {
-      if (scrollDebounceTimerRef.current !== null) {
-        window.clearTimeout(scrollDebounceTimerRef.current);
-      }
+      if (options.debounceStoreCommit === false) {
+        if (scrollDebounceTimerRef.current !== null) {
+          window.clearTimeout(scrollDebounceTimerRef.current);
+          scrollDebounceTimerRef.current = null;
+        }
+      } else {
+        if (scrollDebounceTimerRef.current !== null) {
+          window.clearTimeout(scrollDebounceTimerRef.current);
+        }
 
-      scrollDebounceTimerRef.current = window.setTimeout(() => {
-        scrollDebounceTimerRef.current = null;
-        setCameraX(cameraXRef.current);
-      }, SCROLL_COMMIT_DEBOUNCE_MS);
+        scrollDebounceTimerRef.current = window.setTimeout(() => {
+          scrollDebounceTimerRef.current = null;
+          setCameraX(cameraXRef.current);
+        }, SCROLL_COMMIT_DEBOUNCE_MS);
+      }
     } else {
       if (scrollDebounceTimerRef.current !== null) {
         window.clearTimeout(scrollDebounceTimerRef.current);
@@ -2296,6 +2304,12 @@ export function TransportPanelContent() {
     }
 
     return clampedCameraX;
+  }
+
+  function commitCameraXToStore(nextCameraX: number) {
+    updateCameraX(nextCameraX, {
+      commitToStore: true,
+    });
   }
 
   function previewSeek(positionSeconds: number) {
@@ -2801,7 +2815,13 @@ export function TransportPanelContent() {
     ];
   }
 
-  function applyZoom(nextZoomLevel: number, anchorViewportX = laneViewportWidth / 2) {
+  function previewZoom(
+    nextZoomLevel: number,
+    anchorViewportX = laneViewportWidth / 2,
+    options?: {
+      scheduleCommit?: boolean;
+    },
+  ) {
     const clampedZoom = clamp(nextZoomLevel, effectiveZoomMin, ZOOM_MAX);
     const nextPixelsPerSecond = clampedZoom * BASE_PIXELS_PER_SECOND;
     const previousPixelsPerSecond = livePixelsPerSecondRef.current;
@@ -2818,23 +2838,54 @@ export function TransportPanelContent() {
 
     liveZoomLevelRef.current = clampedZoom;
     livePixelsPerSecondRef.current = nextPixelsPerSecond;
-    updateCameraX(nextCameraX, {
+    const clampedCameraX = updateCameraX(nextCameraX, {
       durationSeconds,
       contentEndSeconds: timelineContentEndSeconds,
       pixelsPerSecond: nextPixelsPerSecond,
       viewportWidth: laneViewportWidth,
       commitToStore: false,
+      debounceStoreCommit: false,
     });
 
-    if (zoomDebounceTimerRef.current !== null) {
-      window.clearTimeout(zoomDebounceTimerRef.current);
+    const nextView = {
+      cameraX: clampedCameraX,
+      zoomLevel: clampedZoom,
+    };
+
+    if (options?.scheduleCommit !== false) {
+      if (zoomDebounceTimerRef.current !== null) {
+        window.clearTimeout(zoomDebounceTimerRef.current);
+      }
+
+      zoomDebounceTimerRef.current = window.setTimeout(() => {
+        zoomDebounceTimerRef.current = null;
+        setZoomLevel(nextView.zoomLevel);
+        commitCameraXToStore(nextView.cameraX);
+      }, LIVE_ZOOM_COMMIT_DEBOUNCE_MS);
     }
 
-    zoomDebounceTimerRef.current = window.setTimeout(() => {
+    return nextView;
+  }
+
+  function applyZoom(nextZoomLevel: number, anchorViewportX = laneViewportWidth / 2) {
+    previewZoom(nextZoomLevel, anchorViewportX, {
+      scheduleCommit: true,
+    });
+  }
+
+  function commitZoomViewToStore(nextView: { cameraX: number; zoomLevel: number }) {
+    if (zoomDebounceTimerRef.current !== null) {
+      window.clearTimeout(zoomDebounceTimerRef.current);
       zoomDebounceTimerRef.current = null;
-      setZoomLevel(liveZoomLevelRef.current);
-      setCameraX(cameraXRef.current);
-    }, LIVE_ZOOM_COMMIT_DEBOUNCE_MS);
+    }
+
+    liveZoomLevelRef.current = nextView.zoomLevel;
+    livePixelsPerSecondRef.current = nextView.zoomLevel * BASE_PIXELS_PER_SECOND;
+    setZoomLevel(nextView.zoomLevel);
+    updateCameraX(nextView.cameraX, {
+      pixelsPerSecond: livePixelsPerSecondRef.current,
+      commitToStore: true,
+    });
   }
 
   function applyTrackHeight(nextTrackHeight: number) {
@@ -2856,68 +2907,6 @@ export function TransportPanelContent() {
       commitToStore: false,
     });
   }
-
-  function handleTimelineWheel(event: WheelEvent, shell: HTMLDivElement) {
-    if (event.ctrlKey || event.metaKey) {
-      if (!song) {
-        return;
-      }
-
-      event.preventDefault();
-      applyTrackHeight(trackHeight + (event.deltaY < 0 ? TRACK_HEIGHT_STEP : -TRACK_HEIGHT_STEP));
-      return;
-    }
-
-    if (isTrackInfoScrollTarget(event.target)) {
-      return;
-    }
-
-    const shouldScrollHorizontally = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
-    if (shouldScrollHorizontally) {
-      if (!isTimelineZoomTarget(event.target)) {
-        return;
-      }
-
-      event.preventDefault();
-      updateCameraX(cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0), {
-        commitToStore: false,
-      });
-      return;
-    }
-
-    if (!song || !isTimelineZoomTarget(event.target)) {
-      return;
-    }
-
-    event.preventDefault();
-    const bounds = shell.getBoundingClientRect();
-    const anchorViewportX = clamp(event.clientX - bounds.left - HEADER_WIDTH, 0, laneViewportWidth);
-
-    applyZoom(
-      getZoomLevelDelta(
-        liveZoomLevelRef.current,
-        event.deltaY < 0 ? "in" : "out",
-        TIMELINE_ZOOM_MULTIPLIER,
-      ),
-      anchorViewportX,
-    );
-  }
-
-  useEffect(() => {
-    const shell = timelineShellRef.current;
-    if (!shell) {
-      return;
-    }
-
-    const onWheel = (event: WheelEvent) => {
-      handleTimelineWheel(event, shell);
-    };
-
-    shell.addEventListener("wheel", onWheel, { capture: true, passive: false });
-    return () => {
-      shell.removeEventListener("wheel", onWheel, true);
-    };
-  }, [handleTimelineWheel, laneViewportWidth, song, trackHeight, zoomLevel]);
 
   async function handleTrackDrop(trackId: string, dropState: NonNullable<TrackDropState>) {
     const targetTrack = tracksById[dropState.targetTrackId] ?? null;
@@ -4735,6 +4724,19 @@ export function TransportPanelContent() {
                   setSelectedRegionId(region.id);
                   openMenu(event, region.name, songRegionContextMenu(region));
                 }}
+                canNativeZoom={Boolean(song)}
+                onNativeCameraXPreview={(nextCameraX) =>
+                  updateCameraX(nextCameraX, {
+                    commitToStore: false,
+                    debounceStoreCommit: false,
+                  })}
+                onNativeCameraXCommit={commitCameraXToStore}
+                onNativeZoomPreview={(nextZoomLevel, anchorViewportX) =>
+                  previewZoom(nextZoomLevel, anchorViewportX, {
+                    scheduleCommit: false,
+                  })}
+                onNativeZoomCommit={commitZoomViewToStore}
+                onNativeTrackHeightChange={applyTrackHeight}
                 onPreviewPositionChange={syncLivePosition}
                 onPlayheadSeekCommit={(positionSeconds) => {
                   setContextMenu(null);

@@ -10,6 +10,7 @@ import type {
   TrackSummary,
   WaveformSummaryDto,
 } from "./desktopApi";
+import { InputManager } from "./Renderer/InputManager";
 import {
   drawGridLines,
   drawRulerBackgroundLayer,
@@ -25,12 +26,13 @@ import {
   type TimelineViewportMetrics,
   type TrackSceneSnapshot,
 } from "./Renderer/TimelineRenderer";
-import type { TimelineGrid } from "./timelineMath";
+import { BASE_PIXELS_PER_SECOND, type TimelineGrid } from "./timelineMath";
 import { secondsToScreenX } from "./timelineMath";
 
 type RulerCanvasProps = {
   width: number;
   height: number;
+  trackHeight: number;
   cameraXRef: MutableRefObject<number>;
   pixelsPerSecond: number;
   livePixelsPerSecondRef: MutableRefObject<number>;
@@ -43,6 +45,16 @@ type RulerCanvasProps = {
   pendingMarkerJump: PendingJumpSummary | null;
   playheadSecondsRef: MutableRefObject<number>;
   playheadDragRef: MutableRefObject<{ currentSeconds: number } | null>;
+  interactionContainerRef: RefObject<HTMLDivElement | null>;
+  canNativeZoom: boolean;
+  onNativeCameraXPreview: (cameraX: number) => number;
+  onNativeCameraXCommit: (cameraX: number) => void;
+  onNativeZoomPreview: (nextZoomLevel: number, anchorViewportX: number) => {
+    cameraX: number;
+    zoomLevel: number;
+  } | null;
+  onNativeZoomCommit: (view: { cameraX: number; zoomLevel: number }) => void;
+  onNativeTrackHeightChange: (trackHeight: number) => void;
   children?: ReactNode;
 };
 
@@ -58,9 +70,20 @@ type TrackCanvasProps = {
   pixelsPerSecond: number;
   livePixelsPerSecondRef: MutableRefObject<number>;
   scrollViewportRef: RefObject<HTMLDivElement | null>;
+  interactionContainerRef: RefObject<HTMLDivElement | null>;
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
+  trackHeightForInput: number;
+  canNativeZoom: boolean;
+  onNativeCameraXPreview: (cameraX: number) => number;
+  onNativeCameraXCommit: (cameraX: number) => void;
+  onNativeZoomPreview: (nextZoomLevel: number, anchorViewportX: number) => {
+    cameraX: number;
+    zoomLevel: number;
+  } | null;
+  onNativeZoomCommit: (view: { cameraX: number; zoomLevel: number }) => void;
+  onNativeTrackHeightChange: (trackHeight: number) => void;
 };
 
 function isRenderableCanvasSize(value: number) {
@@ -154,6 +177,7 @@ function buildWaveformCacheSignature(waveformCache: Record<string, WaveformSumma
 export function TimelineRulerCanvas({
   width,
   height,
+  trackHeight,
   cameraXRef,
   pixelsPerSecond,
   livePixelsPerSecondRef,
@@ -166,6 +190,13 @@ export function TimelineRulerCanvas({
   pendingMarkerJump,
   playheadSecondsRef,
   playheadDragRef,
+  interactionContainerRef,
+  canNativeZoom,
+  onNativeCameraXPreview,
+  onNativeCameraXCommit,
+  onNativeZoomPreview,
+  onNativeZoomCommit,
+  onNativeTrackHeightChange,
   children,
 }: RulerCanvasProps) {
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -232,6 +263,50 @@ export function TimelineRulerCanvas({
     selectedMarkerId,
     timelineGrid,
     width,
+  ]);
+
+  useEffect(() => {
+    const container = interactionContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const inputManager = new InputManager({
+      container,
+      getState: () => ({
+        cameraX: cameraXRef.current,
+        zoomLevel: livePixelsPerSecondRef.current / BASE_PIXELS_PER_SECOND,
+        trackHeight,
+        canZoom: canNativeZoom,
+      }),
+      dragThresholdPx: 6,
+      panCommitDelayMs: 100,
+      zoomCommitDelayMs: 100,
+      zoomMultiplier: 1.2,
+      trackHeightStep: 8,
+      trackHeightMin: 68,
+      trackHeightMax: 148,
+      onPreviewCameraX: onNativeCameraXPreview,
+      onCommitCameraX: onNativeCameraXCommit,
+      onPreviewZoom: onNativeZoomPreview,
+      onCommitZoom: onNativeZoomCommit,
+      onTrackHeightChange: onNativeTrackHeightChange,
+    });
+
+    return () => {
+      inputManager.destroy();
+    };
+  }, [
+    canNativeZoom,
+    cameraXRef,
+    interactionContainerRef,
+    livePixelsPerSecondRef,
+    onNativeCameraXCommit,
+    onNativeCameraXPreview,
+    onNativeTrackHeightChange,
+    onNativeZoomCommit,
+    onNativeZoomPreview,
+    trackHeight,
   ]);
 
   useEffect(() => {
@@ -398,9 +473,17 @@ export function TimelineTrackCanvas({
   pixelsPerSecond,
   livePixelsPerSecondRef,
   scrollViewportRef,
+  interactionContainerRef,
   timelineGrid,
   selectedClipId,
   clipPreviewSecondsRef,
+  trackHeightForInput,
+  canNativeZoom,
+  onNativeCameraXPreview,
+  onNativeCameraXCommit,
+  onNativeZoomPreview,
+  onNativeZoomCommit,
+  onNativeTrackHeightChange,
 }: TrackCanvasProps) {
   const backgroundCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const tracksCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -430,6 +513,50 @@ export function TimelineTrackCanvas({
     () => buildWaveformCacheSignature(waveformCache),
     [waveformCache],
   );
+
+  useEffect(() => {
+    const container = interactionContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const inputManager = new InputManager({
+      container,
+      getState: () => ({
+        cameraX: cameraXRef.current,
+        zoomLevel: livePixelsPerSecondRef.current / BASE_PIXELS_PER_SECOND,
+        trackHeight: trackHeightForInput,
+        canZoom: canNativeZoom,
+      }),
+      dragThresholdPx: 6,
+      panCommitDelayMs: 100,
+      zoomCommitDelayMs: 100,
+      zoomMultiplier: 1.2,
+      trackHeightStep: 8,
+      trackHeightMin: 68,
+      trackHeightMax: 148,
+      onPreviewCameraX: onNativeCameraXPreview,
+      onCommitCameraX: onNativeCameraXCommit,
+      onPreviewZoom: onNativeZoomPreview,
+      onCommitZoom: onNativeZoomCommit,
+      onTrackHeightChange: onNativeTrackHeightChange,
+    });
+
+    return () => {
+      inputManager.destroy();
+    };
+  }, [
+    canNativeZoom,
+    cameraXRef,
+    interactionContainerRef,
+    livePixelsPerSecondRef,
+    onNativeCameraXCommit,
+    onNativeCameraXPreview,
+    onNativeTrackHeightChange,
+    onNativeZoomCommit,
+    onNativeZoomPreview,
+    trackHeightForInput,
+  ]);
 
   snapshotRef.current = {
     width,
