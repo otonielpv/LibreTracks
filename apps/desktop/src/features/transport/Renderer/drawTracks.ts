@@ -1,17 +1,11 @@
-import type { ClipSummary, SongView, TrackSummary, WaveformLodDto, WaveformSummaryDto } from "../desktopApi";
+import type { ClipSummary, SongView, TrackSummary } from "../desktopApi";
 import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
 import { clamp, secondsToScreenX } from "../timelineMath";
+import { WaveformTileCache, WAVEFORM_TILE_WIDTH_PX } from "./WaveformTileCache";
 
 const TRACK_CLIP_TOP_PADDING = 1;
 const TRACK_CLIP_BOTTOM_PADDING = 1;
-const decodedWaveformLodCache = new WeakMap<WaveformLodDto, ResolvedWaveformLod>();
-
-type ResolvedWaveformLod = {
-  resolutionFrames: number;
-  bucketCount: number;
-  minPeaks: Float32Array;
-  maxPeaks: Float32Array;
-};
+const waveformTileCache = new WaveformTileCache();
 
 export function drawTrackCanvasBackground(
   context: CanvasRenderingContext2D,
@@ -31,97 +25,6 @@ function clipScreenBounds(
     left: secondsToScreenX(startSeconds, cameraX, pixelsPerSecond),
     width: clip.durationSeconds * pixelsPerSecond,
   };
-}
-
-function drawWaveformShape(
-  context: CanvasRenderingContext2D,
-  clip: ClipSummary,
-  waveform: WaveformSummaryDto | undefined,
-  pixelsPerSecond: number,
-  canvasWidth: number,
-  left: number,
-  width: number,
-  top: number,
-  height: number,
-) {
-  const waveformLod = selectWaveformLod(waveform, pixelsPerSecond);
-  const maxPeaks = waveformLod?.maxPeaks ?? new Float32Array(0);
-  const minPeaks = waveformLod?.minPeaks ?? new Float32Array(0);
-  if (!maxPeaks.length || !minPeaks.length || width < 2 || height < 2 || clip.sourceDurationSeconds <= 0) {
-    return;
-  }
-
-  const visiblePixelStart = Math.max(0, -left);
-  const visiblePixelEnd = Math.min(width, canvasWidth - left);
-  if (visiblePixelStart >= visiblePixelEnd) {
-    return;
-  }
-
-  const clipStartRatio = clamp(clip.sourceStartSeconds / clip.sourceDurationSeconds, 0, 1);
-  const clipSpanRatio = clamp(clip.durationSeconds / clip.sourceDurationSeconds, 0, 1);
-  const clipStartIndex = Math.max(0, Math.floor(clipStartRatio * maxPeaks.length));
-  const clipEndIndex = Math.min(
-    maxPeaks.length,
-    Math.max(clipStartIndex + 1, Math.ceil((clipStartRatio + clipSpanRatio) * maxPeaks.length)),
-  );
-  const clipSampleCount = clipEndIndex - clipStartIndex;
-  if (clipSampleCount <= 0) {
-    return;
-  }
-
-  const startIndex = Math.max(
-    clipStartIndex,
-    clipStartIndex + Math.floor((visiblePixelStart / width) * clipSampleCount),
-  );
-  const endIndex = Math.min(
-    clipEndIndex,
-    Math.max(startIndex + 1, clipStartIndex + Math.ceil((visiblePixelEnd / width) * clipSampleCount)),
-  );
-  if (startIndex >= endIndex || startIndex >= minPeaks.length) {
-    return;
-  }
-
-  context.save();
-  context.fillStyle = waveform?.isPreview ? "rgba(20, 20, 20, 0.34)" : "rgba(20, 20, 20, 0.72)";
-  context.lineJoin = "round";
-  context.lineCap = "round";
-  context.beginPath();
-  const xDenominator = Math.max(1, clipSampleCount - 1);
-  const pxPerBucket = width / xDenominator;
-  const shouldUseSteppedPeaks = pxPerBucket > 5;
-  let previousTopY = 0;
-
-  for (let index = startIndex; index < endIndex; index += 1) {
-    const x = left + ((index - clipStartIndex) / xDenominator) * width;
-    const y = top + height * 0.5 - clamp(maxPeaks[index], -1, 1) * height * 0.42;
-    if (index === startIndex) {
-      context.moveTo(x, y);
-      previousTopY = y;
-    } else {
-      if (shouldUseSteppedPeaks) {
-        context.lineTo(x, previousTopY);
-      }
-      context.lineTo(x, y);
-      previousTopY = y;
-    }
-  }
-
-  let previousBottomY = 0;
-  for (let index = endIndex - 1; index >= startIndex; index -= 1) {
-    const x = left + ((index - clipStartIndex) / xDenominator) * width;
-    const y = top + height * 0.5 - clamp(minPeaks[index], -1, 1) * height * 0.42;
-    if (index === endIndex - 1) {
-      previousBottomY = y;
-    } else if (shouldUseSteppedPeaks) {
-      context.lineTo(x, previousBottomY);
-    }
-    context.lineTo(x, y);
-    previousBottomY = y;
-  }
-
-  context.closePath();
-  context.fill();
-  context.restore();
 }
 
 function drawWaveformPlaceholder(
@@ -148,83 +51,6 @@ function drawWaveformPlaceholder(
   context.lineTo(left + width - 8, top + height * 0.5);
   context.stroke();
   context.restore();
-}
-
-function decodeBase64ToBytes(base64: string) {
-  if (typeof atob === "function") {
-    const decoded = atob(base64);
-    const bytes = new Uint8Array(decoded.length);
-    for (let index = 0; index < decoded.length; index += 1) {
-      bytes[index] = decoded.charCodeAt(index);
-    }
-
-    return bytes;
-  }
-
-  return new Uint8Array(0);
-}
-
-export function decodeFloat32Peaks(base64: string | undefined, expectedCount: number) {
-  if (!base64 || expectedCount <= 0) {
-    return new Float32Array(0);
-  }
-
-  const bytes = decodeBase64ToBytes(base64);
-  const availableCount = Math.min(expectedCount, Math.floor(bytes.byteLength / 4));
-  const values = new Float32Array(availableCount);
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-
-  for (let index = 0; index < availableCount; index += 1) {
-    values[index] = view.getFloat32(index * 4, true);
-  }
-
-  return values;
-}
-
-function resolveWaveformLod(lod: WaveformLodDto): ResolvedWaveformLod {
-  const cached = decodedWaveformLodCache.get(lod);
-  if (cached) {
-    return cached;
-  }
-
-  const resolved = {
-    resolutionFrames: lod.resolutionFrames,
-    bucketCount: lod.bucketCount,
-    minPeaks: lod.minPeaks
-      ? Float32Array.from(lod.minPeaks)
-      : decodeFloat32Peaks(lod.minPeaksBase64, lod.bucketCount),
-    maxPeaks: lod.maxPeaks
-      ? Float32Array.from(lod.maxPeaks)
-      : decodeFloat32Peaks(lod.maxPeaksBase64, lod.bucketCount),
-  };
-  decodedWaveformLodCache.set(lod, resolved);
-  return resolved;
-}
-
-export function selectWaveformLod(
-  waveform: WaveformSummaryDto | undefined,
-  pixelsPerSecond: number,
-): ResolvedWaveformLod | null {
-  if (!waveform?.lods.length) {
-    return null;
-  }
-
-  const framesPerPixel =
-    waveform.sampleRate > 0 && pixelsPerSecond > 0
-      ? waveform.sampleRate / pixelsPerSecond
-      : waveform.lods[0].resolutionFrames;
-  let selectedLod = waveform.lods[0];
-
-  for (const lod of waveform.lods) {
-    if (lod.resolutionFrames <= framesPerPixel) {
-      selectedLod = lod;
-      continue;
-    }
-
-    break;
-  }
-
-  return resolveWaveformLod(selectedLod);
 }
 
 function resolveVisibleTrackWindow(
@@ -256,6 +82,7 @@ export function drawTrackClipsLayer(
   snapshot: TrackSceneSnapshot,
   viewport: TimelineViewportMetrics,
 ) {
+  const activeNamespaces = new Set<string>();
   const { startIndex: visibleTrackStart, endIndex: visibleTrackEnd, startY, endY } =
     resolveVisibleTrackWindow(
       snapshot.visibleTracks.length,
@@ -270,6 +97,18 @@ export function drawTrackClipsLayer(
   context.rect(0, startY, snapshot.width, visibleHeight);
   context.clip();
   context.clearRect(0, startY, snapshot.width, visibleHeight);
+
+  for (const trackClips of Object.values(snapshot.clipsByTrack)) {
+    for (const clip of trackClips) {
+      const waveform = snapshot.waveformCache[clip.waveformKey];
+      if (!waveform) {
+        continue;
+      }
+
+      activeNamespaces.add(waveformTileCache.buildNamespace(clip, waveform, snapshot.zoomLevel));
+    }
+  }
+  waveformTileCache.pruneNamespaces(activeNamespaces);
 
   for (let trackIndex = visibleTrackStart; trackIndex < visibleTrackEnd; trackIndex += 1) {
     const track = snapshot.visibleTracks[trackIndex];
@@ -326,17 +165,34 @@ export function drawTrackClipsLayer(
         context.beginPath();
         context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
         context.clip();
-        drawWaveformShape(
-          context,
-          clip,
-          waveform,
-          snapshot.zoomLevel,
-          snapshot.width,
-          left,
-          width,
-          clipTop,
-          clipHeight,
+        const visiblePixelStart = Math.max(0, -left);
+        const visiblePixelEnd = Math.min(width, snapshot.width - left);
+        const startTileIndex = Math.max(0, Math.floor(visiblePixelStart / WAVEFORM_TILE_WIDTH_PX));
+        const endTileIndex = Math.max(
+          startTileIndex,
+          Math.ceil(visiblePixelEnd / WAVEFORM_TILE_WIDTH_PX) - 1,
         );
+
+        for (let tileIndex = startTileIndex; tileIndex <= endTileIndex; tileIndex += 1) {
+          const tile = waveformTileCache.getTile({
+            clip,
+            waveform,
+            pixelsPerSecond: snapshot.zoomLevel,
+            clipPixelWidth: width,
+            tileIndex,
+          });
+          if (!tile) {
+            continue;
+          }
+
+          context.drawImage(
+            tile.canvas,
+            left + tile.tileStartPixel,
+            clipTop,
+            tile.tileWidth,
+            clipHeight,
+          );
+        }
         context.restore();
       } else {
         drawWaveformPlaceholder(context, clippedLeft, visibleWidth, clipTop, clipHeight);
