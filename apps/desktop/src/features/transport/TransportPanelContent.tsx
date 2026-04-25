@@ -2088,9 +2088,6 @@ export function TransportPanelContent() {
         };
         clipDragRef.current = nextDrag;
         clipPreviewSecondsRef.current = { [nextDrag.clipId]: nextDrag.previewSeconds };
-        if (nextDrag.hasMoved) {
-          queueClipMoveLiveUpdate(nextDrag.clipId, nextDrag.previewSeconds);
-        }
       }
 
       const trackDrag = trackDragRef.current;

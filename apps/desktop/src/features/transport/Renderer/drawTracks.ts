@@ -82,7 +82,6 @@ export function drawTrackClipsLayer(
   snapshot: TrackSceneSnapshot,
   viewport: TimelineViewportMetrics,
 ) {
-  const activeNamespaces = new Set<string>();
   const { startIndex: visibleTrackStart, endIndex: visibleTrackEnd, startY, endY } =
     resolveVisibleTrackWindow(
       snapshot.visibleTracks.length,
@@ -90,25 +89,9 @@ export function drawTrackClipsLayer(
       viewport.scrollTop,
       viewport.height,
     );
-  const visibleHeight = Math.max(1, endY - startY);
 
   context.save();
-  context.beginPath();
-  context.rect(0, startY, snapshot.width, visibleHeight);
-  context.clip();
-  context.clearRect(0, startY, snapshot.width, visibleHeight);
-
-  for (const trackClips of Object.values(snapshot.clipsByTrack)) {
-    for (const clip of trackClips) {
-      const waveform = snapshot.waveformCache[clip.waveformKey];
-      if (!waveform) {
-        continue;
-      }
-
-      activeNamespaces.add(waveformTileCache.buildNamespace(clip, waveform, snapshot.zoomLevel));
-    }
-  }
-  waveformTileCache.pruneNamespaces(activeNamespaces);
+  context.clearRect(0, 0, snapshot.width, snapshot.height);
 
   for (let trackIndex = visibleTrackStart; trackIndex < visibleTrackEnd; trackIndex += 1) {
     const track = snapshot.visibleTracks[trackIndex];
