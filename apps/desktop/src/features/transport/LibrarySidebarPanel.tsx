@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { LibraryAssetSummary, LibraryImportProgressEvent } from "./desktopApi";
 
@@ -88,6 +89,7 @@ export function LibrarySidebarPanel({
   onDeleteFolder,
   onDeleteRequested,
 }: LibrarySidebarPanelProps) {
+  const { t } = useTranslation();
   const [selectedAssetPaths, setSelectedAssetPaths] = useState<string[]>([]);
   const [dragTargetGroupId, setDragTargetGroupId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
@@ -208,12 +210,14 @@ export function LibrarySidebarPanel({
 
     return [
       {
-        label: contextAssets.length > 1 ? `Borrar ${contextAssets.length} assets` : `Borrar ${asset.fileName}`,
+        label: contextAssets.length > 1
+          ? t("library.deleteAssets", { count: contextAssets.length })
+          : t("library.deleteAsset", { name: asset.fileName }),
         disabled: contextAssets.some((candidate) => deletingFilePath === candidate.filePath),
         onSelect: () => onDeleteRequested(contextAssets),
       },
       {
-        label: asset.folderPath ? "Mover a la raiz" : "Mover a la raiz (ya esta aqui)",
+        label: asset.folderPath ? t("library.moveToRoot") : t("library.moveToRootDisabled"),
         disabled: !asset.folderPath,
         onSelect: () => onMoveAssetsToFolder(contextAssets.map((candidate) => candidate.filePath), null),
       },
@@ -224,7 +228,7 @@ export function LibrarySidebarPanel({
     if (!folderPath) {
       return [
         {
-          label: "Crear carpeta virtual",
+          label: t("library.createFolder"),
           onSelect: onCreateFolder,
         },
       ];
@@ -232,11 +236,11 @@ export function LibrarySidebarPanel({
 
     return [
       {
-        label: "Renombrar carpeta",
+        label: t("library.renameFolder"),
         onSelect: () => onRenameFolder(folderPath),
       },
       {
-        label: "Eliminar carpeta",
+        label: t("library.deleteFolder"),
         onSelect: () => onDeleteFolder(folderPath),
       },
     ];
@@ -346,7 +350,7 @@ export function LibrarySidebarPanel({
 
   const renderAssetRows = (groupAssets: LibraryAssetSummary[]) => {
     return groupAssets.length ? (
-      <div className="lt-library-asset-list" role="list" aria-label="Library assets">
+      <div className="lt-library-asset-list" role="list" aria-label={t("library.assetListAria")}>
         {groupAssets.map((asset) => {
           const isSelected = selectedAssetPathSet.has(asset.filePath);
 
@@ -381,16 +385,16 @@ export function LibrarySidebarPanel({
         })}
       </div>
     ) : (
-      <p className="lt-library-folder-empty">Drop assets here to keep this folder ready for the next song.</p>
+      <p className="lt-library-folder-empty">{t("library.emptyFolder")}</p>
     );
   };
 
   return (
-    <aside className="lt-library-panel" aria-label="Library panel">
+    <aside className="lt-library-panel" aria-label={t("library.panelAria")}>
       <div className="lt-library-panel-header">
         <div>
-          <span className="lt-library-panel-eyebrow">Session Assets</span>
-          <h2>Library</h2>
+          <span className="lt-library-panel-eyebrow">{t("library.eyebrow")}</span>
+          <h2>{t("library.title")}</h2>
         </div>
 
         <div className="lt-library-panel-actions">
@@ -401,7 +405,7 @@ export function LibrarySidebarPanel({
             disabled={!canImport || isImporting}
           >
             <span className="material-symbols-outlined">create_new_folder</span>
-            Folder
+            {t("library.folderButton")}
           </button>
           <button
             type="button"
@@ -410,20 +414,20 @@ export function LibrarySidebarPanel({
             disabled={!canImport || isImporting}
           >
             <span className="material-symbols-outlined">audio_file</span>
-            {isImporting ? "Importing..." : "Import audio"}
+            {isImporting ? t("library.importing") : t("library.importAudio")}
           </button>
         </div>
       </div>
 
       <div className="lt-library-panel-meta" aria-live="polite">
-        <span>{assets.length} assets</span>
-        <span>{folders.length} folders</span>
+        <span>{t("library.assetsCount", { count: assets.length })}</span>
+        <span>{t("library.foldersCount", { count: folders.length })}</span>
         <span>
           {selectedAssetPaths.length > 1
-            ? `${selectedAssetPaths.length} selected`
+            ? t("library.selectedCount", { count: selectedAssetPaths.length })
             : canImport
-              ? "Delete removes selection"
-              : "Open or create a session"}
+              ? t("library.deleteHint")
+              : t("library.openSessionHint")}
         </span>
       </div>
 
@@ -437,11 +441,11 @@ export function LibrarySidebarPanel({
       ) : null}
 
       <div className="lt-library-panel-body" onKeyDown={handlePanelKeyDown} tabIndex={0}>
-        {isLoading ? <p className="lt-library-panel-empty">Loading library assets...</p> : null}
+        {isLoading ? <p className="lt-library-panel-empty">{t("library.loading")}</p> : null}
 
         {!isLoading && !assets.length && !folders.length ? (
           <p className="lt-library-panel-empty">
-            Import WAV files to build the library before arranging them on the timeline.
+            {t("library.empty")}
           </p>
         ) : null}
 
@@ -450,15 +454,15 @@ export function LibrarySidebarPanel({
             <details className="lt-library-root-group" open>
               <summary
                 className={`lt-library-folder-summary ${dragTargetGroupId === ROOT_GROUP_ID ? "is-drag-target" : ""}`}
-                onContextMenu={(event) => openContextMenu(event, "Sin carpeta", folderContextMenu(null))}
+                onContextMenu={(event) => openContextMenu(event, t("library.rootFolder"), folderContextMenu(null))}
                 onDragLeave={handleGroupDragLeave}
                 onDragOver={(event) => handleGroupDragOver(event, null)}
                 onDrop={(event) => handleGroupDrop(event, null)}
               >
                 <span className="material-symbols-outlined">home_storage</span>
                 <span className="lt-library-folder-copy">
-                  <strong title="Sin carpeta">Sin carpeta</strong>
-                  <small>{rootAssets.length} asset(s)</small>
+                  <strong title={t("library.rootFolder")}>{t("library.rootFolder")}</strong>
+                  <small>{t("library.assetsInFolder", { count: rootAssets.length })}</small>
                 </span>
               </summary>
               <div className="lt-library-group-list">{renderAssetRows(rootAssets)}</div>
@@ -476,7 +480,7 @@ export function LibrarySidebarPanel({
                   <span className="material-symbols-outlined">folder</span>
                   <span className="lt-library-folder-copy">
                     <strong title={group.folderPath}>{group.folderPath}</strong>
-                    <small>{group.assets.length} asset(s)</small>
+                    <small>{t("library.assetsInFolder", { count: group.assets.length })}</small>
                   </span>
                 </summary>
                 <div className="lt-library-group-list">{renderAssetRows(group.assets)}</div>

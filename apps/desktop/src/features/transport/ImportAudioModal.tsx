@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 type ImportAudioModalProps = {
   isOpen: boolean;
   isImporting: boolean;
@@ -6,6 +8,8 @@ type ImportAudioModalProps = {
 };
 
 export function ImportAudioModal({ isOpen, isImporting, onClose, onImport }: ImportAudioModalProps) {
+  const { t } = useTranslation();
+
   if (!isOpen) {
     return null;
   }
@@ -16,7 +20,7 @@ export function ImportAudioModal({ isOpen, isImporting, onClose, onImport }: Imp
         <header className="lt-import-header">
           <div className="lt-import-header-title">
             <span className="material-symbols-outlined">audio_file</span>
-            <span>Importar Audio</span>
+            <span>{t("importAudio.title")}</span>
           </div>
           <button type="button" className="lt-import-close" onClick={onClose} disabled={isImporting}>
             <span className="material-symbols-outlined">close</span>
@@ -25,9 +29,9 @@ export function ImportAudioModal({ isOpen, isImporting, onClose, onImport }: Imp
 
         <div className="lt-import-simple-body">
           <span className="material-symbols-outlined lt-import-simple-icon">folder_open</span>
-          <h2 className="lt-import-simple-title">Selecciona archivos WAV desde tu ordenador</h2>
+          <h2 className="lt-import-simple-title">{t("importAudio.pickTitle")}</h2>
           <p className="lt-import-simple-hint">
-            Se abrirá el explorador de archivos del sistema. Puedes seleccionar uno o varios archivos WAV.
+            {t("importAudio.pickHint")}
           </p>
           <button
             type="button"
@@ -38,7 +42,7 @@ export function ImportAudioModal({ isOpen, isImporting, onClose, onImport }: Imp
             }}
           >
             <span className="material-symbols-outlined">file_open</span>
-            {isImporting ? "Importando..." : "Seleccionar archivos..."}
+            {isImporting ? t("importAudio.importing") : t("importAudio.selectingFiles")}
           </button>
         </div>
 
@@ -46,7 +50,7 @@ export function ImportAudioModal({ isOpen, isImporting, onClose, onImport }: Imp
           <div />
           <div className="lt-import-actions">
             <button type="button" className="lt-import-cancel" onClick={onClose} disabled={isImporting}>
-              Cancelar
+              {t("common.cancel")}
             </button>
           </div>
         </footer>

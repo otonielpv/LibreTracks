@@ -226,7 +226,25 @@ export type AudioMeterLevel = {
 export type AppSettings = {
   selectedOutputDevice?: string | null;
   splitStereoEnabled: boolean;
+  locale?: string | null;
 };
+
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  selectedOutputDevice: null,
+  splitStereoEnabled: false,
+  locale: null,
+};
+
+export function normalizeAppSettings(settings: AppSettings): AppSettings {
+  const selectedOutputDevice = settings.selectedOutputDevice?.trim() || null;
+  const locale = settings.locale?.trim().toLowerCase();
+
+  return {
+    selectedOutputDevice,
+    splitStereoEnabled: Boolean(settings.splitStereoEnabled),
+    locale: locale === "en" || locale === "es" ? locale : null,
+  };
+}
 
 export type AudioOutputDevices = {
   devices: string[];
@@ -268,10 +286,7 @@ let demoSong = buildDemoSong();
 let demoWaveforms = buildDemoWaveforms();
 let demoLibraryAssets = buildDemoLibraryAssets(demoSong);
 let demoLibraryFolders = collectDemoLibraryFolders(demoLibraryAssets);
-let demoAppSettings: AppSettings = {
-  selectedOutputDevice: null,
-  splitStereoEnabled: false,
-};
+let demoAppSettings: AppSettings = { ...DEFAULT_APP_SETTINGS };
 let demoPlaybackState: PlaybackState = "stopped";
 let demoPendingJump: PendingJumpSummary | null = null;
 let demoProjectRevision = demoSong.projectRevision;
@@ -552,7 +567,7 @@ export async function getDesktopPerformanceSnapshot(): Promise<DesktopPerformanc
 
 export async function getSettings(): Promise<AppSettings> {
   if (!isTauriApp) {
-    return cloneSnapshot(demoAppSettings);
+    return normalizeAppSettings(cloneSnapshot(demoAppSettings));
   }
 
   return invokeCommand<AppSettings>("get_settings");
@@ -560,7 +575,7 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function saveSettings(settings: AppSettings): Promise<AppSettings> {
   if (!isTauriApp) {
-    demoAppSettings = cloneSnapshot(settings);
+    demoAppSettings = normalizeAppSettings(cloneSnapshot(settings));
     return cloneSnapshot(demoAppSettings);
   }
 
@@ -569,7 +584,7 @@ export async function saveSettings(settings: AppSettings): Promise<AppSettings> 
 
 export async function updateAudioSettings(settings: AppSettings): Promise<AppSettings> {
   if (!isTauriApp) {
-    demoAppSettings = cloneSnapshot(settings);
+    demoAppSettings = normalizeAppSettings(cloneSnapshot(settings));
     return cloneSnapshot(demoAppSettings);
   }
 

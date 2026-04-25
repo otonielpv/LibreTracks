@@ -17,6 +17,8 @@ pub struct AppSettings {
     pub selected_output_device: Option<String>,
     #[serde(default)]
     pub split_stereo_enabled: bool,
+    #[serde(default)]
+    pub locale: Option<String>,
 }
 
 pub struct AppSettingsStore {

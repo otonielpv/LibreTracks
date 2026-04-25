@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import type { GlobalJumpMode } from "./uiStore";
 
 type TimelineToolbarProps = {
@@ -31,6 +33,8 @@ export function TimelineToolbar({
   onGlobalJumpBarsChange,
   onCancelPendingJump,
 }: TimelineToolbarProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="lt-timeline-topline">
       <div className="lt-timeline-meta">
@@ -38,31 +42,31 @@ export function TimelineToolbar({
           <button
             type="button"
             className={`lt-icon-button ${snapEnabled ? "is-active" : ""}`}
-            aria-label={snapEnabled ? "Desactivar snap to grid" : "Activar snap to grid"}
+            aria-label={snapEnabled ? t("timelineToolbar.disableSnap") : t("timelineToolbar.enableSnap")}
             aria-pressed={snapEnabled}
-            title={`Snap to Grid (${subdivisionPerBeat}/1)`}
+            title={t("timelineToolbar.snapTitle", { subdivision: subdivisionPerBeat })}
             onClick={onToggleSnap}
           >
             <span className="material-symbols-outlined">{snapEnabled ? "grid_on" : "grid_off"}</span>
           </button>
           <label className="lt-zoom-control lt-jump-mode-control">
-            <span>Salto</span>
+            <span>{t("timelineToolbar.jumpLabel")}</span>
             <select
-              aria-label="Modo global de salto"
+              aria-label={t("timelineToolbar.jumpModeAria")}
               disabled={isProjectEmpty}
               value={globalJumpMode}
               onChange={(event) => onGlobalJumpModeChange(event.target.value as GlobalJumpMode)}
             >
-              <option value="immediate">Immediate</option>
-              <option value="after_bars">After X bars</option>
-              <option value="next_marker">At next marker</option>
+              <option value="immediate">{t("transport.jumpMode.immediate")}</option>
+              <option value="after_bars">{t("timelineToolbar.afterBarsOption")}</option>
+              <option value="next_marker">{t("transport.jumpMode.nextMarker")}</option>
             </select>
           </label>
           {globalJumpMode === "after_bars" ? (
             <label className="lt-zoom-control">
-              <span>Compases</span>
+              <span>{t("timelineToolbar.barsLabel")}</span>
               <input
-                aria-label="Compases para salto global"
+                aria-label={t("timelineToolbar.jumpBarsAria")}
                 type="number"
                 min={1}
                 step={1}
@@ -75,8 +79,8 @@ export function TimelineToolbar({
           <button
             type="button"
             className="lt-icon-button"
-            aria-label="Cancelar salto"
-            title="Cancelar salto"
+            aria-label={t("timelineToolbar.cancelJump")}
+            title={t("timelineToolbar.cancelJump")}
             disabled={!pendingMarkerJumpLabel}
             onClick={onCancelPendingJump}
           >
@@ -84,9 +88,9 @@ export function TimelineToolbar({
           </button>
         </div>
         <div className="lt-timeline-stats">
-          <span>{trackCount} tracks</span>
-          <span>{clipCount} clips</span>
-          <span>{markerCount} marcas</span>
+          <span>{t("timelineToolbar.tracksCount", { count: trackCount })}</span>
+          <span>{t("timelineToolbar.clipsCount", { count: clipCount })}</span>
+          <span>{t("timelineToolbar.markersCount", { count: markerCount })}</span>
         </div>
       </div>
     </div>

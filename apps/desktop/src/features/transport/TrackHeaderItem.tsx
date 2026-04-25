@@ -1,4 +1,5 @@
 import { memo, type MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { TrackKind } from "./desktopApi";
 import { TrackMeter } from "./TrackMeter";
@@ -80,6 +81,7 @@ function TrackHeaderItemComponent({
   onPanChange,
   onCommitPan,
 }: TrackHeaderItemProps) {
+  const { t } = useTranslation();
   const optimisticMix = useTransportStore((state) => state.optimisticMix[trackId] ?? null);
   const effectivePanValue = optimisticMix?.pan ?? panValue;
   const effectiveTrackMuted = optimisticMix?.muted ?? trackMuted;
@@ -101,7 +103,7 @@ function TrackHeaderItemComponent({
     onStartTrackDrag(event, trackId);
   };
 
-  const metaLabel = trackKind === "folder" ? `${childCount} hijos` : null;
+  const metaLabel = trackKind === "folder" ? t("trackHeader.childrenCount", { count: childCount }) : null;
 
   return (
     <div
@@ -122,7 +124,9 @@ function TrackHeaderItemComponent({
                   <button
                     type="button"
                     className="lt-folder-toggle"
-                    aria-label={isCollapsed ? `Expandir ${trackName}` : `Colapsar ${trackName}`}
+                    aria-label={isCollapsed
+                      ? t("trackHeader.expand", { name: trackName })
+                      : t("trackHeader.collapse", { name: trackName })}
                     onClick={(event) => {
                       event.stopPropagation();
                       onToggleFolder(trackId);
@@ -162,9 +166,9 @@ function TrackHeaderItemComponent({
             </div>
             <div className="lt-track-mix-controls">
               <label className="lt-track-volume">
-                <span>Vol</span>
+                <span>{t("trackHeader.volume")}</span>
                 <input
-                  aria-label={`Volumen de ${trackName}`}
+                  aria-label={t("trackHeader.volumeAria", { name: trackName })}
                   type="range"
                   min={0}
                   max={1}
@@ -195,7 +199,7 @@ function TrackHeaderItemComponent({
               <label className="lt-track-pan">
                 <span>{formatPanValue(effectivePanValue)}</span>
                 <input
-                  aria-label={`Paneo de ${trackName}`}
+                  aria-label={t("trackHeader.panAria", { name: trackName })}
                   type="range"
                   min={-1}
                   max={1}

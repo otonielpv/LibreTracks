@@ -1,6 +1,7 @@
 import type { KeyboardEvent, RefObject } from "react";
+import { useTranslation } from "react-i18next";
 
-import { getSongBaseBpm, type SongView } from "./desktopApi";
+import { getSongBaseBpm, type PlaybackState, type SongView } from "./desktopApi";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;
@@ -13,7 +14,7 @@ type TimelineTopbarProps = {
   song: SongView | null;
   musicalPositionLabel: string;
   readoutPositionSecondsLabel: string;
-  playbackState: string;
+  playbackState: PlaybackState;
   transportReadoutBarRef: RefObject<HTMLElement | null>;
   transportReadoutValueRef: RefObject<HTMLElement | null>;
   onToggleTopMenu: (menuKey: "file") => void;
@@ -55,7 +56,9 @@ export function TimelineTopbar({
   onTempoDraftChange,
   onTempoCommit,
 }: TimelineTopbarProps) {
+  const { t } = useTranslation();
   const fallbackBpm = getSongBaseBpm(song);
+  const playbackStateLabel = t(`transport.playbackState.${playbackState}`);
 
   const handleTempoKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") {
@@ -72,7 +75,7 @@ export function TimelineTopbar({
           <span className="lt-brand-title">LIBRETRACKS</span>
         </div>
 
-        <nav className="lt-menu-bar" aria-label="Menu principal" ref={menuBarRef}>
+        <nav className="lt-menu-bar" aria-label={t("timelineTopbar.mainMenu")} ref={menuBarRef}>
           <div className={`lt-top-menu ${openTopMenu === "file" ? "is-open" : ""}`}>
             <button
               type="button"
@@ -81,17 +84,17 @@ export function TimelineTopbar({
               aria-expanded={openTopMenu === "file"}
               onClick={() => onToggleTopMenu("file")}
             >
-              <span className="lt-button-label">Archivo</span>
+              <span className="lt-button-label">{t("timelineTopbar.fileMenu")}</span>
               <span className="material-symbols-outlined" aria-hidden="true">arrow_drop_down</span>
             </button>
 
             {openTopMenu === "file" ? (
-              <div className="lt-top-menu-dropdown" role="menu" aria-label="Archivo">
+              <div className="lt-top-menu-dropdown" role="menu" aria-label={t("timelineTopbar.fileMenu")}>
                 <button type="button" role="menuitem" onClick={() => onTopMenuAction(onCreateSong)}>
-                  <span>Nuevo proyecto</span>
+                  <span>{t("timelineTopbar.newProject")}</span>
                 </button>
                 <button type="button" role="menuitem" onClick={() => onTopMenuAction(onOpenProject)}>
-                  <span>Abrir</span>
+                  <span>{t("timelineTopbar.open")}</span>
                 </button>
                 <div className="lt-top-menu-separator" aria-hidden="true" />
                 <button
@@ -100,7 +103,7 @@ export function TimelineTopbar({
                   disabled={!canPersistProject}
                   onClick={() => onTopMenuAction(onSaveProject)}
                 >
-                  <span>Guardar</span>
+                  <span>{t("timelineTopbar.save")}</span>
                   <span className="lt-top-menu-shortcut">Ctrl+S</span>
                 </button>
                 <button
@@ -109,7 +112,7 @@ export function TimelineTopbar({
                   disabled={!canPersistProject}
                   onClick={() => onTopMenuAction(onSaveProjectAs)}
                 >
-                  <span>Guardar como</span>
+                  <span>{t("timelineTopbar.saveAs")}</span>
                   <span className="lt-top-menu-shortcut">Ctrl+Shift+S</span>
                 </button>
               </div>
@@ -121,9 +124,9 @@ export function TimelineTopbar({
       <div className="lt-topbar-main-row">
         <div className="lt-transport">
           <label className="lt-bpm-control">
-            <span>BPM</span>
+            <span>{t("timelineTopbar.bpmLabel")}</span>
             <input
-              aria-label="BPM de la cancion"
+              aria-label={t("timelineTopbar.songBpmAria")}
               disabled={isProjectEmpty}
               type="number"
               min={1}
@@ -137,37 +140,37 @@ export function TimelineTopbar({
           </label>
 
           <div className="lt-transport-buttons">
-            <button type="button" aria-label="Anterior" disabled={isProjectEmpty}>
+            <button type="button" aria-label={t("timelineTopbar.previous")} disabled={isProjectEmpty}>
               <span className="material-symbols-outlined">skip_previous</span>
             </button>
-            <button type="button" aria-label="Detener" disabled={isProjectEmpty} onClick={onStopTransport}>
+            <button type="button" aria-label={t("timelineTopbar.stop")} disabled={isProjectEmpty} onClick={onStopTransport}>
               <span className="material-symbols-outlined">stop</span>
             </button>
-            <button type="button" aria-label="Reproducir" className="is-play" disabled={isProjectEmpty} onClick={onPlayTransport}>
+            <button type="button" aria-label={t("timelineTopbar.play")} className="is-play" disabled={isProjectEmpty} onClick={onPlayTransport}>
               <span className="material-symbols-outlined">play_arrow</span>
             </button>
-            <button type="button" aria-label="Pausar" disabled={isProjectEmpty} onClick={onPauseTransport}>
+            <button type="button" aria-label={t("timelineTopbar.pause")} disabled={isProjectEmpty} onClick={onPauseTransport}>
               <span className="material-symbols-outlined">pause</span>
             </button>
-            <button type="button" aria-label="Siguiente" disabled={isProjectEmpty}>
+            <button type="button" aria-label={t("timelineTopbar.next")} disabled={isProjectEmpty}>
               <span className="material-symbols-outlined">skip_next</span>
             </button>
           </div>
 
           <div className="lt-transport-readout">
             <div className="lt-readout-block">
-              <span>Tempo</span>
+              <span>{t("timelineTopbar.tempoReadout")}</span>
               <strong>{`${(Number.isFinite(displayedBpm) ? displayedBpm : fallbackBpm).toFixed(2)} BPM`}</strong>
             </div>
             <div className="lt-readout-block">
-              <span>Bar</span>
+              <span>{t("timelineTopbar.barReadout")}</span>
               <strong ref={transportReadoutBarRef}>{musicalPositionLabel}</strong>
             </div>
             <div className="lt-readout-block is-timecode">
-              <span>Timecode</span>
+              <span>{t("timelineTopbar.timecodeReadout")}</span>
               <strong ref={transportReadoutValueRef}>{readoutPositionSecondsLabel}</strong>
             </div>
-            <span className={`transport-pill is-${playbackState}`}>{playbackState}</span>
+            <span className={`transport-pill is-${playbackState}`}>{playbackStateLabel}</span>
           </div>
         </div>
       </div>

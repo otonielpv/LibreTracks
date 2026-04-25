@@ -9,7 +9,9 @@ import {
   type MouseEvent as ReactMouseEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
+  DEFAULT_APP_SETTINGS,
   assignSectionMarkerDigit,
   cancelMarkerJump,
   createSectionMarker,
@@ -71,8 +73,10 @@ import {
   updateSongTempo,
   updateTrack,
   updateTrackMixLive,
+  normalizeAppSettings,
   type AppSettings,
   type ClipSummary,
+  type JumpTriggerLabel,
   type LibraryAssetSummary,
   type LibraryImportProgressEvent,
   type SectionMarkerSummary,
@@ -86,6 +90,7 @@ import {
   type WaveformSummaryDto,
   reportUiRenderMetric,
 } from "./desktopApi";
+import { getSystemLanguage } from "../../shared/i18n";
 import { LibrarySidebarPanel } from "./LibrarySidebarPanel";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
 import { TimelineToolbar } from "./TimelineToolbar";
@@ -247,19 +252,6 @@ type TransportAnchorMeta = {
   anchorPositionSeconds: number;
   emittedAtUnixMs: number;
 };
-
-const DEFAULT_APP_SETTINGS: AppSettings = {
-  selectedOutputDevice: null,
-  splitStereoEnabled: false,
-};
-
-function normalizeAppSettings(settings: AppSettings): AppSettings {
-  const selectedOutputDevice = settings.selectedOutputDevice?.trim() || null;
-  return {
-    selectedOutputDevice,
-    splitStereoEnabled: Boolean(settings.splitStereoEnabled),
-  };
-}
 
 function formatClock(seconds: number) {
   const safeSeconds = Math.max(0, seconds);
@@ -704,11 +696,12 @@ function lanePointerToClip(
 }
 
 export function TransportPanelContent() {
+  const { t, i18n } = useTranslation();
   const [song, setSong] = useState<SongView | null>(null);
   const [waveformCache, setWaveformCache] = useState<Record<string, WaveformSummaryDto>>({});
   const [clipsByTrack, setClipsByTrack] = useState<Record<string, ClipSummary[]>>({});
   const [tracksById, setTracksById] = useState<Record<string, TrackSummary>>({});
-  const [status, setStatus] = useState("Cargando sesion...");
+  const [status, setStatus] = useState(() => t("transport.status.loadingSession"));
   const [isBusy, setIsBusy] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
@@ -732,6 +725,31 @@ export function TransportPanelContent() {
   const [libraryImportProgress, setLibraryImportProgress] = useState<LibraryImportProgressEvent | null>(null);
   const [deletingLibraryFilePath, setDeletingLibraryFilePath] = useState<string | null>(null);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
+  const syncSettingsLanguage = useCallback(async (settings: AppSettings) => {
+    await i18n.changeLanguage(settings.locale || getSystemLanguage());
+  }, [i18n]);
+  const formatErrorStatus = useCallback((error: unknown) => {
+    return t("transport.status.error", { message: String(error) });
+  }, [t]);
+  const translateJumpTrigger = useCallback((trigger: JumpTriggerLabel) => {
+    if (trigger === "immediate") {
+      return t("transport.jumpMode.immediate");
+    }
+
+    if (trigger === "next_marker") {
+      return t("transport.jumpMode.nextMarker");
+    }
+
+    const bars = Number(trigger.split(":")[1]) || 1;
+    return t("transport.jumpMode.afterBars", { count: bars });
+  }, [t]);
+  const translateLanguageName = useCallback((language: "en" | "es") => {
+    return i18n.t(
+      language === "es"
+        ? "transport.settingsModal.languageSpanish"
+        : "transport.settingsModal.languageEnglish",
+    );
+  }, [i18n]);
   const cameraX = useTimelineUIStore((state) => state.cameraX);
   const globalJumpMode = useTimelineUIStore((state) => state.globalJumpMode);
   const globalJumpBars = useTimelineUIStore((state) => state.globalJumpBars);
@@ -837,13 +855,13 @@ export function TransportPanelContent() {
       }
       await work();
     } catch (error) {
-      setStatus(`Error: ${String(error)}`);
+      setStatus(formatErrorStatus(error));
     } finally {
       if (options?.busy) {
         setIsBusy(false);
       }
     }
-  }, []);
+  }, [formatErrorStatus]);
 
   const loadLibraryState = useCallback(async () => {
     if (!playbackSongDir) {
@@ -867,13 +885,17 @@ export function TransportPanelContent() {
     const [nextSettings, nextAudioDevices] = await Promise.all([getSettings(), getAudioOutputDevices()]);
     const normalizedSettings = normalizeAppSettings(nextSettings);
     setAppSettings(normalizedSettings);
+    await syncSettingsLanguage(normalizedSettings);
     setAudioOutputDevices(nextAudioDevices.devices);
     setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
     return normalizedSettings;
-  }, []);
+  }, [syncSettingsLanguage]);
 
   const persistAudioSettings = useCallback(
-    (nextSettings: AppSettings, successMessage: string) => {
+    (
+      nextSettings: AppSettings,
+      successMessage: string | ((savedSettings: AppSettings) => string),
+    ) => {
       const previousSettings = appSettings;
       const normalizedSettings = normalizeAppSettings(nextSettings);
       setAppSettings(normalizedSettings);
@@ -884,7 +906,8 @@ export function TransportPanelContent() {
           const liveSettings = normalizeAppSettings(await updateAudioSettings(normalizedSettings));
           const savedSettings = normalizeAppSettings(await saveSettings(liveSettings));
           setAppSettings(savedSettings);
-          setStatus(successMessage);
+          await syncSettingsLanguage(savedSettings);
+          setStatus(typeof successMessage === "function" ? successMessage(savedSettings) : successMessage);
         } catch (error) {
           setAppSettings(previousSettings);
           throw error;
@@ -893,7 +916,7 @@ export function TransportPanelContent() {
         }
       });
     },
-    [appSettings, runAction],
+    [appSettings, runAction, syncSettingsLanguage],
   );
 
   const applyPlaybackSnapshot = useCallback((nextSnapshot: TransportSnapshot | null) => {
@@ -1125,7 +1148,7 @@ export function TransportPanelContent() {
       void flushTrackMixLiveUpdates(trackId).catch((error) => {
         clearTrackOptimisticMixKeys(trackId, ["muted", "solo", "volume", "pan"]);
         delete trackMixLiveStatesRef.current[trackId];
-        setStatus(`Error: ${String(error)}`);
+        setStatus(formatErrorStatus(error));
       });
     },
     [clearTrackOptimisticMixKeys, flushTrackMixLiveUpdates],
@@ -1179,7 +1202,7 @@ export function TransportPanelContent() {
         if (clipDragRef.current?.clipId !== clipId) {
           clipPreviewSecondsRef.current = {};
         }
-        setStatus(`Error: ${String(error)}`);
+        setStatus(formatErrorStatus(error));
       });
     },
     [flushClipMoveLiveUpdates],
@@ -1387,7 +1410,7 @@ export function TransportPanelContent() {
         if (!active) {
           return;
         }
-        setStatus(`Error: ${String(error)}`);
+        setStatus(formatErrorStatus(error));
       })
       .finally(() => {
         if (active) {
@@ -1416,7 +1439,7 @@ export function TransportPanelContent() {
       })
       .catch((error) => {
         if (active) {
-          setStatus(`Error: ${String(error)}`);
+          setStatus(formatErrorStatus(error));
         }
       });
 
@@ -1446,8 +1469,8 @@ export function TransportPanelContent() {
       applyPlaybackSnapshot(nextSnapshot);
       setStatus(
         nextSnapshot.isNativeRuntime
-          ? "Sesion desktop lista para edicion."
-          : "Modo demo web activo. Las acciones contextuales ya usan el nuevo flujo DAW.",
+          ? t("transport.status.readyDesktop")
+          : t("transport.status.readyDemo"),
       );
     }
 
@@ -1701,7 +1724,7 @@ export function TransportPanelContent() {
         setLibraryFolders(folders);
       } catch (error) {
         if (active) {
-          setStatus(`Error: ${String(error)}`);
+          setStatus(formatErrorStatus(error));
         }
       } finally {
         if (active) {
@@ -2058,13 +2081,13 @@ export function TransportPanelContent() {
           if (snapshotRef.current?.playbackState === "playing") {
             const nextSnapshot = await pauseTransport();
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus("Reproduccion pausada.");
+            setStatus(t("transport.status.playbackPaused"));
             return;
           }
 
           const nextSnapshot = await playTransport();
           applyPlaybackSnapshot(nextSnapshot);
-          setStatus("Reproduccion iniciada.");
+          setStatus(t("transport.status.playbackStarted"));
         });
         return;
       }
@@ -2097,7 +2120,7 @@ export function TransportPanelContent() {
         void runAction(async () => {
           const nextSnapshot = event.shiftKey ? await redoAction() : await undoAction();
           applyPlaybackSnapshot(nextSnapshot);
-          setStatus(event.shiftKey ? "Accion rehecha." : "Accion deshecha.");
+          setStatus(event.shiftKey ? t("transport.status.actionRedone") : t("transport.status.actionUndone"));
         });
         return;
       }
@@ -2107,7 +2130,7 @@ export function TransportPanelContent() {
         void runAction(async () => {
           const nextSnapshot = await redoAction();
           applyPlaybackSnapshot(nextSnapshot);
-          setStatus("Accion rehecha.");
+          setStatus(t("transport.status.actionRedone"));
         });
         return;
       }
@@ -2118,7 +2141,7 @@ export function TransportPanelContent() {
 
         const marker = song ? resolveMarkerShortcut(song.sectionMarkers, keyDigit) : null;
         if (!marker) {
-          setStatus(`No hay marca disponible para el digito ${keyDigit}.`);
+          setStatus(t("transport.status.noMarkerForDigit", { digit: keyDigit }));
           return;
         }
 
@@ -2127,7 +2150,7 @@ export function TransportPanelContent() {
           if (pendingJump && pendingJump.targetMarkerId === marker.id) {
             const nextSnapshot = await cancelMarkerJump();
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Salto cancelado para digito ${keyDigit}.`);
+            setStatus(t("transport.status.jumpCancelledDigit", { digit: keyDigit }));
             return;
           }
 
@@ -2149,12 +2172,12 @@ export function TransportPanelContent() {
           void runAction(async () => {
             const nextSnapshot = await cancelMarkerJump();
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus("Salto cancelado.");
+            setStatus(t("transport.status.jumpCancelled"));
           });
           return;
         }
 
-        clearSelections("Selecciones limpiadas.");
+        clearSelections(t("transport.status.selectionsCleared"));
         return;
       }
 
@@ -2170,7 +2193,7 @@ export function TransportPanelContent() {
             const nextSnapshot = await deleteClip(selectedClipId);
             applyPlaybackSnapshot(nextSnapshot);
             setSelectedClipId(null);
-            setStatus("Clip eliminado.");
+            setStatus(t("transport.status.clipDeleted"));
           });
         } else if (selectedTrackIds.length > 0) {
           void runAction(async () => {
@@ -2182,7 +2205,7 @@ export function TransportPanelContent() {
               applyPlaybackSnapshot(lastSnapshot);
             }
             clearSelection();
-            setStatus(`${selectedTrackIds.length} track(s) eliminado(s).`);
+            setStatus(t("transport.status.tracksDeleted", { count: selectedTrackIds.length }));
           });
         }
       }
@@ -2283,7 +2306,7 @@ export function TransportPanelContent() {
             const nextSnapshot = await moveClip(activeClipDrag.clipId, activeClipDrag.previewSeconds);
             applyPlaybackSnapshot(nextSnapshot);
             const clip = findClip(songRef.current, activeClipDrag.clipId);
-            setStatus(`Clip movido: ${clip?.trackName ?? activeClipDrag.clipId}`);
+            setStatus(t("transport.status.clipMoved", { name: clip?.trackName ?? activeClipDrag.clipId }));
           });
         } else {
           clipPreviewSecondsRef.current = {};
@@ -2506,7 +2529,7 @@ export function TransportPanelContent() {
     try {
       const nextSnapshot = await seekTransport(positionSeconds);
       applyPlaybackSnapshot(nextSnapshot);
-      setStatus(`Cursor movido a ${formatClock(nextSnapshot.positionSeconds)}`);
+      setStatus(t("transport.status.cursorMoved", { time: formatClock(nextSnapshot.positionSeconds) }));
     } catch (error) {
       restoreConfirmedTransportVisual();
       throw error;
@@ -2625,8 +2648,8 @@ export function TransportPanelContent() {
     ? formatMusicalPosition(readoutPositionSeconds, song)
     : "1.1.00";
   const tempoSourceLabel = readoutTempoRegion
-    ? `Tempo @ ${formatClock(readoutTempoRegion.startSeconds)}`
-    : "BPM base";
+    ? t("transport.tempoSource.at", { time: formatClock(readoutTempoRegion.startSeconds) })
+    : t("transport.tempoSource.base");
   const canPersistProject = Boolean(song);
   const isProjectEmpty = !song || song.tracks.length === 0;
   const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
@@ -2662,13 +2685,13 @@ export function TransportPanelContent() {
         title:
           previews.length === 1
             ? humanizeLibraryTrackName(previews[0].filePath)
-            : "New track",
+            : t("transport.preview.newTrack"),
         meta:
           previews.length === 1
-            ? "Drop to create track"
-            : `${previews.length} clips on new track`,
+            ? t("transport.preview.dropToCreateTrack")
+            : t("transport.preview.clipsOnNewTrack", { count: previews.length }),
       }));
-  }, [libraryClipPreview]);
+  }, [libraryClipPreview, t]);
 
   useEffect(() => {
     timelineDurationSecondsRef.current = workspaceDurationSeconds;
@@ -2697,16 +2720,16 @@ export function TransportPanelContent() {
     applyPlaybackSnapshot(nextSnapshot);
 
     if (trigger === "next_marker" && !nextSnapshot.pendingMarkerJump) {
-      setStatus("Aviso: no quedan marcas por delante; salto en la siguiente marca ignorado.");
+      setStatus(t("transport.status.noMarkersAhead"));
       return nextSnapshot;
     }
 
     setStatus(
       trigger === "immediate"
-        ? `Salto inmediato a ${markerName}.`
+        ? t("transport.status.jumpImmediate", { name: markerName })
         : trigger === "next_marker"
-          ? `Salto armado en la siguiente marca hacia ${markerName}.`
-          : `Salto armado en ${bars} compases hacia ${markerName}.`,
+          ? t("transport.status.jumpNextMarker", { name: markerName })
+          : t("transport.status.jumpAfterBars", { count: bars, name: markerName }),
     );
 
     return nextSnapshot;
@@ -2720,7 +2743,7 @@ export function TransportPanelContent() {
     if (snapshotRef.current?.pendingMarkerJump?.targetMarkerId === section.id) {
       const nextSnapshot = await cancelMarkerJump();
       applyPlaybackSnapshot(nextSnapshot);
-      setStatus(`Salto cancelado para ${section.name}.`);
+      setStatus(t("transport.status.jumpCancelledSection", { name: section.name }));
       return;
     }
 
@@ -2825,7 +2848,7 @@ export function TransportPanelContent() {
   ): ContextMenuAction[] {
     return [
       {
-        label: timelineRange ? "Crear Cancion (Region) desde seleccion" : "Crear Marca",
+        label: timelineRange ? t("transport.menu.createSongRegionFromSelection") : t("transport.menu.createMarker"),
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = timelineRange
@@ -2837,17 +2860,20 @@ export function TransportPanelContent() {
             setSelectedTimelineRange(null);
             setStatus(
               timelineRange
-                ? `Cancion creada entre ${formatClock(timelineRange.startSeconds)} y ${formatClock(timelineRange.endSeconds)}.`
-                : `Marca creada en ${formatClock(positionSeconds)}.`,
+                ? t("transport.status.songCreatedInRange", {
+                    start: formatClock(timelineRange.startSeconds),
+                    end: formatClock(timelineRange.endSeconds),
+                  })
+                : t("transport.status.markerCreatedAt", { time: formatClock(positionSeconds) }),
             );
           });
         },
       },
       {
-        label: "Cambiar BPM del timeline",
+        label: t("transport.menu.changeTimelineBpm"),
         disabled: !song,
         onSelect: async () => {
-          const nextBpm = Number(window.prompt("Nuevo BPM del timeline", songBaseBpm.toFixed(2)));
+          const nextBpm = Number(window.prompt(t("transport.prompt.timelineBpm"), songBaseBpm.toFixed(2)));
           if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
             return;
           }
@@ -2860,18 +2886,21 @@ export function TransportPanelContent() {
             setTempoDraft(String(nextBpm));
             setStatus(
               positionSeconds <= 0.0001
-                ? `BPM base del timeline actualizado a ${nextBpm.toFixed(2)}.`
-                : `Marca de BPM creada en ${formatClock(positionSeconds)} a ${nextBpm.toFixed(2)} BPM.`,
+                ? t("transport.status.baseTimelineBpmUpdated", { bpm: nextBpm.toFixed(2) })
+                : t("transport.status.tempoMarkerCreated", {
+                    time: formatClock(positionSeconds),
+                    bpm: nextBpm.toFixed(2),
+                  }),
             );
           });
         },
       },
       {
-        label: "Limpiar seleccion del timeline",
+        label: t("transport.menu.clearTimelineSelection"),
         disabled: !timelineRange,
         onSelect: () => {
           setSelectedTimelineRange(null);
-          setStatus("Seleccion del timeline limpiada.");
+          setStatus(t("transport.status.timelineSelectionCleared"));
         },
       },
     ];
@@ -2880,9 +2909,9 @@ export function TransportPanelContent() {
   function songRegionContextMenu(region: SongRegionSummary) {
     return [
       {
-        label: "Renombrar Cancion",
+        label: t("transport.menu.renameSong"),
         onSelect: async () => {
-          const nextName = window.prompt("Nuevo nombre de la cancion", region.name)?.trim();
+          const nextName = window.prompt(t("transport.prompt.songRename"), region.name)?.trim();
           if (!nextName) {
             return;
           }
@@ -2895,23 +2924,23 @@ export function TransportPanelContent() {
               region.endSeconds,
             );
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Cancion renombrada: ${nextName}.`);
+            setStatus(t("transport.status.songRenamed", { name: nextName }));
           });
         },
       },
       {
-        label: "Cambiar BPM",
+        label: t("transport.menu.changeBpm"),
         disabled: true,
         onSelect: () => {},
       },
       {
-        label: "Borrar Cancion",
+        label: t("transport.menu.deleteSong"),
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await deleteSongRegion(region.id);
             applyPlaybackSnapshot(nextSnapshot);
             setSelectedRegionId(null);
-            setStatus(`Cancion eliminada: ${region.name}.`);
+            setStatus(t("transport.status.songDeleted", { name: region.name }));
           });
         },
       },
@@ -2921,9 +2950,9 @@ export function TransportPanelContent() {
   function tempoMarkerContextMenu(marker: TempoMarkerSummary) {
     return [
       {
-        label: "Cambiar BPM",
+        label: t("transport.menu.changeBpm"),
         onSelect: async () => {
-          const nextBpm = Number(window.prompt("Nuevo BPM", marker.bpm.toFixed(2)));
+          const nextBpm = Number(window.prompt(t("transport.prompt.tempoMarkerBpm"), marker.bpm.toFixed(2)));
           if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
             return;
           }
@@ -2932,17 +2961,17 @@ export function TransportPanelContent() {
             const nextSnapshot = await upsertSongTempoMarker(marker.startSeconds, nextBpm);
             applyPlaybackSnapshot(nextSnapshot);
             setTempoDraft(String(nextBpm));
-            setStatus(`Marca de BPM actualizada a ${nextBpm.toFixed(2)} BPM.`);
+            setStatus(t("transport.status.tempoMarkerUpdated", { bpm: nextBpm.toFixed(2) }));
           });
         },
       },
       {
-        label: "Borrar marca",
+        label: t("transport.menu.deleteMarker"),
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await deleteSongTempoMarker(marker.id);
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Marca de BPM borrada en ${formatClock(marker.startSeconds)}.`);
+            setStatus(t("transport.status.tempoMarkerDeleted", { time: formatClock(marker.startSeconds) }));
           });
         },
       },
@@ -3095,7 +3124,7 @@ export function TransportPanelContent() {
         applyPlaybackSnapshot(lastSnapshot);
       }
       await refreshSongView();
-      setStatus(`${tracksToMove.length} track(s) reordenado(s).`);
+      setStatus(t("transport.status.tracksReordered", { count: tracksToMove.length }));
     });
   }
 
@@ -3115,8 +3144,10 @@ export function TransportPanelContent() {
   }
 
   async function handleCreateTrack(kind: TrackKind, anchorTrack: TrackSummary | null, parentTrackId?: string | null) {
-    const defaultName = kind === "folder" ? "Folder track" : "Audio track";
-    const name = window.prompt("Nombre del track", defaultName)?.trim();
+    const defaultName = kind === "folder"
+      ? t("transport.defaults.folderTrackName")
+      : t("transport.defaults.audioTrackName");
+    const name = window.prompt(t("transport.prompt.trackName"), defaultName)?.trim();
     if (!name) {
       return;
     }
@@ -3130,7 +3161,7 @@ export function TransportPanelContent() {
       });
       applyPlaybackSnapshot(nextSnapshot);
       await refreshSongView();
-      setStatus(`Track creado: ${name}`);
+      setStatus(t("transport.status.trackCreated", { name }));
     });
   }
 
@@ -3146,35 +3177,35 @@ export function TransportPanelContent() {
 
     return [
       {
-        label: "Insertar track",
+        label: t("transport.menu.insertTrack"),
         onSelect: () => handleCreateTrack("audio", track, track.parentTrackId ?? null),
       },
       {
-        label: "Insertar folder track",
+        label: t("transport.menu.insertFolderTrack"),
         onSelect: () => handleCreateTrack("folder", track, track.parentTrackId ?? null),
       },
       {
-        label: "Renombrar",
+        label: t("common.rename"),
         onSelect: async () => {
-          const nextName = window.prompt("Nuevo nombre del track", track.name)?.trim();
+          const nextName = window.prompt(t("transport.prompt.trackRename"), track.name)?.trim();
           if (!nextName) {
             return;
           }
           await runAction(async () => {
             const nextSnapshot = await updateTrack({ trackId: track.id, name: nextName });
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Track renombrado: ${nextName}`);
+            setStatus(t("transport.status.trackRenamed", { name: nextName }));
           });
         },
       },
       {
-        label: "Borrar",
+        label: t("common.delete"),
         onSelect: async () => {
           const clipCount = currentSong.clips.filter((clip) => clip.trackId === track.id).length;
           if (
             track.kind === "audio" &&
             clipCount > 0 &&
-            !window.confirm("Este audio track tiene clips. ¿Quieres borrarlo junto con sus clips?")
+            !window.confirm(t("transport.confirm.deleteTrackWithClips"))
           ) {
             return;
           }
@@ -3184,12 +3215,12 @@ export function TransportPanelContent() {
             applyPlaybackSnapshot(nextSnapshot);
             clearLibraryDragPreview();
             await refreshSongView();
-            setStatus(`Track borrado: ${track.name}`);
+            setStatus(t("transport.status.trackDeleted", { name: track.name }));
           });
         },
       },
       {
-        label: "Indentar dentro del folder anterior",
+        label: t("transport.menu.indentIntoPreviousFolder"),
         disabled: !previousFolder,
         onSelect: async () => {
           if (!previousFolder) {
@@ -3202,12 +3233,12 @@ export function TransportPanelContent() {
             });
             applyPlaybackSnapshot(nextSnapshot);
             await refreshSongView();
-            setStatus(`Track movido dentro de ${previousFolder.name}`);
+            setStatus(t("transport.status.trackMovedIntoFolder", { name: previousFolder.name }));
           });
         },
       },
       {
-        label: "Sacar del folder",
+        label: t("transport.menu.removeFromFolder"),
         disabled: !track.parentTrackId,
         onSelect: async () => {
           await runAction(async () => {
@@ -3218,7 +3249,7 @@ export function TransportPanelContent() {
             });
             applyPlaybackSnapshot(nextSnapshot);
             await refreshSongView();
-            setStatus(`Track sacado del folder: ${track.name}`);
+            setStatus(t("transport.status.trackRemovedFromFolder", { name: track.name }));
           });
         },
       },
@@ -3228,11 +3259,11 @@ export function TransportPanelContent() {
   function globalTrackListContextMenu() {
     return [
       {
-        label: "Add audio track",
+        label: t("transport.menu.addAudioTrack"),
         onSelect: () => handleCreateTrack("audio", null, null),
       },
       {
-        label: "Add folder track",
+        label: t("transport.menu.addFolderTrack"),
         onSelect: () => handleCreateTrack("folder", null, null),
       },
     ];
@@ -3271,10 +3302,10 @@ export function TransportPanelContent() {
     selectTrack(nextSelection);
     setStatus(
       nextSelection.length > 1
-        ? `${nextSelection.length} tracks seleccionados`
-        : `Track seleccionado: ${trackName}`,
+        ? t("transport.status.tracksSelected", { count: nextSelection.length })
+        : t("transport.status.trackSelected", { name: trackName }),
     );
-  }, [selectTrack, visibleTracks]);
+  }, [selectTrack, t, visibleTracks]);
 
   function handleTrackHeaderContextMenu(event: ReactMouseEvent<HTMLDivElement>, trackId: string) {
     const track = findTrack(songRef.current, trackId);
@@ -3387,18 +3418,18 @@ export function TransportPanelContent() {
 
     return [
       {
-        label: "Cortar en cursor",
+        label: t("transport.menu.splitClipAtCursor"),
         disabled: !canSplit,
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await splitClip(clip.id, currentCursorSeconds);
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Clip cortado en ${formatClock(currentCursorSeconds)}`);
+            setStatus(t("transport.status.clipSplitAt", { time: formatClock(currentCursorSeconds) }));
           });
         },
       },
       {
-        label: "Duplicar",
+        label: t("transport.menu.duplicateClip"),
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await duplicateClip(
@@ -3406,18 +3437,18 @@ export function TransportPanelContent() {
               clip.timelineStartSeconds + clip.durationSeconds + 1,
             );
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Clip duplicado: ${clip.trackName}`);
+            setStatus(t("transport.status.clipDuplicated", { name: clip.trackName }));
           });
         },
       },
       {
-        label: "Borrar",
+        label: t("common.delete"),
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await deleteClip(clip.id);
             applyPlaybackSnapshot(nextSnapshot);
             setSelectedClipId(null);
-            setStatus(`Clip eliminado: ${clip.trackName}`);
+            setStatus(t("transport.status.clipDeleted", { name: clip.trackName }));
           });
         },
       },
@@ -3572,40 +3603,40 @@ export function TransportPanelContent() {
 
     return [
       {
-        label: "Jump to this marker",
+        label: t("transport.menu.jumpToMarker"),
         disabled: !canEditMarker,
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await scheduleMarkerJump(section.id, "immediate");
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Cursor enviado a ${section.name}`);
+            setStatus(t("transport.status.markerCursorSent", { name: section.name }));
           });
         },
       },
       {
-        label: "Rename",
+        label: t("common.rename"),
         disabled: !canEditMarker,
         onSelect: async () => {
-          const nextName = window.prompt("Nuevo nombre de la marca", section.name)?.trim();
+          const nextName = window.prompt(t("transport.prompt.markerRename"), section.name)?.trim();
           if (!nextName) {
             return;
           }
           await runAction(async () => {
             const nextSnapshot = await updateSectionMarker(section.id, nextName, section.startSeconds);
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Marca renombrada: ${nextName}`);
+            setStatus(t("transport.status.markerRenamed", { name: nextName }));
           });
         },
       },
       {
-        label: "Delete",
+        label: t("common.delete"),
         disabled: !canEditMarker,
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = await deleteSectionMarker(section.id);
             applyPlaybackSnapshot(nextSnapshot);
             setSelectedSectionId(null);
-            setStatus(`Marca eliminada: ${section.name}`);
+            setStatus(t("transport.status.markerDeleted", { name: section.name }));
           });
         },
       },
@@ -3640,8 +3671,8 @@ export function TransportPanelContent() {
         setActiveSidebarTab(null);
         setStatus(
           nextSnapshot.songFilePath
-            ? `Proyecto creado en ${nextSnapshot.songFilePath}.`
-            : "Proyecto creado.",
+            ? t("transport.status.projectCreatedAt", { path: nextSnapshot.songFilePath })
+            : t("transport.status.projectCreated"),
         );
       },
       { busy: true },
@@ -3675,8 +3706,8 @@ export function TransportPanelContent() {
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath
-            ? `Proyecto guardado en ${nextSnapshot.songFilePath}.`
-            : "Proyecto guardado.",
+            ? t("transport.status.projectSavedAt", { path: nextSnapshot.songFilePath })
+            : t("transport.status.projectSaved"),
         );
       },
       { busy: true },
@@ -3694,8 +3725,8 @@ export function TransportPanelContent() {
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath
-            ? `Proyecto guardado en ${nextSnapshot.songFilePath}.`
-            : "Proyecto guardado en nueva ubicacion.",
+            ? t("transport.status.projectSavedAt", { path: nextSnapshot.songFilePath })
+            : t("transport.status.projectSavedNewLocation"),
         );
       },
       { busy: true },
@@ -3717,8 +3748,8 @@ export function TransportPanelContent() {
         selectedOutputDevice: nextValue || null,
       },
       nextValue
-        ? `Dispositivo de audio actualizado a ${nextValue}.`
-        : "Dispositivo de audio ajustado al predeterminado del sistema.",
+        ? t("transport.status.audioDeviceUpdated", { name: nextValue })
+        : t("transport.status.audioDeviceSystemDefault"),
     );
   }
 
@@ -3729,14 +3760,28 @@ export function TransportPanelContent() {
         splitStereoEnabled: nextValue,
       },
       nextValue
-        ? "Modo Split Stereo activado."
-        : "Modo Split Stereo desactivado.",
+        ? t("transport.status.splitStereoEnabled")
+        : t("transport.status.splitStereoDisabled"),
+    );
+  }
+
+  function handleLocaleChange(nextValue: string) {
+    persistAudioSettings(
+      {
+        ...appSettings,
+        locale: nextValue || null,
+      },
+      (savedSettings) => savedSettings.locale
+        ? i18n.t("transport.status.settingsLanguageUpdated", {
+            name: translateLanguageName(savedSettings.locale === "es" ? "es" : "en"),
+          })
+        : i18n.t("transport.status.settingsLanguageSystem"),
     );
   }
 
   async function handleImportLibraryAssetsClick() {
     if (!playbackSongDir) {
-      setStatus("Crea o abre una sesion antes de importar audio a la libreria.");
+      setStatus(t("transport.status.importRequiresSession"));
       return;
     }
 
@@ -3751,7 +3796,7 @@ export function TransportPanelContent() {
 
       setLibraryAssets(assets);
       setLibraryFolders(await getLibraryFolders());
-      setStatus(`Libreria actualizada con ${assets.length} assets.`);
+      setStatus(t("transport.status.libraryUpdated", { count: assets.length }));
     });
     setIsImportingLibrary(false);
     setLibraryImportProgress(null);
@@ -3765,8 +3810,8 @@ export function TransportPanelContent() {
 
     const confirmationMessage =
       uniqueAssets.length === 1
-        ? `Delete ${uniqueAssets[0].fileName} from this song library?`
-        : `Delete ${uniqueAssets.length} selected assets from this song library?`;
+        ? t("transport.confirm.deleteLibraryAsset", { name: uniqueAssets[0].fileName })
+        : t("transport.confirm.deleteLibraryAssets", { count: uniqueAssets.length });
     if (!window.confirm(confirmationMessage)) {
       return;
     }
@@ -3787,8 +3832,8 @@ export function TransportPanelContent() {
         setLibraryClipPreview((current) => current.filter((preview) => !deletedFilePaths.has(preview.filePath)));
         setStatus(
           uniqueAssets.length === 1
-            ? `Asset eliminado: ${uniqueAssets[0].fileName}`
-            : `${uniqueAssets.length} assets eliminados de la libreria.`,
+            ? t("transport.status.libraryAssetDeleted", { name: uniqueAssets[0].fileName })
+            : t("transport.status.libraryAssetsDeleted", { count: uniqueAssets.length }),
         );
       });
     } finally {
@@ -3798,11 +3843,14 @@ export function TransportPanelContent() {
 
   async function handleCreateLibraryFolder() {
     if (!playbackSongDir) {
-      setStatus("Crea o abre una sesion antes de crear carpetas virtuales.");
+      setStatus(t("transport.status.createFolderRequiresSession"));
       return;
     }
 
-    const folderPath = window.prompt("Nombre de la carpeta virtual", "Set A");
+    const folderPath = window.prompt(
+      t("transport.prompt.virtualFolderName"),
+      t("transport.defaults.virtualFolderName"),
+    );
     if (folderPath === null) {
       return;
     }
@@ -3810,7 +3858,9 @@ export function TransportPanelContent() {
     await runAction(async () => {
       const folders = await createLibraryFolder(folderPath);
       setLibraryFolders(folders);
-      setStatus(`Carpeta virtual creada: ${folderPath.trim() || "(sin nombre)"}`);
+      setStatus(t("transport.status.virtualFolderCreated", {
+        name: folderPath.trim() || t("transport.defaults.unnamedFolder"),
+      }));
     });
   }
 
@@ -3832,19 +3882,19 @@ export function TransportPanelContent() {
       setLibraryFolders(folders);
       setStatus(
         newFolderPath
-          ? `${uniqueFilePaths.length} asset(s) movidos a ${newFolderPath}.`
-          : `${uniqueFilePaths.length} asset(s) movidos a la raiz de la libreria.`,
+          ? t("transport.status.libraryAssetsMoved", { count: uniqueFilePaths.length, name: newFolderPath })
+          : t("transport.status.libraryAssetsMovedRoot", { count: uniqueFilePaths.length }),
       );
     });
   }
 
   async function handleRenameLibraryFolder(folderPath: string) {
     if (!playbackSongDir) {
-      setStatus("Crea o abre una sesion antes de renombrar carpetas virtuales.");
+      setStatus(t("transport.status.renameFolderRequiresSession"));
       return;
     }
 
-    const nextFolderPath = window.prompt("Nuevo nombre de la carpeta virtual", folderPath);
+    const nextFolderPath = window.prompt(t("transport.prompt.virtualFolderRename"), folderPath);
     if (nextFolderPath === null) {
       return;
     }
@@ -3854,12 +3904,12 @@ export function TransportPanelContent() {
       const { folders } = await loadLibraryState();
       setLibraryAssets(assets);
       setLibraryFolders(folders);
-      setStatus(`Carpeta virtual renombrada: ${folderPath} -> ${nextFolderPath.trim()}`);
+      setStatus(t("transport.status.virtualFolderRenamed", { from: folderPath, to: nextFolderPath.trim() }));
     });
   }
 
   async function handleDeleteLibraryFolder(folderPath: string) {
-    if (!window.confirm(`Delete virtual folder ${folderPath}? Assets inside it will move back to the library root.`)) {
+    if (!window.confirm(t("transport.confirm.deleteLibraryFolder", { name: folderPath }))) {
       return;
     }
 
@@ -3868,7 +3918,7 @@ export function TransportPanelContent() {
       const { folders } = await loadLibraryState();
       setLibraryAssets(assets);
       setLibraryFolders(folders);
-      setStatus(`Carpeta virtual eliminada: ${folderPath}`);
+      setStatus(t("transport.status.virtualFolderDeleted", { name: folderPath }));
     });
   }
 
@@ -4151,7 +4201,7 @@ export function TransportPanelContent() {
     }
 
     const shouldUpdateTempo = window.confirm(
-      `Detected BPM: ${asset.detectedBpm.toFixed(1)}. Do you want to adjust the project tempo?`,
+      t("transport.confirm.adjustProjectTempo", { bpm: asset.detectedBpm.toFixed(1) }),
     );
     if (!shouldUpdateTempo) {
       return;
@@ -4335,8 +4385,8 @@ export function TransportPanelContent() {
     setSelectedSectionId(null);
     setStatus(
       assets.length === 1
-        ? `Clip agregado: ${assets[0].fileName}`
-        : `${assets.length} clips agregados desde la biblioteca.`,
+        ? t("transport.status.clipAdded", { name: assets[0].fileName })
+        : t("transport.status.clipsAdded", { count: assets.length }),
     );
   }
 
@@ -4494,6 +4544,7 @@ export function TransportPanelContent() {
   }
 
   const selectedAudioOutputDevice = appSettings.selectedOutputDevice ?? "";
+  const selectedLocale = appSettings.locale ?? "";
   const selectedAudioOutputDeviceMissing = Boolean(
     appSettings.selectedOutputDevice && !audioOutputDevices.includes(appSettings.selectedOutputDevice),
   );
@@ -4504,8 +4555,8 @@ export function TransportPanelContent() {
       {isBusy ? (
         <div className="busy-overlay" aria-live="polite">
           <div className="busy-overlay-card">
-            <strong>Aplicando cambios</strong>
-            <p>Sincronizando el estado del proyecto y del timeline.</p>
+            <strong>{t("transport.shell.busyTitle")}</strong>
+            <p>{t("transport.shell.busyDescription")}</p>
           </div>
         </div>
       ) : null}
@@ -4534,21 +4585,21 @@ export function TransportPanelContent() {
           void runAction(async () => {
             const nextSnapshot = await stopTransport();
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus("Reproduccion detenida.");
+            setStatus(t("transport.status.playbackStopped"));
           })
         }
         onPlayTransport={() =>
           void runAction(async () => {
             const nextSnapshot = await playTransport();
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus("Reproduccion iniciada.");
+            setStatus(t("transport.status.playbackStarted"));
           })
         }
         onPauseTransport={() =>
           void runAction(async () => {
             const nextSnapshot = await pauseTransport();
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus("Reproduccion pausada.");
+            setStatus(t("transport.status.playbackPaused"));
           })
         }
         onTempoDraftChange={setTempoDraft}
@@ -4564,30 +4615,30 @@ export function TransportPanelContent() {
           void runAction(async () => {
             const nextSnapshot = await updateSongTempo(nextBpm);
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Tempo actualizado a ${nextBpm.toFixed(1)} BPM.`);
+            setStatus(t("transport.status.tempoUpdated", { bpm: nextBpm.toFixed(1) }));
           });
         }}
       />
 
       <div className="lt-shell-body">
-        <aside className="lt-side-nav" aria-label="Navegacion principal">
+        <aside className="lt-side-nav" aria-label={t("transport.shell.navigation")}>
           <button
             type="button"
             className={activeSidebarTab === "library" ? "is-active" : ""}
-            aria-label="Library"
+            aria-label={t("transport.shell.library")}
             onClick={() => handleSidebarTabToggle("library")}
           >
             <span className="material-symbols-outlined">library_music</span>
-            Library
+            {t("transport.shell.library")}
           </button>
           <button
             type="button"
             className={isSettingsModalOpen ? "is-active" : ""}
-            aria-label="Settings"
+            aria-label={t("transport.shell.settings")}
             onClick={handleSettingsButtonClick}
           >
             <span className="material-symbols-outlined">settings</span>
-            Settings
+            {t("transport.shell.settings")}
           </button>
         </aside>
 
@@ -4632,15 +4683,12 @@ export function TransportPanelContent() {
       {shouldShowEmptyState ? (
         <div className="lt-empty-state">
           <div className="lt-empty-state-card">
-            <span className="lt-empty-state-eyebrow">LibreTracks DAW</span>
-            <h1>Create or open a song</h1>
-            <p>
-              Start a new project or open an existing one. Import WAV assets later from the Library
-              panel and drag them onto the timeline only when you want to arrange them.
-            </p>
+            <span className="lt-empty-state-eyebrow">{t("transport.shell.emptyEyebrow")}</span>
+            <h1>{t("transport.shell.emptyTitle")}</h1>
+            <p>{t("transport.shell.emptyDescription")}</p>
             <div className="lt-empty-state-actions">
-              <button type="button" className="is-primary" onClick={handleCreateSongClick}>Create</button>
-              <button type="button" onClick={handleOpenProjectClick}>Open</button>
+              <button type="button" className="is-primary" onClick={handleCreateSongClick}>{t("common.create")}</button>
+              <button type="button" onClick={handleOpenProjectClick}>{t("common.open")}</button>
             </div>
           </div>
         </div>
@@ -4653,7 +4701,10 @@ export function TransportPanelContent() {
           globalJumpBars={globalJumpBars}
           pendingMarkerJumpLabel={
             pendingMarkerJump
-              ? `Armado: ${pendingMarkerJump.targetMarkerName} | ${pendingMarkerJump.trigger}`
+              ? t("transport.shell.pendingJump", {
+                  markerName: pendingMarkerJump.targetMarkerName,
+                  trigger: translateJumpTrigger(pendingMarkerJump.trigger),
+                })
               : null
           }
           isProjectEmpty={isProjectEmpty}
@@ -4667,7 +4718,7 @@ export function TransportPanelContent() {
             void runAction(async () => {
               const nextSnapshot = await cancelMarkerJump();
               applyPlaybackSnapshot(nextSnapshot);
-              setStatus("Salto cancelado.");
+              setStatus(t("transport.status.jumpCancelled"));
             })
           }
         />
@@ -4844,7 +4895,10 @@ export function TransportPanelContent() {
                       endSeconds: normalizedEndSeconds,
                     });
                     setStatus(
-                      `Rango seleccionado: ${formatClock(normalizedStartSeconds)} - ${formatClock(normalizedEndSeconds)}.`,
+                      t("transport.status.rangeSelected", {
+                        start: formatClock(normalizedStartSeconds),
+                        end: formatClock(normalizedEndSeconds),
+                      }),
                     );
                   };
 
@@ -4871,8 +4925,11 @@ export function TransportPanelContent() {
                   openMenu(
                     event,
                     activeTimelineRange
-                      ? `Selection ${formatClock(activeTimelineRange.startSeconds)} - ${formatClock(activeTimelineRange.endSeconds)}`
-                      : `Timeline ${formatClock(positionSeconds)}`,
+                      ? t("transport.shell.contextSelectionTitle", {
+                          start: formatClock(activeTimelineRange.startSeconds),
+                          end: formatClock(activeTimelineRange.endSeconds),
+                        })
+                      : t("transport.shell.contextTimelineTitle", { time: formatClock(positionSeconds) }),
                     rulerContextMenu(positionSeconds, activeTimelineRange),
                   );
                 }}
@@ -4905,7 +4962,7 @@ export function TransportPanelContent() {
                   clearSelection();
                   setSelectedTimelineRange(null);
                   setSelectedRegionId(null);
-                  openMenu(event, `Tempo ${marker.bpm.toFixed(2)} BPM`, tempoMarkerContextMenu(marker));
+                  openMenu(event, `${t("timelineTopbar.tempoReadout")} ${marker.bpm.toFixed(2)} BPM`, tempoMarkerContextMenu(marker));
                 }}
                 onRegionContextMenu={(event, regionId) => {
                   const region = song?.regions.find((candidate) => candidate.id === regionId);
@@ -4959,7 +5016,7 @@ export function TransportPanelContent() {
               <div
                 ref={horizontalScrollbarRef}
                 className="lt-horizontal-scrollbar-rail"
-                aria-label="Desplazamiento horizontal del timeline"
+                aria-label={t("transport.shell.horizontalScroll")}
                 onScroll={(event) => {
                   const scrollLeft = event.currentTarget.scrollLeft;
                   updateCameraX(scrollLeft, {
@@ -4991,19 +5048,19 @@ export function TransportPanelContent() {
             >
               <header className="lt-settings-modal-header">
                 <div>
-                  <span className="lt-settings-modal-eyebrow">Audio</span>
-                  <h2 id="lt-settings-modal-title">Settings</h2>
-                  <p>Configura la salida global del motor y el modo split stereo para directo.</p>
+                  <span className="lt-settings-modal-eyebrow">{t("transport.settingsModal.eyebrow")}</span>
+                  <h2 id="lt-settings-modal-title">{t("transport.settingsModal.title")}</h2>
+                  <p>{t("transport.settingsModal.description")}</p>
                 </div>
                 <button type="button" className="lt-settings-modal-close" onClick={() => setIsSettingsModalOpen(false)}>
                   <span className="material-symbols-outlined">close</span>
-                  Cerrar
+                  {t("transport.settingsModal.close")}
                 </button>
               </header>
 
               <div className="lt-settings-modal-body">
                 <label className="lt-settings-field">
-                  <span className="lt-settings-field-label">Dispositivo de audio</span>
+                  <span className="lt-settings-field-label">{t("transport.settingsModal.audioDevice")}</span>
                   <select
                     value={selectedAudioOutputDevice}
                     disabled={isSettingsLoading || isSettingsSaving}
@@ -5011,12 +5068,12 @@ export function TransportPanelContent() {
                   >
                     <option value="">
                       {defaultAudioOutputDevice
-                        ? `Predeterminado del sistema (${defaultAudioOutputDevice})`
-                        : "Predeterminado del sistema"}
+                        ? t("transport.settingsModal.audioDeviceSystemDefaultNamed", { name: defaultAudioOutputDevice })
+                        : t("transport.settingsModal.audioDeviceSystemDefault")}
                     </option>
                     {selectedAudioOutputDeviceMissing ? (
                       <option value={selectedAudioOutputDevice}>
-                        {`${selectedAudioOutputDevice} (no disponible actualmente)`}
+                        {t("transport.settingsModal.audioDeviceUnavailable", { name: selectedAudioOutputDevice })}
                       </option>
                     ) : null}
                     {audioOutputDevices.map((deviceName) => (
@@ -5027,9 +5084,22 @@ export function TransportPanelContent() {
                   </select>
                   <small>
                     {defaultAudioOutputDevice
-                      ? `Predeterminado actual del sistema: ${defaultAudioOutputDevice}.`
-                      : "No se detecto un dispositivo predeterminado en el sistema operativo."}
+                      ? t("transport.settingsModal.audioDeviceCurrentDefault", { name: defaultAudioOutputDevice })
+                      : t("transport.settingsModal.audioDeviceNoDefault")}
                   </small>
+                </label>
+
+                <label className="lt-settings-field">
+                  <span className="lt-settings-field-label">{t("transport.settingsModal.language")}</span>
+                  <select
+                    value={selectedLocale}
+                    disabled={isSettingsLoading || isSettingsSaving}
+                    onChange={(event) => handleLocaleChange(event.target.value)}
+                  >
+                    <option value="">{t("transport.settingsModal.languageSystemDefault")}</option>
+                    <option value="en">{t("transport.settingsModal.languageEnglish")}</option>
+                    <option value="es">{t("transport.settingsModal.languageSpanish")}</option>
+                  </select>
                 </label>
 
                 <label className="lt-settings-toggle">
@@ -5040,10 +5110,9 @@ export function TransportPanelContent() {
                     onChange={(event) => handleSplitStereoChange(event.target.checked)}
                   />
                   <div className="lt-settings-toggle-copy">
-                    <strong>Modo Split Stereo (Monitor Izq. / Main Der.)</strong>
+                    <strong>{t("transport.settingsModal.splitStereoTitle")}</strong>
                     <small>
-                      Fuerza las pistas del bus Monitor al canal izquierdo y las del bus Main al derecho,
-                      sin alterar el paneo normal cuando el modo esta apagado.
+                      {t("transport.settingsModal.splitStereoDescription")}
                     </small>
                   </div>
                 </label>
