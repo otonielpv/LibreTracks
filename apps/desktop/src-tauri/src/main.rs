@@ -2,28 +2,45 @@ mod audio_runtime;
 mod commands;
 mod error;
 mod models;
+mod settings;
 mod state;
 
 use tauri::Manager;
 
+use settings::{load_app_settings, AppSettingsStore};
 use state::DesktopState;
 
 fn main() {
     tauri::Builder::default()
         .manage(DesktopState::default())
         .setup(|app| {
+            let initial_settings = load_app_settings(&app.handle()).unwrap_or_else(|error| {
+                eprintln!("[libretracks-settings] failed to load settings: {error}");
+                settings::AppSettings::default()
+            });
+
+            app.manage(AppSettingsStore::new(initial_settings.clone()));
+
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
+            state
+                .audio
+                .apply_settings(initial_settings)
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::system::healthcheck,
             commands::transport::get_transport_snapshot,
+            commands::settings::get_settings,
+            commands::settings::save_settings,
+            commands::settings::update_audio_settings,
             commands::project::get_song_view,
             commands::library::get_library_assets,
             commands::library::get_library_folders,
             commands::library::get_waveform_summaries,
             commands::library::get_library_waveform_summaries,
+            audio_runtime::get_audio_output_devices,
             commands::system::get_audio_debug_snapshot,
             commands::system::get_desktop_performance_snapshot,
             commands::system::report_ui_render_metric,

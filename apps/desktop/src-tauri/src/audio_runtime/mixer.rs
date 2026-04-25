@@ -6,6 +6,7 @@ use tauri::Emitter;
 pub(crate) struct LiveTrackMix {
     parent_track_id: Option<String>,
     kind: TrackKind,
+    output_bus_id: String,
     volume: f32,
     pan: f32,
     muted: bool,
@@ -29,6 +30,7 @@ pub(crate) struct PlaybackClipPlan {
 pub(crate) struct Mixer {
     song: Song,
     live_mix_state: SharedTrackMixState,
+    audio_settings: SharedAudioSettings,
     cached_live_mix: LiveMixSnapshot,
     audio_buffers: source::AudioBufferCache,
     pub(crate) output_sample_rate: u32,
@@ -96,6 +98,7 @@ impl LiveTrackMix {
         Self {
             parent_track_id: track.parent_track_id.clone(),
             kind: track.kind,
+            output_bus_id: track.output_bus_id.clone(),
             volume: track.volume as f32,
             pan: track.pan as f32,
             muted: track.muted,
@@ -130,6 +133,7 @@ impl Mixer {
         output_channels: usize,
         app_handle: SharedAppHandle,
         live_mix_state: SharedTrackMixState,
+        audio_settings: SharedAudioSettings,
         debug_config: telemetry::AudioDebugConfig,
         audio_buffers: source::AudioBufferCache,
     ) -> Self {
@@ -145,6 +149,7 @@ impl Mixer {
         let mut mixer = Self {
             song,
             live_mix_state,
+            audio_settings,
             cached_live_mix: LiveMixSnapshot::default(),
             audio_buffers,
             output_sample_rate,
@@ -197,6 +202,11 @@ impl Mixer {
         let mut mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
         let should_capture_track_meters = self.meter_emitter.capture_enabled();
         let mut track_meters = should_capture_track_meters.then(|| self.empty_track_meters());
+        let split_stereo_enabled = self
+            .audio_settings
+            .read()
+            .map(|settings| settings.split_stereo_enabled)
+            .unwrap_or(false);
 
         self.prune_inactive_clips(block_start);
         self.activate_due_clips(block_end);
@@ -219,8 +229,11 @@ impl Mixer {
                     clip_state.plan.clip_gain,
                     is_any_track_soloed,
                 );
-                let target_pan =
-                    resolve_track_runtime_pan(live_mix_state, &clip_state.plan.track_id);
+                let target_pan = resolve_clip_target_pan(
+                    live_mix_state,
+                    &clip_state.plan.track_id,
+                    split_stereo_enabled,
+                );
                 let parent_gain =
                     resolve_parent_track_runtime_gain(live_mix_state, &clip_state.plan.track_id)
                         .unwrap_or(1.0);
@@ -307,8 +320,16 @@ impl Mixer {
                         plan.clip_gain,
                         self.cached_live_mix.is_any_track_soloed,
                     );
-                    let current_pan =
-                        resolve_track_runtime_pan(&self.cached_live_mix.tracks, &plan.track_id);
+                    let split_stereo_enabled = self
+                        .audio_settings
+                        .read()
+                        .map(|settings| settings.split_stereo_enabled)
+                        .unwrap_or(false);
+                    let current_pan = resolve_clip_target_pan(
+                        &self.cached_live_mix.tracks,
+                        &plan.track_id,
+                        split_stereo_enabled,
+                    );
                     self.active_clips.push(MixClipState {
                         plan,
                         reader,
@@ -683,6 +704,22 @@ pub(crate) fn resolve_track_runtime_pan(
     }
 
     pan.clamp(-1.0, 1.0)
+}
+
+fn resolve_clip_target_pan(
+    live_mix_state: &HashMap<String, LiveTrackMix>,
+    track_id: &str,
+    split_stereo_enabled: bool,
+) -> f32 {
+    if !split_stereo_enabled {
+        return resolve_track_runtime_pan(live_mix_state, track_id);
+    }
+
+    match live_mix_state.get(track_id).map(|track| track.output_bus_id.as_str()) {
+        Some("monitor") => -1.0,
+        Some("main") => 1.0,
+        _ => resolve_track_runtime_pan(live_mix_state, track_id),
+    }
 }
 
 fn resolve_parent_track_runtime_gain(

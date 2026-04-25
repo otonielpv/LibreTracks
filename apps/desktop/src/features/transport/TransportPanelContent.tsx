@@ -29,6 +29,8 @@ import {
   deleteLibraryAsset,
   getLibraryAssets,
   getLibraryFolders,
+  getAudioOutputDevices,
+  getSettings,
   buildSongTempoRegions,
   getPrimarySongRegion,
   getSongBaseBpm,
@@ -56,17 +58,20 @@ import {
   renameLibraryFolder,
   saveProject,
   saveProjectAs,
+  saveSettings,
   scheduleMarkerJump,
   seekTransport,
   splitClip,
   stopTransport,
   undoAction,
+  updateAudioSettings,
   updateSectionMarker,
   updateSongRegion,
   upsertSongTempoMarker,
   updateSongTempo,
   updateTrack,
   updateTrackMixLive,
+  type AppSettings,
   type ClipSummary,
   type LibraryAssetSummary,
   type LibraryImportProgressEvent,
@@ -194,7 +199,7 @@ type LiveTrackMixRequestState = {
   lastSentAt: number;
 };
 
-type SidebarTab = "markers" | "library" | "routing" | "settings";
+type SidebarTab = "library";
 
 const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 const LIBRARY_DRAG_EDGE_BUFFER_PX = 50;
@@ -242,6 +247,19 @@ type TransportAnchorMeta = {
   anchorPositionSeconds: number;
   emittedAtUnixMs: number;
 };
+
+const DEFAULT_APP_SETTINGS: AppSettings = {
+  selectedOutputDevice: null,
+  splitStereoEnabled: false,
+};
+
+function normalizeAppSettings(settings: AppSettings): AppSettings {
+  const selectedOutputDevice = settings.selectedOutputDevice?.trim() || null;
+  return {
+    selectedOutputDevice,
+    splitStereoEnabled: Boolean(settings.splitStereoEnabled),
+  };
+}
 
 function formatClock(seconds: number) {
   const safeSeconds = Math.max(0, seconds);
@@ -692,6 +710,12 @@ export function TransportPanelContent() {
   const [tracksById, setTracksById] = useState<Record<string, TrackSummary>>({});
   const [status, setStatus] = useState("Cargando sesion...");
   const [isBusy, setIsBusy] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isSettingsLoading, setIsSettingsLoading] = useState(true);
+  const [isSettingsSaving, setIsSettingsSaving] = useState(false);
+  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [audioOutputDevices, setAudioOutputDevices] = useState<string[]>([]);
+  const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<string | null>(null);
   const [tempoDraft, setTempoDraft] = useState("120");
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
@@ -838,6 +862,39 @@ export function TransportPanelContent() {
     setSong(nextSong);
     return nextSong;
   }, []);
+
+  const refreshAudioSettings = useCallback(async () => {
+    const [nextSettings, nextAudioDevices] = await Promise.all([getSettings(), getAudioOutputDevices()]);
+    const normalizedSettings = normalizeAppSettings(nextSettings);
+    setAppSettings(normalizedSettings);
+    setAudioOutputDevices(nextAudioDevices.devices);
+    setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
+    return normalizedSettings;
+  }, []);
+
+  const persistAudioSettings = useCallback(
+    (nextSettings: AppSettings, successMessage: string) => {
+      const previousSettings = appSettings;
+      const normalizedSettings = normalizeAppSettings(nextSettings);
+      setAppSettings(normalizedSettings);
+      setIsSettingsSaving(true);
+
+      void runAction(async () => {
+        try {
+          const liveSettings = normalizeAppSettings(await updateAudioSettings(normalizedSettings));
+          const savedSettings = normalizeAppSettings(await saveSettings(liveSettings));
+          setAppSettings(savedSettings);
+          setStatus(successMessage);
+        } catch (error) {
+          setAppSettings(previousSettings);
+          throw error;
+        } finally {
+          setIsSettingsSaving(false);
+        }
+      });
+    },
+    [appSettings, runAction],
+  );
 
   const applyPlaybackSnapshot = useCallback((nextSnapshot: TransportSnapshot | null) => {
     snapshotRef.current = nextSnapshot;
@@ -1321,6 +1378,60 @@ export function TransportPanelContent() {
 
     return useTransportStore.subscribe((state) => state.playback, syncPlaybackSnapshot);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void refreshAudioSettings()
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+        setStatus(`Error: ${String(error)}`);
+      })
+      .finally(() => {
+        if (active) {
+          setIsSettingsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [refreshAudioSettings]);
+
+  useEffect(() => {
+    if (!isSettingsModalOpen) {
+      return () => {};
+    }
+
+    let active = true;
+    void getAudioOutputDevices()
+      .then((nextAudioDevices) => {
+        if (!active) {
+          return;
+        }
+        setAudioOutputDevices(nextAudioDevices.devices);
+        setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
+      })
+      .catch((error) => {
+        if (active) {
+          setStatus(`Error: ${String(error)}`);
+        }
+      });
+
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsSettingsModalOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      active = false;
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [isSettingsModalOpen]);
 
   useEffect(() => {
     let active = true;
@@ -3595,6 +3706,34 @@ export function TransportPanelContent() {
     setActiveSidebarTab((currentTab) => (currentTab === tab ? null : tab));
   }
 
+  function handleSettingsButtonClick() {
+    setIsSettingsModalOpen((current) => !current);
+  }
+
+  function handleAudioOutputDeviceChange(nextValue: string) {
+    persistAudioSettings(
+      {
+        ...appSettings,
+        selectedOutputDevice: nextValue || null,
+      },
+      nextValue
+        ? `Dispositivo de audio actualizado a ${nextValue}.`
+        : "Dispositivo de audio ajustado al predeterminado del sistema.",
+    );
+  }
+
+  function handleSplitStereoChange(nextValue: boolean) {
+    persistAudioSettings(
+      {
+        ...appSettings,
+        splitStereoEnabled: nextValue,
+      },
+      nextValue
+        ? "Modo Split Stereo activado."
+        : "Modo Split Stereo desactivado.",
+    );
+  }
+
   async function handleImportLibraryAssetsClick() {
     if (!playbackSongDir) {
       setStatus("Crea o abre una sesion antes de importar audio a la libreria.");
@@ -4354,6 +4493,11 @@ export function TransportPanelContent() {
     });
   }
 
+  const selectedAudioOutputDevice = appSettings.selectedOutputDevice ?? "";
+  const selectedAudioOutputDeviceMissing = Boolean(
+    appSettings.selectedOutputDevice && !audioOutputDevices.includes(appSettings.selectedOutputDevice),
+  );
+
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
       <div className="lt-daw-shell" ref={panelRef} onContextMenu={(event) => event.preventDefault()}>
@@ -4429,15 +4573,6 @@ export function TransportPanelContent() {
         <aside className="lt-side-nav" aria-label="Navegacion principal">
           <button
             type="button"
-            className={activeSidebarTab === "markers" ? "is-active" : ""}
-            aria-label="Markers"
-            onClick={() => handleSidebarTabToggle("markers")}
-          >
-            <span className="material-symbols-outlined">sell</span>
-            Markers
-          </button>
-          <button
-            type="button"
             className={activeSidebarTab === "library" ? "is-active" : ""}
             aria-label="Library"
             onClick={() => handleSidebarTabToggle("library")}
@@ -4447,18 +4582,9 @@ export function TransportPanelContent() {
           </button>
           <button
             type="button"
-            className={activeSidebarTab === "routing" ? "is-active" : ""}
-            aria-label="Routing"
-            onClick={() => handleSidebarTabToggle("routing")}
-          >
-            <span className="material-symbols-outlined">settings_input_component</span>
-            Routing
-          </button>
-          <button
-            type="button"
-            className={activeSidebarTab === "settings" ? "is-active" : ""}
+            className={isSettingsModalOpen ? "is-active" : ""}
             aria-label="Settings"
-            onClick={() => handleSidebarTabToggle("settings")}
+            onClick={handleSettingsButtonClick}
           >
             <span className="material-symbols-outlined">settings</span>
             Settings
@@ -4853,6 +4979,78 @@ export function TransportPanelContent() {
   </section>
   )}
   </div>
+
+        {isSettingsModalOpen ? (
+          <div className="lt-modal-backdrop" onClick={() => setIsSettingsModalOpen(false)}>
+            <section
+              className="lt-settings-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="lt-settings-modal-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <header className="lt-settings-modal-header">
+                <div>
+                  <span className="lt-settings-modal-eyebrow">Audio</span>
+                  <h2 id="lt-settings-modal-title">Settings</h2>
+                  <p>Configura la salida global del motor y el modo split stereo para directo.</p>
+                </div>
+                <button type="button" className="lt-settings-modal-close" onClick={() => setIsSettingsModalOpen(false)}>
+                  <span className="material-symbols-outlined">close</span>
+                  Cerrar
+                </button>
+              </header>
+
+              <div className="lt-settings-modal-body">
+                <label className="lt-settings-field">
+                  <span className="lt-settings-field-label">Dispositivo de audio</span>
+                  <select
+                    value={selectedAudioOutputDevice}
+                    disabled={isSettingsLoading || isSettingsSaving}
+                    onChange={(event) => handleAudioOutputDeviceChange(event.target.value)}
+                  >
+                    <option value="">
+                      {defaultAudioOutputDevice
+                        ? `Predeterminado del sistema (${defaultAudioOutputDevice})`
+                        : "Predeterminado del sistema"}
+                    </option>
+                    {selectedAudioOutputDeviceMissing ? (
+                      <option value={selectedAudioOutputDevice}>
+                        {`${selectedAudioOutputDevice} (no disponible actualmente)`}
+                      </option>
+                    ) : null}
+                    {audioOutputDevices.map((deviceName) => (
+                      <option key={deviceName} value={deviceName}>
+                        {deviceName}
+                      </option>
+                    ))}
+                  </select>
+                  <small>
+                    {defaultAudioOutputDevice
+                      ? `Predeterminado actual del sistema: ${defaultAudioOutputDevice}.`
+                      : "No se detecto un dispositivo predeterminado en el sistema operativo."}
+                  </small>
+                </label>
+
+                <label className="lt-settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={appSettings.splitStereoEnabled}
+                    disabled={isSettingsLoading || isSettingsSaving}
+                    onChange={(event) => handleSplitStereoChange(event.target.checked)}
+                  />
+                  <div className="lt-settings-toggle-copy">
+                    <strong>Modo Split Stereo (Monitor Izq. / Main Der.)</strong>
+                    <small>
+                      Fuerza las pistas del bus Monitor al canal izquierdo y las del bus Main al derecho,
+                      sin alterar el paneo normal cuando el modo esta apagado.
+                    </small>
+                  </div>
+                </label>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         {contextMenu ? (
         <div

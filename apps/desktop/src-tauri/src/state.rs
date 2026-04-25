@@ -31,6 +31,7 @@ use crate::models::{
     DesktopPerformanceSnapshot, LibraryAssetSummary, SongView, TransportClockSummary,
     TransportDriftSummary, TransportSnapshot, WaveformSummaryDto,
 };
+use crate::settings::AppSettings;
 
 const LIBRARY_MANIFEST_FILE_NAME: &str = "library.json";
 const LIBRARY_IMPORT_PROGRESS_EVENT: &str = "library:import-progress";
@@ -289,7 +290,7 @@ impl DesktopSession {
         let target_song_file = FileDialog::new()
             .set_title("Crear proyecto")
             .set_directory(&default_directory)
-            .add_filter("LibreTracks Song", &["json"])
+            .add_filter("LibreTracks Song", &["ltsong"])
             .set_file_name(&default_project_file_name(&song.title))
             .save_file();
 
@@ -341,7 +342,7 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let target_song_file = FileDialog::new()
-            .add_filter("LibreTracks Song", &["json"])
+            .add_filter("LibreTracks Song", &["ltsong"])
             .set_title("Guardar proyecto como")
             .set_file_name(&default_project_file_name(&song.title))
             .save_file();
@@ -387,8 +388,8 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<Option<TransportSnapshot>, DesktopError> {
         let song_file = FileDialog::new()
-            .add_filter("LibreTracks Song", &["json"])
-            .set_title("Selecciona song.json")
+            .add_filter("LibreTracks Song", &["ltsong"])
+            .set_title("Selecciona song.ltsong")
             .pick_file();
 
         let Some(song_file) = song_file else {
@@ -399,7 +400,7 @@ impl DesktopSession {
             .parent()
             .map(std::path::Path::to_path_buf)
             .ok_or_else(|| {
-                DesktopError::AudioCommand("song.json must live inside a folder".into())
+                DesktopError::AudioCommand("song.ltsong must live inside a folder".into())
             })?;
         let song = load_song_from_file(&song_file)?;
 
@@ -856,6 +857,36 @@ impl DesktopSession {
 
     pub fn report_ui_render_metric(&mut self, render_millis: f64) {
         self.perf_metrics.last_react_render_millis = render_millis.max(0.0);
+    }
+
+    pub fn update_audio_settings(
+        &mut self,
+        next_settings: AppSettings,
+        audio: &AudioController,
+    ) -> Result<AppSettings, DesktopError> {
+        let previous_settings = audio.current_settings()?;
+        let device_changed = previous_settings.selected_output_device != next_settings.selected_output_device;
+        let split_changed = previous_settings.split_stereo_enabled != next_settings.split_stereo_enabled;
+
+        if !device_changed && !split_changed {
+            return Ok(next_settings);
+        }
+
+        audio.apply_settings(next_settings.clone())?;
+
+        if device_changed && self.engine.playback_state() == PlaybackState::Playing {
+            self.restart_audio(audio, PlaybackStartReason::TransportResync)?;
+            self.transport_clock
+                .reanchor_playing(self.engine.position_seconds());
+            self.capture_transport_drift_sample(
+                audio,
+                "audio_settings",
+                self.current_position(),
+                self.engine.position_seconds(),
+            );
+        }
+
+        Ok(next_settings)
     }
 
     pub fn play(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
@@ -2977,7 +3008,7 @@ fn default_project_file_name(title: &str) -> String {
     } else {
         trimmed
     };
-    format!("{fallback}.json")
+    format!("{fallback}.ltsong")
 }
 
 fn copy_project_audio_files(

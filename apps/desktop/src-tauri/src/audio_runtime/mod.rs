@@ -17,7 +17,7 @@ use std::{
 
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
-    Stream, StreamConfig,
+    Device, Stream, StreamConfig,
 };
 use libretracks_core::Song;
 use rtrb::RingBuffer;
@@ -25,6 +25,7 @@ use serde::Serialize;
 use tauri::AppHandle;
 
 use crate::error::DesktopError;
+use crate::settings::AppSettings;
 
 #[cfg(test)]
 use self::backend::drain_consumer_samples;
@@ -56,12 +57,14 @@ const MAX_HIERARCHY_DEPTH: usize = 16;
 
 type SharedAppHandle = Arc<RwLock<Option<AppHandle>>>;
 type SharedTrackMixState = Arc<RwLock<HashMap<String, LiveTrackMix>>>;
+type SharedAudioSettings = Arc<RwLock<AppSettings>>;
 
 pub struct AudioRuntime {
     session: Option<PlaybackSession>,
     audio_buffers: AudioBufferCache,
     app_handle: SharedAppHandle,
     live_mix_state: SharedTrackMixState,
+    audio_settings: SharedAudioSettings,
 }
 
 pub struct AudioController {
@@ -69,6 +72,14 @@ pub struct AudioController {
     audio_buffers: AudioBufferCache,
     app_handle: SharedAppHandle,
     live_mix_state: SharedTrackMixState,
+    audio_settings: SharedAudioSettings,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioOutputDevicesResponse {
+    pub devices: Vec<String>,
+    pub default_device: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -156,12 +167,14 @@ impl AudioRuntime {
         audio_buffers: AudioBufferCache,
         app_handle: SharedAppHandle,
         live_mix_state: SharedTrackMixState,
+        audio_settings: SharedAudioSettings,
     ) -> Self {
         Self {
             session: None,
             audio_buffers,
             app_handle,
             live_mix_state,
+            audio_settings,
         }
     }
 
@@ -196,6 +209,7 @@ impl AudioRuntime {
             position_seconds,
             self.app_handle.clone(),
             self.live_mix_state.clone(),
+            self.audio_settings.clone(),
             debug_config,
             self.audio_buffers.clone(),
         )?;
@@ -242,9 +256,11 @@ impl AudioController {
         let audio_buffers = AudioBufferCache::default();
         let app_handle = Arc::new(RwLock::new(None));
         let live_mix_state = Arc::new(RwLock::new(HashMap::new()));
+        let audio_settings = Arc::new(RwLock::new(AppSettings::default()));
         let runtime_audio_buffers = audio_buffers.clone();
         let runtime_app_handle = app_handle.clone();
         let runtime_live_mix_state = live_mix_state.clone();
+        let runtime_audio_settings = audio_settings.clone();
 
         thread::Builder::new()
             .name("libretracks-audio".into())
@@ -255,6 +271,7 @@ impl AudioController {
                     runtime_audio_buffers,
                     runtime_app_handle,
                     runtime_live_mix_state,
+                    runtime_audio_settings,
                 )
             })
             .expect("audio thread should start");
@@ -264,6 +281,7 @@ impl AudioController {
             audio_buffers,
             app_handle,
             live_mix_state,
+            audio_settings,
         }
     }
 
@@ -339,6 +357,22 @@ impl AudioController {
             .map_err(DesktopError::AudioCommand)
     }
 
+    pub fn current_settings(&self) -> Result<AppSettings, DesktopError> {
+        self.audio_settings
+            .read()
+            .map(|settings| settings.clone())
+            .map_err(|_| DesktopError::AudioCommand("audio settings lock poisoned".into()))
+    }
+
+    pub fn apply_settings(&self, settings: AppSettings) -> Result<(), DesktopError> {
+        let mut current_settings = self
+            .audio_settings
+            .write()
+            .map_err(|_| DesktopError::AudioCommand("audio settings lock poisoned".into()))?;
+        *current_settings = settings;
+        Ok(())
+    }
+
     pub fn stop(&self) -> Result<(), DesktopError> {
         self.request(|respond_to| AudioCommand::Stop { respond_to })
     }
@@ -392,11 +426,20 @@ impl PlaybackSession {
         position_seconds: f64,
         app_handle: SharedAppHandle,
         live_mix_state: SharedTrackMixState,
+        audio_settings: SharedAudioSettings,
         debug_config: AudioDebugConfig,
         audio_buffers: AudioBufferCache,
     ) -> Result<Self, String> {
         let host = cpal::default_host();
-        let Some(device) = host.default_output_device() else {
+        let selected_device_name = audio_settings
+            .read()
+            .ok()
+            .and_then(|settings| settings.selected_output_device.clone())
+            .and_then(|device_name| {
+                let trimmed = device_name.trim().to_string();
+                (!trimmed.is_empty()).then_some(trimmed)
+            });
+        let Some(device) = resolve_output_device(&host, selected_device_name.as_deref()) else {
             eprintln!("[libretracks-audio] no default output device available, using null backend");
             return Ok(Self {
                 backend: PlaybackBackend::Null,
@@ -428,6 +471,7 @@ impl PlaybackSession {
                 output_channels,
                 app_handle,
                 live_mix_state,
+                audio_settings,
                 debug_config,
                 audio_buffers.clone(),
             ),
@@ -507,6 +551,7 @@ fn run_audio_thread(
     audio_buffers: AudioBufferCache,
     app_handle: SharedAppHandle,
     live_mix_state: SharedTrackMixState,
+    audio_settings: SharedAudioSettings,
 ) {
     let mut runtime: Option<AudioRuntime> = None;
     let mut debug_state = AudioDebugState::new(debug_config);
@@ -527,7 +572,13 @@ fn run_audio_thread(
                 );
 
                 let result =
-                    ensure_runtime(&mut runtime, &audio_buffers, &app_handle, &live_mix_state)
+                    ensure_runtime(
+                        &mut runtime,
+                        &audio_buffers,
+                        &app_handle,
+                        &live_mix_state,
+                        &audio_settings,
+                    )
                         .restart(&song_dir, &song, position_seconds, debug_config)
                         .map(|report| {
                             debug_state.record_restart(
@@ -552,7 +603,13 @@ fn run_audio_thread(
                 );
 
                 let result =
-                    ensure_runtime(&mut runtime, &audio_buffers, &app_handle, &live_mix_state)
+                    ensure_runtime(
+                        &mut runtime,
+                        &audio_buffers,
+                        &app_handle,
+                        &live_mix_state,
+                        &audio_settings,
+                    )
                         .seek(&song, position_seconds)
                         .map(|active_sinks| {
                             debug_state.record_seek(
@@ -574,7 +631,13 @@ fn run_audio_thread(
                     .record_command(AudioCommandKind::SyncSong, Some("mix_only".to_string()));
 
                 let result =
-                    ensure_runtime(&mut runtime, &audio_buffers, &app_handle, &live_mix_state)
+                    ensure_runtime(
+                        &mut runtime,
+                        &audio_buffers,
+                        &app_handle,
+                        &live_mix_state,
+                        &audio_settings,
+                    )
                         .sync_song(&song)
                         .map(|report| {
                             debug_state.record_sync(&report);
@@ -620,14 +683,55 @@ fn ensure_runtime<'a>(
     audio_buffers: &AudioBufferCache,
     app_handle: &SharedAppHandle,
     live_mix_state: &SharedTrackMixState,
+    audio_settings: &SharedAudioSettings,
 ) -> &'a mut AudioRuntime {
     runtime.get_or_insert_with(|| {
         AudioRuntime::new(
             audio_buffers.clone(),
             app_handle.clone(),
             live_mix_state.clone(),
+            audio_settings.clone(),
         )
     })
+}
+
+#[tauri::command]
+pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> {
+    let host = cpal::default_host();
+    let default_device = host.default_output_device().and_then(|device| device.name().ok());
+    let mut devices = host
+        .output_devices()
+        .map_err(|error| error.to_string())?
+        .filter_map(|device| device.name().ok())
+        .collect::<Vec<_>>();
+
+    devices.sort();
+    devices.dedup();
+
+    Ok(AudioOutputDevicesResponse {
+        devices,
+        default_device,
+    })
+}
+
+fn resolve_output_device(host: &cpal::Host, selected_device_name: Option<&str>) -> Option<Device> {
+    if let Some(selected_device_name) = selected_device_name {
+        let normalized_name = selected_device_name.trim();
+        if !normalized_name.is_empty() {
+            if let Ok(devices) = host.output_devices() {
+                for device in devices {
+                    let Ok(device_name) = device.name() else {
+                        continue;
+                    };
+                    if device_name == normalized_name {
+                        return Some(device);
+                    }
+                }
+            }
+        }
+    }
+
+    host.default_output_device()
 }
 
 fn next_audio_command(

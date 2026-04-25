@@ -223,6 +223,16 @@ export type AudioMeterLevel = {
   rightPeak: number;
 };
 
+export type AppSettings = {
+  selectedOutputDevice?: string | null;
+  splitStereoEnabled: boolean;
+};
+
+export type AudioOutputDevices = {
+  devices: string[];
+  defaultDevice?: string | null;
+};
+
 export type LibraryImportProgressEvent = {
   percent: number;
   message: string;
@@ -258,6 +268,10 @@ let demoSong = buildDemoSong();
 let demoWaveforms = buildDemoWaveforms();
 let demoLibraryAssets = buildDemoLibraryAssets(demoSong);
 let demoLibraryFolders = collectDemoLibraryFolders(demoLibraryAssets);
+let demoAppSettings: AppSettings = {
+  selectedOutputDevice: null,
+  splitStereoEnabled: false,
+};
 let demoPlaybackState: PlaybackState = "stopped";
 let demoPendingJump: PendingJumpSummary | null = null;
 let demoProjectRevision = demoSong.projectRevision;
@@ -447,7 +461,7 @@ function buildDemoSnapshot(): TransportSnapshot {
     },
     projectRevision: demoProjectRevision,
     songDir: "demo://session",
-    songFilePath: "demo://session/song.json",
+    songFilePath: "demo://session/song.ltsong",
     isNativeRuntime: false,
   };
 }
@@ -534,6 +548,43 @@ export async function getDesktopPerformanceSnapshot(): Promise<DesktopPerformanc
   }
 
   return invokeCommand<DesktopPerformanceSnapshot>("get_desktop_performance_snapshot");
+}
+
+export async function getSettings(): Promise<AppSettings> {
+  if (!isTauriApp) {
+    return cloneSnapshot(demoAppSettings);
+  }
+
+  return invokeCommand<AppSettings>("get_settings");
+}
+
+export async function saveSettings(settings: AppSettings): Promise<AppSettings> {
+  if (!isTauriApp) {
+    demoAppSettings = cloneSnapshot(settings);
+    return cloneSnapshot(demoAppSettings);
+  }
+
+  return invokeCommand<AppSettings>("save_settings", { settings });
+}
+
+export async function updateAudioSettings(settings: AppSettings): Promise<AppSettings> {
+  if (!isTauriApp) {
+    demoAppSettings = cloneSnapshot(settings);
+    return cloneSnapshot(demoAppSettings);
+  }
+
+  return invokeCommand<AppSettings>("update_audio_settings", { settings });
+}
+
+export async function getAudioOutputDevices(): Promise<AudioOutputDevices> {
+  if (!isTauriApp) {
+    return {
+      devices: ["Default Speakers", "USB Audio Interface"],
+      defaultDevice: "Default Speakers",
+    };
+  }
+
+  return invokeCommand<AudioOutputDevices>("get_audio_output_devices");
 }
 
 export async function reportUiRenderMetric(renderMillis: number): Promise<void> {
