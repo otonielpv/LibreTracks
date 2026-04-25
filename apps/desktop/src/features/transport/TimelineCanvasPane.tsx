@@ -38,7 +38,6 @@ type TimelineCanvasPaneProps = {
   laneViewportWidth: number;
   trackHeight: number;
   playheadDurationSeconds: number;
-  showTimelineHeaderTime: boolean;
   song: SongView | null;
   visibleTracks: TrackSummary[];
   renderedClipsByTrack: Record<string, ClipSummary[]>;
@@ -48,7 +47,6 @@ type TimelineCanvasPaneProps = {
   pixelsPerSecond: number;
   livePixelsPerSecondRef: MutableRefObject<number>;
   timelineGrid: TimelineGrid;
-  timelineHeaderMarkers: TimelineGrid["markers"];
   selectedTimelineRange: { startSeconds: number; endSeconds: number } | null;
   selectedClipId: string | null;
   selectedRegionId: string | null;
@@ -66,8 +64,6 @@ type TimelineCanvasPaneProps = {
   shouldShowEmptyArrangementHint: boolean;
   normalizePositionSeconds: (positionSeconds: number) => number;
   resolveLibraryGhostLeft: (seconds: number) => number;
-  formatTimelineHeaderMusicalPosition: (barNumber: number, beatInBar: number) => string;
-  formatTimelineHeaderTime: (seconds: number) => string;
   onRulerMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onRulerContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onMarkerPrimaryAction: (sectionId: string) => void;
@@ -111,7 +107,6 @@ export function TimelineCanvasPane({
   laneViewportWidth,
   trackHeight,
   playheadDurationSeconds,
-  showTimelineHeaderTime,
   song,
   visibleTracks,
   renderedClipsByTrack,
@@ -121,7 +116,6 @@ export function TimelineCanvasPane({
   pixelsPerSecond,
   livePixelsPerSecondRef,
   timelineGrid,
-  timelineHeaderMarkers,
   selectedTimelineRange,
   selectedClipId,
   selectedRegionId,
@@ -139,8 +133,6 @@ export function TimelineCanvasPane({
   shouldShowEmptyArrangementHint,
   normalizePositionSeconds,
   resolveLibraryGhostLeft,
-  formatTimelineHeaderMusicalPosition,
-  formatTimelineHeaderTime,
   onRulerMouseDown,
   onRulerContextMenu,
   onMarkerPrimaryAction,
@@ -241,17 +233,6 @@ export function TimelineCanvasPane({
                 }}
               />
             ) : null}
-
-            {timelineHeaderMarkers.map((marker) => (
-              <div
-                key={`marker-${marker.seconds.toFixed(4)}`}
-                className={`lt-ruler-mark ${marker.isBarStart ? "is-bar" : "is-beat"}`}
-                style={{ left: marker.seconds * pixelsPerSecond }}
-              >
-                <strong>{formatTimelineHeaderMusicalPosition(marker.barNumber, marker.beatInBar)}</strong>
-                {showTimelineHeaderTime ? <small>{formatTimelineHeaderTime(marker.seconds)}</small> : null}
-              </div>
-            ))}
 
             {song?.sectionMarkers.map((section) => (
               <button

@@ -318,17 +318,6 @@ function hasLibraryAssetDragType(dataTransfer: DataTransfer | null) {
   return dragTypes.includes(LIBRARY_ASSET_DRAG_MIME) || dragTypes.includes("text/plain");
 }
 
-function formatTimelineHeaderTime(seconds: number) {
-  const safeSeconds = Math.max(0, seconds);
-  const minutes = Math.floor(safeSeconds / 60);
-  const secondsRemainder = safeSeconds - minutes * 60;
-  return `${minutes}:${secondsRemainder.toFixed(3).padStart(6, "0")}`;
-}
-
-function formatTimelineHeaderMusicalPosition(barNumber: number, beatInBar: number) {
-  return `${barNumber}.${beatInBar}.00`;
-}
-
 function formatMusicalPosition(seconds: number, song: SongView | null | undefined) {
   return getCumulativeMusicalPosition(
     seconds,
@@ -2584,32 +2573,6 @@ export function TransportPanelContent() {
     viewportStartSeconds: 0,
     viewportEndSeconds: workspaceDurationSeconds,
   });
-  const timelineHeaderMarkers = useMemo(
-    () => {
-      const baseMarkers = timelineGrid.markers.filter((marker) =>
-        timelineGrid.showBeatLabels
-          ? true
-          : marker.isBarStart && (marker.barNumber - 1) % timelineGrid.barLabelStep === 0,
-      );
-      const minimumLabelGapPx = timelineGrid.showBeatLabels ? 72 : 96;
-      const filteredMarkers: typeof baseMarkers = [];
-      let lastAcceptedX = Number.NEGATIVE_INFINITY;
-
-      for (const marker of baseMarkers) {
-        const markerX = marker.seconds * pixelsPerSecond;
-        if (markerX - lastAcceptedX < minimumLabelGapPx) {
-          continue;
-        }
-
-        filteredMarkers.push(marker);
-        lastAcceptedX = markerX;
-      }
-
-      return filteredMarkers;
-    },
-    [pixelsPerSecond, timelineGrid.barLabelStep, timelineGrid.markers, timelineGrid.showBeatLabels],
-  );
-  const showTimelineHeaderTime = true;
 
   async function scheduleMarkerJumpWithGlobalMode(markerId: string, markerName: string) {
     const trigger =
@@ -4621,7 +4584,6 @@ export function TransportPanelContent() {
                 pixelsPerSecond={pixelsPerSecond}
                 livePixelsPerSecondRef={livePixelsPerSecondRef}
                 timelineGrid={timelineGrid}
-                timelineHeaderMarkers={timelineHeaderMarkers}
                 selectedTimelineRange={selectedTimelineRange}
                 selectedClipId={selectedClipId}
                 selectedRegionId={selectedRegionId}
@@ -4631,7 +4593,6 @@ export function TransportPanelContent() {
                 playheadDragRef={playheadDragRef}
                 clipPreviewSecondsRef={clipPreviewSecondsRef}
                 playheadDurationSeconds={workspaceDurationSeconds}
-                showTimelineHeaderTime={showTimelineHeaderTime}
                 rulerTrackRef={rulerTrackRef}
                 horizontalScrollbarRef={horizontalScrollbarRef}
                 laneAreaRef={laneAreaRef}
@@ -4642,8 +4603,6 @@ export function TransportPanelContent() {
                 normalizePositionSeconds={(positionSeconds) =>
                   normalizeTimelineSeekSeconds(positionSeconds, workspaceDurationSeconds)}
                 resolveLibraryGhostLeft={resolveLibraryGhostLeft}
-                formatTimelineHeaderMusicalPosition={formatTimelineHeaderMusicalPosition}
-                formatTimelineHeaderTime={formatTimelineHeaderTime}
                 onRulerMouseDown={(event) => {
                   if (!song || event.button !== 0 || !rulerTrackRef.current) {
                     return;

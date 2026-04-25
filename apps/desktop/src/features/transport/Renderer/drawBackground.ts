@@ -2,6 +2,17 @@ import type { SectionMarkerSummary, SongRegionSummary, TempoMarkerSummary } from
 import type { TimelineGrid } from "../timelineMath";
 import { screenXToSeconds, secondsToScreenX } from "../timelineMath";
 
+function formatRulerMusicalPosition(barNumber: number, beatInBar: number) {
+  return `${barNumber}.${beatInBar}.00`;
+}
+
+function formatRulerTimecode(seconds: number) {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds - minutes * 60;
+  return `${minutes}:${remainder.toFixed(3).padStart(6, "0")}`;
+}
+
 export type RulerMarkerDrawOptions = {
   isSelected: boolean;
   isArmed: boolean;
@@ -67,6 +78,50 @@ export function drawGridLines(
   context.strokeStyle = "rgba(186, 202, 197, 0.32)";
   context.lineWidth = 1;
   context.stroke(barPath);
+}
+
+export function drawRulerGridLabels(
+  context: CanvasRenderingContext2D,
+  grid: TimelineGrid,
+  width: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+) {
+  const visibleStartSeconds = screenXToSeconds(0, cameraX, pixelsPerSecond);
+  const visibleEndSeconds = screenXToSeconds(width, cameraX, pixelsPerSecond);
+
+  const minimumLabelGapPx = grid.showBeatLabels ? 72 : 96;
+  let lastAcceptedX = Number.NEGATIVE_INFINITY;
+
+  context.textAlign = "left";
+  context.textBaseline = "top";
+
+  for (const marker of grid.markers) {
+    if (!grid.showBeatLabels && !(marker.isBarStart && (marker.barNumber - 1) % grid.barLabelStep === 0)) {
+      continue;
+    }
+
+    const markerX = secondsToScreenX(marker.seconds, cameraX, pixelsPerSecond);
+    if (markerX - lastAcceptedX < minimumLabelGapPx) {
+      continue;
+    }
+    lastAcceptedX = markerX;
+
+    if (marker.seconds < visibleStartSeconds - 2 || marker.seconds > visibleEndSeconds + 2) {
+      continue;
+    }
+
+    const x = Math.round(markerX) + 4;
+    const y = 28;
+
+    context.fillStyle = marker.isBarStart ? "#e5e2e1" : "#bacac5";
+    context.font = '600 10px "Space Grotesk", sans-serif';
+    context.fillText(formatRulerMusicalPosition(marker.barNumber, marker.beatInBar), x, y);
+
+    context.fillStyle = marker.isBarStart ? "#57f1db" : "rgba(186, 202, 197, 0.68)";
+    context.font = '400 10px "Space Grotesk", sans-serif';
+    context.fillText(formatRulerTimecode(marker.seconds), x, y + 12);
+  }
 }
 
 export function drawRulerRegion(
@@ -284,6 +339,14 @@ export function drawRulerBackgroundLayer(
     args.timelineGrid,
     args.width,
     args.height,
+    args.cameraX,
+    args.pixelsPerSecond,
+  );
+
+  drawRulerGridLabels(
+    context,
+    args.timelineGrid,
+    args.width,
     args.cameraX,
     args.pixelsPerSecond,
   );
