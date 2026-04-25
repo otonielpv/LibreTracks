@@ -11,6 +11,7 @@
     "dev:desktop:native": "powershell -ExecutionPolicy Bypass -File .\\scripts\\desktop-native.ps1 dev",
     "build:desktop": "npm --prefix apps/desktop run build",
     "check:desktop:native": "powershell -ExecutionPolicy Bypass -File .\\scripts\\desktop-native.ps1 check",
+    "build:desktop:native": "powershell -ExecutionPolicy Bypass -File .\\scripts\\desktop-native.ps1 build",
     "test:desktop": "npm --prefix apps/desktop run test",
     "dev:remote": "npm --prefix apps/remote run dev --",
     "build:remote": "npm --prefix apps/remote run build",
