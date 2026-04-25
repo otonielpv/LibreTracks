@@ -2,6 +2,8 @@ import type { SectionMarkerSummary, SongRegionSummary, TempoMarkerSummary } from
 import type { TimelineGrid } from "../timelineMath";
 import { screenXToSeconds, secondsToScreenX } from "../timelineMath";
 
+const MIN_LABEL_WIDTH_PX = 70;
+
 function formatRulerMusicalPosition(barNumber: number, beatInBar: number) {
   return `${barNumber}.${beatInBar}.00`;
 }
@@ -11,6 +13,48 @@ function formatRulerTimecode(seconds: number) {
   const minutes = Math.floor(safeSeconds / 60);
   const remainder = safeSeconds - minutes * 60;
   return `${minutes}:${remainder.toFixed(3).padStart(6, "0")}`;
+}
+
+function getPrimaryRulerMarkers(grid: TimelineGrid) {
+  if (grid.showBeatLabels) {
+    return grid.markers;
+  }
+
+  return grid.markers.filter(
+    (marker) => marker.isBarStart && (marker.barNumber - 1) % grid.barLabelStep === 0,
+  );
+}
+
+function getPrimaryMarkerOrdinal(
+  marker: TimelineGrid["markers"][number],
+  grid: TimelineGrid,
+) {
+  if (grid.showBeatLabels) {
+    return (marker.barNumber - 1) * grid.beatsPerBar + (marker.beatInBar - 1);
+  }
+
+  return Math.floor((marker.barNumber - 1) / grid.barLabelStep);
+}
+
+function getLabelSkipDivisor(primaryMarkers: TimelineGrid["markers"], pixelsPerSecond: number) {
+  let minimumPrimaryIntervalPx = Number.POSITIVE_INFINITY;
+
+  for (let index = 1; index < primaryMarkers.length; index += 1) {
+    const intervalPx = (primaryMarkers[index].seconds - primaryMarkers[index - 1].seconds) * pixelsPerSecond;
+    if (intervalPx > 0) {
+      minimumPrimaryIntervalPx = Math.min(minimumPrimaryIntervalPx, intervalPx);
+    }
+  }
+
+  let labelSkipDivisor = 1;
+  while (
+    Number.isFinite(minimumPrimaryIntervalPx) &&
+    minimumPrimaryIntervalPx * labelSkipDivisor < MIN_LABEL_WIDTH_PX
+  ) {
+    labelSkipDivisor *= 2;
+  }
+
+  return labelSkipDivisor;
 }
 
 export type RulerMarkerDrawOptions = {
@@ -89,24 +133,18 @@ export function drawRulerGridLabels(
 ) {
   const visibleStartSeconds = screenXToSeconds(0, cameraX, pixelsPerSecond);
   const visibleEndSeconds = screenXToSeconds(width, cameraX, pixelsPerSecond);
-
-  const minimumLabelGapPx = grid.showBeatLabels ? 72 : 96;
-  let lastAcceptedX = Number.NEGATIVE_INFINITY;
+  const primaryMarkers = getPrimaryRulerMarkers(grid);
+  const labelSkipDivisor = getLabelSkipDivisor(primaryMarkers, pixelsPerSecond);
 
   context.textAlign = "left";
   context.textBaseline = "top";
 
-  for (const marker of grid.markers) {
-    if (!grid.showBeatLabels && !(marker.isBarStart && (marker.barNumber - 1) % grid.barLabelStep === 0)) {
+  for (const marker of primaryMarkers) {
+    if (getPrimaryMarkerOrdinal(marker, grid) % labelSkipDivisor !== 0) {
       continue;
     }
 
     const markerX = secondsToScreenX(marker.seconds, cameraX, pixelsPerSecond);
-    if (markerX - lastAcceptedX < minimumLabelGapPx) {
-      continue;
-    }
-    lastAcceptedX = markerX;
-
     if (marker.seconds < visibleStartSeconds - 2 || marker.seconds > visibleEndSeconds + 2) {
       continue;
     }
