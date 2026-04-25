@@ -626,6 +626,48 @@ describe("App", () => {
     expect(screen.getByText("Narration")).toBeTruthy();
   });
 
+  it("clears the arrangement immediately after deleting the only track with a clip", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    const { App } = await import("./App");
+    await desktopApi.createSong();
+    await desktopApi.createTrack({
+      name: "Solo",
+      kind: "audio",
+    });
+    const seededSong = await desktopApi.getSongView();
+    const seededTrackId = seededSong?.tracks.at(-1)?.id ?? null;
+    expect(seededTrackId).toBeTruthy();
+    await desktopApi.createClipsBatch([
+      {
+        trackId: seededTrackId as string,
+        filePath: "audio/drums.wav",
+        timelineStartSeconds: 0,
+      },
+    ]);
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { container } = render(<App />);
+    await screen.findByText(/modo demo web activo/i);
+    await screen.findByText("Solo");
+    mockRulerBounds(container);
+    mockTrackListBounds(container);
+
+    const drumsHeader = getTrackHeader(container, "Solo");
+    await act(async () => {
+      fireEvent.contextMenu(drumsHeader, { clientX: 180, clientY: 220 });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /^borrar$/i }));
+    });
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(await screen.findByText(/track borrado: solo/i)).toBeTruthy();
+    expect(screen.getByLabelText(/empty arrangement dropzone/i)).toBeTruthy();
+    expect(container.querySelector(".lt-track-lane-row")).toBeNull();
+    expect(container.querySelector(".lt-library-clip-ghost")).toBeNull();
+  });
+
   it("creates a marker from the ruler right-click context menu", async () => {
     const { container } = await renderApp();
     mockRulerBounds(container);

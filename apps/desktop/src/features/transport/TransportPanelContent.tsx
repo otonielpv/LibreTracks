@@ -843,6 +843,12 @@ export function TransportPanelContent() {
     return { assets, folders };
   }, [playbackSongDir]);
 
+  const refreshSongView = useCallback(async () => {
+    const nextSong = await getSongView();
+    setSong(nextSong);
+    return nextSong;
+  }, []);
+
   const applyPlaybackSnapshot = useCallback((nextSnapshot: TransportSnapshot | null) => {
     snapshotRef.current = nextSnapshot;
     useTransportStore.getState().setPlaybackState(nextSnapshot);
@@ -1152,6 +1158,7 @@ export function TransportPanelContent() {
     if (draggedTrackRowRef.current) {
       draggedTrackRowRef.current.style.transform = "";
       draggedTrackRowRef.current.style.zIndex = "";
+      draggedTrackRowRef.current.style.pointerEvents = "";
     }
 
     const draggedHeader = draggedTrackRowRef.current?.querySelector(".lt-track-header");
@@ -1184,6 +1191,7 @@ export function TransportPanelContent() {
     if (dragState.rowElement) {
       dragState.rowElement.style.transform = `translate3d(0, ${deltaY}px, 0)`;
       dragState.rowElement.style.zIndex = "8";
+      dragState.rowElement.style.pointerEvents = "none";
     }
 
     if (dragState.headerElement) {
@@ -2952,6 +2960,7 @@ export function TransportPanelContent() {
     await runAction(async () => {
       const nextSnapshot = await moveTrack(moveArgs);
       applyPlaybackSnapshot(nextSnapshot);
+      await refreshSongView();
       setStatus(
         dropState.mode === "inside-folder"
           ? `Track movido dentro de ${targetTrack.name}.`
@@ -2992,6 +3001,7 @@ export function TransportPanelContent() {
         parentTrackId: parentTrackId ?? null,
       });
       applyPlaybackSnapshot(nextSnapshot);
+      await refreshSongView();
       setStatus(`Track creado: ${name}`);
     });
   }
@@ -3044,6 +3054,8 @@ export function TransportPanelContent() {
           await runAction(async () => {
             const nextSnapshot = await deleteTrack(track.id);
             applyPlaybackSnapshot(nextSnapshot);
+            clearLibraryDragPreview();
+            await refreshSongView();
             setStatus(`Track borrado: ${track.name}`);
           });
         },
@@ -3061,6 +3073,7 @@ export function TransportPanelContent() {
               parentTrackId: previousFolder.id,
             });
             applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView();
             setStatus(`Track movido dentro de ${previousFolder.name}`);
           });
         },
@@ -3076,6 +3089,7 @@ export function TransportPanelContent() {
               parentTrackId: parentOfParent,
             });
             applyPlaybackSnapshot(nextSnapshot);
+            await refreshSongView();
             setStatus(`Track sacado del folder: ${track.name}`);
           });
         },

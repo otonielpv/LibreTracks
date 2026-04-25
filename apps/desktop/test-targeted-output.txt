@@ -1,0 +1,17 @@
+
+> @libretracks/desktop@0.0.1 test
+> vitest run src/app/App.test.tsx -t clears the arrangement immediately after deleting the only track with a clip|reorders tracks vertically from the header drag handle|allows dragging a track into a folder track
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mC:/Repos/LibreTracks/apps/desktop[39m
+
+ [32mÔ£ô[39m src/app/App.test.tsx [2m([22m[2m32 tests[22m[2m | [22m[33m29 skipped[39m[2m)[22m[33m 2077[2mms[22m[39m
+   [33m[2mÔ£ô[22m[39m App[2m > [22mclears the arrangement immediately after deleting the only track with a clip [33m1152[2mms[22m[39m
+   [33m[2mÔ£ô[22m[39m App[2m > [22mreorders tracks vertically from the header drag handle [33m472[2mms[22m[39m
+   [33m[2mÔ£ô[22m[39m App[2m > [22mallows dragging a track into a folder track [33m451[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m3 passed[39m[22m[2m | [22m[33m29 skipped[39m[90m (32)[39m
+[2m   Start at [22m 13:30:36
+[2m   Duration [22m 4.00s[2m (transform 346ms, setup 0ms, collect 292ms, tests 2.08s, environment 927ms, prepare 240ms)[22m
+

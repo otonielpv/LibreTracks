@@ -2010,19 +2010,19 @@ body {
   background: #2a2a2a;
 }
 
-.lt-track-row.is-drop-target .lt-track-header {
+.lt-track-header-row.is-drop-target .lt-track-header {
   background: #201f1f;
 }
 
-.lt-track-row.is-drop-before .lt-track-header {
+.lt-track-header-row.is-drop-before .lt-track-header {
   box-shadow: inset 0 2px 0 #57f1db;
 }
 
-.lt-track-row.is-drop-after .lt-track-header {
+.lt-track-header-row.is-drop-after .lt-track-header {
   box-shadow: inset 0 -2px 0 #57f1db;
 }
 
-.lt-track-row.is-drop-inside-folder .lt-track-header {
+.lt-track-header-row.is-drop-inside-folder .lt-track-header {
   box-shadow: inset 2px 0 0 #57f1db;
 }
 

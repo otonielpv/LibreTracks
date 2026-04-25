@@ -1,0 +1,42 @@
+
+> @libretracks/desktop@0.0.1 test
+> vitest run src/app/App.test.tsx -t clears the arrangement immediately after deleting the only track with a clip
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mC:/Repos/LibreTracks/apps/desktop[39m
+
+ [31mÔØ»[39m src/app/App.test.tsx [2m([22m[2m32 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m31 skipped[39m[2m)[22m[33m 1099[2mms[22m[39m
+[31m   [31m├ù[31m App[2m > [22mclears the arrangement immediately after deleting the only track with a clip[33m 1098[2mms[22m[31m[39m
+[31m     ÔåÆ expected null to be truthy[39m
+
+ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ» Failed Tests 1 ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»
+
+ FAIL  src/app/App.test.tsx > App > clears the arrangement immediately after deleting the only track with a clip
+AssertionError: expected null to be truthy
+
+- Expected: 
+true
+
++ Received: 
+null
+
+ ÔØ» getLibraryAssetButton src/app/App.test.tsx:147:23
+    145| function getLibraryAssetButton(fileName: string) {
+    146|   const assetButton = document.querySelector(`.lt-library-asset[aria-lÔÇª
+    147|   expect(assetButton).toBeTruthy();
+       |                       ^
+    148|   return assetButton as HTMLButtonElement;
+    149| }
+ ÔØ» src/app/App.test.tsx:657:27
+ ÔØ» ../../node_modules/@testing-library/react/dist/act-compat.js:47:24
+ ÔØ» process.env.NODE_ENV.exports.act ../../node_modules/react/cjs/react.development.js:814:22
+ ÔØ» Proxy.<anonymous> ../../node_modules/@testing-library/react/dist/act-compat.js:46:25
+ ÔØ» src/app/App.test.tsx:656:11
+
+ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»[1/1]ÔÄ»
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m31 skipped[39m[90m (32)[39m
+[2m   Start at [22m 13:29:34
+[2m   Duration [22m 3.06s[2m (transform 344ms, setup 0ms, collect 312ms, tests 1.10s, environment 1.00s, prepare 240ms)[22m
+
