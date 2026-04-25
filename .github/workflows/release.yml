@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run backend Rust tests
+        run: cargo test --locked -p libretracks-core -p libretracks-project -p libretracks-audio
+
+      - name: Build and publish Tauri release
+        uses: tauri-apps/tauri-action@v0.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: 'apps/desktop'
+          tagName: ${{ github.ref_name }}
+          releaseName: LibreTracks ${{ github.ref_name }}
+          releaseBody: See the Assets section to download this version.
+          releaseDraft: false
+          prerelease: false
