@@ -122,6 +122,26 @@ function mockTrackListBounds(container: HTMLElement, width = 1400, height = 500)
   });
 }
 
+function getTrackHeader(container: HTMLElement, trackName: string) {
+  const header = Array.from(container.querySelectorAll(".lt-track-header")).find((candidate) =>
+    candidate.textContent?.includes(trackName),
+  );
+  expect(header).toBeTruthy();
+  return header as HTMLDivElement;
+}
+
+function getTrackLaneRow(container: HTMLElement, trackName: string) {
+  const headerRow = getTrackHeader(container, trackName).closest(".lt-track-header-row") as HTMLDivElement | null;
+  expect(headerRow).toBeTruthy();
+
+  const trackId = headerRow?.dataset.trackId ?? null;
+  expect(trackId).toBeTruthy();
+
+  const laneRow = container.querySelector(`.lt-track-lane-row[data-track-id="${trackId}"]`) as HTMLDivElement | null;
+  expect(laneRow).toBeTruthy();
+  return laneRow as HTMLDivElement;
+}
+
 function getLibraryAssetButton(fileName: string) {
   const assetButton = document.querySelector(`.lt-library-asset[aria-label="${fileName}"]`);
   expect(assetButton).toBeTruthy();
@@ -129,8 +149,10 @@ function getLibraryAssetButton(fileName: string) {
 }
 
 function mockTrackRowDragGeometry(container: HTMLElement) {
-  const rows = Array.from(container.querySelectorAll(".lt-track-row")) as HTMLDivElement[];
+  const rows = Array.from(container.querySelectorAll(".lt-track-lane-row")) as HTMLDivElement[];
+  const headerRows = Array.from(container.querySelectorAll(".lt-track-header-row")) as HTMLDivElement[];
   expect(rows.length).toBeGreaterThan(0);
+  expect(headerRows.length).toBeGreaterThan(0);
 
   rows.forEach((row, index) => {
     const top = 120 + index * 84;
@@ -150,13 +172,37 @@ function mockTrackRowDragGeometry(container: HTMLElement) {
     });
   });
 
+  headerRows.forEach((row, index) => {
+    const top = 120 + index * 84;
+    Object.defineProperty(row, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        left: 0,
+        right: 260,
+        top,
+        bottom: top + 78,
+        width: 260,
+        height: 78,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      }),
+    });
+  });
+
   Object.defineProperty(document, "elementFromPoint", {
     configurable: true,
-    value: vi.fn((_x: number, y: number) => {
-      return rows.find((_, index) => {
+    value: vi.fn((x: number, y: number) => {
+      const rowIndex = rows.findIndex((_, index) => {
         const top = 120 + index * 84;
         return y >= top && y <= top + 78;
-      }) ?? null;
+      });
+
+      if (rowIndex < 0) {
+        return null;
+      }
+
+      return x < 260 ? headerRows[rowIndex] ?? rows[rowIndex] ?? null : rows[rowIndex] ?? headerRows[rowIndex] ?? null;
     }),
   });
 }
@@ -318,7 +364,7 @@ describe("App", () => {
       fireEvent.dragStart(getLibraryAssetButton("drums.wav"), { dataTransfer });
     });
 
-    const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
+    const drumsRow = getTrackLaneRow(container, "Drums");
     expect(drumsRow).toBeTruthy();
     const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
     expect(drumsLane).toBeTruthy();
@@ -357,7 +403,7 @@ describe("App", () => {
       fireEvent.dragStart(getLibraryAssetButton("drums.wav"), { dataTransfer });
     });
 
-    const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
+    const drumsRow = getTrackLaneRow(container, "Drums");
     expect(drumsRow).toBeTruthy();
     const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
     expect(drumsLane).toBeTruthy();
@@ -396,7 +442,7 @@ describe("App", () => {
       fireEvent.dragStart(getLibraryAssetButton("drums.wav"), { dataTransfer });
     });
 
-    const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
+    const drumsRow = getTrackLaneRow(container, "Drums");
     expect(drumsRow).toBeTruthy();
     const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
     expect(drumsLane).toBeTruthy();
@@ -435,7 +481,7 @@ describe("App", () => {
       types: [],
     };
 
-    const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
+    const drumsRow = getTrackLaneRow(container, "Drums");
     expect(drumsRow).toBeTruthy();
     const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
     expect(drumsLane).toBeTruthy();
@@ -447,6 +493,58 @@ describe("App", () => {
 
     expect(await screen.findByText(/clip agregado: drums\.wav/i)).toBeTruthy();
     expect(screen.getByText("5 clips")).toBeTruthy();
+  });
+
+  it("clears stale library clip ghosts after deleting a track", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTrackListBounds(container);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /library/i }));
+    });
+
+    const transferData = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: vi.fn((type: string, value: string) => {
+        transferData.set(type, value);
+      }),
+      getData: vi.fn((type: string) => transferData.get(type) ?? ""),
+    };
+
+    await act(async () => {
+      fireEvent.dragStart(getLibraryAssetButton("drums.wav"), { dataTransfer });
+    });
+
+    const drumsRow = getTrackLaneRow(container, "Drums");
+    expect(drumsRow).toBeTruthy();
+    const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(drumsLane).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.dragOver(drumsLane as HTMLElement, { dataTransfer, clientX: 420, clientY: 160 });
+    });
+
+    expect(container.querySelectorAll(".lt-library-clip-ghost").length).toBeGreaterThan(0);
+
+    const drumsHeader = getTrackHeader(container, "Drums");
+    expect(drumsHeader).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.contextMenu(drumsHeader as HTMLElement, { clientX: 180, clientY: 220 });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /^borrar$/i }));
+    });
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(await screen.findByText(/track borrado: drums/i)).toBeTruthy();
+    expect(container.querySelector(".lt-library-clip-ghost")).toBeNull();
   });
 
   it("drops multiple library assets with the vertical modifier and creates stacked tracks and clips", async () => {
@@ -475,7 +573,7 @@ describe("App", () => {
       getData: vi.fn((type: string) => transferData.get(type) ?? ""),
     };
 
-    const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
+    const drumsRow = getTrackLaneRow(container, "Drums");
     expect(drumsRow).toBeTruthy();
     const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
     expect(drumsLane).toBeTruthy();
@@ -561,7 +659,7 @@ describe("App", () => {
       fireEvent.mouseUp(window, { button: 0, clientX: 320 });
     });
 
-    const drumsRow = screen.getByText("Drums").closest(".lt-track-row");
+    const drumsRow = getTrackLaneRow(container, "Drums");
     expect(drumsRow).toBeTruthy();
     const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
     expect(drumsLane).toBeTruthy();
@@ -881,11 +979,10 @@ describe("App", () => {
     const { container } = await renderApp();
     mockTrackRowDragGeometry(container);
 
-    const dragHandle = screen.getByRole("button", { name: /mover keys/i });
-    expect(dragHandle).toBeTruthy();
+    const keysHeader = getTrackHeader(container, "Keys");
 
     await act(async () => {
-      fireEvent.mouseDown(dragHandle, { button: 0, clientX: 80, clientY: 470 });
+      fireEvent.mouseDown(keysHeader, { button: 0, clientX: 80, clientY: 470 });
     });
 
     await act(async () => {
@@ -900,11 +997,10 @@ describe("App", () => {
     const { container } = await renderApp();
     mockTrackRowDragGeometry(container);
 
-    const dragHandle = screen.getByRole("button", { name: /mover keys/i });
-    expect(dragHandle).toBeTruthy();
+    const keysHeader = getTrackHeader(container, "Keys");
 
     await act(async () => {
-      fireEvent.mouseDown(dragHandle, { button: 0, clientX: 80, clientY: 470 });
+      fireEvent.mouseDown(keysHeader, { button: 0, clientX: 80, clientY: 470 });
     });
 
     await act(async () => {
