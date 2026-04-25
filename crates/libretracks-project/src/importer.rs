@@ -313,12 +313,6 @@ pub fn append_wav_files_to_song(
             .max(analyzed_file.metadata.duration_seconds);
 
         next_song.duration_seconds = new_duration;
-
-        if let Some(last_region) = next_song.regions.last_mut() {
-            if last_region.end_seconds < new_duration {
-                last_region.end_seconds = new_duration;
-            }
-        }
     }
 
     validate_song(&next_song)?;

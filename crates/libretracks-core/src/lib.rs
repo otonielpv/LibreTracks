@@ -78,6 +78,19 @@ mod tests {
     }
 
     #[test]
+    fn allows_regions_beyond_song_duration() {
+        let mut song = valid_song();
+        song.regions.push(SongRegion {
+            id: "region_outro".into(),
+            name: "Outro".into(),
+            start_seconds: 240.0,
+            end_seconds: 360.0,
+        });
+
+        assert!(validate_song(&song).is_ok());
+    }
+
+    #[test]
     fn rejects_clip_that_points_to_unknown_track() {
         let mut song = valid_song();
         song.clips[0].track_id = "missing".into();

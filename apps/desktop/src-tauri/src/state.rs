@@ -2871,16 +2871,10 @@ fn refresh_song_duration(song: &mut Song) {
         .max(max_marker_start)
         .max(song.duration_seconds)
         .max(1.0);
-
-    if let Some(last_region) = song.regions.last_mut() {
-        if last_region.end_seconds < song.duration_seconds {
-            last_region.end_seconds = song.duration_seconds;
-        }
-    }
 }
 
 fn sanitize_region_bounds(
-    song: &Song,
+    _song: &Song,
     start_seconds: f64,
     end_seconds: f64,
 ) -> Result<(f64, f64), DesktopError> {
@@ -2890,10 +2884,8 @@ fn sanitize_region_bounds(
         ));
     }
 
-    let clamped_start_seconds = start_seconds
-        .max(0.0)
-        .min((song.duration_seconds - 0.0001).max(0.0));
-    let clamped_end_seconds = end_seconds.max(0.0).min(song.duration_seconds);
+    let clamped_start_seconds = start_seconds.max(0.0);
+    let clamped_end_seconds = end_seconds.max(clamped_start_seconds + 0.001);
     if clamped_end_seconds <= clamped_start_seconds {
         return Err(DesktopError::AudioCommand(
             "region end must be greater than region start".into(),
@@ -4477,6 +4469,39 @@ mod tests {
     }
 
     #[test]
+    fn duplicating_a_clip_does_not_stretch_the_last_region() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = create_song_folder(root.path(), "clip-duplicate-region-demo")
+            .expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+
+        let mut song = demo_song();
+        song.regions[0].end_seconds = 2.0;
+        save_song(&song_dir, &song).expect("song should save");
+
+        let mut session = DesktopSession::default();
+        session.song_dir = Some(song_dir.clone());
+        session
+            .engine
+            .load_song(song)
+            .expect("song should load into engine");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .duplicate_clip("clip_1", 6.0, &audio)
+            .expect("clip should duplicate without stretching regions");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert!(snapshot.project_revision > 0);
+        assert_eq!(song_view.duration_seconds, 12.0);
+        assert_eq!(song_view.regions.len(), 1);
+        assert_eq!(song_view.regions[0].end_seconds, 2.0);
+    }
+
+    #[test]
     fn scheduling_and_cancelling_a_section_jump_updates_snapshot() {
         let mut session = DesktopSession::default();
         session
@@ -4787,6 +4812,35 @@ mod tests {
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.regions.len(), 1);
+    }
+
+    #[test]
+    fn creating_a_song_region_beyond_song_duration_preserves_its_bounds() {
+        let mut session = session_with_song_dir("region-beyond-duration-demo", demo_song());
+        let song_dir = session.song_dir.clone().expect("song dir should exist");
+
+        let audio = crate::audio_runtime::AudioController::default();
+        let snapshot = session
+            .create_song_region(12.0, 24.0, &audio)
+            .expect("song region should be created beyond song duration");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+        let created_region = song_view
+            .regions
+            .iter()
+            .find(|region| region.start_seconds == 12.0 && region.end_seconds == 24.0)
+            .expect("created region should exist");
+
+        assert!(snapshot.project_revision > 0);
+        assert_eq!(song_view.duration_seconds, 12.0);
+        assert_eq!(song_view.regions.len(), 2);
+        assert_eq!(created_region.name, "Region 1");
+
+        let saved_song = load_song(&song_dir).expect("song json should load");
+        assert_eq!(saved_song.regions.len(), 1);
+        assert_eq!(saved_song.regions[0].end_seconds, 12.0);
     }
 
     #[test]

@@ -426,7 +426,7 @@ mod tests {
 
         let mut song = demo_song();
         song.duration_seconds = 4.0;
-        song.regions[0].end_seconds = 4.0;
+        song.regions[0].end_seconds = 2.0;
         song.clips[0].duration_seconds = 4.0;
         save_song(&song_dir, &song).expect("song should save");
 
@@ -459,6 +459,7 @@ mod tests {
         assert!(song_dir.join("audio").join("click-1.wav").exists());
         assert!(waveform_file_path(&song_dir, "audio/click-1.wav").exists());
         assert!((appended_song.song.duration_seconds - 4.0).abs() < 0.001);
+        assert!((appended_song.song.regions[0].end_seconds - 2.0).abs() < 0.001);
     }
 
     #[test]
