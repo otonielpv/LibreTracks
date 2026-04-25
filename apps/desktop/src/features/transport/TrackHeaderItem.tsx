@@ -37,7 +37,7 @@ type TrackHeaderItemProps = {
   dropMode: "before" | "after" | "inside-folder" | null;
   isDragging: boolean;
   densityClass: string;
-  onSelectTrack: (trackId: string, trackName: string) => void;
+  onSelectTrack: (trackId: string, trackName: string, event: ReactMouseEvent<HTMLDivElement>) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
   onStartTrackDrag: (
     event: ReactMouseEvent<HTMLElement>,
@@ -110,7 +110,7 @@ function TrackHeaderItemComponent({
       role="button"
       tabIndex={0}
       onMouseDown={handleMouseDown}
-      onClick={() => onSelectTrack(trackId, trackName)}
+      onClick={(event) => onSelectTrack(trackId, trackName, event)}
       onContextMenu={(event) => onOpenContextMenu(event, trackId)}
     >
       <div className="lt-track-header-body">

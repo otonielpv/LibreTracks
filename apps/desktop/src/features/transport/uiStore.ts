@@ -13,7 +13,7 @@ type TimelineUIState = {
   cameraX: number;
   zoomLevel: number;
   trackHeight: number;
-  selectedTrackId: string | null;
+  selectedTrackIds: string[];
   selectedClipId: string | null;
   selectedSectionId: string | null;
   snapEnabled: boolean;
@@ -22,11 +22,11 @@ type TimelineUIState = {
   setCameraX: (cameraX: number) => void;
   setZoomLevel: (zoomLevel: number | ((currentZoomLevel: number) => number)) => void;
   setTrackHeight: (trackHeight: number | ((currentTrackHeight: number) => number)) => void;
-  setSelectedTrackId: (trackId: string | null) => void;
+  setSelectedTrackIds: (trackIds: string[]) => void;
   setSelectedClipId: (clipId: string | null) => void;
   setSelectedSectionId: (sectionId: string | null) => void;
   clearSelection: () => void;
-  selectTrack: (trackId: string | null) => void;
+  selectTrack: (trackIds: string[]) => void;
   selectClip: (clipId: string | null, trackId?: string | null) => void;
   selectSection: (sectionId: string | null) => void;
   setSnapEnabled: (enabled: boolean | ((currentSnapEnabled: boolean) => boolean)) => void;
@@ -40,7 +40,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     cameraX: 0,
     zoomLevel: TIMELINE_DEFAULT_ZOOM_LEVEL,
     trackHeight: TIMELINE_DEFAULT_TRACK_HEIGHT,
-    selectedTrackId: null,
+    selectedTrackIds: [],
     selectedClipId: null,
     selectedSectionId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
@@ -61,8 +61,8 @@ export const useTimelineUIStore = create<TimelineUIState>()(
           typeof trackHeight === "function" ? trackHeight(state.trackHeight) : trackHeight,
       }));
     },
-    setSelectedTrackId: (selectedTrackId) => {
-      set({ selectedTrackId });
+    setSelectedTrackIds: (selectedTrackIds) => {
+      set({ selectedTrackIds });
     },
     setSelectedClipId: (selectedClipId) => {
       set({ selectedClipId });
@@ -72,28 +72,28 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     clearSelection: () => {
       set({
-        selectedTrackId: null,
+        selectedTrackIds: [],
         selectedClipId: null,
         selectedSectionId: null,
       });
     },
-    selectTrack: (trackId) => {
+    selectTrack: (selectedTrackIds) => {
       set({
-        selectedTrackId: trackId,
+        selectedTrackIds,
         selectedClipId: null,
         selectedSectionId: null,
       });
     },
-    selectClip: (clipId, trackId = null) => {
+    selectClip: (clipId, _trackId = null) => {
       set({
-        selectedTrackId: trackId,
+        selectedTrackIds: [],
         selectedClipId: clipId,
         selectedSectionId: null,
       });
     },
     selectSection: (sectionId) => {
       set({
-        selectedTrackId: null,
+        selectedTrackIds: [],
         selectedClipId: null,
         selectedSectionId: sectionId,
       });

@@ -725,7 +725,7 @@ export function TransportPanelContent() {
   const zoomLevel = useTimelineUIStore((state) => state.zoomLevel);
   const trackHeight = useTimelineUIStore((state) => state.trackHeight);
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
-  const selectedTrackId = useTimelineUIStore((state) => state.selectedTrackId);
+  const selectedTrackIds = useTimelineUIStore((state) => state.selectedTrackIds);
   const selectedClipId = useTimelineUIStore((state) => state.selectedClipId);
   const selectedSectionId = useTimelineUIStore((state) => state.selectedSectionId);
   const setCameraX = useTimelineUIStore((state) => state.setCameraX);
@@ -735,7 +735,6 @@ export function TransportPanelContent() {
   const setTrackHeight = useTimelineUIStore((state) => state.setTrackHeight);
   const setSnapEnabled = useTimelineUIStore((state) => state.setSnapEnabled);
   const toggleSnapEnabled = useTimelineUIStore((state) => state.toggleSnapEnabled);
-  const setSelectedTrackId = useTimelineUIStore((state) => state.setSelectedTrackId);
   const setSelectedClipId = useTimelineUIStore((state) => state.setSelectedClipId);
   const setSelectedSectionId = useTimelineUIStore((state) => state.setSelectedSectionId);
   const clearSelection = useTimelineUIStore((state) => state.clearSelection);
@@ -2027,14 +2026,33 @@ export function TransportPanelContent() {
         return;
       }
 
-      if (event.key === "Delete" && selectedClipId) {
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (isTextEntryTarget(event.target)) {
+          return;
+        }
+
         event.preventDefault();
-        void runAction(async () => {
-          const nextSnapshot = await deleteClip(selectedClipId);
-          applyPlaybackSnapshot(nextSnapshot);
-          setSelectedClipId(null);
-          setStatus("Clip eliminado.");
-        });
+
+        if (selectedClipId) {
+          void runAction(async () => {
+            const nextSnapshot = await deleteClip(selectedClipId);
+            applyPlaybackSnapshot(nextSnapshot);
+            setSelectedClipId(null);
+            setStatus("Clip eliminado.");
+          });
+        } else if (selectedTrackIds.length > 0) {
+          void runAction(async () => {
+            let lastSnapshot: TransportSnapshot | null = null;
+            for (const trackId of selectedTrackIds) {
+              lastSnapshot = await deleteTrack(trackId);
+            }
+            if (lastSnapshot) {
+              applyPlaybackSnapshot(lastSnapshot);
+            }
+            clearSelection();
+            setStatus(`${selectedTrackIds.length} track(s) eliminado(s).`);
+          });
+        }
       }
     };
 
@@ -2051,6 +2069,7 @@ export function TransportPanelContent() {
     runAction,
     scheduleMarkerJumpWithGlobalMode,
     selectedClipId,
+    selectedTrackIds,
     song,
   ]);
 
@@ -2923,45 +2942,54 @@ export function TransportPanelContent() {
     });
   }
 
-  async function handleTrackDrop(trackId: string, dropState: NonNullable<TrackDropState>) {
+  async function handleTrackDrop(draggedTrackId: string, dropState: NonNullable<TrackDropState>) {
     const targetTrack = tracksById[dropState.targetTrackId] ?? null;
-    if (!song || !targetTrack || trackId === targetTrack.id) {
+    if (!song || !targetTrack || draggedTrackId === targetTrack.id) {
       return;
     }
 
-    const moveArgs =
-      dropState.mode === "inside-folder"
-        ? {
-            trackId,
-            insertAfterTrackId: null,
-            insertBeforeTrackId: null,
-            parentTrackId: targetTrack.id,
-          }
-        : dropState.mode === "before"
-          ? {
-              trackId,
-              insertAfterTrackId: null,
-              insertBeforeTrackId: targetTrack.id,
-              parentTrackId: targetTrack.parentTrackId ?? null,
-            }
-          : {
-              trackId,
-              insertAfterTrackId: targetTrack.id,
-              insertBeforeTrackId: null,
-              parentTrackId: targetTrack.parentTrackId ?? null,
-            };
+    const tracksToMove =
+      selectedTrackIds.includes(draggedTrackId) && selectedTrackIds.length > 1
+        ? selectedTrackIds
+        : [draggedTrackId];
 
     await runAction(async () => {
-      const nextSnapshot = await moveTrack(moveArgs);
-      applyPlaybackSnapshot(nextSnapshot);
+      let lastSnapshot: TransportSnapshot | null = null;
+      for (const trackId of tracksToMove) {
+        if (trackId === targetTrack.id) {
+          continue;
+        }
+
+        const moveArgs =
+          dropState.mode === "inside-folder"
+            ? {
+                trackId,
+                insertAfterTrackId: null,
+                insertBeforeTrackId: null,
+                parentTrackId: targetTrack.id,
+              }
+            : dropState.mode === "before"
+              ? {
+                  trackId,
+                  insertAfterTrackId: null,
+                  insertBeforeTrackId: targetTrack.id,
+                  parentTrackId: targetTrack.parentTrackId ?? null,
+                }
+              : {
+                  trackId,
+                  insertAfterTrackId: targetTrack.id,
+                  insertBeforeTrackId: null,
+                  parentTrackId: targetTrack.parentTrackId ?? null,
+                };
+
+        lastSnapshot = await moveTrack(moveArgs);
+      }
+
+      if (lastSnapshot) {
+        applyPlaybackSnapshot(lastSnapshot);
+      }
       await refreshSongView();
-      setStatus(
-        dropState.mode === "inside-folder"
-          ? `Track movido dentro de ${targetTrack.name}.`
-          : dropState.mode === "before"
-            ? `Track reordenado encima de ${targetTrack.name}.`
-            : `Track reordenado debajo de ${targetTrack.name}.`,
-      );
+      setStatus(`${tracksToMove.length} track(s) reordenado(s).`);
     });
   }
 
@@ -3104,15 +3132,43 @@ export function TransportPanelContent() {
     ];
   }
 
-  const handleTrackHeaderSelect = useCallback((trackId: string, trackName: string) => {
+  const handleTrackHeaderSelect = useCallback((
+    trackId: string,
+    trackName: string,
+    event: ReactMouseEvent<HTMLDivElement>,
+  ) => {
     if (suppressTrackClickRef.current) {
       suppressTrackClickRef.current = false;
       return;
     }
 
-    selectTrack(trackId);
-    setStatus(`Track seleccionado: ${trackName}`);
-  }, [selectTrack]);
+    const currentSelection = useTimelineUIStore.getState().selectedTrackIds;
+    let nextSelection = [trackId];
+
+    if (event.ctrlKey || event.metaKey) {
+      nextSelection = currentSelection.includes(trackId)
+        ? currentSelection.filter((id) => id !== trackId)
+        : [...currentSelection, trackId];
+    } else if (event.shiftKey && currentSelection.length > 0) {
+      const visibleTrackIds = visibleTracks.map((track) => track.id);
+      const lastSelectedIdx = visibleTrackIds.indexOf(currentSelection[currentSelection.length - 1]);
+      const currentIdx = visibleTrackIds.indexOf(trackId);
+
+      if (lastSelectedIdx !== -1 && currentIdx !== -1) {
+        const start = Math.min(lastSelectedIdx, currentIdx);
+        const end = Math.max(lastSelectedIdx, currentIdx);
+        const range = visibleTrackIds.slice(start, end + 1);
+        nextSelection = [...new Set([...currentSelection, ...range])];
+      }
+    }
+
+    selectTrack(nextSelection);
+    setStatus(
+      nextSelection.length > 1
+        ? `${nextSelection.length} tracks seleccionados`
+        : `Track seleccionado: ${trackName}`,
+    );
+  }, [selectTrack, visibleTracks]);
 
   function handleTrackHeaderContextMenu(event: ReactMouseEvent<HTMLDivElement>, trackId: string) {
     const track = findTrack(songRef.current, trackId);
@@ -3120,7 +3176,7 @@ export function TransportPanelContent() {
       return;
     }
 
-    selectTrack(track.id);
+    selectTrack([track.id]);
     openMenu(event, track.name, trackContextMenu(track));
   }
 
@@ -3386,7 +3442,7 @@ export function TransportPanelContent() {
       return;
     }
 
-    selectTrack(track.id);
+    selectTrack([track.id]);
     openMenu(event, track.name, trackContextMenu(track));
   }
 
@@ -4099,7 +4155,7 @@ export function TransportPanelContent() {
         pendingTrackSnapshot,
       });
 
-      selectTrack(targetTrackId);
+      selectTrack([targetTrackId]);
     } else {
       let selectedTrackId: string | null = args.targetTrackId;
       let pendingTrackSnapshot: TransportSnapshot | null = null;
@@ -4138,7 +4194,7 @@ export function TransportPanelContent() {
       });
 
       if (selectedTrackId) {
-        selectTrack(selectedTrackId);
+        selectTrack([selectedTrackId]);
       }
     }
 
@@ -4501,7 +4557,7 @@ export function TransportPanelContent() {
               <TrackHeadersPane
                 song={song}
                 visibleTracks={visibleTracks}
-                selectedTrackId={selectedTrackId}
+                selectedTrackIds={selectedTrackIds}
                 trackHeight={trackHeight}
                 collapsedFolders={collapsedFolders}
                 previewTrackDensityClass={previewTrackDensityClass}

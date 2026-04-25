@@ -12,7 +12,7 @@ type LibraryPreviewRow = {
 type TrackHeadersPaneProps = {
   song: SongView | null;
   visibleTracks: TrackSummary[];
-  selectedTrackId: string | null;
+  selectedTrackIds: string[];
   trackHeight: number;
   collapsedFolders: Set<string>;
   previewTrackDensityClass: string;
@@ -20,7 +20,7 @@ type TrackHeadersPaneProps = {
   shouldShowEmptyArrangementHint: boolean;
   onHeadersWheel: (event: ReactWheelEvent<HTMLDivElement>) => void;
   getTrackChildCount: (trackId: string) => number;
-  onSelectTrack: (trackId: string, trackName: string) => void;
+  onSelectTrack: (trackId: string, trackName: string, event: ReactMouseEvent<HTMLDivElement>) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
   onStartTrackDrag: (event: ReactMouseEvent<HTMLElement>, trackId: string) => void;
   onToggleFolder: (trackId: string) => void;
@@ -35,7 +35,7 @@ type TrackHeadersPaneProps = {
 export function TrackHeadersPane({
   song,
   visibleTracks,
-  selectedTrackId,
+  selectedTrackIds,
   trackHeight,
   collapsedFolders,
   previewTrackDensityClass,
@@ -65,7 +65,7 @@ export function TrackHeadersPane({
         onWheel={onHeadersWheel}
       >
         {song?.tracks && visibleTracks.map((track) => {
-          const isTrackSelected = selectedTrackId === track.id;
+          const isTrackSelected = selectedTrackIds.includes(track.id);
           const childCount = getTrackChildCount(track.id);
           const trackDensityClass =
             trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
