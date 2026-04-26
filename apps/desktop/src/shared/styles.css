@@ -307,8 +307,8 @@ body {
 
 .lt-readout-block strong {
   color: #57f1db;
-  font: 900 1.15rem/1 "Space Grotesk", ui-monospace, "SFMono-Regular", monospace;
-  letter-spacing: -0.02em;
+  font: 900 1.15rem/1 ui-monospace, "Cascadia Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
   width: 9ch;
