@@ -364,11 +364,12 @@ pub(crate) fn musical_position_summary(
             break;
         }
 
-        let beat_duration_seconds = f64::from(beat_frames_for_signature(
+        let beat_duration_seconds = beat_frames_for_signature(
             region.bpm,
             denominator,
             TIMELINE_TIMEBASE_HZ,
-        )) / f64::from(TIMELINE_TIMEBASE_HZ);
+        ) as f64
+            / f64::from(TIMELINE_TIMEBASE_HZ);
         total_beats += (clamped_region_end - region.start_seconds) / beat_duration_seconds;
 
         if clamped_seconds < region.end_seconds {
