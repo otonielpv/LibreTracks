@@ -357,9 +357,12 @@ pub(crate) fn musical_position_summary(
     let clamped_seconds = position_seconds.max(0.0);
     let tempo_regions = build_tempo_regions(song, clamped_seconds);
     let mut total_frames = 0_u64;
+    let mut final_beat_frames =
+        beat_frames_for_signature(song.bpm, denominator, TIMELINE_TIMEBASE_HZ);
 
     for region in tempo_regions {
         let beat_frames = beat_frames_for_signature(region.bpm, denominator, TIMELINE_TIMEBASE_HZ);
+        final_beat_frames = beat_frames;
         let clamped_region_end = clamped_seconds.min(region.end_seconds.max(region.start_seconds));
         if clamped_region_end <= region.start_seconds {
             break;
@@ -387,13 +390,12 @@ pub(crate) fn musical_position_summary(
         }
     }
 
-    let beat_frames = beat_frames_for_signature(song.bpm, denominator, TIMELINE_TIMEBASE_HZ);
-    let total_whole_beats = total_frames / beat_frames;
-    let beat_offset_frames = total_frames % beat_frames;
+    let total_whole_beats = total_frames / final_beat_frames;
+    let beat_offset_frames = total_frames % final_beat_frames;
     let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
     let beat_in_bar = (total_whole_beats % u64::from(beats_per_bar)) as u32 + 1;
-    let sub_beat =
-        (((u128::from(beat_offset_frames)) * 100) / u128::from(beat_frames)).min(99) as u32;
+    let sub_beat = (((u128::from(beat_offset_frames)) * 100) / u128::from(final_beat_frames))
+        .min(99) as u32;
 
     MusicalPositionSummary {
         bar_number,
