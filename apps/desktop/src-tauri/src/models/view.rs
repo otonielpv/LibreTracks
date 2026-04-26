@@ -356,30 +356,27 @@ pub(crate) fn musical_position_summary(
     let beats_per_bar = numerator.max(1);
     let clamped_seconds = position_seconds.max(0.0);
     let tempo_regions = build_tempo_regions(song, clamped_seconds);
-    let mut total_frames = 0_u64;
-    let mut final_beat_frames =
-        beat_frames_for_signature(song.bpm, denominator, TIMELINE_TIMEBASE_HZ);
+    let mut total_beats = 0.0_f64;
 
     for region in tempo_regions {
-        let beat_frames = beat_frames_for_signature(region.bpm, denominator, TIMELINE_TIMEBASE_HZ);
-        final_beat_frames = beat_frames;
         let clamped_region_end = clamped_seconds.min(region.end_seconds.max(region.start_seconds));
         if clamped_region_end <= region.start_seconds {
             break;
         }
 
-        total_frames += seconds_to_timebase_frames(
-            clamped_region_end - region.start_seconds,
+        let beat_duration_seconds = f64::from(beat_frames_for_signature(
+            region.bpm,
+            denominator,
             TIMELINE_TIMEBASE_HZ,
-        );
+        )) / f64::from(TIMELINE_TIMEBASE_HZ);
+        total_beats += (clamped_region_end - region.start_seconds) / beat_duration_seconds;
 
         if clamped_seconds < region.end_seconds {
-            let total_whole_beats = total_frames / beat_frames;
-            let beat_offset_frames = total_frames % beat_frames;
+            let total_whole_beats = (total_beats + f64::EPSILON).floor() as u64;
+            let fractional_beat = (total_beats - total_whole_beats as f64).clamp(0.0, 0.999_999);
             let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
             let beat_in_bar = (total_whole_beats % u64::from(beats_per_bar)) as u32 + 1;
-            let sub_beat =
-                (((u128::from(beat_offset_frames)) * 100) / u128::from(beat_frames)).min(99) as u32;
+            let sub_beat = (fractional_beat * 100.0).floor().min(99.0) as u32;
 
             return MusicalPositionSummary {
                 bar_number,
@@ -390,12 +387,11 @@ pub(crate) fn musical_position_summary(
         }
     }
 
-    let total_whole_beats = total_frames / final_beat_frames;
-    let beat_offset_frames = total_frames % final_beat_frames;
+    let total_whole_beats = (total_beats + f64::EPSILON).floor() as u64;
+    let fractional_beat = (total_beats - total_whole_beats as f64).clamp(0.0, 0.999_999);
     let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
     let beat_in_bar = (total_whole_beats % u64::from(beats_per_bar)) as u32 + 1;
-    let sub_beat = (((u128::from(beat_offset_frames)) * 100) / u128::from(final_beat_frames))
-        .min(99) as u32;
+    let sub_beat = (fractional_beat * 100.0).floor().min(99.0) as u32;
 
     MusicalPositionSummary {
         bar_number,
