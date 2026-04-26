@@ -3098,7 +3098,7 @@ mod tests {
 
     use libretracks_audio::{JumpTrigger, PlaybackState};
     use libretracks_core::{
-        Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind,
+        Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, Track, TrackKind,
     };
     use libretracks_project::{
         create_song_folder, generate_waveform_summary, load_song, save_song, SONG_FILE_NAME,

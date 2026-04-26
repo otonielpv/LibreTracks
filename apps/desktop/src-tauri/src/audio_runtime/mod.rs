@@ -34,7 +34,8 @@ use self::backend::{
 };
 #[cfg(test)]
 use self::mixer::{
-    apply_runtime_pan, build_live_mix_map, interpolated_gain, resolve_track_runtime_pan,
+    apply_runtime_pan, build_live_mix_map, build_playback_plans, interpolated_gain,
+    resolve_track_runtime_pan, PlaybackClipPlan,
 };
 use self::mixer::{replace_shared_live_mix, update_shared_track_mix, LiveTrackMix, Mixer};
 #[cfg(test)]
@@ -974,22 +975,10 @@ mod tests {
         channels: usize,
     ) -> AudioBufferCache {
         let cache = AudioBufferCache::default();
-        cache
-            .entries
-            .write()
-            .expect("audio cache should lock")
-            .insert(
-                path.to_path_buf(),
-                Arc::new(SharedAudioSource {
-                    file_path: path.to_path_buf(),
-                    mapped_audio: None,
-                    preload_frame_count: samples.len() / channels.max(1),
-                    preload_samples: samples,
-                    sample_rate,
-                    channels,
-                    fully_cached: true,
-                }),
-            );
+        cache.insert_for_test(
+            path.to_path_buf(),
+            SharedAudioSource::from_preloaded(samples, sample_rate, channels, true),
+        );
         cache
     }
 
@@ -1293,7 +1282,7 @@ mod tests {
 
         assert_eq!(mixed, [0.25, -0.25, 0.5, -0.5]);
         assert!(reader.eof);
-        assert_eq!(reader.current_frame, 2);
+        assert_eq!(reader.current_frame(), 2);
     }
 
     #[test]
@@ -1455,6 +1444,7 @@ mod tests {
             2,
             Arc::new(RwLock::new(None)),
             shared_mix_state(&song),
+            Arc::new(RwLock::new(AppSettings::default())),
             AudioDebugConfig {
                 enabled: false,
                 log_commands: false,
@@ -1485,36 +1475,14 @@ mod tests {
         let song = demo_song();
         let song_dir = PathBuf::from("song");
         let cache = AudioBufferCache::default();
-        cache
-            .entries
-            .write()
-            .expect("audio cache should lock")
-            .extend([
-                (
-                    song_dir.join("audio/intro.wav"),
-                    Arc::new(SharedAudioSource {
-                        file_path: song_dir.join("audio/intro.wav"),
-                        mapped_audio: None,
-                        preload_frame_count: 48_000 * 5,
-                        preload_samples: vec![0.0; 48_000 * 10],
-                        sample_rate: 48_000,
-                        channels: 2,
-                        fully_cached: true,
-                    }),
-                ),
-                (
-                    song_dir.join("audio/late.wav"),
-                    Arc::new(SharedAudioSource {
-                        file_path: song_dir.join("audio/late.wav"),
-                        mapped_audio: None,
-                        preload_frame_count: 48_000 * 5,
-                        preload_samples: vec![0.0; 48_000 * 10],
-                        sample_rate: 48_000,
-                        channels: 2,
-                        fully_cached: true,
-                    }),
-                ),
-            ]);
+        cache.insert_for_test(
+            song_dir.join("audio/intro.wav"),
+            SharedAudioSource::from_preloaded(vec![0.0; 48_000 * 10], 48_000, 2, true),
+        );
+        cache.insert_for_test(
+            song_dir.join("audio/late.wav"),
+            SharedAudioSource::from_preloaded(vec![0.0; 48_000 * 10], 48_000, 2, true),
+        );
 
         let live_mix_state = shared_mix_state(&song);
         let render_iterations = Arc::new(AtomicU64::new(0));
@@ -1538,6 +1506,7 @@ mod tests {
                     2,
                     Arc::new(RwLock::new(None)),
                     live_mix_state,
+                    Arc::new(RwLock::new(AppSettings::default())),
                     AudioDebugConfig {
                         enabled: false,
                         log_commands: false,
@@ -1625,7 +1594,7 @@ mod tests {
         reader.mix_into_with_channel_gains(&mut mixed, 0, 1, 2, 1.0, 0.0);
 
         assert_eq!(mixed, [0.3, 0.4]);
-        assert_eq!(reader.current_frame, 2);
+        assert_eq!(reader.current_frame(), 2);
         assert!(!reader.eof);
     }
 
@@ -1651,7 +1620,7 @@ mod tests {
         )
         .expect("memory reader should open");
 
-        assert_eq!(reader.current_frame, 2);
+        assert_eq!(reader.current_frame(), 2);
         assert!(!reader.eof);
     }
 
@@ -1663,11 +1632,11 @@ mod tests {
 
         let source = prepare_audio_source(&audio_path).expect("audio source should prepare");
 
-        assert_eq!(source.sample_rate, 8_000);
-        assert_eq!(source.channels, 1);
-        assert_eq!(source.preload_frame_count, 8_000 * 4);
-        assert!(source.fully_cached);
-        assert!(source.mapped_audio.is_some());
+        assert_eq!(source.sample_rate(), 8_000);
+        assert_eq!(source.channels(), 1);
+        assert_eq!(source.preload_frame_count(), 8_000 * 4);
+        assert!(source.is_fully_cached());
+        assert!(source.has_mapped_audio());
     }
 
     #[test]
@@ -1678,12 +1647,12 @@ mod tests {
 
         let source = prepare_audio_source(&audio_path).expect("audio source should prepare");
 
-        assert_eq!(source.sample_rate, 48_000);
-        assert_eq!(source.channels, 1);
-        assert_eq!(source.preload_frame_count, 2);
-        assert!(source.mapped_audio.is_some());
-        assert!((source.read_preloaded_sample(0, 0, 1) - 0.25).abs() < 0.000_001);
-        assert!((source.read_preloaded_sample(1, 0, 1) + 0.5).abs() < 0.000_001);
+        assert_eq!(source.sample_rate(), 48_000);
+        assert_eq!(source.channels(), 1);
+        assert_eq!(source.preload_frame_count(), 2);
+        assert!(source.has_mapped_audio());
+        assert!((source.read_preloaded_sample_for_test(0, 0, 1) - 0.25).abs() < 0.000_001);
+        assert!((source.read_preloaded_sample_for_test(1, 0, 1) + 0.5).abs() < 0.000_001);
     }
 
     #[test]
@@ -1693,14 +1662,10 @@ mod tests {
         write_counting_test_wav(&audio_path, 8_000, 8_000 * 3);
 
         let cache = AudioBufferCache::default();
-        cache
-            .entries
-            .write()
-            .expect("audio cache should lock")
-            .insert(
-                audio_path.clone(),
-                Arc::new(prepare_audio_source(&audio_path).expect("audio source should prepare")),
-            );
+        cache.insert_for_test(
+            audio_path.clone(),
+            prepare_audio_source(&audio_path).expect("audio source should prepare"),
+        );
 
         let mut reader = MemoryClipReader::open(
             &PlaybackClipPlan {
@@ -1727,7 +1692,7 @@ mod tests {
 
         assert!(mixed[0].abs() > 0.01);
         assert!(right_peak.abs() > 0.01);
-        assert!(reader.shared_source.mapped_audio.is_some());
+        assert!(reader.shared_source().has_mapped_audio());
     }
 
     #[test]
@@ -1735,36 +1700,14 @@ mod tests {
         let song = demo_song();
         let song_dir = PathBuf::from("song");
         let cache = AudioBufferCache::default();
-        cache
-            .entries
-            .write()
-            .expect("audio cache should lock")
-            .extend([
-                (
-                    song_dir.join("audio/intro.wav"),
-                    Arc::new(SharedAudioSource {
-                        file_path: song_dir.join("audio/intro.wav"),
-                        mapped_audio: None,
-                        preload_frame_count: 48_000 * 5,
-                        preload_samples: vec![0.0; 48_000 * 5],
-                        sample_rate: 48_000,
-                        channels: 1,
-                        fully_cached: true,
-                    }),
-                ),
-                (
-                    song_dir.join("audio/late.wav"),
-                    Arc::new(SharedAudioSource {
-                        file_path: song_dir.join("audio/late.wav"),
-                        mapped_audio: None,
-                        preload_frame_count: 48_000 * 5,
-                        preload_samples: vec![0.0; 48_000 * 5],
-                        sample_rate: 48_000,
-                        channels: 1,
-                        fully_cached: true,
-                    }),
-                ),
-            ]);
+        cache.insert_for_test(
+            song_dir.join("audio/intro.wav"),
+            SharedAudioSource::from_preloaded(vec![0.0; 48_000 * 5], 48_000, 1, true),
+        );
+        cache.insert_for_test(
+            song_dir.join("audio/late.wav"),
+            SharedAudioSource::from_preloaded(vec![0.0; 48_000 * 5], 48_000, 1, true),
+        );
 
         let mut mixer = Mixer::new(
             song_dir,
@@ -1774,6 +1717,7 @@ mod tests {
             1,
             Arc::new(RwLock::new(None)),
             shared_mix_state(&song),
+            Arc::new(RwLock::new(AppSettings::default())),
             AudioDebugConfig {
                 enabled: false,
                 log_commands: false,
@@ -1781,18 +1725,18 @@ mod tests {
             cache,
         );
 
-        assert_eq!(mixer.plans.len(), 2);
+        assert_eq!(mixer.plans().len(), 2);
         assert_eq!(mixer.timeline_cursor_frame, 0);
-        assert_eq!(mixer.active_clips.len(), 1);
-        assert_eq!(mixer.active_clips[0].plan.clip_id, "clip_intro");
+        assert_eq!(mixer.active_clips().len(), 1);
+        assert_eq!(mixer.active_clips()[0].plan().clip_id, "clip_intro");
 
         mixer.seek(song, 11.0);
 
-        assert_eq!(mixer.plans.len(), 2);
+        assert_eq!(mixer.plans().len(), 2);
         assert_eq!(mixer.timeline_cursor_frame, 48_000 * 11);
-        assert_eq!(mixer.active_clips.len(), 1);
-        assert_eq!(mixer.active_clips[0].plan.clip_id, "clip_late");
-        assert_eq!(mixer.active_clips[0].reader.current_frame, 48_000);
+        assert_eq!(mixer.active_clips().len(), 1);
+        assert_eq!(mixer.active_clips()[0].plan().clip_id, "clip_late");
+        assert_eq!(mixer.active_clips()[0].reader_current_frame(), 48_000);
     }
 
     #[test]

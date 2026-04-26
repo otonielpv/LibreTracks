@@ -73,7 +73,7 @@ impl PlaybackClipPlan {
             .saturating_add(self.duration_frames)
     }
 
-    fn edge_gain(&self, clip_frame_position: u64) -> f32 {
+    pub(crate) fn edge_gain(&self, clip_frame_position: u64) -> f32 {
         let fade_in_gain = if self.fade_in_frames == 0 || clip_frame_position >= self.fade_in_frames
         {
             1.0
@@ -379,7 +379,7 @@ impl Mixer {
             .collect()
     }
 
-    fn roll_up_folder_track_meters(&self, track_meters: &mut [AudioMeterLevel]) {
+    pub(crate) fn roll_up_folder_track_meters(&self, track_meters: &mut [AudioMeterLevel]) {
         for track_index in (0..self.song.tracks.len()).rev() {
             let track = &self.song.tracks[track_index];
             if track.kind != TrackKind::Folder {
@@ -409,6 +409,28 @@ impl Mixer {
         if let Ok(live_mix_state) = self.live_mix_state.try_read() {
             self.cached_live_mix = LiveMixSnapshot::from_tracks(&live_mix_state);
         }
+    }
+}
+
+#[cfg(test)]
+impl Mixer {
+    pub(crate) fn plans(&self) -> &[PlaybackClipPlan] {
+        &self.plans
+    }
+
+    pub(crate) fn active_clips(&self) -> &[MixClipState] {
+        &self.active_clips
+    }
+}
+
+#[cfg(test)]
+impl MixClipState {
+    pub(crate) fn plan(&self) -> &PlaybackClipPlan {
+        &self.plan
+    }
+
+    pub(crate) fn reader_current_frame(&self) -> usize {
+        self.reader.current_frame()
     }
 }
 
@@ -548,7 +570,7 @@ pub(crate) fn interpolated_gain(
     start_gain + (target_gain - start_gain) * gain_ratio
 }
 
-fn build_playback_plans(
+pub(crate) fn build_playback_plans(
     song_dir: &Path,
     song: &Song,
     output_sample_rate: u32,

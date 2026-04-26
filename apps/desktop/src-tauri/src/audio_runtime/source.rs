@@ -62,8 +62,41 @@ pub(crate) struct ParsedWavLayout {
 }
 
 impl SharedAudioSource {
+    pub(crate) fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    pub(crate) fn channels(&self) -> usize {
+        self.channels
+    }
+
     pub(crate) fn preload_frame_count(&self) -> usize {
         self.preload_frame_count
+    }
+
+    pub(crate) fn is_fully_cached(&self) -> bool {
+        self.fully_cached
+    }
+
+    pub(crate) fn has_mapped_audio(&self) -> bool {
+        self.mapped_audio.is_some()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_preloaded(
+        preload_samples: Vec<f32>,
+        sample_rate: u32,
+        channels: usize,
+        fully_cached: bool,
+    ) -> Self {
+        Self {
+            preload_frame_count: preload_samples.len() / channels.max(1),
+            preload_samples,
+            mapped_audio: None,
+            sample_rate: sample_rate.max(1),
+            channels: channels.max(1),
+            fully_cached,
+        }
     }
 
     fn preload_bytes(&self) -> usize {
@@ -122,6 +155,16 @@ impl SharedAudioSource {
 
         self.preload_samples[sample_index + source_channel]
     }
+
+    #[cfg(test)]
+    pub(crate) fn read_preloaded_sample_for_test(
+        &self,
+        frame_index: usize,
+        channel: usize,
+        output_channels: usize,
+    ) -> f32 {
+        self.read_preloaded_sample(frame_index, channel, output_channels)
+    }
 }
 
 impl MappedAudioSource {
@@ -168,6 +211,18 @@ impl MappedAudioSource {
 }
 
 impl AudioBufferCache {
+    #[cfg(test)]
+    pub(crate) fn insert_for_test(
+        &self,
+        file_path: PathBuf,
+        source: SharedAudioSource,
+    ) {
+        self.entries
+            .write()
+            .expect("audio cache should lock")
+            .insert(file_path, Arc::new(source));
+    }
+
     pub(crate) fn replace_song_buffers(&self, song_dir: &Path, song: &Song) -> Result<(), String> {
         let mut unique_paths = Vec::new();
         let mut seen_paths = HashSet::new();
@@ -278,6 +333,16 @@ impl MemoryClipReader {
     #[cfg(test)]
     pub(crate) fn seek_to(&mut self, target_frame: usize) {
         let _ = self.seek_to_internal(target_frame);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn current_frame(&self) -> usize {
+        self.current_frame
+    }
+
+    #[cfg(test)]
+    pub(crate) fn shared_source(&self) -> &SharedAudioSource {
+        &self.shared_source
     }
 
     pub(crate) fn mix_into_with_channel_gains(
