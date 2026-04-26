@@ -813,6 +813,8 @@ mod tests {
     use rtrb::RingBuffer;
     use tempfile::tempdir;
 
+    use crate::settings::AppSettings;
+
     use super::{
         apply_runtime_pan, build_live_mix_map, build_playback_plans, coalesce_sync_song_commands,
         drain_consumer_samples, env_flag, interpolated_gain, playback_reason_label,
