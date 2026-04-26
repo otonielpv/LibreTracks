@@ -307,16 +307,17 @@ body {
 
 .lt-readout-block strong {
   color: #57f1db;
-  font: 900 1.15rem/1 Inter, sans-serif;
+  font: 900 1.15rem/1 "Space Grotesk", ui-monospace, "SFMono-Regular", monospace;
   letter-spacing: -0.02em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
+  width: 9ch;
+  text-align: right;
 }
 
 .lt-readout-block.is-timecode strong {
   color: #e5e2e1;
-  min-width: 7.75ch;
-  text-align: right;
+  width: 11ch;
 }
 
 .transport-pill {
