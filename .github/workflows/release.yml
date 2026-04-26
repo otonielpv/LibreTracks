@@ -38,7 +38,9 @@ jobs:
         run: cargo test --locked -p libretracks-core -p libretracks-project -p libretracks-audio
 
       - name: Run desktop Rust tests
-        run: cargo test --locked -p libretracks-desktop
+        env:
+          LIBRETRACKS_DUMMY_AUDIO: "1"
+        run: cargo test --locked -p libretracks-desktop -- --test-threads=1
 
   release:
     needs: test

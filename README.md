@@ -66,7 +66,14 @@ npm run check:desktop:native
 # Frontend tests and lint/typecheck
 npm run test:desktop
 npm run lint
+
+# Headless desktop Rust tests on Windows CI or machines without audio hardware
+LIBRETRACKS_DUMMY_AUDIO=1 cargo test --locked -p libretracks-desktop -- --test-threads=1
 ```
+
+When `LIBRETRACKS_DUMMY_AUDIO` is set to `1` or `true`, the desktop audio runtime skips `cpal` device discovery and falls back to the existing null playback backend. This is intended for headless Windows CI, where WASAPI initialization can fail without audio hardware.
+
+The desktop Rust test command above also forces `--test-threads=1`. That keeps tests deterministic when temporary WAV fixtures are backed by `memmap2`, so mapped files are released predictably before Windows tears down the temp directory.
 
 ## Project Structure
 

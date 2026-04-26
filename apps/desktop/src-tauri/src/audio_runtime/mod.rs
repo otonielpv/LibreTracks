@@ -675,8 +675,8 @@ fn run_audio_thread(
             }
             AudioCommand::Shutdown => {
                 debug_state.record_command(AudioCommandKind::Shutdown, None);
-                if let Some(runtime) = runtime.as_mut() {
-                    runtime.stop_all();
+                if let Some(mut active_runtime) = runtime.take() {
+                    active_runtime.stop_all();
                 }
                 break;
             }
@@ -721,6 +721,13 @@ pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> 
 }
 
 fn resolve_output_device(host: &cpal::Host, selected_device_name: Option<&str>) -> Option<Device> {
+    if std::env::var("LIBRETRACKS_DUMMY_AUDIO")
+        .ok()
+        .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true"))
+    {
+        return None;
+    }
+
     if let Some(selected_device_name) = selected_device_name {
         let normalized_name = selected_device_name.trim();
         if !normalized_name.is_empty() {
