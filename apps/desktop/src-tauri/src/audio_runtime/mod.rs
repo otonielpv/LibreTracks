@@ -74,6 +74,7 @@ pub struct AudioController {
     app_handle: SharedAppHandle,
     live_mix_state: SharedTrackMixState,
     audio_settings: SharedAudioSettings,
+    audio_thread_handle: Option<JoinHandle<()>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -263,7 +264,7 @@ impl AudioController {
         let runtime_live_mix_state = live_mix_state.clone();
         let runtime_audio_settings = audio_settings.clone();
 
-        thread::Builder::new()
+        let audio_thread_handle = thread::Builder::new()
             .name("libretracks-audio".into())
             .spawn(move || {
                 run_audio_thread(
@@ -283,6 +284,7 @@ impl AudioController {
             app_handle,
             live_mix_state,
             audio_settings,
+            audio_thread_handle: Some(audio_thread_handle),
         }
     }
 
@@ -417,6 +419,9 @@ impl Default for AudioController {
 impl Drop for AudioController {
     fn drop(&mut self) {
         let _ = self.sender.send(AudioCommand::Shutdown);
+        if let Some(audio_thread_handle) = self.audio_thread_handle.take() {
+            let _ = audio_thread_handle.join();
+        }
     }
 }
 
