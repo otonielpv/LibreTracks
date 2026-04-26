@@ -15,6 +15,7 @@ type TimelineTopbarProps = {
   musicalPositionLabel: string;
   readoutPositionSecondsLabel: string;
   playbackState: PlaybackState;
+  transportReadoutTempoRef: RefObject<HTMLElement | null>;
   transportReadoutBarRef: RefObject<HTMLElement | null>;
   transportReadoutValueRef: RefObject<HTMLElement | null>;
   onToggleTopMenu: (menuKey: "file") => void;
@@ -42,6 +43,7 @@ export function TimelineTopbar({
   musicalPositionLabel,
   readoutPositionSecondsLabel,
   playbackState,
+  transportReadoutTempoRef,
   transportReadoutBarRef,
   transportReadoutValueRef,
   onToggleTopMenu,
@@ -160,7 +162,7 @@ export function TimelineTopbar({
           <div className="lt-transport-readout">
             <div className="lt-readout-block">
               <span>{t("timelineTopbar.tempoReadout")}</span>
-              <strong>{`${(Number.isFinite(displayedBpm) ? displayedBpm : fallbackBpm).toFixed(2)} BPM`}</strong>
+              <strong ref={transportReadoutTempoRef}>{`${(Number.isFinite(displayedBpm) ? displayedBpm : fallbackBpm).toFixed(2)} BPM`}</strong>
             </div>
             <div className="lt-readout-block">
               <span>{t("timelineTopbar.barReadout")}</span>

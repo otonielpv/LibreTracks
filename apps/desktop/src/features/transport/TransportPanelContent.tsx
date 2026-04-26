@@ -791,6 +791,7 @@ export function TransportPanelContent() {
   const suppressTrackClickRef = useRef(false);
   const renderMetricTimeoutRef = useRef<number | null>(null);
   const pendingRenderMetricRef = useRef(0);
+  const transportReadoutTempoRef = useRef<HTMLElement | null>(null);
   const transportReadoutValueRef = useRef<HTMLElement | null>(null);
   const transportReadoutBarRef = useRef<HTMLElement | null>(null);
   const songDurationSecondsRef = useRef(0);
@@ -2434,16 +2435,20 @@ export function TransportPanelContent() {
       ?? songRef.current?.durationSeconds
       ?? 0;
     const clampedPosition = clamp(positionSeconds, 0, durationSeconds || Number.MAX_SAFE_INTEGER);
+    const timingRegion = getSongTempoRegionAtPosition(songRef.current, clampedPosition);
+    const displayedTempo = timingRegion?.bpm ?? getSongBaseBpm(songRef.current);
 
     displayPositionSecondsRef.current = clampedPosition;
+
+    if (transportReadoutTempoRef.current) {
+      transportReadoutTempoRef.current.textContent = `${displayedTempo.toFixed(2)} BPM`;
+    }
 
     if (transportReadoutValueRef.current) {
       transportReadoutValueRef.current.textContent = formatClock(clampedPosition);
     }
 
     if (transportReadoutBarRef.current) {
-      const timingRegion =
-        getSongRegionAtPosition(songRef.current, clampedPosition) ?? getPrimarySongRegion(songRef.current);
       transportReadoutBarRef.current.textContent = formatMusicalPosition(
         clampedPosition,
         songRef.current,
@@ -4608,6 +4613,7 @@ export function TransportPanelContent() {
         musicalPositionLabel={musicalPositionLabel}
         readoutPositionSecondsLabel={formatClock(readoutPositionSeconds)}
         playbackState={playbackState}
+        transportReadoutTempoRef={transportReadoutTempoRef}
         transportReadoutBarRef={transportReadoutBarRef}
         transportReadoutValueRef={transportReadoutValueRef}
         onToggleTopMenu={handleToggleTopMenu}

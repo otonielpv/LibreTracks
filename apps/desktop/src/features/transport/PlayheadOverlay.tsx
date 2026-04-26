@@ -121,8 +121,15 @@ export function PlayheadOverlay({
       const activeDrag = dragStateRef.current;
       const effectivePixelsPerSecond =
         latestPropsRef.current.livePixelsPerSecondRef?.current ?? latestPropsRef.current.pixelsPerSecond;
+      const sharedPositionSeconds = latestPropsRef.current.positionSecondsRef?.current;
       const nextSeconds = activeDrag
         ? activeDrag.currentSeconds
+        : typeof sharedPositionSeconds === "number"
+          ? clamp(
+              sharedPositionSeconds,
+              0,
+              Math.max(0, latestPropsRef.current.durationSeconds),
+            )
         : playbackRef.current.playbackState === "playing" && playbackRef.current.transportClock?.running
           ? resolveClockPositionSeconds(playbackRef.current, latestPropsRef.current.durationSeconds)
           : clamp(
