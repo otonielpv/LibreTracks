@@ -252,6 +252,7 @@ async fn run_remote_command_bridge(
             RemoteCommand::Pause => emit_transport_lifecycle_event(&app, "pause", &snapshot),
             RemoteCommand::Stop => emit_transport_lifecycle_event(&app, "stop", &snapshot),
             RemoteCommand::Seek { .. } => emit_transport_lifecycle_event(&app, "seek", &snapshot),
+            RemoteCommand::ToggleVamp { .. } => emit_transport_lifecycle_event(&app, "vamp", &snapshot),
             _ => {}
         }
 
