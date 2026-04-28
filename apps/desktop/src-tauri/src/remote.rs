@@ -19,7 +19,7 @@ pub struct RemoteServiceState {
 }
 
 pub fn initialize_remote(app: &App) -> Result<(), String> {
-    let static_dir = resolve_remote_static_dir();
+    let static_dir = resolve_remote_static_dir(app);
     let runtime = tauri::async_runtime::block_on(spawn_remote_server(
         DEFAULT_REMOTE_PORT,
         static_dir,
@@ -49,29 +49,43 @@ pub fn remote_server_info(app: &AppHandle) -> RemoteServerInfo {
     app.state::<RemoteServiceState>().handle.info().clone()
 }
 
-fn resolve_remote_static_dir() -> Option<PathBuf> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let candidate_roots = [
-        std::env::current_dir().ok(),
-        Some(manifest_dir.clone()),
-        manifest_dir.parent().map(PathBuf::from),
-        manifest_dir.parent().and_then(|path| path.parent()).map(PathBuf::from),
-        manifest_dir
-            .parent()
-            .and_then(|path| path.parent())
-            .and_then(|path| path.parent())
-            .map(PathBuf::from),
-    ];
-
-    for candidate_root in candidate_roots.into_iter().flatten() {
-        let direct_dist = candidate_root.join("apps").join("remote").join("dist");
-        if direct_dist.join("index.html").exists() {
-            return Some(direct_dist);
+fn resolve_remote_static_dir(app: &App) -> Option<PathBuf> {
+    #[cfg(not(debug_assertions))]
+    {
+        if let Ok(resource_dir) = app.path().resource_dir() {
+            let remote_dist = resource_dir.join("remote-dist");
+            if remote_dist.exists() {
+                return Some(remote_dist);
+            }
         }
+    }
 
-        let sibling_dist = candidate_root.join("remote").join("dist");
-        if sibling_dist.join("index.html").exists() {
-            return Some(sibling_dist);
+    #[cfg(debug_assertions)]
+    {
+        let _ = app; // unused in dev
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let candidate_roots = [
+            std::env::current_dir().ok(),
+            Some(manifest_dir.clone()),
+            manifest_dir.parent().map(PathBuf::from),
+            manifest_dir.parent().and_then(|path| path.parent()).map(PathBuf::from),
+            manifest_dir
+                .parent()
+                .and_then(|path| path.parent())
+                .and_then(|path| path.parent())
+                .map(PathBuf::from),
+        ];
+
+        for candidate_root in candidate_roots.into_iter().flatten() {
+            let direct_dist = candidate_root.join("apps").join("remote").join("dist");
+            if direct_dist.join("index.html").exists() {
+                return Some(direct_dist);
+            }
+
+            let sibling_dist = candidate_root.join("remote").join("dist");
+            if sibling_dist.join("index.html").exists() {
+                return Some(sibling_dist);
+            }
         }
     }
 

@@ -83,6 +83,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Build remote frontend
+        run: npm run build:remote
+
       - name: Build and publish Tauri release
         uses: tauri-apps/tauri-action@v0.5
         env:
