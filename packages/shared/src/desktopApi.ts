@@ -112,6 +112,10 @@ export async function getAudioOutputDevices(): Promise<AudioOutputDevices> {
   return invokeCommand<AudioOutputDevices>("get_audio_output_devices");
 }
 
+export async function getMidiInputs(): Promise<string[]> {
+  return invokeCommand<string[]>("get_midi_inputs");
+}
+
 export async function getRemoteServerInfo(): Promise<RemoteServerInfo> {
   return invokeCommand<RemoteServerInfo>("get_remote_server_info");
 }

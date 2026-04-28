@@ -36,6 +36,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     saveSettings: vi.fn(testDesktopApiMock.saveSettings),
     updateAudioSettings: vi.fn(testDesktopApiMock.updateAudioSettings),
     getAudioOutputDevices: vi.fn(testDesktopApiMock.getAudioOutputDevices),
+    getMidiInputs: vi.fn(testDesktopApiMock.getMidiInputs),
     reportUiRenderMetric: vi.fn(testDesktopApiMock.reportUiRenderMetric),
     createSong: vi.fn(testDesktopApiMock.createSong),
     saveProject: vi.fn(testDesktopApiMock.saveProject),

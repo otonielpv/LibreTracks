@@ -23,10 +23,11 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio_runtime::{AudioController, PlaybackStartReason};
 use crate::error::DesktopError;
+use crate::midi::MidiManager;
 use crate::models::view::{
     active_vamp_to_summary, empty_musical_position_summary, marker_to_summary,
-    musical_position_summary, pending_jump_to_summary, song_to_view,
-    waveform_key_for_file_path, waveform_summary_to_dto,
+    musical_position_summary, pending_jump_to_summary, song_to_view, waveform_key_for_file_path,
+    waveform_summary_to_dto,
 };
 use crate::models::{
     DesktopPerformanceSnapshot, LibraryAssetSummary, SongView, TransportClockSummary,
@@ -60,6 +61,7 @@ pub struct WaveformGenerationQueue {
 
 pub struct DesktopState {
     pub audio: AudioController,
+    pub midi: MidiManager,
     pub waveform_jobs: WaveformGenerationQueue,
     pub session: Mutex<DesktopSession>,
 }
@@ -68,6 +70,7 @@ impl Default for DesktopState {
     fn default() -> Self {
         Self {
             audio: AudioController::default(),
+            midi: MidiManager::default(),
             waveform_jobs: WaveformGenerationQueue::default(),
             session: Mutex::new(DesktopSession::default()),
         }
@@ -866,10 +869,14 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<AppSettings, DesktopError> {
         let previous_settings = audio.current_settings()?;
-        let device_changed = previous_settings.selected_output_device != next_settings.selected_output_device;
-        let split_changed = previous_settings.split_stereo_enabled != next_settings.split_stereo_enabled;
+        let device_changed =
+            previous_settings.selected_output_device != next_settings.selected_output_device;
+        let midi_changed =
+            previous_settings.selected_midi_device != next_settings.selected_midi_device;
+        let split_changed =
+            previous_settings.split_stereo_enabled != next_settings.split_stereo_enabled;
 
-        if !device_changed && !split_changed {
+        if !device_changed && !midi_changed && !split_changed {
             return Ok(next_settings);
         }
 
@@ -2067,7 +2074,8 @@ impl DesktopSession {
                 if let Some(target_position) = self.engine.complete_pending_fade_jump()? {
                     self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
                     audio.start_master_fade(1.0, duration_seconds)?;
-                    self.transport_clock.note_jump_while_playing(target_position);
+                    self.transport_clock
+                        .note_jump_while_playing(target_position);
                     self.capture_transport_drift_sample(
                         audio,
                         "jump",
@@ -3511,7 +3519,12 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session
-            .schedule_marker_jump("section_1", JumpTrigger::Immediate, TransitionType::Instant, &audio)
+            .schedule_marker_jump(
+                "section_1",
+                JumpTrigger::Immediate,
+                TransitionType::Instant,
+                &audio,
+            )
             .expect("immediate jump should execute");
 
         assert_eq!(snapshot.transport_clock.anchor_position_seconds, 1.0);
@@ -3728,7 +3741,12 @@ mod tests {
         session.seek(3.95, &audio).expect("seek should succeed");
         session.play(&audio).expect("play should succeed");
         session
-            .schedule_marker_jump("section_3", JumpTrigger::NextMarker, TransitionType::Instant, &audio)
+            .schedule_marker_jump(
+                "section_3",
+                JumpTrigger::NextMarker,
+                TransitionType::Instant,
+                &audio,
+            )
             .expect("jump should schedule");
 
         thread::sleep(Duration::from_millis(70));
@@ -4687,7 +4705,12 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let scheduled_snapshot = session
-            .schedule_marker_jump("section_1", JumpTrigger::AfterBars(6), TransitionType::Instant, &audio)
+            .schedule_marker_jump(
+                "section_1",
+                JumpTrigger::AfterBars(6),
+                TransitionType::Instant,
+                &audio,
+            )
             .expect("jump should schedule");
 
         let pending_jump = scheduled_snapshot
@@ -4715,7 +4738,12 @@ mod tests {
         session.seek(7.0, &audio).expect("seek should work");
 
         let snapshot = session
-            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), TransitionType::Instant, &audio)
+            .schedule_marker_jump(
+                "section_2",
+                JumpTrigger::AfterBars(2),
+                TransitionType::Instant,
+                &audio,
+            )
             .expect("jump should schedule");
 
         let pending_jump = snapshot
@@ -4744,7 +4772,12 @@ mod tests {
         let audio = crate::audio_runtime::AudioController::default();
         session.seek(7.0, &audio).expect("seek should work");
         session
-            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), TransitionType::Instant, &audio)
+            .schedule_marker_jump(
+                "section_2",
+                JumpTrigger::AfterBars(2),
+                TransitionType::Instant,
+                &audio,
+            )
             .expect("jump should schedule");
 
         let snapshot = session
@@ -4771,7 +4804,12 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session
-            .schedule_marker_jump("section_1", JumpTrigger::Immediate, TransitionType::Instant, &audio)
+            .schedule_marker_jump(
+                "section_1",
+                JumpTrigger::Immediate,
+                TransitionType::Instant,
+                &audio,
+            )
             .expect("immediate jump should execute");
 
         assert!(snapshot.pending_marker_jump.is_none());
@@ -4801,7 +4839,12 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, TransitionType::Instant, &audio)
+            .schedule_marker_jump(
+                "section_2",
+                JumpTrigger::NextMarker,
+                TransitionType::Instant,
+                &audio,
+            )
             .expect("jump should schedule");
 
         let snapshot = session
@@ -4833,7 +4876,12 @@ mod tests {
         let audio = crate::audio_runtime::AudioController::default();
         session.seek(5.0, &audio).expect("seek should work");
         session
-            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, TransitionType::Instant, &audio)
+            .schedule_marker_jump(
+                "section_2",
+                JumpTrigger::NextMarker,
+                TransitionType::Instant,
+                &audio,
+            )
             .expect("jump should schedule");
 
         let snapshot = session
@@ -4860,7 +4908,12 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), TransitionType::Instant, &audio)
+            .schedule_marker_jump(
+                "section_2",
+                JumpTrigger::AfterBars(2),
+                TransitionType::Instant,
+                &audio,
+            )
             .expect("jump should schedule");
 
         let snapshot = session
@@ -4881,7 +4934,12 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, TransitionType::Instant, &audio)
+            .schedule_marker_jump(
+                "section_2",
+                JumpTrigger::NextMarker,
+                TransitionType::Instant,
+                &audio,
+            )
             .expect("jump should schedule");
 
         let snapshot = session

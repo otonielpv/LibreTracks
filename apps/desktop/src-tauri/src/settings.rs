@@ -1,9 +1,4 @@
-use std::{
-    fs,
-    io,
-    path::PathBuf,
-    sync::Mutex,
-};
+use std::{fs, io, path::PathBuf, sync::Mutex};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -15,6 +10,8 @@ const SETTINGS_FILE_NAME: &str = "settings.json";
 pub struct AppSettings {
     #[serde(default)]
     pub selected_output_device: Option<String>,
+    #[serde(default)]
+    pub selected_midi_device: Option<String>,
     #[serde(default)]
     pub split_stereo_enabled: bool,
     #[serde(default)]

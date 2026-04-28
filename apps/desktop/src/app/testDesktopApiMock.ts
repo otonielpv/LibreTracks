@@ -26,6 +26,7 @@ type PlaybackState = TransportSnapshot["playbackState"];
 type DesktopApiMockState = {
   appSettings: AppSettings;
   audioOutputDevices: AudioOutputDevices;
+  midiInputs: string[];
   libraryAssets: LibraryAssetSummary[];
   libraryFolders: string[];
   activeVamp: TransportSnapshot["activeVamp"];
@@ -321,6 +322,7 @@ function buildInitialState(): DesktopApiMockState {
   return {
     appSettings: {
       selectedOutputDevice: null,
+      selectedMidiDevice: null,
       splitStereoEnabled: false,
       locale: "en",
     },
@@ -328,6 +330,7 @@ function buildInitialState(): DesktopApiMockState {
       devices: ["Mock Built-in Output"],
       defaultDevice: "Mock Built-in Output",
     },
+    midiInputs: ["Mock MIDI Pedal"],
     libraryAssets,
     libraryFolders: [],
     activeVamp: null,
@@ -580,6 +583,7 @@ export const testDesktopApiMock = {
     return clone(state.appSettings);
   },
   getAudioOutputDevices: async () => clone(state.audioOutputDevices),
+  getMidiInputs: async () => clone(state.midiInputs),
   reportUiRenderMetric: async (_renderMillis: number) => {},
   createSong: async () => {
     replaceSong(buildEmptySong());

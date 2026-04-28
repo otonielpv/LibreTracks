@@ -2,6 +2,7 @@ use tauri::State;
 
 use crate::audio_runtime::AudioDebugSnapshot;
 use crate::error::DesktopError;
+use crate::midi::get_midi_input_names;
 use crate::models::DesktopPerformanceSnapshot;
 use crate::remote;
 use crate::state::DesktopState;
@@ -51,4 +52,9 @@ pub fn report_ui_render_metric(
 #[tauri::command]
 pub fn get_remote_server_info(app: AppHandle) -> Result<RemoteServerInfo, String> {
     Ok(remote::remote_server_info(&app))
+}
+
+#[tauri::command]
+pub fn get_midi_inputs() -> Result<Vec<String>, String> {
+    get_midi_input_names()
 }

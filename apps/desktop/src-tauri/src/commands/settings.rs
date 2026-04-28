@@ -24,10 +24,15 @@ pub fn save_settings(
 
 #[tauri::command]
 pub fn update_audio_settings(
+    app: AppHandle,
     settings: AppSettings,
     settings_store: State<'_, AppSettingsStore>,
     state: State<'_, DesktopState>,
 ) -> Result<AppSettings, String> {
+    let previous_settings = state
+        .audio
+        .current_settings()
+        .map_err(|error| error.to_string())?;
     let mut session = state
         .session
         .lock()
@@ -36,10 +41,22 @@ pub fn update_audio_settings(
     let next_settings = session
         .update_audio_settings(settings, &state.audio)
         .map_err(|error| error.to_string())?;
+    drop(session);
 
     settings_store
         .set(next_settings.clone())
         .map_err(|error| error.to_string())?;
+
+    if previous_settings.selected_midi_device != next_settings.selected_midi_device {
+        state
+            .midi
+            .restart(
+                app,
+                state.audio.command_sender(),
+                next_settings.selected_midi_device.clone(),
+            )
+            .map_err(|error| error.to_string())?;
+    }
 
     Ok(next_settings)
 }

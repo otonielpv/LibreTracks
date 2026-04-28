@@ -216,7 +216,7 @@ export type TransportClock = NonNullable<TransportSnapshot["transportClock"]>;
 
 const SONG_TEMPO_REGION_VISUAL_END_SECONDS = 1_000_000;
 
-export type TransportLifecycleEventKind = "play" | "pause" | "stop" | "seek";
+export type TransportLifecycleEventKind = "play" | "pause" | "stop" | "seek" | "sync";
 
 export type TransportLifecycleEvent = {
   kind: TransportLifecycleEventKind;
@@ -233,22 +233,26 @@ export type AudioMeterLevel = {
 
 export type AppSettings = {
   selectedOutputDevice?: string | null;
+  selectedMidiDevice?: string | null;
   splitStereoEnabled: boolean;
   locale?: string | null;
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   selectedOutputDevice: null,
+  selectedMidiDevice: null,
   splitStereoEnabled: false,
   locale: null,
 };
 
 export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const selectedOutputDevice = settings.selectedOutputDevice?.trim() || null;
+  const selectedMidiDevice = settings.selectedMidiDevice?.trim() || null;
   const locale = settings.locale?.trim().toLowerCase();
 
   return {
     selectedOutputDevice,
+    selectedMidiDevice,
     splitStereoEnabled: Boolean(settings.splitStereoEnabled),
     locale: locale === "en" || locale === "es" ? locale : null,
   };

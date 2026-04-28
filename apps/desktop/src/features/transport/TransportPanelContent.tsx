@@ -32,6 +32,7 @@ import {
   getLibraryAssets,
   getLibraryFolders,
   getAudioOutputDevices,
+  getMidiInputs,
   getRemoteServerInfo,
   getSettings,
   buildSongTempoRegions,
@@ -726,6 +727,7 @@ export function TransportPanelContent() {
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [audioOutputDevices, setAudioOutputDevices] = useState<string[]>([]);
   const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<string | null>(null);
+  const [midiInputDevices, setMidiInputDevices] = useState<string[]>([]);
   const [remoteServerInfo, setRemoteServerInfo] = useState<RemoteServerInfo | null>(null);
   const [tempoDraft, setTempoDraft] = useState("120");
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
@@ -929,12 +931,17 @@ export function TransportPanelContent() {
   }, []);
 
   const refreshAudioSettings = useCallback(async () => {
-    const [nextSettings, nextAudioDevices] = await Promise.all([getSettings(), getAudioOutputDevices()]);
+    const [nextSettings, nextAudioDevices, nextMidiInputs] = await Promise.all([
+      getSettings(),
+      getAudioOutputDevices(),
+      getMidiInputs(),
+    ]);
     const normalizedSettings = normalizeAppSettings(nextSettings);
     setAppSettings(normalizedSettings);
     await syncSettingsLanguage(normalizedSettings);
     setAudioOutputDevices(nextAudioDevices.devices);
     setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
+    setMidiInputDevices(nextMidiInputs);
     return normalizedSettings;
   }, [syncSettingsLanguage]);
 
@@ -1509,13 +1516,14 @@ export function TransportPanelContent() {
     }
 
     let active = true;
-    void getAudioOutputDevices()
-      .then((nextAudioDevices) => {
+    void Promise.all([getAudioOutputDevices(), getMidiInputs()])
+      .then(([nextAudioDevices, nextMidiInputs]) => {
         if (!active) {
           return;
         }
         setAudioOutputDevices(nextAudioDevices.devices);
         setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
+        setMidiInputDevices(nextMidiInputs);
       })
       .catch((error) => {
         if (active) {
@@ -3922,6 +3930,18 @@ export function TransportPanelContent() {
     );
   }
 
+  function handleMidiInputDeviceChange(nextValue: string) {
+    persistAudioSettings(
+      {
+        ...appSettings,
+        selectedMidiDevice: nextValue || null,
+      },
+      nextValue
+        ? t("transport.status.midiDeviceUpdated", { name: nextValue })
+        : t("transport.status.midiDeviceDisabled"),
+    );
+  }
+
   function handleLocaleChange(nextValue: string) {
     persistAudioSettings(
       {
@@ -4701,9 +4721,13 @@ export function TransportPanelContent() {
   }
 
   const selectedAudioOutputDevice = appSettings.selectedOutputDevice ?? "";
+  const selectedMidiInputDevice = appSettings.selectedMidiDevice ?? "";
   const selectedLocale = appSettings.locale ?? "";
   const selectedAudioOutputDeviceMissing = Boolean(
     appSettings.selectedOutputDevice && !audioOutputDevices.includes(appSettings.selectedOutputDevice),
+  );
+  const selectedMidiInputDeviceMissing = Boolean(
+    appSettings.selectedMidiDevice && !midiInputDevices.includes(appSettings.selectedMidiDevice),
   );
 
   return (
@@ -5271,6 +5295,28 @@ export function TransportPanelContent() {
                       ? t("transport.settingsModal.audioDeviceCurrentDefault", { name: defaultAudioOutputDevice })
                       : t("transport.settingsModal.audioDeviceNoDefault")}
                   </small>
+                </label>
+
+                <label className="lt-settings-field">
+                  <span className="lt-settings-field-label">{t("transport.settingsModal.midiDevice")}</span>
+                  <select
+                    value={selectedMidiInputDevice}
+                    disabled={isSettingsLoading || isSettingsSaving}
+                    onChange={(event) => handleMidiInputDeviceChange(event.target.value)}
+                  >
+                    <option value="">{t("transport.settingsModal.midiDeviceNone")}</option>
+                    {selectedMidiInputDeviceMissing ? (
+                      <option value={selectedMidiInputDevice}>
+                        {t("transport.settingsModal.midiDeviceUnavailable", { name: selectedMidiInputDevice })}
+                      </option>
+                    ) : null}
+                    {midiInputDevices.map((deviceName) => (
+                      <option key={deviceName} value={deviceName}>
+                        {deviceName}
+                      </option>
+                    ))}
+                  </select>
+                  <small>{t("transport.settingsModal.midiDeviceHelp")}</small>
                 </label>
 
                 <label className="lt-settings-field">

@@ -119,7 +119,7 @@ enum AudioCommandKind {
     Shutdown,
 }
 
-enum AudioCommand {
+pub(crate) enum AudioCommand {
     Play {
         song_dir: PathBuf,
         song: Song,
@@ -359,6 +359,10 @@ impl AudioController {
         if let Ok(mut shared_remote_handle) = self.remote_handle.write() {
             *shared_remote_handle = Some(remote_handle);
         }
+    }
+
+    pub(crate) fn command_sender(&self) -> Sender<AudioCommand> {
+        self.sender.clone()
     }
 
     pub fn play(
@@ -627,7 +631,11 @@ impl PlaybackSession {
         self.seek(song, position_seconds)
     }
 
-    fn start_master_fade(&mut self, target_gain: f32, duration_seconds: f64) -> Result<bool, String> {
+    fn start_master_fade(
+        &mut self,
+        target_gain: f32,
+        duration_seconds: f64,
+    ) -> Result<bool, String> {
         if let Some(reader_sender) = &self.reader_sender {
             reader_sender
                 .send(ReaderCommand::StartMasterFade {
@@ -644,11 +652,7 @@ impl PlaybackSession {
     fn master_gain(&self) -> f32 {
         match &self.backend {
             PlaybackBackend::Null => 1.0,
-            PlaybackBackend::Cpal { .. } => self
-                .reader_sender
-                .as_ref()
-                .map(|_| 1.0)
-                .unwrap_or(1.0),
+            PlaybackBackend::Cpal { .. } => self.reader_sender.as_ref().map(|_| 1.0).unwrap_or(1.0),
         }
     }
 
@@ -699,24 +703,23 @@ fn run_audio_thread(
                     Some(playback_reason_label(reason).to_string()),
                 );
 
-                let result =
-                    ensure_runtime(
-                        &mut runtime,
-                        &audio_buffers,
-                        &app_handle,
-                        &remote_handle,
-                        &live_mix_state,
-                        &audio_settings,
-                    )
-                        .restart(&song_dir, &song, position_seconds, debug_config)
-                        .map(|report| {
-                            debug_state.record_restart(
-                                reason,
-                                position_seconds,
-                                song.duration_seconds,
-                                &report,
-                            );
-                        });
+                let result = ensure_runtime(
+                    &mut runtime,
+                    &audio_buffers,
+                    &app_handle,
+                    &remote_handle,
+                    &live_mix_state,
+                    &audio_settings,
+                )
+                .restart(&song_dir, &song, position_seconds, debug_config)
+                .map(|report| {
+                    debug_state.record_restart(
+                        reason,
+                        position_seconds,
+                        song.duration_seconds,
+                        &report,
+                    );
+                });
 
                 let _ = respond_to.send(result);
             }
@@ -731,24 +734,23 @@ fn run_audio_thread(
                     Some(playback_reason_label(reason).to_string()),
                 );
 
-                let result =
-                    ensure_runtime(
-                        &mut runtime,
-                        &audio_buffers,
-                        &app_handle,
-                        &remote_handle,
-                        &live_mix_state,
-                        &audio_settings,
-                    )
-                        .seek(&song, position_seconds)
-                        .map(|active_sinks| {
-                            debug_state.record_seek(
-                                reason,
-                                position_seconds,
-                                song.duration_seconds,
-                                active_sinks.max(1),
-                            );
-                        });
+                let result = ensure_runtime(
+                    &mut runtime,
+                    &audio_buffers,
+                    &app_handle,
+                    &remote_handle,
+                    &live_mix_state,
+                    &audio_settings,
+                )
+                .seek(&song, position_seconds)
+                .map(|active_sinks| {
+                    debug_state.record_seek(
+                        reason,
+                        position_seconds,
+                        song.duration_seconds,
+                        active_sinks.max(1),
+                    );
+                });
 
                 let _ = respond_to.send(result);
             }
@@ -760,19 +762,18 @@ fn run_audio_thread(
                 debug_state
                     .record_command(AudioCommandKind::SyncSong, Some("mix_only".to_string()));
 
-                let result =
-                    ensure_runtime(
-                        &mut runtime,
-                        &audio_buffers,
-                        &app_handle,
-                        &remote_handle,
-                        &live_mix_state,
-                        &audio_settings,
-                    )
-                        .sync_song(&song)
-                        .map(|report| {
-                            debug_state.record_sync(&report);
-                        });
+                let result = ensure_runtime(
+                    &mut runtime,
+                    &audio_buffers,
+                    &app_handle,
+                    &remote_handle,
+                    &live_mix_state,
+                    &audio_settings,
+                )
+                .sync_song(&song)
+                .map(|report| {
+                    debug_state.record_sync(&report);
+                });
 
                 for respond_to in respond_tos {
                     let _ = respond_to.send(result.clone());
@@ -856,7 +857,9 @@ fn ensure_runtime<'a>(
 #[tauri::command]
 pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> {
     let host = cpal::default_host();
-    let default_device = host.default_output_device().and_then(|device| device.name().ok());
+    let default_device = host
+        .default_output_device()
+        .and_then(|device| device.name().ok());
     let mut devices = host
         .output_devices()
         .map_err(|error| error.to_string())?
@@ -1317,11 +1320,13 @@ mod tests {
         let snapshot = debug_state.snapshot();
 
         assert_eq!(snapshot.playhead.anchor_position_seconds, Some(12.0));
-        assert!(snapshot
-            .playhead
-            .estimated_position_seconds
-            .unwrap_or_default()
-            >= 12.0);
+        assert!(
+            snapshot
+                .playhead
+                .estimated_position_seconds
+                .unwrap_or_default()
+                >= 12.0
+        );
         assert_eq!(snapshot.playhead.song_duration_seconds, Some(8.0));
     }
 

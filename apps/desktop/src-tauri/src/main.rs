@@ -1,8 +1,12 @@
-#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
 
 mod audio_runtime;
 mod commands;
 mod error;
+mod midi;
 mod models;
 mod remote;
 mod settings;
@@ -30,6 +34,18 @@ fn main() {
                 .audio
                 .apply_settings(initial_settings)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
+            state
+                .midi
+                .restart(
+                    app.handle().clone(),
+                    state.audio.command_sender(),
+                    state
+                        .audio
+                        .current_settings()
+                        .ok()
+                        .and_then(|settings| settings.selected_midi_device),
+                )
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
             remote::initialize_remote(app)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
             Ok(())
@@ -37,6 +53,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::system::healthcheck,
             commands::system::get_remote_server_info,
+            commands::system::get_midi_inputs,
             commands::transport::get_transport_snapshot,
             commands::settings::get_settings,
             commands::settings::save_settings,
