@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Build remote frontend
+        run: npm run build:remote
+
       - name: Run frontend tests
         run: npm test
 
