@@ -5,4 +5,12 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+axum = { version = "0.7", features = ["ws"] }
+futures = "0.3"
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 libretracks-core = { path = "../libretracks-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["fs", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tower-http = { version = "0.5", features = ["cors", "fs"] }

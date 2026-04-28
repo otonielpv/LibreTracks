@@ -39,6 +39,7 @@ const es = {
     shell: {
       navigation: "Navegacion principal",
       library: "Biblioteca",
+      remote: "Remote",
       settings: "Configuracion",
       busyTitle: "Aplicando cambios",
       busyDescription: "Sincronizando el estado del proyecto y del timeline.",
@@ -257,6 +258,15 @@ const es = {
     pickHint: "Se abrira el explorador de archivos del sistema. Puedes seleccionar uno o varios archivos WAV.",
     selectingFiles: "Seleccionar archivos...",
     importing: "Importando...",
+  },
+  remoteAccess: {
+    eyebrow: "Control remoto",
+    title: "Conectar remote movil",
+    description: "Escanea el codigo QR o abre una de las URLs desde tu movil o tablet.",
+    sameNetwork: "Asegurate de que el desktop y el movil o tablet esten conectados a la misma red.",
+    ipUrl: "URL por IP",
+    hostnameUrl: "URL por hostname (.local)",
+    qrAlt: "Codigo QR para LibreTracks Remote",
   },
 } as const;
 

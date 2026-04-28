@@ -128,7 +128,11 @@ function createTileSurface(width: number, height: number): TileSurface | null {
 }
 
 function getTileContext(surface: TileSurface) {
-  return surface.getContext("2d");
+  const context = surface.getContext("2d");
+  if (!context || !("fillRect" in context)) {
+    return null;
+  }
+  return context;
 }
 
 function tileNamespace(request: TileRequest) {

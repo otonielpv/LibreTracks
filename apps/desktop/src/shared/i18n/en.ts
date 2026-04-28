@@ -39,6 +39,7 @@ const en = {
     shell: {
       navigation: "Main navigation",
       library: "Library",
+      remote: "Remote",
       settings: "Settings",
       busyTitle: "Applying changes",
       busyDescription: "Syncing project and timeline state.",
@@ -257,6 +258,15 @@ const en = {
     pickHint: "The system file browser will open. You can select one or more WAV files.",
     selectingFiles: "Select files...",
     importing: "Importing...",
+  },
+  remoteAccess: {
+    eyebrow: "Remote Control",
+    title: "Connect mobile remote",
+    description: "Scan the QR code or open one of the URLs below from your phone or tablet.",
+    sameNetwork: "Make sure the desktop and the mobile or tablet are connected to the same network.",
+    ipUrl: "IP URL",
+    hostnameUrl: "Hostname URL (.local)",
+    qrAlt: "QR code for LibreTracks Remote",
   },
 } as const;
 

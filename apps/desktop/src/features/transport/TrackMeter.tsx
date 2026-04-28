@@ -1,62 +1,39 @@
 import { memo, useEffect, useRef } from "react";
 
+import {
+  DEFAULT_METER_FALLOFF_DB_PER_SECOND,
+  METER_ACTIVE_EPSILON_DB,
+  METER_CLIP_HOLD_MS,
+  METER_CLIP_THRESHOLD,
+  meterStyleFromDb,
+  peakToMeterDb,
+  stepMeterDb,
+} from "@libretracks/shared/meterBallistics";
+
 import { useTransportStore, type TrackMeterState } from "./store";
 
 const EMPTY_METER: TrackMeterState = {
   leftPeak: 0,
   rightPeak: 0,
 };
-const PEAK_FALLOFF_PER_SECOND = 1.8;
-const PEAK_EPSILON = 0.001;
-const METER_MIN_DB = -60;
-const METER_MAX_DB = 9;
-const CLIP_THRESHOLD = 1;
-const CLIP_HOLD_MS = 220;
-
 type MeterAnimationState = {
   frameId: number | null;
   lastFrameAt: number;
-  currentPeak: number;
-  targetPeak: number;
+  currentDb: number;
+  targetDb: number;
   clipHoldUntil: number;
 };
-
-function clampPeak(peak: number) {
-  return Math.max(0, Math.min(1, peak));
-}
 
 function resolveTrackPeak(meter: TrackMeterState) {
   return Math.max(meter.leftPeak, meter.rightPeak);
 }
 
-function gainToDb(peak: number) {
-  return 20 * Math.log10(Math.max(peak, 0.000_001));
-}
-
-function peakToDisplayScale(peak: number) {
-  const nextPeak = clampPeak(peak);
-  if (nextPeak <= PEAK_EPSILON) {
-    return 0;
-  }
-
-  const peakDb = gainToDb(nextPeak);
-  return Math.max(0, Math.min(1, (peakDb - METER_MIN_DB) / (METER_MAX_DB - METER_MIN_DB)));
-}
-
-function meterStyleValue(peak: number) {
-  const nextPeak = peakToDisplayScale(peak);
-  return {
-    clipPath: `inset(${((1 - nextPeak) * 100).toFixed(2)}% 0 0 0)`,
-    opacity: nextPeak > PEAK_EPSILON ? "1" : "0.18",
-  } as const;
-}
-
-function applyMeterBar(element: HTMLDivElement | null, peak: number) {
+function applyMeterBar(element: HTMLDivElement | null, meterDb: number) {
   if (!element) {
     return;
   }
 
-  const nextStyle = meterStyleValue(peak);
+  const nextStyle = meterStyleFromDb(meterDb);
   element.style.clipPath = nextStyle.clipPath;
   element.style.opacity = nextStyle.opacity;
 }
@@ -90,8 +67,8 @@ function TrackMeterComponent({ trackId }: TrackMeterProps) {
   const animationStateRef = useRef<MeterAnimationState>({
     frameId: null,
     lastFrameAt: 0,
-    currentPeak: 0,
-    targetPeak: 0,
+    currentDb: peakToMeterDb(0),
+    targetDb: peakToMeterDb(0),
     clipHoldUntil: 0,
   });
 
@@ -99,7 +76,7 @@ function TrackMeterComponent({ trackId }: TrackMeterProps) {
     const animationState = animationStateRef.current;
 
     const applyCurrentMeter = () => {
-      applyMeterBar(barRef.current, animationState.currentPeak);
+      applyMeterBar(barRef.current, animationState.currentDb);
       applyClipIndicator(clipRef.current, performance.now() <= animationState.clipHoldUntil);
     };
 
@@ -115,19 +92,21 @@ function TrackMeterComponent({ trackId }: TrackMeterProps) {
       const elapsedMs = animationState.lastFrameAt > 0 ? now - animationState.lastFrameAt : 16.67;
       animationState.lastFrameAt = now;
 
-      const decayAmount = (PEAK_FALLOFF_PER_SECOND * elapsedMs) / 1000;
-      animationState.currentPeak =
-        animationState.targetPeak > animationState.currentPeak
-          ? animationState.targetPeak
-          : Math.max(animationState.targetPeak, animationState.currentPeak - decayAmount);
+      animationState.currentDb = stepMeterDb(
+        animationState.currentDb,
+        animationState.targetDb,
+        elapsedMs,
+        DEFAULT_METER_FALLOFF_DB_PER_SECOND,
+      );
 
       applyCurrentMeter();
 
       const shouldContinue =
-        Math.abs(animationState.currentPeak - animationState.targetPeak) > PEAK_EPSILON;
+        Math.abs(animationState.currentDb - animationState.targetDb) > METER_ACTIVE_EPSILON_DB ||
+        performance.now() <= animationState.clipHoldUntil;
 
       if (!shouldContinue) {
-        animationState.currentPeak = animationState.targetPeak;
+        animationState.currentDb = animationState.targetDb;
         applyCurrentMeter();
         stopAnimation();
         return;
@@ -146,20 +125,19 @@ function TrackMeterComponent({ trackId }: TrackMeterProps) {
 
     const updateMeterTarget = (meter: TrackMeterState | undefined) => {
       const rawPeak = resolveTrackPeak(meter ?? EMPTY_METER);
-      const nextPeak = clampPeak(rawPeak);
-      animationState.targetPeak = nextPeak;
-      if (rawPeak >= CLIP_THRESHOLD) {
-        animationState.clipHoldUntil = performance.now() + CLIP_HOLD_MS;
+      animationState.targetDb = peakToMeterDb(rawPeak);
+      if (rawPeak >= METER_CLIP_THRESHOLD) {
+        animationState.clipHoldUntil = performance.now() + METER_CLIP_HOLD_MS;
       }
       scheduleAnimation();
     };
 
     const currentMeter = useTransportStore.getState().meters[trackId] ?? EMPTY_METER;
-    animationState.currentPeak = clampPeak(resolveTrackPeak(currentMeter));
-    animationState.targetPeak = animationState.currentPeak;
+    animationState.currentDb = peakToMeterDb(resolveTrackPeak(currentMeter));
+    animationState.targetDb = animationState.currentDb;
     applyCurrentMeter();
 
-    if (animationState.currentPeak > PEAK_EPSILON) {
+    if (animationState.currentDb > peakToMeterDb(0)) {
       scheduleAnimation();
     }
 
@@ -176,15 +154,15 @@ function TrackMeterComponent({ trackId }: TrackMeterProps) {
     return () => {
       unsubscribe();
       stopAnimation();
-      animationState.currentPeak = 0;
-      animationState.targetPeak = 0;
+      animationState.currentDb = peakToMeterDb(0);
+      animationState.targetDb = peakToMeterDb(0);
       animationState.clipHoldUntil = 0;
-      applyMeterBar(barRef.current, 0);
+      applyMeterBar(barRef.current, peakToMeterDb(0));
       applyClipIndicator(clipRef.current, false);
     };
   }, [trackId]);
 
-  const idleMeterStyle = meterStyleValue(0);
+  const idleMeterStyle = meterStyleFromDb(peakToMeterDb(0));
 
   return (
     <div className="lt-track-meter" aria-hidden="true">

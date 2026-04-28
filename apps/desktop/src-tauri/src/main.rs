@@ -4,6 +4,7 @@ mod audio_runtime;
 mod commands;
 mod error;
 mod models;
+mod remote;
 mod settings;
 mod state;
 
@@ -29,10 +30,13 @@ fn main() {
                 .audio
                 .apply_settings(initial_settings)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
+            remote::initialize_remote(app)
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::system::healthcheck,
+            commands::system::get_remote_server_info,
             commands::transport::get_transport_snapshot,
             commands::settings::get_settings,
             commands::settings::save_settings,

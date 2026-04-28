@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "description": "Editor y reproductor multitrack con escritorio Tauri y control remoto web.",
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "dev:desktop": "npm --prefix apps/desktop run dev --",
@@ -17,7 +18,7 @@
     "build:remote": "npm --prefix apps/remote run build",
     "test:remote": "npm --prefix apps/remote run test",
     "test": "npm run test:desktop",
-    "lint": "npm --prefix apps/desktop run lint && npm --prefix apps/remote run lint"
+    "lint": "npm --prefix apps/desktop run lint && npm --prefix apps/remote run lint && npm --prefix packages/shared run lint"
   },
   "engines": {
     "node": ">=20"

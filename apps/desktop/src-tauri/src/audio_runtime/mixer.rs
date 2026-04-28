@@ -62,6 +62,7 @@ pub(crate) struct LiveMixSnapshot {
 
 struct MeterEmitterState {
     app_handle: SharedAppHandle,
+    remote_handle: SharedRemoteHandle,
     resolved_app_handle: Option<AppHandle>,
     pending_track_meters: Vec<AudioMeterLevel>,
     last_emit_at: Option<Instant>,
@@ -132,6 +133,7 @@ impl Mixer {
         output_sample_rate: u32,
         output_channels: usize,
         app_handle: SharedAppHandle,
+        remote_handle: SharedRemoteHandle,
         live_mix_state: SharedTrackMixState,
         audio_settings: SharedAudioSettings,
         debug_config: telemetry::AudioDebugConfig,
@@ -163,7 +165,7 @@ impl Mixer {
             opened_files: 0,
             track_meter_indices,
             track_child_indices,
-            meter_emitter: MeterEmitterState::new(app_handle),
+            meter_emitter: MeterEmitterState::new(app_handle, remote_handle),
         };
         mixer.cached_live_mix = LiveMixSnapshot::from_song(&mixer.song);
         mixer.seek(mixer.song.clone(), position_seconds);
@@ -435,9 +437,10 @@ impl MixClipState {
 }
 
 impl MeterEmitterState {
-    fn new(app_handle: SharedAppHandle) -> Self {
+    fn new(app_handle: SharedAppHandle, remote_handle: SharedRemoteHandle) -> Self {
         Self {
             app_handle,
+            remote_handle,
             resolved_app_handle: None,
             pending_track_meters: Vec::new(),
             last_emit_at: None,
@@ -481,6 +484,12 @@ impl MeterEmitterState {
 
         if let Err(error) = app_handle.emit(AUDIO_METER_EVENT, self.pending_track_meters.clone()) {
             eprintln!("[libretracks-audio] failed to emit audio meters: {error}");
+        }
+
+        if let Ok(remote_handle) = self.remote_handle.read() {
+            if let Some(remote_handle) = remote_handle.as_ref() {
+                remote_handle.publish_meters(&self.pending_track_meters);
+            }
         }
 
         self.pending_track_meters.clear();

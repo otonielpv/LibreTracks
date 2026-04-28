@@ -1,0 +1,9 @@
+{
+  "name": "LibreTracks Remote",
+  "short_name": "LibreTracks",
+  "display": "standalone",
+  "background_color": "#131313",
+  "theme_color": "#131313",
+  "start_url": "/",
+  "scope": "/"
+}

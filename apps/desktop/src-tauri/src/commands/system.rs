@@ -3,7 +3,10 @@ use tauri::State;
 use crate::audio_runtime::AudioDebugSnapshot;
 use crate::error::DesktopError;
 use crate::models::DesktopPerformanceSnapshot;
+use crate::remote;
 use crate::state::DesktopState;
+use libretracks_remote::RemoteServerInfo;
+use tauri::AppHandle;
 
 #[tauri::command]
 pub fn healthcheck() -> &'static str {
@@ -43,4 +46,9 @@ pub fn report_ui_render_metric(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
     session.report_ui_render_metric(render_millis);
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_remote_server_info(app: AppHandle) -> Result<RemoteServerInfo, String> {
+    Ok(remote::remote_server_info(&app))
 }

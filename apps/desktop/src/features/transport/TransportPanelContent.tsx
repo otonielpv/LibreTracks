@@ -32,6 +32,7 @@ import {
   getLibraryAssets,
   getLibraryFolders,
   getAudioOutputDevices,
+  getRemoteServerInfo,
   getSettings,
   buildSongTempoRegions,
   getPrimarySongRegion,
@@ -79,6 +80,7 @@ import {
   type JumpTriggerLabel,
   type LibraryAssetSummary,
   type LibraryImportProgressEvent,
+  type RemoteServerInfo,
   type SectionMarkerSummary,
   type SongRegionSummary,
   type SongView,
@@ -92,6 +94,7 @@ import {
 } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
 import { LibrarySidebarPanel } from "./LibrarySidebarPanel";
+import { RemoteAccessCard } from "./RemoteAccessCard";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
 import { TimelineToolbar } from "./TimelineToolbar";
 import { TimelineTopbar } from "./TimelineTopbar";
@@ -706,11 +709,13 @@ export function TransportPanelContent() {
   const [status, setStatus] = useState(() => t("transport.status.loadingSession"));
   const [isBusy, setIsBusy] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isRemoteModalOpen, setIsRemoteModalOpen] = useState(false);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [audioOutputDevices, setAudioOutputDevices] = useState<string[]>([]);
   const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<string | null>(null);
+  const [remoteServerInfo, setRemoteServerInfo] = useState<RemoteServerInfo | null>(null);
   const [tempoDraft, setTempoDraft] = useState("120");
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
@@ -758,6 +763,20 @@ export function TransportPanelContent() {
   const zoomLevel = useTimelineUIStore((state) => state.zoomLevel);
   const trackHeight = useTimelineUIStore((state) => state.trackHeight);
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
+
+  useEffect(() => {
+    if (!isTauriApp) {
+      return;
+    }
+
+    void getRemoteServerInfo()
+      .then((info) => {
+        setRemoteServerInfo(info);
+      })
+      .catch(() => {
+        setRemoteServerInfo(null);
+      });
+  }, []);
   const selectedTrackIds = useTimelineUIStore((state) => state.selectedTrackIds);
   const selectedClipId = useTimelineUIStore((state) => state.selectedClipId);
   const selectedSectionId = useTimelineUIStore((state) => state.selectedSectionId);
@@ -1460,7 +1479,7 @@ export function TransportPanelContent() {
   }, [refreshAudioSettings]);
 
   useEffect(() => {
-    if (!isSettingsModalOpen) {
+    if (!isSettingsModalOpen && !isRemoteModalOpen) {
       return () => {};
     }
 
@@ -1482,6 +1501,7 @@ export function TransportPanelContent() {
     const handleWindowKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsSettingsModalOpen(false);
+        setIsRemoteModalOpen(false);
       }
     };
 
@@ -1490,7 +1510,7 @@ export function TransportPanelContent() {
       active = false;
       window.removeEventListener("keydown", handleWindowKeyDown);
     };
-  }, [isSettingsModalOpen]);
+  }, [isRemoteModalOpen, isSettingsModalOpen]);
 
   useEffect(() => {
     let active = true;
@@ -3778,7 +3798,13 @@ export function TransportPanelContent() {
   }
 
   function handleSettingsButtonClick() {
+    setIsRemoteModalOpen(false);
     setIsSettingsModalOpen((current) => !current);
+  }
+
+  function handleRemoteButtonClick() {
+    setIsSettingsModalOpen(false);
+    setIsRemoteModalOpen((current) => !current);
   }
 
   function handleAudioOutputDeviceChange(nextValue: string) {
@@ -4674,6 +4700,15 @@ export function TransportPanelContent() {
           </button>
           <button
             type="button"
+            className={isRemoteModalOpen ? "is-active" : ""}
+            aria-label={t("transport.shell.remote")}
+            onClick={handleRemoteButtonClick}
+          >
+            <span className="material-symbols-outlined">phonelink</span>
+            {t("transport.shell.remote")}
+          </button>
+          <button
+            type="button"
             className={isSettingsModalOpen ? "is-active" : ""}
             aria-label={t("transport.shell.settings")}
             onClick={handleSettingsButtonClick}
@@ -5157,6 +5192,34 @@ export function TransportPanelContent() {
                     </small>
                   </div>
                 </label>
+              </div>
+            </section>
+          </div>
+        ) : null}
+
+        {isRemoteModalOpen ? (
+          <div className="lt-modal-backdrop" onClick={() => setIsRemoteModalOpen(false)}>
+            <section
+              className="lt-settings-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="lt-remote-modal-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <header className="lt-settings-modal-header">
+                <div>
+                  <span className="lt-settings-modal-eyebrow">{t("remoteAccess.eyebrow")}</span>
+                  <h2 id="lt-remote-modal-title">{t("remoteAccess.title")}</h2>
+                  <p>{t("remoteAccess.description")}</p>
+                </div>
+                <button type="button" className="lt-settings-modal-close" onClick={() => setIsRemoteModalOpen(false)}>
+                  <span className="material-symbols-outlined">close</span>
+                  {t("common.close")}
+                </button>
+              </header>
+
+              <div className="lt-settings-modal-body">
+                <RemoteAccessCard remoteServerInfo={remoteServerInfo} />
               </div>
             </section>
           </div>

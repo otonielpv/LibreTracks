@@ -20,6 +20,7 @@ use cpal::{
     Device, Stream, StreamConfig,
 };
 use libretracks_core::Song;
+use libretracks_remote::RemoteServerHandle;
 use rtrb::RingBuffer;
 use serde::Serialize;
 use tauri::AppHandle;
@@ -57,6 +58,7 @@ const AUDIO_COMMAND_RESPONSE_TIMEOUT: Duration = Duration::from_millis(250);
 const MAX_HIERARCHY_DEPTH: usize = 16;
 
 type SharedAppHandle = Arc<RwLock<Option<AppHandle>>>;
+type SharedRemoteHandle = Arc<RwLock<Option<RemoteServerHandle>>>;
 type SharedTrackMixState = Arc<RwLock<HashMap<String, LiveTrackMix>>>;
 type SharedAudioSettings = Arc<RwLock<AppSettings>>;
 
@@ -64,6 +66,7 @@ pub struct AudioRuntime {
     session: Option<PlaybackSession>,
     audio_buffers: AudioBufferCache,
     app_handle: SharedAppHandle,
+    remote_handle: SharedRemoteHandle,
     live_mix_state: SharedTrackMixState,
     audio_settings: SharedAudioSettings,
 }
@@ -72,6 +75,7 @@ pub struct AudioController {
     sender: Sender<AudioCommand>,
     audio_buffers: AudioBufferCache,
     app_handle: SharedAppHandle,
+    remote_handle: SharedRemoteHandle,
     live_mix_state: SharedTrackMixState,
     audio_settings: SharedAudioSettings,
     audio_thread_handle: Option<JoinHandle<()>>,
@@ -168,6 +172,7 @@ impl AudioRuntime {
     fn new(
         audio_buffers: AudioBufferCache,
         app_handle: SharedAppHandle,
+        remote_handle: SharedRemoteHandle,
         live_mix_state: SharedTrackMixState,
         audio_settings: SharedAudioSettings,
     ) -> Self {
@@ -175,6 +180,7 @@ impl AudioRuntime {
             session: None,
             audio_buffers,
             app_handle,
+            remote_handle,
             live_mix_state,
             audio_settings,
         }
@@ -210,6 +216,7 @@ impl AudioRuntime {
             song.clone(),
             position_seconds,
             self.app_handle.clone(),
+            self.remote_handle.clone(),
             self.live_mix_state.clone(),
             self.audio_settings.clone(),
             debug_config,
@@ -257,10 +264,12 @@ impl AudioController {
         let debug_config = AudioDebugConfig::from_env();
         let audio_buffers = AudioBufferCache::default();
         let app_handle = Arc::new(RwLock::new(None));
+        let remote_handle = Arc::new(RwLock::new(None));
         let live_mix_state = Arc::new(RwLock::new(HashMap::new()));
         let audio_settings = Arc::new(RwLock::new(AppSettings::default()));
         let runtime_audio_buffers = audio_buffers.clone();
         let runtime_app_handle = app_handle.clone();
+        let runtime_remote_handle = remote_handle.clone();
         let runtime_live_mix_state = live_mix_state.clone();
         let runtime_audio_settings = audio_settings.clone();
 
@@ -272,6 +281,7 @@ impl AudioController {
                     debug_config,
                     runtime_audio_buffers,
                     runtime_app_handle,
+                    runtime_remote_handle,
                     runtime_live_mix_state,
                     runtime_audio_settings,
                 )
@@ -282,6 +292,7 @@ impl AudioController {
             sender,
             audio_buffers,
             app_handle,
+            remote_handle,
             live_mix_state,
             audio_settings,
             audio_thread_handle: Some(audio_thread_handle),
@@ -291,6 +302,12 @@ impl AudioController {
     pub fn attach_app_handle(&self, app_handle: AppHandle) {
         if let Ok(mut shared_app_handle) = self.app_handle.write() {
             *shared_app_handle = Some(app_handle);
+        }
+    }
+
+    pub fn attach_remote_handle(&self, remote_handle: RemoteServerHandle) {
+        if let Ok(mut shared_remote_handle) = self.remote_handle.write() {
+            *shared_remote_handle = Some(remote_handle);
         }
     }
 
@@ -431,6 +448,7 @@ impl PlaybackSession {
         song: Song,
         position_seconds: f64,
         app_handle: SharedAppHandle,
+        remote_handle: SharedRemoteHandle,
         live_mix_state: SharedTrackMixState,
         audio_settings: SharedAudioSettings,
         debug_config: AudioDebugConfig,
@@ -476,6 +494,7 @@ impl PlaybackSession {
                 output_sample_rate,
                 output_channels,
                 app_handle,
+                remote_handle,
                 live_mix_state,
                 audio_settings,
                 debug_config,
@@ -556,6 +575,7 @@ fn run_audio_thread(
     debug_config: AudioDebugConfig,
     audio_buffers: AudioBufferCache,
     app_handle: SharedAppHandle,
+    remote_handle: SharedRemoteHandle,
     live_mix_state: SharedTrackMixState,
     audio_settings: SharedAudioSettings,
 ) {
@@ -582,6 +602,7 @@ fn run_audio_thread(
                         &mut runtime,
                         &audio_buffers,
                         &app_handle,
+                        &remote_handle,
                         &live_mix_state,
                         &audio_settings,
                     )
@@ -613,6 +634,7 @@ fn run_audio_thread(
                         &mut runtime,
                         &audio_buffers,
                         &app_handle,
+                        &remote_handle,
                         &live_mix_state,
                         &audio_settings,
                     )
@@ -641,6 +663,7 @@ fn run_audio_thread(
                         &mut runtime,
                         &audio_buffers,
                         &app_handle,
+                        &remote_handle,
                         &live_mix_state,
                         &audio_settings,
                     )
@@ -688,6 +711,7 @@ fn ensure_runtime<'a>(
     runtime: &'a mut Option<AudioRuntime>,
     audio_buffers: &AudioBufferCache,
     app_handle: &SharedAppHandle,
+    remote_handle: &SharedRemoteHandle,
     live_mix_state: &SharedTrackMixState,
     audio_settings: &SharedAudioSettings,
 ) -> &'a mut AudioRuntime {
@@ -695,6 +719,7 @@ fn ensure_runtime<'a>(
         AudioRuntime::new(
             audio_buffers.clone(),
             app_handle.clone(),
+            remote_handle.clone(),
             live_mix_state.clone(),
             audio_settings.clone(),
         )
@@ -1457,6 +1482,7 @@ mod tests {
             48_000,
             2,
             Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
             shared_mix_state(&song),
             Arc::new(RwLock::new(AppSettings::default())),
             AudioDebugConfig {
@@ -1518,6 +1544,7 @@ mod tests {
                     0.0,
                     48_000,
                     2,
+                    Arc::new(RwLock::new(None)),
                     Arc::new(RwLock::new(None)),
                     live_mix_state,
                     Arc::new(RwLock::new(AppSettings::default())),
@@ -1729,6 +1756,7 @@ mod tests {
             0.0,
             48_000,
             1,
+            Arc::new(RwLock::new(None)),
             Arc::new(RwLock::new(None)),
             shared_mix_state(&song),
             Arc::new(RwLock::new(AppSettings::default())),
