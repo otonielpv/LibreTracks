@@ -826,7 +826,9 @@ function TransportView() {
               scheduleJump(marker.id);
             }}
           >
-            <small>{marker.digit ?? "."}</small>
+            {typeof marker.digit === "number" && Number.isFinite(marker.digit) ? (
+              <small>{marker.digit}</small>
+            ) : null}
             <strong>{marker.name}</strong>
             <span>{formatTimecode(marker.startSeconds)}</span>
             <em>{formatJumpModeLabel(jumpMode, jumpBars)}</em>
