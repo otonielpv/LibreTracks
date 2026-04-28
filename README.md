@@ -10,21 +10,11 @@
 LibreTracks is a multitrack DAW and live playback workstation for desktop, built with a Rust audio stack and a React/Tauri shell. The current monorepo focuses on non-destructive arrangement, live section jumps, WAV import, and a desktop runtime that keeps audio concerns separate from UI concerns.
 
 ## Screenshots
-
-### Startup
-![Startup screen](./screenshots/Inicio.png)
-
-### Empty Session
-![Empty session](./screenshots/Vacio.png)
-
-### Project View
-![Project view](./screenshots/Proyecto.png)
-
-### Remote Connection
-![Remote connection](./screenshots/Remote.png)
-
-### Remote Mixer
-![Remote mixer](./screenshots/Remote_Mixer.png)
+| Screenshot | Screenshot |
+| --- | --- |
+| Startup<br>![Startup screen](./screenshots/Inicio.png) | Empty Session<br>![Empty session](./screenshots/Vacio.png) |
+| Project View<br>![Project view](./screenshots/Proyecto.png) | Remote Connection<br>![Remote connection](./screenshots/Remote.png) |
+| Remote Mixer<br>![Remote mixer](./screenshots/Remote_Mixer.png) |  |
 
 ## Architecture Overview
 
