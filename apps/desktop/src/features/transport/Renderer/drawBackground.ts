@@ -343,9 +343,10 @@ export function drawRulerTempoMarker(
   height: number,
   cameraX: number,
   pixelsPerSecond: number,
+  overrideLabel?: string,
 ) {
   const x = secondsToScreenX(marker.startSeconds, cameraX, pixelsPerSecond);
-  const label = `${marker.bpm.toFixed(marker.bpm % 1 === 0 ? 0 : 1)}`;
+  const label = overrideLabel ?? `${marker.bpm.toFixed(marker.bpm % 1 === 0 ? 0 : 1)}`;
 
   context.font = '700 10px "Space Grotesk", sans-serif';
   const labelWidth = Math.max(30, Math.ceil(context.measureText(label).width) + 14);
@@ -361,8 +362,8 @@ export function drawRulerTempoMarker(
   }
 
   context.save();
-  context.strokeStyle = "rgba(87, 241, 219, 0.78)";
-  context.fillStyle = "rgba(87, 241, 219, 0.16)";
+  context.strokeStyle = overrideLabel ? "rgba(255, 184, 107, 0.78)" : "rgba(87, 241, 219, 0.78)";
+  context.fillStyle = overrideLabel ? "rgba(255, 184, 107, 0.16)" : "rgba(87, 241, 219, 0.16)";
   context.lineWidth = 1.2;
   context.beginPath();
   context.moveTo(snappedX, flagTop + 2);
@@ -379,7 +380,7 @@ export function drawRulerTempoMarker(
   context.fill();
   context.stroke();
 
-  context.fillStyle = "#57f1db";
+  context.fillStyle = overrideLabel ? "#ffb86b" : "#57f1db";
   context.textBaseline = "middle";
   context.fillText(label, flagLeft + 6, flagTop + flagHeight / 2 + 0.5);
 

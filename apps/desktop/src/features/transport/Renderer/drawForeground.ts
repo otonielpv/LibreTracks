@@ -1,4 +1,9 @@
-import type { PendingJumpSummary, SectionMarkerSummary, TempoMarkerSummary } from "../desktopApi";
+import type {
+  PendingJumpSummary,
+  SectionMarkerSummary,
+  TempoMarkerSummary,
+  TimeSignatureMarkerSummary,
+} from "../desktopApi";
 import { secondsToScreenX } from "../timelineMath";
 
 import { drawRulerMarker, drawRulerTempoMarker } from "./drawBackground";
@@ -10,6 +15,7 @@ export type RulerForegroundLayerArgs = {
   pixelsPerSecond: number;
   markers: SectionMarkerSummary[];
   tempoMarkers: TempoMarkerSummary[];
+  timeSignatureMarkers: TimeSignatureMarkerSummary[];
   pendingMarkerJump: PendingJumpSummary | null;
   selectedMarkerId: string | null;
   currentMarkerId: string | null;
@@ -89,6 +95,22 @@ export function drawRulerForegroundLayer(
       args.height,
       args.cameraX,
       args.pixelsPerSecond,
+    );
+  }
+
+  for (const marker of args.timeSignatureMarkers) {
+    drawRulerTempoMarker(
+      context,
+      {
+        id: marker.id,
+        startSeconds: marker.startSeconds,
+        bpm: Number.NaN,
+      },
+      args.width,
+      args.height,
+      args.cameraX,
+      args.pixelsPerSecond,
+      marker.signature,
     );
   }
 }

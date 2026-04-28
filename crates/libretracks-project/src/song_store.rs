@@ -4,14 +4,15 @@ use std::{
 };
 
 use libretracks_core::{
-    validate_song, Clip, DomainError, Marker, Song, SongRegion, TempoMetadata, Track,
+    validate_song, Clip, DomainError, Marker, Song, SongRegion, TempoMetadata,
+    TimeSignatureMarker, Track,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
 pub const SONG_FILE_NAME: &str = "song.ltsession";
-const SONG_FORMAT_VERSION: u32 = 4;
+const SONG_FORMAT_VERSION: u32 = 5;
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
@@ -78,6 +79,26 @@ struct LegacySongDocumentV3 {
     key: Option<String>,
     time_signature: String,
     duration_seconds: f64,
+    tracks: Vec<Track>,
+    clips: Vec<Clip>,
+    #[serde(default)]
+    section_markers: Vec<Marker>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacySongDocumentV4 {
+    id: String,
+    title: String,
+    artist: Option<String>,
+    bpm: f64,
+    key: Option<String>,
+    time_signature: String,
+    duration_seconds: f64,
+    #[serde(default)]
+    tempo_markers: Vec<libretracks_core::TempoMarker>,
+    #[serde(default)]
+    regions: Vec<SongRegion>,
     tracks: Vec<Track>,
     clips: Vec<Clip>,
     #[serde(default)]
@@ -160,6 +181,10 @@ pub fn load_song_from_file(song_file: impl AsRef<Path>) -> Result<Song, ProjectE
             let legacy_document: LegacySongDocumentV3 = serde_json::from_str(&json)?;
             migrate_v3_song(legacy_document)
         }
+        4 => {
+            let legacy_document: LegacySongDocumentV4 = serde_json::from_str(&json)?;
+            migrate_v4_song(legacy_document)
+        }
         2 => {
             let legacy_document: LegacySongDocumentV2 = serde_json::from_str(&json)?;
             migrate_v2_song(legacy_document)
@@ -202,6 +227,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
         time_signature: document.time_signature.clone(),
         duration_seconds: document.duration_seconds,
         tempo_markers: vec![],
+        time_signature_markers: vec![],
         regions: vec![SongRegion {
             id: "region_1".into(),
             name: "Song 1".into(),
@@ -228,6 +254,7 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
         time_signature: document.time_signature.clone(),
         duration_seconds: document.duration_seconds,
         tempo_markers: vec![],
+        time_signature_markers: vec![],
         regions: vec![SongRegion {
             id: "region_1".into(),
             name: region_name,
@@ -240,6 +267,27 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
     };
 
     let _ = document.tempo_metadata;
+    validate_song(&song)?;
+    Ok(song)
+}
+
+fn migrate_v4_song(document: LegacySongDocumentV4) -> Result<Song, ProjectError> {
+    let song = Song {
+        id: document.id,
+        title: document.title,
+        artist: document.artist,
+        key: document.key,
+        bpm: document.bpm,
+        time_signature: document.time_signature,
+        duration_seconds: document.duration_seconds,
+        tempo_markers: document.tempo_markers,
+        time_signature_markers: Vec::<TimeSignatureMarker>::new(),
+        regions: document.regions,
+        tracks: document.tracks,
+        clips: document.clips,
+        section_markers: document.section_markers,
+    };
+
     validate_song(&song)?;
     Ok(song)
 }

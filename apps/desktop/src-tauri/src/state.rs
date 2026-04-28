@@ -9,12 +9,17 @@ use std::{
 };
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
-use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, Track, TrackKind};
+use libretracks_core::{
+    Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track,
+    TrackKind,
+};
 use libretracks_project::{
-    append_wav_files_to_song, generate_waveform_summary, import_wav_files_to_library,
-    import_wav_song, load_song_from_file, load_waveform_summary, read_wav_metadata,
-    save_song_to_file, waveform_file_path, ImportOperationMetrics, ImportedSong, ProjectError,
-    ProjectImportRequest, WaveformSummary, SONG_FILE_NAME,
+    append_wav_files_to_song, export_region_as_package as export_song_region_package,
+    generate_waveform_summary, import_song_package as import_song_package_into_project,
+    import_wav_files_to_library, import_wav_song, load_song_from_file,
+    load_waveform_summary, read_audio_metadata, save_song_to_file, waveform_file_path,
+    ImportOperationMetrics, ImportedSong, ProjectError, ProjectImportRequest, WaveformSummary,
+    SONG_FILE_NAME,
 };
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
@@ -420,8 +425,8 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<Option<TransportSnapshot>, DesktopError> {
         let files = FileDialog::new()
-            .add_filter("Wave Audio", &["wav"])
-            .set_title("Selecciona las pistas WAV")
+            .add_filter("Audio", &["wav", "mp3", "flac", "m4a", "aac", "ogg"])
+            .set_title("Selecciona las pistas de audio")
             .pick_files();
 
         let Some(files) = files else {
@@ -449,7 +454,7 @@ impl DesktopSession {
         app: &AppHandle,
     ) -> Result<Option<Vec<LibraryAssetSummary>>, DesktopError> {
         let files = FileDialog::new()
-            .add_filter("Wave Audio", &["wav"])
+            .add_filter("Audio", &["wav", "mp3", "flac", "m4a", "aac", "ogg"])
             .set_title("Importar audio a la libreria")
             .pick_files();
 
@@ -1550,6 +1555,130 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn update_song_time_signature(
+        &mut self,
+        signature: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        validate_time_signature(signature)?;
+
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        song.time_signature = signature.to_string();
+        song.time_signature_markers.clear();
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn upsert_song_time_signature_marker(
+        &mut self,
+        start_seconds: f64,
+        signature: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        validate_time_signature(signature)?;
+
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let clamped_start_seconds = start_seconds.max(0.0);
+
+        if clamped_start_seconds <= 0.0001 {
+            song.time_signature = signature.to_string();
+        } else if let Some(existing_marker) = song.time_signature_markers.iter_mut().find(|marker| {
+            (marker.start_seconds - clamped_start_seconds).abs() < 0.0001
+        }) {
+            existing_marker.signature = signature.to_string();
+        } else {
+            song.time_signature_markers.push(TimeSignatureMarker {
+                id: format!("time_signature_marker_{}", timestamp_suffix()),
+                start_seconds: clamped_start_seconds,
+                signature: signature.to_string(),
+            });
+            song.time_signature_markers.sort_by(|left, right| {
+                left.start_seconds
+                    .partial_cmp(&right.start_seconds)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn delete_song_time_signature_marker(
+        &mut self,
+        marker_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let marker_index = song
+            .time_signature_markers
+            .iter()
+            .position(|marker| marker.id == marker_id)
+            .ok_or_else(|| DesktopError::AudioCommand("time signature marker not found".into()))?;
+        song.time_signature_markers.remove(marker_index);
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn export_region_as_package(
+        &mut self,
+        region_id: &str,
+    ) -> Result<(), DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let region = song
+            .regions
+            .iter()
+            .find(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::AudioCommand("song region not found".into()))?;
+        let output_path = FileDialog::new()
+            .add_filter("LibreTracks Package", &["ltpkg"])
+            .set_title("Exportar Cancion")
+            .set_file_name(&format!("{}.ltpkg", slugify(&region.name)))
+            .save_file();
+
+        let Some(output_path) = output_path else {
+            return Ok(());
+        };
+
+        export_song_region_package(&song_dir, &song, region_id, &output_path)?;
+        Ok(())
+    }
+
+    pub fn import_song_package(
+        &mut self,
+        package_path: &str,
+        insert_at_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let imported = import_song_package_into_project(
+            &song_dir,
+            &song,
+            Path::new(package_path),
+            insert_at_seconds,
+        )?;
+        self.persist_song_update(imported.song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        Ok(self.snapshot())
+    }
+
     pub fn create_track(
         &mut self,
         name: &str,
@@ -2376,6 +2505,7 @@ fn build_empty_song(song_id: String, title: String) -> Song {
         time_signature: "4/4".into(),
         duration_seconds: 60.0,
         tempo_markers: vec![],
+        time_signature_markers: vec![],
         regions: vec![],
         tracks: vec![],
         clips: vec![],
@@ -2650,7 +2780,7 @@ fn list_library_assets(
             .and_then(|value| value.to_str())
             .unwrap_or(&file_path)
             .to_string();
-        let metadata = read_wav_metadata(&path)?;
+        let metadata = read_audio_metadata(&path)?;
         let manifest_entry = manifest_assets.get(&file_path);
         assets.push(LibraryAssetSummary {
             file_name: file_name.clone(),
@@ -2700,6 +2830,24 @@ fn timestamp_suffix() -> u128 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or(0)
+}
+
+fn validate_time_signature(signature: &str) -> Result<(), DesktopError> {
+    let (numerator, denominator) = signature
+        .split_once('/')
+        .ok_or_else(|| DesktopError::AudioCommand("time signature is invalid".into()))?;
+    let numerator = numerator
+        .parse::<u32>()
+        .map_err(|_| DesktopError::AudioCommand("time signature is invalid".into()))?;
+    let denominator = denominator
+        .parse::<u32>()
+        .map_err(|_| DesktopError::AudioCommand("time signature is invalid".into()))?;
+    if numerator == 0 || denominator == 0 {
+        return Err(DesktopError::AudioCommand(
+            "time signature is invalid".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn playback_state_label(state: PlaybackState) -> &'static str {
@@ -2950,8 +3098,8 @@ fn validate_clip_window(
         return Err(DesktopError::InvalidClipRange);
     }
 
-    let wav_metadata = read_wav_metadata(song_dir.join(clip_file_path))?;
-    if source_start_seconds + duration_seconds > wav_metadata.duration_seconds + 0.0001 {
+    let audio_metadata = read_audio_metadata(song_dir.join(clip_file_path))?;
+    if source_start_seconds + duration_seconds > audio_metadata.duration_seconds + 0.0001 {
         return Err(DesktopError::InvalidClipRange);
     }
 
@@ -2975,7 +3123,7 @@ fn append_clip_to_song(
     }
 
     let normalized_file_path = request.file_path.replace('\\', "/");
-    let wav_metadata = read_wav_metadata(song_dir.join(&normalized_file_path))?;
+    let wav_metadata = read_audio_metadata(song_dir.join(&normalized_file_path))?;
     let clip_id = format!("clip_{}_{}", timestamp_suffix(), song.clips.len());
 
     song.clips.push(Clip {
@@ -3231,6 +3379,7 @@ mod tests {
             time_signature: "4/4".into(),
             duration_seconds: 12.0,
             tempo_markers: vec![],
+            time_signature_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_1".into(),
                 name: "Move Demo".into(),
@@ -3424,6 +3573,7 @@ mod tests {
             time_signature: "4/4".into(),
             duration_seconds: 12.0,
             tempo_markers: vec![],
+            time_signature_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_1".into(),
                 name: "Hierarchy Demo".into(),
@@ -3697,6 +3847,7 @@ mod tests {
             time_signature: "4/4".into(),
             duration_seconds: 8.0,
             tempo_markers: vec![],
+            time_signature_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_1".into(),
                 name: "ID Audit".into(),

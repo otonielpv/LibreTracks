@@ -7,6 +7,7 @@ import type {
   SectionMarkerSummary,
   SongRegionSummary,
   TempoMarkerSummary,
+  TimeSignatureMarkerSummary,
   SongView,
   TrackSummary,
   WaveformSummaryDto,
@@ -41,6 +42,7 @@ type RulerCanvasProps = {
   regions: SongRegionSummary[];
   markers: SectionMarkerSummary[];
   tempoMarkers: TempoMarkerSummary[];
+  timeSignatureMarkers: TimeSignatureMarkerSummary[];
   selectedRegionId: string | null;
   selectedMarkerId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
@@ -200,6 +202,7 @@ export function TimelineRulerCanvas({
   regions,
   markers,
   tempoMarkers,
+  timeSignatureMarkers,
   selectedRegionId,
   selectedMarkerId,
   pendingMarkerJump,
@@ -226,6 +229,7 @@ export function TimelineRulerCanvas({
     regions,
     markers,
     tempoMarkers,
+    timeSignatureMarkers,
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
@@ -242,6 +246,7 @@ export function TimelineRulerCanvas({
     regions,
     markers,
     tempoMarkers,
+    timeSignatureMarkers,
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
@@ -263,6 +268,10 @@ export function TimelineRulerCanvas({
     () => tempoMarkers.map((m) => `${m.id}:${m.startSeconds}:${m.bpm}`).join("|"),
     [tempoMarkers],
   );
+  const timeSignatureMarkersSignature = useMemo(
+    () => timeSignatureMarkers.map((m) => `${m.id}:${m.startSeconds}:${m.signature}`).join("|"),
+    [timeSignatureMarkers],
+  );
 
   const pendingJumpSignature = pendingMarkerJump
     ? `${pendingMarkerJump.targetMarkerId}:${pendingMarkerJump.executeAtSeconds}`
@@ -278,6 +287,7 @@ export function TimelineRulerCanvas({
     regionsSignature,
     markersSignature,
     tempoMarkersSignature,
+    timeSignatureMarkersSignature,
     pendingJumpSignature,
     activeVampSignature,
     pixelsPerSecond,
@@ -432,6 +442,7 @@ export function TimelineRulerCanvas({
               pixelsPerSecond: livePixelsPerSecond,
               markers: snapshot.markers,
               tempoMarkers: snapshot.tempoMarkers,
+              timeSignatureMarkers: snapshot.timeSignatureMarkers,
               pendingMarkerJump: snapshot.pendingMarkerJump,
               selectedMarkerId: snapshot.selectedMarkerId,
               currentMarkerId,

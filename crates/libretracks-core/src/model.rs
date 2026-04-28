@@ -32,6 +32,8 @@ pub struct Song {
     #[serde(default)]
     pub tempo_markers: Vec<TempoMarker>,
     #[serde(default)]
+    pub time_signature_markers: Vec<TimeSignatureMarker>,
+    #[serde(default)]
     pub regions: Vec<SongRegion>,
     pub tracks: Vec<Track>,
     pub clips: Vec<Clip>,
@@ -122,6 +124,14 @@ pub struct TempoMetadata {
 pub enum OutputBus {
     Main,
     Monitor,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeSignatureMarker {
+    pub id: String,
+    pub start_seconds: f64,
+    pub signature: String,
 }
 
 impl OutputBus {

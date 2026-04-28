@@ -50,6 +50,20 @@ pub enum DomainError {
     InvalidMarkerDigit { marker_id: String, digit: u8 },
     #[error("marker digit is duplicated: {digit}")]
     DuplicateMarkerDigit { digit: u8 },
+    #[error("time signature marker {marker_id} has invalid position")]
+    InvalidTimeSignatureMarkerPosition { marker_id: String },
+    #[error(
+        "time signature markers are out of order: {previous_marker_id} before {marker_id}"
+    )]
+    TimeSignatureMarkersOutOfOrder {
+        previous_marker_id: String,
+        marker_id: String,
+    },
+    #[error("time signature marker {marker_id} is invalid: {signature}")]
+    InvalidTimeSignatureMarker {
+        marker_id: String,
+        signature: String,
+    },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -194,5 +208,47 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
         previous_marker_start_seconds = Some(marker.start_seconds);
     }
 
+    let mut previous_time_signature_marker_id: Option<&str> = None;
+    let mut previous_time_signature_marker_start_seconds: Option<f64> = None;
+
+    for marker in &song.time_signature_markers {
+        if marker.start_seconds < 0.0 {
+            return Err(DomainError::InvalidTimeSignatureMarkerPosition {
+                marker_id: marker.id.clone(),
+            });
+        }
+
+        if parse_time_signature(&marker.signature).is_none() {
+            return Err(DomainError::InvalidTimeSignatureMarker {
+                marker_id: marker.id.clone(),
+                signature: marker.signature.clone(),
+            });
+        }
+
+        if let Some(previous_start_seconds) = previous_time_signature_marker_start_seconds {
+            if marker.start_seconds <= previous_start_seconds {
+                return Err(DomainError::TimeSignatureMarkersOutOfOrder {
+                    previous_marker_id: previous_time_signature_marker_id
+                        .unwrap_or_default()
+                        .to_string(),
+                    marker_id: marker.id.clone(),
+                });
+            }
+        }
+
+        previous_time_signature_marker_id = Some(marker.id.as_str());
+        previous_time_signature_marker_start_seconds = Some(marker.start_seconds);
+    }
+
     Ok(())
+}
+
+fn parse_time_signature(time_signature: &str) -> Option<(u32, u32)> {
+    let (numerator, denominator) = time_signature.split_once('/')?;
+    let numerator = numerator.parse::<u32>().ok()?;
+    let denominator = denominator.parse::<u32>().ok()?;
+    if numerator == 0 || denominator == 0 {
+        return None;
+    }
+    Some((numerator, denominator))
 }

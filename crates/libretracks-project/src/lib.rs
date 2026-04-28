@@ -1,13 +1,18 @@
 //! Persistencia y operaciones de proyecto.
 
 mod importer;
+mod package;
 mod song_store;
 mod waveform;
 
 pub use importer::{
-    append_wav_files_to_song, import_wav_files_to_library, import_wav_song, read_wav_metadata,
+    append_wav_files_to_song, import_wav_files_to_library, import_wav_song, read_audio_metadata,
+    read_wav_metadata,
     AppendWavFilesResult, ImportLibraryAssetsResult, ImportOperationMetrics, ImportedAudioFile,
-    ImportedLibraryAsset, ImportedSong, ProjectImportRequest, WavMetadata,
+    ImportedLibraryAsset, ImportedSong, ProjectImportRequest, AudioMetadata, WavMetadata,
+};
+pub use package::{
+    export_region_as_package, import_song_package, SongPackageExport, SongPackageImportResult,
 };
 pub use song_store::{
     create_song_folder, load_song, load_song_from_file, save_song, save_song_to_file,
@@ -44,6 +49,7 @@ mod tests {
             time_signature: "4/4".into(),
             duration_seconds: 240.0,
             tempo_markers: vec![],
+            time_signature_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_intro".into(),
                 name: "Cancion".into(),

@@ -145,3 +145,34 @@ pub fn import_library_assets_from_dialog(
         .import_library_assets_from_dialog(&app)
         .map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub fn export_region_as_package(
+    region_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .export_region_as_package(&region_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn import_song_package(
+    package_path: String,
+    insert_at_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .import_song_package(&package_path, insert_at_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}

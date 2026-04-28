@@ -25,6 +25,7 @@ import {
   deleteClip,
   deleteSongRegion,
   deleteSongTempoMarker,
+  deleteSongTimeSignatureMarker,
   deleteSectionMarker,
   deleteTrack,
   duplicateClip,
@@ -46,6 +47,7 @@ import {
   getTransportSnapshot,
   getWaveformSummaries,
   importLibraryAssetsFromDialog,
+  importSongPackage,
   isTauriApp,
   listenToLibraryImportProgress,
   listenToAudioMeters,
@@ -73,9 +75,12 @@ import {
   toggleVamp,
   undoAction,
   updateAudioSettings,
+  exportRegionAsPackage,
   updateSectionMarker,
   updateSongRegion,
   upsertSongTempoMarker,
+  upsertSongTimeSignatureMarker,
+  updateSongTimeSignature,
   updateSongTempo,
   updateTrack,
   updateTrackMixLive,
@@ -91,6 +96,7 @@ import {
   type SongRegionSummary,
   type SongView,
   type TempoMarkerSummary,
+  type TimeSignatureMarkerSummary,
   type TrackKind,
   type TransportLifecycleEvent,
   type TrackSummary,
@@ -423,6 +429,16 @@ function hasLibraryAssetDragType(dataTransfer: DataTransfer | null) {
 
   const dragTypes = Array.from(dataTransfer.types ?? []);
   return dragTypes.includes(LIBRARY_ASSET_DRAG_MIME) || dragTypes.includes("text/plain");
+}
+
+function readSongPackageDragPath(dataTransfer: DataTransfer | null) {
+  const file = dataTransfer?.files?.[0];
+  if (!file) {
+    return null;
+  }
+
+  const nativeFile = file as File & { path?: string };
+  return file.name.toLowerCase().endsWith(".ltpkg") ? nativeFile.path ?? file.name : null;
 }
 
 function formatMusicalPosition(seconds: number, song: SongView | null | undefined) {
@@ -818,6 +834,7 @@ export function TransportPanelContent() {
   const [midiInputDevices, setMidiInputDevices] = useState<string[]>([]);
   const [remoteServerInfo, setRemoteServerInfo] = useState<RemoteServerInfo | null>(null);
   const [tempoDraft, setTempoDraft] = useState("120");
+  const [timeSignatureDraft, setTimeSignatureDraft] = useState("4/4");
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
@@ -825,6 +842,7 @@ export function TransportPanelContent() {
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
   const [libraryFolders, setLibraryFolders] = useState<string[]>([]);
   const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState[]>([]);
+  const [packageDropPreviewSeconds, setPackageDropPreviewSeconds] = useState<number | null>(null);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [selectedTimelineRange, setSelectedTimelineRange] = useState<TimelineRangeSelection | null>(null);
   const [optimisticClipOperations, setOptimisticClipOperations] = useState<OptimisticClipOperation[]>([]);
@@ -2088,6 +2106,7 @@ export function TransportPanelContent() {
     }
 
     setTempoDraft(String(getSongBaseBpm(song)));
+    setTimeSignatureDraft(getSongBaseTimeSignature(song));
   }, [song, song?.projectRevision]);
 
   useEffect(() => {
@@ -2938,6 +2957,7 @@ export function TransportPanelContent() {
   const songBaseBpm = getSongBaseBpm(song);
   const songBaseTimeSignature = getSongBaseTimeSignature(song);
   const displayedBpm = readoutTempoRegion?.bpm ?? songBaseBpm;
+  const displayedTimeSignature = readoutTempoRegion?.timeSignature ?? songBaseTimeSignature;
   const musicalPositionLabel = song
     ? formatMusicalPosition(readoutPositionSeconds, song)
     : "1.1.00";
@@ -3249,6 +3269,25 @@ export function TransportPanelContent() {
         },
       },
       {
+        label: "Crear marca de metrica",
+        disabled: !song,
+        onSelect: async () => {
+          const nextSignature = window.prompt("Compas", displayedTimeSignature)?.trim();
+          if (!nextSignature) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = positionSeconds <= 0.0001
+              ? await updateSongTimeSignature(nextSignature)
+              : await upsertSongTimeSignatureMarker(positionSeconds, nextSignature);
+            applyPlaybackSnapshot(nextSnapshot);
+            setTimeSignatureDraft(nextSignature);
+            setStatus(`Compas ${nextSignature} en ${formatClock(positionSeconds)}`);
+          });
+        },
+      },
+      {
         label: t("transport.menu.clearTimelineSelection"),
         disabled: !timelineRange,
         onSelect: () => {
@@ -3285,6 +3324,15 @@ export function TransportPanelContent() {
         label: t("transport.menu.changeBpm"),
         disabled: true,
         onSelect: () => {},
+      },
+      {
+        label: "Exportar Cancion",
+        onSelect: async () => {
+          await runAction(async () => {
+            await exportRegionAsPackage(region.id);
+            setStatus(`Paquete exportado para ${region.name}`);
+          });
+        },
       },
       {
         label: t("transport.menu.deleteSong"),
@@ -4098,6 +4146,37 @@ export function TransportPanelContent() {
   function handleRemoteButtonClick() {
     setIsSettingsModalOpen(false);
     setIsRemoteModalOpen((current) => !current);
+  }
+
+  function timeSignatureMarkerContextMenu(marker: TimeSignatureMarkerSummary) {
+    return [
+      {
+        label: "Cambiar compas",
+        onSelect: async () => {
+          const nextSignature = window.prompt("Compas", marker.signature)?.trim();
+          if (!nextSignature) {
+            return;
+          }
+
+          await runAction(async () => {
+            const nextSnapshot = await upsertSongTimeSignatureMarker(marker.startSeconds, nextSignature);
+            applyPlaybackSnapshot(nextSnapshot);
+            setTimeSignatureDraft(nextSignature);
+            setStatus(`Compas actualizado a ${nextSignature}`);
+          });
+        },
+      },
+      {
+        label: t("transport.menu.deleteMarker"),
+        onSelect: async () => {
+          await runAction(async () => {
+            const nextSnapshot = await deleteSongTimeSignatureMarker(marker.id);
+            applyPlaybackSnapshot(nextSnapshot);
+            setStatus(`Marca de compas eliminada en ${formatClock(marker.startSeconds)}`);
+          });
+        },
+      },
+    ];
   }
 
   function handleMidiLearnToggle(options?: { closePanels?: boolean }) {
@@ -4952,6 +5031,7 @@ export function TransportPanelContent() {
       return;
     }
 
+    setPackageDropPreviewSeconds(null);
     clearLibraryDragPreview();
   }
 
@@ -4959,6 +5039,15 @@ export function TransportPanelContent() {
     event: ReactDragEvent<HTMLDivElement>,
     track: TrackSummary,
   ) {
+    const packagePath = readSongPackageDragPath(event.dataTransfer);
+    if (packagePath) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      setPackageDropPreviewSeconds(resolveLibraryDropSeconds(event, event.currentTarget));
+      return;
+    }
+
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload || track.kind === "folder") {
       return;
@@ -4974,6 +5063,22 @@ export function TransportPanelContent() {
     event: ReactDragEvent<HTMLDivElement>,
     track: TrackSummary,
   ) {
+    const packagePath = readSongPackageDragPath(event.dataTransfer);
+    if (packagePath) {
+      event.preventDefault();
+      event.stopPropagation();
+      setPackageDropPreviewSeconds(null);
+      void runAction(async () => {
+        const nextSnapshot = await importSongPackage(
+          packagePath,
+          resolveLibraryDropSeconds(event, event.currentTarget),
+        );
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(`Paquete importado en ${formatClock(resolveLibraryDropSeconds(event, event.currentTarget))}`);
+      });
+      return;
+    }
+
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload || track.kind === "folder") {
       return;
@@ -4995,6 +5100,14 @@ export function TransportPanelContent() {
   }
 
   function handleTrackListLibraryDragOver(event: ReactDragEvent<HTMLDivElement>) {
+    const packagePath = readSongPackageDragPath(event.dataTransfer);
+    if (packagePath) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      setPackageDropPreviewSeconds(resolveLibraryDropSeconds(event, event.currentTarget));
+      return;
+    }
+
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
@@ -5013,6 +5126,22 @@ export function TransportPanelContent() {
   }
 
   function handleTrackListLibraryDrop(event: ReactDragEvent<HTMLDivElement>) {
+    const packagePath = readSongPackageDragPath(event.dataTransfer);
+    if (packagePath) {
+      event.preventDefault();
+      clearLibraryDragPreview();
+      clearActiveLibraryDragPayload();
+      setPackageDropPreviewSeconds(null);
+
+      void runAction(async () => {
+        const insertAtSeconds = resolveLibraryDropSeconds(event, event.currentTarget);
+        const nextSnapshot = await importSongPackage(packagePath, insertAtSeconds);
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(`Paquete importado en ${formatClock(insertAtSeconds)}`);
+      });
+      return;
+    }
+
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (!payload || target?.closest(".lt-track-lane")) {
@@ -5034,6 +5163,13 @@ export function TransportPanelContent() {
   }
 
   function handleLibraryPreviewLaneDragOver(event: ReactDragEvent<HTMLDivElement>) {
+    if (readSongPackageDragPath(event.dataTransfer)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      setPackageDropPreviewSeconds(resolveLibraryDropSeconds(event, event.currentTarget));
+      return;
+    }
+
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
@@ -5046,6 +5182,22 @@ export function TransportPanelContent() {
   }
 
   function handleLibraryPreviewLaneDrop(event: ReactDragEvent<HTMLDivElement>) {
+    const packagePath = readSongPackageDragPath(event.dataTransfer);
+    if (packagePath) {
+      event.preventDefault();
+      clearLibraryDragPreview();
+      clearActiveLibraryDragPayload();
+      setPackageDropPreviewSeconds(null);
+
+      void runAction(async () => {
+        const insertAtSeconds = resolveLibraryDropSeconds(event, event.currentTarget);
+        const nextSnapshot = await importSongPackage(packagePath, insertAtSeconds);
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(`Paquete importado en ${formatClock(insertAtSeconds)}`);
+      });
+      return;
+    }
+
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
@@ -5067,6 +5219,13 @@ export function TransportPanelContent() {
   }
 
   function handleEmptyArrangementLibraryDragOver(event: ReactDragEvent<HTMLDivElement>) {
+    if (readSongPackageDragPath(event.dataTransfer)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      setPackageDropPreviewSeconds(resolveLibraryDropSeconds(event, event.currentTarget));
+      return;
+    }
+
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
@@ -5079,6 +5238,22 @@ export function TransportPanelContent() {
   }
 
   function handleEmptyArrangementLibraryDrop(event: ReactDragEvent<HTMLDivElement>) {
+    const packagePath = readSongPackageDragPath(event.dataTransfer);
+    if (packagePath) {
+      event.preventDefault();
+      clearLibraryDragPreview();
+      clearActiveLibraryDragPayload();
+      setPackageDropPreviewSeconds(null);
+
+      void runAction(async () => {
+        const insertAtSeconds = resolveLibraryDropSeconds(event, event.currentTarget);
+        const nextSnapshot = await importSongPackage(packagePath, insertAtSeconds);
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(`Paquete importado en ${formatClock(insertAtSeconds)}`);
+      });
+      return;
+    }
+
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
@@ -5131,8 +5306,10 @@ export function TransportPanelContent() {
         canPersistProject={canPersistProject}
         isProjectEmpty={isProjectEmpty}
         tempoDraft={tempoDraft}
+        timeSignatureDraft={timeSignatureDraft}
         tempoSourceLabel={tempoSourceLabel}
         displayedBpm={displayedBpm}
+        displayedTimeSignature={displayedTimeSignature}
         song={song}
         musicalPositionLabel={musicalPositionLabel}
         readoutPositionSecondsLabel={formatClock(readoutPositionSeconds)}
@@ -5188,6 +5365,25 @@ export function TransportPanelContent() {
             const nextSnapshot = await updateSongTempo(nextBpm);
             applyPlaybackSnapshot(nextSnapshot);
             setStatus(t("transport.status.tempoUpdated", { bpm: nextBpm.toFixed(1) }));
+          });
+        }}
+        onTimeSignatureDraftChange={setTimeSignatureDraft}
+        onTimeSignatureCommit={() => {
+          const nextSignature = timeSignatureDraft.trim();
+          const currentSignature = songBaseTimeSignature;
+
+          if (!song || !nextSignature || nextSignature === currentSignature) {
+            setTimeSignatureDraft(currentSignature);
+            return;
+          }
+
+          void runAction(async () => {
+            const positionSeconds = readoutPositionSeconds;
+            const nextSnapshot = positionSeconds <= 0.0001
+              ? await updateSongTimeSignature(nextSignature)
+              : await upsertSongTimeSignatureMarker(positionSeconds, nextSignature);
+            applyPlaybackSnapshot(nextSnapshot);
+            setStatus(`Compas actualizado a ${nextSignature}`);
           });
         }}
         midiLearnMode={midiLearnMode}
@@ -5388,6 +5584,7 @@ export function TransportPanelContent() {
                 scrollViewportRef={timelineScrollViewportRef}
                 libraryClipPreview={libraryClipPreview}
                 libraryPreviewRows={libraryPreviewRows}
+                packageDropPreviewSeconds={packageDropPreviewSeconds}
                 shouldShowEmptyArrangementHint={shouldShowEmptyArrangementHint}
                 normalizePositionSeconds={(positionSeconds) =>
                   normalizeTimelineSeekSeconds(positionSeconds, workspaceDurationSeconds)}
@@ -5575,6 +5772,17 @@ export function TransportPanelContent() {
                   setSelectedTimelineRange(null);
                   setSelectedRegionId(null);
                   openMenu(event, `${t("timelineTopbar.tempoReadout")} ${marker.bpm.toFixed(2)} BPM`, tempoMarkerContextMenu(marker));
+                }}
+                onTimeSignatureMarkerContextMenu={(event, markerId) => {
+                  const marker = song?.timeSignatureMarkers.find((candidate) => candidate.id === markerId);
+                  if (!marker) {
+                    return;
+                  }
+
+                  clearSelection();
+                  setSelectedTimelineRange(null);
+                  setSelectedRegionId(null);
+                  openMenu(event, `Compas ${marker.signature}`, timeSignatureMarkerContextMenu(marker));
                 }}
                 onRegionContextMenu={(event, regionId) => {
                   const region = song?.regions.find((candidate) => candidate.id === regionId);

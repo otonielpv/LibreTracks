@@ -9,8 +9,10 @@ type TimelineTopbarProps = {
   canPersistProject: boolean;
   isProjectEmpty: boolean;
   tempoDraft: string;
+  timeSignatureDraft: string;
   tempoSourceLabel: string;
   displayedBpm: number;
+  displayedTimeSignature: string;
   song: SongView | null;
   musicalPositionLabel: string;
   readoutPositionSecondsLabel: string;
@@ -32,6 +34,8 @@ type TimelineTopbarProps = {
   onToggleMetronome: () => void;
   onTempoDraftChange: (nextTempoDraft: string) => void;
   onTempoCommit: () => void;
+  onTimeSignatureDraftChange: (nextSignatureDraft: string) => void;
+  onTimeSignatureCommit: () => void;
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => void;
 };
@@ -42,8 +46,10 @@ export function TimelineTopbar({
   canPersistProject,
   isProjectEmpty,
   tempoDraft,
+  timeSignatureDraft,
   tempoSourceLabel,
   displayedBpm,
+  displayedTimeSignature,
   song,
   musicalPositionLabel,
   readoutPositionSecondsLabel,
@@ -65,6 +71,8 @@ export function TimelineTopbar({
   onToggleMetronome,
   onTempoDraftChange,
   onTempoCommit,
+  onTimeSignatureDraftChange,
+  onTimeSignatureCommit,
   midiLearnMode,
   onMidiLearnTarget,
 }: TimelineTopbarProps) {
@@ -193,6 +201,20 @@ export function TimelineTopbar({
             <small>{tempoSourceLabel}</small>
           </label>
 
+          <label className="lt-bpm-control">
+            <span>Compas</span>
+            <input
+              aria-label="Compas de la cancion"
+              disabled={isProjectEmpty}
+              type="text"
+              value={timeSignatureDraft}
+              onChange={(event) => onTimeSignatureDraftChange(event.target.value)}
+              onBlur={onTimeSignatureCommit}
+              onKeyDown={handleTempoKeyDown}
+            />
+            <small>{displayedTimeSignature}</small>
+          </label>
+
           <div className="lt-transport-buttons">
             <button type="button" aria-label={t("timelineTopbar.previous")} disabled={isProjectEmpty}>
               <span className="material-symbols-outlined">skip_previous</span>
@@ -281,6 +303,10 @@ export function TimelineTopbar({
             <div className="lt-readout-block">
               <span>{t("timelineTopbar.tempoReadout")}</span>
               <strong ref={transportReadoutTempoRef}>{`${(Number.isFinite(displayedBpm) ? displayedBpm : fallbackBpm).toFixed(2)} BPM`}</strong>
+            </div>
+            <div className="lt-readout-block">
+              <span>Compas</span>
+              <strong>{displayedTimeSignature}</strong>
             </div>
             <div className="lt-readout-block">
               <span>{t("timelineTopbar.barReadout")}</span>

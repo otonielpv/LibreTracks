@@ -27,6 +27,12 @@ export type TempoMarkerSummary = {
   bpm: number;
 };
 
+export type TimeSignatureMarkerSummary = {
+  id: string;
+  startSeconds: number;
+  signature: string;
+};
+
 export type PendingJumpSummary = {
   targetMarkerId: string;
   targetMarkerName: string;
@@ -76,6 +82,7 @@ export type SongView = {
   timeSignature: string;
   durationSeconds: number;
   tempoMarkers: TempoMarkerSummary[];
+  timeSignatureMarkers: TimeSignatureMarkerSummary[];
   regions: SongRegionSummary[];
   sectionMarkers: SectionMarkerSummary[];
   clips: ClipSummary[];
@@ -366,38 +373,46 @@ export function buildSongTempoRegions(song: SongView | null | undefined): SongTe
     return [];
   }
 
-  const markers = [...song.tempoMarkers]
-    .filter((marker) => marker.startSeconds > 0)
-    .sort((left, right) => left.startSeconds - right.startSeconds);
+  const boundaries = [
+    ...song.tempoMarkers
+      .filter((marker) => marker.startSeconds > 0)
+      .map((marker) => ({ startSeconds: marker.startSeconds, bpm: marker.bpm, timeSignature: null as string | null })),
+    ...song.timeSignatureMarkers
+      .filter((marker) => marker.startSeconds > 0)
+      .map((marker) => ({ startSeconds: marker.startSeconds, bpm: null as number | null, timeSignature: marker.signature })),
+  ].sort((left, right) => left.startSeconds - right.startSeconds);
   const regions: SongTempoRegionSummary[] = [];
   let startSeconds = 0;
   let bpm = getSongBaseBpm(song);
+  let timeSignature = getSongBaseTimeSignature(song);
 
-  for (const marker of markers) {
+  for (const marker of boundaries) {
     if (marker.startSeconds <= startSeconds) {
-      bpm = marker.bpm;
+      bpm = marker.bpm ?? bpm;
+      timeSignature = marker.timeSignature ?? timeSignature;
       continue;
     }
 
     regions.push({
       id: `tempo-region-${startSeconds.toFixed(4)}`,
-      name: `Tempo ${bpm.toFixed(2)}`,
+      name: `Tempo ${bpm.toFixed(2)} ${timeSignature}`,
       startSeconds,
       endSeconds: marker.startSeconds,
       bpm,
-      timeSignature: getSongBaseTimeSignature(song),
+      timeSignature,
     });
     startSeconds = marker.startSeconds;
-    bpm = marker.bpm;
+    bpm = marker.bpm ?? bpm;
+    timeSignature = marker.timeSignature ?? timeSignature;
   }
 
   regions.push({
     id: `tempo-region-${startSeconds.toFixed(4)}-tail`,
-    name: `Tempo ${bpm.toFixed(2)}`,
+    name: `Tempo ${bpm.toFixed(2)} ${timeSignature}`,
     startSeconds,
     endSeconds: Math.max(startSeconds, SONG_TEMPO_REGION_VISUAL_END_SECONDS),
     bpm,
-    timeSignature: getSongBaseTimeSignature(song),
+    timeSignature,
   });
 
   return regions;

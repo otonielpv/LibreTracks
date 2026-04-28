@@ -13,6 +13,7 @@ import type {
   PendingJumpSummary,
   SongRegionSummary,
   SongView,
+  TimeSignatureMarkerSummary,
   TrackSummary,
   WaveformSummaryDto,
 } from "./desktopApi";
@@ -64,6 +65,7 @@ type TimelineCanvasPaneProps = {
   scrollViewportRef: RefObject<HTMLDivElement | null>;
   libraryClipPreview: LibraryClipPreviewState[];
   libraryPreviewRows: LibraryPreviewRow[];
+  packageDropPreviewSeconds: number | null;
   shouldShowEmptyArrangementHint: boolean;
   normalizePositionSeconds: (positionSeconds: number) => number;
   resolveLibraryGhostLeft: (seconds: number) => number;
@@ -72,6 +74,10 @@ type TimelineCanvasPaneProps = {
   onMarkerPrimaryAction: (sectionId: string) => void;
   onMarkerContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, sectionId: string) => void;
   onTempoMarkerContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, markerId: string) => void;
+  onTimeSignatureMarkerContextMenu: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    markerId: string,
+  ) => void;
   onRegionContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, regionId: string) => void;
   canNativeZoom: boolean;
   onNativeCameraXPreview: (cameraX: number) => number;
@@ -134,6 +140,7 @@ export function TimelineCanvasPane({
   scrollViewportRef,
   libraryClipPreview,
   libraryPreviewRows,
+  packageDropPreviewSeconds,
   shouldShowEmptyArrangementHint,
   normalizePositionSeconds,
   resolveLibraryGhostLeft,
@@ -142,6 +149,7 @@ export function TimelineCanvasPane({
   onMarkerPrimaryAction,
   onMarkerContextMenu,
   onTempoMarkerContextMenu,
+  onTimeSignatureMarkerContextMenu,
   onRegionContextMenu,
   canNativeZoom,
   onNativeCameraXPreview,
@@ -186,6 +194,7 @@ export function TimelineCanvasPane({
             regions={(song?.regions ?? []) as SongRegionSummary[]}
             markers={song?.sectionMarkers ?? []}
             tempoMarkers={song?.tempoMarkers ?? []}
+            timeSignatureMarkers={song?.timeSignatureMarkers ?? []}
             selectedRegionId={selectedRegionId}
             selectedMarkerId={selectedSectionId}
             pendingMarkerJump={pendingMarkerJump}
@@ -289,6 +298,30 @@ export function TimelineCanvasPane({
                 <span className="lt-sr-only">{marker.bpm.toFixed(2)} BPM</span>
               </button>
             ))}
+
+            {song?.timeSignatureMarkers.map((marker) => (
+              <button
+                key={marker.id}
+                type="button"
+                className="lt-tempo-hotspot lt-time-signature-hotspot"
+                aria-label={`Compas ${marker.signature}`}
+                title={`Compas ${marker.signature}`}
+                style={{ left: marker.startSeconds * pixelsPerSecond }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+                onContextMenu={(event) => {
+                  event.stopPropagation();
+                  onTimeSignatureMarkerContextMenu(event, marker.id);
+                }}
+              >
+                <span className="lt-sr-only">{marker.signature}</span>
+              </button>
+            ))}
           </TimelineRulerCanvas>
 
           <PlayheadOverlay
@@ -355,6 +388,22 @@ export function TimelineCanvasPane({
               positionSecondsRef={displayPositionSecondsRef}
             />
           </div>
+
+          {packageDropPreviewSeconds !== null ? (
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: resolveLibraryGhostLeft(packageDropPreviewSeconds),
+                width: 2,
+                background: "#ffb86b",
+                boxShadow: "0 0 0 1px rgba(255,184,107,0.22), 0 0 18px rgba(255,184,107,0.42)",
+                pointerEvents: "none",
+              }}
+            />
+          ) : null}
 
           {shouldShowEmptyArrangementHint ? (
             <div

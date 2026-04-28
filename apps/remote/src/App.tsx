@@ -75,6 +75,7 @@ type TransportReadout = {
   timecode: string;
   musicalDisplay: string;
   bpm: number;
+  timeSignature: string;
   regionName: string;
 };
 
@@ -448,6 +449,7 @@ function useTransportReadout(): TransportReadout {
     timecode: "00:00.00",
     musicalDisplay: "1.1.00",
     bpm: 120,
+    timeSignature: "4/4",
     regionName: "--",
   });
 
@@ -485,6 +487,7 @@ function useTransportReadout(): TransportReadout {
         timecode: formatTimecode(positionSeconds),
         musicalDisplay: musicalPosition.display,
         bpm: tempoRegion.bpm,
+        timeSignature: tempoRegion.timeSignature,
         regionName: currentRegion?.name ?? "--",
       });
 
@@ -713,6 +716,10 @@ function TransportChrome() {
             <strong>{readout.bpm.toFixed(2)}</strong>
           </div>
           <div className="readout-card">
+            <span>Compas</span>
+            <strong>{readout.timeSignature}</strong>
+          </div>
+          <div className="readout-card">
             <span>{STRINGS.region}</span>
             <strong>{readout.regionName}</strong>
           </div>
@@ -750,6 +757,10 @@ function HeaderTransportTopline() {
           <div className="readout-card">
             <span>{STRINGS.bpm}</span>
             <strong>{readout.bpm.toFixed(2)}</strong>
+          </div>
+          <div className="readout-card">
+            <span>Compas</span>
+            <strong>{readout.timeSignature}</strong>
           </div>
           <div className="readout-card">
             <span>{STRINGS.region}</span>

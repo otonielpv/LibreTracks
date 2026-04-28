@@ -778,6 +778,7 @@ mod tests {
             time_signature: "4/4".into(),
             duration_seconds: 24.0,
             tempo_markers: vec![],
+            time_signature_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_1".into(),
                 name: "Digno y Santo".into(),
@@ -898,6 +899,7 @@ mod tests {
                     bpm: 60.0,
                 },
             ],
+            time_signature_markers: vec![],
             regions: vec![
                 SongRegion {
                     id: "region_intro".into(),

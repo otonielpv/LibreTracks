@@ -1,6 +1,8 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{ActiveVamp, JumpTrigger, PendingMarkerJump, TransitionType};
-use libretracks_core::{Clip, Marker, Song, SongRegion, TempoMarker, TrackKind};
+use libretracks_core::{
+    Clip, Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker, TrackKind,
+};
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
 
@@ -61,6 +63,7 @@ pub struct SongView {
     pub time_signature: String,
     pub duration_seconds: f64,
     pub tempo_markers: Vec<TempoMarkerSummary>,
+    pub time_signature_markers: Vec<TimeSignatureMarkerSummary>,
     pub regions: Vec<SongRegionSummary>,
     pub section_markers: Vec<MarkerSummary>,
     pub clips: Vec<ClipSummary>,
@@ -83,6 +86,14 @@ pub struct TempoMarkerSummary {
     pub id: String,
     pub start_seconds: f64,
     pub bpm: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeSignatureMarkerSummary {
+    pub id: String,
+    pub start_seconds: f64,
+    pub signature: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -217,6 +228,11 @@ pub(crate) fn song_to_view(
             .tempo_markers
             .iter()
             .map(tempo_marker_to_summary)
+            .collect(),
+        time_signature_markers: song
+            .time_signature_markers
+            .iter()
+            .map(time_signature_marker_to_summary)
             .collect(),
         regions: song.regions.iter().map(region_to_summary).collect(),
         section_markers: song.section_markers.iter().map(marker_to_summary).collect(),
@@ -359,41 +375,41 @@ pub(crate) fn tempo_marker_to_summary(marker: &TempoMarker) -> TempoMarkerSummar
     }
 }
 
+pub(crate) fn time_signature_marker_to_summary(
+    marker: &TimeSignatureMarker,
+) -> TimeSignatureMarkerSummary {
+    TimeSignatureMarkerSummary {
+        id: marker.id.clone(),
+        start_seconds: marker.start_seconds,
+        signature: marker.signature.clone(),
+    }
+}
+
 pub(crate) fn musical_position_summary(
     song: &Song,
     position_seconds: f64,
 ) -> MusicalPositionSummary {
-    let Ok((numerator, denominator)) = parse_time_signature(&song.time_signature) else {
-        return empty_musical_position_summary();
-    };
     if song.bpm <= 0.0 {
         return empty_musical_position_summary();
     }
-
-    let beats_per_bar = numerator.max(1);
     let clamped_seconds = position_seconds.max(0.0);
-    let tempo_regions = build_tempo_regions(song, clamped_seconds);
-    let mut total_beats = 0.0_f64;
+    let timing_regions = build_timing_regions(song, clamped_seconds);
+    let mut cumulative_bars_start = 0.0_f64;
 
-    for region in tempo_regions {
+    for region in &timing_regions {
         let clamped_region_end = clamped_seconds.min(region.end_seconds.max(region.start_seconds));
         if clamped_region_end <= region.start_seconds {
             break;
         }
 
-        let beat_duration_seconds = beat_frames_for_signature(
-            region.bpm,
-            denominator,
-            TIMELINE_TIMEBASE_HZ,
-        ) as f64
-            / f64::from(TIMELINE_TIMEBASE_HZ);
-        total_beats += (clamped_region_end - region.start_seconds) / beat_duration_seconds;
+        let total_beats = cumulative_bars_start * f64::from(region.beats_per_bar)
+            + (clamped_region_end - region.start_seconds) / region.beat_duration_seconds;
 
         if clamped_seconds < region.end_seconds {
             let total_whole_beats = (total_beats + f64::EPSILON).floor() as u64;
             let fractional_beat = (total_beats - total_whole_beats as f64).clamp(0.0, 0.999_999);
-            let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
-            let beat_in_bar = (total_whole_beats % u64::from(beats_per_bar)) as u32 + 1;
+            let bar_number = (total_whole_beats / u64::from(region.beats_per_bar)) as u32 + 1;
+            let beat_in_bar = (total_whole_beats % u64::from(region.beats_per_bar)) as u32 + 1;
             let sub_beat = (fractional_beat * 100.0).floor().min(99.0) as u32;
 
             return MusicalPositionSummary {
@@ -403,8 +419,15 @@ pub(crate) fn musical_position_summary(
                 display: format!("{bar_number}.{beat_in_bar}.{sub_beat:02}"),
             };
         }
+
+        cumulative_bars_start = region.cumulative_bars_end;
     }
 
+    let total_beats = timing_regions
+        .last()
+        .map(|region| region.cumulative_bars_end * f64::from(region.beats_per_bar))
+        .unwrap_or(0.0);
+    let beats_per_bar = timing_regions.last().map(|region| region.beats_per_bar).unwrap_or(4);
     let total_whole_beats = (total_beats + f64::EPSILON).floor() as u64;
     let fractional_beat = (total_beats - total_whole_beats as f64).clamp(0.0, 0.999_999);
     let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
@@ -420,47 +443,92 @@ pub(crate) fn musical_position_summary(
 }
 
 #[derive(Debug, Clone)]
-struct TempoRegion {
+struct TimingRegion {
     start_seconds: f64,
     end_seconds: f64,
     bpm: f64,
+    beats_per_bar: u32,
+    beat_duration_seconds: f64,
+    cumulative_bars_end: f64,
 }
 
-fn build_tempo_regions(song: &Song, horizon_seconds: f64) -> Vec<TempoRegion> {
-    let mut markers = song
+fn build_timing_regions(song: &Song, horizon_seconds: f64) -> Vec<TimingRegion> {
+    let mut boundaries = song
         .tempo_markers
         .iter()
         .filter(|marker| marker.start_seconds > 0.0)
+        .map(|marker| (marker.start_seconds, Some(marker.bpm), None))
+        .chain(
+            song.time_signature_markers
+                .iter()
+                .filter(|marker| marker.start_seconds > 0.0)
+                .map(|marker| (marker.start_seconds, None, Some(marker.signature.clone()))),
+        )
         .collect::<Vec<_>>();
-    markers.sort_by(|left, right| {
-        left.start_seconds
-            .partial_cmp(&right.start_seconds)
+    boundaries.sort_by(|left, right| {
+        left.0
+            .partial_cmp(&right.0)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let mut regions = Vec::with_capacity(markers.len() + 1);
+    let mut regions = Vec::with_capacity(boundaries.len() + 1);
     let mut start_seconds = 0.0;
     let mut bpm = song.bpm;
+    let mut time_signature = song.time_signature.clone();
+    let mut cumulative_bars_end = 0.0_f64;
 
-    for marker in markers {
-        if marker.start_seconds <= start_seconds {
-            bpm = marker.bpm;
+    for (boundary_seconds, boundary_bpm, boundary_signature) in boundaries {
+        if boundary_seconds <= start_seconds {
+            if let Some(next_bpm) = boundary_bpm {
+                bpm = next_bpm;
+            }
+            if let Some(next_signature) = boundary_signature {
+                time_signature = next_signature;
+            }
             continue;
         }
 
-        regions.push(TempoRegion {
+        let Ok((beats_per_bar, denominator)) = parse_time_signature(&time_signature) else {
+            continue;
+        };
+        let beat_duration_seconds = beat_frames_for_signature(bpm, denominator, TIMELINE_TIMEBASE_HZ)
+            as f64
+            / f64::from(TIMELINE_TIMEBASE_HZ);
+        let bar_duration_seconds = beat_duration_seconds * f64::from(beats_per_bar);
+        cumulative_bars_end += (boundary_seconds - start_seconds).max(0.0) / bar_duration_seconds;
+        regions.push(TimingRegion {
             start_seconds,
-            end_seconds: marker.start_seconds,
+            end_seconds: boundary_seconds,
             bpm,
+            beats_per_bar,
+            beat_duration_seconds,
+            cumulative_bars_end,
         });
-        start_seconds = marker.start_seconds;
-        bpm = marker.bpm;
+        start_seconds = boundary_seconds;
+        if let Some(next_bpm) = boundary_bpm {
+            bpm = next_bpm;
+        }
+        if let Some(next_signature) = boundary_signature {
+            time_signature = next_signature;
+        }
     }
 
-    regions.push(TempoRegion {
+    let Ok((beats_per_bar, denominator)) = parse_time_signature(&time_signature) else {
+        return regions;
+    };
+    let beat_duration_seconds = beat_frames_for_signature(bpm, denominator, TIMELINE_TIMEBASE_HZ)
+        as f64
+        / f64::from(TIMELINE_TIMEBASE_HZ);
+    let bar_duration_seconds = beat_duration_seconds * f64::from(beats_per_bar);
+    cumulative_bars_end += (horizon_seconds.max(start_seconds) - start_seconds).max(0.0)
+        / bar_duration_seconds;
+    regions.push(TimingRegion {
         start_seconds,
         end_seconds: horizon_seconds.max(start_seconds),
         bpm,
+        beats_per_bar,
+        beat_duration_seconds,
+        cumulative_bars_end,
     });
 
     regions

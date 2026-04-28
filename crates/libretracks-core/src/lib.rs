@@ -3,7 +3,7 @@ pub mod validation;
 
 pub use model::{
     parse_track_output_channels, Clip, Marker, OutputBus, Project, Song, SongRegion,
-    TempoMarker, TempoMetadata, TempoSource, Track, TrackKind,
+    TempoMarker, TempoMetadata, TempoSource, TimeSignatureMarker, Track, TrackKind,
 };
 pub use validation::{validate_song, DomainError};
 
@@ -21,6 +21,7 @@ mod tests {
             time_signature: "4/4".into(),
             duration_seconds: 240.0,
             tempo_markers: vec![],
+            time_signature_markers: vec![],
             regions: vec![SongRegion {
                 id: "region_intro".into(),
                 name: "Cancion".into(),

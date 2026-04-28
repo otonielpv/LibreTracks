@@ -108,6 +108,7 @@ function buildInitialSong(): SongView {
     timeSignature: "4/4",
     durationSeconds: 180,
     tempoMarkers: [],
+    timeSignatureMarkers: [],
     regions: [
       {
         id: "region-1",
@@ -272,6 +273,7 @@ function buildEmptySong(): SongView {
     timeSignature: "4/4",
     durationSeconds: 0,
     tempoMarkers: [],
+    timeSignatureMarkers: [],
     regions: [],
     tracks: [],
     clips: [],
@@ -360,16 +362,23 @@ function buildSongTempoRegions(song: SongView | null | undefined): Array<SongReg
     return [];
   }
 
-  const markers = [...song.tempoMarkers]
-    .filter((marker) => marker.startSeconds > 0)
-    .sort((left, right) => left.startSeconds - right.startSeconds);
+  const markers = [
+    ...song.tempoMarkers
+      .filter((marker) => marker.startSeconds > 0)
+      .map((marker) => ({ startSeconds: marker.startSeconds, bpm: marker.bpm, timeSignature: null as string | null })),
+    ...song.timeSignatureMarkers
+      .filter((marker) => marker.startSeconds > 0)
+      .map((marker) => ({ startSeconds: marker.startSeconds, bpm: null as number | null, timeSignature: marker.signature })),
+  ].sort((left, right) => left.startSeconds - right.startSeconds);
   const regions: Array<SongRegionSummary & TimelineRegion> = [];
   let startSeconds = 0;
   let bpm = song.bpm;
+  let timeSignature = song.timeSignature;
 
   for (const marker of markers) {
     if (marker.startSeconds <= startSeconds) {
-      bpm = marker.bpm;
+      bpm = marker.bpm ?? bpm;
+      timeSignature = marker.timeSignature ?? timeSignature;
       continue;
     }
 
@@ -379,10 +388,11 @@ function buildSongTempoRegions(song: SongView | null | undefined): Array<SongReg
       startSeconds,
       endSeconds: marker.startSeconds,
       bpm,
-      timeSignature: song.timeSignature,
+      timeSignature,
     });
     startSeconds = marker.startSeconds;
-    bpm = marker.bpm;
+    bpm = marker.bpm ?? bpm;
+    timeSignature = marker.timeSignature ?? timeSignature;
   }
 
   regions.push({
@@ -391,7 +401,7 @@ function buildSongTempoRegions(song: SongView | null | undefined): Array<SongReg
     startSeconds,
     endSeconds: Math.max(startSeconds, SONG_TEMPO_REGION_VISUAL_END_SECONDS),
     bpm,
-    timeSignature: song.timeSignature,
+    timeSignature,
   });
 
   return regions;
@@ -441,6 +451,7 @@ function normalizeSong(song: SongView): SongView {
     regions: [...song.regions].sort((left, right) => left.startSeconds - right.startSeconds),
     sectionMarkers: [...song.sectionMarkers].sort((left, right) => left.startSeconds - right.startSeconds),
     tempoMarkers: [...song.tempoMarkers].sort((left, right) => left.startSeconds - right.startSeconds),
+    timeSignatureMarkers: [...song.timeSignatureMarkers].sort((left, right) => left.startSeconds - right.startSeconds),
   };
 }
 
@@ -637,12 +648,44 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
+  updateSongTimeSignature: async (signature: string) => {
+    replaceSong({
+      ...state.song,
+      timeSignature: signature,
+      timeSignatureMarkers: [],
+    });
+    return clone(buildSnapshot());
+  },
+  upsertSongTimeSignatureMarker: async (startSeconds: number, signature: string) => {
+    const nextMarkers = state.song.timeSignatureMarkers.filter(
+      (marker) => Math.abs(marker.startSeconds - startSeconds) > 0.0001,
+    );
+    nextMarkers.push({
+      id: nextId("time-signature-marker"),
+      startSeconds: Math.max(0, startSeconds),
+      signature,
+    });
+    replaceSong({
+      ...state.song,
+      timeSignatureMarkers: nextMarkers,
+    });
+    return clone(buildSnapshot());
+  },
+  deleteSongTimeSignatureMarker: async (markerId: string) => {
+    replaceSong({
+      ...state.song,
+      timeSignatureMarkers: state.song.timeSignatureMarkers.filter((marker) => marker.id !== markerId),
+    });
+    return clone(buildSnapshot());
+  },
   openProject: async () => {
     resetTestDesktopApiMock();
     return clone(buildSnapshot());
   },
   pickAndImportSong: async () => clone(buildSnapshot()),
   importLibraryAssetsFromDialog: async () => clone(state.libraryAssets),
+  exportRegionAsPackage: async (_regionId: string) => {},
+  importSongPackage: async (_packagePath: string, _insertAtSeconds: number) => clone(buildSnapshot()),
   deleteLibraryAsset: async (filePath: string) => {
     state.libraryAssets = state.libraryAssets.filter((asset) => asset.filePath !== filePath);
     delete state.waveforms[filePath];

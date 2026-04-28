@@ -42,7 +42,7 @@ pub struct ProjectImportRequest {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct WavMetadata {
+pub struct AudioMetadata {
     pub channels: u16,
     pub sample_rate: u32,
     pub duration_seconds: f64,
@@ -97,34 +97,83 @@ pub struct ImportOperationMetrics {
     pub analysis_workers: usize,
 }
 
-pub fn read_wav_metadata(path: impl AsRef<Path>) -> Result<WavMetadata, ProjectError> {
+pub fn read_audio_metadata(path: impl AsRef<Path>) -> Result<AudioMetadata, ProjectError> {
     let path = path.as_ref();
-    ensure_wav_extension(path)?;
-    let reader = hound::WavReader::open(path)?;
-    let spec = reader.spec();
-    let frame_count = reader.duration() as f64;
-    let duration_seconds = frame_count / f64::from(spec.sample_rate.max(1));
+    let file = File::open(path)?;
+    let mut hint = Hint::new();
+    if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
+        hint.with_extension(extension);
+    }
+    let media_source_stream = MediaSourceStream::new(Box::new(file), Default::default());
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            media_source_stream,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .map_err(|_| ProjectError::UnsupportedAudioFormat {
+            path: path.to_path_buf(),
+        })?;
+    let format = probed.format;
+    let track = format
+        .default_track()
+        .or_else(|| {
+            format
+                .tracks()
+                .iter()
+                .find(|track| track.codec_params.codec != CODEC_TYPE_NULL)
+        })
+        .ok_or_else(|| ProjectError::UnsupportedAudioFormat {
+            path: path.to_path_buf(),
+        })?;
+    let sample_rate = track.codec_params.sample_rate.ok_or_else(|| {
+        ProjectError::AudioDecode(format!("missing sample rate for {}", path.display()))
+    })?;
+    let channels = track
+        .codec_params
+        .channels
+        .map(|channels| channels.count() as u16)
+        .unwrap_or(1)
+        .max(1);
+    let duration_seconds = if let (Some(n_frames), rate) = (track.codec_params.n_frames, sample_rate)
+    {
+        n_frames as f64 / f64::from(rate.max(1))
+    } else if let Some(tb) = track.codec_params.time_base {
+        track.codec_params
+            .n_frames
+            .map(|frames| tb.calc_time(frames).seconds as f64 + f64::from(tb.calc_time(frames).frac))
+            .unwrap_or(0.0)
+    } else {
+        0.0
+    };
 
-    Ok(WavMetadata {
-        channels: spec.channels,
-        sample_rate: spec.sample_rate,
+    Ok(AudioMetadata {
+        channels,
+        sample_rate,
         duration_seconds,
         tempo_candidate: None,
     })
 }
 
+pub type WavMetadata = AudioMetadata;
+
+pub fn read_wav_metadata(path: impl AsRef<Path>) -> Result<AudioMetadata, ProjectError> {
+    read_audio_metadata(path)
+}
+
 pub fn import_wav_files_to_library(
     song_dir: impl AsRef<Path>,
-    wav_files: &[PathBuf],
+    audio_files: &[PathBuf],
 ) -> Result<ImportLibraryAssetsResult, ProjectError> {
-    if wav_files.is_empty() {
+    if audio_files.is_empty() {
         return Err(ProjectError::EmptyImportSet);
     }
 
     let song_dir = song_dir.as_ref();
     let mut used_file_names = collect_existing_file_names(song_dir)?;
     let mut metrics = ImportOperationMetrics::default();
-    let planned_files = plan_import_files(song_dir, wav_files, &mut used_file_names)?;
+    let planned_files = plan_import_files(song_dir, audio_files, &mut used_file_names)?;
     metrics.copy_millis = copy_import_files(&planned_files)?;
     let (imported_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
     merge_import_metrics(&mut metrics, &analysis_metrics);
@@ -196,6 +245,7 @@ pub fn import_wav_song(
         time_signature: request.time_signature.clone(),
         duration_seconds,
         tempo_markers: vec![],
+        time_signature_markers: vec![],
         regions: vec![SongRegion {
             id: format!("region_{}", slugify(&request.title)),
             name: request.title.clone(),
@@ -252,9 +302,9 @@ pub fn import_wav_song(
 pub fn append_wav_files_to_song(
     song_dir: impl AsRef<Path>,
     song: &Song,
-    wav_files: &[PathBuf],
+    audio_files: &[PathBuf],
 ) -> Result<AppendWavFilesResult, ProjectError> {
-    if wav_files.is_empty() {
+    if audio_files.is_empty() {
         return Err(ProjectError::EmptyImportSet);
     }
 
@@ -266,7 +316,7 @@ pub fn append_wav_files_to_song(
     let mut used_clip_ids: HashSet<String> =
         song.clips.iter().map(|clip| clip.id.clone()).collect();
     let mut metrics = ImportOperationMetrics::default();
-    let planned_files = plan_import_files(song_dir, wav_files, &mut used_file_names)?;
+    let planned_files = plan_import_files(song_dir, audio_files, &mut used_file_names)?;
     metrics.copy_millis = copy_import_files(&planned_files)?;
     let (analyzed_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
     merge_import_metrics(&mut metrics, &analysis_metrics);
@@ -322,20 +372,6 @@ pub fn append_wav_files_to_song(
     })
 }
 
-fn ensure_wav_extension(path: &Path) -> Result<(), ProjectError> {
-    let extension = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    if extension.eq_ignore_ascii_case("wav") {
-        Ok(())
-    } else {
-        Err(ProjectError::UnsupportedAudioFormat {
-            path: path.to_path_buf(),
-        })
-    }
-}
-
 fn unique_file_name(
     source_path: &Path,
     used_file_names: &mut HashSet<String>,
@@ -377,22 +413,21 @@ struct AnalyzedImportFile {
     source_path: PathBuf,
     destination_path: PathBuf,
     imported_relative_path: PathBuf,
-    metadata: WavMetadata,
+    metadata: AudioMetadata,
 }
 
 fn plan_import_files(
     song_dir: &Path,
-    wav_files: &[PathBuf],
+    audio_files: &[PathBuf],
     used_file_names: &mut HashSet<String>,
 ) -> Result<Vec<PlannedImportFile>, ProjectError> {
     let audio_dir = song_dir.join("audio");
     fs::create_dir_all(&audio_dir)?;
 
-    wav_files
+    audio_files
         .iter()
         .enumerate()
         .map(|(index, source_path)| {
-            ensure_wav_extension(source_path)?;
             let file_name = unique_file_name(source_path, used_file_names)?;
             let destination_path = audio_dir.join(&file_name);
             Ok(PlannedImportFile {
@@ -596,7 +631,7 @@ fn analyze_import_files_in_parallel(
             write_waveform_summary(&waveform_path, &analysis.waveform)?;
             let waveform_write_millis = waveform_write_started_at.elapsed().as_millis();
 
-            let metadata = WavMetadata {
+            let metadata = AudioMetadata {
                 channels: analysis.channels,
                 sample_rate: analysis.sample_rate,
                 duration_seconds: analysis.duration_seconds,
@@ -657,7 +692,7 @@ fn resolve_import_tempo(analyzed_files: &[AnalyzedImportFile]) -> ResolvedTempo 
         );
 
     match best_candidate {
-        Some((file, tempo_candidate)) => ResolvedTempo {
+        Some((_file, tempo_candidate)) => ResolvedTempo {
             bpm: tempo_candidate.bpm,
         },
         None => ResolvedTempo { bpm: 120.0 },

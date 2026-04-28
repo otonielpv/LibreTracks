@@ -178,6 +178,24 @@ export async function deleteSongTempoMarker(markerId: string): Promise<Transport
   return invokeCommand<TransportSnapshot>("delete_song_tempo_marker", { markerId });
 }
 
+export async function updateSongTimeSignature(signature: string): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_song_time_signature", { signature });
+}
+
+export async function upsertSongTimeSignatureMarker(
+  startSeconds: number,
+  signature: string,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("upsert_song_time_signature_marker", {
+    startSeconds,
+    signature,
+  });
+}
+
+export async function deleteSongTimeSignatureMarker(markerId: string): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("delete_song_time_signature_marker", { markerId });
+}
+
 export async function openProject(): Promise<TransportSnapshot | null> {
   return invokeCommand<TransportSnapshot | null>("open_project_from_dialog");
 }
@@ -188,6 +206,17 @@ export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
 
 export async function importLibraryAssetsFromDialog(): Promise<LibraryAssetSummary[] | null> {
   return invokeCommand<LibraryAssetSummary[] | null>("import_library_assets_from_dialog");
+}
+
+export async function exportRegionAsPackage(regionId: string): Promise<void> {
+  await invokeCommand("export_region_as_package", { regionId });
+}
+
+export async function importSongPackage(
+  packagePath: string,
+  insertAtSeconds: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("import_song_package", { packagePath, insertAtSeconds });
 }
 
 export async function deleteLibraryAsset(filePath: string): Promise<LibraryAssetSummary[]> {
