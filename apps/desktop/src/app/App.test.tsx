@@ -5,8 +5,6 @@ import i18n from "../shared/i18n";
 import en from "../shared/i18n/en";
 import { useTransportStore } from "../features/transport/store";
 import {
-  TIMELINE_DEFAULT_GLOBAL_JUMP_BARS,
-  TIMELINE_DEFAULT_GLOBAL_JUMP_MODE,
   TIMELINE_DEFAULT_SNAP_ENABLED,
   TIMELINE_DEFAULT_TRACK_HEIGHT,
   TIMELINE_DEFAULT_ZOOM_LEVEL,
@@ -25,6 +23,8 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     listenToAudioMeters: vi.fn(testDesktopApiMock.listenToAudioMeters),
     listenToLibraryImportProgress: vi.fn(testDesktopApiMock.listenToLibraryImportProgress),
     listenToWaveformReady: vi.fn(testDesktopApiMock.listenToWaveformReady),
+    listenToSettingsUpdated: vi.fn(testDesktopApiMock.listenToSettingsUpdated),
+    listenToMidiRawMessage: vi.fn(testDesktopApiMock.listenToMidiRawMessage),
     getTransportSnapshot: vi.fn(testDesktopApiMock.getTransportSnapshot),
     getSongView: vi.fn(testDesktopApiMock.getSongView),
     getWaveformSummaries: vi.fn(testDesktopApiMock.getWaveformSummaries),
@@ -135,8 +135,7 @@ beforeEach(async () => {
     selectedClipId: null,
     selectedSectionId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
-    globalJumpMode: TIMELINE_DEFAULT_GLOBAL_JUMP_MODE,
-    globalJumpBars: TIMELINE_DEFAULT_GLOBAL_JUMP_BARS,
+    midiLearnMode: null,
   });
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -893,9 +892,11 @@ describe("App", () => {
   it("triggers marker jump with digit keys and cancels with escape", async () => {
     await renderApp();
 
-    const modeSelect = await screen.findByRole("combobox", { name: textMatcher(en.timelineToolbar.jumpModeAria) });
+    const nextMarkerButton = await screen.findByRole("button", {
+      name: textMatcher(en.transport.jumpMode.nextMarker),
+    });
     await act(async () => {
-      fireEvent.change(modeSelect, { target: { value: "next_marker" } });
+      fireEvent.click(nextMarkerButton);
     });
 
     await act(async () => {
@@ -917,9 +918,11 @@ describe("App", () => {
   it("maps numpad 0 to the first marker", async () => {
     await renderApp();
 
-    const modeSelect = await screen.findByRole("combobox", { name: textMatcher(en.timelineToolbar.jumpModeAria) });
+    const nextMarkerButton = await screen.findByRole("button", {
+      name: textMatcher(en.transport.jumpMode.nextMarker),
+    });
     await act(async () => {
-      fireEvent.change(modeSelect, { target: { value: "next_marker" } });
+      fireEvent.click(nextMarkerButton);
     });
 
     await act(async () => {
@@ -932,11 +935,11 @@ describe("App", () => {
   it("maps shift plus 0 to the first song region", async () => {
     await renderApp();
 
-    const songJumpSelect = await screen.findByRole("combobox", {
-      name: textMatcher(en.timelineToolbar.songJumpModeAria),
+    const regionEndButton = await screen.findByRole("button", {
+      name: textMatcher(en.transport.jumpMode.regionEnd),
     });
     await act(async () => {
-      fireEvent.change(songJumpSelect, { target: { value: "region_end" } });
+      fireEvent.click(regionEndButton);
     });
 
     await act(async () => {
@@ -952,9 +955,11 @@ describe("App", () => {
   it("overwrites the armed marker on click and cancels when clicked again", async () => {
     await renderApp();
 
-    const modeSelect = await screen.findByRole("combobox", { name: textMatcher(en.timelineToolbar.jumpModeAria) });
+    const nextMarkerButton = await screen.findByRole("button", {
+      name: textMatcher(en.transport.jumpMode.nextMarker),
+    });
     await act(async () => {
-      fireEvent.change(modeSelect, { target: { value: "next_marker" } });
+      fireEvent.click(nextMarkerButton);
     });
 
     const introMarker = await screen.findByRole("button", { name: "Intro" });
@@ -1006,9 +1011,11 @@ describe("App", () => {
 
     expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThanOrEqual(0);
 
-    const modeSelect = await screen.findByRole("combobox", { name: textMatcher(en.timelineToolbar.jumpModeAria) });
+    const nextMarkerButton = await screen.findByRole("button", {
+      name: textMatcher(en.transport.jumpMode.nextMarker),
+    });
     await act(async () => {
-      fireEvent.change(modeSelect, { target: { value: "next_marker" } });
+      fireEvent.click(nextMarkerButton);
     });
 
     const introMarker = await screen.findByRole("button", { name: "Intro" });

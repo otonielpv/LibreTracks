@@ -9,13 +9,6 @@ export type VampMode = "section" | "bars";
 export const TIMELINE_DEFAULT_ZOOM_LEVEL = 7;
 export const TIMELINE_DEFAULT_TRACK_HEIGHT = 94;
 export const TIMELINE_DEFAULT_SNAP_ENABLED = true;
-export const TIMELINE_DEFAULT_GLOBAL_JUMP_MODE: GlobalJumpMode = "immediate";
-export const TIMELINE_DEFAULT_GLOBAL_JUMP_BARS = 4;
-export const TIMELINE_DEFAULT_SONG_JUMP_TRIGGER: SongJumpTrigger = "immediate";
-export const TIMELINE_DEFAULT_SONG_JUMP_BARS = 4;
-export const TIMELINE_DEFAULT_SONG_TRANSITION_MODE: SongTransitionMode = "instant";
-export const TIMELINE_DEFAULT_VAMP_MODE: VampMode = "section";
-export const TIMELINE_DEFAULT_VAMP_BARS = 4;
 
 type TimelineUIState = {
   cameraX: number;
@@ -25,13 +18,7 @@ type TimelineUIState = {
   selectedClipId: string | null;
   selectedSectionId: string | null;
   snapEnabled: boolean;
-  globalJumpMode: GlobalJumpMode;
-  globalJumpBars: number;
-  songJumpTrigger: SongJumpTrigger;
-  songJumpBars: number;
-  songTransitionMode: SongTransitionMode;
-  vampMode: VampMode;
-  vampBars: number;
+  midiLearnMode: string | null;
   setCameraX: (cameraX: number) => void;
   setZoomLevel: (zoomLevel: number | ((currentZoomLevel: number) => number)) => void;
   setTrackHeight: (trackHeight: number | ((currentTrackHeight: number) => number)) => void;
@@ -44,13 +31,7 @@ type TimelineUIState = {
   selectSection: (sectionId: string | null) => void;
   setSnapEnabled: (enabled: boolean | ((currentSnapEnabled: boolean) => boolean)) => void;
   toggleSnapEnabled: () => void;
-  setGlobalJumpMode: (mode: GlobalJumpMode) => void;
-  setGlobalJumpBars: (bars: number) => void;
-  setSongJumpTrigger: (trigger: SongJumpTrigger) => void;
-  setSongJumpBars: (bars: number) => void;
-  setSongTransitionMode: (mode: SongTransitionMode) => void;
-  setVampMode: (mode: VampMode) => void;
-  setVampBars: (bars: number) => void;
+  setMidiLearnMode: (midiLearnMode: string | null) => void;
 };
 
 export const useTimelineUIStore = create<TimelineUIState>()(
@@ -62,13 +43,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     selectedClipId: null,
     selectedSectionId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
-    globalJumpMode: TIMELINE_DEFAULT_GLOBAL_JUMP_MODE,
-    globalJumpBars: TIMELINE_DEFAULT_GLOBAL_JUMP_BARS,
-    songJumpTrigger: TIMELINE_DEFAULT_SONG_JUMP_TRIGGER,
-    songJumpBars: TIMELINE_DEFAULT_SONG_JUMP_BARS,
-    songTransitionMode: TIMELINE_DEFAULT_SONG_TRANSITION_MODE,
-    vampMode: TIMELINE_DEFAULT_VAMP_MODE,
-    vampBars: TIMELINE_DEFAULT_VAMP_BARS,
+    midiLearnMode: null,
     setCameraX: (cameraX) => {
       set({ cameraX: Number.isFinite(cameraX) ? Math.max(0, cameraX) : 0 });
     },
@@ -130,26 +105,8 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     toggleSnapEnabled: () => {
       set((state) => ({ snapEnabled: !state.snapEnabled }));
     },
-    setGlobalJumpMode: (globalJumpMode) => {
-      set({ globalJumpMode });
-    },
-    setGlobalJumpBars: (globalJumpBars) => {
-      set({ globalJumpBars: Math.max(1, Math.floor(globalJumpBars) || 1) });
-    },
-    setSongJumpTrigger: (songJumpTrigger) => {
-      set({ songJumpTrigger });
-    },
-    setSongJumpBars: (songJumpBars) => {
-      set({ songJumpBars: Math.max(1, Math.floor(songJumpBars) || 1) });
-    },
-    setSongTransitionMode: (songTransitionMode) => {
-      set({ songTransitionMode });
-    },
-    setVampMode: (vampMode) => {
-      set({ vampMode });
-    },
-    setVampBars: (vampBars) => {
-      set({ vampBars: Math.max(1, Math.floor(vampBars) || 1) });
+    setMidiLearnMode: (midiLearnMode) => {
+      set({ midiLearnMode });
     },
   })),
 );

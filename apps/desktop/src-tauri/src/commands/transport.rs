@@ -3,6 +3,7 @@ use tauri::{AppHandle, State};
 use crate::commands::events::emit_transport_lifecycle_event;
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
+use crate::settings::AppSettingsStore;
 use crate::state::DesktopState;
 use libretracks_audio::{JumpTrigger, TransitionType, VampMode};
 
@@ -90,10 +91,7 @@ pub fn seek_transport(
 #[tauri::command]
 pub fn schedule_marker_jump(
     target_marker_id: String,
-    trigger: String,
-    bars: Option<u32>,
-    transition: Option<String>,
-    duration_seconds: Option<f64>,
+    settings_store: State<'_, AppSettingsStore>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -101,22 +99,27 @@ pub fn schedule_marker_jump(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    let jump_trigger = parse_jump_trigger(&trigger, bars).map_err(|error| error.to_string())?;
-    let transition =
-        parse_transition_type(transition.as_deref(), duration_seconds).map_err(|error| error.to_string())?;
+    let settings = settings_store.current().map_err(|error| error.to_string())?;
+    let jump_trigger =
+        parse_jump_trigger(&settings.global_jump_mode, Some(settings.global_jump_bars))
+            .map_err(|error| error.to_string())?;
+    let transition = parse_transition_type(Some(&settings.song_transition_mode), None)
+        .map_err(|error| error.to_string())?;
 
     session
-        .schedule_marker_jump(&target_marker_id, jump_trigger, transition, &state.audio)
+        .schedule_marker_jump(
+            &target_marker_id,
+            jump_trigger,
+            transition,
+            &state.audio,
+        )
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 pub fn schedule_region_jump(
     target_region_id: String,
-    trigger: String,
-    bars: Option<u32>,
-    transition: Option<String>,
-    duration_seconds: Option<f64>,
+    settings_store: State<'_, AppSettingsStore>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -124,8 +127,11 @@ pub fn schedule_region_jump(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    let jump_trigger = parse_jump_trigger(&trigger, bars).map_err(|error| error.to_string())?;
-    let transition = parse_transition_type(transition.as_deref(), duration_seconds)
+    let settings = settings_store.current().map_err(|error| error.to_string())?;
+    let jump_trigger =
+        parse_jump_trigger(&settings.song_jump_trigger, Some(settings.song_jump_bars))
+            .map_err(|error| error.to_string())?;
+    let transition = parse_transition_type(Some(&settings.song_transition_mode), None)
         .map_err(|error| error.to_string())?;
 
     session

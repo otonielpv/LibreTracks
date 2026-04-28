@@ -6,6 +6,7 @@ import type {
   DesktopPerformanceSnapshot,
   LibraryAssetSummary,
   LibraryImportProgressEvent,
+  MidiRawMessage,
   RemoteServerInfo,
   SongView,
   TrackKind,
@@ -60,6 +61,24 @@ export async function listenToWaveformReady(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<WaveformReadyEvent>("waveform:ready", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenToSettingsUpdated(
+  handler: (settings: AppSettings) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<AppSettings>("settings:updated", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenToMidiRawMessage(
+  handler: (message: MidiRawMessage) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<MidiRawMessage>("midi:raw_message", (event) => {
     handler(event.payload);
   });
 }
@@ -221,33 +240,17 @@ export async function seekTransport(positionSeconds: number): Promise<TransportS
 
 export async function scheduleMarkerJump(
   targetMarkerId: string,
-  trigger: "immediate" | "next_marker" | "after_bars",
-  bars?: number,
-  transition: "instant" | "fade_out" = "instant",
-  durationSeconds?: number,
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("schedule_marker_jump", {
     targetMarkerId,
-    trigger,
-    bars,
-    transition,
-    durationSeconds,
   });
 }
 
 export async function scheduleRegionJump(
   targetRegionId: string,
-  trigger: "immediate" | "region_end" | "after_bars",
-  bars?: number,
-  transition: "instant" | "fade_out" = "instant",
-  durationSeconds?: number,
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("schedule_region_jump", {
     targetRegionId,
-    trigger,
-    bars,
-    transition,
-    durationSeconds,
   });
 }
 

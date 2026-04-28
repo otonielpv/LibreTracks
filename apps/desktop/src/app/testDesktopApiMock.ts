@@ -327,6 +327,14 @@ function buildInitialState(): DesktopApiMockState {
       locale: "en",
       metronomeEnabled: false,
       metronomeVolume: 0.8,
+      globalJumpMode: "immediate",
+      globalJumpBars: 4,
+      songJumpTrigger: "immediate",
+      songJumpBars: 4,
+      songTransitionMode: "instant",
+      vampMode: "section",
+      vampBars: 4,
+      midiMappings: {},
     },
     audioOutputDevices: {
       devices: ["Mock Built-in Output"],
@@ -552,6 +560,8 @@ export const testDesktopApiMock = {
   listenToAudioMeters: async (_handler: (levels: AudioMeterLevel[]) => void) => () => {},
   listenToLibraryImportProgress: async (_handler: (event: LibraryImportProgressEvent) => void) => () => {},
   listenToWaveformReady: async (_handler: (event: WaveformReadyEvent) => void) => () => {},
+  listenToSettingsUpdated: async (_handler: (settings: AppSettings) => void) => () => {},
+  listenToMidiRawMessage: async (_handler: (message: { status: number; data1: number; data2: number }) => void) => () => {},
   getTransportSnapshot: async () => clone(buildSnapshot()),
   getSongView: async () => clone(state.song),
   getWaveformSummaries: async (waveformKeys: string[]) =>
@@ -729,11 +739,14 @@ export const testDesktopApiMock = {
     };
     return clone(buildSnapshot());
   },
-  scheduleMarkerJump: async (targetMarkerId: string, trigger: Exclude<JumpTriggerLabel, `after_bars:${number}`> | "after_bars", bars?: number) => {
+  scheduleMarkerJump: async (targetMarkerId: string) => {
     const marker = state.song.sectionMarkers.find((entry) => entry.id === targetMarkerId) ?? null;
     if (!marker) {
       return clone(buildSnapshot());
     }
+
+    const trigger = state.appSettings.globalJumpMode;
+    const bars = Math.max(1, Math.floor(state.appSettings.globalJumpBars));
 
     if (trigger === "immediate") {
       state.playbackPositionSeconds = marker.startSeconds;
@@ -749,20 +762,18 @@ export const testDesktopApiMock = {
       return clone(buildSnapshot());
     }
 
-    state.pendingMarkerJump = createPendingJump(marker, `after_bars:${Math.max(1, bars ?? 1)}`);
+    state.pendingMarkerJump = createPendingJump(marker, `after_bars:${bars}`);
     return clone(buildSnapshot());
   },
-  scheduleRegionJump: async (
-    targetRegionId: string,
-    trigger: "immediate" | "region_end" | "after_bars",
-    bars?: number,
-    transition: "instant" | "fade_out" = "instant",
-    durationSeconds?: number,
-  ) => {
+  scheduleRegionJump: async (targetRegionId: string) => {
     const region = state.song.regions.find((entry) => entry.id === targetRegionId) ?? null;
     if (!region) {
       return clone(buildSnapshot());
     }
+
+    const trigger = state.appSettings.songJumpTrigger;
+    const bars = Math.max(1, Math.floor(state.appSettings.songJumpBars));
+    const transition = state.appSettings.songTransitionMode;
 
     if (trigger === "immediate") {
       state.playbackPositionSeconds = region.startSeconds;
@@ -771,16 +782,20 @@ export const testDesktopApiMock = {
     }
 
     const transitionLabel: TransitionTypeLabel =
-      transition === "fade_out" ? `fade_out:${durationSeconds ?? 0.35}` : "instant";
+      transition === "fade_out" ? "fade_out:0.35" : "instant";
     state.pendingMarkerJump = createPendingJump(
       {
         id: region.id,
         name: region.name,
         startSeconds: region.startSeconds,
       },
-      trigger === "region_end" ? "region_end" : `after_bars:${Math.max(1, bars ?? 1)}`,
+      trigger === "region_end" ? "region_end" : `after_bars:${bars}`,
       transitionLabel,
     );
+    if (trigger === "after_bars") {
+      const secondsPerBar = (60 / Math.max(1, state.song.bpm)) * 4;
+      state.pendingMarkerJump.executeAtSeconds = state.playbackPositionSeconds + secondsPerBar * bars;
+    }
     return clone(buildSnapshot());
   },
   cancelMarkerJump: async () => {

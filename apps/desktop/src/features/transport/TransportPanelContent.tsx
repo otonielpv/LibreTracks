@@ -49,6 +49,8 @@ import {
   isTauriApp,
   listenToLibraryImportProgress,
   listenToAudioMeters,
+  listenToMidiRawMessage,
+  listenToSettingsUpdated,
   listenToTransportLifecycle,
   listenToWaveformReady,
   moveClip,
@@ -80,6 +82,7 @@ import {
   normalizeAppSettings,
   type AppSettings,
   type ClipSummary,
+  type MidiBinding,
   type JumpTriggerLabel,
   type LibraryAssetSummary,
   type LibraryImportProgressEvent,
@@ -124,10 +127,6 @@ import {
 import {
   TIMELINE_DEFAULT_TRACK_HEIGHT,
   useTimelineUIStore,
-  type GlobalJumpMode,
-  type SongJumpTrigger,
-  type SongTransitionMode,
-  type VampMode,
 } from "./uiStore";
 
 const HEADER_WIDTH = 260;
@@ -215,9 +214,96 @@ type LiveTrackMixRequestState = {
 
 type SidebarTab = "library";
 
+type MidiLearnCommand = {
+  key: string;
+  labelKey: string;
+};
+
+type MidiLearnFeedback = {
+  key: string;
+  binding: MidiBinding;
+};
+
 const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 const LIBRARY_DRAG_EDGE_BUFFER_PX = 50;
 const LIBRARY_DRAG_MAX_SCROLL_SPEED_PX = 22;
+const MIDI_NOTE_NAMES = [
+  "C",
+  "C#",
+  "D",
+  "D#",
+  "E",
+  "F",
+  "F#",
+  "G",
+  "G#",
+  "A",
+  "A#",
+  "B",
+];
+const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
+  { key: "action:create_song", labelKey: "transport.settingsModal.midiLearnCreateSong" },
+  { key: "action:open_project", labelKey: "transport.settingsModal.midiLearnOpenProject" },
+  { key: "action:save_project", labelKey: "transport.settingsModal.midiLearnSaveProject" },
+  { key: "action:save_project_as", labelKey: "transport.settingsModal.midiLearnSaveProjectAs" },
+  { key: "action:undo", labelKey: "transport.settingsModal.midiLearnUndo" },
+  { key: "action:redo", labelKey: "transport.settingsModal.midiLearnRedo" },
+  { key: "action:play", labelKey: "timelineTopbar.play" },
+  { key: "action:pause", labelKey: "timelineTopbar.pause" },
+  { key: "action:stop", labelKey: "timelineTopbar.stop" },
+  { key: "action:next_song", labelKey: "timelineTopbar.next" },
+  { key: "action:toggle_metronome", labelKey: "timelineTopbar.metronome" },
+  { key: "action:toggle_vamp", labelKey: "timelineToolbar.vampButton" },
+  { key: "action:toggle_split_stereo", labelKey: "transport.settingsModal.midiLearnToggleSplitStereo" },
+  { key: "action:cancel_jump", labelKey: "timelineToolbar.cancelJump" },
+  { key: "action:create_marker", labelKey: "transport.settingsModal.midiLearnCreateMarker" },
+  { key: "action:set_global_jump_mode_immediate", labelKey: "transport.settingsModal.midiLearnGlobalJumpModeImmediate" },
+  { key: "action:set_global_jump_mode_after_bars", labelKey: "transport.settingsModal.midiLearnGlobalJumpModeAfterBars" },
+  { key: "action:set_global_jump_mode_next_marker", labelKey: "transport.settingsModal.midiLearnGlobalJumpModeNextMarker" },
+  { key: "action:increase_global_jump_bars", labelKey: "transport.settingsModal.midiLearnBarsIncrease" },
+  { key: "action:decrease_global_jump_bars", labelKey: "transport.settingsModal.midiLearnBarsDecrease" },
+  { key: "param:tempo", labelKey: "transport.settingsModal.midiLearnTempo" },
+  { key: "param:global_jump_mode", labelKey: "transport.settingsModal.midiLearnGlobalJumpMode" },
+  { key: "param:metronome_volume", labelKey: "transport.settingsModal.metronomeVolume" },
+  { key: "param:global_jump_bars", labelKey: "transport.settingsModal.globalJumpBars" },
+  { key: "action:set_song_jump_trigger_immediate", labelKey: "transport.settingsModal.midiLearnSongJumpTriggerImmediate" },
+  { key: "action:set_song_jump_trigger_after_bars", labelKey: "transport.settingsModal.midiLearnSongJumpTriggerAfterBars" },
+  { key: "action:set_song_jump_trigger_region_end", labelKey: "transport.settingsModal.midiLearnSongJumpTriggerRegionEnd" },
+  { key: "action:increase_song_jump_bars", labelKey: "transport.settingsModal.midiLearnBarsIncrease" },
+  { key: "action:decrease_song_jump_bars", labelKey: "transport.settingsModal.midiLearnBarsDecrease" },
+  { key: "param:song_jump_trigger", labelKey: "transport.settingsModal.midiLearnSongJumpTrigger" },
+  { key: "param:song_jump_bars", labelKey: "transport.settingsModal.songJumpBars" },
+  { key: "action:set_song_transition_instant", labelKey: "transport.settingsModal.midiLearnSongTransitionInstant" },
+  { key: "action:set_song_transition_fade_out", labelKey: "transport.settingsModal.midiLearnSongTransitionFadeOut" },
+  { key: "param:song_transition_mode", labelKey: "transport.settingsModal.midiLearnSongTransitionMode" },
+  { key: "action:set_vamp_mode_section", labelKey: "transport.settingsModal.midiLearnVampModeSection" },
+  { key: "action:set_vamp_mode_bars", labelKey: "transport.settingsModal.midiLearnVampModeBars" },
+  { key: "param:vamp_mode", labelKey: "transport.settingsModal.midiLearnVampMode" },
+  { key: "action:increase_vamp_bars", labelKey: "transport.settingsModal.midiLearnBarsIncrease" },
+  { key: "action:decrease_vamp_bars", labelKey: "transport.settingsModal.midiLearnBarsDecrease" },
+  { key: "param:vamp_bars", labelKey: "transport.settingsModal.vampBars" },
+  { key: "param:jump_bars", labelKey: "transport.settingsModal.jumpBars" },
+];
+
+function formatMidiBinding(binding: MidiBinding) {
+  const channel = (binding.status & 0x0f) + 1;
+  const statusType = binding.status & 0xf0;
+
+  if (binding.isCc || statusType === 0xb0) {
+    return `CC ${binding.data1} (Ch ${channel})`;
+  }
+
+  if (statusType === 0x90 || statusType === 0x80) {
+    const noteIndex = binding.data1 % 12;
+    const octave = Math.floor(binding.data1 / 12) - 1;
+    const noteName = MIDI_NOTE_NAMES[noteIndex] ?? `Note ${binding.data1}`;
+    const noteLabel = `${noteName}${octave}`;
+    const prefix = statusType === 0x80 ? "Note Off" : "Note On";
+    return `${prefix} ${binding.data1} (${noteLabel}) (Ch ${channel})`;
+  }
+
+  return `Status 0x${binding.status.toString(16).toUpperCase().padStart(2, "0")} / Data1 ${binding.data1} (Ch ${channel})`;
+}
 
 type LibraryAssetDragPayload = {
   file_path: string;
@@ -725,6 +811,7 @@ export function TransportPanelContent() {
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [midiLearnFeedback, setMidiLearnFeedback] = useState<MidiLearnFeedback | null>(null);
   const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(DEFAULT_APP_SETTINGS.metronomeVolume);
   const [audioOutputDevices, setAudioOutputDevices] = useState<string[]>([]);
   const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<string | null>(null);
@@ -778,16 +865,27 @@ export function TransportPanelContent() {
     );
   }, [i18n]);
   const cameraX = useTimelineUIStore((state) => state.cameraX);
-  const globalJumpMode = useTimelineUIStore((state) => state.globalJumpMode);
-  const globalJumpBars = useTimelineUIStore((state) => state.globalJumpBars);
-  const songJumpTrigger = useTimelineUIStore((state) => state.songJumpTrigger);
-  const songJumpBars = useTimelineUIStore((state) => state.songJumpBars);
-  const songTransitionMode = useTimelineUIStore((state) => state.songTransitionMode);
-  const vampMode = useTimelineUIStore((state) => state.vampMode);
-  const vampBars = useTimelineUIStore((state) => state.vampBars);
   const zoomLevel = useTimelineUIStore((state) => state.zoomLevel);
   const trackHeight = useTimelineUIStore((state) => state.trackHeight);
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
+  const midiLearnMode = useTimelineUIStore((state) => state.midiLearnMode);
+  const midiLearnCommandRows = useMemo(
+    () =>
+      MIDI_LEARN_COMMANDS.map((command) => ({
+        ...command,
+        label: t(command.labelKey),
+        binding: appSettings.midiMappings[command.key] ?? null,
+      })),
+    [appSettings.midiMappings, t],
+  );
+  const midiLearnFeedbackCommand = useMemo(
+    () => midiLearnCommandRows.find((command) => command.key === midiLearnFeedback?.key) ?? null,
+    [midiLearnCommandRows, midiLearnFeedback],
+  );
+  const activeMidiLearnCommand = useMemo(
+    () => midiLearnCommandRows.find((command) => command.key === midiLearnMode) ?? null,
+    [midiLearnCommandRows, midiLearnMode],
+  );
 
   useEffect(() => {
     setMetronomeVolumeDraft(appSettings.metronomeVolume);
@@ -814,13 +912,6 @@ export function TransportPanelContent() {
   const selectedClipId = useTimelineUIStore((state) => state.selectedClipId);
   const selectedSectionId = useTimelineUIStore((state) => state.selectedSectionId);
   const setCameraX = useTimelineUIStore((state) => state.setCameraX);
-  const setGlobalJumpMode = useTimelineUIStore((state) => state.setGlobalJumpMode);
-  const setGlobalJumpBars = useTimelineUIStore((state) => state.setGlobalJumpBars);
-  const setSongJumpTrigger = useTimelineUIStore((state) => state.setSongJumpTrigger);
-  const setSongJumpBars = useTimelineUIStore((state) => state.setSongJumpBars);
-  const setSongTransitionMode = useTimelineUIStore((state) => state.setSongTransitionMode);
-  const setVampMode = useTimelineUIStore((state) => state.setVampMode);
-  const setVampBars = useTimelineUIStore((state) => state.setVampBars);
   const setZoomLevel = useTimelineUIStore((state) => state.setZoomLevel);
   const setTrackHeight = useTimelineUIStore((state) => state.setTrackHeight);
   const setSnapEnabled = useTimelineUIStore((state) => state.setSnapEnabled);
@@ -831,6 +922,7 @@ export function TransportPanelContent() {
   const selectTrack = useTimelineUIStore((state) => state.selectTrack);
   const selectClip = useTimelineUIStore((state) => state.selectClip);
   const selectSection = useTimelineUIStore((state) => state.selectSection);
+  const setMidiLearnMode = useTimelineUIStore((state) => state.setMidiLearnMode);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const menuBarRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
@@ -956,24 +1048,111 @@ export function TransportPanelContent() {
     return normalizedSettings;
   }, [syncSettingsLanguage]);
 
+  useEffect(() => {
+    if (!isTauriApp) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+    void listenToSettingsUpdated((nextSettings) => {
+      const normalizedSettings = normalizeAppSettings(nextSettings);
+      appSettingsRef.current = normalizedSettings;
+      setAppSettings(normalizedSettings);
+      setMetronomeVolumeDraft(normalizedSettings.metronomeVolume);
+      void syncSettingsLanguage(normalizedSettings);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+
+    return () => {
+      unlisten?.();
+    };
+  }, [syncSettingsLanguage]);
+
+  useEffect(() => {
+    if (!isTauriApp) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+    void listenToMidiRawMessage((message) => {
+      const learnMode = useTimelineUIStore.getState().midiLearnMode;
+      if (!learnMode) {
+        return;
+      }
+
+      if (learnMode === "") {
+        return;
+      }
+
+      const nextBinding = {
+        status: message.status,
+        data1: message.data1,
+        isCc: (message.status & 0xF0) === 0xB0,
+      };
+      const nextSettings = normalizeAppSettings({
+        ...appSettingsRef.current,
+        midiMappings: {
+          ...appSettingsRef.current.midiMappings,
+          [learnMode]: nextBinding,
+        },
+      });
+      const previousSettings = appSettingsRef.current;
+      const learnedCommandLabel =
+        midiLearnCommandRows.find((command) => command.key === learnMode)?.label ?? learnMode;
+
+      appSettingsRef.current = nextSettings;
+      setAppSettings(nextSettings);
+      setMidiLearnMode(null);
+
+      void runAction(async () => {
+        try {
+          const liveSettings = normalizeAppSettings(await updateAudioSettings(nextSettings));
+          const savedSettings = normalizeAppSettings(await saveSettings(liveSettings));
+          appSettingsRef.current = savedSettings;
+          setAppSettings(savedSettings);
+          setMidiLearnFeedback({ key: learnMode, binding: nextBinding });
+          setStatus(
+            t("transport.status.midiBindingLearned", {
+              key: learnedCommandLabel,
+              binding: formatMidiBinding(nextBinding),
+            }),
+          );
+        } catch (error) {
+          appSettingsRef.current = previousSettings;
+          setAppSettings(previousSettings);
+          setMidiLearnMode(learnMode);
+          throw error;
+        }
+      });
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+
+    return () => {
+      unlisten?.();
+    };
+  }, [midiLearnCommandRows, runAction, setMidiLearnMode, t]);
+
   const persistAudioSettings = useCallback(
     (
       nextSettings: AppSettings,
       successMessage: string | ((savedSettings: AppSettings) => string),
     ) => {
-      const previousSettings = appSettings;
+      const previousSettings = appSettingsRef.current;
       const normalizedSettings = normalizeAppSettings(nextSettings);
       setAppSettings(normalizedSettings);
       setIsSettingsSaving(true);
 
       void runAction(async () => {
-        try {
+      try {
           const liveSettings = normalizeAppSettings(await updateAudioSettings(normalizedSettings));
           const savedSettings = normalizeAppSettings(await saveSettings(liveSettings));
           setAppSettings(savedSettings);
           await syncSettingsLanguage(savedSettings);
           setStatus(typeof successMessage === "function" ? successMessage(savedSettings) : successMessage);
         } catch (error) {
+          appSettingsRef.current = previousSettings;
           setAppSettings(previousSettings);
           throw error;
         } finally {
@@ -2824,14 +3003,9 @@ export function TransportPanelContent() {
   });
 
   async function scheduleMarkerJumpWithGlobalMode(markerId: string, markerName: string) {
-    const trigger =
-      globalJumpMode === "after_bars" ? "after_bars" : globalJumpMode;
-    const bars = Math.max(1, Math.floor(globalJumpBars));
-    const nextSnapshot = await scheduleMarkerJump(
-      markerId,
-      trigger,
-      trigger === "after_bars" ? bars : undefined,
-    );
+    const trigger = appSettings.globalJumpMode;
+    const bars = Math.max(1, Math.floor(appSettings.globalJumpBars));
+    const nextSnapshot = await scheduleMarkerJump(markerId);
     applyPlaybackSnapshot(nextSnapshot);
 
     if (trigger === "next_marker" && !nextSnapshot.pendingMarkerJump) {
@@ -2851,17 +3025,10 @@ export function TransportPanelContent() {
   }
 
   async function scheduleRegionJumpWithOptions(regionId: string, regionName: string) {
-    const trigger: SongJumpTrigger =
-      songJumpTrigger === "after_bars" ? "after_bars" : songJumpTrigger;
-    const bars = Math.max(1, Math.floor(songJumpBars));
-    const transition: SongTransitionMode = songTransitionMode;
-    const nextSnapshot = await scheduleRegionJump(
-      regionId,
-      trigger,
-      trigger === "after_bars" ? bars : undefined,
-      transition,
-      transition === "fade_out" ? 0.35 : undefined,
-    );
+    const trigger = appSettings.songJumpTrigger;
+    const bars = Math.max(1, Math.floor(appSettings.songJumpBars));
+    const transition = appSettings.songTransitionMode;
+    const nextSnapshot = await scheduleRegionJump(regionId);
     applyPlaybackSnapshot(nextSnapshot);
 
     if (trigger === "region_end" && !nextSnapshot.pendingMarkerJump) {
@@ -2889,15 +3056,31 @@ export function TransportPanelContent() {
     return nextSnapshot;
   }
 
+  async function handleNextSongClick() {
+    if (!song || song.regions.length === 0) {
+      return;
+    }
+
+    const currentPosition = snapshotRef.current?.positionSeconds ?? displayPositionSecondsRef.current;
+    const nextRegion = song.regions.find((region) => region.startSeconds > currentPosition + Number.EPSILON)
+      ?? song.regions[0];
+
+    if (!nextRegion) {
+      return;
+    }
+
+    await scheduleRegionJumpWithOptions(nextRegion.id, nextRegion.name);
+  }
+
   async function toggleTimelineVamp() {
-    const mode: VampMode = vampMode;
-    const nextSnapshot = await toggleVamp(mode, mode === "bars" ? vampBars : undefined);
+    const mode = appSettings.vampMode;
+    const nextSnapshot = await toggleVamp(mode, mode === "bars" ? appSettings.vampBars : undefined);
     applyPlaybackSnapshot(nextSnapshot);
 
     setStatus(
       nextSnapshot.activeVamp
         ? mode === "bars"
-          ? t("transport.status.vampBarsEnabled", { count: vampBars })
+          ? t("transport.status.vampBarsEnabled", { count: appSettings.vampBars })
           : t("transport.status.vampSectionEnabled")
         : t("transport.status.vampDisabled"),
     );
@@ -3777,7 +3960,7 @@ export function TransportPanelContent() {
         disabled: !canEditMarker,
         onSelect: async () => {
           await runAction(async () => {
-            const nextSnapshot = await scheduleMarkerJump(section.id, "immediate");
+            const nextSnapshot = await scheduleMarkerJump(section.id);
             applyPlaybackSnapshot(nextSnapshot);
             setStatus(t("transport.status.markerCursorSent", { name: section.name }));
           });
@@ -3917,6 +4100,43 @@ export function TransportPanelContent() {
     setIsRemoteModalOpen((current) => !current);
   }
 
+  function handleMidiLearnToggle(options?: { closePanels?: boolean }) {
+    if (options?.closePanels) {
+      setIsSettingsModalOpen(false);
+      setIsRemoteModalOpen(false);
+    }
+
+    setMidiLearnMode(midiLearnMode === null ? "" : null);
+  }
+
+  function handleMidiLearnButtonClick() {
+    handleMidiLearnToggle({ closePanels: true });
+  }
+
+  function handleMidiLearnTarget(controlKey: string) {
+    if (midiLearnMode === null) {
+      return false;
+    }
+
+    setMidiLearnMode(controlKey);
+    return true;
+  }
+
+  function handleMidiLearnCommandRelearn(controlKey: string) {
+    setMidiLearnMode(controlKey);
+  }
+
+  function handleResetMidiMappings() {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        midiMappings: {},
+      }),
+      t("transport.status.midiMappingsReset"),
+    );
+    setMidiLearnFeedback(null);
+  }
+
   function handleAudioOutputDeviceChange(nextValue: string) {
     persistAudioSettings(
       {
@@ -4017,6 +4237,76 @@ export function TransportPanelContent() {
         setStatus(formatErrorStatus(error));
       }
     });
+  }
+
+  function handleGlobalJumpModeChange(nextValue: AppSettings["globalJumpMode"]) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        globalJumpMode: nextValue,
+      }),
+      "Jump settings updated.",
+    );
+  }
+
+  function handleGlobalJumpBarsChange(nextValue: number) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        globalJumpBars: Math.max(1, Math.floor(nextValue) || 1),
+      }),
+      "Jump settings updated.",
+    );
+  }
+
+  function handleSongJumpTriggerChange(nextValue: AppSettings["songJumpTrigger"]) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        songJumpTrigger: nextValue,
+      }),
+      "Song jump settings updated.",
+    );
+  }
+
+  function handleSongJumpBarsChange(nextValue: number) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        songJumpBars: Math.max(1, Math.floor(nextValue) || 1),
+      }),
+      "Song jump settings updated.",
+    );
+  }
+
+  function handleSongTransitionModeChange(nextValue: AppSettings["songTransitionMode"]) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        songTransitionMode: nextValue,
+      }),
+      "Song transition updated.",
+    );
+  }
+
+  function handleVampModeChange(nextValue: AppSettings["vampMode"]) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        vampMode: nextValue,
+      }),
+      "Vamp settings updated.",
+    );
+  }
+
+  function handleVampBarsChange(nextValue: number) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        vampBars: Math.max(1, Math.floor(nextValue) || 1),
+      }),
+      "Vamp settings updated.",
+    );
   }
 
   function handleMidiInputDeviceChange(nextValue: string) {
@@ -4821,7 +5111,11 @@ export function TransportPanelContent() {
 
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
-      <div className="lt-daw-shell" ref={panelRef} onContextMenu={(event) => event.preventDefault()}>
+      <div
+        className={`lt-daw-shell ${midiLearnMode !== null ? "is-midi-learn-active" : ""}`}
+        ref={panelRef}
+        onContextMenu={(event) => event.preventDefault()}
+      >
       {isBusy ? (
         <div className="busy-overlay" aria-live="polite">
           <div className="busy-overlay-card">
@@ -4866,6 +5160,11 @@ export function TransportPanelContent() {
             setStatus(t("transport.status.playbackStarted"));
           })
         }
+        onNextSong={() =>
+          void runAction(async () => {
+            await handleNextSongClick();
+          })
+        }
         onPauseTransport={() =>
           void runAction(async () => {
             const nextSnapshot = await pauseTransport();
@@ -4891,6 +5190,8 @@ export function TransportPanelContent() {
             setStatus(t("transport.status.tempoUpdated", { bpm: nextBpm.toFixed(1) }));
           });
         }}
+        midiLearnMode={midiLearnMode}
+        onMidiLearnTarget={handleMidiLearnTarget}
       />
 
       <div className="lt-shell-body">
@@ -4921,6 +5222,16 @@ export function TransportPanelContent() {
           >
             <span className="material-symbols-outlined">settings</span>
             {t("transport.shell.settings")}
+          </button>
+          <button
+            type="button"
+            className={midiLearnMode !== null ? "is-active is-midi-learn" : "is-midi-learn"}
+            aria-label={t("transport.shell.midiLearn")}
+            aria-pressed={midiLearnMode !== null}
+            onClick={handleMidiLearnButtonClick}
+          >
+            <span className="material-symbols-outlined">graphic_eq</span>
+            {t("transport.shell.midiLearn")}
           </button>
         </aside>
 
@@ -4979,13 +5290,13 @@ export function TransportPanelContent() {
         <TimelineToolbar
           snapEnabled={snapEnabled}
           subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
-          globalJumpMode={globalJumpMode}
-          globalJumpBars={globalJumpBars}
-          songJumpTrigger={songJumpTrigger}
-          songJumpBars={songJumpBars}
-          songTransitionMode={songTransitionMode}
-          vampMode={vampMode}
-          vampBars={vampBars}
+          globalJumpMode={appSettings.globalJumpMode}
+          globalJumpBars={appSettings.globalJumpBars}
+          songJumpTrigger={appSettings.songJumpTrigger}
+          songJumpBars={appSettings.songJumpBars}
+          songTransitionMode={appSettings.songTransitionMode}
+          vampMode={appSettings.vampMode}
+          vampBars={appSettings.vampBars}
           isVampActive={Boolean(activeVamp)}
           pendingMarkerJumpLabel={
             pendingMarkerJump
@@ -5000,13 +5311,13 @@ export function TransportPanelContent() {
           clipCount={song?.clips.length ?? 0}
           markerCount={song?.sectionMarkers.length ?? 0}
           onToggleSnap={toggleSnapEnabled}
-          onGlobalJumpModeChange={setGlobalJumpMode}
-          onGlobalJumpBarsChange={setGlobalJumpBars}
-          onSongJumpTriggerChange={setSongJumpTrigger}
-          onSongJumpBarsChange={setSongJumpBars}
-          onSongTransitionModeChange={setSongTransitionMode}
-          onVampModeChange={setVampMode}
-          onVampBarsChange={setVampBars}
+          onGlobalJumpModeChange={handleGlobalJumpModeChange}
+          onGlobalJumpBarsChange={handleGlobalJumpBarsChange}
+          onSongJumpTriggerChange={handleSongJumpTriggerChange}
+          onSongJumpBarsChange={handleSongJumpBarsChange}
+          onSongTransitionModeChange={handleSongTransitionModeChange}
+          onVampModeChange={handleVampModeChange}
+          onVampBarsChange={handleVampBarsChange}
           onToggleVamp={() =>
             void runAction(async () => {
               await toggleTimelineVamp();
@@ -5019,6 +5330,8 @@ export function TransportPanelContent() {
               setStatus(t("transport.status.jumpCancelled"));
             })
           }
+          midiLearnMode={midiLearnMode}
+          onMidiLearnTarget={handleMidiLearnTarget}
         />
 
         <div className="lt-timeline-shell" ref={timelineShellRef}>
@@ -5433,6 +5746,15 @@ export function TransportPanelContent() {
                     step={0.01}
                     value={metronomeVolumeDraft}
                     disabled={isSettingsLoading || isSettingsSaving}
+                    onPointerDown={(event) => {
+                      if (midiLearnMode === null) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleMidiLearnTarget("param:metronome_volume");
+                    }}
                     onChange={(event) => handleMetronomeVolumeDraftChange(Number(event.target.value))}
                     onPointerUp={(event) => commitMetronomeVolumeDraft(Number(event.currentTarget.value))}
                     onBlur={(event) => commitMetronomeVolumeDraft(Number(event.currentTarget.value))}
@@ -5449,6 +5771,15 @@ export function TransportPanelContent() {
                     type="checkbox"
                     checked={appSettings.splitStereoEnabled}
                     disabled={isSettingsLoading || isSettingsSaving}
+                    onPointerDown={(event) => {
+                      if (midiLearnMode === null) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleMidiLearnTarget("action:toggle_split_stereo");
+                    }}
                     onChange={(event) => handleSplitStereoChange(event.target.checked)}
                   />
                   <div className="lt-settings-toggle-copy">
@@ -5458,6 +5789,106 @@ export function TransportPanelContent() {
                     </small>
                   </div>
                 </label>
+
+                <section className="lt-midi-learn-panel" aria-labelledby="lt-midi-learn-panel-title">
+                  <div className="lt-midi-learn-panel-header">
+                    <div>
+                      <span id="lt-midi-learn-panel-title" className="lt-settings-field-label">
+                        {t("transport.settingsModal.midiLearnSectionTitle")}
+                      </span>
+                      <p>{t("transport.settingsModal.midiLearnSectionDescription")}</p>
+                    </div>
+                    <div className="lt-midi-learn-actions">
+                      <button
+                        type="button"
+                        className={`lt-midi-learn-activate ${midiLearnMode !== null ? "is-active" : ""}`}
+                        disabled={isSettingsLoading || isSettingsSaving}
+                        onClick={() => handleMidiLearnToggle({ closePanels: false })}
+                      >
+                        <span className="material-symbols-outlined">graphic_eq</span>
+                        {t("transport.shell.midiLearn")}
+                      </button>
+                      <button
+                        type="button"
+                        className="lt-midi-learn-reset"
+                        disabled={isSettingsLoading || isSettingsSaving || Object.keys(appSettings.midiMappings).length === 0}
+                        onClick={handleResetMidiMappings}
+                      >
+                        {t("transport.settingsModal.midiLearnReset")}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="lt-midi-learn-feedback">
+                    <strong>{t("transport.settingsModal.midiLearnLatest")}</strong>
+                    {midiLearnFeedback ? (
+                      <p>
+                        {midiLearnFeedbackCommand?.label ?? midiLearnFeedback.key}: {formatMidiBinding(midiLearnFeedback.binding)}
+                      </p>
+                    ) : (
+                      <p>{t("transport.settingsModal.midiLearnEmpty")}</p>
+                    )}
+                  </div>
+
+                  {midiLearnMode !== null ? (
+                    <div className="lt-midi-learn-live">
+                      <strong>{t("transport.settingsModal.midiLearnListening")}</strong>
+                      <p>
+                        {midiLearnMode === ""
+                          ? t("transport.settingsModal.midiLearnArmed")
+                          : t("transport.settingsModal.midiLearnTargeting", {
+                              key: activeMidiLearnCommand?.label ?? midiLearnMode,
+                            })}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <div className="lt-midi-learn-table-wrap">
+                    <table className="lt-midi-learn-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{t("transport.settingsModal.midiLearnTableCommand")}</th>
+                          <th scope="col">{t("transport.settingsModal.midiLearnTableBinding")}</th>
+                          <th scope="col">{t("transport.settingsModal.midiLearnTableAction")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {midiLearnCommandRows.map((command) => {
+                          const hasBinding = Boolean(command.binding);
+                          const isTarget = midiLearnMode === command.key;
+
+                          return (
+                            <tr key={command.key} className={isTarget ? "is-midi-target" : undefined}>
+                              <td>
+                                <strong>{command.label}</strong>
+                                <code>{command.key}</code>
+                              </td>
+                              <td>
+                                {hasBinding && command.binding ? (
+                                  <span className="lt-midi-binding-pill">{formatMidiBinding(command.binding)}</span>
+                                ) : (
+                                  <span className="lt-midi-binding-empty">{t("transport.settingsModal.midiLearnUnassigned")}</span>
+                                )}
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className={`lt-midi-learn-relearn ${isTarget ? "is-active" : ""}`}
+                                  disabled={isSettingsLoading || isSettingsSaving}
+                                  onClick={() => handleMidiLearnCommandRelearn(command.key)}
+                                >
+                                  {isTarget
+                                    ? t("transport.settingsModal.midiLearnListeningShort")
+                                    : t("transport.settingsModal.midiLearnRelearn")}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
 
               </div>
             </section>

@@ -1,4 +1,4 @@
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::error::DesktopError;
 use crate::settings::{save_app_settings, AppSettings, AppSettingsStore};
@@ -15,10 +15,15 @@ pub fn save_settings(
     settings: AppSettings,
     settings_store: State<'_, AppSettingsStore>,
 ) -> Result<AppSettings, String> {
+    let previous_settings = settings_store.current().map_err(|error| error.to_string())?;
     settings_store
         .set(settings.clone())
         .map_err(|error| error.to_string())?;
     save_app_settings(&app, &settings).map_err(|error| error.to_string())?;
+    if previous_settings != settings {
+        app.emit("settings:updated", settings.clone())
+            .map_err(|error| error.to_string())?;
+    }
     Ok(settings)
 }
 
@@ -51,10 +56,15 @@ pub fn update_audio_settings(
         state
             .midi
             .restart(
-                app,
+                app.clone(),
                 state.audio.command_sender(),
                 next_settings.selected_midi_device.clone(),
             )
+            .map_err(|error| error.to_string())?;
+    }
+
+    if previous_settings != next_settings {
+        app.emit("settings:updated", next_settings.clone())
             .map_err(|error| error.to_string())?;
     }
 

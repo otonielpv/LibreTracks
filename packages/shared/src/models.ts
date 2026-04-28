@@ -231,13 +231,27 @@ export type AudioMeterLevel = {
   rightPeak: number;
 };
 
+export type MidiBinding = {
+  status: number;
+  data1: number;
+  isCc: boolean;
+};
+
 export type AppSettings = {
-  selectedOutputDevice?: string | null;
-  selectedMidiDevice?: string | null;
+  selectedOutputDevice: string | null;
+  selectedMidiDevice: string | null;
   splitStereoEnabled: boolean;
-  locale?: string | null;
+  locale: string | null;
   metronomeEnabled: boolean;
   metronomeVolume: number;
+  globalJumpMode: "immediate" | "after_bars" | "next_marker";
+  globalJumpBars: number;
+  songJumpTrigger: "immediate" | "region_end" | "after_bars";
+  songJumpBars: number;
+  songTransitionMode: "instant" | "fade_out";
+  vampMode: "section" | "bars";
+  vampBars: number;
+  midiMappings: Record<string, MidiBinding>;
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -247,7 +261,27 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   locale: null,
   metronomeEnabled: false,
   metronomeVolume: 0.8,
+  globalJumpMode: "immediate",
+  globalJumpBars: 4,
+  songJumpTrigger: "immediate",
+  songJumpBars: 4,
+  songTransitionMode: "instant",
+  vampMode: "section",
+  vampBars: 4,
+  midiMappings: {},
 };
+
+function normalizeJumpBars(value: number, fallback: number) {
+  return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : fallback;
+}
+
+function normalizeMidiBinding(binding: MidiBinding): MidiBinding {
+  return {
+    status: Math.max(0, Math.min(255, Math.floor(binding.status) || 0)),
+    data1: Math.max(0, Math.min(255, Math.floor(binding.data1) || 0)),
+    isCc: Boolean(binding.isCc),
+  };
+}
 
 export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const selectedOutputDevice = settings.selectedOutputDevice?.trim() || null;
@@ -256,6 +290,20 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const metronomeVolume = Number.isFinite(settings.metronomeVolume)
     ? Math.min(1, Math.max(0, settings.metronomeVolume))
     : DEFAULT_APP_SETTINGS.metronomeVolume;
+  const globalJumpMode =
+    settings.globalJumpMode === "after_bars" || settings.globalJumpMode === "next_marker"
+      ? settings.globalJumpMode
+      : DEFAULT_APP_SETTINGS.globalJumpMode;
+  const songJumpTrigger =
+    settings.songJumpTrigger === "after_bars" || settings.songJumpTrigger === "region_end"
+      ? settings.songJumpTrigger
+      : DEFAULT_APP_SETTINGS.songJumpTrigger;
+  const songTransitionMode =
+    settings.songTransitionMode === "fade_out" ? settings.songTransitionMode : DEFAULT_APP_SETTINGS.songTransitionMode;
+  const vampMode = settings.vampMode === "bars" ? settings.vampMode : DEFAULT_APP_SETTINGS.vampMode;
+  const midiMappings = Object.fromEntries(
+    Object.entries(settings.midiMappings ?? {}).map(([key, binding]) => [key, normalizeMidiBinding(binding)]),
+  );
 
   return {
     selectedOutputDevice,
@@ -264,12 +312,26 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     locale: locale === "en" || locale === "es" ? locale : null,
     metronomeEnabled: Boolean(settings.metronomeEnabled),
     metronomeVolume,
+    globalJumpMode,
+    globalJumpBars: normalizeJumpBars(settings.globalJumpBars, DEFAULT_APP_SETTINGS.globalJumpBars),
+    songJumpTrigger,
+    songJumpBars: normalizeJumpBars(settings.songJumpBars, DEFAULT_APP_SETTINGS.songJumpBars),
+    songTransitionMode,
+    vampMode,
+    vampBars: normalizeJumpBars(settings.vampBars, DEFAULT_APP_SETTINGS.vampBars),
+    midiMappings,
   };
 }
 
 export type AudioOutputDevices = {
   devices: string[];
   defaultDevice?: string | null;
+};
+
+export type MidiRawMessage = {
+  status: number;
+  data1: number;
+  data2: number;
 };
 
 export type RemoteServerInfo = {

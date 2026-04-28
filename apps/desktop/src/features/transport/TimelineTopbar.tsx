@@ -27,10 +27,13 @@ type TimelineTopbarProps = {
   onStopTransport: () => void;
   onPlayTransport: () => void;
   onPauseTransport: () => void;
+  onNextSong: () => void;
   metronomeEnabled: boolean;
   onToggleMetronome: () => void;
   onTempoDraftChange: (nextTempoDraft: string) => void;
   onTempoCommit: () => void;
+  midiLearnMode: string | null;
+  onMidiLearnTarget: (controlKey: string) => void;
 };
 
 export function TimelineTopbar({
@@ -57,14 +60,18 @@ export function TimelineTopbar({
   onStopTransport,
   onPlayTransport,
   onPauseTransport,
+  onNextSong,
   metronomeEnabled,
   onToggleMetronome,
   onTempoDraftChange,
   onTempoCommit,
+  midiLearnMode,
+  onMidiLearnTarget,
 }: TimelineTopbarProps) {
   const { t } = useTranslation();
   const fallbackBpm = getSongBaseBpm(song);
   const playbackStateLabel = t(`transport.playbackState.${playbackState}`);
+  const learnModeActive = midiLearnMode !== null;
 
   const handleTempoKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") {
@@ -96,18 +103,44 @@ export function TimelineTopbar({
 
             {openTopMenu === "file" ? (
               <div className="lt-top-menu-dropdown" role="menu" aria-label={t("timelineTopbar.fileMenu")}>
-                <button type="button" role="menuitem" onClick={() => onTopMenuAction(onCreateSong)}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    if (learnModeActive) {
+                      onMidiLearnTarget("action:create_song");
+                      return;
+                    }
+                    onTopMenuAction(onCreateSong);
+                  }}
+                >
                   <span>{t("timelineTopbar.newProject")}</span>
                 </button>
-                <button type="button" role="menuitem" onClick={() => onTopMenuAction(onOpenProject)}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    if (learnModeActive) {
+                      onMidiLearnTarget("action:open_project");
+                      return;
+                    }
+                    onTopMenuAction(onOpenProject);
+                  }}
+                >
                   <span>{t("timelineTopbar.open")}</span>
                 </button>
                 <div className="lt-top-menu-separator" aria-hidden="true" />
                 <button
                   type="button"
                   role="menuitem"
-                  disabled={!canPersistProject}
-                  onClick={() => onTopMenuAction(onSaveProject)}
+                  disabled={!canPersistProject && !learnModeActive}
+                  onClick={() => {
+                    if (learnModeActive) {
+                      onMidiLearnTarget("action:save_project");
+                      return;
+                    }
+                    onTopMenuAction(onSaveProject);
+                  }}
                 >
                   <span>{t("timelineTopbar.save")}</span>
                   <span className="lt-top-menu-shortcut">Ctrl+S</span>
@@ -115,8 +148,14 @@ export function TimelineTopbar({
                 <button
                   type="button"
                   role="menuitem"
-                  disabled={!canPersistProject}
-                  onClick={() => onTopMenuAction(onSaveProjectAs)}
+                  disabled={!canPersistProject && !learnModeActive}
+                  onClick={() => {
+                    if (learnModeActive) {
+                      onMidiLearnTarget("action:save_project_as");
+                      return;
+                    }
+                    onTopMenuAction(onSaveProjectAs);
+                  }}
                 >
                   <span>{t("timelineTopbar.saveAs")}</span>
                   <span className="lt-top-menu-shortcut">Ctrl+Shift+S</span>
@@ -138,6 +177,15 @@ export function TimelineTopbar({
               min={1}
               step={0.1}
               value={tempoDraft}
+              onPointerDown={(event) => {
+                if (!learnModeActive) {
+                  return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                onMidiLearnTarget("param:tempo");
+              }}
               onChange={(event) => onTempoDraftChange(event.target.value)}
               onBlur={onTempoCommit}
               onKeyDown={handleTempoKeyDown}
@@ -149,26 +197,82 @@ export function TimelineTopbar({
             <button type="button" aria-label={t("timelineTopbar.previous")} disabled={isProjectEmpty}>
               <span className="material-symbols-outlined">skip_previous</span>
             </button>
-            <button type="button" aria-label={t("timelineTopbar.stop")} disabled={isProjectEmpty} onClick={onStopTransport}>
+            <button
+              type="button"
+              aria-label={t("timelineTopbar.stop")}
+              disabled={isProjectEmpty && !learnModeActive}
+              onClick={() => {
+                if (learnModeActive) {
+                  onMidiLearnTarget("action:stop");
+                  return;
+                }
+
+                onStopTransport();
+              }}
+            >
               <span className="material-symbols-outlined">stop</span>
             </button>
-            <button type="button" aria-label={t("timelineTopbar.play")} className="is-play" disabled={isProjectEmpty} onClick={onPlayTransport}>
+            <button
+              type="button"
+              aria-label={t("timelineTopbar.play")}
+              className="is-play"
+              disabled={isProjectEmpty && !learnModeActive}
+              onClick={() => {
+                if (learnModeActive) {
+                  onMidiLearnTarget("action:play");
+                  return;
+                }
+
+                onPlayTransport();
+              }}
+            >
               <span className="material-symbols-outlined">play_arrow</span>
             </button>
-            <button type="button" aria-label={t("timelineTopbar.pause")} disabled={isProjectEmpty} onClick={onPauseTransport}>
+            <button
+              type="button"
+              aria-label={t("timelineTopbar.pause")}
+              disabled={isProjectEmpty && !learnModeActive}
+              onClick={() => {
+                if (learnModeActive) {
+                  onMidiLearnTarget("action:pause");
+                  return;
+                }
+
+                onPauseTransport();
+              }}
+            >
               <span className="material-symbols-outlined">pause</span>
             </button>
             <button
               type="button"
               aria-label={t("timelineTopbar.metronome")}
               className={metronomeEnabled ? "is-active is-toggle" : "is-toggle"}
-              disabled={isProjectEmpty}
-              onClick={onToggleMetronome}
+              disabled={isProjectEmpty && !learnModeActive}
+              onClick={() => {
+                if (learnModeActive) {
+                  onMidiLearnTarget("action:toggle_metronome");
+                  return;
+                }
+
+                onToggleMetronome();
+              }}
             >
               <span className="material-symbols-outlined">music_note</span>
               <span className="lt-button-label">{t("timelineTopbar.click")}</span>
             </button>
-            <button type="button" aria-label={t("timelineTopbar.next")} disabled={isProjectEmpty}>
+            <button
+              type="button"
+              aria-label={t("timelineTopbar.next")}
+              disabled={isProjectEmpty && !learnModeActive}
+              onClick={() => {
+                if (learnModeActive) {
+                  onMidiLearnTarget("action:next_song");
+                  return;
+                }
+
+                onNextSong();
+              }}
+            >
               <span className="material-symbols-outlined">skip_next</span>
             </button>
           </div>
