@@ -464,6 +464,15 @@ button {
 .region-actions-row {
   display: flex;
   align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.selected-region-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
 }
 
 .region-chip {

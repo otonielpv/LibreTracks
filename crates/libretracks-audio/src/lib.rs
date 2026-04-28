@@ -1,6 +1,6 @@
 //! Motor de audio y transporte.
 
-use libretracks_core::{validate_song, Clip, DomainError, Marker, Song, Track, TrackKind};
+use libretracks_core::{validate_song, Clip, DomainError, Marker, Song, SongRegion, Track, TrackKind};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +26,7 @@ pub struct ActiveClip {
 pub enum JumpTrigger {
     Immediate,
     NextMarker,
+    RegionEnd,
     AfterBars(u32),
 }
 
@@ -200,6 +201,42 @@ impl AudioEngine {
         Ok(Some(pending_jump))
     }
 
+    pub fn schedule_region_jump(
+        &mut self,
+        target_region_id: &str,
+        trigger: JumpTrigger,
+        transition: TransitionType,
+    ) -> Result<Option<PendingMarkerJump>, AudioEngineError> {
+        let song = self.ensure_song_loaded()?;
+        let target_region = find_region(song, target_region_id)?;
+
+        if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
+            self.position_seconds = target_region.start_seconds;
+            self.pending_marker_jump = None;
+            self.pending_fade_jump = None;
+            return Ok(None);
+        }
+
+        let Some(execute_at_seconds) = jump_execute_at(song, self.position_seconds, &trigger)?
+        else {
+            self.pending_marker_jump = None;
+            return Ok(None);
+        };
+
+        let pending_jump = PendingMarkerJump {
+            target_marker_id: target_region.id.clone(),
+            target_marker_name: target_region.name.clone(),
+            target_digit: None,
+            trigger,
+            execute_at_seconds,
+            transition,
+        };
+
+        self.pending_marker_jump = Some(pending_jump.clone());
+        self.pending_fade_jump = None;
+        Ok(Some(pending_jump))
+    }
+
     pub fn cancel_section_jump(&mut self) {
         self.pending_marker_jump = None;
         self.pending_fade_jump = None;
@@ -223,9 +260,10 @@ impl AudioEngine {
             if execute_at <= next_position {
                 match pending_jump.transition {
                     TransitionType::Instant => {
-                        let target_marker = find_marker(&song, &pending_jump.target_marker_id)?;
+                        let target_position =
+                            resolve_pending_jump_target_start_seconds(&song, &pending_jump)?;
                         let overshoot = next_position - execute_at;
-                        next_position = target_marker.start_seconds + overshoot;
+                        next_position = target_position + overshoot;
                         self.pending_marker_jump = None;
                         self.pending_fade_jump = None;
                         jump_executed = true;
@@ -278,8 +316,7 @@ impl AudioEngine {
         }
 
         let song = self.ensure_song_loaded()?;
-        let target_marker = find_marker(song, &pending_jump.target_marker_id)?;
-        self.position_seconds = target_marker.start_seconds;
+        self.position_seconds = resolve_pending_jump_target_start_seconds(song, &pending_jump)?;
         self.pending_marker_jump = None;
         self.pending_fade_jump = None;
         Ok(Some(self.position_seconds))
@@ -353,6 +390,25 @@ fn find_marker<'a>(song: &'a Song, marker_id: &str) -> Result<&'a Marker, AudioE
         .ok_or_else(|| AudioEngineError::MarkerNotFound(marker_id.to_string()))
 }
 
+fn find_region<'a>(song: &'a Song, region_id: &str) -> Result<&'a SongRegion, AudioEngineError> {
+    song.regions
+        .iter()
+        .find(|region| region.id == region_id)
+        .ok_or_else(|| AudioEngineError::MarkerNotFound(region_id.to_string()))
+}
+
+fn find_region_for_position(song: &Song, position_seconds: f64) -> Option<&SongRegion> {
+    song.regions
+        .iter()
+        .find(|region| position_seconds >= region.start_seconds && position_seconds < region.end_seconds)
+        .or_else(|| {
+            song.regions
+                .iter()
+                .rev()
+                .find(|region| position_seconds >= region.start_seconds)
+        })
+}
+
 fn jump_execute_at(
     song: &Song,
     current_position: f64,
@@ -363,6 +419,7 @@ fn jump_execute_at(
         JumpTrigger::NextMarker => Ok(song
             .next_marker_after(current_position)
             .map(|marker| marker.start_seconds)),
+        JumpTrigger::RegionEnd => Ok(find_region_for_position(song, current_position).map(|region| region.end_seconds)),
         JumpTrigger::AfterBars(bars) => Ok(Some(jump_execute_at_after_bars(
             song,
             current_position,
@@ -390,6 +447,17 @@ fn jump_execute_at_after_bars(
         &resolved_regions,
         target_bar_index,
     ))
+}
+
+fn resolve_pending_jump_target_start_seconds(
+    song: &Song,
+    pending_jump: &PendingMarkerJump,
+) -> Result<f64, AudioEngineError> {
+    if let Some(marker) = song.marker_by_id(&pending_jump.target_marker_id) {
+        return Ok(marker.start_seconds);
+    }
+
+    Ok(find_region(song, &pending_jump.target_marker_id)?.start_seconds)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1077,6 +1145,42 @@ mod tests {
             .expect("jump should remain pending");
 
         assert!((scheduled.execute_at_seconds - 16.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn region_end_jump_uses_the_current_region_end() {
+        let mut engine = AudioEngine::new();
+        engine
+            .load_song(multi_region_song())
+            .expect("song should load");
+        engine.seek(7.0).expect("seek should work");
+
+        let scheduled = engine
+            .schedule_region_jump("region_outro", JumpTrigger::RegionEnd, TransitionType::Instant)
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        assert!((scheduled.execute_at_seconds - 8.0).abs() < 0.0001);
+        assert_eq!(scheduled.target_marker_id, "region_outro");
+        assert_eq!(scheduled.target_marker_name, "Outro");
+        assert_eq!(scheduled.target_digit, None);
+    }
+
+    #[test]
+    fn immediate_region_jump_moves_transport_now() {
+        let mut engine = AudioEngine::new();
+        engine
+            .load_song(multi_region_song())
+            .expect("song should load");
+        engine.seek(1.0).expect("seek should work");
+
+        let scheduled = engine
+            .schedule_region_jump("region_bridge", JumpTrigger::Immediate, TransitionType::Instant)
+            .expect("jump should schedule");
+
+        assert!(scheduled.is_none());
+        assert_eq!(engine.position_seconds(), 8.0);
+        assert!(engine.pending_marker_jump().is_none());
     }
 
     #[test]

@@ -1,12 +1,15 @@
 import { useTranslation } from "react-i18next";
 
-import type { GlobalJumpMode } from "./uiStore";
+import type { GlobalJumpMode, SongJumpTrigger, SongTransitionMode } from "./uiStore";
 
 type TimelineToolbarProps = {
   snapEnabled: boolean;
   subdivisionPerBeat: number;
   globalJumpMode: GlobalJumpMode;
   globalJumpBars: number;
+  songJumpTrigger: SongJumpTrigger;
+  songJumpBars: number;
+  songTransitionMode: SongTransitionMode;
   pendingMarkerJumpLabel: string | null;
   isProjectEmpty: boolean;
   trackCount: number;
@@ -15,6 +18,9 @@ type TimelineToolbarProps = {
   onToggleSnap: () => void;
   onGlobalJumpModeChange: (mode: GlobalJumpMode) => void;
   onGlobalJumpBarsChange: (bars: number) => void;
+  onSongJumpTriggerChange: (trigger: SongJumpTrigger) => void;
+  onSongJumpBarsChange: (bars: number) => void;
+  onSongTransitionModeChange: (mode: SongTransitionMode) => void;
   onCancelPendingJump: () => void;
 };
 
@@ -23,6 +29,9 @@ export function TimelineToolbar({
   subdivisionPerBeat,
   globalJumpMode,
   globalJumpBars,
+  songJumpTrigger,
+  songJumpBars,
+  songTransitionMode,
   pendingMarkerJumpLabel,
   isProjectEmpty,
   trackCount,
@@ -31,6 +40,9 @@ export function TimelineToolbar({
   onToggleSnap,
   onGlobalJumpModeChange,
   onGlobalJumpBarsChange,
+  onSongJumpTriggerChange,
+  onSongJumpBarsChange,
+  onSongTransitionModeChange,
   onCancelPendingJump,
 }: TimelineToolbarProps) {
   const { t } = useTranslation();
@@ -50,9 +62,9 @@ export function TimelineToolbar({
             <span className="material-symbols-outlined">{snapEnabled ? "grid_on" : "grid_off"}</span>
           </button>
           <label className="lt-zoom-control lt-jump-mode-control">
-            <span>{t("timelineToolbar.jumpLabel")}</span>
+            <span>{t("timelineToolbar.markerJumpLabel")}</span>
             <select
-              aria-label={t("timelineToolbar.jumpModeAria")}
+              aria-label={t("timelineToolbar.markerJumpModeAria")}
               disabled={isProjectEmpty}
               value={globalJumpMode}
               onChange={(event) => onGlobalJumpModeChange(event.target.value as GlobalJumpMode)}
@@ -64,9 +76,9 @@ export function TimelineToolbar({
           </label>
           {globalJumpMode === "after_bars" ? (
             <label className="lt-zoom-control">
-              <span>{t("timelineToolbar.barsLabel")}</span>
+              <span>{t("timelineToolbar.markerBarsLabel")}</span>
               <input
-                aria-label={t("timelineToolbar.jumpBarsAria")}
+                aria-label={t("timelineToolbar.markerJumpBarsAria")}
                 type="number"
                 min={1}
                 step={1}
@@ -75,6 +87,46 @@ export function TimelineToolbar({
               />
             </label>
           ) : null}
+          <label className="lt-zoom-control lt-jump-mode-control">
+            <span>{t("timelineToolbar.songJumpLabel")}</span>
+            <select
+              aria-label={t("timelineToolbar.songJumpModeAria")}
+              disabled={isProjectEmpty}
+              value={songJumpTrigger}
+              onChange={(event) => onSongJumpTriggerChange(event.target.value as SongJumpTrigger)}
+            >
+              <option value="immediate">{t("transport.jumpMode.immediate")}</option>
+              <option value="region_end">{t("transport.jumpMode.regionEnd")}</option>
+              <option value="after_bars">{t("timelineToolbar.afterBarsOption")}</option>
+            </select>
+          </label>
+          {songJumpTrigger === "after_bars" ? (
+            <label className="lt-zoom-control">
+              <span>{t("timelineToolbar.songBarsLabel")}</span>
+              <input
+                aria-label={t("timelineToolbar.songJumpBarsAria")}
+                type="number"
+                min={1}
+                step={1}
+                value={songJumpBars}
+                onChange={(event) => onSongJumpBarsChange(Number(event.target.value) || 1)}
+              />
+            </label>
+          ) : null}
+          <label className="lt-zoom-control lt-jump-mode-control">
+            <span>{t("timelineToolbar.songTransitionLabel")}</span>
+            <select
+              aria-label={t("timelineToolbar.songTransitionAria")}
+              disabled={isProjectEmpty}
+              value={songTransitionMode}
+              onChange={(event) =>
+                onSongTransitionModeChange(event.target.value as SongTransitionMode)
+              }
+            >
+              <option value="instant">{t("timelineToolbar.songTransitionInstant")}</option>
+              <option value="fade_out">{t("timelineToolbar.songTransitionFadeOut")}</option>
+            </select>
+          </label>
           {pendingMarkerJumpLabel ? <span>{pendingMarkerJumpLabel}</span> : null}
           <button
             type="button"

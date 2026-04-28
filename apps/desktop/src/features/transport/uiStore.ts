@@ -2,12 +2,17 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
 export type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
+export type SongJumpTrigger = "immediate" | "region_end" | "after_bars";
+export type SongTransitionMode = "instant" | "fade_out";
 
 export const TIMELINE_DEFAULT_ZOOM_LEVEL = 7;
 export const TIMELINE_DEFAULT_TRACK_HEIGHT = 94;
 export const TIMELINE_DEFAULT_SNAP_ENABLED = true;
 export const TIMELINE_DEFAULT_GLOBAL_JUMP_MODE: GlobalJumpMode = "immediate";
 export const TIMELINE_DEFAULT_GLOBAL_JUMP_BARS = 4;
+export const TIMELINE_DEFAULT_SONG_JUMP_TRIGGER: SongJumpTrigger = "immediate";
+export const TIMELINE_DEFAULT_SONG_JUMP_BARS = 4;
+export const TIMELINE_DEFAULT_SONG_TRANSITION_MODE: SongTransitionMode = "instant";
 
 type TimelineUIState = {
   cameraX: number;
@@ -19,6 +24,9 @@ type TimelineUIState = {
   snapEnabled: boolean;
   globalJumpMode: GlobalJumpMode;
   globalJumpBars: number;
+  songJumpTrigger: SongJumpTrigger;
+  songJumpBars: number;
+  songTransitionMode: SongTransitionMode;
   setCameraX: (cameraX: number) => void;
   setZoomLevel: (zoomLevel: number | ((currentZoomLevel: number) => number)) => void;
   setTrackHeight: (trackHeight: number | ((currentTrackHeight: number) => number)) => void;
@@ -33,6 +41,9 @@ type TimelineUIState = {
   toggleSnapEnabled: () => void;
   setGlobalJumpMode: (mode: GlobalJumpMode) => void;
   setGlobalJumpBars: (bars: number) => void;
+  setSongJumpTrigger: (trigger: SongJumpTrigger) => void;
+  setSongJumpBars: (bars: number) => void;
+  setSongTransitionMode: (mode: SongTransitionMode) => void;
 };
 
 export const useTimelineUIStore = create<TimelineUIState>()(
@@ -46,6 +57,9 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     globalJumpMode: TIMELINE_DEFAULT_GLOBAL_JUMP_MODE,
     globalJumpBars: TIMELINE_DEFAULT_GLOBAL_JUMP_BARS,
+    songJumpTrigger: TIMELINE_DEFAULT_SONG_JUMP_TRIGGER,
+    songJumpBars: TIMELINE_DEFAULT_SONG_JUMP_BARS,
+    songTransitionMode: TIMELINE_DEFAULT_SONG_TRANSITION_MODE,
     setCameraX: (cameraX) => {
       set({ cameraX: Number.isFinite(cameraX) ? Math.max(0, cameraX) : 0 });
     },
@@ -112,6 +126,15 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     setGlobalJumpBars: (globalJumpBars) => {
       set({ globalJumpBars: Math.max(1, Math.floor(globalJumpBars) || 1) });
+    },
+    setSongJumpTrigger: (songJumpTrigger) => {
+      set({ songJumpTrigger });
+    },
+    setSongJumpBars: (songJumpBars) => {
+      set({ songJumpBars: Math.max(1, Math.floor(songJumpBars) || 1) });
+    },
+    setSongTransitionMode: (songTransitionMode) => {
+      set({ songTransitionMode });
     },
   })),
 );

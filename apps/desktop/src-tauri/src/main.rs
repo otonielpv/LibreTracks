@@ -66,6 +66,7 @@ fn main() {
             commands::transport::stop_transport,
             commands::transport::seek_transport,
             commands::transport::schedule_marker_jump,
+            commands::transport::schedule_region_jump,
             commands::transport::cancel_marker_jump,
             commands::timeline::move_clip,
             commands::timeline::move_clip_live,

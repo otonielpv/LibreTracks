@@ -63,6 +63,7 @@ import {
   saveProjectAs,
   saveSettings,
   scheduleMarkerJump,
+  scheduleRegionJump,
   seekTransport,
   splitClip,
   stopTransport,
@@ -122,6 +123,8 @@ import {
   TIMELINE_DEFAULT_TRACK_HEIGHT,
   useTimelineUIStore,
   type GlobalJumpMode,
+  type SongJumpTrigger,
+  type SongTransitionMode,
 } from "./uiStore";
 
 const HEADER_WIDTH = 260;
@@ -428,6 +431,12 @@ function isTextEntryTarget(target: EventTarget | null) {
 
 function resolveMarkerShortcut(markers: SectionMarkerSummary[], digit: number) {
   return [...markers]
+    .sort((left, right) => left.startSeconds - right.startSeconds)
+    .at(digit) ?? null;
+}
+
+function resolveRegionShortcut(regions: SongRegionSummary[], digit: number) {
+  return [...regions]
     .sort((left, right) => left.startSeconds - right.startSeconds)
     .at(digit) ?? null;
 }
@@ -747,6 +756,10 @@ export function TransportPanelContent() {
       return t("transport.jumpMode.nextMarker");
     }
 
+    if (trigger === "region_end") {
+      return t("transport.jumpMode.regionEnd");
+    }
+
     const bars = Number(trigger.split(":")[1]) || 1;
     return t("transport.jumpMode.afterBars", { count: bars });
   }, [t]);
@@ -760,6 +773,9 @@ export function TransportPanelContent() {
   const cameraX = useTimelineUIStore((state) => state.cameraX);
   const globalJumpMode = useTimelineUIStore((state) => state.globalJumpMode);
   const globalJumpBars = useTimelineUIStore((state) => state.globalJumpBars);
+  const songJumpTrigger = useTimelineUIStore((state) => state.songJumpTrigger);
+  const songJumpBars = useTimelineUIStore((state) => state.songJumpBars);
+  const songTransitionMode = useTimelineUIStore((state) => state.songTransitionMode);
   const zoomLevel = useTimelineUIStore((state) => state.zoomLevel);
   const trackHeight = useTimelineUIStore((state) => state.trackHeight);
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
@@ -783,6 +799,9 @@ export function TransportPanelContent() {
   const setCameraX = useTimelineUIStore((state) => state.setCameraX);
   const setGlobalJumpMode = useTimelineUIStore((state) => state.setGlobalJumpMode);
   const setGlobalJumpBars = useTimelineUIStore((state) => state.setGlobalJumpBars);
+  const setSongJumpTrigger = useTimelineUIStore((state) => state.setSongJumpTrigger);
+  const setSongJumpBars = useTimelineUIStore((state) => state.setSongJumpBars);
+  const setSongTransitionMode = useTimelineUIStore((state) => state.setSongTransitionMode);
   const setZoomLevel = useTimelineUIStore((state) => state.setZoomLevel);
   const setTrackHeight = useTimelineUIStore((state) => state.setTrackHeight);
   const setSnapEnabled = useTimelineUIStore((state) => state.setSnapEnabled);
@@ -2149,11 +2168,7 @@ export function TransportPanelContent() {
       }
 
       const target = event.target as HTMLElement | null;
-      const isTypingTarget =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "SELECT" ||
-        target?.isContentEditable;
+      const isTypingTarget = isTextEntryTarget(event.target) || target?.tagName === "SELECT";
 
       if (isTypingTarget) {
         return;
@@ -2194,6 +2209,19 @@ export function TransportPanelContent() {
       const keyDigit = keyboardDigit(event.code);
       if (keyDigit !== null) {
         event.preventDefault();
+
+        if (event.shiftKey) {
+          const region = song ? resolveRegionShortcut(song.regions, keyDigit) : null;
+          if (!region) {
+            setStatus(t("transport.status.noSongForDigit", { digit: keyDigit }));
+            return;
+          }
+
+          void runAction(async () => {
+            await scheduleRegionJumpWithOptions(region.id, region.name);
+          });
+          return;
+        }
 
         const marker = song ? resolveMarkerShortcut(song.sectionMarkers, keyDigit) : null;
         if (!marker) {
@@ -2279,6 +2307,7 @@ export function TransportPanelContent() {
     openTopMenu,
     runAction,
     scheduleMarkerJumpWithGlobalMode,
+    scheduleRegionJumpWithOptions,
     selectedClipId,
     selectedTrackIds,
     song,
@@ -2791,6 +2820,45 @@ export function TransportPanelContent() {
           ? t("transport.status.jumpNextMarker", { name: markerName })
           : t("transport.status.jumpAfterBars", { count: bars, name: markerName }),
     );
+
+    return nextSnapshot;
+  }
+
+  async function scheduleRegionJumpWithOptions(regionId: string, regionName: string) {
+    const trigger: SongJumpTrigger =
+      songJumpTrigger === "after_bars" ? "after_bars" : songJumpTrigger;
+    const bars = Math.max(1, Math.floor(songJumpBars));
+    const transition: SongTransitionMode = songTransitionMode;
+    const nextSnapshot = await scheduleRegionJump(
+      regionId,
+      trigger,
+      trigger === "after_bars" ? bars : undefined,
+      transition,
+      transition === "fade_out" ? 0.35 : undefined,
+    );
+    applyPlaybackSnapshot(nextSnapshot);
+
+    if (trigger === "region_end" && !nextSnapshot.pendingMarkerJump) {
+      setStatus(t("transport.status.noSongRegionAtCursor"));
+      return nextSnapshot;
+    }
+
+    const whenLabel =
+      trigger === "immediate"
+        ? t("transport.jumpMode.immediate")
+        : trigger === "region_end"
+          ? t("transport.jumpMode.regionEnd")
+          : t("transport.jumpMode.afterBars", { count: bars });
+    const howLabel =
+      transition === "fade_out"
+        ? t("timelineToolbar.songTransitionFadeOut")
+        : t("timelineToolbar.songTransitionInstant");
+
+    setStatus(t("transport.status.songJumpScheduled", {
+      name: regionName,
+      when: whenLabel,
+      how: howLabel,
+    }));
 
     return nextSnapshot;
   }
@@ -4775,6 +4843,9 @@ export function TransportPanelContent() {
           subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
           globalJumpMode={globalJumpMode}
           globalJumpBars={globalJumpBars}
+          songJumpTrigger={songJumpTrigger}
+          songJumpBars={songJumpBars}
+          songTransitionMode={songTransitionMode}
           pendingMarkerJumpLabel={
             pendingMarkerJump
               ? t("transport.shell.pendingJump", {
@@ -4790,6 +4861,9 @@ export function TransportPanelContent() {
           onToggleSnap={toggleSnapEnabled}
           onGlobalJumpModeChange={setGlobalJumpMode}
           onGlobalJumpBarsChange={setGlobalJumpBars}
+          onSongJumpTriggerChange={setSongJumpTrigger}
+          onSongJumpBarsChange={setSongJumpBars}
+          onSongTransitionModeChange={setSongTransitionMode}
           onCancelPendingJump={() =>
             void runAction(async () => {
               const nextSnapshot = await cancelMarkerJump();

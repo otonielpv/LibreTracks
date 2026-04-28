@@ -83,6 +83,15 @@ pub enum RemoteCommand {
         target_marker_id: String,
         trigger: String,
         bars: Option<u32>,
+        transition: Option<String>,
+        duration_seconds: Option<f64>,
+    },
+    ScheduleRegionJump {
+        target_region_id: String,
+        trigger: String,
+        bars: Option<u32>,
+        transition: Option<String>,
+        duration_seconds: Option<f64>,
     },
     CancelMarkerJump,
     UpdateTrackMixLive {

@@ -111,6 +111,29 @@ pub fn schedule_marker_jump(
 }
 
 #[tauri::command]
+pub fn schedule_region_jump(
+    target_region_id: String,
+    trigger: String,
+    bars: Option<u32>,
+    transition: Option<String>,
+    duration_seconds: Option<f64>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    let jump_trigger = parse_jump_trigger(&trigger, bars).map_err(|error| error.to_string())?;
+    let transition = parse_transition_type(transition.as_deref(), duration_seconds)
+        .map_err(|error| error.to_string())?;
+
+    session
+        .schedule_region_jump(&target_region_id, jump_trigger, transition, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn cancel_marker_jump(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
     let mut session = state
         .session
@@ -122,10 +145,14 @@ pub fn cancel_marker_jump(state: State<'_, DesktopState>) -> Result<TransportSna
         .map_err(|error| error.to_string())
 }
 
-fn parse_jump_trigger(trigger: &str, bars: Option<u32>) -> Result<JumpTrigger, DesktopError> {
+pub(crate) fn parse_jump_trigger(
+    trigger: &str,
+    bars: Option<u32>,
+) -> Result<JumpTrigger, DesktopError> {
     match trigger {
         "immediate" => Ok(JumpTrigger::Immediate),
         "section_end" | "next_marker" => Ok(JumpTrigger::NextMarker),
+        "region_end" => Ok(JumpTrigger::RegionEnd),
         "after_bars" => Ok(JumpTrigger::AfterBars(bars.unwrap_or(4))),
         _ => Err(DesktopError::AudioCommand(format!(
             "unknown jump trigger: {trigger}"
@@ -133,7 +160,7 @@ fn parse_jump_trigger(trigger: &str, bars: Option<u32>) -> Result<JumpTrigger, D
     }
 }
 
-fn parse_transition_type(
+pub(crate) fn parse_transition_type(
     transition: Option<&str>,
     duration_seconds: Option<f64>,
 ) -> Result<TransitionType, DesktopError> {

@@ -1003,6 +1003,38 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn schedule_region_jump(
+        &mut self,
+        target_region_id: &str,
+        trigger: JumpTrigger,
+        transition: TransitionType,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        let was_playing = self.engine.playback_state() == PlaybackState::Playing;
+
+        self.engine
+            .schedule_region_jump(target_region_id, trigger.clone(), transition.clone())?;
+
+        if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
+            if was_playing {
+                self.reposition_audio(audio, PlaybackStartReason::ImmediateJump)?;
+                self.transport_clock
+                    .note_jump_while_playing(self.engine.position_seconds());
+            } else {
+                self.transport_clock.seek_to(self.engine.position_seconds());
+            }
+            self.capture_transport_drift_sample(
+                audio,
+                "jump",
+                self.current_position(),
+                self.engine.position_seconds(),
+            );
+        }
+
+        Ok(self.snapshot())
+    }
+
     pub fn cancel_marker_jump(
         &mut self,
         audio: &AudioController,

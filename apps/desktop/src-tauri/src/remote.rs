@@ -7,8 +7,8 @@ use libretracks_remote::{
 use tauri::{App, AppHandle, Manager};
 
 use crate::{
+    commands::transport::{parse_jump_trigger, parse_transition_type},
     commands::events::emit_transport_lifecycle_event,
-    error::DesktopError,
     state::DesktopState,
 };
 
@@ -154,10 +154,26 @@ async fn run_remote_command_bridge(
                 target_marker_id,
                 trigger,
                 bars,
+                transition,
+                duration_seconds,
             } => session.schedule_marker_jump(
                 target_marker_id,
                 parse_jump_trigger(trigger, *bars).unwrap_or(JumpTrigger::Immediate),
-                TransitionType::Instant,
+                parse_transition_type(transition.as_deref(), *duration_seconds)
+                    .unwrap_or(TransitionType::Instant),
+                &state.audio,
+            ),
+            RemoteCommand::ScheduleRegionJump {
+                target_region_id,
+                trigger,
+                bars,
+                transition,
+                duration_seconds,
+            } => session.schedule_region_jump(
+                target_region_id,
+                parse_jump_trigger(trigger, *bars).unwrap_or(JumpTrigger::Immediate),
+                parse_transition_type(transition.as_deref(), *duration_seconds)
+                    .unwrap_or(TransitionType::Instant),
                 &state.audio,
             ),
             RemoteCommand::CancelMarkerJump => session.cancel_marker_jump(&state.audio),
@@ -202,16 +218,5 @@ async fn run_remote_command_bridge(
         if let Ok(song_view) = session.song_view() {
             handle.publish_song_view(&song_view);
         }
-    }
-}
-
-fn parse_jump_trigger(trigger: &str, bars: Option<u32>) -> Result<JumpTrigger, DesktopError> {
-    match trigger {
-        "immediate" => Ok(JumpTrigger::Immediate),
-        "section_end" | "next_marker" => Ok(JumpTrigger::NextMarker),
-        "after_bars" => Ok(JumpTrigger::AfterBars(bars.unwrap_or(4))),
-        _ => Err(DesktopError::AudioCommand(format!(
-            "unknown jump trigger: {trigger}"
-        ))),
     }
 }

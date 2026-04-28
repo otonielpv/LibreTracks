@@ -31,6 +31,8 @@ import { getRemoteStrings } from "./i18n";
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 type RemoteView = "transport" | "mixer";
 type JumpMode = "immediate" | "next_marker" | "after_bars";
+type SongJumpTrigger = "immediate" | "region_end" | "after_bars";
+type SongTransitionMode = "instant" | "fade_out";
 
 type RemoteConnectionState = {
   status: ConnectionStatus;
@@ -75,8 +77,12 @@ type TransportReadout = {
 type RemoteJumpState = {
   mode: JumpMode;
   bars: number;
+  songTrigger: SongJumpTrigger;
+  songTransition: SongTransitionMode;
   setMode: (mode: JumpMode) => void;
   setBars: (bars: number) => void;
+  setSongTrigger: (mode: SongJumpTrigger) => void;
+  setSongTransition: (mode: SongTransitionMode) => void;
 };
 
 type FolderPalette = {
@@ -144,11 +150,19 @@ const useOptimisticStore = create<OptimisticState>()((set) => ({
 const useRemoteJumpStore = create<RemoteJumpState>()((set) => ({
   mode: "immediate",
   bars: 4,
+  songTrigger: "immediate",
+  songTransition: "instant",
   setMode: (mode) => {
     set({ mode });
   },
   setBars: (bars) => {
     set({ bars: Math.max(1, Math.floor(bars) || 1) });
+  },
+  setSongTrigger: (songTrigger) => {
+    set({ songTrigger });
+  },
+  setSongTransition: (songTransition) => {
+    set({ songTransition });
   },
 }));
 
@@ -180,6 +194,10 @@ function parsePendingJumpMode(trigger: string | undefined): { mode: JumpMode; ba
 
   if (trigger === "next_marker") {
     return { mode: "next_marker" };
+  }
+
+  if (trigger === "region_end") {
+    return { mode: "immediate" };
   }
 
   return { mode: "immediate" };
@@ -688,8 +706,12 @@ function TransportView() {
   const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
   const jumpMode = useRemoteJumpStore((state) => state.mode);
   const jumpBars = useRemoteJumpStore((state) => state.bars);
+  const songTrigger = useRemoteJumpStore((state) => state.songTrigger);
+  const songTransition = useRemoteJumpStore((state) => state.songTransition);
   const setJumpMode = useRemoteJumpStore((state) => state.setMode);
   const setJumpBars = useRemoteJumpStore((state) => state.setBars);
+  const setSongTrigger = useRemoteJumpStore((state) => state.setSongTrigger);
+  const setSongTransition = useRemoteJumpStore((state) => state.setSongTransition);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const markers = songView?.sectionMarkers ?? [];
   const regions = songView?.regions ?? [];
@@ -732,6 +754,17 @@ function TransportView() {
   const cancelJump = () => {
     useOptimisticStore.getState().setPendingJumpTarget(null);
     sendCommand({ cmd: "cancelMarkerJump" });
+  };
+
+  const scheduleRegionJump = (regionId: string) => {
+    sendCommand({
+      cmd: "scheduleRegionJump",
+      targetRegionId: regionId,
+      trigger: songTrigger,
+      bars: songTrigger === "after_bars" ? jumpBars : undefined,
+      transition: songTransition,
+      durationSeconds: songTransition === "fade_out" ? 0.35 : undefined,
+    });
   };
 
   return (
@@ -792,6 +825,46 @@ function TransportView() {
         ) : null}
       </div>
 
+      <div className="jump-toolbar">
+        <label className="jump-bars-field">
+          <span>{STRINGS.songTrigger}</span>
+          <select
+            value={songTrigger}
+            onChange={(event) => setSongTrigger(event.currentTarget.value as SongJumpTrigger)}
+          >
+            <option value="immediate">{STRINGS.immediate}</option>
+            <option value="region_end">{STRINGS.songEnd}</option>
+            <option value="after_bars">{STRINGS.bars}</option>
+          </select>
+        </label>
+
+        {songTrigger === "after_bars" ? (
+          <label className="jump-bars-field">
+            <span>{STRINGS.bars}</span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={jumpBars}
+              onChange={(event) => setJumpBars(Number(event.currentTarget.value))}
+            />
+          </label>
+        ) : null}
+
+        <label className="jump-bars-field">
+          <span>{STRINGS.songTransition}</span>
+          <select
+            value={songTransition}
+            onChange={(event) =>
+              setSongTransition(event.currentTarget.value as SongTransitionMode)
+            }
+          >
+            <option value="instant">{STRINGS.cleanCut}</option>
+            <option value="fade_out">{STRINGS.fadeOut}</option>
+          </select>
+        </label>
+      </div>
+
       <div className="region-actions-row">
         <div className="region-carousel">
           {regions.map((region) => (
@@ -800,16 +873,22 @@ function TransportView() {
               className={`region-chip ${selectedRegionId === region.id ? "is-active" : ""}`}
               onClick={() => {
                 setSelectedRegionId(region.id);
-                sendCommand({
-                  cmd: "seek",
-                  positionSeconds: region.startSeconds,
-                });
               }}
             >
               {region.name}
             </button>
           ))}
         </div>
+        {selectedRegion ? (
+          <div className="selected-region-actions">
+            <button
+              className="jump-cancel-button"
+              onClick={() => scheduleRegionJump(selectedRegion.id)}
+            >
+              {STRINGS.jumpToSong}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="marker-grid">

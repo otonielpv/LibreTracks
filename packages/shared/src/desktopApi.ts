@@ -231,6 +231,22 @@ export async function scheduleMarkerJump(
   });
 }
 
+export async function scheduleRegionJump(
+  targetRegionId: string,
+  trigger: "immediate" | "region_end" | "after_bars",
+  bars?: number,
+  transition: "instant" | "fade_out" = "instant",
+  durationSeconds?: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("schedule_region_jump", {
+    targetRegionId,
+    trigger,
+    bars,
+    transition,
+    durationSeconds,
+  });
+}
+
 export async function cancelMarkerJump(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("cancel_marker_jump");
 }

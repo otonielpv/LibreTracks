@@ -2,7 +2,7 @@ import { getCumulativeMusicalPosition, type TimelineRegion } from "./timelineMat
 
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
 export type TrackKind = "audio" | "folder";
-export type JumpTriggerLabel = "immediate" | "next_marker" | `after_bars:${number}`;
+export type JumpTriggerLabel = "immediate" | "next_marker" | "region_end" | `after_bars:${number}`;
 export type TransitionTypeLabel = "instant" | `fade_out:${number}`;
 
 export type SectionMarkerSummary = {

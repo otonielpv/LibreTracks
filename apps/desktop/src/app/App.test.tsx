@@ -58,6 +58,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     stopTransport: vi.fn(testDesktopApiMock.stopTransport),
     seekTransport: vi.fn(testDesktopApiMock.seekTransport),
     scheduleMarkerJump: vi.fn(testDesktopApiMock.scheduleMarkerJump),
+    scheduleRegionJump: vi.fn(testDesktopApiMock.scheduleRegionJump),
     cancelMarkerJump: vi.fn(testDesktopApiMock.cancelMarkerJump),
     moveClip: vi.fn(testDesktopApiMock.moveClip),
     moveClipLive: vi.fn(testDesktopApiMock.moveClipLive),
@@ -925,6 +926,26 @@ describe("App", () => {
     });
 
     expect(await screen.findByText(jumpNextMarkerMatcher("Intro"))).toBeTruthy();
+  });
+
+  it("maps shift plus 0 to the first song region", async () => {
+    await renderApp();
+
+    const songJumpSelect = await screen.findByRole("combobox", {
+      name: textMatcher(en.timelineToolbar.songJumpModeAria),
+    });
+    await act(async () => {
+      fireEvent.change(songJumpSelect, { target: { value: "region_end" } });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "Digit0", key: "0", shiftKey: true });
+    });
+
+    await waitFor(() => {
+      expect(useTransportStore.getState().playback?.pendingMarkerJump?.targetMarkerName).toBe("LibreTracks Session");
+      expect(useTransportStore.getState().playback?.pendingMarkerJump?.trigger).toBe("region_end");
+    });
   });
 
   it("overwrites the armed marker on click and cancels when clicked again", async () => {

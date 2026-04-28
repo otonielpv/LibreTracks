@@ -509,14 +509,18 @@ function findLibraryAsset(filePath: string) {
   return state.libraryAssets.find((asset) => asset.filePath === filePath) ?? null;
 }
 
-function createPendingJump(marker: SectionMarkerSummary, trigger: JumpTriggerLabel): PendingJumpSummary {
+function createPendingJump(
+  marker: Pick<SectionMarkerSummary, "id" | "name" | "startSeconds"> & { digit?: number | null },
+  trigger: JumpTriggerLabel,
+  transition: PendingJumpSummary["transition"] = "instant",
+): PendingJumpSummary {
   return {
     targetMarkerId: marker.id,
     targetMarkerName: marker.name,
     targetDigit: marker.digit ?? null,
     trigger,
     executeAtSeconds: trigger === "immediate" ? marker.startSeconds : Math.max(state.playbackPositionSeconds, marker.startSeconds),
-    transition: "instant",
+    transition,
   };
 }
 
@@ -707,6 +711,37 @@ export const testDesktopApiMock = {
     }
 
     state.pendingMarkerJump = createPendingJump(marker, `after_bars:${Math.max(1, bars ?? 1)}`);
+    return clone(buildSnapshot());
+  },
+  scheduleRegionJump: async (
+    targetRegionId: string,
+    trigger: "immediate" | "region_end" | "after_bars",
+    bars?: number,
+    transition: "instant" | "fade_out" = "instant",
+    durationSeconds?: number,
+  ) => {
+    const region = state.song.regions.find((entry) => entry.id === targetRegionId) ?? null;
+    if (!region) {
+      return clone(buildSnapshot());
+    }
+
+    if (trigger === "immediate") {
+      state.playbackPositionSeconds = region.startSeconds;
+      state.pendingMarkerJump = null;
+      return clone(buildSnapshot());
+    }
+
+    const transitionLabel =
+      transition === "fade_out" ? `fade_out:${durationSeconds ?? 0.35}` : "instant";
+    state.pendingMarkerJump = createPendingJump(
+      {
+        id: region.id,
+        name: region.name,
+        startSeconds: region.startSeconds,
+      },
+      trigger === "region_end" ? "region_end" : `after_bars:${Math.max(1, bars ?? 1)}`,
+      transitionLabel,
+    );
     return clone(buildSnapshot());
   },
   cancelMarkerJump: async () => {
