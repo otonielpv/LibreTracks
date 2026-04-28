@@ -301,6 +301,7 @@ body {
 }
 
 .lt-remote-card {
+  box-sizing: border-box;
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
