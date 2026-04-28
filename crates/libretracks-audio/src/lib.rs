@@ -30,12 +30,25 @@ pub enum JumpTrigger {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum TransitionType {
+    Instant,
+    FadeOut { duration_seconds: f64 },
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct PendingMarkerJump {
     pub target_marker_id: String,
     pub target_marker_name: String,
     pub target_digit: Option<u8>,
     pub trigger: JumpTrigger,
     pub execute_at_seconds: f64,
+    pub transition: TransitionType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct PendingFadeJump {
+    duration_seconds: f64,
+    fade_started: bool,
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -60,6 +73,7 @@ pub struct AudioEngine {
     playback_state: PlaybackState,
     position_seconds: f64,
     pending_marker_jump: Option<PendingMarkerJump>,
+    pending_fade_jump: Option<PendingFadeJump>,
 }
 
 impl Default for PlaybackState {
@@ -79,6 +93,7 @@ impl AudioEngine {
         self.playback_state = PlaybackState::Stopped;
         self.position_seconds = 0.0;
         self.pending_marker_jump = None;
+        self.pending_fade_jump = None;
 
         Ok(())
     }
@@ -120,6 +135,7 @@ impl AudioEngine {
         self.playback_state = PlaybackState::Stopped;
         self.position_seconds = 0.0;
         self.pending_marker_jump = None;
+        self.pending_fade_jump = None;
         Ok(())
     }
 
@@ -138,6 +154,7 @@ impl AudioEngine {
         self.position_seconds = position_seconds;
         if should_clear_pending_jump {
             self.pending_marker_jump = None;
+            self.pending_fade_jump = None;
         }
         Ok(())
     }
@@ -151,13 +168,15 @@ impl AudioEngine {
         &mut self,
         target_marker_id: &str,
         trigger: JumpTrigger,
+        transition: TransitionType,
     ) -> Result<Option<PendingMarkerJump>, AudioEngineError> {
         let song = self.ensure_song_loaded()?;
         let target_marker = find_marker(song, target_marker_id)?;
 
-        if trigger == JumpTrigger::Immediate {
+        if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
             self.position_seconds = target_marker.start_seconds;
             self.pending_marker_jump = None;
+            self.pending_fade_jump = None;
             return Ok(None);
         }
 
@@ -173,14 +192,17 @@ impl AudioEngine {
             target_digit: target_marker.digit,
             trigger,
             execute_at_seconds,
+            transition,
         };
 
         self.pending_marker_jump = Some(pending_jump.clone());
+        self.pending_fade_jump = None;
         Ok(Some(pending_jump))
     }
 
     pub fn cancel_section_jump(&mut self) {
         self.pending_marker_jump = None;
+        self.pending_fade_jump = None;
     }
 
     pub fn advance_transport(
@@ -197,19 +219,70 @@ impl AudioEngine {
 
         if let Some(pending_jump) = self.pending_marker_jump.clone() {
             let execute_at = pending_jump.execute_at_seconds;
-            let target_marker = find_marker(&song, &pending_jump.target_marker_id)?;
 
             if execute_at <= next_position {
-                let overshoot = next_position - execute_at;
-                next_position = target_marker.start_seconds + overshoot;
-                self.pending_marker_jump = None;
-                jump_executed = true;
+                match pending_jump.transition {
+                    TransitionType::Instant => {
+                        let target_marker = find_marker(&song, &pending_jump.target_marker_id)?;
+                        let overshoot = next_position - execute_at;
+                        next_position = target_marker.start_seconds + overshoot;
+                        self.pending_marker_jump = None;
+                        self.pending_fade_jump = None;
+                        jump_executed = true;
+                    }
+                    TransitionType::FadeOut { duration_seconds } => {
+                        next_position = execute_at;
+                        self.pending_fade_jump.get_or_insert(PendingFadeJump {
+                            duration_seconds,
+                            fade_started: false,
+                        });
+                    }
+                }
             }
+        }
+
+        if self.pending_fade_jump.is_some() {
+            self.position_seconds = next_position;
+            return Ok((self.position_seconds, false));
         }
 
         self.position_seconds = next_position;
 
         Ok((self.position_seconds, jump_executed))
+    }
+
+    pub fn take_pending_fade_out_request(&mut self) -> Option<f64> {
+        let pending_fade = self.pending_fade_jump.as_mut()?;
+        if pending_fade.fade_started {
+            return None;
+        }
+
+        pending_fade.fade_started = true;
+        Some(pending_fade.duration_seconds)
+    }
+
+    pub fn pending_fade_duration_seconds(&self) -> Option<f64> {
+        self.pending_fade_jump
+            .as_ref()
+            .map(|pending_fade| pending_fade.duration_seconds)
+    }
+
+    pub fn complete_pending_fade_jump(&mut self) -> Result<Option<f64>, AudioEngineError> {
+        let pending_jump = match self.pending_marker_jump.clone() {
+            Some(pending_jump) => pending_jump,
+            None => return Ok(None),
+        };
+
+        if self.pending_fade_jump.is_none() {
+            return Ok(None);
+        }
+
+        let song = self.ensure_song_loaded()?;
+        let target_marker = find_marker(song, &pending_jump.target_marker_id)?;
+        self.position_seconds = target_marker.start_seconds;
+        self.pending_marker_jump = None;
+        self.pending_fade_jump = None;
+        Ok(Some(self.position_seconds))
     }
 
     pub fn active_clips(&self) -> Result<Vec<ActiveClip>, AudioEngineError> {
@@ -522,7 +595,7 @@ fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, Audi
 mod tests {
     use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind};
 
-    use crate::{AudioEngine, AudioEngineError, JumpTrigger, PlaybackState};
+    use crate::{AudioEngine, AudioEngineError, JumpTrigger, PlaybackState, TransitionType};
 
     fn demo_song() -> Song {
         Song {
@@ -825,7 +898,7 @@ mod tests {
         engine.seek(1.0).expect("seek should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_outro", JumpTrigger::Immediate)
+            .schedule_marker_jump("section_outro", JumpTrigger::Immediate, TransitionType::Instant)
             .expect("jump should schedule");
 
         assert!(scheduled.is_none());
@@ -841,7 +914,7 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker)
+            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker, TransitionType::Instant)
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -864,7 +937,7 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2))
+            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2), TransitionType::Instant)
             .expect("jump should schedule");
 
         let (position, jump_executed) = engine
@@ -884,7 +957,7 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(4))
+            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(4), TransitionType::Instant)
             .expect("jump should schedule");
 
         let (position, jump_executed) = engine
@@ -906,7 +979,7 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2))
+            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2), TransitionType::Instant)
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -944,7 +1017,7 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_target", JumpTrigger::AfterBars(1))
+            .schedule_marker_jump("section_target", JumpTrigger::AfterBars(1), TransitionType::Instant)
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -961,7 +1034,7 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_intro", JumpTrigger::AfterBars(4))
+            .schedule_marker_jump("section_intro", JumpTrigger::AfterBars(4), TransitionType::Instant)
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -999,7 +1072,7 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_target", JumpTrigger::AfterBars(1))
+            .schedule_marker_jump("section_target", JumpTrigger::AfterBars(1), TransitionType::Instant)
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -1014,7 +1087,7 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker)
+            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker, TransitionType::Instant)
             .expect("jump should schedule");
         engine.cancel_section_jump();
 
@@ -1035,7 +1108,7 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker)
+            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker, TransitionType::Instant)
             .expect("jump should schedule");
         assert!(engine.pending_marker_jump().is_some());
 
@@ -1053,7 +1126,7 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2))
+            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2), TransitionType::Instant)
             .expect("jump should schedule");
         assert!(engine.pending_marker_jump().is_some());
 
@@ -1071,7 +1144,7 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_intro", JumpTrigger::NextMarker)
+            .schedule_marker_jump("section_intro", JumpTrigger::NextMarker, TransitionType::Instant)
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -1102,7 +1175,7 @@ mod tests {
         engine.seek(13.0).expect("seek should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_intro", JumpTrigger::NextMarker)
+            .schedule_marker_jump("section_intro", JumpTrigger::NextMarker, TransitionType::Instant)
             .expect("jump should resolve safely");
 
         assert!(scheduled.is_none());

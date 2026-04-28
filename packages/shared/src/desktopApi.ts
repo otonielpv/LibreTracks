@@ -219,11 +219,15 @@ export async function scheduleMarkerJump(
   targetMarkerId: string,
   trigger: "immediate" | "next_marker" | "after_bars",
   bars?: number,
+  transition: "instant" | "fade_out" = "instant",
+  durationSeconds?: number,
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("schedule_marker_jump", {
     targetMarkerId,
     trigger,
     bars,
+    transition,
+    durationSeconds,
   });
 }
 

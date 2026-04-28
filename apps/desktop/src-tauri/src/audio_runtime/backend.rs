@@ -13,6 +13,7 @@ pub(crate) struct DiskReaderState {
     pub(crate) producer: Producer<OutputSample>,
     pub(crate) command_receiver: Receiver<ReaderCommand>,
     pub(crate) current_generation: u64,
+    pub(crate) is_running: bool,
 }
 
 #[derive(Default)]
@@ -134,6 +135,11 @@ pub(crate) fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
             break;
         }
 
+        if !state.is_running {
+            thread::sleep(Duration::from_millis(1));
+            continue;
+        }
+
         state.mixer.refresh_cached_live_mix();
 
         let free_frames = state.producer.slots() / state.mixer.output_channels.max(1);
@@ -158,7 +164,7 @@ pub(crate) fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
 
 impl DiskReaderState {
     fn consume_commands(&mut self) -> bool {
-        let mut should_stop = false;
+        let mut should_shutdown = false;
 
         while let Ok(command) = self.command_receiver.try_recv() {
             match command {
@@ -170,12 +176,18 @@ impl DiskReaderState {
                 } => {
                     self.mixer.seek(song, position_seconds);
                     self.current_generation = generation;
+                    self.is_running = true;
                 }
-                ReaderCommand::Stop => should_stop = true,
+                ReaderCommand::Stop => self.is_running = false,
+                ReaderCommand::StartMasterFade {
+                    target_gain,
+                    duration_seconds,
+                } => self.mixer.start_master_fade(target_gain, duration_seconds),
+                ReaderCommand::Shutdown => should_shutdown = true,
             }
         }
 
-        should_stop
+        should_shutdown
     }
 }
 

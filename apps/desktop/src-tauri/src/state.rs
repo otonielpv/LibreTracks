@@ -8,7 +8,7 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
-use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState};
+use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType};
 use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, Track, TrackKind};
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary, import_wav_files_to_library,
@@ -290,7 +290,7 @@ impl DesktopSession {
         let target_song_file = FileDialog::new()
             .set_title("Crear proyecto")
             .set_directory(&default_directory)
-            .add_filter("LibreTracks Song", &["ltsong"])
+            .add_filter("LibreTracks Session", &["ltsession"])
             .set_file_name(&default_project_file_name(&song.title))
             .save_file();
 
@@ -342,7 +342,7 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let target_song_file = FileDialog::new()
-            .add_filter("LibreTracks Song", &["ltsong"])
+            .add_filter("LibreTracks Session", &["ltsession"])
             .set_title("Guardar proyecto como")
             .set_file_name(&default_project_file_name(&song.title))
             .save_file();
@@ -388,8 +388,8 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<Option<TransportSnapshot>, DesktopError> {
         let song_file = FileDialog::new()
-            .add_filter("LibreTracks Song", &["ltsong"])
-            .set_title("Selecciona song.ltsong")
+            .add_filter("LibreTracks Session", &["ltsession"])
+            .set_title("Selecciona session.ltsession")
             .pick_file();
 
         let Some(song_file) = song_file else {
@@ -400,7 +400,7 @@ impl DesktopSession {
             .parent()
             .map(std::path::Path::to_path_buf)
             .ok_or_else(|| {
-                DesktopError::AudioCommand("song.ltsong must live inside a folder".into())
+                DesktopError::AudioCommand("session.ltsession must live inside a folder".into())
             })?;
         let song = load_song_from_file(&song_file)?;
 
@@ -975,15 +975,16 @@ impl DesktopSession {
         &mut self,
         target_marker_id: &str,
         trigger: JumpTrigger,
+        transition: TransitionType,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
 
         self.engine
-            .schedule_marker_jump(target_marker_id, trigger.clone())?;
+            .schedule_marker_jump(target_marker_id, trigger.clone(), transition.clone())?;
 
-        if trigger == JumpTrigger::Immediate {
+        if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
             if was_playing {
                 self.reposition_audio(audio, PlaybackStartReason::ImmediateJump)?;
                 self.transport_clock
@@ -1265,9 +1266,20 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
         let (start_seconds, end_seconds) =
             sanitize_region_bounds(&song, start_seconds, end_seconds)?;
+        let region_index = song.regions.len();
+        let region_name = audio
+            .current_settings()
+            .ok()
+            .and_then(|settings| settings.locale)
+            .map(|locale| locale.to_ascii_lowercase())
+            .map(|locale| match locale.as_str() {
+                "es" => format!("Canción {region_index}"),
+                _ => format!("Song {region_index}"),
+            })
+            .unwrap_or_else(|| format!("Song {region_index}"));
         let region = SongRegion {
-            id: format!("region_{}_{}", timestamp_suffix(), song.regions.len()),
-            name: format!("Region {}", song.regions.len()),
+            id: format!("region_{}_{}", timestamp_suffix(), region_index),
+            name: region_name,
             start_seconds,
             end_seconds,
         };
@@ -1824,6 +1836,7 @@ impl DesktopSession {
                     self.engine.schedule_marker_jump(
                         &pending_jump.target_marker_id,
                         pending_jump.trigger,
+                        pending_jump.transition,
                     )?;
                 }
             }
@@ -1993,6 +2006,32 @@ impl DesktopSession {
 
         let elapsed = self.transport_clock.elapsed_since_anchor();
         let (advanced_position, jump_executed) = self.engine.advance_transport(elapsed)?;
+
+        if let Some(duration_seconds) = self.engine.take_pending_fade_out_request() {
+            audio.start_master_fade(0.0, duration_seconds)?;
+            self.transport_clock.reanchor_playing(advanced_position);
+            return Ok(());
+        }
+
+        if let Some(duration_seconds) = self.engine.pending_fade_duration_seconds() {
+            if elapsed >= duration_seconds {
+                if let Some(target_position) = self.engine.complete_pending_fade_jump()? {
+                    self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
+                    audio.start_master_fade(1.0, duration_seconds)?;
+                    self.transport_clock.note_jump_while_playing(target_position);
+                    self.capture_transport_drift_sample(
+                        audio,
+                        "jump",
+                        target_position,
+                        target_position,
+                    );
+                    return Ok(());
+                }
+            }
+
+            self.transport_clock.reanchor_playing(advanced_position);
+            return Ok(());
+        }
 
         if jump_executed {
             self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
@@ -3008,7 +3047,7 @@ fn default_project_file_name(title: &str) -> String {
     } else {
         trimmed
     };
-    format!("{fallback}.ltsong")
+    format!("{fallback}.ltsession")
 }
 
 fn copy_project_audio_files(
@@ -3096,7 +3135,7 @@ fn humanize(value: &str) -> String {
 mod tests {
     use std::{fs, path::Path, thread, time::Duration};
 
-    use libretracks_audio::{JumpTrigger, PlaybackState};
+    use libretracks_audio::{JumpTrigger, PlaybackState, TransitionType};
     use libretracks_core::{
         Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, Track, TrackKind,
     };
@@ -3422,7 +3461,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session
-            .schedule_marker_jump("section_1", JumpTrigger::Immediate, &audio)
+            .schedule_marker_jump("section_1", JumpTrigger::Immediate, TransitionType::Instant, &audio)
             .expect("immediate jump should execute");
 
         assert_eq!(snapshot.transport_clock.anchor_position_seconds, 1.0);
@@ -3639,7 +3678,7 @@ mod tests {
         session.seek(3.95, &audio).expect("seek should succeed");
         session.play(&audio).expect("play should succeed");
         session
-            .schedule_marker_jump("section_3", JumpTrigger::NextMarker, &audio)
+            .schedule_marker_jump("section_3", JumpTrigger::NextMarker, TransitionType::Instant, &audio)
             .expect("jump should schedule");
 
         thread::sleep(Duration::from_millis(70));
@@ -4598,7 +4637,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let scheduled_snapshot = session
-            .schedule_marker_jump("section_1", JumpTrigger::AfterBars(6), &audio)
+            .schedule_marker_jump("section_1", JumpTrigger::AfterBars(6), TransitionType::Instant, &audio)
             .expect("jump should schedule");
 
         let pending_jump = scheduled_snapshot
@@ -4626,7 +4665,7 @@ mod tests {
         session.seek(7.0, &audio).expect("seek should work");
 
         let snapshot = session
-            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), &audio)
+            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), TransitionType::Instant, &audio)
             .expect("jump should schedule");
 
         let pending_jump = snapshot
@@ -4655,7 +4694,7 @@ mod tests {
         let audio = crate::audio_runtime::AudioController::default();
         session.seek(7.0, &audio).expect("seek should work");
         session
-            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), &audio)
+            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), TransitionType::Instant, &audio)
             .expect("jump should schedule");
 
         let snapshot = session
@@ -4682,7 +4721,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session
-            .schedule_marker_jump("section_1", JumpTrigger::Immediate, &audio)
+            .schedule_marker_jump("section_1", JumpTrigger::Immediate, TransitionType::Instant, &audio)
             .expect("immediate jump should execute");
 
         assert!(snapshot.pending_marker_jump.is_none());
@@ -4712,7 +4751,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, &audio)
+            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, TransitionType::Instant, &audio)
             .expect("jump should schedule");
 
         let snapshot = session
@@ -4744,7 +4783,7 @@ mod tests {
         let audio = crate::audio_runtime::AudioController::default();
         session.seek(5.0, &audio).expect("seek should work");
         session
-            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, &audio)
+            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, TransitionType::Instant, &audio)
             .expect("jump should schedule");
 
         let snapshot = session
@@ -4771,7 +4810,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), &audio)
+            .schedule_marker_jump("section_2", JumpTrigger::AfterBars(2), TransitionType::Instant, &audio)
             .expect("jump should schedule");
 
         let snapshot = session
@@ -4792,7 +4831,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         session
-            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, &audio)
+            .schedule_marker_jump("section_2", JumpTrigger::NextMarker, TransitionType::Instant, &audio)
             .expect("jump should schedule");
 
         let snapshot = session
@@ -4895,7 +4934,7 @@ mod tests {
 
         assert_eq!(snapshot.project_revision, song_view.project_revision);
         assert_eq!(song_view.regions.len(), 3);
-        assert_eq!(created_region.name, "Region 1");
+        assert_eq!(created_region.name, "Song 1");
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.regions.len(), 1);
@@ -4923,7 +4962,7 @@ mod tests {
         assert!(snapshot.project_revision > 0);
         assert_eq!(song_view.duration_seconds, 12.0);
         assert_eq!(song_view.regions.len(), 2);
-        assert_eq!(created_region.name, "Region 1");
+        assert_eq!(created_region.name, "Song 1");
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.regions.len(), 1);

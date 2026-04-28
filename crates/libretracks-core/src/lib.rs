@@ -2,8 +2,8 @@ pub mod model;
 pub mod validation;
 
 pub use model::{
-    Clip, Marker, OutputBus, Project, Song, SongRegion, TempoMarker, TempoMetadata, TempoSource,
-    Track, TrackKind,
+    parse_track_output_channels, Clip, Marker, OutputBus, Project, Song, SongRegion,
+    TempoMarker, TempoMetadata, TempoSource, Track, TrackKind,
 };
 pub use validation::{validate_song, DomainError};
 

@@ -1,6 +1,6 @@
 use std::{path::PathBuf, time::Duration};
 
-use libretracks_audio::JumpTrigger;
+use libretracks_audio::{JumpTrigger, TransitionType};
 use libretracks_remote::{
     spawn_remote_server, RemoteCommand, RemoteServerHandle, RemoteServerInfo,
 };
@@ -157,6 +157,7 @@ async fn run_remote_command_bridge(
             } => session.schedule_marker_jump(
                 target_marker_id,
                 parse_jump_trigger(trigger, *bars).unwrap_or(JumpTrigger::Immediate),
+                TransitionType::Instant,
                 &state.audio,
             ),
             RemoteCommand::CancelMarkerJump => session.cancel_marker_jump(&state.audio),

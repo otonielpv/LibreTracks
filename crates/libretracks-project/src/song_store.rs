@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-pub const SONG_FILE_NAME: &str = "song.ltsong";
+pub const SONG_FILE_NAME: &str = "song.ltsession";
 const SONG_FORMAT_VERSION: u32 = 4;
 
 #[derive(Debug, Error)]

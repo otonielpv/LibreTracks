@@ -133,6 +133,82 @@ impl OutputBus {
     }
 }
 
+pub fn parse_track_output_channels(output_bus_id: &str, available_channels: usize) -> Vec<usize> {
+    let channel_count = available_channels.max(1);
+    let normalized = output_bus_id.trim().to_ascii_lowercase();
+
+    match normalized.as_str() {
+        "" | "main" => return stereo_pair(0, channel_count),
+        "monitor" => {
+            return if channel_count >= 4 {
+                stereo_pair(2, channel_count)
+            } else {
+                stereo_pair(0, channel_count)
+            };
+        }
+        _ => {}
+    }
+
+    if let Some(explicit) = parse_explicit_output_channels(&normalized, channel_count) {
+        return explicit;
+    }
+
+    stereo_pair(0, channel_count)
+}
+
+fn parse_explicit_output_channels(
+    normalized_output_bus_id: &str,
+    available_channels: usize,
+) -> Option<Vec<usize>> {
+    let mut value = normalized_output_bus_id
+        .trim_start_matches("hardware:")
+        .trim()
+        .to_string();
+    if let Some(stripped) = value.strip_prefix("out ") {
+        value = stripped.trim().to_string();
+    }
+    if let Some(stripped) = value.strip_prefix("out_") {
+        value = stripped.trim().to_string();
+    }
+    if let Some(stripped) = value.strip_prefix("out") {
+        value = stripped.trim().to_string();
+    }
+
+    if let Some((start, end)) = value.split_once('-') {
+        let start = start.trim().parse::<usize>().ok()?;
+        let end = end.trim().parse::<usize>().ok()?;
+        if start == 0 || end == 0 || end < start {
+            return None;
+        }
+
+        let mut channels = Vec::new();
+        for channel in start..=end {
+            let zero_based = channel - 1;
+            if zero_based < available_channels {
+                channels.push(zero_based);
+            }
+        }
+        return (!channels.is_empty()).then_some(channels);
+    }
+
+    let channel = value.parse::<usize>().ok()?;
+    if channel == 0 {
+        return None;
+    }
+    let zero_based = channel - 1;
+    (zero_based < available_channels).then_some(vec![zero_based])
+}
+
+fn stereo_pair(start_channel: usize, available_channels: usize) -> Vec<usize> {
+    let first = start_channel.min(available_channels.saturating_sub(1));
+    let second = (first + 1).min(available_channels.saturating_sub(1));
+    if first == second {
+        vec![first]
+    } else {
+        vec![first, second]
+    }
+}
+
 impl Song {
     pub fn sorted_markers(&self) -> Vec<&Marker> {
         let mut markers = self.section_markers.iter().collect::<Vec<_>>();

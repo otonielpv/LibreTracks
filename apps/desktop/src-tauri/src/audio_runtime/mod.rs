@@ -114,6 +114,7 @@ enum AudioCommandKind {
     Seek,
     SyncSong,
     Stop,
+    StartMasterFade,
     DebugSnapshot,
     Shutdown,
 }
@@ -139,6 +140,11 @@ enum AudioCommand {
     Stop {
         respond_to: Sender<Result<(), String>>,
     },
+    StartMasterFade {
+        target_gain: f32,
+        duration_seconds: f64,
+        respond_to: Sender<Result<(), String>>,
+    },
     DebugSnapshot {
         respond_to: Sender<AudioDebugSnapshot>,
     },
@@ -147,6 +153,7 @@ enum AudioCommand {
 
 struct PlaybackSession {
     backend: PlaybackBackend,
+    song_dir: PathBuf,
     reader_sender: Option<Sender<ReaderCommand>>,
     reader_handle: Option<JoinHandle<DiskReaderReport>>,
     seek_generation: Arc<AtomicU64>,
@@ -166,6 +173,11 @@ enum ReaderCommand {
         generation: u64,
     },
     Stop,
+    StartMasterFade {
+        target_gain: f32,
+        duration_seconds: f64,
+    },
+    Shutdown,
 }
 
 impl AudioRuntime {
@@ -190,8 +202,8 @@ impl AudioRuntime {
         let started_at = Instant::now();
         let stopped_sinks = usize::from(self.session.is_some());
 
-        if let Some(session) = self.session.take() {
-            let _ = session.stop();
+        if let Some(session) = self.session.as_mut() {
+            let _ = session.stop_playback();
         }
 
         StopReport {
@@ -208,23 +220,47 @@ impl AudioRuntime {
         debug_config: AudioDebugConfig,
     ) -> Result<RestartReport, String> {
         let started_at = Instant::now();
-        self.stop_all();
-
         let scheduled_clips = scheduled_clip_count(song, position_seconds);
-        let session = PlaybackSession::start(
-            song_dir.to_path_buf(),
-            song.clone(),
-            position_seconds,
-            self.app_handle.clone(),
-            self.remote_handle.clone(),
-            self.live_mix_state.clone(),
-            self.audio_settings.clone(),
-            debug_config,
-            self.audio_buffers.clone(),
-        )?;
-        let cache_stats = session.cache_stats();
-
-        self.session = Some(session);
+        let cache_stats = if let Some(session) = self.session.as_mut() {
+            if session.song_dir == song_dir {
+                session.play(song.clone(), position_seconds)?;
+                session.cache_stats()
+            } else {
+                let old_session = self.session.take();
+                if let Some(session) = old_session {
+                    let _ = session.shutdown();
+                }
+                let session = PlaybackSession::start(
+                    song_dir.to_path_buf(),
+                    song.clone(),
+                    position_seconds,
+                    self.app_handle.clone(),
+                    self.remote_handle.clone(),
+                    self.live_mix_state.clone(),
+                    self.audio_settings.clone(),
+                    debug_config,
+                    self.audio_buffers.clone(),
+                )?;
+                let cache_stats = session.cache_stats();
+                self.session = Some(session);
+                cache_stats
+            }
+        } else {
+            let session = PlaybackSession::start(
+                song_dir.to_path_buf(),
+                song.clone(),
+                position_seconds,
+                self.app_handle.clone(),
+                self.remote_handle.clone(),
+                self.live_mix_state.clone(),
+                self.audio_settings.clone(),
+                debug_config,
+                self.audio_buffers.clone(),
+            )?;
+            let cache_stats = session.cache_stats();
+            self.session = Some(session);
+            cache_stats
+        };
 
         Ok(RestartReport {
             elapsed: started_at.elapsed(),
@@ -255,6 +291,20 @@ impl AudioRuntime {
             None => 0,
         };
         Ok(updated_sinks)
+    }
+
+    fn start_master_fade(&mut self, target_gain: f32, duration_seconds: f64) -> Result<(), String> {
+        if let Some(session) = self.session.as_mut() {
+            session.start_master_fade(target_gain, duration_seconds)?;
+        }
+        Ok(())
+    }
+
+    fn master_gain(&self) -> f32 {
+        self.session
+            .as_ref()
+            .map(PlaybackSession::master_gain)
+            .unwrap_or(1.0)
     }
 }
 
@@ -397,6 +447,18 @@ impl AudioController {
         self.request(|respond_to| AudioCommand::Stop { respond_to })
     }
 
+    pub fn start_master_fade(
+        &self,
+        target_gain: f32,
+        duration_seconds: f64,
+    ) -> Result<(), DesktopError> {
+        self.request(|respond_to| AudioCommand::StartMasterFade {
+            target_gain,
+            duration_seconds,
+            respond_to,
+        })
+    }
+
     pub fn debug_snapshot(&self) -> Result<AudioDebugSnapshot, DesktopError> {
         let (respond_to, response) = mpsc::channel();
 
@@ -467,6 +529,7 @@ impl PlaybackSession {
             eprintln!("[libretracks-audio] no default output device available, using null backend");
             return Ok(Self {
                 backend: PlaybackBackend::Null,
+                song_dir,
                 reader_sender: None,
                 reader_handle: None,
                 seek_generation: Arc::new(AtomicU64::new(0)),
@@ -503,6 +566,7 @@ impl PlaybackSession {
             producer,
             command_receiver: reader_receiver,
             current_generation: 0,
+            is_running: true,
         });
 
         let stream = build_output_stream(
@@ -516,6 +580,7 @@ impl PlaybackSession {
 
         Ok(Self {
             backend: PlaybackBackend::Cpal { _stream: stream },
+            song_dir,
             reader_sender: Some(reader_sender),
             reader_handle: Some(reader_handle),
             seek_generation,
@@ -558,11 +623,48 @@ impl PlaybackSession {
         Ok(matches!(self.backend, PlaybackBackend::Null))
     }
 
-    fn stop(mut self) -> DiskReaderReport {
-        if let Some(reader_sender) = self.reader_sender.take() {
-            let _ = reader_sender.send(ReaderCommand::Stop);
+    fn play(&mut self, song: Song, position_seconds: f64) -> Result<bool, String> {
+        self.seek(song, position_seconds)
+    }
+
+    fn start_master_fade(&mut self, target_gain: f32, duration_seconds: f64) -> Result<bool, String> {
+        if let Some(reader_sender) = &self.reader_sender {
+            reader_sender
+                .send(ReaderCommand::StartMasterFade {
+                    target_gain,
+                    duration_seconds,
+                })
+                .map_err(|_| "disk reader thread is unavailable".to_string())?;
+            return Ok(true);
         }
 
+        Ok(false)
+    }
+
+    fn master_gain(&self) -> f32 {
+        match &self.backend {
+            PlaybackBackend::Null => 1.0,
+            PlaybackBackend::Cpal { .. } => self
+                .reader_sender
+                .as_ref()
+                .map(|_| 1.0)
+                .unwrap_or(1.0),
+        }
+    }
+
+    fn stop_playback(&mut self) -> Result<bool, String> {
+        self.seek_generation.fetch_add(1, Ordering::AcqRel);
+        if let Some(reader_sender) = &self.reader_sender {
+            let _ = reader_sender.send(ReaderCommand::Stop);
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    fn shutdown(mut self) -> DiskReaderReport {
+        if let Some(reader_sender) = self.reader_sender.take() {
+            let _ = reader_sender.send(ReaderCommand::Shutdown);
+        }
         self.reader_handle
             .take()
             .and_then(|handle| handle.join().ok())
@@ -692,14 +794,39 @@ fn run_audio_thread(
 
                 let _ = respond_to.send(Ok(()));
             }
+            AudioCommand::StartMasterFade {
+                target_gain,
+                duration_seconds,
+                respond_to,
+            } => {
+                debug_state.record_command(AudioCommandKind::StartMasterFade, None);
+
+                let result = ensure_runtime(
+                    &mut runtime,
+                    &audio_buffers,
+                    &app_handle,
+                    &remote_handle,
+                    &live_mix_state,
+                    &audio_settings,
+                )
+                .start_master_fade(target_gain, duration_seconds);
+
+                let _ = respond_to.send(result);
+            }
             AudioCommand::DebugSnapshot { respond_to } => {
                 debug_state.record_command(AudioCommandKind::DebugSnapshot, None);
-                let _ = respond_to.send(debug_state.snapshot());
+                let mut snapshot = debug_state.snapshot();
+                if let Some(active_runtime) = runtime.as_ref() {
+                    snapshot.runtime_state.master_gain = active_runtime.master_gain();
+                }
+                let _ = respond_to.send(snapshot);
             }
             AudioCommand::Shutdown => {
                 debug_state.record_command(AudioCommandKind::Shutdown, None);
                 if let Some(mut active_runtime) = runtime.take() {
-                    active_runtime.stop_all();
+                    if let Some(session) = active_runtime.session.take() {
+                        let _ = session.shutdown();
+                    }
                 }
                 break;
             }
@@ -1850,6 +1977,7 @@ mod tests {
         let seek_generation = Arc::new(AtomicU64::new(0));
         let mut session = PlaybackSession {
             backend: PlaybackBackend::Null,
+            song_dir: PathBuf::new(),
             reader_sender: None,
             reader_handle: None,
             seek_generation: seek_generation.clone(),

@@ -1,5 +1,5 @@
 use super::*;
-use libretracks_core::{Track, TrackKind};
+use libretracks_core::{parse_track_output_channels, Track, TrackKind};
 use tauri::Emitter;
 
 #[derive(Debug, Clone)]
@@ -28,6 +28,7 @@ pub(crate) struct PlaybackClipPlan {
 }
 
 pub(crate) struct Mixer {
+    song_dir: PathBuf,
     song: Song,
     live_mix_state: SharedTrackMixState,
     audio_settings: SharedAudioSettings,
@@ -45,6 +46,8 @@ pub(crate) struct Mixer {
     track_meter_indices: HashMap<String, usize>,
     track_child_indices: Vec<Vec<usize>>,
     meter_emitter: MeterEmitterState,
+    master_gain: f32,
+    master_fade: Option<MasterFadeState>,
 }
 
 pub(crate) struct MixClipState {
@@ -52,6 +55,14 @@ pub(crate) struct MixClipState {
     reader: source::MemoryClipReader,
     current_gain: f32,
     current_pan: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MasterFadeState {
+    start_gain: f32,
+    target_gain: f32,
+    total_frames: u64,
+    elapsed_frames: u64,
 }
 
 #[derive(Clone, Default)]
@@ -149,6 +160,7 @@ impl Mixer {
             .collect();
         let track_child_indices = vec![Vec::new(); song.tracks.len()];
         let mut mixer = Self {
+            song_dir,
             song,
             live_mix_state,
             audio_settings,
@@ -166,6 +178,8 @@ impl Mixer {
             track_meter_indices,
             track_child_indices,
             meter_emitter: MeterEmitterState::new(app_handle, remote_handle),
+            master_gain: 1.0,
+            master_fade: None,
         };
         mixer.cached_live_mix = LiveMixSnapshot::from_song(&mixer.song);
         mixer.seek(mixer.song.clone(), position_seconds);
@@ -176,6 +190,7 @@ impl Mixer {
         let _ = replace_shared_live_mix(&self.live_mix_state, &song);
         self.song = song;
         self.cached_live_mix = LiveMixSnapshot::from_song(&self.song);
+        self.plans = build_playback_plans(&self.song_dir, &self.song, self.output_sample_rate);
         self.rebuild_track_meter_indices();
     }
 
@@ -183,6 +198,7 @@ impl Mixer {
         let _ = replace_shared_live_mix(&self.live_mix_state, &song);
         self.song = song;
         self.cached_live_mix = LiveMixSnapshot::from_song(&self.song);
+        self.plans = build_playback_plans(&self.song_dir, &self.song, self.output_sample_rate);
         self.rebuild_track_meter_indices();
         self.song_duration_frames =
             seconds_to_frames(self.song.duration_seconds, self.output_sample_rate);
@@ -204,12 +220,6 @@ impl Mixer {
         let mut mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
         let should_capture_track_meters = self.meter_emitter.capture_enabled();
         let mut track_meters = should_capture_track_meters.then(|| self.empty_track_meters());
-        let split_stereo_enabled = self
-            .audio_settings
-            .read()
-            .map(|settings| settings.split_stereo_enabled)
-            .unwrap_or(false);
-
         self.prune_inactive_clips(block_start);
         self.activate_due_clips(block_end);
         {
@@ -231,14 +241,12 @@ impl Mixer {
                     clip_state.plan.clip_gain,
                     is_any_track_soloed,
                 );
-                let target_pan = resolve_clip_target_pan(
-                    live_mix_state,
-                    &clip_state.plan.track_id,
-                    split_stereo_enabled,
-                );
+                let target_pan = resolve_track_runtime_pan(live_mix_state, &clip_state.plan.track_id);
                 let parent_gain =
                     resolve_parent_track_runtime_gain(live_mix_state, &clip_state.plan.track_id)
                         .unwrap_or(1.0);
+                let output_routing =
+                    resolve_track_output_routing(live_mix_state, &clip_state.plan.track_id, self.output_channels);
 
                 let (left_peak, right_peak) = clip_state.mix_into(
                     &mut mixed,
@@ -248,6 +256,7 @@ impl Mixer {
                     overlap_start,
                     target_gain,
                     target_pan,
+                    &output_routing,
                 );
 
                 if let Some(index) = track_meters.as_ref().and_then(|_| {
@@ -286,6 +295,7 @@ impl Mixer {
         self.active_clips.retain(|clip_state| {
             !clip_state.reader.eof && block_end < clip_state.plan.timeline_end_frame()
         });
+        self.apply_master_gain(&mut mixed, block_frames);
         self.timeline_cursor_frame += block_frames as u64;
 
         mixed
@@ -412,6 +422,68 @@ impl Mixer {
             self.cached_live_mix = LiveMixSnapshot::from_tracks(&live_mix_state);
         }
     }
+
+    pub(crate) fn start_master_fade(&mut self, target_gain: f32, duration_seconds: f64) {
+        let duration_frames =
+            seconds_to_frames(duration_seconds.max(0.0), self.output_sample_rate).max(1);
+        let target_gain = target_gain.clamp(0.0, 1.0);
+        if duration_frames <= 1 {
+            self.master_gain = target_gain;
+            self.master_fade = None;
+            return;
+        }
+
+        self.master_fade = Some(MasterFadeState {
+            start_gain: self.master_gain,
+            target_gain,
+            total_frames: duration_frames,
+            elapsed_frames: 0,
+        });
+    }
+
+    pub(crate) fn master_gain(&self) -> f32 {
+        self.master_gain
+    }
+
+    fn apply_master_gain(&mut self, mixed: &mut [f32], block_frames: usize) {
+        let output_channels = self.output_channels.max(1);
+        let Some(mut fade) = self.master_fade else {
+            if (self.master_gain - 1.0).abs() <= GAIN_EPSILON {
+                return;
+            }
+            for sample in mixed {
+                *sample *= self.master_gain;
+            }
+            return;
+        };
+
+        for frame_index in 0..block_frames {
+            let frame_gain = interpolated_gain(
+                fade.start_gain,
+                fade.target_gain,
+                fade.elapsed_frames as usize,
+                fade.total_frames as usize,
+            );
+            let frame_base = frame_index * output_channels;
+            for channel in 0..output_channels {
+                mixed[frame_base + channel] *= frame_gain;
+            }
+            fade.elapsed_frames = fade.elapsed_frames.saturating_add(1);
+        }
+
+        if fade.elapsed_frames >= fade.total_frames {
+            self.master_gain = fade.target_gain;
+            self.master_fade = None;
+        } else {
+            self.master_gain = interpolated_gain(
+                fade.start_gain,
+                fade.target_gain,
+                fade.elapsed_frames as usize,
+                fade.total_frames as usize,
+            );
+            self.master_fade = Some(fade);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -524,6 +596,7 @@ impl MixClipState {
         overlap_start_frame: u64,
         target_gain: f32,
         target_pan: f32,
+        output_routing: &[usize],
     ) -> (f32, f32) {
         let start_gain = self.current_gain;
         let start_pan = self.current_pan;
@@ -538,16 +611,22 @@ impl MixClipState {
                 (overlap_start_frame - self.plan.timeline_start_frame) + frame_offset as u64;
             let edge_gain = self.plan.edge_gain(clip_frame_position);
 
-            let (frame_left_peak, frame_right_peak) = self.reader.mix_into_with_channel_gains(
+            let Some((left_sample, right_sample)) = self
+                .reader
+                .next_stereo_frame(dynamic_gain * edge_gain, dynamic_pan)
+            else {
+                break;
+            };
+            write_frame_to_output(
                 buffer,
                 offset_frames + frame_offset,
-                1,
                 output_channels,
-                dynamic_gain * edge_gain,
-                dynamic_pan,
+                output_routing,
+                left_sample,
+                right_sample,
             );
-            left_peak = left_peak.max(frame_left_peak);
-            right_peak = right_peak.max(frame_right_peak);
+            left_peak = left_peak.max(left_sample.abs());
+            right_peak = right_peak.max(right_sample.abs());
         }
 
         self.current_gain = target_gain;
@@ -750,6 +829,50 @@ fn resolve_clip_target_pan(
         Some("monitor") => -1.0,
         Some("main") => 1.0,
         _ => resolve_track_runtime_pan(live_mix_state, track_id),
+    }
+}
+
+fn resolve_track_output_routing(
+    live_mix_state: &HashMap<String, LiveTrackMix>,
+    track_id: &str,
+    output_channels: usize,
+) -> Vec<usize> {
+    let output_bus_id = live_mix_state
+        .get(track_id)
+        .map(|track| track.output_bus_id.as_str())
+        .unwrap_or("main");
+    parse_track_output_channels(output_bus_id, output_channels)
+}
+
+fn write_frame_to_output(
+    buffer: &mut [f32],
+    frame_index: usize,
+    output_channels: usize,
+    output_routing: &[usize],
+    left_sample: f32,
+    right_sample: f32,
+) {
+    let buffer_base = frame_index * output_channels.max(1);
+    if output_channels <= 1 {
+        buffer[buffer_base] += (left_sample + right_sample) * 0.5;
+        return;
+    }
+
+    match output_routing {
+        [] => {
+            buffer[buffer_base] += left_sample;
+            buffer[buffer_base + 1] += right_sample;
+        }
+        [single] => {
+            let channel = (*single).min(output_channels.saturating_sub(1));
+            buffer[buffer_base + channel] += (left_sample + right_sample) * 0.5;
+        }
+        [left_channel, right_channel, ..] => {
+            let left_channel = (*left_channel).min(output_channels.saturating_sub(1));
+            let right_channel = (*right_channel).min(output_channels.saturating_sub(1));
+            buffer[buffer_base + left_channel] += left_sample;
+            buffer[buffer_base + right_channel] += right_sample;
+        }
     }
 }
 

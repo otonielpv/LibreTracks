@@ -1,5 +1,5 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use libretracks_audio::{JumpTrigger, PendingMarkerJump};
+use libretracks_audio::{JumpTrigger, PendingMarkerJump, TransitionType};
 use libretracks_core::{Clip, Marker, Song, SongRegion, TempoMarker, TrackKind};
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
@@ -107,6 +107,7 @@ pub struct PendingJumpSummary {
     pub target_digit: Option<u8>,
     pub trigger: String,
     pub execute_at_seconds: f64,
+    pub transition: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -322,6 +323,7 @@ pub(crate) fn pending_jump_to_summary(pending_jump: &PendingMarkerJump) -> Pendi
         target_digit: pending_jump.target_digit,
         trigger: pending_jump_trigger_label(&pending_jump.trigger),
         execute_at_seconds: pending_jump.execute_at_seconds,
+        transition: transition_type_label(&pending_jump.transition),
     }
 }
 
@@ -521,5 +523,14 @@ fn pending_jump_trigger_label(trigger: &JumpTrigger) -> String {
         JumpTrigger::Immediate => "immediate".to_string(),
         JumpTrigger::NextMarker => "next_marker".to_string(),
         JumpTrigger::AfterBars(bars) => format!("after_bars:{bars}"),
+    }
+}
+
+fn transition_type_label(transition: &TransitionType) -> String {
+    match transition {
+        TransitionType::Instant => "instant".to_string(),
+        TransitionType::FadeOut { duration_seconds } => {
+            format!("fade_out:{duration_seconds}")
+        }
     }
 }

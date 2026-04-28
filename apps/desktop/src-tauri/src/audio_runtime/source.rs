@@ -345,6 +345,46 @@ impl MemoryClipReader {
         &self.shared_source
     }
 
+    pub(crate) fn next_stereo_frame(
+        &mut self,
+        gain: f32,
+        pan: f32,
+    ) -> Option<(f32, f32)> {
+        if self.eof {
+            return None;
+        }
+
+        if !self.ensure_frame_available(self.current_frame) {
+            self.eof = true;
+            return None;
+        }
+
+        let frame_step = self.shared_source.sample_rate as f64 / self.output_sample_rate as f64;
+        let pan = pan.clamp(-1.0, 1.0);
+        let (left_output, right_output) = if gain.abs() <= GAIN_EPSILON {
+            (0.0, 0.0)
+        } else if self.shared_source.channels <= 1 {
+            let mono_input = self.read_sample(self.current_frame, 0, 1);
+            let (left_output, right_output) =
+                mixer::apply_runtime_pan(mono_input, mono_input, pan, 1);
+            (left_output * gain, right_output * gain)
+        } else {
+            let left_input = self.read_sample(self.current_frame, 0, 2);
+            let right_input = self.read_sample(self.current_frame, 1, 2);
+            let (left_output, right_output) =
+                mixer::apply_runtime_pan(left_input, right_input, pan, self.shared_source.channels);
+            (left_output * gain, right_output * gain)
+        };
+
+        self.source_frame_cursor += frame_step;
+        self.current_frame = self.source_frame_cursor.round().max(0.0) as usize;
+        if self.current_frame >= self.shared_source.preload_frame_count() {
+            self.eof = true;
+        }
+
+        Some((left_output, right_output))
+    }
+
     pub(crate) fn mix_into_with_channel_gains(
         &mut self,
         buffer: &mut [f32],
@@ -354,59 +394,26 @@ impl MemoryClipReader {
         gain: f32,
         pan: f32,
     ) -> (f32, f32) {
-        if self.eof {
-            return (0.0, 0.0);
-        }
-
-        let frame_step = self.shared_source.sample_rate as f64 / self.output_sample_rate as f64;
         let mut left_peak = 0.0_f32;
         let mut right_peak = 0.0_f32;
-        let pan = pan.clamp(-1.0, 1.0);
 
         for frame_offset in 0..frame_count {
-            if !self.ensure_frame_available(self.current_frame) {
-                self.eof = true;
+            let Some((left_output, right_output)) = self.next_stereo_frame(gain, pan) else {
                 break;
+            };
+            let buffer_base = (offset_frames + frame_offset) * output_channels;
+            if output_channels <= 1 {
+                let mono_sample = (left_output + right_output) * 0.5;
+                buffer[buffer_base] += mono_sample;
+                let mono_peak = mono_sample.abs();
+                left_peak = left_peak.max(mono_peak);
+                right_peak = right_peak.max(mono_peak);
+            } else {
+                buffer[buffer_base] += left_output;
+                buffer[buffer_base + 1] += right_output;
+                left_peak = left_peak.max(left_output.abs());
+                right_peak = right_peak.max(right_output.abs());
             }
-
-            if gain.abs() > GAIN_EPSILON {
-                let buffer_base = (offset_frames + frame_offset) * output_channels;
-                if output_channels <= 1 {
-                    let mono_sample =
-                        self.read_sample(self.current_frame, 0, output_channels) * gain;
-                    buffer[buffer_base] += mono_sample;
-                    let mono_peak = mono_sample.abs();
-                    left_peak = left_peak.max(mono_peak);
-                    right_peak = right_peak.max(mono_peak);
-                } else {
-                    let left_input = self.read_sample(self.current_frame, 0, 2);
-                    let right_input = if self.shared_source.channels > 1 {
-                        self.read_sample(self.current_frame, 1, 2)
-                    } else {
-                        left_input
-                    };
-                    let (mut left_output, mut right_output) = mixer::apply_runtime_pan(
-                        left_input,
-                        right_input,
-                        pan,
-                        self.shared_source.channels,
-                    );
-                    left_output *= gain;
-                    right_output *= gain;
-
-                    buffer[buffer_base] += left_output;
-                    buffer[buffer_base + 1] += right_output;
-                    left_peak = left_peak.max(left_output.abs());
-                    right_peak = right_peak.max(right_output.abs());
-                }
-            }
-
-            self.source_frame_cursor += frame_step;
-            self.current_frame = self.source_frame_cursor.round().max(0.0) as usize;
-        }
-
-        if self.current_frame >= self.shared_source.preload_frame_count() {
-            self.eof = true;
         }
 
         (left_peak, right_peak)

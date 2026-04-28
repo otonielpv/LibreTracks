@@ -39,7 +39,7 @@ type DesktopApiMockState = {
 
 const SONG_TEMPO_REGION_VISUAL_END_SECONDS = 1_000_000;
 const MOCK_SONG_DIR = "C:/mock/session";
-const MOCK_SONG_FILE_PATH = `${MOCK_SONG_DIR}/song.ltsong`;
+const MOCK_SONG_FILE_PATH = `${MOCK_SONG_DIR}/song.ltsession`;
 
 let state = buildInitialState();
 let idCounter = 0;
@@ -516,6 +516,7 @@ function createPendingJump(marker: SectionMarkerSummary, trigger: JumpTriggerLab
     targetDigit: marker.digit ?? null,
     trigger,
     executeAtSeconds: trigger === "immediate" ? marker.startSeconds : Math.max(state.playbackPositionSeconds, marker.startSeconds),
+    transition: "instant",
   };
 }
 

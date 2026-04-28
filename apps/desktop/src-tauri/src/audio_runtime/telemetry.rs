@@ -47,6 +47,7 @@ pub(crate) struct AudioRuntimeStateSummary {
     pub cached_audio_buffers: usize,
     pub fully_cached_audio_buffers: usize,
     pub cached_audio_preload_bytes: usize,
+    pub master_gain: f32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -112,6 +113,7 @@ impl Default for AudioRuntimeStateSummary {
             cached_audio_buffers: 0,
             fully_cached_audio_buffers: 0,
             cached_audio_preload_bytes: 0,
+            master_gain: 1.0,
         }
     }
 }
@@ -303,6 +305,7 @@ pub(crate) fn command_kind_label(kind: AudioCommandKind) -> &'static str {
         AudioCommandKind::Seek => "seek",
         AudioCommandKind::SyncSong => "sync_song",
         AudioCommandKind::Stop => "stop",
+        AudioCommandKind::StartMasterFade => "start_master_fade",
         AudioCommandKind::DebugSnapshot => "debug_snapshot",
         AudioCommandKind::Shutdown => "shutdown",
     }
