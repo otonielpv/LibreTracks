@@ -120,3 +120,27 @@ Esto te permite reaccionar en tiempo real si la banda alarga un estribillo, se s
 - `0-9`: arma un salto hacia la marca correspondiente
 
 Si armas la sección equivocada, pulsa `Esc` inmediatamente. Si no existe una marca para ese hueco, LibreTracks avisará de que no hay una marca disponible para ese dígito.
+
+## 6. Control Remote Movil
+
+LibreTracks desktop puede publicar una superficie web remota para controlar transporte y mixer.
+
+### Conectar movil o tablet
+
+1. Abre `Remote` desde la navegacion lateral en la app desktop.
+2. En `Conectar remote movil`, escanea el codigo QR o abre una de las URLs mostradas:
+	- `URL por IP`
+	- `URL por hostname (.local)`
+3. Verifica que desktop y movil esten en la misma red local.
+
+![Panel de conexion remote](../screenshots/Remote.png)
+
+### Uso remoto en ensayo/show
+
+- Usa controles de transporte (`Reproducir`, `Pausar`, `Detener`) desde el movil.
+- Arma y cancela saltos desde remote cuando necesites adaptar secciones en vivo.
+- Cambia a `Mixer` para ajustar volumen, paneo, mute y solo por pista sin tocar el desktop.
+
+![Vista de mixer remote](../screenshots/Remote_Mixer.png)
+
+> Sugerencia de flujo en directo: deja al operador desktop centrado en timeline/arreglo y asigna a una segunda persona los ajustes de mezcla/cues desde el remote.

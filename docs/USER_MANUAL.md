@@ -120,3 +120,27 @@ This lets you recover in real time if the band extends a chorus, skips a bridge,
 - `0-9`: arm a jump to the corresponding marker slot
 
 If you arm the wrong section, press `Esc` immediately. If no marker exists for that slot, LibreTracks reports that no marker is available for that digit.
+
+## 6. Mobile Remote Control
+
+LibreTracks desktop can publish a mobile web remote for transport and mixer control.
+
+### Connect your phone or tablet
+
+1. Open `Remote` from the left navigation in the desktop app.
+2. In `Connect mobile remote`, scan the QR code or open one of the provided URLs:
+	- `URL by IP`
+	- `URL by hostname (.local)`
+3. Confirm desktop and mobile devices are on the same local network.
+
+![Remote connection panel](../screenshots/Remote.png)
+
+### Use the remote during rehearsal/show
+
+- Use transport controls (`Play`, `Pause`, `Stop`) from the mobile view.
+- Arm and cancel jumps from the remote when you need to adapt sections live.
+- Switch to `Mixer` to adjust track volume, pan, mute, and solo without touching the desktop.
+
+![Remote mixer view](../screenshots/Remote_Mixer.png)
+
+> Live workflow suggestion: keep the desktop operator focused on arrangement/timeline while a second person handles cue/mix adjustments from the remote.

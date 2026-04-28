@@ -18,6 +18,12 @@ LibreTracks es una DAW y estación de reproducción multitrack para directo, con
 ### Proyecto
 ![Vista del proyecto](./screenshots/Proyecto.png)
 
+### Conexion remote
+![Conexion remote](./screenshots/Remote.png)
+
+### Mixer remote
+![Mixer remote](./screenshots/Remote_Mixer.png)
+
 
 ## Architecture Overview
 
@@ -84,6 +90,16 @@ LIBRETRACKS_DUMMY_AUDIO=1 cargo test --locked -p libretracks-desktop -- --test-t
 Cuando `LIBRETRACKS_DUMMY_AUDIO` vale `1` o `true`, el runtime de audio desktop omite la deteccion de dispositivos con `cpal` y usa el backend nulo de reproduccion que ya existe. Esto esta pensado para la CI headless en Windows, donde WASAPI puede fallar si no hay hardware de audio disponible.
 
 Ese comando de tests tambien fuerza `--test-threads=1`. Asi evitamos flakiness cuando los fixtures WAV temporales usan `memmap2`, de modo que los archivos mapeados se liberen de forma predecible antes de que Windows destruya el directorio temporal.
+
+## Control Remote (Desktop + Movil)
+
+LibreTracks ahora incluye un flujo de acceso remoto integrado en la UI desktop:
+
+1. Abre `Remote` desde la navegacion lateral.
+2. En la tarjeta `Conectar remote movil`, escanea el codigo QR o abre una de las URLs generadas (`IP` o `hostname .local`) desde el navegador de tu movil/tablet.
+3. Asegurate de que desktop y movil esten en la misma red.
+
+La superficie web remota refleja acciones en vivo desde desktop y expone controles de transporte, controles de salto y una vista dedicada de mixer para ajustes rapidos de volumen/mute/solo durante ensayos y show.
 
 ## Project Structure
 

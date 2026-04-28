@@ -20,6 +20,12 @@ LibreTracks is a multitrack DAW and live playback workstation for desktop, built
 ### Project View
 ![Project view](./screenshots/Proyecto.png)
 
+### Remote Connection
+![Remote connection](./screenshots/Remote.png)
+
+### Remote Mixer
+![Remote mixer](./screenshots/Remote_Mixer.png)
+
 ## Architecture Overview
 
 LibreTracks is split into two clear layers:
@@ -85,6 +91,16 @@ LIBRETRACKS_DUMMY_AUDIO=1 cargo test --locked -p libretracks-desktop -- --test-t
 When `LIBRETRACKS_DUMMY_AUDIO` is set to `1` or `true`, the desktop audio runtime skips `cpal` device discovery and falls back to the existing null playback backend. This is intended for headless Windows CI, where WASAPI initialization can fail without audio hardware.
 
 The desktop Rust test command above also forces `--test-threads=1`. That keeps tests deterministic when temporary WAV fixtures are backed by `memmap2`, so mapped files are released predictably before Windows tears down the temp directory.
+
+## Remote Control (Desktop + Mobile)
+
+LibreTracks now includes an integrated remote access flow in the desktop UI:
+
+1. Open `Remote` from the left navigation.
+2. In the `Connect mobile remote` card, scan the QR code or open one of the generated URLs (`IP` or `.local hostname`) from your phone/tablet browser.
+3. Keep desktop and mobile devices on the same network.
+
+The remote web surface mirrors live actions from desktop and exposes transport controls, jump controls, and a dedicated mixer view for fast level/mute/solo adjustments during rehearsals and shows.
 
 ## Project Structure
 
