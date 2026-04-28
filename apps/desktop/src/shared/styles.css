@@ -291,6 +291,18 @@ body {
   font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24;
 }
 
+.lt-transport-buttons button.is-toggle {
+  width: auto;
+  min-width: 3.6rem;
+  gap: 0.3rem;
+  padding: 0 0.5rem;
+}
+
+.lt-transport-buttons button.is-active:not(:disabled) {
+  background: rgb(87 241 219 / 0.18);
+  color: #57f1db;
+}
+
 .lt-transport-readout {
   display: flex;
   align-items: center;
@@ -657,9 +669,54 @@ body {
 }
 
 .lt-settings-field select:disabled,
+.lt-settings-field input[type="range"]:disabled,
 .lt-settings-toggle input:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.lt-range-input {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.lt-range-input::-webkit-slider-runnable-track {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(87 241 219 / 0.5), rgb(45 212 191 / 0.9));
+}
+
+.lt-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: -0.275rem;
+  border: 0;
+  border-radius: 999px;
+  background: #f3f0ef;
+  box-shadow: 0 0 0 2px rgb(15 18 19 / 0.95);
+}
+
+.lt-range-input::-moz-range-track {
+  height: 0.45rem;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(87 241 219 / 0.5), rgb(45 212 191 / 0.9));
+}
+
+.lt-range-input::-moz-range-thumb {
+  width: 1rem;
+  height: 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: #f3f0ef;
+  box-shadow: 0 0 0 2px rgb(15 18 19 / 0.95);
 }
 
 .lt-settings-field small,

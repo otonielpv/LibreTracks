@@ -112,6 +112,10 @@ pub enum RemoteCommand {
         muted: Option<bool>,
         solo: Option<bool>,
     },
+    UpdateMetronome {
+        enabled: Option<bool>,
+        volume: Option<f64>,
+    },
     Ping,
 }
 
@@ -119,6 +123,7 @@ pub enum RemoteCommand {
 enum ServerEvent {
     Snapshot(Value),
     SongView(Value),
+    Settings(Value),
     Meters(Vec<u8>),
 }
 
@@ -126,6 +131,7 @@ enum ServerEvent {
 struct RemoteStateCache {
     latest_snapshot: Option<Value>,
     latest_song_view: Option<Value>,
+    latest_settings: Option<Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -235,6 +241,15 @@ impl RemoteServerHandle {
         }
     }
 
+    pub fn publish_settings<T: Serialize>(&self, settings: &T) {
+        if let Ok(value) = serde_json::to_value(settings) {
+            if let Ok(mut cache) = self.cache.write() {
+                cache.latest_settings = Some(value.clone());
+            }
+            let _ = self.events_tx.send(ServerEvent::Settings(value));
+        }
+    }
+
     pub fn publish_meters<T: Serialize>(&self, meters: &T) {
         let Ok(mut guard) = self.last_meter_emit_at.write() else {
             return;
@@ -308,10 +323,14 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
     let mut events_rx = state.events_tx.subscribe();
 
-    let (latest_snapshot, latest_song_view) = if let Ok(cache) = state.cache.read() {
-        (cache.latest_snapshot.clone(), cache.latest_song_view.clone())
+    let (latest_snapshot, latest_song_view, latest_settings) = if let Ok(cache) = state.cache.read() {
+        (
+            cache.latest_snapshot.clone(),
+            cache.latest_song_view.clone(),
+            cache.latest_settings.clone(),
+        )
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     if let Some(snapshot) = latest_snapshot {
@@ -331,6 +350,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                 serde_json::to_string(&OutboundEnvelope {
                     event: "songView",
                     payload: song_view,
+                })
+                .unwrap_or_default(),
+            ))
+            .await;
+    }
+    if let Some(settings) = latest_settings {
+        let _ = sender
+            .send(Message::Text(
+                serde_json::to_string(&OutboundEnvelope {
+                    event: "settings",
+                    payload: settings,
                 })
                 .unwrap_or_default(),
             ))
@@ -356,6 +386,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         .send(Message::Text(
                             serde_json::to_string(&OutboundEnvelope {
                                 event: "songView",
+                                payload,
+                            })
+                            .unwrap_or_default(),
+                        ))
+                        .await;
+                }
+                Ok(ServerEvent::Settings(payload)) => {
+                    let _ = sender
+                        .send(Message::Text(
+                            serde_json::to_string(&OutboundEnvelope {
+                                event: "settings",
                                 payload,
                             })
                             .unwrap_or_default(),

@@ -325,6 +325,8 @@ function buildInitialState(): DesktopApiMockState {
       selectedMidiDevice: null,
       splitStereoEnabled: false,
       locale: "en",
+      metronomeEnabled: false,
+      metronomeVolume: 0.8,
     },
     audioOutputDevices: {
       devices: ["Mock Built-in Output"],

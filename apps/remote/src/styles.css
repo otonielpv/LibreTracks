@@ -209,6 +209,11 @@ button {
   font-size: 0.84rem;
 }
 
+.pill-button.is-active {
+  background: linear-gradient(180deg, #ffd76a, #f59e0b);
+  color: #3f2200;
+}
+
 .timeline-shell {
   position: relative;
   overflow: hidden;
@@ -443,7 +448,7 @@ button {
   font-size: 0.64rem;
 }
 
-.jump-bars-field input {
+.jump-bars-field input:not([type="range"]) {
   width: 3.25rem;
   border: 0;
   border-radius: 999px;
@@ -458,6 +463,50 @@ button {
   background: rgb(255 255 255 / 0.06);
   color: var(--text);
   padding: 0.36rem 0.55rem;
+}
+
+.jump-range-input {
+  width: 8rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.jump-range-input::-webkit-slider-runnable-track {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(87 241 219 / 0.48), rgb(45 212 191 / 0.95));
+}
+
+.jump-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-top: -0.275rem;
+  border: 0;
+  border-radius: 999px;
+  background: #f7f4f2;
+  box-shadow: 0 0 0 2px rgb(13 13 13 / 0.9);
+}
+
+.jump-range-input::-moz-range-track {
+  height: 0.4rem;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(87 241 219 / 0.48), rgb(45 212 191 / 0.95));
+}
+
+.jump-range-input::-moz-range-thumb {
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 0;
+  border-radius: 999px;
+  background: #f7f4f2;
+  box-shadow: 0 0 0 2px rgb(13 13 13 / 0.9);
 }
 
 .bars-stepper {

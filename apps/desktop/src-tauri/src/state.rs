@@ -875,8 +875,18 @@ impl DesktopSession {
             previous_settings.selected_midi_device != next_settings.selected_midi_device;
         let split_changed =
             previous_settings.split_stereo_enabled != next_settings.split_stereo_enabled;
+        let metronome_enabled_changed =
+            previous_settings.metronome_enabled != next_settings.metronome_enabled;
+        let metronome_volume_changed =
+            (previous_settings.metronome_volume - next_settings.metronome_volume).abs()
+                > f64::EPSILON;
 
-        if !device_changed && !midi_changed && !split_changed {
+        if !device_changed
+            && !midi_changed
+            && !split_changed
+            && !metronome_enabled_changed
+            && !metronome_volume_changed
+        {
             return Ok(next_settings);
         }
 

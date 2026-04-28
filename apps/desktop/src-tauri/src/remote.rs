@@ -9,6 +9,7 @@ use tauri::{App, AppHandle, Manager};
 use crate::{
     commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
     commands::events::emit_transport_lifecycle_event,
+    settings::AppSettingsStore,
     state::DesktopState,
 };
 
@@ -97,10 +98,19 @@ async fn run_remote_sync_poller(app: AppHandle, handle: RemoteServerHandle) {
     let mut last_snapshot_json = String::new();
     let mut last_song_revision = u64::MAX;
     let mut last_song_json = String::new();
+    let mut last_settings_json = String::new();
 
     loop {
         interval.tick().await;
         let state = app.state::<DesktopState>();
+        if let Ok(settings) = state.audio.current_settings() {
+            if let Ok(settings_json) = serde_json::to_string(&settings) {
+                if settings_json != last_settings_json {
+                    handle.publish_settings(&settings);
+                    last_settings_json = settings_json;
+                }
+            }
+        }
         let mut session = match state.session.lock() {
             Ok(session) => session,
             Err(_) => continue,
@@ -203,6 +213,33 @@ async fn run_remote_command_bridge(
                 muted,
                 solo,
             } => session.update_track(track_id, None, *volume, *pan, *muted, *solo, &state.audio),
+            RemoteCommand::UpdateMetronome { enabled, volume } => {
+                let settings_store = app.state::<AppSettingsStore>();
+                let mut next_settings = match state.audio.current_settings() {
+                    Ok(settings) => settings,
+                    Err(_) => continue,
+                };
+
+                if let Some(enabled) = enabled {
+                    next_settings.metronome_enabled = *enabled;
+                }
+
+                if let Some(volume) = volume {
+                    next_settings.metronome_volume = volume.clamp(0.0, 1.0);
+                }
+
+                let result = session.update_audio_settings(next_settings.clone(), &state.audio);
+                let Ok(saved_settings) = result else {
+                    continue;
+                };
+
+                if settings_store.set(saved_settings.clone()).is_err() {
+                    continue;
+                }
+
+                handle.publish_settings(&saved_settings);
+                session.snapshot_with_sync(&state.audio)
+            }
             RemoteCommand::Ping => continue,
         };
 

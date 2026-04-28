@@ -725,6 +725,7 @@ export function TransportPanelContent() {
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(DEFAULT_APP_SETTINGS.metronomeVolume);
   const [audioOutputDevices, setAudioOutputDevices] = useState<string[]>([]);
   const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<string | null>(null);
   const [midiInputDevices, setMidiInputDevices] = useState<string[]>([]);
@@ -745,6 +746,8 @@ export function TransportPanelContent() {
   const [libraryImportProgress, setLibraryImportProgress] = useState<LibraryImportProgressEvent | null>(null);
   const [deletingLibraryFilePath, setDeletingLibraryFilePath] = useState<string | null>(null);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
+  const appSettingsRef = useRef(appSettings);
+  const metronomeLiveRequestIdRef = useRef(0);
   const syncSettingsLanguage = useCallback(async (settings: AppSettings) => {
     await i18n.changeLanguage(settings.locale || getSystemLanguage());
   }, [i18n]);
@@ -785,6 +788,14 @@ export function TransportPanelContent() {
   const zoomLevel = useTimelineUIStore((state) => state.zoomLevel);
   const trackHeight = useTimelineUIStore((state) => state.trackHeight);
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
+
+  useEffect(() => {
+    setMetronomeVolumeDraft(appSettings.metronomeVolume);
+  }, [appSettings.metronomeVolume]);
+
+  useEffect(() => {
+    appSettingsRef.current = appSettings;
+  }, [appSettings]);
 
   useEffect(() => {
     if (!isTauriApp) {
@@ -3930,6 +3941,84 @@ export function TransportPanelContent() {
     );
   }
 
+  function handleMetronomeEnabledChange(nextValue: boolean) {
+    const nextSettings = normalizeAppSettings({
+      ...appSettingsRef.current,
+      metronomeEnabled: nextValue,
+    });
+
+    appSettingsRef.current = nextSettings;
+    setAppSettings(nextSettings);
+
+    void runAction(async () => {
+      const liveSettings = normalizeAppSettings(await updateAudioSettings(nextSettings));
+      appSettingsRef.current = liveSettings;
+      setAppSettings(liveSettings);
+      setStatus(
+        nextValue
+          ? t("transport.status.metronomeEnabled")
+          : t("transport.status.metronomeDisabled"),
+      );
+    });
+  }
+
+  function handleMetronomeVolumeDraftChange(nextValue: number) {
+    const normalizedValue = Math.max(0, Math.min(1, nextValue));
+    const nextSettings = normalizeAppSettings({
+      ...appSettingsRef.current,
+      metronomeVolume: normalizedValue,
+    });
+    const requestId = metronomeLiveRequestIdRef.current + 1;
+
+    metronomeLiveRequestIdRef.current = requestId;
+    appSettingsRef.current = nextSettings;
+    setMetronomeVolumeDraft(normalizedValue);
+    setAppSettings(nextSettings);
+
+    void updateAudioSettings(nextSettings)
+      .then((liveSettings) => {
+        if (metronomeLiveRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        const normalizedLiveSettings = normalizeAppSettings(liveSettings);
+        appSettingsRef.current = normalizedLiveSettings;
+        setAppSettings(normalizedLiveSettings);
+      })
+      .catch((error) => {
+        if (metronomeLiveRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setStatus(formatErrorStatus(error));
+      });
+  }
+
+  function commitMetronomeVolumeDraft(nextValue: number) {
+    const normalizedValue = Math.max(0, Math.min(1, nextValue));
+    const nextSettings = normalizeAppSettings({
+      ...appSettingsRef.current,
+      metronomeVolume: normalizedValue,
+    });
+
+    appSettingsRef.current = nextSettings;
+    setMetronomeVolumeDraft(normalizedValue);
+    setAppSettings(nextSettings);
+
+    void runAction(async () => {
+      try {
+        const liveSettings = normalizeAppSettings(await updateAudioSettings(nextSettings));
+        appSettingsRef.current = liveSettings;
+        setAppSettings(liveSettings);
+        setStatus(t("transport.status.metronomeVolumeUpdated", {
+          volume: Math.round(liveSettings.metronomeVolume * 100),
+        }));
+      } catch (error) {
+        setStatus(formatErrorStatus(error));
+      }
+    });
+  }
+
   function handleMidiInputDeviceChange(nextValue: string) {
     persistAudioSettings(
       {
@@ -4784,6 +4873,8 @@ export function TransportPanelContent() {
             setStatus(t("transport.status.playbackPaused"));
           })
         }
+        metronomeEnabled={appSettings.metronomeEnabled}
+        onToggleMetronome={() => handleMetronomeEnabledChange(!appSettings.metronomeEnabled)}
         onTempoDraftChange={setTempoDraft}
         onTempoCommit={() => {
           const nextBpm = Number(tempoDraft);
@@ -5332,6 +5423,27 @@ export function TransportPanelContent() {
                   </select>
                 </label>
 
+                <label className="lt-settings-field">
+                  <span className="lt-settings-field-label">{t("transport.settingsModal.metronomeVolume")}</span>
+                  <input
+                    className="lt-range-input"
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={metronomeVolumeDraft}
+                    disabled={isSettingsLoading || isSettingsSaving}
+                    onChange={(event) => handleMetronomeVolumeDraftChange(Number(event.target.value))}
+                    onPointerUp={(event) => commitMetronomeVolumeDraft(Number(event.currentTarget.value))}
+                    onBlur={(event) => commitMetronomeVolumeDraft(Number(event.currentTarget.value))}
+                  />
+                  <small>
+                    {t("transport.settingsModal.metronomeVolumeValue", {
+                      value: Math.round(metronomeVolumeDraft * 100),
+                    })}
+                  </small>
+                </label>
+
                 <label className="lt-settings-toggle">
                   <input
                     type="checkbox"
@@ -5346,6 +5458,7 @@ export function TransportPanelContent() {
                     </small>
                   </div>
                 </label>
+
               </div>
             </section>
           </div>

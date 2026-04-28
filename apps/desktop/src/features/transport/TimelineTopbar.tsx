@@ -27,6 +27,8 @@ type TimelineTopbarProps = {
   onStopTransport: () => void;
   onPlayTransport: () => void;
   onPauseTransport: () => void;
+  metronomeEnabled: boolean;
+  onToggleMetronome: () => void;
   onTempoDraftChange: (nextTempoDraft: string) => void;
   onTempoCommit: () => void;
 };
@@ -55,6 +57,8 @@ export function TimelineTopbar({
   onStopTransport,
   onPlayTransport,
   onPauseTransport,
+  metronomeEnabled,
+  onToggleMetronome,
   onTempoDraftChange,
   onTempoCommit,
 }: TimelineTopbarProps) {
@@ -153,6 +157,16 @@ export function TimelineTopbar({
             </button>
             <button type="button" aria-label={t("timelineTopbar.pause")} disabled={isProjectEmpty} onClick={onPauseTransport}>
               <span className="material-symbols-outlined">pause</span>
+            </button>
+            <button
+              type="button"
+              aria-label={t("timelineTopbar.metronome")}
+              className={metronomeEnabled ? "is-active is-toggle" : "is-toggle"}
+              disabled={isProjectEmpty}
+              onClick={onToggleMetronome}
+            >
+              <span className="material-symbols-outlined">music_note</span>
+              <span className="lt-button-label">{t("timelineTopbar.click")}</span>
             </button>
             <button type="button" aria-label={t("timelineTopbar.next")} disabled={isProjectEmpty}>
               <span className="material-symbols-outlined">skip_next</span>

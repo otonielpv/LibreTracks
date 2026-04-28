@@ -236,6 +236,8 @@ export type AppSettings = {
   selectedMidiDevice?: string | null;
   splitStereoEnabled: boolean;
   locale?: string | null;
+  metronomeEnabled: boolean;
+  metronomeVolume: number;
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -243,18 +245,25 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   selectedMidiDevice: null,
   splitStereoEnabled: false,
   locale: null,
+  metronomeEnabled: false,
+  metronomeVolume: 0.8,
 };
 
 export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const selectedOutputDevice = settings.selectedOutputDevice?.trim() || null;
   const selectedMidiDevice = settings.selectedMidiDevice?.trim() || null;
   const locale = settings.locale?.trim().toLowerCase();
+  const metronomeVolume = Number.isFinite(settings.metronomeVolume)
+    ? Math.min(1, Math.max(0, settings.metronomeVolume))
+    : DEFAULT_APP_SETTINGS.metronomeVolume;
 
   return {
     selectedOutputDevice,
     selectedMidiDevice,
     splitStereoEnabled: Boolean(settings.splitStereoEnabled),
     locale: locale === "en" || locale === "es" ? locale : null,
+    metronomeEnabled: Boolean(settings.metronomeEnabled),
+    metronomeVolume,
   };
 }
 

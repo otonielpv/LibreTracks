@@ -6,6 +6,7 @@ import {
   buildSongTempoRegions,
   getSongRegionAtPosition,
   getSongTempoRegionAtPosition,
+  type AppSettings,
   type AudioMeterLevel,
   type SongView,
   type TrackSummary,
@@ -45,10 +46,12 @@ type RemoteConnectionState = {
 type RemoteSyncState = {
   snapshot: TransportSnapshot | null;
   songView: SongView | null;
+  settings: AppSettings | null;
   meters: Record<string, AudioMeterLevel>;
   receivedAtMs: number;
   setSnapshot: (snapshot: TransportSnapshot) => void;
   setSongView: (songView: SongView | null) => void;
+  setSettings: (settings: AppSettings) => void;
   setMeters: (meters: AudioMeterLevel[]) => void;
 };
 
@@ -113,6 +116,7 @@ const useRemoteSyncStore = create<RemoteSyncState>()(
   subscribeWithSelector((set) => ({
     snapshot: null,
     songView: null,
+    settings: null,
     meters: {},
     receivedAtMs: performance.now(),
     setSnapshot: (snapshot) => {
@@ -120,6 +124,9 @@ const useRemoteSyncStore = create<RemoteSyncState>()(
     },
     setSongView: (songView) => {
       set({ songView, receivedAtMs: performance.now() });
+    },
+    setSettings: (settings) => {
+      set({ settings, receivedAtMs: performance.now() });
     },
     setMeters: (meters) => {
       set({
@@ -190,6 +197,14 @@ function sendCommand(command: Record<string, unknown>) {
     return;
   }
   socket.send(JSON.stringify(command));
+}
+
+function sendMetronomePatch(patch: { enabled?: boolean; volume?: number }) {
+  sendCommand({
+    cmd: "updateMetronome",
+    enabled: patch.enabled,
+    volume: patch.volume,
+  });
 }
 
 function parsePendingJumpMode(trigger: string | undefined): { mode: JumpMode; bars?: number } {
@@ -344,6 +359,11 @@ function useRemoteBridge() {
         if (message.event === "songView") {
           useRemoteSyncStore.getState().setSongView(message.payload as SongView | null);
           useOptimisticStore.getState().clearTracks();
+          return;
+        }
+
+        if (message.event === "settings") {
+          useRemoteSyncStore.getState().setSettings(message.payload as AppSettings);
           return;
         }
 
@@ -616,6 +636,31 @@ function SharedTimeline({
   );
 }
 
+function TransportControlButtons() {
+  const settings = useRemoteSyncStore((state) => state.settings);
+  const metronomeEnabled = settings?.metronomeEnabled ?? false;
+
+  return (
+    <div className="transport-controls transport-controls-inline">
+      <button className="pill-button" onClick={() => sendCommand({ cmd: "play" })}>
+        {STRINGS.play}
+      </button>
+      <button className="pill-button" onClick={() => sendCommand({ cmd: "pause" })}>
+        {STRINGS.pause}
+      </button>
+      <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
+        {STRINGS.stop}
+      </button>
+      <button
+        className={`pill-button ${metronomeEnabled ? "is-active" : ""}`}
+        onClick={() => sendMetronomePatch({ enabled: !metronomeEnabled })}
+      >
+        {STRINGS.click}
+      </button>
+    </div>
+  );
+}
+
 function TransportTopline() {
   const readout = useTransportReadout();
 
@@ -640,17 +685,7 @@ function TransportTopline() {
         </div>
       </div>
 
-      <div className="transport-controls transport-controls-inline">
-        <button className="pill-button" onClick={() => sendCommand({ cmd: "play" })}>
-          {STRINGS.play}
-        </button>
-        <button className="pill-button" onClick={() => sendCommand({ cmd: "pause" })}>
-          {STRINGS.pause}
-        </button>
-        <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
-          {STRINGS.stop}
-        </button>
-      </div>
+      <TransportControlButtons />
     </div>
   );
 }
@@ -683,17 +718,7 @@ function TransportChrome() {
           </div>
         </div>
 
-        <div className="transport-controls transport-controls-inline">
-          <button className="pill-button" onClick={() => sendCommand({ cmd: "play" })}>
-            {STRINGS.play}
-          </button>
-          <button className="pill-button" onClick={() => sendCommand({ cmd: "pause" })}>
-            {STRINGS.pause}
-          </button>
-          <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
-            {STRINGS.stop}
-          </button>
-        </div>
+        <TransportControlButtons />
       </div>
 
       <SharedTimeline
@@ -732,17 +757,7 @@ function HeaderTransportTopline() {
           </div>
         </div>
 
-        <div className="transport-controls transport-controls-inline">
-          <button className="pill-button" onClick={() => sendCommand({ cmd: "play" })}>
-            {STRINGS.play}
-          </button>
-          <button className="pill-button" onClick={() => sendCommand({ cmd: "pause" })}>
-            {STRINGS.pause}
-          </button>
-          <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
-            {STRINGS.stop}
-          </button>
-        </div>
+        <TransportControlButtons />
       </div>
     </section>
   );
@@ -751,6 +766,7 @@ function HeaderTransportTopline() {
 function TransportView() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
+  const settings = useRemoteSyncStore((state) => state.settings);
   const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
   const jumpMode = useRemoteJumpStore((state) => state.mode);
   const jumpBars = useRemoteJumpStore((state) => state.bars);
@@ -765,10 +781,16 @@ function TransportView() {
   const setVampMode = useRemoteJumpStore((state) => state.setVampMode);
   const setVampBars = useRemoteJumpStore((state) => state.setVampBars);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
+  const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(0.8);
   const markers = songView?.sectionMarkers ?? [];
   const regions = songView?.regions ?? [];
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
   const activeVamp = snapshot?.activeVamp ?? null;
+  const metronomeVolume = settings?.metronomeVolume ?? 0.8;
+
+  useEffect(() => {
+    setMetronomeVolumeDraft(metronomeVolume);
+  }, [metronomeVolume]);
 
   useEffect(() => {
     if (!regions.length) {
@@ -918,6 +940,23 @@ function TransportView() {
 
         <div className="transport-control-card transport-control-card-song">
           <div className="jump-toolbar">
+            <label className="jump-bars-field">
+              <span>{STRINGS.clickVolume}</span>
+              <input
+                className="jump-range-input"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={metronomeVolumeDraft}
+                onChange={(event) => {
+                  const nextValue = Number(event.currentTarget.value);
+                  setMetronomeVolumeDraft(nextValue);
+                  sendMetronomePatch({ volume: nextValue });
+                }}
+              />
+            </label>
+
             <label className="jump-bars-field">
               <span>{STRINGS.songTrigger}</span>
               <select

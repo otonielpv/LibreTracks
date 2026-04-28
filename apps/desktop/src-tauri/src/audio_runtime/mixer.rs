@@ -2,6 +2,11 @@ use super::*;
 use libretracks_core::{parse_track_output_channels, Track, TrackKind};
 use tauri::Emitter;
 
+const METRONOME_ACCENT_FREQUENCY_HZ: f32 = 1_000.0;
+const METRONOME_BEAT_FREQUENCY_HZ: f32 = 500.0;
+const METRONOME_BEEP_DURATION_SECONDS: f32 = 0.045;
+const METRONOME_PEAK_GAIN: f32 = 0.6;
+
 #[derive(Debug, Clone)]
 pub(crate) struct LiveTrackMix {
     parent_track_id: Option<String>,
@@ -48,6 +53,7 @@ pub(crate) struct Mixer {
     meter_emitter: MeterEmitterState,
     master_gain: f32,
     master_fade: Option<MasterFadeState>,
+    metronome_voice: MetronomeVoice,
 }
 
 pub(crate) struct MixClipState {
@@ -63,6 +69,34 @@ struct MasterFadeState {
     target_gain: f32,
     total_frames: u64,
     elapsed_frames: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MetronomeVoice {
+    phase: f32,
+    frequency_hz: f32,
+    frames_remaining: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MetronomeSettingsSnapshot {
+    enabled: bool,
+    volume: f32,
+    split_stereo_enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ResolvedTempoBeatRegion {
+    start_seconds: f64,
+    end_seconds: f64,
+    beat_duration_seconds: f64,
+    cumulative_beats_start: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MetronomeBeatEvent {
+    frame_offset: usize,
+    is_downbeat: bool,
 }
 
 #[derive(Clone, Default)]
@@ -180,6 +214,7 @@ impl Mixer {
             meter_emitter: MeterEmitterState::new(app_handle, remote_handle),
             master_gain: 1.0,
             master_fade: None,
+            metronome_voice: MetronomeVoice::default(),
         };
         mixer.cached_live_mix = LiveMixSnapshot::from_song(&mixer.song);
         mixer.seek(mixer.song.clone(), position_seconds);
@@ -220,6 +255,7 @@ impl Mixer {
         let mut mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
         let should_capture_track_meters = self.meter_emitter.capture_enabled();
         let mut track_meters = should_capture_track_meters.then(|| self.empty_track_meters());
+        let metronome_settings = self.read_metronome_settings();
         self.prune_inactive_clips(block_start);
         self.activate_due_clips(block_end);
         {
@@ -295,6 +331,12 @@ impl Mixer {
         self.active_clips.retain(|clip_state| {
             !clip_state.reader.eof && block_end < clip_state.plan.timeline_end_frame()
         });
+        self.mix_metronome_into_output(
+            &mut mixed,
+            block_start,
+            block_frames,
+            metronome_settings,
+        );
         self.apply_master_gain(&mut mixed, block_frames);
         self.timeline_cursor_frame += block_frames as u64;
 
@@ -443,6 +485,72 @@ impl Mixer {
 
     pub(crate) fn master_gain(&self) -> f32 {
         self.master_gain
+    }
+
+    fn read_metronome_settings(&self) -> MetronomeSettingsSnapshot {
+        self.audio_settings
+            .read()
+            .map(|settings| MetronomeSettingsSnapshot {
+                enabled: settings.metronome_enabled,
+                volume: settings.metronome_volume.clamp(0.0, 1.0) as f32,
+                split_stereo_enabled: settings.split_stereo_enabled,
+            })
+            .unwrap_or(MetronomeSettingsSnapshot {
+                enabled: false,
+                volume: 0.0,
+                split_stereo_enabled: false,
+            })
+    }
+
+    fn mix_metronome_into_output(
+        &mut self,
+        buffer: &mut [f32],
+        block_start_frame: u64,
+        block_frames: usize,
+        settings: MetronomeSettingsSnapshot,
+    ) {
+        if !settings.enabled || settings.volume <= 0.0 || block_frames == 0 {
+            return;
+        }
+
+        let beat_events = metronome_events_for_block(
+            &self.song,
+            block_start_frame,
+            block_frames,
+            self.output_sample_rate,
+        );
+        let output_routing =
+            monitor_output_routing(self.output_channels, settings.split_stereo_enabled);
+        let mut next_event_index = 0;
+
+        for frame_offset in 0..block_frames {
+            while next_event_index < beat_events.len()
+                && beat_events[next_event_index].frame_offset == frame_offset
+            {
+                self.metronome_voice.trigger(
+                    beat_events[next_event_index].is_downbeat,
+                    self.output_sample_rate,
+                );
+                next_event_index += 1;
+            }
+
+            let sample = self
+                .metronome_voice
+                .next_sample(self.output_sample_rate)
+                * settings.volume;
+            if sample.abs() <= GAIN_EPSILON {
+                continue;
+            }
+
+            write_frame_to_output(
+                buffer,
+                frame_offset,
+                self.output_channels,
+                &output_routing,
+                sample,
+                sample,
+            );
+        }
     }
 
     fn apply_master_gain(&mut self, mixed: &mut [f32], block_frames: usize) {
@@ -633,6 +741,45 @@ impl MixClipState {
         self.current_pan = target_pan;
 
         (left_peak, right_peak)
+    }
+}
+
+impl Default for MetronomeVoice {
+    fn default() -> Self {
+        Self {
+            phase: 0.0,
+            frequency_hz: METRONOME_BEAT_FREQUENCY_HZ,
+            frames_remaining: 0,
+        }
+    }
+}
+
+impl MetronomeVoice {
+    fn trigger(&mut self, is_downbeat: bool, output_sample_rate: u32) {
+        self.phase = 0.25;
+        self.frequency_hz = if is_downbeat {
+            METRONOME_ACCENT_FREQUENCY_HZ
+        } else {
+            METRONOME_BEAT_FREQUENCY_HZ
+        };
+        self.frames_remaining = metronome_beep_duration_frames(output_sample_rate);
+    }
+
+    fn next_sample(&mut self, output_sample_rate: u32) -> f32 {
+        if self.frames_remaining == 0 {
+            return 0.0;
+        }
+
+        let total_frames = metronome_beep_duration_frames(output_sample_rate);
+        let elapsed_frames = total_frames.saturating_sub(self.frames_remaining) as f32;
+        let progress = elapsed_frames / total_frames.max(1) as f32;
+        let envelope = (1.0 - progress).powi(3);
+        let sample = (self.phase * std::f32::consts::TAU).sin() * envelope * METRONOME_PEAK_GAIN;
+
+        self.phase = (self.phase + self.frequency_hz / output_sample_rate.max(1) as f32).fract();
+        self.frames_remaining = self.frames_remaining.saturating_sub(1);
+
+        sample
     }
 }
 
@@ -844,6 +991,18 @@ fn resolve_track_output_routing(
     parse_track_output_channels(output_bus_id, output_channels)
 }
 
+fn monitor_output_routing(output_channels: usize, split_stereo_enabled: bool) -> Vec<usize> {
+    if output_channels <= 1 {
+        return vec![0];
+    }
+
+    if split_stereo_enabled && output_channels < 4 {
+        return vec![0];
+    }
+
+    parse_track_output_channels("monitor", output_channels)
+}
+
 fn write_frame_to_output(
     buffer: &mut [f32],
     frame_index: usize,
@@ -901,6 +1060,141 @@ fn resolve_parent_track_runtime_gain(
     }
 
     Some(gain)
+}
+
+fn metronome_beep_duration_frames(output_sample_rate: u32) -> u32 {
+    (METRONOME_BEEP_DURATION_SECONDS * output_sample_rate.max(1) as f32)
+        .round()
+        .max(1.0) as u32
+}
+
+fn metronome_events_for_block(
+    song: &Song,
+    block_start_frame: u64,
+    block_frames: usize,
+    output_sample_rate: u32,
+) -> Vec<MetronomeBeatEvent> {
+    if block_frames == 0 || song.bpm <= 0.0 {
+        return Vec::new();
+    }
+
+    let Ok((beats_per_bar, denominator)) = parse_song_time_signature(&song.time_signature) else {
+        return Vec::new();
+    };
+    let block_start_seconds = block_start_frame as f64 / f64::from(output_sample_rate.max(1));
+    let block_end_seconds =
+        (block_start_frame + block_frames as u64) as f64 / f64::from(output_sample_rate.max(1));
+    let tempo_regions = resolve_tempo_beat_regions(song, denominator);
+    let mut events = Vec::new();
+
+    for region in tempo_regions {
+        let overlap_start = block_start_seconds.max(region.start_seconds);
+        let overlap_end = block_end_seconds.min(region.end_seconds);
+        if overlap_end <= overlap_start {
+            continue;
+        }
+
+        let mut next_beat_number = (region.cumulative_beats_start
+            + (overlap_start - region.start_seconds) / region.beat_duration_seconds
+            - f64::EPSILON)
+            .ceil()
+            .max(0.0) as u64;
+
+        loop {
+            let beat_time = region.start_seconds
+                + (next_beat_number as f64 - region.cumulative_beats_start)
+                    * region.beat_duration_seconds;
+
+            if beat_time + f64::EPSILON < overlap_start {
+                next_beat_number = next_beat_number.saturating_add(1);
+                continue;
+            }
+
+            if beat_time + f64::EPSILON >= overlap_end {
+                break;
+            }
+
+            let beat_frame = seconds_to_frames(beat_time, output_sample_rate);
+            if beat_frame >= block_start_frame {
+                let frame_offset = (beat_frame - block_start_frame) as usize;
+                if frame_offset < block_frames
+                    && events
+                        .last()
+                        .map(|event: &MetronomeBeatEvent| event.frame_offset != frame_offset)
+                        .unwrap_or(true)
+                {
+                    events.push(MetronomeBeatEvent {
+                        frame_offset,
+                        is_downbeat: next_beat_number % u64::from(beats_per_bar.max(1)) == 0,
+                    });
+                }
+            }
+
+            next_beat_number = next_beat_number.saturating_add(1);
+        }
+    }
+
+    events
+}
+
+fn resolve_tempo_beat_regions(song: &Song, denominator: u32) -> Vec<ResolvedTempoBeatRegion> {
+    let mut markers = song
+        .tempo_markers
+        .iter()
+        .filter(|marker| marker.start_seconds > 0.0)
+        .collect::<Vec<_>>();
+    markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut regions = Vec::with_capacity(markers.len() + 1);
+    let mut cumulative_beats_start = 0.0_f64;
+    let mut start_seconds = 0.0_f64;
+    let mut bpm = song.bpm.max(1.0);
+
+    for marker in markers {
+        if marker.start_seconds <= start_seconds {
+            bpm = marker.bpm.max(1.0);
+            continue;
+        }
+
+        let beat_duration_seconds = beat_duration_seconds_for_signature(bpm, denominator);
+        let duration_seconds = (marker.start_seconds - start_seconds).max(0.0);
+        regions.push(ResolvedTempoBeatRegion {
+            start_seconds,
+            end_seconds: marker.start_seconds,
+            beat_duration_seconds,
+            cumulative_beats_start,
+        });
+        cumulative_beats_start += duration_seconds / beat_duration_seconds;
+        start_seconds = marker.start_seconds;
+        bpm = marker.bpm.max(1.0);
+    }
+
+    regions.push(ResolvedTempoBeatRegion {
+        start_seconds,
+        end_seconds: f64::MAX,
+        beat_duration_seconds: beat_duration_seconds_for_signature(bpm, denominator),
+        cumulative_beats_start,
+    });
+
+    regions
+}
+
+fn beat_duration_seconds_for_signature(bpm: f64, denominator: u32) -> f64 {
+    (60.0 / bpm.max(1.0)) * (4.0 / f64::from(denominator.max(1)))
+}
+
+fn parse_song_time_signature(time_signature: &str) -> Result<(u32, u32), ()> {
+    let (numerator, denominator) = time_signature.split_once('/').ok_or(())?;
+    let numerator = numerator.parse::<u32>().map_err(|_| ())?;
+    let denominator = denominator.parse::<u32>().map_err(|_| ())?;
+    if numerator == 0 || denominator == 0 {
+        return Err(());
+    }
+    Ok((numerator, denominator))
 }
 
 fn resolve_track_clip_gain(
@@ -978,4 +1272,84 @@ fn is_track_soloed_in_hierarchy(
     }
 
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libretracks_core::{Marker, OutputBus, SongRegion, TempoMarker};
+
+    fn metronome_song() -> Song {
+        Song {
+            id: "song".into(),
+            title: "Metronome".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 8.0,
+            tempo_markers: vec![],
+            regions: vec![SongRegion {
+                id: "region".into(),
+                name: "Song".into(),
+                start_seconds: 0.0,
+                end_seconds: 8.0,
+            }],
+            tracks: vec![Track {
+                id: "track".into(),
+                name: "Track".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                output_bus_id: OutputBus::Main.id(),
+            }],
+            clips: vec![],
+            section_markers: vec![Marker {
+                id: "marker".into(),
+                name: "Intro".into(),
+                start_seconds: 0.0,
+                digit: Some(1),
+            }],
+        }
+    }
+
+    #[test]
+    fn metronome_events_follow_base_bpm_grid() {
+        let song = metronome_song();
+
+        let events = metronome_events_for_block(&song, 0, 48_000, 48_000);
+
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].frame_offset, 0);
+        assert!(events[0].is_downbeat);
+        assert_eq!(events[1].frame_offset, 24_000);
+        assert!(!events[1].is_downbeat);
+    }
+
+    #[test]
+    fn metronome_events_carry_fractional_beat_progress_across_tempo_markers() {
+        let mut song = metronome_song();
+        song.tempo_markers.push(TempoMarker {
+            id: "tempo-1".into(),
+            start_seconds: 0.75,
+            bpm: 60.0,
+        });
+
+        let block_start_frame = seconds_to_frames(0.75, 48_000);
+        let events = metronome_events_for_block(&song, block_start_frame, 48_000, 48_000);
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].frame_offset, 24_000);
+        assert!(!events[0].is_downbeat);
+    }
+
+    #[test]
+    fn monitor_output_routing_respects_split_stereo_for_two_channel_outputs() {
+        assert_eq!(monitor_output_routing(2, false), vec![0, 1]);
+        assert_eq!(monitor_output_routing(2, true), vec![0]);
+        assert_eq!(monitor_output_routing(4, true), vec![2, 3]);
+    }
 }

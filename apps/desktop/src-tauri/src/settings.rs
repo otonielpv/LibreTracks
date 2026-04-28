@@ -5,7 +5,11 @@ use tauri::{AppHandle, Manager};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+fn default_metronome_volume() -> f64 {
+    0.8
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     #[serde(default)]
@@ -16,6 +20,23 @@ pub struct AppSettings {
     pub split_stereo_enabled: bool,
     #[serde(default)]
     pub locale: Option<String>,
+    #[serde(default)]
+    pub metronome_enabled: bool,
+    #[serde(default = "default_metronome_volume")]
+    pub metronome_volume: f64,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            selected_output_device: None,
+            selected_midi_device: None,
+            split_stereo_enabled: false,
+            locale: None,
+            metronome_enabled: false,
+            metronome_volume: default_metronome_volume(),
+        }
+    }
 }
 
 pub struct AppSettingsStore {
