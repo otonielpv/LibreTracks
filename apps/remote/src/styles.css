@@ -593,19 +593,6 @@ button {
   width: 100%;
 }
 
-.pan-section::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 1.7rem;
-  width: 2px;
-  height: 0.95rem;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.18);
-  pointer-events: none;
-}
-
 .mini-action {
   align-self: flex-start;
   border-radius: 999px;
