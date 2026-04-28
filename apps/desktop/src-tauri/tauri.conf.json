@@ -24,7 +24,7 @@
     "active": true,
     "targets": "all",
     "resources": {
-      "../../apps/remote/dist": "remote-dist"
+      "../../remote/dist": "remote-dist"
     },
     "icon": [
       "icons/32x32.png",
