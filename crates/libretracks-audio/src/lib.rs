@@ -30,6 +30,18 @@ pub enum JumpTrigger {
     AfterBars(u32),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VampMode {
+    Section,
+    Bars(u32),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActiveVamp {
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransitionType {
     Instant,
@@ -66,6 +78,8 @@ pub enum AudioEngineError {
     MarkerNotFound(String),
     #[error("time signature is invalid: {0}")]
     InvalidTimeSignature(String),
+    #[error("vamp range is invalid")]
+    InvalidVampRange,
 }
 
 #[derive(Debug, Default)]
@@ -75,6 +89,7 @@ pub struct AudioEngine {
     position_seconds: f64,
     pending_marker_jump: Option<PendingMarkerJump>,
     pending_fade_jump: Option<PendingFadeJump>,
+    active_vamp: Option<ActiveVamp>,
 }
 
 impl Default for PlaybackState {
@@ -95,6 +110,7 @@ impl AudioEngine {
         self.position_seconds = 0.0;
         self.pending_marker_jump = None;
         self.pending_fade_jump = None;
+        self.active_vamp = None;
 
         Ok(())
     }
@@ -119,6 +135,10 @@ impl AudioEngine {
         self.pending_marker_jump.as_ref()
     }
 
+    pub fn active_vamp(&self) -> Option<&ActiveVamp> {
+        self.active_vamp.as_ref()
+    }
+
     pub fn play(&mut self) -> Result<(), AudioEngineError> {
         self.ensure_song_loaded()?;
         self.playback_state = PlaybackState::Playing;
@@ -137,6 +157,7 @@ impl AudioEngine {
         self.position_seconds = 0.0;
         self.pending_marker_jump = None;
         self.pending_fade_jump = None;
+        self.active_vamp = None;
         Ok(())
     }
 
@@ -242,6 +263,66 @@ impl AudioEngine {
         self.pending_fade_jump = None;
     }
 
+    pub fn toggle_vamp(
+        &mut self,
+        mode: VampMode,
+    ) -> Result<Option<ActiveVamp>, AudioEngineError> {
+        let song = self.ensure_song_loaded()?;
+
+        if self.active_vamp.is_some() {
+            self.active_vamp = None;
+            return Ok(None);
+        }
+
+        let active_vamp = match mode {
+            VampMode::Section => {
+                let current_region = find_region_for_position(song, self.position_seconds);
+                let start_seconds = song
+                    .marker_at(self.position_seconds)
+                    .map(|marker| marker.start_seconds)
+                    .or_else(|| current_region.map(|region| region.start_seconds))
+                    .unwrap_or(0.0);
+                let end_seconds = song
+                    .section_markers
+                    .iter()
+                    .filter(|marker| marker.start_seconds > start_seconds + f64::EPSILON)
+                    .map(|marker| marker.start_seconds)
+                    .min_by(|left, right| {
+                        left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .or_else(|| current_region.map(|region| region.end_seconds))
+                    .unwrap_or(song.duration_seconds);
+
+                ActiveVamp {
+                    start_seconds,
+                    end_seconds,
+                }
+            }
+            VampMode::Bars(bars) => {
+                let resolved_regions = resolve_song_regions(song)?;
+                let current_bar_index =
+                    current_bar_index_for_position(&resolved_regions, self.position_seconds)?;
+                let safe_bars = bars.max(1) as usize;
+                let start_seconds =
+                    cumulative_bar_start_seconds(&resolved_regions, current_bar_index);
+                let end_seconds =
+                    cumulative_bar_start_seconds(&resolved_regions, current_bar_index + safe_bars);
+
+                ActiveVamp {
+                    start_seconds,
+                    end_seconds,
+                }
+            }
+        };
+
+        if active_vamp.end_seconds <= active_vamp.start_seconds + f64::EPSILON {
+            return Err(AudioEngineError::InvalidVampRange);
+        }
+
+        self.active_vamp = Some(active_vamp.clone());
+        Ok(Some(active_vamp))
+    }
+
     pub fn advance_transport(
         &mut self,
         delta_seconds: f64,
@@ -282,6 +363,18 @@ impl AudioEngine {
         if self.pending_fade_jump.is_some() {
             self.position_seconds = next_position;
             return Ok((self.position_seconds, false));
+        }
+
+        if let Some(active_vamp) = self.active_vamp.as_ref() {
+            if next_position >= active_vamp.end_seconds {
+                let vamp_duration = active_vamp.end_seconds - active_vamp.start_seconds;
+                if vamp_duration <= f64::EPSILON {
+                    return Err(AudioEngineError::InvalidVampRange);
+                }
+
+                let overshoot = next_position - active_vamp.end_seconds;
+                next_position = active_vamp.start_seconds + overshoot.rem_euclid(vamp_duration);
+            }
         }
 
         self.position_seconds = next_position;
@@ -434,13 +527,7 @@ fn jump_execute_at_after_bars(
     bars: u32,
 ) -> Result<f64, AudioEngineError> {
     let resolved_regions = resolve_song_regions(song)?;
-    let current_region = resolve_resolved_region_for_position(&resolved_regions, current_position)
-        .ok_or_else(|| AudioEngineError::InvalidTimeSignature("missing song region".into()))?;
-    let local_position = (current_position - current_region.start_seconds).max(0.0);
-    let current_bar_index = (current_region.cumulative_bars_start
-        + local_position / current_region.bar_duration_seconds
-        + f64::EPSILON)
-        .floor() as usize;
+    let current_bar_index = current_bar_index_for_position(&resolved_regions, current_position)?;
     let target_bar_index = current_bar_index + bars as usize;
 
     Ok(cumulative_bar_start_seconds(
@@ -458,6 +545,19 @@ fn resolve_pending_jump_target_start_seconds(
     }
 
     Ok(find_region(song, &pending_jump.target_marker_id)?.start_seconds)
+}
+
+fn current_bar_index_for_position(
+    resolved_regions: &[ResolvedSongRegion],
+    position_seconds: f64,
+) -> Result<usize, AudioEngineError> {
+    let current_region = resolve_resolved_region_for_position(resolved_regions, position_seconds)
+        .ok_or_else(|| AudioEngineError::InvalidTimeSignature("missing song region".into()))?;
+    let local_position = (position_seconds - current_region.start_seconds).max(0.0);
+    Ok((current_region.cumulative_bars_start
+        + local_position / current_region.bar_duration_seconds
+        + f64::EPSILON)
+        .floor() as usize)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -663,7 +763,10 @@ fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, Audi
 mod tests {
     use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind};
 
-    use crate::{AudioEngine, AudioEngineError, JumpTrigger, PlaybackState, TransitionType};
+    use crate::{
+        ActiveVamp, AudioEngine, AudioEngineError, JumpTrigger, PlaybackState, TransitionType,
+        VampMode,
+    };
 
     fn demo_song() -> Song {
         Song {
@@ -1090,6 +1193,79 @@ mod tests {
             .expect("jump should remain pending");
 
         assert!((scheduled.execute_at_seconds - 2.75).abs() < 0.0001);
+    }
+
+    #[test]
+    fn toggle_vamp_section_uses_current_marker_and_next_marker() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(6.0).expect("seek should work");
+
+        let active_vamp = engine
+            .toggle_vamp(VampMode::Section)
+            .expect("vamp should activate")
+            .expect("vamp should exist");
+
+        assert_eq!(
+            active_vamp,
+            ActiveVamp {
+                start_seconds: 0.0,
+                end_seconds: 8.0,
+            }
+        );
+        assert_eq!(engine.active_vamp(), Some(&active_vamp));
+    }
+
+    #[test]
+    fn toggle_vamp_bars_starts_from_current_bar_and_crosses_tempo_markers() {
+        let mut engine = AudioEngine::new();
+        engine
+            .load_song(multi_region_song())
+            .expect("song should load");
+        engine.seek(7.0).expect("seek should work");
+
+        let active_vamp = engine
+            .toggle_vamp(VampMode::Bars(2))
+            .expect("vamp should activate")
+            .expect("vamp should exist");
+
+        assert!((active_vamp.start_seconds - 6.0).abs() < 0.0001);
+        assert!((active_vamp.end_seconds - 10.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn toggle_vamp_again_disables_the_active_vamp() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+
+        assert!(engine
+            .toggle_vamp(VampMode::Section)
+            .expect("vamp should toggle on")
+            .is_some());
+
+        let active_vamp = engine
+            .toggle_vamp(VampMode::Section)
+            .expect("vamp should toggle off");
+
+        assert!(active_vamp.is_none());
+        assert!(engine.active_vamp().is_none());
+    }
+
+    #[test]
+    fn advance_transport_wraps_inside_the_active_vamp_using_overshoot() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(6.5).expect("seek should work");
+        engine
+            .toggle_vamp(VampMode::Section)
+            .expect("vamp should activate");
+
+        let (position, jump_executed) = engine
+            .advance_transport(2.0)
+            .expect("transport should wrap inside vamp");
+
+        assert!((position - 0.5).abs() < 0.0001);
+        assert!(!jump_executed);
     }
 
     #[test]

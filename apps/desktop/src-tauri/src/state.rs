@@ -8,7 +8,7 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
-use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType};
+use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
 use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, Track, TrackKind};
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary, import_wav_files_to_library,
@@ -24,8 +24,9 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::audio_runtime::{AudioController, PlaybackStartReason};
 use crate::error::DesktopError;
 use crate::models::view::{
-    empty_musical_position_summary, marker_to_summary, musical_position_summary,
-    pending_jump_to_summary, song_to_view, waveform_key_for_file_path, waveform_summary_to_dto,
+    active_vamp_to_summary, empty_musical_position_summary, marker_to_summary,
+    musical_position_summary, pending_jump_to_summary, song_to_view,
+    waveform_key_for_file_path, waveform_summary_to_dto,
 };
 use crate::models::{
     DesktopPerformanceSnapshot, LibraryAssetSummary, SongView, TransportClockSummary,
@@ -1044,6 +1045,16 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn toggle_vamp(
+        &mut self,
+        mode: VampMode,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        self.engine.toggle_vamp(mode)?;
+        Ok(self.snapshot())
+    }
+
     pub fn move_clip(
         &mut self,
         clip_id: &str,
@@ -2037,6 +2048,12 @@ impl DesktopSession {
         }
 
         let elapsed = self.transport_clock.elapsed_since_anchor();
+        let previous_position = self.engine.position_seconds();
+        let wrapped_by_vamp = self
+            .engine
+            .active_vamp()
+            .map(|active_vamp| previous_position + elapsed >= active_vamp.end_seconds)
+            .unwrap_or(false);
         let (advanced_position, jump_executed) = self.engine.advance_transport(elapsed)?;
 
         if let Some(duration_seconds) = self.engine.take_pending_fade_out_request() {
@@ -2065,7 +2082,7 @@ impl DesktopSession {
             return Ok(());
         }
 
-        if jump_executed {
+        if jump_executed || wrapped_by_vamp {
             self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
             self.transport_clock
                 .note_jump_while_playing(advanced_position);
@@ -2138,6 +2155,7 @@ impl DesktopSession {
                 .engine
                 .pending_marker_jump()
                 .map(pending_jump_to_summary),
+            active_vamp: self.engine.active_vamp().map(active_vamp_to_summary),
             musical_position: self
                 .engine
                 .song()

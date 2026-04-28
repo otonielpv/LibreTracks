@@ -1,5 +1,5 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use libretracks_audio::{JumpTrigger, PendingMarkerJump, TransitionType};
+use libretracks_audio::{ActiveVamp, JumpTrigger, PendingMarkerJump, TransitionType};
 use libretracks_core::{Clip, Marker, Song, SongRegion, TempoMarker, TrackKind};
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
@@ -16,6 +16,7 @@ pub struct TransportSnapshot {
     pub position_seconds: f64,
     pub current_marker: Option<MarkerSummary>,
     pub pending_marker_jump: Option<PendingJumpSummary>,
+    pub active_vamp: Option<ActiveVampSummary>,
     pub musical_position: MusicalPositionSummary,
     pub transport_clock: TransportClockSummary,
     pub last_drift_sample: Option<TransportDriftSummary>,
@@ -108,6 +109,13 @@ pub struct PendingJumpSummary {
     pub trigger: String,
     pub execute_at_seconds: f64,
     pub transition: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveVampSummary {
+    pub start_seconds: f64,
+    pub end_seconds: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -324,6 +332,13 @@ pub(crate) fn pending_jump_to_summary(pending_jump: &PendingMarkerJump) -> Pendi
         trigger: pending_jump_trigger_label(&pending_jump.trigger),
         execute_at_seconds: pending_jump.execute_at_seconds,
         transition: transition_type_label(&pending_jump.transition),
+    }
+}
+
+pub(crate) fn active_vamp_to_summary(active_vamp: &ActiveVamp) -> ActiveVampSummary {
+    ActiveVampSummary {
+        start_seconds: active_vamp.start_seconds,
+        end_seconds: active_vamp.end_seconds,
     }
 }
 

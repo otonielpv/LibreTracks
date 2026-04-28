@@ -251,6 +251,16 @@ export async function cancelMarkerJump(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("cancel_marker_jump");
 }
 
+export async function toggleVamp(
+  mode: "section" | "bars",
+  bars?: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("toggle_vamp", {
+    mode,
+    bars,
+  });
+}
+
 export async function moveClip(
   clipId: string,
   timelineStartSeconds: number,

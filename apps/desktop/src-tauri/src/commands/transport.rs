@@ -4,7 +4,7 @@ use crate::commands::events::emit_transport_lifecycle_event;
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
 use crate::state::DesktopState;
-use libretracks_audio::{JumpTrigger, TransitionType};
+use libretracks_audio::{JumpTrigger, TransitionType, VampMode};
 
 #[tauri::command]
 pub fn get_transport_snapshot(state: State<'_, DesktopState>) -> Result<TransportSnapshot, String> {
@@ -145,6 +145,24 @@ pub fn cancel_marker_jump(state: State<'_, DesktopState>) -> Result<TransportSna
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+pub fn toggle_vamp(
+    mode: String,
+    bars: Option<u32>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    let vamp_mode = parse_vamp_mode(&mode, bars).map_err(|error| error.to_string())?;
+
+    session
+        .toggle_vamp(vamp_mode, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 pub(crate) fn parse_jump_trigger(
     trigger: &str,
     bars: Option<u32>,
@@ -171,6 +189,16 @@ pub(crate) fn parse_transition_type(
         }),
         other => Err(DesktopError::AudioCommand(format!(
             "unknown transition type: {other}"
+        ))),
+    }
+}
+
+pub(crate) fn parse_vamp_mode(mode: &str, bars: Option<u32>) -> Result<VampMode, DesktopError> {
+    match mode {
+        "section" => Ok(VampMode::Section),
+        "bars" => Ok(VampMode::Bars(bars.unwrap_or(4).max(1))),
+        other => Err(DesktopError::AudioCommand(format!(
+            "unknown vamp mode: {other}"
         ))),
     }
 }

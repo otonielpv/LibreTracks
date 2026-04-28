@@ -7,7 +7,7 @@ use libretracks_remote::{
 use tauri::{App, AppHandle, Manager};
 
 use crate::{
-    commands::transport::{parse_jump_trigger, parse_transition_type},
+    commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
     commands::events::emit_transport_lifecycle_event,
     state::DesktopState,
 };
@@ -174,6 +174,10 @@ async fn run_remote_command_bridge(
                 parse_jump_trigger(trigger, *bars).unwrap_or(JumpTrigger::Immediate),
                 parse_transition_type(transition.as_deref(), *duration_seconds)
                     .unwrap_or(TransitionType::Instant),
+                &state.audio,
+            ),
+            RemoteCommand::ToggleVamp { mode, bars } => session.toggle_vamp(
+                parse_vamp_mode(mode, *bars).unwrap_or(libretracks_audio::VampMode::Section),
                 &state.audio,
             ),
             RemoteCommand::CancelMarkerJump => session.cancel_marker_jump(&state.audio),

@@ -1,4 +1,9 @@
-import type { SectionMarkerSummary, SongRegionSummary, TempoMarkerSummary } from "../desktopApi";
+import type {
+  ActiveVampSummary,
+  SectionMarkerSummary,
+  SongRegionSummary,
+  TempoMarkerSummary,
+} from "../desktopApi";
 import type { TimelineGrid } from "../timelineMath";
 import { screenXToSeconds, secondsToScreenX } from "../timelineMath";
 
@@ -72,7 +77,40 @@ export type RulerBackgroundLayerArgs = {
   timelineGrid: TimelineGrid;
   regions: SongRegionSummary[];
   selectedRegionId: string | null;
+  activeVamp: ActiveVampSummary | null;
 };
+
+function drawActiveVampRange(
+  context: CanvasRenderingContext2D,
+  activeVamp: ActiveVampSummary,
+  width: number,
+  height: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+) {
+  const left = secondsToScreenX(activeVamp.startSeconds, cameraX, pixelsPerSecond);
+  const right = secondsToScreenX(activeVamp.endSeconds, cameraX, pixelsPerSecond);
+  const highlightLeft = Math.max(0, left);
+  const highlightRight = Math.min(width, right);
+  const highlightWidth = highlightRight - highlightLeft;
+
+  if (highlightWidth <= 0) {
+    return;
+  }
+
+  context.save();
+  context.fillStyle = "rgba(255, 176, 76, 0.18)";
+  context.strokeStyle = "rgba(255, 176, 76, 0.78)";
+  context.lineWidth = 1;
+  context.fillRect(highlightLeft, 0, highlightWidth, height);
+  context.beginPath();
+  context.moveTo(highlightLeft + 0.5, 0);
+  context.lineTo(highlightLeft + 0.5, height);
+  context.moveTo(highlightRight - 0.5, 0);
+  context.lineTo(highlightRight - 0.5, height);
+  context.stroke();
+  context.restore();
+}
 
 export function drawGridLines(
   context: CanvasRenderingContext2D,
@@ -360,6 +398,17 @@ export function drawRulerBackgroundLayer(
 ) {
   context.fillStyle = "#2a2a2a";
   context.fillRect(0, 0, args.width, args.height);
+
+  if (args.activeVamp) {
+    drawActiveVampRange(
+      context,
+      args.activeVamp,
+      args.width,
+      args.height,
+      args.cameraX,
+      args.pixelsPerSecond,
+    );
+  }
 
   for (const region of args.regions) {
     drawRulerRegion(

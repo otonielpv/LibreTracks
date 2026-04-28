@@ -365,11 +365,33 @@ button {
   padding: 0.85rem 0 0.2rem;
 }
 
+.transport-control-deck {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.8rem;
+}
+
+.transport-control-card {
+  flex: 1 1 19rem;
+  min-width: 18rem;
+  padding: 0.25rem 0.1rem;
+}
+
+.transport-control-card-song {
+  flex-basis: 24rem;
+}
+
+.transport-control-card-region {
+  flex-basis: 100%;
+}
+
 .jump-toolbar {
   display: grid;
-  grid-template-columns: auto auto auto minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, max-content));
   align-items: center;
   gap: 0.55rem;
+  justify-content: flex-start;
   padding-top: 0.25rem;
 }
 
@@ -430,8 +452,51 @@ button {
   padding: 0.36rem 0.55rem;
 }
 
+.jump-bars-field select {
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.06);
+  color: var(--text);
+  padding: 0.36rem 0.55rem;
+}
+
+.bars-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.bars-stepper button {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.06);
+  color: var(--text);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.bars-stepper input {
+  width: 2.9rem;
+  text-align: center;
+  pointer-events: none;
+}
+
 .jump-cancel-button:disabled {
   opacity: 0.45;
+}
+
+.vamp-toggle-button {
+  background: linear-gradient(135deg, rgb(107 63 22 / 0.9), rgb(54 35 21 / 0.92));
+  color: rgb(255 225 185);
+  border: 1px solid rgb(255 176 76 / 0.2);
+}
+
+.vamp-toggle-button.is-active {
+  color: rgb(255 245 230);
+  border-color: rgb(255 176 76 / 0.5);
+  box-shadow: 0 0 18px rgb(255 176 76 / 0.18);
 }
 
 .pending-jump-card {
@@ -584,6 +649,25 @@ button {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.pending-vamp-card {
+  border-color: rgb(255 176 76 / 0.24);
+  background: rgb(255 176 76 / 0.08);
+}
+
+.pending-vamp-card strong {
+  color: rgb(255 214 156);
+}
+
+.timeline-vamp-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgb(255 176 76 / 0.85);
+  border-right: 1px solid rgb(255 176 76 / 0.85);
+  background: rgb(255 176 76 / 0.14);
+  pointer-events: none;
 }
 
 .pan-section {
@@ -834,6 +918,16 @@ button {
   .jump-toolbar {
     grid-template-columns: 1fr;
     gap: 0.45rem;
+  }
+
+  .transport-control-deck {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .transport-control-card {
+    min-width: 0;
+    padding: 0;
   }
 
   .jump-mode-group {

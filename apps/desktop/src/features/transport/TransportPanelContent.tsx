@@ -67,6 +67,7 @@ import {
   seekTransport,
   splitClip,
   stopTransport,
+  toggleVamp,
   undoAction,
   updateAudioSettings,
   updateSectionMarker,
@@ -125,6 +126,7 @@ import {
   type GlobalJumpMode,
   type SongJumpTrigger,
   type SongTransitionMode,
+  type VampMode,
 } from "./uiStore";
 
 const HEADER_WIDTH = 260;
@@ -776,6 +778,8 @@ export function TransportPanelContent() {
   const songJumpTrigger = useTimelineUIStore((state) => state.songJumpTrigger);
   const songJumpBars = useTimelineUIStore((state) => state.songJumpBars);
   const songTransitionMode = useTimelineUIStore((state) => state.songTransitionMode);
+  const vampMode = useTimelineUIStore((state) => state.vampMode);
+  const vampBars = useTimelineUIStore((state) => state.vampBars);
   const zoomLevel = useTimelineUIStore((state) => state.zoomLevel);
   const trackHeight = useTimelineUIStore((state) => state.trackHeight);
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
@@ -802,6 +806,8 @@ export function TransportPanelContent() {
   const setSongJumpTrigger = useTimelineUIStore((state) => state.setSongJumpTrigger);
   const setSongJumpBars = useTimelineUIStore((state) => state.setSongJumpBars);
   const setSongTransitionMode = useTimelineUIStore((state) => state.setSongTransitionMode);
+  const setVampMode = useTimelineUIStore((state) => state.setVampMode);
+  const setVampBars = useTimelineUIStore((state) => state.setVampBars);
   const setZoomLevel = useTimelineUIStore((state) => state.setZoomLevel);
   const setTrackHeight = useTimelineUIStore((state) => state.setTrackHeight);
   const setSnapEnabled = useTimelineUIStore((state) => state.setSnapEnabled);
@@ -2724,6 +2730,7 @@ export function TransportPanelContent() {
   const pendingMarkerJump = pendingMarkerJumpSignature
     ? snapshotRef.current?.pendingMarkerJump ?? null
     : null;
+  const activeVamp = snapshotRef.current?.activeVamp ?? null;
   const renderedClipsByTrack = useMemo(
     () => mergeOptimisticClipsByTrack(clipsByTrack, optimisticClipOperations),
     [clipsByTrack, optimisticClipOperations],
@@ -2859,6 +2866,22 @@ export function TransportPanelContent() {
       when: whenLabel,
       how: howLabel,
     }));
+
+    return nextSnapshot;
+  }
+
+  async function toggleTimelineVamp() {
+    const mode: VampMode = vampMode;
+    const nextSnapshot = await toggleVamp(mode, mode === "bars" ? vampBars : undefined);
+    applyPlaybackSnapshot(nextSnapshot);
+
+    setStatus(
+      nextSnapshot.activeVamp
+        ? mode === "bars"
+          ? t("transport.status.vampBarsEnabled", { count: vampBars })
+          : t("transport.status.vampSectionEnabled")
+        : t("transport.status.vampDisabled"),
+    );
 
     return nextSnapshot;
   }
@@ -4846,6 +4869,9 @@ export function TransportPanelContent() {
           songJumpTrigger={songJumpTrigger}
           songJumpBars={songJumpBars}
           songTransitionMode={songTransitionMode}
+          vampMode={vampMode}
+          vampBars={vampBars}
+          isVampActive={Boolean(activeVamp)}
           pendingMarkerJumpLabel={
             pendingMarkerJump
               ? t("transport.shell.pendingJump", {
@@ -4864,6 +4890,13 @@ export function TransportPanelContent() {
           onSongJumpTriggerChange={setSongJumpTrigger}
           onSongJumpBarsChange={setSongJumpBars}
           onSongTransitionModeChange={setSongTransitionMode}
+          onVampModeChange={setVampMode}
+          onVampBarsChange={setVampBars}
+          onToggleVamp={() =>
+            void runAction(async () => {
+              await toggleTimelineVamp();
+            })
+          }
           onCancelPendingJump={() =>
             void runAction(async () => {
               const nextSnapshot = await cancelMarkerJump();
@@ -4916,6 +4949,7 @@ export function TransportPanelContent() {
                 selectedRegionId={selectedRegionId}
                 selectedSectionId={selectedSectionId}
                 pendingMarkerJump={pendingMarkerJump}
+                activeVamp={activeVamp}
                 displayPositionSecondsRef={displayPositionSecondsRef}
                 playheadDragRef={playheadDragRef}
                 clipPreviewSecondsRef={clipPreviewSecondsRef}

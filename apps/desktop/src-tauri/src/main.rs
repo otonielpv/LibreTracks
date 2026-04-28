@@ -68,6 +68,7 @@ fn main() {
             commands::transport::schedule_marker_jump,
             commands::transport::schedule_region_jump,
             commands::transport::cancel_marker_jump,
+            commands::transport::toggle_vamp,
             commands::timeline::move_clip,
             commands::timeline::move_clip_live,
             commands::timeline::delete_clip,

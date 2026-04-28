@@ -36,6 +36,11 @@ export type PendingJumpSummary = {
   transition: TransitionTypeLabel;
 };
 
+export type ActiveVampSummary = {
+  startSeconds: number;
+  endSeconds: number;
+};
+
 export type TrackSummary = {
   id: string;
   name: string;
@@ -187,6 +192,7 @@ export type TransportSnapshot = {
   positionSeconds: number;
   currentMarker?: SectionMarkerSummary | null;
   pendingMarkerJump?: PendingJumpSummary | null;
+  activeVamp?: ActiveVampSummary | null;
   musicalPosition?: {
     barNumber: number;
     beatInBar: number;

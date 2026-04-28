@@ -14,6 +14,7 @@ import type {
   TempoMarkerSummary,
   TrackKind,
   TrackSummary,
+  TransitionTypeLabel,
   TransportLifecycleEvent,
   TransportSnapshot,
   WaveformReadyEvent,
@@ -27,6 +28,7 @@ type DesktopApiMockState = {
   audioOutputDevices: AudioOutputDevices;
   libraryAssets: LibraryAssetSummary[];
   libraryFolders: string[];
+  activeVamp: TransportSnapshot["activeVamp"];
   pendingMarkerJump: PendingJumpSummary | null;
   playbackPositionSeconds: number;
   playbackState: PlaybackState;
@@ -328,6 +330,7 @@ function buildInitialState(): DesktopApiMockState {
     },
     libraryAssets,
     libraryFolders: [],
+    activeVamp: null,
     pendingMarkerJump: null,
     playbackPositionSeconds: 0,
     playbackState: "stopped",
@@ -445,6 +448,7 @@ function buildSnapshot(): TransportSnapshot {
     positionSeconds: state.playbackPositionSeconds,
     currentMarker,
     pendingMarkerJump: state.pendingMarkerJump ? clone(state.pendingMarkerJump) : null,
+    activeVamp: state.activeVamp ? clone(state.activeVamp) : null,
     musicalPosition,
     transportClock: {
       anchorPositionSeconds: state.playbackPositionSeconds,
@@ -684,10 +688,39 @@ export const testDesktopApiMock = {
     state.playbackState = "stopped";
     state.playbackPositionSeconds = 0;
     state.pendingMarkerJump = null;
+    state.activeVamp = null;
     return clone(buildSnapshot());
   },
   seekTransport: async (positionSeconds: number) => {
     state.playbackPositionSeconds = Math.max(0, positionSeconds);
+    return clone(buildSnapshot());
+  },
+  toggleVamp: async (mode: "section" | "bars", bars?: number) => {
+    if (state.activeVamp) {
+      state.activeVamp = null;
+      return clone(buildSnapshot());
+    }
+
+    if (mode === "section") {
+      const currentMarker =
+        [...state.song.sectionMarkers]
+          .reverse()
+          .find((marker) => state.playbackPositionSeconds >= marker.startSeconds) ?? null;
+      const startSeconds = currentMarker?.startSeconds ?? 0;
+      const endSeconds =
+        state.song.sectionMarkers.find((marker) => marker.startSeconds > startSeconds)?.startSeconds ??
+        state.song.durationSeconds;
+      state.activeVamp = { startSeconds, endSeconds };
+      return clone(buildSnapshot());
+    }
+
+    const safeBars = Math.max(1, Math.floor(bars ?? 4));
+    const secondsPerBar = (60 / Math.max(1, state.song.bpm)) * 4;
+    const startSeconds = Math.floor(state.playbackPositionSeconds / secondsPerBar) * secondsPerBar;
+    state.activeVamp = {
+      startSeconds,
+      endSeconds: startSeconds + secondsPerBar * safeBars,
+    };
     return clone(buildSnapshot());
   },
   scheduleMarkerJump: async (targetMarkerId: string, trigger: Exclude<JumpTriggerLabel, `after_bars:${number}`> | "after_bars", bars?: number) => {
@@ -731,7 +764,7 @@ export const testDesktopApiMock = {
       return clone(buildSnapshot());
     }
 
-    const transitionLabel =
+    const transitionLabel: TransitionTypeLabel =
       transition === "fade_out" ? `fade_out:${durationSeconds ?? 0.35}` : "instant";
     state.pendingMarkerJump = createPendingJump(
       {

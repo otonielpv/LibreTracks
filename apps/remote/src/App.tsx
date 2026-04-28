@@ -33,6 +33,7 @@ type RemoteView = "transport" | "mixer";
 type JumpMode = "immediate" | "next_marker" | "after_bars";
 type SongJumpTrigger = "immediate" | "region_end" | "after_bars";
 type SongTransitionMode = "instant" | "fade_out";
+type VampMode = "section" | "bars";
 
 type RemoteConnectionState = {
   status: ConnectionStatus;
@@ -79,10 +80,14 @@ type RemoteJumpState = {
   bars: number;
   songTrigger: SongJumpTrigger;
   songTransition: SongTransitionMode;
+  vampMode: VampMode;
+  vampBars: number;
   setMode: (mode: JumpMode) => void;
   setBars: (bars: number) => void;
   setSongTrigger: (mode: SongJumpTrigger) => void;
   setSongTransition: (mode: SongTransitionMode) => void;
+  setVampMode: (mode: VampMode) => void;
+  setVampBars: (bars: number) => void;
 };
 
 type FolderPalette = {
@@ -152,6 +157,8 @@ const useRemoteJumpStore = create<RemoteJumpState>()((set) => ({
   bars: 4,
   songTrigger: "immediate",
   songTransition: "instant",
+  vampMode: "section",
+  vampBars: 4,
   setMode: (mode) => {
     set({ mode });
   },
@@ -163,6 +170,12 @@ const useRemoteJumpStore = create<RemoteJumpState>()((set) => ({
   },
   setSongTransition: (songTransition) => {
     set({ songTransition });
+  },
+  setVampMode: (vampMode) => {
+    set({ vampMode });
+  },
+  setVampBars: (vampBars) => {
+    set({ vampBars: Math.max(1, Math.floor(vampBars) || 1) });
   },
 }));
 
@@ -213,6 +226,27 @@ function formatJumpModeLabel(mode: JumpMode, bars: number) {
   }
 
   return `${bars} ${STRINGS.bars.toLowerCase()}`;
+}
+
+function StepperField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="jump-bars-field">
+      <span>{label}</span>
+      <div className="bars-stepper" role="group" aria-label={label}>
+        <button type="button" onClick={() => onChange(Math.max(1, value - 1))}>-</button>
+        <input type="number" min={1} step={1} value={value} readOnly />
+        <button type="button" onClick={() => onChange(value + 1)}>+</button>
+      </div>
+    </label>
+  );
 }
 
 function magnetizePanValue(value: number) {
@@ -449,11 +483,13 @@ function SharedTimeline({
   positionSeconds,
   pendingJumpTargetId,
   pendingJump,
+  activeVamp,
 }: {
   songView: SongView | null;
   positionSeconds: number;
   pendingJumpTargetId: string | null;
   pendingJump: TransportSnapshot["pendingMarkerJump"];
+  activeVamp: TransportSnapshot["activeVamp"];
 }) {
   const rulerRef = useRef<HTMLDivElement | null>(null);
   const viewportWidth = typeof window !== "undefined" ? window.innerWidth - 32 : 1200;
@@ -480,6 +516,16 @@ function SharedTimeline({
   const pendingJumpX =
     pendingJump && Number.isFinite(pendingJump.executeAtSeconds)
       ? secondsToAbsoluteX(pendingJump.executeAtSeconds, CHROME_TIMELINE_PIXELS_PER_SECOND)
+      : null;
+  const activeVampStyle =
+    activeVamp && Number.isFinite(activeVamp.startSeconds) && Number.isFinite(activeVamp.endSeconds)
+      ? {
+          left: `${secondsToAbsoluteX(activeVamp.startSeconds, CHROME_TIMELINE_PIXELS_PER_SECOND)}px`,
+          width: `${Math.max(
+            2,
+            (activeVamp.endSeconds - activeVamp.startSeconds) * CHROME_TIMELINE_PIXELS_PER_SECOND,
+          )}px`,
+        }
       : null;
 
   useEffect(() => {
@@ -527,6 +573,7 @@ function SharedTimeline({
         </div>
 
         <div className="timeline-grid">
+          {activeVampStyle ? <span className="timeline-vamp-range" style={activeVampStyle} /> : null}
           {grid.markers.map((marker) => (
             <span
               key={`grid-${marker.seconds}`}
@@ -654,6 +701,7 @@ function TransportChrome() {
         positionSeconds={readout.positionSeconds}
         pendingJumpTargetId={pendingJumpTargetId}
         pendingJump={snapshot?.pendingMarkerJump ?? null}
+        activeVamp={snapshot?.activeVamp ?? null}
       />
     </section>
   );
@@ -708,14 +756,19 @@ function TransportView() {
   const jumpBars = useRemoteJumpStore((state) => state.bars);
   const songTrigger = useRemoteJumpStore((state) => state.songTrigger);
   const songTransition = useRemoteJumpStore((state) => state.songTransition);
+  const vampMode = useRemoteJumpStore((state) => state.vampMode);
+  const vampBars = useRemoteJumpStore((state) => state.vampBars);
   const setJumpMode = useRemoteJumpStore((state) => state.setMode);
   const setJumpBars = useRemoteJumpStore((state) => state.setBars);
   const setSongTrigger = useRemoteJumpStore((state) => state.setSongTrigger);
   const setSongTransition = useRemoteJumpStore((state) => state.setSongTransition);
+  const setVampMode = useRemoteJumpStore((state) => state.setVampMode);
+  const setVampBars = useRemoteJumpStore((state) => state.setVampBars);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const markers = songView?.sectionMarkers ?? [];
   const regions = songView?.regions ?? [];
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
+  const activeVamp = snapshot?.activeVamp ?? null;
 
   useEffect(() => {
     if (!regions.length) {
@@ -767,128 +820,162 @@ function TransportView() {
     });
   };
 
+  const toggleVamp = () => {
+    sendCommand({
+      cmd: "toggleVamp",
+      mode: vampMode,
+      bars: vampMode === "bars" ? vampBars : undefined,
+    });
+  };
+
   return (
     <section className="remote-panel">
-      <div className="jump-toolbar">
-        <div className="jump-mode-group" role="group" aria-label={STRINGS.jump}>
-          <button
-            className={jumpMode === "immediate" ? "is-active" : ""}
-            onClick={() => setJumpMode("immediate")}
-          >
-            {STRINGS.immediate}
-          </button>
-          <button
-            className={jumpMode === "after_bars" ? "is-active" : ""}
-            onClick={() => setJumpMode("after_bars")}
-          >
-            {STRINGS.bars}
-          </button>
-          <button
-            className={jumpMode === "next_marker" ? "is-active" : ""}
-            onClick={() => setJumpMode("next_marker")}
-          >
-            {STRINGS.next}
-          </button>
-        </div>
+      <div className="transport-control-deck">
+        <div className="transport-control-card">
+          <div className="jump-toolbar">
+            <div className="jump-mode-group" role="group" aria-label={STRINGS.jump}>
+              <button
+                className={jumpMode === "immediate" ? "is-active" : ""}
+                onClick={() => setJumpMode("immediate")}
+              >
+                {STRINGS.immediate}
+              </button>
+              <button
+                className={jumpMode === "after_bars" ? "is-active" : ""}
+                onClick={() => setJumpMode("after_bars")}
+              >
+                {STRINGS.bars}
+              </button>
+              <button
+                className={jumpMode === "next_marker" ? "is-active" : ""}
+                onClick={() => setJumpMode("next_marker")}
+              >
+                {STRINGS.next}
+              </button>
+            </div>
 
-        {jumpMode === "after_bars" ? (
-          <label className="jump-bars-field">
-            <span>{STRINGS.bars}</span>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={jumpBars}
-              onChange={(event) => setJumpBars(Number(event.currentTarget.value))}
-            />
-          </label>
-        ) : null}
+            {jumpMode === "after_bars" ? (
+              <StepperField label={STRINGS.bars} value={jumpBars} onChange={setJumpBars} />
+            ) : null}
 
-        <button
-          className="jump-cancel-button"
-          disabled={!pendingJump}
-          onClick={() => {
-            if (pendingJump) {
-              cancelJump();
-            }
-          }}
-        >
-          {STRINGS.cancelJump}
-        </button>
-
-        {pendingJump ? (
-          <div className="pending-jump-card">
-            <span>{STRINGS.pending}</span>
-            <strong>{pendingJump.targetMarkerName}</strong>
-            <small>{formatJumpModeLabel(pendingJumpMode.mode, pendingJumpMode.bars ?? jumpBars)}</small>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="jump-toolbar">
-        <label className="jump-bars-field">
-          <span>{STRINGS.songTrigger}</span>
-          <select
-            value={songTrigger}
-            onChange={(event) => setSongTrigger(event.currentTarget.value as SongJumpTrigger)}
-          >
-            <option value="immediate">{STRINGS.immediate}</option>
-            <option value="region_end">{STRINGS.songEnd}</option>
-            <option value="after_bars">{STRINGS.bars}</option>
-          </select>
-        </label>
-
-        {songTrigger === "after_bars" ? (
-          <label className="jump-bars-field">
-            <span>{STRINGS.bars}</span>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={jumpBars}
-              onChange={(event) => setJumpBars(Number(event.currentTarget.value))}
-            />
-          </label>
-        ) : null}
-
-        <label className="jump-bars-field">
-          <span>{STRINGS.songTransition}</span>
-          <select
-            value={songTransition}
-            onChange={(event) =>
-              setSongTransition(event.currentTarget.value as SongTransitionMode)
-            }
-          >
-            <option value="instant">{STRINGS.cleanCut}</option>
-            <option value="fade_out">{STRINGS.fadeOut}</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="region-actions-row">
-        <div className="region-carousel">
-          {regions.map((region) => (
-            <button
-              key={region.id}
-              className={`region-chip ${selectedRegionId === region.id ? "is-active" : ""}`}
-              onClick={() => {
-                setSelectedRegionId(region.id);
-              }}
-            >
-              {region.name}
-            </button>
-          ))}
-        </div>
-        {selectedRegion ? (
-          <div className="selected-region-actions">
             <button
               className="jump-cancel-button"
-              onClick={() => scheduleRegionJump(selectedRegion.id)}
+              disabled={!pendingJump}
+              onClick={() => {
+                if (pendingJump) {
+                  cancelJump();
+                }
+              }}
             >
-              {STRINGS.jumpToSong}
+              {STRINGS.cancelJump}
             </button>
+
+            {pendingJump ? (
+              <div className="pending-jump-card">
+                <span>{STRINGS.pending}</span>
+                <strong>{pendingJump.targetMarkerName}</strong>
+                <small>{formatJumpModeLabel(pendingJumpMode.mode, pendingJumpMode.bars ?? jumpBars)}</small>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
+
+        <div className="transport-control-card">
+          <div className="jump-toolbar">
+            <label className="jump-bars-field">
+              <span>{STRINGS.vampMode}</span>
+              <select
+                value={vampMode}
+                onChange={(event) => setVampMode(event.currentTarget.value as VampMode)}
+              >
+                <option value="section">{STRINGS.section}</option>
+                <option value="bars">{STRINGS.bars}</option>
+              </select>
+            </label>
+
+            {vampMode === "bars" ? (
+              <StepperField label={STRINGS.vampBars} value={vampBars} onChange={setVampBars} />
+            ) : null}
+
+            <button
+              className={`jump-cancel-button vamp-toggle-button ${activeVamp ? "is-active" : ""}`}
+              onClick={toggleVamp}
+            >
+              {STRINGS.vamp}
+            </button>
+
+            {activeVamp ? (
+              <div className="pending-jump-card pending-vamp-card">
+                <span>{STRINGS.vamp}</span>
+                <strong>
+                  {formatTimecode(activeVamp.startSeconds)} - {formatTimecode(activeVamp.endSeconds)}
+                </strong>
+                <small>{vampMode === "bars" ? `${vampBars} ${STRINGS.bars.toLowerCase()}` : STRINGS.section}</small>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="transport-control-card transport-control-card-song">
+          <div className="jump-toolbar">
+            <label className="jump-bars-field">
+              <span>{STRINGS.songTrigger}</span>
+              <select
+                value={songTrigger}
+                onChange={(event) => setSongTrigger(event.currentTarget.value as SongJumpTrigger)}
+              >
+                <option value="immediate">{STRINGS.immediate}</option>
+                <option value="region_end">{STRINGS.songEnd}</option>
+                <option value="after_bars">{STRINGS.bars}</option>
+              </select>
+            </label>
+
+            {songTrigger === "after_bars" ? (
+              <StepperField label={STRINGS.bars} value={jumpBars} onChange={setJumpBars} />
+            ) : null}
+
+            <label className="jump-bars-field">
+              <span>{STRINGS.songTransition}</span>
+              <select
+                value={songTransition}
+                onChange={(event) =>
+                  setSongTransition(event.currentTarget.value as SongTransitionMode)
+                }
+              >
+                <option value="instant">{STRINGS.cleanCut}</option>
+                <option value="fade_out">{STRINGS.fadeOut}</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="transport-control-card transport-control-card-region">
+          <div className="region-actions-row">
+            <div className="region-carousel">
+              {regions.map((region) => (
+                <button
+                  key={region.id}
+                  className={`region-chip ${selectedRegionId === region.id ? "is-active" : ""}`}
+                  onClick={() => {
+                    setSelectedRegionId(region.id);
+                  }}
+                >
+                  {region.name}
+                </button>
+              ))}
+            </div>
+            {selectedRegion ? (
+              <div className="selected-region-actions">
+                <button
+                  className="jump-cancel-button"
+                  onClick={() => scheduleRegionJump(selectedRegion.id)}
+                >
+                  {STRINGS.jumpToSong}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <div className="marker-grid">

@@ -2166,6 +2166,23 @@ body {
   color: #57f1db;
 }
 
+.lt-bottom-controls .lt-vamp-button {
+  min-width: 4.9rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #33241a, #201f1f);
+  color: #ffd9b0;
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 76, 0.18);
+}
+
+.lt-bottom-controls .lt-vamp-button:hover,
+.lt-bottom-controls .lt-vamp-button.is-active {
+  background: linear-gradient(135deg, #6b3f16, #2f2218);
+  color: #fff0d8;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 176, 76, 0.48),
+    0 0 16px rgba(255, 176, 76, 0.22);
+}
+
 .lt-bottom-controls button:disabled {
   opacity: 0.45;
   cursor: not-allowed;

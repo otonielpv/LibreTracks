@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import type {
+  ActiveVampSummary,
   ClipSummary,
   PendingJumpSummary,
   SongRegionSummary,
@@ -53,6 +54,7 @@ type TimelineCanvasPaneProps = {
   selectedRegionId: string | null;
   selectedSectionId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
+  activeVamp: ActiveVampSummary | null;
   displayPositionSecondsRef: MutableRefObject<number>;
   playheadDragRef: MutableRefObject<{ pointerId: number; currentSeconds: number } | null>;
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
@@ -122,6 +124,7 @@ export function TimelineCanvasPane({
   selectedRegionId,
   selectedSectionId,
   pendingMarkerJump,
+  activeVamp,
   displayPositionSecondsRef,
   playheadDragRef,
   clipPreviewSecondsRef,
@@ -186,6 +189,7 @@ export function TimelineCanvasPane({
             selectedRegionId={selectedRegionId}
             selectedMarkerId={selectedSectionId}
             pendingMarkerJump={pendingMarkerJump}
+            activeVamp={activeVamp}
             playheadSecondsRef={displayPositionSecondsRef}
             playheadDragRef={playheadDragRef}
             interactionContainerRef={rulerTrackRef}

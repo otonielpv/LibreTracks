@@ -93,6 +93,10 @@ pub enum RemoteCommand {
         transition: Option<String>,
         duration_seconds: Option<f64>,
     },
+    ToggleVamp {
+        mode: String,
+        bars: Option<u32>,
+    },
     CancelMarkerJump,
     UpdateTrackMixLive {
         track_id: String,

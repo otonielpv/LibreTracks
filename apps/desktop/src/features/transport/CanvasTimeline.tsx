@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, type MutableRefObject, type ReactNode, type RefObject } from "react";
 
 import type {
+  ActiveVampSummary,
   ClipSummary,
   PendingJumpSummary,
   SectionMarkerSummary,
@@ -43,6 +44,7 @@ type RulerCanvasProps = {
   selectedRegionId: string | null;
   selectedMarkerId: string | null;
   pendingMarkerJump: PendingJumpSummary | null;
+  activeVamp: ActiveVampSummary | null;
   playheadSecondsRef: MutableRefObject<number>;
   playheadDragRef: MutableRefObject<{ currentSeconds: number } | null>;
   interactionContainerRef: RefObject<HTMLDivElement | null>;
@@ -201,6 +203,7 @@ export function TimelineRulerCanvas({
   selectedRegionId,
   selectedMarkerId,
   pendingMarkerJump,
+  activeVamp,
   playheadSecondsRef,
   playheadDragRef,
   interactionContainerRef,
@@ -226,6 +229,7 @@ export function TimelineRulerCanvas({
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
+    activeVamp,
     playheadDragRef,
   });
   const sceneVersionRef = useRef(0);
@@ -241,6 +245,7 @@ export function TimelineRulerCanvas({
     selectedRegionId,
     selectedMarkerId,
     pendingMarkerJump,
+    activeVamp,
     playheadDragRef,
   };
 
@@ -262,6 +267,9 @@ export function TimelineRulerCanvas({
   const pendingJumpSignature = pendingMarkerJump
     ? `${pendingMarkerJump.targetMarkerId}:${pendingMarkerJump.executeAtSeconds}`
     : "";
+  const activeVampSignature = activeVamp
+    ? `${activeVamp.startSeconds}:${activeVamp.endSeconds}`
+    : "";
 
   useEffect(() => {
     sceneVersionRef.current += 1;
@@ -271,6 +279,7 @@ export function TimelineRulerCanvas({
     markersSignature,
     tempoMarkersSignature,
     pendingJumpSignature,
+    activeVampSignature,
     pixelsPerSecond,
     selectedRegionId,
     selectedMarkerId,
@@ -368,6 +377,7 @@ export function TimelineRulerCanvas({
               timelineGrid: snapshot.timelineGrid,
               regions: snapshot.regions,
               selectedRegionId: snapshot.selectedRegionId,
+              activeVamp: snapshot.activeVamp,
             });
           }
 

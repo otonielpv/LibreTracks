@@ -4,6 +4,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 export type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
 export type SongJumpTrigger = "immediate" | "region_end" | "after_bars";
 export type SongTransitionMode = "instant" | "fade_out";
+export type VampMode = "section" | "bars";
 
 export const TIMELINE_DEFAULT_ZOOM_LEVEL = 7;
 export const TIMELINE_DEFAULT_TRACK_HEIGHT = 94;
@@ -13,6 +14,8 @@ export const TIMELINE_DEFAULT_GLOBAL_JUMP_BARS = 4;
 export const TIMELINE_DEFAULT_SONG_JUMP_TRIGGER: SongJumpTrigger = "immediate";
 export const TIMELINE_DEFAULT_SONG_JUMP_BARS = 4;
 export const TIMELINE_DEFAULT_SONG_TRANSITION_MODE: SongTransitionMode = "instant";
+export const TIMELINE_DEFAULT_VAMP_MODE: VampMode = "section";
+export const TIMELINE_DEFAULT_VAMP_BARS = 4;
 
 type TimelineUIState = {
   cameraX: number;
@@ -27,6 +30,8 @@ type TimelineUIState = {
   songJumpTrigger: SongJumpTrigger;
   songJumpBars: number;
   songTransitionMode: SongTransitionMode;
+  vampMode: VampMode;
+  vampBars: number;
   setCameraX: (cameraX: number) => void;
   setZoomLevel: (zoomLevel: number | ((currentZoomLevel: number) => number)) => void;
   setTrackHeight: (trackHeight: number | ((currentTrackHeight: number) => number)) => void;
@@ -44,6 +49,8 @@ type TimelineUIState = {
   setSongJumpTrigger: (trigger: SongJumpTrigger) => void;
   setSongJumpBars: (bars: number) => void;
   setSongTransitionMode: (mode: SongTransitionMode) => void;
+  setVampMode: (mode: VampMode) => void;
+  setVampBars: (bars: number) => void;
 };
 
 export const useTimelineUIStore = create<TimelineUIState>()(
@@ -60,6 +67,8 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     songJumpTrigger: TIMELINE_DEFAULT_SONG_JUMP_TRIGGER,
     songJumpBars: TIMELINE_DEFAULT_SONG_JUMP_BARS,
     songTransitionMode: TIMELINE_DEFAULT_SONG_TRANSITION_MODE,
+    vampMode: TIMELINE_DEFAULT_VAMP_MODE,
+    vampBars: TIMELINE_DEFAULT_VAMP_BARS,
     setCameraX: (cameraX) => {
       set({ cameraX: Number.isFinite(cameraX) ? Math.max(0, cameraX) : 0 });
     },
@@ -135,6 +144,12 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     setSongTransitionMode: (songTransitionMode) => {
       set({ songTransitionMode });
+    },
+    setVampMode: (vampMode) => {
+      set({ vampMode });
+    },
+    setVampBars: (vampBars) => {
+      set({ vampBars: Math.max(1, Math.floor(vampBars) || 1) });
     },
   })),
 );
