@@ -119,6 +119,34 @@ function pendingJumpMatcher(markerName: string, trigger: string) {
   return textMatcher(interpolate(en.transport.shell.pendingJump, { markerName, trigger }));
 }
 
+async function chooseMarkerJumpMode(modeLabel: string) {
+  const markerJumpSettings = await screen.findByRole("button", {
+    name: textMatcher(`${en.timelineToolbar.markerJumpLabel} settings`),
+  });
+  await act(async () => {
+    fireEvent.click(markerJumpSettings);
+  });
+
+  const modeButton = await screen.findByRole("button", { name: textMatcher(modeLabel) });
+  await act(async () => {
+    fireEvent.click(modeButton);
+  });
+}
+
+async function chooseSongJumpTrigger(triggerLabel: string) {
+  const songSettings = await screen.findByRole("button", {
+    name: textMatcher(`${en.timelineToolbar.songTransitionLabel} settings`),
+  });
+  await act(async () => {
+    fireEvent.click(songSettings);
+  });
+
+  const triggerButton = await screen.findByRole("button", { name: textMatcher(triggerLabel) });
+  await act(async () => {
+    fireEvent.click(triggerButton);
+  });
+}
+
 beforeEach(async () => {
   const { resetTestDesktopApiMock } = await import("./testDesktopApiMock");
   resetTestDesktopApiMock();
@@ -876,7 +904,7 @@ describe("App", () => {
   it("shows the marker context menu on right click", async () => {
     await renderApp();
 
-    const introSection = await screen.findByRole("button", { name: "Intro" });
+    const introSection = await screen.findByRole("button", { name: /^Intro\b/i });
     await act(async () => {
       fireEvent.contextMenu(introSection, { clientX: 220, clientY: 120 });
     });
@@ -892,12 +920,7 @@ describe("App", () => {
   it("triggers marker jump with digit keys and cancels with escape", async () => {
     await renderApp();
 
-    const nextMarkerButton = await screen.findByRole("button", {
-      name: textMatcher(en.transport.jumpMode.nextMarker),
-    });
-    await act(async () => {
-      fireEvent.click(nextMarkerButton);
-    });
+    await chooseMarkerJumpMode(en.transport.jumpMode.nextMarker);
 
     await act(async () => {
       fireEvent.keyDown(window, { code: "Digit2", key: "2" });
@@ -918,12 +941,7 @@ describe("App", () => {
   it("maps numpad 0 to the first marker", async () => {
     await renderApp();
 
-    const nextMarkerButton = await screen.findByRole("button", {
-      name: textMatcher(en.transport.jumpMode.nextMarker),
-    });
-    await act(async () => {
-      fireEvent.click(nextMarkerButton);
-    });
+    await chooseMarkerJumpMode(en.transport.jumpMode.nextMarker);
 
     await act(async () => {
       fireEvent.keyDown(window, { code: "Numpad0", key: "0" });
@@ -935,12 +953,7 @@ describe("App", () => {
   it("maps shift plus 0 to the first song region", async () => {
     await renderApp();
 
-    const regionEndButton = await screen.findByRole("button", {
-      name: textMatcher(en.transport.jumpMode.regionEnd),
-    });
-    await act(async () => {
-      fireEvent.click(regionEndButton);
-    });
+    await chooseSongJumpTrigger(en.transport.jumpMode.regionEnd);
 
     await act(async () => {
       fireEvent.keyDown(window, { code: "Digit0", key: "0", shiftKey: true });
@@ -955,15 +968,10 @@ describe("App", () => {
   it("overwrites the armed marker on click and cancels when clicked again", async () => {
     await renderApp();
 
-    const nextMarkerButton = await screen.findByRole("button", {
-      name: textMatcher(en.transport.jumpMode.nextMarker),
-    });
-    await act(async () => {
-      fireEvent.click(nextMarkerButton);
-    });
+    await chooseMarkerJumpMode(en.transport.jumpMode.nextMarker);
 
-    const introMarker = await screen.findByRole("button", { name: "Intro" });
-    const bridgeMarker = await screen.findByRole("button", { name: "Bridge" });
+    const introMarker = await screen.findByRole("button", { name: /^Intro\b/i });
+    const bridgeMarker = await screen.findByRole("button", { name: /^Bridge\b/i });
 
     await act(async () => {
       fireEvent.click(introMarker);
@@ -1011,14 +1019,9 @@ describe("App", () => {
 
     expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThanOrEqual(0);
 
-    const nextMarkerButton = await screen.findByRole("button", {
-      name: textMatcher(en.transport.jumpMode.nextMarker),
-    });
-    await act(async () => {
-      fireEvent.click(nextMarkerButton);
-    });
+    await chooseMarkerJumpMode(en.transport.jumpMode.nextMarker);
 
-    const introMarker = await screen.findByRole("button", { name: "Intro" });
+    const introMarker = await screen.findByRole("button", { name: /^Intro\b/i });
     await act(async () => {
       fireEvent.click(introMarker);
     });
@@ -1155,15 +1158,15 @@ describe("App", () => {
     const firstLane = container.querySelector(".lt-track-lane") as HTMLElement | null;
     expect(firstHeader).toBeTruthy();
     expect(firstLane).toBeTruthy();
-    expect((firstHeader as HTMLElement).style.height).toBe("94px");
-    expect((firstLane as HTMLElement).style.height).toBe("94px");
+    expect((firstHeader as HTMLElement).style.height).toBe(`${TIMELINE_DEFAULT_TRACK_HEIGHT}px`);
+    expect((firstLane as HTMLElement).style.height).toBe(`${TIMELINE_DEFAULT_TRACK_HEIGHT}px`);
 
     await act(async () => {
       fireEvent.wheel(firstHeader as HTMLElement, { deltaY: -100, ctrlKey: true });
     });
 
-    expect((firstHeader as HTMLElement).style.height).toBe("102px");
-    expect((firstLane as HTMLElement).style.height).toBe("102px");
+    expect((firstHeader as HTMLElement).style.height).toBe(`${TIMELINE_DEFAULT_TRACK_HEIGHT + 8}px`);
+    expect((firstLane as HTMLElement).style.height).toBe(`${TIMELINE_DEFAULT_TRACK_HEIGHT + 8}px`);
   });
 
   it("resizes track rows with ctrl plus wheel over the native timeline lane surface", async () => {
@@ -1174,13 +1177,13 @@ describe("App", () => {
     const trackList = container.querySelector(".lt-track-list") as HTMLElement | null;
     expect(firstHeader).toBeTruthy();
     expect(trackList).toBeTruthy();
-    expect((firstHeader as HTMLElement).style.height).toBe("94px");
+    expect((firstHeader as HTMLElement).style.height).toBe(`${TIMELINE_DEFAULT_TRACK_HEIGHT}px`);
 
     await act(async () => {
       fireEvent.wheel(trackList as HTMLElement, { deltaY: -100, ctrlKey: true });
     });
 
-    expect((firstHeader as HTMLElement).style.height).toBe("102px");
+    expect((firstHeader as HTMLElement).style.height).toBe(`${TIMELINE_DEFAULT_TRACK_HEIGHT + 8}px`);
   });
 
   it("creates a new audio track from the track context menu", async () => {
