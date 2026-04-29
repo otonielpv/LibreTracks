@@ -4,7 +4,8 @@ import { clamp, secondsToScreenX } from "../timelineMath";
 import { WaveformTileCache, WAVEFORM_TILE_WIDTH_PX } from "./WaveformTileCache";
 
 const TRACK_CLIP_TOP_PADDING = 1;
-const TRACK_CLIP_BOTTOM_PADDING = 1;
+const TRACK_CLIP_BOTTOM_PADDING = 0;
+const TRACK_CONTENT_TOP_OFFSET = 12;
 const waveformTileCache = new WaveformTileCache();
 
 export function drawTrackCanvasBackground(
@@ -100,14 +101,19 @@ export function drawTrackClipsLayer(
 
     if (track.kind === "folder") {
       context.fillStyle = "rgba(32, 31, 31, 0.78)";
-      context.fillRect(8, trackTop + 8, Math.max(0, snapshot.width - 16), snapshot.trackHeight - 16);
+      context.fillRect(
+        8,
+        trackTop + TRACK_CONTENT_TOP_OFFSET,
+        Math.max(0, snapshot.width - 16),
+        snapshot.trackHeight - TRACK_CONTENT_TOP_OFFSET - 2,
+      );
       context.fillStyle = "#bacac5";
       context.font = '600 10px "Space Grotesk", sans-serif';
       context.textBaseline = "middle";
       context.fillText(
         childCount ? `${childCount} tracks dentro del folder` : "Folder track",
         20,
-        trackTop + snapshot.trackHeight / 2,
+        trackTop + TRACK_CONTENT_TOP_OFFSET + (snapshot.trackHeight - TRACK_CONTENT_TOP_OFFSET) / 2 - 4,
       );
       continue;
     }
@@ -130,8 +136,11 @@ export function drawTrackClipsLayer(
       const clippedLeft = clamp(left, 0, snapshot.width);
       const clippedRight = clamp(right, 0, snapshot.width);
       const visibleWidth = Math.max(2, clippedRight - clippedLeft);
-      const clipTop = trackTop + TRACK_CLIP_TOP_PADDING;
-      const clipHeight = Math.max(12, snapshot.trackHeight - TRACK_CLIP_TOP_PADDING - TRACK_CLIP_BOTTOM_PADDING);
+      const clipTop = trackTop + TRACK_CONTENT_TOP_OFFSET + TRACK_CLIP_TOP_PADDING;
+      const clipHeight = Math.max(
+        12,
+        snapshot.trackHeight - TRACK_CONTENT_TOP_OFFSET - TRACK_CLIP_TOP_PADDING - TRACK_CLIP_BOTTOM_PADDING,
+      );
 
       context.fillStyle = "rgba(210, 212, 209, 0.92)";
       context.strokeStyle =

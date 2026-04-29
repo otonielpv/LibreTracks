@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
@@ -262,6 +262,47 @@ function StepperField({
         <button type="button" onClick={() => onChange(value + 1)}>+</button>
       </div>
     </label>
+  );
+}
+
+type RemoteSheetKey = "jump" | "vamp" | "song";
+
+function BottomSheet({
+  open,
+  title,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="sheet-backdrop" role="presentation" onClick={onClose}>
+      <section
+        className="sheet-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="sheet-header">
+          <div>
+            <small>{STRINGS.appTitle}</small>
+            <h2>{title}</h2>
+          </div>
+          <button type="button" className="sheet-close" onClick={onClose}>
+            X
+          </button>
+        </header>
+        <div className="sheet-body">{children}</div>
+      </section>
+    </div>
   );
 }
 
@@ -798,6 +839,7 @@ function TransportView() {
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
   const activeVamp = snapshot?.activeVamp ?? null;
   const metronomeVolume = settings?.metronomeVolume ?? 0.8;
+  const [activeSheet, setActiveSheet] = useState<RemoteSheetKey | null>(null);
 
   useEffect(() => {
     setMetronomeVolumeDraft(metronomeVolume);
@@ -861,143 +903,189 @@ function TransportView() {
     });
   };
 
+  const jumpModeSummary =
+    jumpMode === "after_bars"
+      ? `${jumpBars} ${STRINGS.bars.toLowerCase()}`
+      : jumpMode === "next_marker"
+        ? STRINGS.nextMarker
+        : STRINGS.immediate;
+
+  const vampSummary =
+    vampMode === "bars" ? `${vampBars} ${STRINGS.bars.toLowerCase()}` : STRINGS.section;
+
+  const songSummary = `${STRINGS.songTransition}: ${songTransition === "fade_out" ? STRINGS.fadeOut : STRINGS.cleanCut}`;
+
+  const renderJumpControls = () => (
+    <div className="jump-toolbar jump-toolbar-sheet">
+      <div className="jump-mode-group" role="group" aria-label={STRINGS.jump}>
+        <button
+          className={jumpMode === "immediate" ? "is-active" : ""}
+          onClick={() => setJumpMode("immediate")}
+        >
+          {STRINGS.immediate}
+        </button>
+        <button
+          className={jumpMode === "after_bars" ? "is-active" : ""}
+          onClick={() => setJumpMode("after_bars")}
+        >
+          {STRINGS.bars}
+        </button>
+        <button
+          className={jumpMode === "next_marker" ? "is-active" : ""}
+          onClick={() => setJumpMode("next_marker")}
+        >
+          {STRINGS.next}
+        </button>
+      </div>
+
+      {jumpMode === "after_bars" ? (
+        <StepperField label={STRINGS.bars} value={jumpBars} onChange={setJumpBars} />
+      ) : null}
+
+      <button
+        className="jump-cancel-button"
+        disabled={!pendingJump}
+        onClick={() => {
+          if (pendingJump) {
+            cancelJump();
+          }
+        }}
+      >
+        {STRINGS.cancelJump}
+      </button>
+
+      {pendingJump ? (
+        <div className="pending-jump-card">
+          <span>{STRINGS.pending}</span>
+          <strong>{pendingJump.targetMarkerName}</strong>
+          <small>{formatJumpModeLabel(pendingJumpMode.mode, pendingJumpMode.bars ?? jumpBars)}</small>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const renderVampControls = () => (
+    <div className="jump-toolbar jump-toolbar-sheet">
+      <label className="jump-bars-field">
+        <span>{STRINGS.vampMode}</span>
+        <select value={vampMode} onChange={(event) => setVampMode(event.currentTarget.value as VampMode)}>
+          <option value="section">{STRINGS.section}</option>
+          <option value="bars">{STRINGS.bars}</option>
+        </select>
+      </label>
+
+      {vampMode === "bars" ? (
+        <StepperField label={STRINGS.vampBars} value={vampBars} onChange={setVampBars} />
+      ) : null}
+
+      <button
+        className={`jump-cancel-button vamp-toggle-button ${activeVamp ? "is-active" : ""}`}
+        onClick={toggleVamp}
+      >
+        {STRINGS.vamp}
+      </button>
+
+      {activeVamp ? (
+        <div className="pending-jump-card pending-vamp-card">
+          <span>{STRINGS.vamp}</span>
+          <strong>
+            {formatTimecode(activeVamp.startSeconds)} - {formatTimecode(activeVamp.endSeconds)}
+          </strong>
+          <small>{vampSummary}</small>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const renderSongControls = () => (
+    <div className="jump-toolbar jump-toolbar-sheet">
+      <label className="jump-bars-field">
+        <span>{STRINGS.clickVolume}</span>
+        <input
+          className="jump-range-input"
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={metronomeVolumeDraft}
+          onChange={(event) => {
+            const nextValue = Number(event.currentTarget.value);
+            setMetronomeVolumeDraft(nextValue);
+            sendMetronomePatch({ volume: nextValue });
+          }}
+        />
+      </label>
+
+      <label className="jump-bars-field">
+        <span>{STRINGS.songTrigger}</span>
+        <select
+          value={songTrigger}
+          onChange={(event) => setSongTrigger(event.currentTarget.value as SongJumpTrigger)}
+        >
+          <option value="immediate">{STRINGS.immediate}</option>
+          <option value="region_end">{STRINGS.songEnd}</option>
+          <option value="after_bars">{STRINGS.bars}</option>
+        </select>
+      </label>
+
+      {songTrigger === "after_bars" ? (
+        <StepperField label={STRINGS.bars} value={jumpBars} onChange={setJumpBars} />
+      ) : null}
+
+      <label className="jump-bars-field">
+        <span>{STRINGS.songTransition}</span>
+        <select
+          value={songTransition}
+          onChange={(event) => setSongTransition(event.currentTarget.value as SongTransitionMode)}
+        >
+          <option value="instant">{STRINGS.cleanCut}</option>
+          <option value="fade_out">{STRINGS.fadeOut}</option>
+        </select>
+      </label>
+    </div>
+  );
+
   return (
     <section className="remote-panel">
       <div className="transport-control-deck">
-        <div className="transport-control-card">
-          <div className="jump-toolbar">
-            <div className="jump-mode-group" role="group" aria-label={STRINGS.jump}>
-              <button
-                className={jumpMode === "immediate" ? "is-active" : ""}
-                onClick={() => setJumpMode("immediate")}
-              >
-                {STRINGS.immediate}
-              </button>
-              <button
-                className={jumpMode === "after_bars" ? "is-active" : ""}
-                onClick={() => setJumpMode("after_bars")}
-              >
-                {STRINGS.bars}
-              </button>
-              <button
-                className={jumpMode === "next_marker" ? "is-active" : ""}
-                onClick={() => setJumpMode("next_marker")}
-              >
-                {STRINGS.next}
-              </button>
+        <article className="transport-control-card transport-control-card-group remote-control-card">
+          <div className="remote-control-card-head">
+            <div>
+              <small>Jump Config</small>
+              <strong>{jumpModeSummary}</strong>
             </div>
-
-            {jumpMode === "after_bars" ? (
-              <StepperField label={STRINGS.bars} value={jumpBars} onChange={setJumpBars} />
-            ) : null}
-
-            <button
-              className="jump-cancel-button"
-              disabled={!pendingJump}
-              onClick={() => {
-                if (pendingJump) {
-                  cancelJump();
-                }
-              }}
-            >
-              {STRINGS.cancelJump}
+            <button type="button" className="group-settings-button" onClick={() => setActiveSheet("jump")}>
+              Settings
             </button>
-
-            {pendingJump ? (
-              <div className="pending-jump-card">
-                <span>{STRINGS.pending}</span>
-                <strong>{pendingJump.targetMarkerName}</strong>
-                <small>{formatJumpModeLabel(pendingJumpMode.mode, pendingJumpMode.bars ?? jumpBars)}</small>
-              </div>
-            ) : null}
           </div>
-        </div>
+          <div className="remote-group-inline">{renderJumpControls()}</div>
+        </article>
 
-        <div className="transport-control-card">
-          <div className="jump-toolbar">
-            <label className="jump-bars-field">
-              <span>{STRINGS.vampMode}</span>
-              <select
-                value={vampMode}
-                onChange={(event) => setVampMode(event.currentTarget.value as VampMode)}
-              >
-                <option value="section">{STRINGS.section}</option>
-                <option value="bars">{STRINGS.bars}</option>
-              </select>
-            </label>
-
-            {vampMode === "bars" ? (
-              <StepperField label={STRINGS.vampBars} value={vampBars} onChange={setVampBars} />
-            ) : null}
-
-            <button
-              className={`jump-cancel-button vamp-toggle-button ${activeVamp ? "is-active" : ""}`}
-              onClick={toggleVamp}
-            >
-              {STRINGS.vamp}
+        <article className="transport-control-card transport-control-card-group remote-control-card">
+          <div className="remote-control-card-head">
+            <div>
+              <small>Vamp / Loop</small>
+              <strong>{vampSummary}</strong>
+            </div>
+            <button type="button" className="group-settings-button" onClick={() => setActiveSheet("vamp")}>
+              Settings
             </button>
-
-            {activeVamp ? (
-              <div className="pending-jump-card pending-vamp-card">
-                <span>{STRINGS.vamp}</span>
-                <strong>
-                  {formatTimecode(activeVamp.startSeconds)} - {formatTimecode(activeVamp.endSeconds)}
-                </strong>
-                <small>{vampMode === "bars" ? `${vampBars} ${STRINGS.bars.toLowerCase()}` : STRINGS.section}</small>
-              </div>
-            ) : null}
           </div>
-        </div>
+          <div className="remote-group-inline">{renderVampControls()}</div>
+        </article>
 
-        <div className="transport-control-card transport-control-card-song">
-          <div className="jump-toolbar">
-            <label className="jump-bars-field">
-              <span>{STRINGS.clickVolume}</span>
-              <input
-                className="jump-range-input"
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={metronomeVolumeDraft}
-                onChange={(event) => {
-                  const nextValue = Number(event.currentTarget.value);
-                  setMetronomeVolumeDraft(nextValue);
-                  sendMetronomePatch({ volume: nextValue });
-                }}
-              />
-            </label>
-
-            <label className="jump-bars-field">
-              <span>{STRINGS.songTrigger}</span>
-              <select
-                value={songTrigger}
-                onChange={(event) => setSongTrigger(event.currentTarget.value as SongJumpTrigger)}
-              >
-                <option value="immediate">{STRINGS.immediate}</option>
-                <option value="region_end">{STRINGS.songEnd}</option>
-                <option value="after_bars">{STRINGS.bars}</option>
-              </select>
-            </label>
-
-            {songTrigger === "after_bars" ? (
-              <StepperField label={STRINGS.bars} value={jumpBars} onChange={setJumpBars} />
-            ) : null}
-
-            <label className="jump-bars-field">
-              <span>{STRINGS.songTransition}</span>
-              <select
-                value={songTransition}
-                onChange={(event) =>
-                  setSongTransition(event.currentTarget.value as SongTransitionMode)
-                }
-              >
-                <option value="instant">{STRINGS.cleanCut}</option>
-                <option value="fade_out">{STRINGS.fadeOut}</option>
-              </select>
-            </label>
+        <article className="transport-control-card transport-control-card-song transport-control-card-group remote-control-card">
+          <div className="remote-control-card-head">
+            <div>
+              <small>Song Transition</small>
+              <strong>{songSummary}</strong>
+            </div>
+            <button type="button" className="group-settings-button" onClick={() => setActiveSheet("song")}>
+              Settings
+            </button>
           </div>
-        </div>
+          <div className="remote-group-inline">{renderSongControls()}</div>
+        </article>
 
         <div className="transport-control-card transport-control-card-region">
           <div className="region-actions-row">
@@ -1048,6 +1136,22 @@ function TransportView() {
           </button>
         ))}
       </div>
+
+      <BottomSheet open={activeSheet === "jump"} title={STRINGS.jump} onClose={() => setActiveSheet(null)}>
+        {renderJumpControls()}
+      </BottomSheet>
+
+      <BottomSheet open={activeSheet === "vamp"} title={STRINGS.vamp} onClose={() => setActiveSheet(null)}>
+        {renderVampControls()}
+      </BottomSheet>
+
+      <BottomSheet
+        open={activeSheet === "song"}
+        title={STRINGS.songTransition}
+        onClose={() => setActiveSheet(null)}
+      >
+        {renderSongControls()}
+      </BottomSheet>
     </section>
   );
 }

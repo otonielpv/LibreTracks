@@ -24,13 +24,18 @@ import {
 } from "./desktopApi";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import {
+  LANE_REGIONS,
+  LANE_SECTIONS,
+  LANE_TEMPO_METRIC,
+} from "./Renderer/drawBackground";
+import {
   BASE_PIXELS_PER_SECOND,
   clientXToTimelineSeconds,
   snapToTimelineGrid,
   type TimelineGrid,
 } from "./timelineMath";
 
-const RULER_HEIGHT = 92;
+const RULER_HEIGHT = 132;
 
 type LibraryClipPreviewState = {
   trackId: string | null;
@@ -330,10 +335,12 @@ export function TimelineCanvasPane({
                 key={region.id}
                 type="button"
                 className={`lt-region-hotspot ${selectedRegionId === region.id ? "is-selected" : ""}`}
-                aria-label={region.name}
-                title={region.name}
+                aria-label={`Carril superior: región ${region.name}`}
+                title={`Carril superior: región ${region.name}`}
                 style={{
                   left: region.startSeconds * pixelsPerSecond,
+                  top: LANE_REGIONS.top,
+                  height: LANE_REGIONS.height,
                   width: Math.max(24, (region.endSeconds - region.startSeconds) * pixelsPerSecond),
                 }}
                 onMouseDown={(event) => {
@@ -371,9 +378,13 @@ export function TimelineCanvasPane({
                 key={section.id}
                 type="button"
                 className={`lt-marker-hotspot ${selectedSectionId === section.id ? "is-selected" : ""}`}
-                aria-label={section.name}
-                title={section.name}
-                style={{ left: section.startSeconds * pixelsPerSecond }}
+                aria-label={`${section.name} - carril central`}
+                title={`Carril central: ${section.name}`}
+                style={{
+                  left: section.startSeconds * pixelsPerSecond,
+                  top: LANE_SECTIONS.top,
+                  height: LANE_SECTIONS.height,
+                }}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -396,9 +407,13 @@ export function TimelineCanvasPane({
                 key={marker.id}
                 type="button"
                 className="lt-tempo-hotspot"
-                aria-label={`Tempo ${marker.bpm.toFixed(2)} BPM`}
-                title={`Tempo ${marker.bpm.toFixed(2)} BPM`}
-                style={{ left: marker.startSeconds * pixelsPerSecond }}
+                aria-label={`Carril inferior: tempo ${marker.bpm.toFixed(2)} BPM`}
+                title={`Carril inferior: tempo ${marker.bpm.toFixed(2)} BPM`}
+                style={{
+                  left: marker.startSeconds * pixelsPerSecond,
+                  top: LANE_TEMPO_METRIC.top,
+                  height: LANE_TEMPO_METRIC.height,
+                }}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -420,9 +435,13 @@ export function TimelineCanvasPane({
                 key={marker.id}
                 type="button"
                 className="lt-tempo-hotspot lt-time-signature-hotspot"
-                aria-label={`Compas ${marker.signature}`}
-                title={`Compas ${marker.signature}`}
-                style={{ left: marker.startSeconds * pixelsPerSecond }}
+                aria-label={`Carril inferior: compás ${marker.signature}`}
+                title={`Carril inferior: compás ${marker.signature}`}
+                style={{
+                  left: marker.startSeconds * pixelsPerSecond,
+                  top: LANE_TEMPO_METRIC.top,
+                  height: LANE_TEMPO_METRIC.height,
+                }}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();

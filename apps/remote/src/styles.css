@@ -392,12 +392,135 @@ button {
 }
 
 .jump-toolbar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, max-content));
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.55rem;
-  justify-content: flex-start;
   padding-top: 0.25rem;
+}
+
+.jump-toolbar-sheet {
+  padding-top: 0;
+}
+
+.remote-control-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 22%),
+    linear-gradient(180deg, rgba(34, 34, 34, 0.95), rgba(18, 18, 18, 0.98));
+  padding: 0.85rem 0.9rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 30px rgba(0, 0, 0, 0.18);
+}
+
+.remote-control-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.remote-control-card-head small {
+  display: block;
+  color: var(--muted);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.remote-control-card-head strong {
+  display: block;
+  margin-top: 0.22rem;
+  color: var(--text);
+  font-size: 0.98rem;
+}
+
+.group-settings-button {
+  flex: 0 0 auto;
+  min-height: 2.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(87, 241, 219, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--accent);
+  padding: 0.52rem 0.8rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.remote-group-inline {
+  min-width: 0;
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(4, 6, 6, 0.7);
+  backdrop-filter: blur(10px);
+  z-index: 80;
+}
+
+.sheet-panel {
+  width: min(100%, 42rem);
+  max-height: min(86vh, 52rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  border-radius: 1.4rem 1.4rem 1rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 18%),
+    linear-gradient(180deg, rgba(28, 28, 28, 0.99), rgba(14, 14, 14, 0.98));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.36);
+  overflow: hidden;
+}
+
+.sheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.2rem;
+}
+
+.sheet-header small {
+  display: block;
+  color: var(--muted);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.56rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.sheet-header h2 {
+  margin: 0.2rem 0 0;
+  font-size: 1.1rem;
+  line-height: 1.1;
+}
+
+.sheet-close {
+  width: 2.3rem;
+  height: 2.3rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 1.2rem;
+}
+
+.sheet-body {
+  overflow: auto;
+  padding: 0 1rem 1rem;
 }
 
 .jump-mode-group {
@@ -425,6 +548,9 @@ button {
 .jump-mode-group button.is-active {
   background: var(--accent-soft);
   color: var(--accent);
+  box-shadow:
+    0 0 0 1px rgba(87, 241, 219, 0.22),
+    0 0 16px rgba(87, 241, 219, 0.14);
 }
 
 .jump-bars-field,
@@ -545,7 +671,9 @@ button {
 .vamp-toggle-button.is-active {
   color: rgb(255 245 230);
   border-color: rgb(255 176 76 / 0.5);
-  box-shadow: 0 0 18px rgb(255 176 76 / 0.18);
+  box-shadow:
+    0 0 0 1px rgb(255 176 76 / 0.18),
+    0 0 18px rgb(255 176 76 / 0.18);
 }
 
 .pending-jump-card {
@@ -637,6 +765,15 @@ button {
   font-size: 0.62rem;
   font-style: normal;
  }
+
+.marker-card.is-pending,
+.pill-button.is-active,
+.group-settings-button:focus-visible,
+.group-settings-button:hover {
+  box-shadow:
+    0 0 0 1px rgba(87, 241, 219, 0.2),
+    0 0 16px rgba(87, 241, 219, 0.16);
+}
 
 .mixer-scroll {
   height: 100%;
@@ -965,7 +1102,8 @@ button {
   }
 
   .jump-toolbar {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
     gap: 0.45rem;
   }
 
@@ -979,17 +1117,70 @@ button {
     padding: 0;
   }
 
+  .remote-control-card {
+    padding: 0.8rem 0.85rem;
+  }
+
   .jump-mode-group {
     width: 100%;
   }
 
   .jump-bars-field {
-    width: auto;
+    width: 100%;
+  }
+
+  .jump-mode-group button,
+  .jump-cancel-button,
+  .group-settings-button {
+    width: 100%;
+  }
+
+  .group-settings-button {
+    min-height: 2.8rem;
+    padding: 0.68rem 0.9rem;
+  }
+
+  .remote-group-inline {
+    display: none;
+  }
+
+  .sheet-backdrop {
+    padding: 0.6rem;
+  }
+
+  .sheet-panel {
+    width: 100%;
+    max-height: 88vh;
+    border-radius: 1.2rem 1.2rem 0.9rem 0.9rem;
   }
 
   .pending-jump-card {
     justify-content: flex-start;
     gap: 0.35rem 0.55rem;
+  }
+
+  .marker-card {
+    min-height: 5.4rem;
+    padding: 0.9rem 0.85rem;
+  }
+
+  .marker-card,
+  .jump-mode-group button,
+  .jump-cancel-button,
+  .group-settings-button,
+  .region-chip {
+    min-height: 2.75rem;
+  }
+
+  .jump-mode-group button,
+  .jump-cancel-button,
+  .group-settings-button {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .jump-mode-group button {
+    font-size: 0.62rem;
   }
 
   .mixer-strip {

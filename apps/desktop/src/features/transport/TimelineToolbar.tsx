@@ -1,3 +1,4 @@
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { GlobalJumpMode, SongJumpTrigger, SongTransitionMode, VampMode } from "./uiStore";
@@ -32,6 +33,50 @@ type TimelineToolbarProps = {
   onMidiLearnTarget: (controlKey: string) => void;
 };
 
+type ControlGroupProps = {
+  title: string;
+  summary?: string;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  children: ReactNode;
+  details?: ReactNode;
+  className?: string;
+};
+
+function ControlGroup({
+  title,
+  summary,
+  expanded,
+  onToggleExpanded,
+  children,
+  details,
+  className,
+}: ControlGroupProps) {
+  return (
+    <section className={`lt-control-group ${className ?? ""} ${expanded ? "is-expanded" : "is-collapsed"}`}>
+      <div className="lt-control-group-head">
+        <div className="lt-control-group-copy">
+          <span className="lt-control-group-title">{title}</span>
+          {summary ? <p>{summary}</p> : null}
+        </div>
+        <button
+          type="button"
+          className="lt-control-group-toggle"
+          aria-label={expanded ? `${title}: collapse` : `${title}: expand`}
+          aria-expanded={expanded}
+          onClick={onToggleExpanded}
+        >
+          <span className="material-symbols-outlined">{expanded ? "keyboard_arrow_up" : "tune"}</span>
+        </button>
+      </div>
+
+      <div className="lt-control-group-actions">{children}</div>
+
+      {expanded && details ? <div className="lt-control-group-details">{details}</div> : null}
+    </section>
+  );
+}
+
 export function TimelineToolbar({
   snapEnabled,
   subdivisionPerBeat,
@@ -63,6 +108,18 @@ export function TimelineToolbar({
 }: TimelineToolbarProps) {
   const { t } = useTranslation();
   const learnModeActive = midiLearnMode !== null;
+  const [expandedGroups, setExpandedGroups] = useState({
+    jump: false,
+    vamp: false,
+    song: false,
+  });
+  const controlsDisabled = isProjectEmpty && !learnModeActive;
+  const jumpSummary =
+    globalJumpMode === "after_bars"
+      ? `${globalJumpBars} bars`
+      : globalJumpMode === "next_marker"
+        ? t("transport.jumpMode.nextMarker")
+        : t("transport.jumpMode.immediate");
 
   const handleModeButtonClick = (
     learnKey: string,
@@ -79,7 +136,7 @@ export function TimelineToolbar({
   return (
     <div className="lt-timeline-topline">
       <div className="lt-timeline-meta">
-        <div className="lt-bottom-controls lt-timeline-controls">
+        <div className="lt-timeline-controls lt-bottom-controls">
           <button
             type="button"
             className={`lt-icon-button ${snapEnabled ? "is-active" : ""}`}
@@ -90,13 +147,97 @@ export function TimelineToolbar({
           >
             <span className="material-symbols-outlined">{snapEnabled ? "grid_on" : "grid_off"}</span>
           </button>
-          <div className="lt-zoom-control lt-jump-mode-control">
-            <span>{t("timelineToolbar.markerJumpLabel")}</span>
+
+          <ControlGroup
+            title={t("timelineToolbar.markerJumpLabel")}
+            summary={jumpSummary}
+            expanded={expandedGroups.jump}
+            onToggleExpanded={() =>
+              setExpandedGroups((state) => ({ ...state, jump: !state.jump }))
+            }
+            className="lt-control-group-jump"
+            details={
+              <>
+                {globalJumpMode === "after_bars" ? (
+                  <label className="lt-stepper-control">
+                    <span>{t("timelineToolbar.markerBarsLabel")}</span>
+                    <div className="lt-stepper-control-row">
+                      <button
+                        type="button"
+                        aria-label={t("timelineToolbar.markerBarsLabel")}
+                        disabled={controlsDisabled}
+                        onClick={() => {
+                          if (learnModeActive) {
+                            onMidiLearnTarget("action:decrease_global_jump_bars");
+                            return;
+                          }
+
+                          onGlobalJumpBarsChange(Math.max(1, globalJumpBars - 1));
+                        }}
+                      >
+                        -
+                      </button>
+                      <input
+                        aria-label={t("timelineToolbar.markerJumpBarsAria")}
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={globalJumpBars}
+                        onPointerDown={(event) => {
+                          if (!learnModeActive) {
+                            return;
+                          }
+
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onMidiLearnTarget("param:global_jump_bars");
+                        }}
+                        onChange={(event) => onGlobalJumpBarsChange(Number(event.target.value) || 1)}
+                      />
+                      <button
+                        type="button"
+                        aria-label={t("timelineToolbar.markerBarsLabel")}
+                        disabled={controlsDisabled}
+                        onClick={() => {
+                          if (learnModeActive) {
+                            onMidiLearnTarget("action:increase_global_jump_bars");
+                            return;
+                          }
+
+                          onGlobalJumpBarsChange(globalJumpBars + 1);
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </label>
+                ) : null}
+                {pendingMarkerJumpLabel ? <span>{pendingMarkerJumpLabel}</span> : null}
+                <button
+                  type="button"
+                  className="lt-icon-button"
+                  aria-label={t("timelineToolbar.cancelJump")}
+                  title={t("timelineToolbar.cancelJump")}
+                  disabled={!pendingMarkerJumpLabel && !learnModeActive}
+                  onClick={() => {
+                    if (learnModeActive) {
+                      onMidiLearnTarget("action:cancel_jump");
+                      return;
+                    }
+
+                    onCancelPendingJump();
+                  }}
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </>
+            }
+          >
             <div className="lt-segmented-control" role="group" aria-label={t("timelineToolbar.markerJumpModeAria")}>
               <button
                 type="button"
                 className={globalJumpMode === "immediate" ? "is-active" : ""}
-                disabled={isProjectEmpty && !learnModeActive}
+                disabled={controlsDisabled}
                 onClick={() =>
                   handleModeButtonClick(
                     "action:set_global_jump_mode_immediate",
@@ -109,7 +250,7 @@ export function TimelineToolbar({
               <button
                 type="button"
                 className={globalJumpMode === "after_bars" ? "is-active" : ""}
-                disabled={isProjectEmpty && !learnModeActive}
+                disabled={controlsDisabled}
                 onClick={() =>
                   handleModeButtonClick(
                     "action:set_global_jump_mode_after_bars",
@@ -122,7 +263,7 @@ export function TimelineToolbar({
               <button
                 type="button"
                 className={globalJumpMode === "next_marker" ? "is-active" : ""}
-                disabled={isProjectEmpty && !learnModeActive}
+                disabled={controlsDisabled}
                 onClick={() =>
                   handleModeButtonClick(
                     "action:set_global_jump_mode_next_marker",
@@ -133,68 +274,80 @@ export function TimelineToolbar({
                 {t("transport.jumpMode.nextMarker")}
               </button>
             </div>
-          </div>
-          {globalJumpMode === "after_bars" ? (
-            <label className="lt-zoom-control lt-stepper-control">
-              <span>{t("timelineToolbar.markerBarsLabel")}</span>
-              <div className="lt-stepper-control-row">
-                <button
-                  type="button"
-                  aria-label={t("timelineToolbar.markerBarsLabel")}
-                  disabled={isProjectEmpty && !learnModeActive}
-                  onClick={() => {
-                    if (learnModeActive) {
-                      onMidiLearnTarget("action:decrease_global_jump_bars");
-                      return;
-                    }
+          </ControlGroup>
 
-                    onGlobalJumpBarsChange(Math.max(1, globalJumpBars - 1));
-                  }}
-                >
-                  -
-                </button>
-                <input
-                  aria-label={t("timelineToolbar.markerJumpBarsAria")}
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={globalJumpBars}
-                  onPointerDown={(event) => {
-                    if (!learnModeActive) {
-                      return;
-                    }
+          <ControlGroup
+            title={t("timelineToolbar.vampModeLabel")}
+            summary={vampMode === "bars" ? `${vampBars} bars` : t("timelineToolbar.vampSectionOption")}
+            expanded={expandedGroups.vamp}
+            onToggleExpanded={() =>
+              setExpandedGroups((state) => ({ ...state, vamp: !state.vamp }))
+            }
+            className="lt-control-group-vamp"
+            details={
+              <>
+                {vampMode === "bars" ? (
+                  <label className="lt-stepper-control">
+                    <span>{t("timelineToolbar.vampBarsLabel")}</span>
+                    <div className="lt-stepper-control-row">
+                      <button
+                        type="button"
+                        aria-label={t("timelineToolbar.vampBarsAria")}
+                        disabled={controlsDisabled}
+                        onClick={() => {
+                          if (learnModeActive) {
+                            onMidiLearnTarget("action:decrease_vamp_bars");
+                            return;
+                          }
 
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onMidiLearnTarget("param:global_jump_bars");
-                  }}
-                  onChange={(event) => onGlobalJumpBarsChange(Number(event.target.value) || 1)}
-                />
-                <button
-                  type="button"
-                  aria-label={t("timelineToolbar.markerBarsLabel")}
-                  disabled={isProjectEmpty && !learnModeActive}
-                  onClick={() => {
-                    if (learnModeActive) {
-                      onMidiLearnTarget("action:increase_global_jump_bars");
-                      return;
-                    }
+                          onVampBarsChange(Math.max(1, vampBars - 1));
+                        }}
+                      >
+                        -
+                      </button>
+                      <input
+                        aria-label={t("timelineToolbar.vampBarsAria")}
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={vampBars}
+                        onPointerDown={(event) => {
+                          if (!learnModeActive) {
+                            return;
+                          }
 
-                    onGlobalJumpBarsChange(globalJumpBars + 1);
-                  }}
-                >
-                  +
-                </button>
-              </div>
-            </label>
-          ) : null}
-          <div className="lt-zoom-control lt-jump-mode-control">
-            <span>{t("timelineToolbar.vampModeLabel")}</span>
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onMidiLearnTarget("param:vamp_bars");
+                        }}
+                        onChange={(event) => onVampBarsChange(Number(event.target.value) || 1)}
+                      />
+                      <button
+                        type="button"
+                        aria-label={t("timelineToolbar.vampBarsAria")}
+                        disabled={controlsDisabled}
+                        onClick={() => {
+                          if (learnModeActive) {
+                            onMidiLearnTarget("action:increase_vamp_bars");
+                            return;
+                          }
+
+                          onVampBarsChange(vampBars + 1);
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </label>
+                ) : null}
+              </>
+            }
+          >
             <div className="lt-segmented-control" role="group" aria-label={t("timelineToolbar.vampModeAria")}>
               <button
                 type="button"
                 className={vampMode === "section" ? "is-active" : ""}
-                disabled={isProjectEmpty && !learnModeActive}
+                disabled={controlsDisabled}
                 onClick={() =>
                   handleModeButtonClick(
                     "action:set_vamp_mode_section",
@@ -207,7 +360,7 @@ export function TimelineToolbar({
               <button
                 type="button"
                 className={vampMode === "bars" ? "is-active" : ""}
-                disabled={isProjectEmpty && !learnModeActive}
+                disabled={controlsDisabled}
                 onClick={() =>
                   handleModeButtonClick(
                     "action:set_vamp_mode_bars",
@@ -218,84 +371,96 @@ export function TimelineToolbar({
                 {t("timelineToolbar.vampBarsOption")}
               </button>
             </div>
-          </div>
-          {vampMode === "bars" ? (
-            <label className="lt-zoom-control lt-stepper-control">
-              <span>{t("timelineToolbar.vampBarsLabel")}</span>
-              <div className="lt-stepper-control-row">
-                <button
-                  type="button"
-                  aria-label={t("timelineToolbar.vampBarsAria")}
-                  disabled={isProjectEmpty && !learnModeActive}
-                  onClick={() => {
-                    if (learnModeActive) {
-                      onMidiLearnTarget("action:decrease_vamp_bars");
-                      return;
-                    }
+            <button
+              type="button"
+              className={`lt-vamp-button ${isVampActive ? "is-active" : ""}`}
+              aria-label={t("timelineToolbar.vampToggle")}
+              disabled={controlsDisabled}
+              onClick={() => {
+                if (learnModeActive) {
+                  onMidiLearnTarget("action:toggle_vamp");
+                  return;
+                }
 
-                    onVampBarsChange(Math.max(1, vampBars - 1));
-                  }}
-                >
-                  -
-                </button>
-                <input
-                  aria-label={t("timelineToolbar.vampBarsAria")}
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={vampBars}
-                  onPointerDown={(event) => {
-                    if (!learnModeActive) {
-                      return;
-                    }
+                onToggleVamp();
+              }}
+            >
+              {t("timelineToolbar.vampButton")}
+            </button>
+          </ControlGroup>
 
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onMidiLearnTarget("param:vamp_bars");
-                  }}
-                  onChange={(event) => onVampBarsChange(Number(event.target.value) || 1)}
-                />
-                <button
-                  type="button"
-                  aria-label={t("timelineToolbar.vampBarsAria")}
-                  disabled={isProjectEmpty && !learnModeActive}
-                  onClick={() => {
-                    if (learnModeActive) {
-                      onMidiLearnTarget("action:increase_vamp_bars");
-                      return;
-                    }
+          <ControlGroup
+            title={t("timelineToolbar.songTransitionLabel")}
+            summary={songTransitionMode === "fade_out" ? t("timelineToolbar.songTransitionFadeOut") : t("timelineToolbar.songTransitionInstant")}
+            expanded={expandedGroups.song}
+            onToggleExpanded={() =>
+              setExpandedGroups((state) => ({ ...state, song: !state.song }))
+            }
+            className="lt-control-group-song"
+            details={
+              <>
+                {songJumpTrigger === "after_bars" ? (
+                  <label className="lt-stepper-control">
+                    <span>{t("timelineToolbar.songBarsLabel")}</span>
+                    <div className="lt-stepper-control-row">
+                      <button
+                        type="button"
+                        aria-label={t("timelineToolbar.songJumpBarsAria")}
+                        disabled={controlsDisabled}
+                        onClick={() => {
+                          if (learnModeActive) {
+                            onMidiLearnTarget("action:decrease_song_jump_bars");
+                            return;
+                          }
 
-                    onVampBarsChange(vampBars + 1);
-                  }}
-                >
-                  +
-                </button>
-              </div>
-            </label>
-          ) : null}
-          <button
-            type="button"
-            className={`lt-vamp-button ${isVampActive ? "is-active" : ""}`}
-            aria-label={t("timelineToolbar.vampToggle")}
-            disabled={isProjectEmpty && !learnModeActive}
-            onClick={() => {
-              if (learnModeActive) {
-                onMidiLearnTarget("action:toggle_vamp");
-                return;
-              }
+                          onSongJumpBarsChange(Math.max(1, songJumpBars - 1));
+                        }}
+                      >
+                        -
+                      </button>
+                      <input
+                        aria-label={t("timelineToolbar.songJumpBarsAria")}
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={songJumpBars}
+                        onPointerDown={(event) => {
+                          if (!learnModeActive) {
+                            return;
+                          }
 
-              onToggleVamp();
-            }}
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onMidiLearnTarget("param:song_jump_bars");
+                        }}
+                        onChange={(event) => onSongJumpBarsChange(Number(event.target.value) || 1)}
+                      />
+                      <button
+                        type="button"
+                        aria-label={t("timelineToolbar.songJumpBarsAria")}
+                        disabled={controlsDisabled}
+                        onClick={() => {
+                          if (learnModeActive) {
+                            onMidiLearnTarget("action:increase_song_jump_bars");
+                            return;
+                          }
+
+                          onSongJumpBarsChange(songJumpBars + 1);
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </label>
+                ) : null}
+              </>
+            }
           >
-            {t("timelineToolbar.vampButton")}
-          </button>
-          <div className="lt-zoom-control lt-jump-mode-control">
-            <span>{t("timelineToolbar.songJumpLabel")}</span>
             <div className="lt-segmented-control" role="group" aria-label={t("timelineToolbar.songJumpModeAria")}>
               <button
                 type="button"
                 className={songJumpTrigger === "immediate" ? "is-active" : ""}
-                disabled={isProjectEmpty && !learnModeActive}
+                disabled={controlsDisabled}
                 onClick={() =>
                   handleModeButtonClick(
                     "action:set_song_jump_trigger_immediate",
@@ -308,7 +473,7 @@ export function TimelineToolbar({
               <button
                 type="button"
                 className={songJumpTrigger === "region_end" ? "is-active" : ""}
-                disabled={isProjectEmpty && !learnModeActive}
+                disabled={controlsDisabled}
                 onClick={() =>
                   handleModeButtonClick(
                     "action:set_song_jump_trigger_region_end",
@@ -321,7 +486,7 @@ export function TimelineToolbar({
               <button
                 type="button"
                 className={songJumpTrigger === "after_bars" ? "is-active" : ""}
-                disabled={isProjectEmpty && !learnModeActive}
+                disabled={controlsDisabled}
                 onClick={() =>
                   handleModeButtonClick(
                     "action:set_song_jump_trigger_after_bars",
@@ -332,68 +497,11 @@ export function TimelineToolbar({
                 {t("timelineToolbar.afterBarsOption")}
               </button>
             </div>
-          </div>
-          {songJumpTrigger === "after_bars" ? (
-            <label className="lt-zoom-control lt-stepper-control">
-              <span>{t("timelineToolbar.songBarsLabel")}</span>
-              <div className="lt-stepper-control-row">
-                <button
-                  type="button"
-                  aria-label={t("timelineToolbar.songJumpBarsAria")}
-                  disabled={isProjectEmpty && !learnModeActive}
-                  onClick={() => {
-                    if (learnModeActive) {
-                      onMidiLearnTarget("action:decrease_song_jump_bars");
-                      return;
-                    }
-
-                    onSongJumpBarsChange(Math.max(1, songJumpBars - 1));
-                  }}
-                >
-                  -
-                </button>
-                <input
-                  aria-label={t("timelineToolbar.songJumpBarsAria")}
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={songJumpBars}
-                  onPointerDown={(event) => {
-                    if (!learnModeActive) {
-                      return;
-                    }
-
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onMidiLearnTarget("param:song_jump_bars");
-                  }}
-                  onChange={(event) => onSongJumpBarsChange(Number(event.target.value) || 1)}
-                />
-                <button
-                  type="button"
-                  aria-label={t("timelineToolbar.songJumpBarsAria")}
-                  disabled={isProjectEmpty && !learnModeActive}
-                  onClick={() => {
-                    if (learnModeActive) {
-                      onMidiLearnTarget("action:increase_song_jump_bars");
-                      return;
-                    }
-
-                    onSongJumpBarsChange(songJumpBars + 1);
-                  }}
-                >
-                  +
-                </button>
-              </div>
-            </label>
-          ) : null}
-          <div className="lt-zoom-control lt-jump-mode-control">
-            <span>{t("timelineToolbar.songTransitionLabel")}</span>
-            <div className="lt-segmented-control" role="group" aria-label={t("timelineToolbar.songTransitionAria")}>
+            <div className="lt-song-transition-row">
               <button
                 type="button"
-                className={songTransitionMode === "instant" ? "is-active" : ""}
-                disabled={isProjectEmpty && !learnModeActive}
+                className={`lt-vamp-button ${songTransitionMode === "instant" ? "is-active" : ""}`}
+                disabled={controlsDisabled}
                 onClick={() =>
                   handleModeButtonClick(
                     "action:set_song_transition_instant",
@@ -405,8 +513,8 @@ export function TimelineToolbar({
               </button>
               <button
                 type="button"
-                className={songTransitionMode === "fade_out" ? "is-active" : ""}
-                disabled={isProjectEmpty && !learnModeActive}
+                className={`lt-vamp-button ${songTransitionMode === "fade_out" ? "is-active" : ""}`}
+                disabled={controlsDisabled}
                 onClick={() =>
                   handleModeButtonClick(
                     "action:set_song_transition_fade_out",
@@ -417,25 +525,7 @@ export function TimelineToolbar({
                 {t("timelineToolbar.songTransitionFadeOut")}
               </button>
             </div>
-          </div>
-          {pendingMarkerJumpLabel ? <span>{pendingMarkerJumpLabel}</span> : null}
-          <button
-            type="button"
-            className="lt-icon-button"
-            aria-label={t("timelineToolbar.cancelJump")}
-            title={t("timelineToolbar.cancelJump")}
-            disabled={!pendingMarkerJumpLabel && !learnModeActive}
-            onClick={() => {
-              if (learnModeActive) {
-                onMidiLearnTarget("action:cancel_jump");
-                return;
-              }
-
-              onCancelPendingJump();
-            }}
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
+          </ControlGroup>
         </div>
         <div className="lt-timeline-stats">
           <span>{t("timelineToolbar.tracksCount", { count: trackCount })}</span>

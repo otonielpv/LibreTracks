@@ -7,7 +7,7 @@ export type SongTransitionMode = "instant" | "fade_out";
 export type VampMode = "section" | "bars";
 
 export const TIMELINE_DEFAULT_ZOOM_LEVEL = 7;
-export const TIMELINE_DEFAULT_TRACK_HEIGHT = 94;
+export const TIMELINE_DEFAULT_TRACK_HEIGHT = 108;
 export const TIMELINE_DEFAULT_SNAP_ENABLED = true;
 
 type TimelineUIState = {

@@ -9,6 +9,26 @@ import { screenXToSeconds, secondsToScreenX } from "../timelineMath";
 
 const MIN_LABEL_WIDTH_PX = 70;
 
+export const LANE_REGIONS = {
+  top: 0,
+  height: 22,
+} as const;
+
+export const LANE_SECTIONS = {
+  top: 48,
+  height: 26,
+} as const;
+
+export const LANE_TEMPO_METRIC = {
+  top: 72,
+  height: 34,
+} as const;
+
+const GRID_LABEL_TOP = 24;
+const GRID_LABEL_SECOND_LINE_TOP = 36;
+const TEMPO_LABEL_TOP = 2;
+const METRIC_LABEL_TOP = 20;
+
 function formatRulerMusicalPosition(barNumber: number, beatInBar: number) {
   return `${barNumber}.${beatInBar}.00`;
 }
@@ -188,15 +208,15 @@ export function drawRulerGridLabels(
     }
 
     const x = Math.round(markerX) + 4;
-    const y = 28;
+    const y = GRID_LABEL_TOP;
 
     context.fillStyle = marker.isBarStart ? "#e5e2e1" : "#bacac5";
-    context.font = '600 10px "Space Grotesk", sans-serif';
+    context.font = '600 9px "Space Grotesk", sans-serif';
     context.fillText(formatRulerMusicalPosition(marker.barNumber, marker.beatInBar), x, y);
 
     context.fillStyle = marker.isBarStart ? "#57f1db" : "rgba(186, 202, 197, 0.68)";
-    context.font = '400 10px "Space Grotesk", sans-serif';
-    context.fillText(formatRulerTimecode(marker.seconds), x, y + 12);
+    context.font = '400 9px "Space Grotesk", sans-serif';
+    context.fillText(formatRulerTimecode(marker.seconds), x, GRID_LABEL_SECOND_LINE_TOP);
   }
 }
 
@@ -217,8 +237,8 @@ export function drawRulerRegion(
 
   const blockLeft = Math.max(-8, left);
   const blockWidth = Math.max(12, Math.min(width + 8, right) - blockLeft);
-  const blockTop = 3;
-  const blockHeight = 18;
+  const blockTop = LANE_REGIONS.top + 3;
+  const blockHeight = LANE_REGIONS.height - 6;
 
   context.save();
   context.fillStyle = isSelected ? "rgba(255, 226, 171, 0.28)" : "rgba(255, 226, 171, 0.14)";
@@ -255,12 +275,12 @@ export function drawRulerMarker(
   const labelWidth = Math.max(30, Math.ceil(context.measureText(label).width) + 12);
   const labelHeight = 16;
   const snappedX = Math.round(x) + 0.5;
-  const stemTop = 48;
-  const stemBottom = height - 12;
+  const stemTop = LANE_SECTIONS.top + 2;
+  const stemBottom = LANE_SECTIONS.top + LANE_SECTIONS.height - 2;
   const alignRight = snappedX > width - labelWidth - 12;
   const flagLeft = alignRight ? snappedX - labelWidth - 8 : snappedX + 2;
   const flagRight = flagLeft + labelWidth;
-  const flagTop = 44;
+  const flagTop = LANE_SECTIONS.top + 1;
   const flagBottom = flagTop + labelHeight;
 
   if (flagRight < -20 || flagLeft > width + 20) {
@@ -351,8 +371,9 @@ export function drawRulerTempoMarker(
   context.font = '700 10px "Space Grotesk", sans-serif';
   const labelWidth = Math.max(30, Math.ceil(context.measureText(label).width) + 14);
   const snappedX = Math.round(x) + 0.5;
-  const flagTop = 24;
-  const flagHeight = 15;
+  const isMetricMarker = overrideLabel != null;
+  const flagTop = LANE_TEMPO_METRIC.top + (isMetricMarker ? METRIC_LABEL_TOP : TEMPO_LABEL_TOP);
+  const flagHeight = isMetricMarker ? 12 : 13;
   const alignRight = snappedX > width - labelWidth - 12;
   const flagLeft = alignRight ? snappedX - labelWidth - 7 : snappedX + 3;
   const flagRight = flagLeft + labelWidth;
@@ -367,7 +388,12 @@ export function drawRulerTempoMarker(
   context.lineWidth = 1.2;
   context.beginPath();
   context.moveTo(snappedX, flagTop + 2);
-  context.lineTo(snappedX, height - 24);
+  context.lineTo(
+    snappedX,
+    isMetricMarker
+      ? LANE_TEMPO_METRIC.top + LANE_TEMPO_METRIC.height - 2
+      : LANE_TEMPO_METRIC.top + TEMPO_LABEL_TOP + flagHeight - 1,
+  );
   context.stroke();
 
   context.beginPath();
@@ -385,9 +411,12 @@ export function drawRulerTempoMarker(
   context.fillText(label, flagLeft + 6, flagTop + flagHeight / 2 + 0.5);
 
   context.beginPath();
-  context.moveTo(snappedX - 4, height - 24);
-  context.lineTo(snappedX + 4, height - 24);
-  context.lineTo(snappedX, height - 17);
+  const stemBottom = isMetricMarker
+    ? LANE_TEMPO_METRIC.top + LANE_TEMPO_METRIC.height - 2
+    : LANE_TEMPO_METRIC.top + TEMPO_LABEL_TOP + flagHeight - 1;
+  context.moveTo(snappedX - 4, stemBottom);
+  context.lineTo(snappedX + 4, stemBottom);
+  context.lineTo(snappedX, stemBottom + 7);
   context.closePath();
   context.fill();
   context.restore();
