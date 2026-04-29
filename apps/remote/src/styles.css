@@ -53,10 +53,11 @@ button {
 
 .remote-header {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 0.8rem;
-  padding: 0.7rem 1rem 0.5rem;
+  gap: 0.5rem;
+  padding: 0.38rem 0.75rem 0.28rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.055);
 }
 
 .remote-header small,
@@ -74,12 +75,12 @@ button {
 
 .remote-header small {
   color: rgb(87 241 219 / 0.8);
-  font-size: 0.72rem;
+  font-size: 0.54rem;
 }
 
 .remote-header h1 {
-  margin: 0.2rem 0 0;
-  font-size: 1.9rem;
+  margin: 0.1rem 0 0;
+  font-size: 1rem;
   line-height: 1;
 }
 
@@ -87,20 +88,89 @@ button {
   min-width: 0;
 }
 
-.remote-header-transport {
-  min-width: 0;
-}
-
 .status-pill {
   border: 1px solid var(--outline);
-  border-radius: 999px;
+  border-radius: 3px;
   background: rgb(255 255 255 / 0.03);
 }
 
 .status-pill {
-  padding: 0.45rem 0.8rem;
+  padding: 0.32rem 0.48rem;
   color: var(--accent);
-  font-size: 0.7rem;
+  font-size: 0.58rem;
+}
+
+.remote-view-tabs {
+  justify-self: center;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.2rem;
+  min-width: min(18rem, 46vw);
+  padding: 0.18rem;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.04);
+}
+
+.remote-view-tabs button {
+  min-height: 1.75rem;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.28rem 0.5rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.remote-view-tabs button.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.remote-size-stepper {
+  display: inline-grid;
+  grid-template-columns: 1.8rem 1.6rem 1.8rem;
+  align-items: center;
+  gap: 0.18rem;
+  padding: 0.18rem;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.04);
+}
+
+.remote-size-stepper button,
+.remote-size-stepper span {
+  min-height: 1.85rem;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+}
+
+.remote-size-stepper button {
+  border: 1px solid rgb(87 241 219 / 0.14);
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+.remote-size-stepper span {
+  color: var(--accent);
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+}
+
+.remote-size-stepper button.is-active {
+  background: rgb(87 241 219 / 0.13);
+  color: var(--accent);
+}
+
+.remote-size-stepper button:disabled:not(.is-active) {
+  opacity: 0.38;
 }
 
 .remote-content {
@@ -113,7 +183,7 @@ button {
   height: 100%;
   overflow: auto;
   box-sizing: border-box;
-  padding: 0 1rem calc(1rem + env(safe-area-inset-bottom));
+  padding: 0 0.75rem 0.75rem;
 }
 
 .remote-panel-mixer {
@@ -123,28 +193,24 @@ button {
 }
 
 .transport-chrome {
-  padding: 0 1rem 0.85rem;
+  padding: 0.45rem 0.75rem 0.5rem;
 }
 
 .transport-chrome-inline-shell {
   padding: 0;
 }
 
-.transport-topline.transport-topline-mobile-only {
-  display: none;
-}
-
 .transport-topline {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.55fr);
-  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem;
   align-items: stretch;
 }
 
 .transport-readouts {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.32rem;
 }
 
 .transport-readouts-inline,
@@ -153,26 +219,26 @@ button {
 }
 
 .readout-card {
-  border-radius: 1rem;
+  border-radius: 4px;
   border: 1px solid rgb(87 241 219 / 0.14);
   background:
     linear-gradient(180deg, rgb(255 255 255 / 0.05), transparent),
     var(--panel);
-  padding: 0.48rem 0.68rem;
+  padding: 0.28rem 0.44rem;
 }
 
 .readout-card span {
   display: block;
   color: var(--muted);
-  font-size: 0.54rem;
+  font-size: 0.48rem;
 }
 
 .readout-card strong {
   display: block;
-  margin-top: 0.18rem;
+  margin-top: 0.1rem;
   color: var(--accent);
   font-family: "Space Grotesk", ui-monospace, monospace;
-  font-size: clamp(0.92rem, 2.5vw, 1.2rem);
+  font-size: clamp(0.72rem, 1.8vw, 0.98rem);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
@@ -181,8 +247,8 @@ button {
 
 .transport-controls {
   display: flex;
-  gap: 0.45rem;
-  margin-top: 0.65rem;
+  gap: 0.24rem;
+  margin-top: 0.35rem;
 }
 
 .transport-controls-inline {
@@ -201,12 +267,12 @@ button {
 
 .pill-button {
   flex: 1;
-  border-radius: 999px;
+  border-radius: 4px;
   background: linear-gradient(180deg, #57f1db, #2dd4bf);
   color: #003731;
   font-weight: 800;
-  padding: 0.52rem 0.72rem;
-  font-size: 0.84rem;
+  padding: 0.36rem 0.52rem;
+  font-size: 0.68rem;
 }
 
 .pill-button.is-active {
@@ -225,8 +291,8 @@ button {
 }
 
 .timeline-shell-shared {
-  margin-top: 0.7rem;
-  height: 6.4rem;
+  margin-top: 0.45rem;
+  height: 5.1rem;
   border-color: rgb(87 241 219 / 0.08);
 }
 
@@ -365,38 +431,46 @@ button {
 
 .region-carousel {
   display: flex;
-  gap: 0.55rem;
+  gap: 0.35rem;
   overflow-x: auto;
-  padding: 0.85rem 0 0.2rem;
+  padding: 0.25rem 0;
+  flex: 1 1 auto;
 }
 
 .transport-control-deck {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
-  gap: 0.45rem;
+  gap: 0.35rem;
+  padding: 0.35rem 0 0.45rem;
+  background: linear-gradient(180deg, rgb(18 18 18 / 0.98), rgb(18 18 18 / 0.88));
+  backdrop-filter: blur(12px);
 }
 
 .transport-control-card {
-  flex: 1 1 13rem;
-  min-width: 12.5rem;
+  flex: 1 1 10.75rem;
+  min-width: 10rem;
   padding: 0;
 }
 
 .transport-control-card-song {
-  flex: 1 1 15rem;
-  min-width: 13rem;
+  flex: 1 1 12rem;
+  min-width: 10.75rem;
 }
 
 .transport-control-card-region {
   flex-basis: 100%;
+  order: 12;
 }
 
 .jump-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.38rem;
   padding-top: 0.25rem;
 }
 
@@ -412,55 +486,61 @@ button {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  gap: 0.55rem;
-  min-height: 3.2rem;
+  gap: 0.38rem;
+  min-height: 2.55rem;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 38%),
     linear-gradient(180deg, rgba(31, 31, 31, 0.98), rgba(14, 14, 14, 0.98));
-  padding: 0.45rem 0.5rem 0.45rem 0.7rem;
+  padding: 0.32rem 0.36rem 0.32rem 0.5rem;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .remote-control-card-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.55rem;
+  gap: 0.35rem;
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.remote-control-card-head > div {
+  min-width: 0;
 }
 
 .remote-control-card-head small {
   display: block;
   color: var(--muted);
   font-family: "Space Grotesk", sans-serif;
-  font-size: 0.58rem;
+  font-size: 0.5rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .remote-control-card-head strong {
   display: block;
-  margin-top: 0.18rem;
+  margin-top: 0.1rem;
   color: var(--text);
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .group-settings-button {
   flex: 0 0 auto;
-  min-height: 2.05rem;
+  max-width: 4.6rem;
+  min-height: 1.72rem;
   border-radius: 3px;
   border: 1px solid rgba(87, 241, 219, 0.14);
   background: rgba(255, 255, 255, 0.04);
   color: var(--accent);
-  padding: 0.45rem 0.6rem;
+  padding: 0.28rem 0.42rem;
   font-family: "Space Grotesk", sans-serif;
-  font-size: 0.64rem;
+  font-size: 0.56rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -494,28 +574,29 @@ button {
 
 .remote-strip-action {
   flex: 0 0 auto;
-  min-height: 2.05rem;
+  min-height: 1.72rem;
   border-radius: 3px;
-  padding: 0.45rem 0.7rem;
+  padding: 0.28rem 0.46rem;
   font-family: "Space Grotesk", sans-serif;
-  font-size: 0.64rem;
+  font-size: 0.56rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .remote-global-cancel-button {
   flex: 0 0 auto;
-  min-width: 9rem;
-  min-height: 3.2rem;
+  order: 10;
+  min-width: 7.6rem;
+  min-height: 2.55rem;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 38%),
     linear-gradient(180deg, rgba(31, 31, 31, 0.98), rgba(14, 14, 14, 0.98));
   color: var(--muted);
-  padding: 0.45rem 0.75rem;
+  padding: 0.32rem 0.56rem;
   font-family: "Space Grotesk", sans-serif;
-  font-size: 0.64rem;
+  font-size: 0.56rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -535,10 +616,13 @@ button {
 
 .remote-inline-panel {
   flex: 1 1 100%;
+  order: 30;
   display: flex;
   align-items: center;
   min-width: 0;
-  padding: 0.55rem 0.65rem;
+  width: 100%;
+  max-width: none;
+  padding: 0.4rem 0.5rem;
   border-radius: 4px;
   border: 1px solid rgba(87, 241, 219, 0.12);
   background:
@@ -555,21 +639,21 @@ button {
 .jump-mode-group {
   display: inline-grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.35rem;
-  padding: 0.35rem;
-  border-radius: 999px;
+  gap: 0.22rem;
+  padding: 0.22rem;
+  border-radius: 4px;
   background: rgb(255 255 255 / 0.04);
   border: 1px solid rgb(255 255 255 / 0.06);
 }
 
 .jump-mode-group button,
 .jump-cancel-button {
-  border-radius: 999px;
+  border-radius: 3px;
   background: rgb(255 255 255 / 0.05);
   color: var(--muted);
-  padding: 0.48rem 0.72rem;
+  padding: 0.36rem 0.52rem;
   font-family: "Space Grotesk", sans-serif;
-  font-size: 0.64rem;
+  font-size: 0.56rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -594,13 +678,13 @@ button {
 .jump-bars-field {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  border-radius: 999px;
+  gap: 0.32rem;
+  border-radius: 4px;
   border: 1px solid rgb(255 255 255 / 0.06);
   background: rgb(255 255 255 / 0.04);
-  padding: 0.4rem 0.58rem;
+  padding: 0.3rem 0.45rem;
   color: var(--muted);
-  font-size: 0.64rem;
+  font-size: 0.56rem;
 }
 
 .jump-bars-field input:not([type="range"]) {
@@ -671,9 +755,9 @@ button {
 }
 
 .bars-stepper button {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
+  width: 1.72rem;
+  height: 1.72rem;
+  border-radius: 3px;
   background: rgb(255 255 255 / 0.06);
   color: var(--text);
   font-family: "Space Grotesk", sans-serif;
@@ -735,24 +819,30 @@ button {
 .region-actions-row {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
-  flex-wrap: wrap;
+  gap: 0.45rem;
+  flex-wrap: nowrap;
 }
 
 .selected-region-actions {
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.35rem;
   flex-wrap: wrap;
+}
+
+.region-jump-button {
+  min-height: 2.2rem;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
 .region-chip {
   flex: 0 0 auto;
-  border-radius: 999px;
+  border-radius: 4px;
   background: var(--panel);
   color: var(--muted);
-  padding: 0.65rem 0.8rem;
-  font-size: 0.68rem;
+  padding: 0.45rem 0.58rem;
+  font-size: 0.58rem;
 }
 
 .region-chip.is-active {
@@ -762,25 +852,25 @@ button {
 
 .marker-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
-  gap: 0.6rem;
-  margin-top: 0.65rem;
+  grid-template-columns: repeat(auto-fill, minmax(8.25rem, 1fr));
+  gap: 0.38rem;
+  margin-top: 0.45rem;
 }
 
 .marker-card {
   display: flex;
   flex-direction: column;
   gap: 0.12rem;
-  min-height: 4.6rem;
-  border-radius: 0.9rem;
+  min-height: 3.45rem;
+  border-radius: 5px;
   background: linear-gradient(180deg, rgb(42 42 42 / 0.92), rgb(24 24 24 / 0.96));
   color: var(--text);
-  padding: 0.72rem 0.78rem;
+  padding: 0.52rem 0.58rem;
   text-align: left;
 }
 
 .marker-card strong {
-  font-size: 0.92rem;
+  font-size: 0.78rem;
 }
 
 .marker-card span,
@@ -802,6 +892,158 @@ button {
   box-shadow:
     0 0 0 1px rgba(87, 241, 219, 0.2),
     0 0 16px rgba(87, 241, 219, 0.16);
+}
+
+.remote-shell.is-large-controls .transport-chrome {
+  padding-bottom: 0.65rem;
+}
+
+.remote-shell.is-large-controls .readout-card {
+  padding: 0.42rem 0.56rem;
+}
+
+.remote-shell.is-large-controls .readout-card span {
+  font-size: 0.56rem;
+}
+
+.remote-shell.is-large-controls .readout-card strong {
+  font-size: clamp(0.9rem, 2.3vw, 1.15rem);
+}
+
+.remote-shell.is-large-controls .pill-button {
+  min-height: 2.45rem;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+.remote-shell.is-large-controls .timeline-shell-shared {
+  height: 6.2rem;
+}
+
+.remote-shell.is-large-controls .remote-control-card,
+.remote-shell.is-large-controls .remote-global-cancel-button {
+  min-height: 3.35rem;
+}
+
+.remote-shell.is-large-controls .remote-control-card {
+  padding: 0.48rem 0.52rem 0.48rem 0.68rem;
+}
+
+.remote-shell.is-large-controls .remote-control-card-head small {
+  font-size: 0.58rem;
+}
+
+.remote-shell.is-large-controls .remote-control-card-head strong {
+  font-size: 0.9rem;
+}
+
+.remote-shell.is-large-controls .group-settings-button,
+.remote-shell.is-large-controls .remote-strip-action {
+  min-height: 2.25rem;
+  padding: 0.48rem 0.66rem;
+  font-size: 0.64rem;
+}
+
+.remote-shell.is-large-controls .remote-global-cancel-button {
+  padding: 0.48rem 0.75rem;
+  font-size: 0.64rem;
+}
+
+.remote-shell.is-large-controls .remote-inline-panel {
+  padding: 0.65rem 0.75rem;
+}
+
+.remote-shell.is-large-controls .jump-mode-group button,
+.remote-shell.is-large-controls .jump-cancel-button,
+.remote-shell.is-large-controls .jump-bars-field,
+.remote-shell.is-large-controls .region-chip {
+  min-height: 2.65rem;
+  font-size: 0.68rem;
+}
+
+.remote-shell.is-large-controls .marker-grid {
+  grid-template-columns: repeat(auto-fill, minmax(10.25rem, 1fr));
+  gap: 0.55rem;
+}
+
+.remote-shell.is-large-controls .marker-card {
+  min-height: 4.9rem;
+  padding: 0.8rem 0.86rem;
+}
+
+.remote-shell.is-large-controls .marker-card strong {
+  font-size: 0.98rem;
+}
+
+.remote-shell.remote-size-2 .readout-card strong {
+  font-size: clamp(1rem, 2.55vw, 1.28rem);
+}
+
+.remote-shell.remote-size-2 .pill-button {
+  min-height: 2.8rem;
+  font-size: 0.86rem;
+}
+
+.remote-shell.remote-size-2 .timeline-shell-shared {
+  height: 7rem;
+}
+
+.remote-shell.remote-size-2 .remote-control-card,
+.remote-shell.remote-size-2 .remote-global-cancel-button {
+  min-height: 3.85rem;
+}
+
+.remote-shell.remote-size-2 .group-settings-button,
+.remote-shell.remote-size-2 .remote-strip-action {
+  min-height: 2.55rem;
+}
+
+.remote-shell.remote-size-2 .marker-card {
+  min-height: 5.6rem;
+}
+
+.remote-shell.remote-size-3 .readout-card strong {
+  font-size: clamp(1.1rem, 2.8vw, 1.42rem);
+}
+
+.remote-shell.remote-size-3 .pill-button {
+  min-height: 3.15rem;
+  font-size: 0.95rem;
+}
+
+.remote-shell.remote-size-3 .timeline-shell-shared {
+  height: 7.8rem;
+}
+
+.remote-shell.remote-size-3 .remote-control-card,
+.remote-shell.remote-size-3 .remote-global-cancel-button {
+  min-height: 4.35rem;
+}
+
+.remote-shell.remote-size-3 .remote-control-card-head small {
+  font-size: 0.66rem;
+}
+
+.remote-shell.remote-size-3 .remote-control-card-head strong {
+  font-size: 1rem;
+}
+
+.remote-shell.remote-size-3 .group-settings-button,
+.remote-shell.remote-size-3 .remote-strip-action {
+  min-height: 2.9rem;
+  font-size: 0.74rem;
+}
+
+.remote-shell.remote-size-3 .marker-grid {
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+}
+
+.remote-shell.remote-size-3 .marker-card {
+  min-height: 6.35rem;
+}
+
+.remote-shell.remote-size-3 .marker-card strong {
+  font-size: 1.12rem;
 }
 
 .mixer-scroll {
@@ -1037,56 +1279,88 @@ button {
 
 @media (max-width: 720px) {
   .remote-header {
-    grid-template-columns: 1fr auto;
-    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.5rem 0.24rem;
   }
 
-  .remote-header-transport {
+  .remote-header small {
     display: none;
-    grid-column: 1 / -1;
   }
 
-  .transport-topline.transport-topline-mobile-only {
-    display: grid;
+  .remote-header h1 {
+    font-size: 0.86rem;
+  }
+
+  .remote-view-tabs {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .remote-view-tabs button {
+    min-height: 1.55rem;
+    padding: 0.22rem 0.34rem;
+    font-size: 0.54rem;
+  }
+
+  .status-pill {
+    padding: 0.26rem 0.36rem;
+    font-size: 0.5rem;
+  }
+
+  .remote-size-stepper {
+    grid-template-columns: 1.5rem 1.2rem 1.5rem;
+  }
+
+  .remote-size-stepper button,
+  .remote-size-stepper span {
+    min-height: 1.55rem;
+  }
+
+  .remote-size-stepper button {
+    font-size: 0.78rem;
+  }
+
+  .remote-size-stepper span {
+    font-size: 0.48rem;
   }
 
   .transport-topline {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.35rem;
   }
 
   .transport-readouts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem;
+    display: flex;
+    gap: 0.28rem;
+    overflow-x: auto;
   }
 
   .transport-chrome {
-    padding-bottom: 0.65rem;
+    padding: 0.35rem 0.5rem 0.4rem;
   }
 
   .transport-chrome-inline-shell {
     padding: 0;
   }
 
-  .remote-header .timeline-shell-shared {
-    display: block;
-  }
-
   .readout-card {
-    padding: 0.52rem 0.62rem;
+    flex: 0 0 4.9rem;
+    padding: 0.26rem 0.34rem;
   }
 
   .readout-card span {
-    font-size: 0.54rem;
+    font-size: 0.44rem;
   }
 
   .readout-card strong {
-    font-size: clamp(0.86rem, 4vw, 1.08rem);
+    font-size: 0.72rem;
   }
 
   .transport-controls {
-    gap: 0.5rem;
-    margin-top: 0.5rem;
+    gap: 0.24rem;
+    margin-top: 0;
   }
 
   .transport-controls-inline {
@@ -1094,13 +1368,13 @@ button {
   }
 
   .pill-button {
-    padding: 0.48rem 0.64rem;
-    font-size: 0.78rem;
+    padding: 0.38rem 0.42rem;
+    font-size: 0.62rem;
   }
 
   .timeline-shell-shared {
-    height: 5.2rem;
-    margin-top: 0.55rem;
+    height: 4.6rem;
+    margin-top: 0.35rem;
   }
 
   .timeline-marker-mini {
@@ -1138,26 +1412,52 @@ button {
 
   .transport-control-deck {
     display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
+    flex-direction: row;
+    gap: 0.32rem;
     align-items: stretch;
   }
 
   .transport-control-card {
-    width: 100%;
+    width: auto;
+    flex: 1 1 calc(50% - 0.32rem);
     min-width: 0;
     padding: 0;
   }
 
+  .transport-control-card-region {
+    flex: 1 1 100%;
+  }
+
   .remote-control-card {
     width: 100%;
-    min-height: 3.05rem;
-    padding: 0.45rem 0.5rem 0.45rem 0.65rem;
+    min-height: 2.5rem;
+    padding: 0.32rem 0.36rem 0.32rem 0.48rem;
   }
 
   .remote-global-cancel-button {
+    width: auto;
+    flex: 1 1 calc(50% - 0.32rem);
+    min-height: 2.5rem;
+    order: 10;
+  }
+
+  .remote-inline-panel {
+    flex: 1 1 100%;
+    max-width: none;
+    order: 12;
+  }
+
+  .remote-inline-panel .jump-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .remote-inline-panel .jump-mode-group,
+  .remote-inline-panel .jump-bars-field,
+  .remote-inline-panel .pending-jump-card,
+  .remote-inline-panel .jump-cancel-button {
     width: 100%;
-    min-height: 3.05rem;
+    box-sizing: border-box;
   }
 
   .remote-control-card-head {
@@ -1179,8 +1479,8 @@ button {
 
   .group-settings-button {
     width: auto;
-    min-height: 2.05rem;
-    padding: 0.45rem 0.6rem;
+    min-height: 1.72rem;
+    padding: 0.28rem 0.42rem;
   }
 
   .remote-group-inline {
@@ -1204,26 +1504,68 @@ button {
     gap: 0.35rem 0.55rem;
   }
 
+  .region-actions-row {
+    gap: 0.28rem;
+  }
+
+  .region-carousel {
+    gap: 0.28rem;
+    padding: 0.12rem 0;
+  }
+
+  .selected-region-actions {
+    flex: 0 0 auto;
+  }
+
+  .region-jump-button {
+    min-height: 2.2rem;
+    padding-inline: 0.5rem;
+  }
+
   .marker-card {
-    min-height: 5.4rem;
-    padding: 0.9rem 0.85rem;
+    min-height: 3.4rem;
+    padding: 0.52rem 0.58rem;
   }
 
   .marker-card,
   .jump-mode-group button,
   .jump-cancel-button,
   .region-chip {
-    min-height: 2.75rem;
+    min-height: 2.2rem;
   }
 
   .jump-mode-group button,
   .jump-cancel-button {
-    padding-top: 0.75rem;
-    padding-bottom: 0.75rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
   }
 
   .jump-mode-group button {
     font-size: 0.62rem;
+  }
+
+  .remote-shell.is-large-controls .transport-readouts {
+    gap: 0.34rem;
+  }
+
+  .remote-shell.is-large-controls .readout-card {
+    flex-basis: 5.8rem;
+  }
+
+  .remote-shell.is-large-controls .timeline-shell-shared {
+    height: 5.8rem;
+  }
+
+  .remote-shell.is-large-controls .transport-control-deck {
+    grid-template-columns: 1fr;
+  }
+
+  .remote-shell.remote-size-2 .timeline-shell-shared {
+    height: 6.4rem;
+  }
+
+  .remote-shell.remote-size-3 .timeline-shell-shared {
+    height: 7rem;
   }
 
   .mixer-strip {
@@ -1264,6 +1606,49 @@ button {
   .bottom-nav button {
     padding: 0.8rem 0.75rem;
     font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 1100px) {
+  .transport-control-deck {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .transport-control-card,
+  .transport-control-card-song,
+  .remote-global-cancel-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .remote-control-card {
+    min-width: 0;
+  }
+
+  .remote-inline-panel,
+  .transport-control-card-region {
+    grid-column: 1 / -1;
+  }
+
+  .remote-inline-panel {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .transport-control-deck {
+    grid-template-columns: 1fr;
+  }
+
+  .remote-control-card,
+  .remote-global-cancel-button {
+    min-height: 2.45rem;
+  }
+
+  .remote-global-cancel-button {
+    grid-column: 1;
   }
 }
 

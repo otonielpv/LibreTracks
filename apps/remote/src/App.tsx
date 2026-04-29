@@ -102,7 +102,27 @@ type FolderPalette = {
 
 const CHROME_TIMELINE_PIXELS_PER_SECOND = BASE_PIXELS_PER_SECOND * 2.35;
 const PAN_CENTER_MAGNET = 0.08;
+const REMOTE_SIZE_STORAGE_KEY = "libretracks.remote.uiSize";
+const MAX_REMOTE_SIZE_LEVEL = 3;
 const STRINGS = getRemoteStrings();
+
+function readRemoteSizeLevel() {
+  if (typeof window === "undefined") {
+    return 0;
+  }
+
+  const storedValue = window.localStorage.getItem(REMOTE_SIZE_STORAGE_KEY);
+  if (storedValue === "large") {
+    return 1;
+  }
+
+  const parsedLevel = Number(storedValue);
+  if (!Number.isFinite(parsedLevel)) {
+    return 0;
+  }
+
+  return Math.min(MAX_REMOTE_SIZE_LEVEL, Math.max(0, Math.floor(parsedLevel)));
+}
 
 const useRemoteConnectionStore = create<RemoteConnectionState>()((set) => ({
   status: "connecting",
@@ -794,17 +814,11 @@ function TransportView() {
   const setVampMode = useRemoteJumpStore((state) => state.setVampMode);
   const setVampBars = useRemoteJumpStore((state) => state.setVampBars);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
-  const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(0.8);
   const markers = songView?.sectionMarkers ?? [];
   const regions = songView?.regions ?? [];
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
   const activeVamp = snapshot?.activeVamp ?? null;
-  const metronomeVolume = settings?.metronomeVolume ?? 0.8;
   const [activePanel, setActivePanel] = useState<RemotePanelKey | null>(null);
-
-  useEffect(() => {
-    setMetronomeVolumeDraft(metronomeVolume);
-  }, [metronomeVolume]);
 
   useEffect(() => {
     if (!regions.length) {
@@ -949,23 +963,6 @@ function TransportView() {
   const renderSongControls = () => (
     <div className="jump-toolbar jump-toolbar-sheet">
       <label className="jump-bars-field">
-        <span>{STRINGS.clickVolume}</span>
-        <input
-          className="jump-range-input"
-          type="range"
-          min={0}
-          max={1}
-          step={0.01}
-          value={metronomeVolumeDraft}
-          onChange={(event) => {
-            const nextValue = Number(event.currentTarget.value);
-            setMetronomeVolumeDraft(nextValue);
-            sendMetronomePatch({ volume: nextValue });
-          }}
-        />
-      </label>
-
-      <label className="jump-bars-field">
         <span>{STRINGS.songTrigger}</span>
         <select
           value={songTrigger}
@@ -1060,14 +1057,6 @@ function TransportView() {
           </div>
         </article>
 
-        {activePanel ? (
-          <div className="remote-inline-panel" role="region" aria-label={STRINGS.settings}>
-            {activePanel === "jump" ? renderJumpControls() : null}
-            {activePanel === "vamp" ? renderVampControls() : null}
-            {activePanel === "song" ? renderSongControls() : null}
-          </div>
-        ) : null}
-
         <button
           type="button"
           className={`transport-control-card remote-global-cancel-button ${pendingJump ? "is-warning" : ""}`}
@@ -1099,7 +1088,7 @@ function TransportView() {
             {selectedRegion ? (
               <div className="selected-region-actions">
                 <button
-                  className="jump-cancel-button"
+                  className="jump-cancel-button region-jump-button"
                   onClick={() => scheduleRegionJump(selectedRegion.id)}
                 >
                   {STRINGS.jumpToSong}
@@ -1108,6 +1097,14 @@ function TransportView() {
             ) : null}
           </div>
         </div>
+
+        {activePanel ? (
+          <div className="remote-inline-panel" role="region" aria-label={STRINGS.settings}>
+            {activePanel === "jump" ? renderJumpControls() : null}
+            {activePanel === "vamp" ? renderVampControls() : null}
+            {activePanel === "song" ? renderSongControls() : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="marker-grid">
@@ -1336,20 +1333,58 @@ function MixerView() {
 export function App() {
   useRemoteBridge();
   const [view, setView] = useState<RemoteView>("transport");
+  const [sizeLevel, setSizeLevel] = useState(readRemoteSizeLevel);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
 
+  useEffect(() => {
+    window.localStorage.setItem(REMOTE_SIZE_STORAGE_KEY, String(sizeLevel));
+  }, [sizeLevel]);
+
   return (
-    <main className="remote-shell">
+    <main
+      className={`remote-shell remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""}`}
+    >
       <header className="remote-header">
         <div className="remote-header-brand">
           <small>LibreTracks</small>
           <h1>{STRINGS.appTitle}</h1>
         </div>
-        <div className="remote-header-transport">
-          <HeaderTransportTopline />
-        </div>
+        <nav className="remote-view-tabs" aria-label={STRINGS.transport}>
+          <button
+            className={view === "transport" ? "is-active" : ""}
+            onClick={() => setView("transport")}
+          >
+            {STRINGS.transport}
+          </button>
+          <button
+            className={view === "mixer" ? "is-active" : ""}
+            onClick={() => setView("mixer")}
+          >
+            {STRINGS.mixer}
+          </button>
+        </nav>
         <div className="status-pill">
           {snapshot?.playbackState ? STRINGS[snapshot.playbackState] : STRINGS.idle}
+        </div>
+        <div className="remote-size-stepper" role="group" aria-label={STRINGS.size}>
+          <button
+            type="button"
+            aria-label={STRINGS.compact}
+            disabled={sizeLevel === 0}
+            onClick={() => setSizeLevel((current) => Math.max(0, current - 1))}
+          >
+            -
+          </button>
+          <span>{sizeLevel + 1}</span>
+          <button
+            type="button"
+            className={sizeLevel > 0 ? "is-active" : ""}
+            aria-label={STRINGS.large}
+            disabled={sizeLevel === MAX_REMOTE_SIZE_LEVEL}
+            onClick={() => setSizeLevel((current) => Math.min(MAX_REMOTE_SIZE_LEVEL, current + 1))}
+          >
+            +
+          </button>
         </div>
       </header>
 
@@ -1358,21 +1393,6 @@ export function App() {
       <div className="remote-content">
         {view === "transport" ? <TransportView /> : <MixerView />}
       </div>
-
-      <nav className="bottom-nav">
-        <button
-          className={view === "transport" ? "is-active" : ""}
-          onClick={() => setView("transport")}
-        >
-          {STRINGS.transport}
-        </button>
-        <button
-          className={view === "mixer" ? "is-active" : ""}
-          onClick={() => setView("mixer")}
-        >
-          {STRINGS.mixer}
-        </button>
-      </nav>
     </main>
   );
 }
