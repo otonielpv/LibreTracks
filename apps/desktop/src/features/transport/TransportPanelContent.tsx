@@ -856,6 +856,7 @@ export function TransportPanelContent() {
   const [missingMidiDeviceWarning, setMissingMidiDeviceWarning] = useState<string | null>(null);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const appSettingsRef = useRef(appSettings);
+  const hasShownMissingMidiDeviceWarningRef = useRef(false);
   const metronomeLiveRequestIdRef = useRef(0);
   useEffect(() => {
     if (isSettingsModalOpen) {
@@ -1021,6 +1022,17 @@ export function TransportPanelContent() {
       pendingJump.targetMarkerName,
       pendingJump.trigger,
       pendingJump.executeAtSeconds.toFixed(6),
+    ].join("|");
+  });
+  const activeVampSignature = useTransportStore((state) => {
+    const activeVamp = state.playback?.activeVamp;
+    if (!activeVamp) {
+      return "";
+    }
+
+    return [
+      activeVamp.startSeconds.toFixed(6),
+      activeVamp.endSeconds.toFixed(6),
     ].join("|");
   });
 
@@ -1945,11 +1957,17 @@ export function TransportPanelContent() {
       return;
     }
 
+    if (hasShownMissingMidiDeviceWarningRef.current) {
+      setMissingMidiDeviceWarning(null);
+      return;
+    }
+
     if (midiInputDevices.includes(selectedMidiDevice)) {
       setMissingMidiDeviceWarning(null);
       return;
     }
 
+    hasShownMissingMidiDeviceWarningRef.current = true;
     setMissingMidiDeviceWarning(selectedMidiDevice);
   }, [
     appSettings.selectedMidiDevice,
@@ -2986,7 +3004,7 @@ export function TransportPanelContent() {
   const pendingMarkerJump = pendingMarkerJumpSignature
     ? snapshotRef.current?.pendingMarkerJump ?? null
     : null;
-  const activeVamp = snapshotRef.current?.activeVamp ?? null;
+  const activeVamp = activeVampSignature ? snapshotRef.current?.activeVamp ?? null : null;
   const renderedClipsByTrack = useMemo(
     () => mergeOptimisticClipsByTrack(clipsByTrack, optimisticClipOperations),
     [clipsByTrack, optimisticClipOperations],
@@ -5332,14 +5350,6 @@ export function TransportPanelContent() {
                 <p>{t("transport.midiWarning.description")}</p>
                 <p>{t("transport.midiWarning.detail", { name: missingMidiDeviceWarning })}</p>
               </div>
-              <button
-                type="button"
-                className="lt-settings-modal-close"
-                onClick={handleDismissMissingMidiDeviceWarning}
-              >
-                <span className="material-symbols-outlined">close</span>
-                {t("transport.midiWarning.dismiss")}
-              </button>
             </header>
             <div className="lt-settings-modal-body">
               <div className="lt-inline-actions">

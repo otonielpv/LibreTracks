@@ -130,6 +130,17 @@ export function TimelineToolbar({
       : globalJumpMode === "next_marker"
         ? t("transport.jumpMode.nextMarker")
         : t("transport.jumpMode.immediate");
+  const songJumpSummary =
+    songJumpTrigger === "after_bars"
+      ? `${songJumpBars} bars`
+      : songJumpTrigger === "region_end"
+        ? t("transport.jumpMode.regionEnd")
+        : t("transport.jumpMode.immediate");
+  const songTransitionSummary =
+    songTransitionMode === "fade_out"
+      ? t("timelineToolbar.songTransitionFadeOut")
+      : t("timelineToolbar.songTransitionInstant");
+  const songSummary = `${songJumpSummary} / ${songTransitionSummary}`;
 
   const handleModeButtonClick = (
     learnKey: string,
@@ -383,7 +394,7 @@ export function TimelineToolbar({
 
           <ControlGroup
             title={t("timelineToolbar.songTransitionLabel")}
-            summary={songTransitionMode === "fade_out" ? t("timelineToolbar.songTransitionFadeOut") : t("timelineToolbar.songTransitionInstant")}
+            summary={songSummary}
             open={openGroup === "song"}
             onToggleOpen={() => setOpenGroup((current) => (current === "song" ? null : "song"))}
             className="lt-control-group-song"

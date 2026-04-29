@@ -116,6 +116,9 @@ pub enum RemoteCommand {
         enabled: Option<bool>,
         volume: Option<f64>,
     },
+    UpdateSettings {
+        settings: Value,
+    },
     Ping,
 }
 

@@ -83,12 +83,14 @@ type RemoteJumpState = {
   mode: JumpMode;
   bars: number;
   songTrigger: SongJumpTrigger;
+  songBars: number;
   songTransition: SongTransitionMode;
   vampMode: VampMode;
   vampBars: number;
   setMode: (mode: JumpMode) => void;
   setBars: (bars: number) => void;
   setSongTrigger: (mode: SongJumpTrigger) => void;
+  setSongBars: (bars: number) => void;
   setSongTransition: (mode: SongTransitionMode) => void;
   setVampMode: (mode: VampMode) => void;
   setVampBars: (bars: number) => void;
@@ -184,6 +186,7 @@ const useRemoteJumpStore = create<RemoteJumpState>()((set) => ({
   mode: "immediate",
   bars: 4,
   songTrigger: "immediate",
+  songBars: 4,
   songTransition: "instant",
   vampMode: "section",
   vampBars: 4,
@@ -195,6 +198,9 @@ const useRemoteJumpStore = create<RemoteJumpState>()((set) => ({
   },
   setSongTrigger: (songTrigger) => {
     set({ songTrigger });
+  },
+  setSongBars: (songBars) => {
+    set({ songBars: Math.max(1, Math.floor(songBars) || 1) });
   },
   setSongTransition: (songTransition) => {
     set({ songTransition });
@@ -225,6 +231,13 @@ function sendMetronomePatch(patch: { enabled?: boolean; volume?: number }) {
     cmd: "updateMetronome",
     enabled: patch.enabled,
     volume: patch.volume,
+  });
+}
+
+function sendSettingsUpdate(settings: AppSettings) {
+  sendCommand({
+    cmd: "updateSettings",
+    settings,
   });
 }
 
@@ -259,6 +272,18 @@ function formatJumpModeLabel(mode: JumpMode, bars: number) {
 
   if (mode === "next_marker") {
     return STRINGS.nextMarker;
+  }
+
+  return `${bars} ${STRINGS.bars.toLowerCase()}`;
+}
+
+function formatSongTriggerLabel(trigger: SongJumpTrigger, bars: number) {
+  if (trigger === "immediate") {
+    return STRINGS.immediate;
+  }
+
+  if (trigger === "region_end") {
+    return STRINGS.songEnd;
   }
 
   return `${bars} ${STRINGS.bars.toLowerCase()}`;
@@ -804,12 +829,14 @@ function TransportView() {
   const jumpMode = useRemoteJumpStore((state) => state.mode);
   const jumpBars = useRemoteJumpStore((state) => state.bars);
   const songTrigger = useRemoteJumpStore((state) => state.songTrigger);
+  const songBars = useRemoteJumpStore((state) => state.songBars);
   const songTransition = useRemoteJumpStore((state) => state.songTransition);
   const vampMode = useRemoteJumpStore((state) => state.vampMode);
   const vampBars = useRemoteJumpStore((state) => state.vampBars);
   const setJumpMode = useRemoteJumpStore((state) => state.setMode);
   const setJumpBars = useRemoteJumpStore((state) => state.setBars);
   const setSongTrigger = useRemoteJumpStore((state) => state.setSongTrigger);
+  const setSongBars = useRemoteJumpStore((state) => state.setSongBars);
   const setSongTransition = useRemoteJumpStore((state) => state.setSongTransition);
   const setVampMode = useRemoteJumpStore((state) => state.setVampMode);
   const setVampBars = useRemoteJumpStore((state) => state.setVampBars);
@@ -819,6 +846,25 @@ function TransportView() {
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
   const activeVamp = snapshot?.activeVamp ?? null;
   const [activePanel, setActivePanel] = useState<RemotePanelKey | null>(null);
+
+  const patchRemoteSettings = (patch: Partial<AppSettings>) => {
+    if (!settings) {
+      return;
+    }
+
+    const jumpState = useRemoteJumpStore.getState();
+    sendSettingsUpdate({
+      ...settings,
+      globalJumpMode: jumpState.mode,
+      globalJumpBars: jumpState.bars,
+      songJumpTrigger: jumpState.songTrigger,
+      songJumpBars: jumpState.songBars,
+      songTransitionMode: jumpState.songTransition,
+      vampMode: jumpState.vampMode,
+      vampBars: jumpState.vampBars,
+      ...patch,
+    });
+  };
 
   useEffect(() => {
     if (!regions.length) {
@@ -830,6 +876,21 @@ function TransportView() {
       setSelectedRegionId(regions[0]?.id ?? null);
     }
   }, [regions, selectedRegionId]);
+
+  useEffect(() => {
+    if (!settings) {
+      return;
+    }
+
+    const jumpStore = useRemoteJumpStore.getState();
+    jumpStore.setMode(settings.globalJumpMode);
+    jumpStore.setBars(settings.globalJumpBars);
+    jumpStore.setSongTrigger(settings.songJumpTrigger);
+    jumpStore.setSongBars(settings.songJumpBars);
+    jumpStore.setSongTransition(settings.songTransitionMode);
+    jumpStore.setVampMode(settings.vampMode);
+    jumpStore.setVampBars(settings.vampBars);
+  }, [settings]);
 
   const selectedRegion =
     regions.find((region) => region.id === selectedRegionId) ??
@@ -864,7 +925,7 @@ function TransportView() {
       cmd: "scheduleRegionJump",
       targetRegionId: regionId,
       trigger: songTrigger,
-      bars: songTrigger === "after_bars" ? jumpBars : undefined,
+      bars: songTrigger === "after_bars" ? songBars : undefined,
       transition: songTransition,
       durationSeconds: songTransition === "fade_out" ? 0.35 : undefined,
     });
@@ -888,33 +949,51 @@ function TransportView() {
   const vampSummary =
     vampMode === "bars" ? `${vampBars} ${STRINGS.bars.toLowerCase()}` : STRINGS.section;
 
-  const songSummary = `${STRINGS.songTransition}: ${songTransition === "fade_out" ? STRINGS.fadeOut : STRINGS.cleanCut}`;
+  const songJumpSummary = formatSongTriggerLabel(songTrigger, songBars);
+  const songTransitionSummary = songTransition === "fade_out" ? STRINGS.fadeOut : STRINGS.cleanCut;
+  const songSummary = `${songJumpSummary} / ${songTransitionSummary}`;
 
   const renderJumpControls = () => (
     <div className="jump-toolbar jump-toolbar-sheet">
       <div className="jump-mode-group" role="group" aria-label={STRINGS.jump}>
         <button
           className={jumpMode === "immediate" ? "is-active" : ""}
-          onClick={() => setJumpMode("immediate")}
+          onClick={() => {
+            setJumpMode("immediate");
+            patchRemoteSettings({ globalJumpMode: "immediate" });
+          }}
         >
           {STRINGS.immediate}
         </button>
         <button
           className={jumpMode === "after_bars" ? "is-active" : ""}
-          onClick={() => setJumpMode("after_bars")}
+          onClick={() => {
+            setJumpMode("after_bars");
+            patchRemoteSettings({ globalJumpMode: "after_bars" });
+          }}
         >
           {STRINGS.bars}
         </button>
         <button
           className={jumpMode === "next_marker" ? "is-active" : ""}
-          onClick={() => setJumpMode("next_marker")}
+          onClick={() => {
+            setJumpMode("next_marker");
+            patchRemoteSettings({ globalJumpMode: "next_marker" });
+          }}
         >
           {STRINGS.next}
         </button>
       </div>
 
       {jumpMode === "after_bars" ? (
-        <StepperField label={STRINGS.bars} value={jumpBars} onChange={setJumpBars} />
+        <StepperField
+          label={STRINGS.bars}
+          value={jumpBars}
+          onChange={(nextValue) => {
+            setJumpBars(nextValue);
+            patchRemoteSettings({ globalJumpBars: Math.max(1, Math.floor(nextValue) || 1) });
+          }}
+        />
       ) : null}
 
       {pendingJump ? (
@@ -931,14 +1010,28 @@ function TransportView() {
     <div className="jump-toolbar jump-toolbar-sheet">
       <label className="jump-bars-field">
         <span>{STRINGS.vampMode}</span>
-        <select value={vampMode} onChange={(event) => setVampMode(event.currentTarget.value as VampMode)}>
+        <select
+          value={vampMode}
+          onChange={(event) => {
+            const nextMode = event.currentTarget.value as VampMode;
+            setVampMode(nextMode);
+            patchRemoteSettings({ vampMode: nextMode });
+          }}
+        >
           <option value="section">{STRINGS.section}</option>
           <option value="bars">{STRINGS.bars}</option>
         </select>
       </label>
 
       {vampMode === "bars" ? (
-        <StepperField label={STRINGS.vampBars} value={vampBars} onChange={setVampBars} />
+        <StepperField
+          label={STRINGS.vampBars}
+          value={vampBars}
+          onChange={(nextValue) => {
+            setVampBars(nextValue);
+            patchRemoteSettings({ vampBars: Math.max(1, Math.floor(nextValue) || 1) });
+          }}
+        />
       ) : null}
 
       <button
@@ -966,7 +1059,11 @@ function TransportView() {
         <span>{STRINGS.songTrigger}</span>
         <select
           value={songTrigger}
-          onChange={(event) => setSongTrigger(event.currentTarget.value as SongJumpTrigger)}
+          onChange={(event) => {
+            const nextTrigger = event.currentTarget.value as SongJumpTrigger;
+            setSongTrigger(nextTrigger);
+            patchRemoteSettings({ songJumpTrigger: nextTrigger });
+          }}
         >
           <option value="immediate">{STRINGS.immediate}</option>
           <option value="region_end">{STRINGS.songEnd}</option>
@@ -975,19 +1072,34 @@ function TransportView() {
       </label>
 
       {songTrigger === "after_bars" ? (
-        <StepperField label={STRINGS.bars} value={jumpBars} onChange={setJumpBars} />
+        <StepperField
+          label={STRINGS.bars}
+          value={songBars}
+          onChange={(nextValue) => {
+            setSongBars(nextValue);
+            patchRemoteSettings({ songJumpBars: Math.max(1, Math.floor(nextValue) || 1) });
+          }}
+        />
       ) : null}
 
       <label className="jump-bars-field">
         <span>{STRINGS.songTransition}</span>
         <select
           value={songTransition}
-          onChange={(event) => setSongTransition(event.currentTarget.value as SongTransitionMode)}
+          onChange={(event) => {
+            const nextTransition = event.currentTarget.value as SongTransitionMode;
+            setSongTransition(nextTransition);
+            patchRemoteSettings({ songTransitionMode: nextTransition });
+          }}
         >
           <option value="instant">{STRINGS.cleanCut}</option>
           <option value="fade_out">{STRINGS.fadeOut}</option>
         </select>
       </label>
+      <div className="pending-jump-card song-config-summary">
+        <span>{STRINGS.songTransition}</span>
+        <strong>{songSummary}</strong>
+      </div>
     </div>
   );
 
@@ -1002,7 +1114,7 @@ function TransportView() {
             </div>
             <button
               type="button"
-              className="group-settings-button"
+              className={`group-settings-button ${activePanel === "vamp" ? "is-active" : ""}`}
               aria-expanded={activePanel === "vamp"}
               onClick={() => setActivePanel((current) => (current === "vamp" ? null : "vamp"))}
             >
@@ -1025,7 +1137,7 @@ function TransportView() {
             </div>
             <button
               type="button"
-              className="group-settings-button"
+              className={`group-settings-button ${activePanel === "jump" ? "is-active" : ""}`}
               aria-expanded={activePanel === "jump"}
               onClick={() => setActivePanel((current) => (current === "jump" ? null : "jump"))}
             >
@@ -1048,7 +1160,7 @@ function TransportView() {
             </div>
             <button
               type="button"
-              className="group-settings-button"
+              className={`group-settings-button ${activePanel === "song" ? "is-active" : ""}`}
               aria-expanded={activePanel === "song"}
               onClick={() => setActivePanel((current) => (current === "song" ? null : "song"))}
             >

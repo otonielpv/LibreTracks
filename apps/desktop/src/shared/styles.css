@@ -105,7 +105,7 @@ body {
   align-items: center;
   gap: 0.15rem;
   padding: 0.3rem 0.55rem;
-  border-radius: 0.125rem;
+  border-radius: 2px;
   background: #1b1a1a;
   color: #bacac5;
   font: 600 12px/1 "Space Grotesk", sans-serif;
@@ -131,7 +131,7 @@ body {
   min-width: 15rem;
   padding: 0.35rem;
   border: 1px solid rgb(186 202 197 / 0.14);
-  border-radius: 0.2rem;
+  border-radius: 2px;
   background: linear-gradient(180deg, #181717 0%, #111111 100%);
   box-shadow: 0 14px 34px rgb(0 0 0 / 0.45);
 }
@@ -143,7 +143,7 @@ body {
   gap: 1rem;
   width: 100%;
   padding: 0.55rem 0.65rem;
-  border-radius: 0.125rem;
+  border-radius: 2px;
   background: transparent;
   color: #d7ddd9;
   font: 500 13px/1.1 Inter, sans-serif;
@@ -229,7 +229,7 @@ body {
   gap: 0.2rem;
   background: #0e0e0e;
   padding: 0.25rem 0.55rem;
-  border-radius: 0.125rem;
+  border-radius: 2px;
   box-shadow: inset 0 0 8px rgb(0 0 0 / 0.5);
   flex-shrink: 0;
 }
@@ -253,7 +253,7 @@ body {
   justify-content: center;
   width: 1.8rem;
   height: 1.8rem;
-  border-radius: 0.125rem;
+  border-radius: 2px;
   background: transparent;
   color: #bacac5;
 }
@@ -285,7 +285,7 @@ body {
 .lt-transport-buttons button.is-play {
   width: 2rem;
   height: 2rem;
-  border-radius: 999px;
+  border-radius: 2px;
   background: linear-gradient(to bottom, #57f1db, #2dd4bf);
   color: #003731;
   box-shadow: 0 0 12px rgb(87 241 219 / 0.3);
@@ -328,7 +328,7 @@ body {
   width: min(34rem, 100%);
   padding: 0.8rem 0.9rem;
   border: 1px solid rgb(87 241 219 / 0.16);
-  border-radius: 0.85rem;
+  border-radius: 2px;
   background: linear-gradient(180deg, rgb(28 27 27 / 0.96), rgb(17 17 17 / 0.98));
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
@@ -397,7 +397,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.75rem;
+  border-radius: 2px;
   background:
     radial-gradient(circle at top, rgb(87 241 219 / 0.16), transparent 60%),
     rgb(255 255 255 / 0.04);
@@ -412,7 +412,7 @@ body {
 
 .lt-remote-qr-placeholder {
   background: rgb(255 255 255 / 0.04);
-  border-radius: 0.5rem;
+  border-radius: 2px;
 }
 
 .lt-readout-block {
@@ -446,7 +446,7 @@ body {
 }
 
 .transport-pill {
-  border-radius: 0.125rem;
+  border-radius: 2px;
   padding: 0.25rem 0.5rem;
   font: 600 10px/1 "Space Grotesk", sans-serif;
   text-transform: uppercase;
@@ -478,7 +478,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  border-radius: 0.125rem;
+  border-radius: 2px;
   background: #201f1f;
   color: #bacac5;
   padding: 0.35rem 0.6rem;
@@ -524,7 +524,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 0.25rem;
-  border-radius: 0.125rem;
+  border-radius: 2px;
   padding: 0.8rem 0.2rem;
   background: transparent;
   color: rgb(186 202 197 / 0.55);
@@ -588,7 +588,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  border-radius: 1.2rem;
+  border-radius: 2px;
   border: 1px solid rgb(87 241 219 / 0.18);
   background:
     radial-gradient(circle at top left, rgb(87 241 219 / 0.12), transparent 45%),
@@ -634,7 +634,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid rgb(255 255 255 / 0.08);
   background: rgb(255 255 255 / 0.04);
   color: #e5e2e1;
@@ -671,7 +671,7 @@ body {
   flex-direction: column;
   gap: 0.45rem;
   padding: 0.4rem;
-  border-radius: 1rem;
+  border-radius: 2px;
   border: 1px solid rgb(255 255 255 / 0.06);
   background: rgb(255 255 255 / 0.03);
 }
@@ -684,7 +684,7 @@ body {
   width: 100%;
   min-height: 2.5rem;
   padding: 0.68rem 0.75rem;
-  border-radius: 0.8rem;
+  border-radius: 2px;
   border: 1px solid transparent;
   background: transparent;
   color: rgb(229 226 225 / 0.72);
@@ -739,7 +739,7 @@ body {
 }
 
 .lt-inline-actions button {
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid rgb(255 255 255 / 0.1);
   background: rgb(255 255 255 / 0.05);
   color: #f3f0ef;
@@ -768,7 +768,7 @@ body {
   flex-direction: column;
   gap: 0.85rem;
   padding: 1rem;
-  border-radius: 1rem;
+  border-radius: 2px;
   border: 1px solid rgb(87 241 219 / 0.14);
   background:
     radial-gradient(circle at top right, rgb(87 241 219 / 0.08), transparent 42%),
@@ -803,7 +803,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid rgb(87 241 219 / 0.2);
   background: rgb(87 241 219 / 0.06);
   color: #d8fff7;
@@ -849,7 +849,7 @@ body {
   flex-direction: column;
   gap: 0.35rem;
   padding: 0.85rem 0.9rem;
-  border-radius: 0.8rem;
+  border-radius: 2px;
   border: 1px solid rgb(255 255 255 / 0.06);
   background: rgb(255 255 255 / 0.03);
 }
@@ -864,7 +864,7 @@ body {
 
 .lt-midi-learn-table-wrap {
   overflow: auto;
-  border-radius: 0.85rem;
+  border-radius: 2px;
   border: 1px solid rgb(255 255 255 / 0.06);
   background: rgb(8 10 11 / 0.75);
 }
@@ -918,7 +918,7 @@ body {
   align-items: center;
   min-height: 1.8rem;
   padding: 0.35rem 0.6rem;
-  border-radius: 999px;
+  border-radius: 2px;
   font: 700 10px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -940,7 +940,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  border-radius: 0.95rem;
+  border-radius: 2px;
   border: 1px solid rgb(255 255 255 / 0.06);
   background: rgb(15 18 19 / 0.92);
   padding: 0.95rem;
@@ -954,7 +954,7 @@ body {
 
 .lt-settings-field select {
   width: 100%;
-  border-radius: 0.8rem;
+  border-radius: 2px;
   border: 1px solid rgb(87 241 219 / 0.18);
   background: rgb(28 31 32 / 0.98);
   color: #f3f0ef;
@@ -981,7 +981,7 @@ body {
 
 .lt-range-input::-webkit-slider-runnable-track {
   height: 0.45rem;
-  border-radius: 999px;
+  border-radius: 2px;
   background: linear-gradient(90deg, rgb(87 241 219 / 0.5), rgb(45 212 191 / 0.9));
 }
 
@@ -992,7 +992,7 @@ body {
   height: 1rem;
   margin-top: -0.275rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 2px;
   background: #f3f0ef;
   box-shadow: 0 0 0 2px rgb(15 18 19 / 0.95);
 }
@@ -1000,7 +1000,7 @@ body {
 .lt-range-input::-moz-range-track {
   height: 0.45rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 2px;
   background: linear-gradient(90deg, rgb(87 241 219 / 0.5), rgb(45 212 191 / 0.9));
 }
 
@@ -1008,7 +1008,7 @@ body {
   width: 1rem;
   height: 1rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 2px;
   background: #f3f0ef;
   box-shadow: 0 0 0 2px rgb(15 18 19 / 0.95);
 }
@@ -1097,17 +1097,19 @@ body {
 
 .lt-library-panel-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 1rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.7rem;
+  padding: 0.9rem 0.85rem;
   border-bottom: 1px solid rgb(87 241 219 / 0.08);
 }
 
 .lt-library-panel-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0.35rem;
+  width: 100%;
 }
 
 .lt-library-panel-header h2 {
@@ -1128,15 +1130,21 @@ body {
 .lt-library-folder-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
   gap: 0.35rem;
-  border-radius: 999px;
-  padding: 0.6rem 0.8rem;
+  border-radius: 2px;
+  padding: 0.52rem 0.42rem;
   border: 1px solid rgb(87 241 219 / 0.16);
   background: rgb(32 31 31 / 0.95);
   color: #e5e2e1;
-  font: 700 10px/1 "Space Grotesk", sans-serif;
-  letter-spacing: 0.12em;
+  font: 700 9px/1.08 "Space Grotesk", sans-serif;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .lt-library-import-button:hover:not(:disabled),
@@ -1171,7 +1179,7 @@ body {
 .lt-library-progress {
   margin: 0 1rem;
   padding: 0.7rem 0.8rem;
-  border-radius: 0.8rem;
+  border-radius: 2px;
   border: 1px solid rgb(87 241 219 / 0.12);
   background: rgb(24 24 24 / 0.92);
 }
@@ -1206,7 +1214,7 @@ body {
 .lt-library-progress-spinner {
   width: 0.95rem;
   height: 0.95rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 2px solid rgb(87 241 219 / 0.18);
   border-top-color: #57f1db;
   flex-shrink: 0;
@@ -1250,7 +1258,7 @@ body {
 
 .lt-library-root-group,
 .lt-library-folder-group {
-  border-radius: 0.72rem;
+  border-radius: 2px;
   border: 1px solid rgb(255 255 255 / 0.06);
   background: rgb(19 19 19 / 0.78);
   overflow: hidden;
@@ -1350,7 +1358,7 @@ body {
   grid-template-columns: 0.9rem minmax(0, 1fr) 4rem 3.5rem;
   align-items: center;
   gap: 0.35rem;
-  border-radius: 0.5rem;
+  border-radius: 2px;
   border: 1px solid transparent;
   background: rgb(32 31 31 / 0.78);
   color: #e5e2e1;
@@ -1415,7 +1423,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid rgb(255 255 255 / 0.08);
   background: rgb(14 14 14 / 0.82);
   color: rgb(229 226 225 / 0.72);
@@ -1467,7 +1475,7 @@ body {
   gap: 1rem;
   padding: 2.5rem 2rem;
   border: 1px solid rgb(87 241 219 / 0.14);
-  border-radius: 1rem;
+  border-radius: 2px;
   background: linear-gradient(180deg, rgb(28 27 27 / 0.96), rgb(14 14 14 / 0.96));
   box-shadow: 0 24px 60px rgb(0 0 0 / 0.34), inset 0 1px 0 rgb(255 255 255 / 0.04);
   text-align: center;
@@ -1504,7 +1512,7 @@ body {
 .lt-empty-state-actions button {
   min-width: 8.75rem;
   border: 1px solid rgb(87 241 219 / 0.16);
-  border-radius: 999px;
+  border-radius: 2px;
   background: rgb(32 31 31 / 0.95);
   color: #e5e2e1;
   padding: 0.8rem 1.15rem;
@@ -1678,7 +1686,7 @@ body {
 }
 
 .lt-track-list::-webkit-scrollbar-thumb {
-  border-radius: 999px;
+  border-radius: 2px;
   background: rgb(87 241 219 / 0.35);
   border: 2px solid rgb(32 31 31 / 0.92);
 }
@@ -1712,7 +1720,7 @@ body {
   min-height: 16rem;
   margin: 1rem 0;
   border: 1px dashed rgb(87 241 219 / 0.22);
-  border-radius: 1rem;
+  border-radius: 2px;
   background:
     linear-gradient(180deg, rgb(32 31 31 / 0.92), rgb(14 14 14 / 0.92));
   display: flex;
@@ -1741,7 +1749,7 @@ body {
   position: absolute;
   top: 0.65rem;
   bottom: 0.65rem;
-  border-radius: 0.7rem;
+  border-radius: 2px;
   border: 1px solid rgb(87 241 219 / 0.34);
   background:
     linear-gradient(135deg, rgb(87 241 219 / 0.24), rgb(45 212 191 / 0.16));
@@ -1810,7 +1818,7 @@ body {
 }
 
 .lt-horizontal-scrollbar-rail::-webkit-scrollbar-thumb {
-  border-radius: 999px;
+  border-radius: 2px;
   background: rgb(87 241 219 / 0.35);
   border: 2px solid rgb(32 31 31 / 0.92);
 }
@@ -2170,7 +2178,7 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: 2px;
   background: #0e0e0e;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
@@ -2201,7 +2209,7 @@ body {
   right: 0;
   height: calc(15.79% + 1px);
   min-height: 0;
-  border-radius: 999px 999px 0 0;
+  border-radius: 2px;
   background: #ff6150;
   opacity: 0;
   pointer-events: none;
@@ -2283,7 +2291,7 @@ body {
   margin: 0;
   appearance: none;
   height: 4px;
-  border-radius: 999px;
+  border-radius: 2px;
   background: #0e0e0e;
 }
 
@@ -2454,7 +2462,7 @@ body {
   height: 1.35rem;
   min-width: 1.5rem;
   border: 0;
-  border-radius: 0.55rem;
+  border-radius: 2px;
   background: rgb(255 226 171 / 0.08);
   box-shadow: inset 0 0 0 1px rgb(255 226 171 / 0.12);
   color: transparent;
@@ -2590,7 +2598,7 @@ body {
   display: flex;
   align-items: center;
   padding: 0.2rem;
-  border-radius: 3px;
+  border-radius: 2px;
   border: 1px solid rgba(255, 255, 255, 0.075);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 38%),
@@ -2701,7 +2709,7 @@ body {
   max-width: min(50rem, calc(100vw - 7rem));
   padding: 0.7rem;
   border: 1px solid rgba(186, 202, 197, 0.16);
-  border-radius: 4px;
+  border-radius: 2px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 26%),
     linear-gradient(180deg, rgba(24, 24, 24, 0.98), rgba(9, 9, 9, 0.98));
@@ -2709,6 +2717,11 @@ body {
 }
 
 .lt-control-group-jump .lt-control-popover-panel {
+  left: 0;
+  transform: none;
+}
+
+.lt-control-group-vamp .lt-control-popover-panel {
   left: 0;
   transform: none;
 }
@@ -2808,7 +2821,7 @@ body {
   gap: 0.28rem;
   flex: 0 0 auto;
   white-space: nowrap;
-  border-radius: 3px;
+  border-radius: 2px;
   border: 1px solid rgba(255, 255, 255, 0.075);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 38%),
@@ -2961,7 +2974,7 @@ body {
   max-width: min(28rem, calc(100vw - 6rem));
   padding: 0.45rem 0.65rem;
   border: 1px solid rgb(87 241 219 / 0.12);
-  border-radius: 0.75rem;
+  border-radius: 2px;
   background: rgb(10 10 10 / 0.7);
   backdrop-filter: blur(14px);
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.24);
@@ -2984,7 +2997,7 @@ body {
   flex-direction: column;
   gap: 0.2rem;
   padding: 0.45rem;
-  border-radius: 0.5rem;
+  border-radius: 2px;
   background: rgb(19 19 19 / 0.8);
   border: 1px solid rgb(133 148 144 / 0.18);
   backdrop-filter: blur(12px);
@@ -3041,7 +3054,7 @@ body {
 .busy-overlay-card {
   width: min(24rem, 90vw);
   background: #201f1f;
-  border-radius: 0.5rem;
+  border-radius: 2px;
   padding: 1rem;
 }
 
@@ -3073,7 +3086,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 2px;
   background: #131313;
   border: 1px solid rgb(133 148 144 / 0.2);
   box-shadow: 0 0 32px rgb(229 226 225 / 0.08);
@@ -3302,7 +3315,7 @@ body {
   justify-content: center;
   width: 3rem;
   height: 3rem;
-  border-radius: 999px;
+  border-radius: 2px;
   background: rgb(87 241 219 / 0.12);
   color: #57f1db;
   font-size: 1.5rem;
@@ -3343,7 +3356,7 @@ body {
 .lt-import-preview-pill {
   width: 2.4rem;
   height: 1.2rem;
-  border-radius: 999px;
+  border-radius: 2px;
   background: rgb(87 241 219 / 0.25);
   position: relative;
 }
@@ -3352,7 +3365,7 @@ body {
   content: "";
   width: 0.95rem;
   height: 0.95rem;
-  border-radius: 999px;
+  border-radius: 2px;
   background: #57f1db;
   position: absolute;
   top: 2px;
@@ -3407,7 +3420,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: #353534;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {

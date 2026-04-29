@@ -4,12 +4,12 @@ use libretracks_audio::{JumpTrigger, TransitionType};
 use libretracks_remote::{
     spawn_remote_server, RemoteCommand, RemoteServerHandle, RemoteServerInfo,
 };
-use tauri::{App, AppHandle, Manager};
+use tauri::{App, AppHandle, Emitter, Manager};
 
 use crate::{
     commands::events::emit_transport_lifecycle_event,
     commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
-    settings::AppSettingsStore,
+    settings::{save_app_settings, AppSettings, AppSettingsStore},
     state::DesktopState,
 };
 
@@ -104,7 +104,8 @@ async fn run_remote_sync_poller(app: AppHandle, handle: RemoteServerHandle) {
     loop {
         interval.tick().await;
         let state = app.state::<DesktopState>();
-        if let Ok(settings) = state.audio.current_settings() {
+        let settings_store = app.state::<AppSettingsStore>();
+        if let Ok(settings) = settings_store.current() {
             if let Ok(settings_json) = serde_json::to_string(&settings) {
                 if settings_json != last_settings_json {
                     handle.publish_settings(&settings);
@@ -218,7 +219,7 @@ async fn run_remote_command_bridge(
             } => session.update_track(track_id, None, *volume, *pan, *muted, *solo, &state.audio),
             RemoteCommand::UpdateMetronome { enabled, volume } => {
                 let settings_store = app.state::<AppSettingsStore>();
-                let mut next_settings = match state.audio.current_settings() {
+                let mut next_settings = match settings_store.current() {
                     Ok(settings) => settings,
                     Err(_) => continue,
                 };
@@ -240,6 +241,36 @@ async fn run_remote_command_bridge(
                     continue;
                 }
 
+                if save_app_settings(&app, &saved_settings).is_err() {
+                    continue;
+                }
+
+                let _ = app.emit("settings:updated", saved_settings.clone());
+
+                handle.publish_settings(&saved_settings);
+                session.snapshot_with_sync(&state.audio)
+            }
+            RemoteCommand::UpdateSettings { settings } => {
+                let settings_store = app.state::<AppSettingsStore>();
+                let Ok(next_settings) = serde_json::from_value::<AppSettings>(settings.clone())
+                else {
+                    continue;
+                };
+
+                let result = session.update_audio_settings(next_settings.clone(), &state.audio);
+                let Ok(saved_settings) = result else {
+                    continue;
+                };
+
+                if settings_store.set(saved_settings.clone()).is_err() {
+                    continue;
+                }
+
+                if save_app_settings(&app, &saved_settings).is_err() {
+                    continue;
+                }
+
+                let _ = app.emit("settings:updated", saved_settings.clone());
                 handle.publish_settings(&saved_settings);
                 session.snapshot_with_sync(&state.audio)
             }

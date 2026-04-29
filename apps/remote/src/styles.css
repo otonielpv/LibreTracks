@@ -816,6 +816,11 @@ button {
   white-space: nowrap;
 }
 
+.song-config-summary {
+  flex: 1 1 14rem;
+  justify-content: flex-start;
+}
+
 .region-actions-row {
   display: flex;
   align-items: center;
@@ -887,11 +892,18 @@ button {
 
 .marker-card.is-pending,
 .pill-button.is-active,
+.group-settings-button.is-active,
 .group-settings-button:focus-visible,
 .group-settings-button:hover {
   box-shadow:
     0 0 0 1px rgba(87, 241, 219, 0.2),
     0 0 16px rgba(87, 241, 219, 0.16);
+}
+
+.group-settings-button.is-active {
+  background: var(--accent-soft);
+  border-color: rgba(87, 241, 219, 0.34);
+  color: var(--accent);
 }
 
 .remote-shell.is-large-controls .transport-chrome {
