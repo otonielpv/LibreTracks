@@ -168,6 +168,11 @@ enum PlaybackBackend {
 
 enum ReaderCommand {
     UpdateSong(Song),
+    Play {
+        song: Song,
+        position_seconds: f64,
+        generation: u64,
+    },
     Seek {
         song: Song,
         position_seconds: f64,
@@ -632,7 +637,23 @@ impl PlaybackSession {
     }
 
     fn play(&mut self, song: Song, position_seconds: f64) -> Result<bool, String> {
-        self.seek(song, position_seconds)
+        let generation = self
+            .seek_generation
+            .fetch_add(1, Ordering::AcqRel)
+            .saturating_add(1);
+
+        if let Some(reader_sender) = &self.reader_sender {
+            reader_sender
+                .send(ReaderCommand::Play {
+                    song,
+                    position_seconds,
+                    generation,
+                })
+                .map_err(|_| "disk reader thread is unavailable".to_string())?;
+            return Ok(true);
+        }
+
+        Ok(matches!(self.backend, PlaybackBackend::Null))
     }
 
     fn start_master_fade(
@@ -2021,6 +2042,71 @@ mod tests {
         assert!(!state.is_running);
         assert!(!state.stop_after_master_fade);
         assert!(state.mixer.master_gain() <= GAIN_EPSILON);
+    }
+
+    #[test]
+    fn disk_reader_play_after_stop_restores_master_gain() {
+        let song = demo_song();
+        let song_dir = PathBuf::from("song");
+        let cache = AudioBufferCache::default();
+        cache.insert_for_test(
+            song_dir.join("audio/intro.wav"),
+            SharedAudioSource::from_preloaded(vec![0.75; 48_000 * 5], 48_000, 1, true),
+        );
+        cache.insert_for_test(
+            song_dir.join("audio/late.wav"),
+            SharedAudioSource::from_preloaded(vec![0.75; 48_000 * 5], 48_000, 1, true),
+        );
+
+        let mixer = Mixer::new(
+            song_dir,
+            song.clone(),
+            0.0,
+            48_000,
+            1,
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+            shared_mix_state(&song),
+            Arc::new(RwLock::new(AppSettings::default())),
+            AudioDebugConfig {
+                enabled: false,
+                log_commands: false,
+            },
+            cache,
+        );
+        let (producer, _consumer) = RingBuffer::<OutputSample>::new(1_024);
+        let (command_sender, command_receiver) = mpsc::channel();
+        let mut state = DiskReaderState {
+            mixer,
+            producer,
+            command_receiver,
+            current_generation: 0,
+            is_running: true,
+            stop_after_master_fade: false,
+        };
+
+        command_sender
+            .send(ReaderCommand::Stop {
+                fade_duration_seconds: STOP_FADE_DURATION_SECONDS,
+            })
+            .expect("stop command should send");
+        assert!(!state.consume_commands());
+        let _ = state.mixer.render_next_block(DISK_RENDER_BLOCK_FRAMES);
+        state.finish_stop_after_fade_if_needed();
+        assert!(state.mixer.master_gain() <= GAIN_EPSILON);
+
+        command_sender
+            .send(ReaderCommand::Play {
+                song,
+                position_seconds: 1.0,
+                generation: 1,
+            })
+            .expect("play command should send");
+
+        assert!(!state.consume_commands());
+        assert!(state.is_running);
+        assert!(!state.stop_after_master_fade);
+        assert!((state.mixer.master_gain() - 1.0).abs() <= GAIN_EPSILON);
     }
 
     #[test]

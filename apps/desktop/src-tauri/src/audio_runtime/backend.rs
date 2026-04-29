@@ -172,6 +172,17 @@ impl DiskReaderState {
         while let Ok(command) = self.command_receiver.try_recv() {
             match command {
                 ReaderCommand::UpdateSong(song) => self.mixer.apply_song_update(song),
+                ReaderCommand::Play {
+                    song,
+                    position_seconds,
+                    generation,
+                } => {
+                    self.mixer.seek(song, position_seconds);
+                    self.mixer.start_master_fade(1.0, 0.0);
+                    self.current_generation = generation;
+                    self.is_running = true;
+                    self.stop_after_master_fade = false;
+                }
                 ReaderCommand::Seek {
                     song,
                     position_seconds,
