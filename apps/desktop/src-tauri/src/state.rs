@@ -10,15 +10,14 @@ use std::{
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
 use libretracks_core::{
-    Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track,
-    TrackKind,
+    Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track, TrackKind,
 };
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary,
     import_song_package as import_song_package_into_project, import_wav_files_to_library,
-    load_song_from_file, load_waveform_summary, read_audio_metadata,
-    save_song_to_file, waveform_file_path, ImportOperationMetrics, ImportedSong, ProjectError,
-    ProjectImportRequest, WaveformSummary, SONG_FILE_NAME,
+    load_song_from_file, load_waveform_summary, read_audio_metadata, save_song_to_file,
+    waveform_file_path, ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry,
+    ProjectError, ProjectImportRequest, WaveformSummary, SONG_FILE_NAME,
 };
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
@@ -432,9 +431,7 @@ impl DesktopSession {
             return Ok(None);
         };
 
-        self.song_dir
-            .as_ref()
-            .ok_or(DesktopError::NoSongLoaded)?;
+        self.song_dir.as_ref().ok_or(DesktopError::NoSongLoaded)?;
         self.engine
             .song()
             .cloned()
@@ -465,7 +462,9 @@ impl DesktopSession {
             format!("Preparando {} archivo(s) para importar...", files.len()),
         );
 
-        let assets = self.import_audio_files_into_library(&files)?;
+        let assets = self.import_audio_files_into_library(&files, |percent, message| {
+            emit_library_import_progress(app, percent, message);
+        })?;
         emit_library_import_progress(app, 85, "Actualizando libreria de la sesion...".into());
         emit_library_import_progress(
             app,
@@ -482,6 +481,7 @@ impl DesktopSession {
         &mut self,
         files: &[PathBuf],
         audio: &AudioController,
+        mut on_progress: impl FnMut(u8, String),
     ) -> Result<TransportSnapshot, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let song = self
@@ -489,7 +489,7 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let updated_song = append_wav_files_to_song(&song_dir, &song, files)?;
+        let updated_song = append_wav_files_to_song(&song_dir, &song, files, &mut on_progress)?;
         self.record_import_metrics(&updated_song.metrics);
         self.persist_song_update(
             updated_song.song,
@@ -503,9 +503,10 @@ impl DesktopSession {
     fn import_audio_files_into_library(
         &mut self,
         files: &[PathBuf],
+        mut on_progress: impl FnMut(u8, String),
     ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let imported_assets = import_wav_files_to_library(&song_dir, files)?;
+        let imported_assets = import_wav_files_to_library(&song_dir, files, &mut on_progress)?;
         let current_song = self.engine.song().cloned();
         let mut library_assets = list_library_assets(&song_dir, current_song.as_ref())?;
         for asset in &imported_assets.assets {
@@ -1465,7 +1466,6 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         song.bpm = bpm;
-        song.tempo_markers.clear();
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
@@ -1552,7 +1552,6 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         song.time_signature = signature.to_string();
-        song.time_signature_markers.clear();
 
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
@@ -1576,9 +1575,11 @@ impl DesktopSession {
 
         if clamped_start_seconds <= 0.0001 {
             song.time_signature = signature.to_string();
-        } else if let Some(existing_marker) = song.time_signature_markers.iter_mut().find(|marker| {
-            (marker.start_seconds - clamped_start_seconds).abs() < 0.0001
-        }) {
+        } else if let Some(existing_marker) = song
+            .time_signature_markers
+            .iter_mut()
+            .find(|marker| (marker.start_seconds - clamped_start_seconds).abs() < 0.0001)
+        {
             existing_marker.signature = signature.to_string();
         } else {
             song.time_signature_markers.push(TimeSignatureMarker {
@@ -1627,16 +1628,31 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         let imported = import_song_package_into_project(
             &song_dir,
             &song,
             Path::new(package_path),
             insert_at_seconds,
         )?;
-        let library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
+        let mut library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
+        merge_package_library_meta(
+            &song_dir,
+            &mut library_assets,
+            &imported.library_meta,
+            Some(&imported.package_title),
+        )?;
         write_library_manifest_assets(&song_dir, &library_assets)?;
-        self.persist_song_update(imported.song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        self.persist_song_update(
+            imported.song,
+            audio,
+            AudioChangeImpact::StructureRebuild,
+            true,
+        )?;
         Ok(self.snapshot())
     }
 
@@ -1647,16 +1663,31 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         let imported = libretracks_project::import_song_package_from_bytes(
             &song_dir,
             &song,
             package_bytes,
             insert_at_seconds,
         )?;
-        let library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
+        let mut library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
+        merge_package_library_meta(
+            &song_dir,
+            &mut library_assets,
+            &imported.library_meta,
+            Some(&imported.package_title),
+        )?;
         write_library_manifest_assets(&song_dir, &library_assets)?;
-        self.persist_song_update(imported.song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        self.persist_song_update(
+            imported.song,
+            audio,
+            AudioChangeImpact::StructureRebuild,
+            true,
+        )?;
         Ok(self.snapshot())
     }
 
@@ -1667,16 +1698,31 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
         let imported = libretracks_project::import_song_package_from_base64(
             &song_dir,
             &song,
             package_base64,
             insert_at_seconds,
         )?;
-        let library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
+        let mut library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
+        merge_package_library_meta(
+            &song_dir,
+            &mut library_assets,
+            &imported.library_meta,
+            Some(&imported.package_title),
+        )?;
         write_library_manifest_assets(&song_dir, &library_assets)?;
-        self.persist_song_update(imported.song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        self.persist_song_update(
+            imported.song,
+            audio,
+            AudioChangeImpact::StructureRebuild,
+            true,
+        )?;
         Ok(self.snapshot())
     }
 
@@ -2624,6 +2670,71 @@ fn write_library_manifest_assets(
         .map(|manifest| manifest.folders)
         .unwrap_or_default();
     write_library_manifest_state(song_dir, assets, &folders)
+}
+
+fn merge_package_library_meta(
+    song_dir: &Path,
+    assets: &mut Vec<LibraryAssetSummary>,
+    package_meta: &[PackageLibraryAssetEntry],
+    fallback_folder: Option<&str>,
+) -> Result<(), DesktopError> {
+    let mut meta_by_path = package_meta
+        .iter()
+        .map(|entry| (normalize_library_file_path(&entry.file_path), entry))
+        .collect::<HashMap<_, _>>();
+
+    for asset in assets.iter_mut() {
+        if let Some(entry) = meta_by_path.remove(&asset.file_path) {
+            asset.detected_bpm = entry.detected_bpm;
+            asset.folder_path = entry
+                .folder_path
+                .as_deref()
+                .and_then(normalize_library_folder_path)
+                .or_else(|| fallback_folder.and_then(normalize_library_folder_path));
+        } else if asset.folder_path.is_none() {
+            asset.folder_path = fallback_folder.and_then(normalize_library_folder_path);
+        }
+    }
+
+    for entry in package_meta {
+        let normalized_file_path = normalize_library_file_path(&entry.file_path);
+        if assets
+            .iter()
+            .any(|asset| asset.file_path == normalized_file_path)
+        {
+            continue;
+        }
+
+        let path = song_dir.join(&normalized_file_path);
+        if !path.is_file() {
+            continue;
+        }
+
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(&normalized_file_path)
+            .to_string();
+        let metadata = read_audio_metadata(&path)?;
+        assets.push(LibraryAssetSummary {
+            file_name,
+            file_path: normalized_file_path,
+            duration_seconds: metadata.duration_seconds,
+            detected_bpm: entry.detected_bpm,
+            folder_path: entry
+                .folder_path
+                .as_deref()
+                .and_then(normalize_library_folder_path)
+                .or_else(|| fallback_folder.and_then(normalize_library_folder_path)),
+        });
+    }
+
+    assets.sort_by(|left, right| {
+        left.folder_path
+            .cmp(&right.folder_path)
+            .then_with(|| left.file_name.cmp(&right.file_name))
+    });
+    Ok(())
 }
 
 fn write_library_manifest_state(
@@ -4166,7 +4277,7 @@ mod tests {
 
         let audio = crate::audio_runtime::AudioController::default();
         let snapshot = session
-            .import_audio_files_into_current_song(&[imported_click], &audio)
+            .import_audio_files_into_current_song(&[imported_click], &audio, |_, _| {})
             .expect("import should append tracks");
         let snapshot_song = session
             .song_view()
@@ -4201,7 +4312,7 @@ mod tests {
             .expect("song view should build")
             .expect("song should be loaded");
         let assets = session
-            .import_audio_files_into_library(&[imported_click])
+            .import_audio_files_into_library(&[imported_click], |_, _| {})
             .expect("library import should succeed");
         let after = session
             .song_view()
@@ -5339,7 +5450,7 @@ mod tests {
     }
 
     #[test]
-    fn updating_song_tempo_clears_existing_tempo_markers_for_a_global_reset() {
+    fn updating_song_tempo_preserves_existing_tempo_markers_while_updating_the_base_bpm() {
         let mut session = session_with_song_dir("song-tempo-reset-demo", demo_song());
         let audio = crate::audio_runtime::AudioController::default();
 
@@ -5357,7 +5468,33 @@ mod tests {
 
         assert_eq!(snapshot.project_revision, song_view.project_revision);
         assert_eq!(song_view.bpm, 91.0);
-        assert!(song_view.tempo_markers.is_empty());
+        assert_eq!(song_view.tempo_markers.len(), 1);
+        assert!((song_view.tempo_markers[0].start_seconds - 12.0).abs() < 0.0001);
+        assert!((song_view.tempo_markers[0].bpm - 91.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn updating_song_time_signature_preserves_existing_time_signature_markers() {
+        let mut session = session_with_song_dir("song-time-signature-reset-demo", demo_song());
+        let audio = crate::audio_runtime::AudioController::default();
+
+        session
+            .upsert_song_time_signature_marker(8.0, "3/4", &audio)
+            .expect("time signature marker should be created");
+
+        let snapshot = session
+            .update_song_time_signature("6/8", &audio)
+            .expect("song time signature should update");
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert_eq!(snapshot.project_revision, song_view.project_revision);
+        assert_eq!(song_view.time_signature, "6/8");
+        assert_eq!(song_view.time_signature_markers.len(), 1);
+        assert!((song_view.time_signature_markers[0].start_seconds - 8.0).abs() < 0.0001);
+        assert_eq!(song_view.time_signature_markers[0].signature, "3/4");
     }
 
     #[test]

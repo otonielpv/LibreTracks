@@ -525,6 +525,7 @@ function isTextEntryTarget(target: EventTarget | null) {
     "email",
     "password",
     "search",
+    "number",
     "tel",
     "text",
     "url",
@@ -1044,6 +1045,12 @@ export function TransportPanelContent() {
     const [assets, folders] = await Promise.all([getLibraryAssets(), getLibraryFolders()]);
     return { assets, folders };
   }, [playbackSongDir]);
+
+  const refreshLibraryState = useCallback(async () => {
+    const { assets, folders } = await loadLibraryState();
+    setLibraryAssets(assets);
+    setLibraryFolders(folders);
+  }, [loadLibraryState]);
 
   const refreshSongView = useCallback(async () => {
     const nextSong = await getSongView();
@@ -4124,6 +4131,7 @@ export function TransportPanelContent() {
         }
 
         applyPlaybackSnapshot(nextSnapshot);
+        await refreshLibraryState();
         setActiveSidebarTab(null);
         setStatus(t("transport.status.songImported"));
       },
@@ -5881,6 +5889,7 @@ export function TransportPanelContent() {
 
                       const nextSnapshot = await importSongPackageFromBase64(base64Data, dropSeconds);
                       applyPlaybackSnapshot(nextSnapshot);
+                      await refreshLibraryState();
                       setStatus(t("transport.status.packageImportedAt", { time: formatClock(dropSeconds) }));
                     } catch (error) {
                       setStatus(formatErrorStatus(error));

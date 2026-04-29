@@ -8,9 +8,7 @@ use std::{
 };
 
 use hound::{SampleFormat, WavSpec, WavWriter};
-use libretracks_core::{
-    validate_song, Clip, OutputBus, Song, SongRegion, Track, TrackKind,
-};
+use libretracks_core::{validate_song, Clip, OutputBus, Song, SongRegion, Track, TrackKind};
 use rayon::prelude::*;
 use symphonia::core::{
     audio::{AudioBufferRef, SampleBuffer},
@@ -136,17 +134,20 @@ pub fn read_audio_metadata(path: impl AsRef<Path>) -> Result<AudioMetadata, Proj
         .map(|channels| channels.count() as u16)
         .unwrap_or(1)
         .max(1);
-    let duration_seconds = if let (Some(n_frames), rate) = (track.codec_params.n_frames, sample_rate)
-    {
-        n_frames as f64 / f64::from(rate.max(1))
-    } else if let Some(tb) = track.codec_params.time_base {
-        track.codec_params
-            .n_frames
-            .map(|frames| tb.calc_time(frames).seconds as f64 + f64::from(tb.calc_time(frames).frac))
-            .unwrap_or(0.0)
-    } else {
-        0.0
-    };
+    let duration_seconds =
+        if let (Some(n_frames), rate) = (track.codec_params.n_frames, sample_rate) {
+            n_frames as f64 / f64::from(rate.max(1))
+        } else if let Some(tb) = track.codec_params.time_base {
+            track
+                .codec_params
+                .n_frames
+                .map(|frames| {
+                    tb.calc_time(frames).seconds as f64 + f64::from(tb.calc_time(frames).frac)
+                })
+                .unwrap_or(0.0)
+        } else {
+            0.0
+        };
 
     Ok(AudioMetadata {
         channels,
@@ -165,6 +166,7 @@ pub fn read_wav_metadata(path: impl AsRef<Path>) -> Result<AudioMetadata, Projec
 pub fn import_wav_files_to_library(
     song_dir: impl AsRef<Path>,
     audio_files: &[PathBuf],
+    mut on_progress: impl FnMut(u8, String),
 ) -> Result<ImportLibraryAssetsResult, ProjectError> {
     if audio_files.is_empty() {
         return Err(ProjectError::EmptyImportSet);
@@ -174,7 +176,7 @@ pub fn import_wav_files_to_library(
     let mut used_file_names = collect_existing_file_names(song_dir)?;
     let mut metrics = ImportOperationMetrics::default();
     let planned_files = plan_import_files(song_dir, audio_files, &mut used_file_names)?;
-    metrics.copy_millis = copy_import_files(&planned_files)?;
+    metrics.copy_millis = copy_import_files(&planned_files, &mut on_progress)?;
     let (imported_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
     merge_import_metrics(&mut metrics, &analysis_metrics);
 
@@ -196,6 +198,7 @@ pub fn import_wav_song(
     root: impl AsRef<Path>,
     folder_name: &str,
     request: &ProjectImportRequest,
+    mut on_progress: impl FnMut(u8, String),
 ) -> Result<ImportedSong, ProjectError> {
     if request.wav_files.is_empty() {
         return Err(ProjectError::EmptyImportSet);
@@ -204,7 +207,7 @@ pub fn import_wav_song(
     let song_dir = create_song_folder(root, folder_name)?;
     let mut metrics = ImportOperationMetrics::default();
     let planned_files = plan_import_files(&song_dir, &request.wav_files, &mut HashSet::new())?;
-    metrics.copy_millis = copy_import_files(&planned_files)?;
+    metrics.copy_millis = copy_import_files(&planned_files, &mut on_progress)?;
     let (analyzed_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
     merge_import_metrics(&mut metrics, &analysis_metrics);
 
@@ -303,6 +306,7 @@ pub fn append_wav_files_to_song(
     song_dir: impl AsRef<Path>,
     song: &Song,
     audio_files: &[PathBuf],
+    mut on_progress: impl FnMut(u8, String),
 ) -> Result<AppendWavFilesResult, ProjectError> {
     if audio_files.is_empty() {
         return Err(ProjectError::EmptyImportSet);
@@ -317,7 +321,7 @@ pub fn append_wav_files_to_song(
         song.clips.iter().map(|clip| clip.id.clone()).collect();
     let mut metrics = ImportOperationMetrics::default();
     let planned_files = plan_import_files(song_dir, audio_files, &mut used_file_names)?;
-    metrics.copy_millis = copy_import_files(&planned_files)?;
+    metrics.copy_millis = copy_import_files(&planned_files, &mut on_progress)?;
     let (analyzed_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
     merge_import_metrics(&mut metrics, &analysis_metrics);
 
@@ -440,10 +444,30 @@ fn plan_import_files(
         .collect()
 }
 
-fn copy_import_files(planned_files: &[PlannedImportFile]) -> Result<u128, ProjectError> {
+fn copy_import_files(
+    planned_files: &[PlannedImportFile],
+    on_progress: &mut impl FnMut(u8, String),
+) -> Result<u128, ProjectError> {
     let started_at = Instant::now();
+    let total = planned_files.len().max(1);
 
-    for planned_file in planned_files {
+    for (index, planned_file) in planned_files.iter().enumerate() {
+        let file_name = planned_file
+            .source_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| planned_file.source_path.to_string_lossy().to_string());
+        let percent = 10 + (((index + 1) * 70) / total) as u8;
+        on_progress(
+            percent,
+            format!(
+                "Procesando archivo {} de {}: {}",
+                index + 1,
+                total,
+                file_name
+            ),
+        );
         transcode_to_project_wav(&planned_file.source_path, &planned_file.destination_path)?;
     }
 

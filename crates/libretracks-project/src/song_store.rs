@@ -4,8 +4,8 @@ use std::{
 };
 
 use libretracks_core::{
-    validate_song, Clip, DomainError, Marker, Song, SongRegion, TempoMetadata,
-    TimeSignatureMarker, Track,
+    validate_song, Clip, DomainError, Marker, Song, SongRegion, TempoMetadata, TimeSignatureMarker,
+    Track,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

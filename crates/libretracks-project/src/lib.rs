@@ -7,13 +7,14 @@ mod waveform;
 
 pub use importer::{
     append_wav_files_to_song, import_wav_files_to_library, import_wav_song, read_audio_metadata,
-    read_wav_metadata,
-    AppendWavFilesResult, ImportLibraryAssetsResult, ImportOperationMetrics, ImportedAudioFile,
-    ImportedLibraryAsset, ImportedSong, ProjectImportRequest, AudioMetadata, WavMetadata,
+    read_wav_metadata, AppendWavFilesResult, AudioMetadata, ImportLibraryAssetsResult,
+    ImportOperationMetrics, ImportedAudioFile, ImportedLibraryAsset, ImportedSong,
+    ProjectImportRequest, WavMetadata,
 };
 pub use package::{
     export_region_as_package, import_song_package, import_song_package_from_base64,
-    import_song_package_from_bytes, SongPackageExport, SongPackageImportResult,
+    import_song_package_from_bytes, PackageLibraryAssetEntry, SongPackageExport,
+    SongPackageImportResult,
 };
 pub use song_store::{
     create_song_folder, load_song, load_song_from_file, save_song, save_song_to_file,
@@ -122,7 +123,7 @@ mod tests {
         save_song(&song_dir, &demo_song()).expect("song should save");
 
         let json = fs::read_to_string(song_file_path(&song_dir)).expect("song file should exist");
-        assert!(json.contains("\"version\": 4"));
+        assert!(json.contains("\"version\": 5"));
         assert!(json.contains("\"timeSignature\""));
         assert!(json.contains("\"regions\""));
         assert!(json.contains("\"timelineStartSeconds\""));
@@ -289,7 +290,7 @@ mod tests {
             wav_files: vec![drums_path.clone(), bass_path.clone()],
         };
 
-        let imported = import_wav_song(root.path(), "import-demo", &request)
+        let imported = import_wav_song(root.path(), "import-demo", &request, |_, _| {})
             .expect("wav import should succeed");
 
         assert_eq!(imported.song.title, "Import Demo");
@@ -351,7 +352,7 @@ mod tests {
             wav_files: vec![drums_path, click_path],
         };
 
-        let imported = import_wav_song(root.path(), "detected-tempo-demo", &request)
+        let imported = import_wav_song(root.path(), "detected-tempo-demo", &request, |_, _| {})
             .expect("import should work");
 
         assert_eq!(imported.song.regions.len(), 1);
@@ -414,8 +415,8 @@ mod tests {
             wav_files: vec![text_path],
         };
 
-        let error =
-            import_wav_song(root.path(), "bad-import", &request).expect_err("import should fail");
+        let error = import_wav_song(root.path(), "bad-import", &request, |_, _| {})
+            .expect_err("import should fail");
 
         match error {
             ProjectError::UnsupportedAudioFormat { .. } => {}
@@ -442,8 +443,9 @@ mod tests {
         let duplicate_click_path = imports_dir.join("click.wav");
         write_test_wav(&duplicate_click_path, 44_100, 2, 3);
 
-        let appended_song = append_wav_files_to_song(&song_dir, &song, &[duplicate_click_path])
-            .expect("append should succeed");
+        let appended_song =
+            append_wav_files_to_song(&song_dir, &song, &[duplicate_click_path], |_, _| {})
+                .expect("append should succeed");
 
         assert_eq!(appended_song.song.tracks.len(), 2);
         assert_eq!(appended_song.song.clips.len(), 2);
@@ -480,7 +482,7 @@ mod tests {
         let click_path = imports_dir.join("click.wav");
         write_test_wav(&click_path, 44_100, 2, 3);
 
-        let imported = import_wav_files_to_library(&song_dir, &[click_path])
+        let imported = import_wav_files_to_library(&song_dir, &[click_path], |_, _| {})
             .expect("library import should succeed");
 
         assert_eq!(imported.assets.len(), 1);

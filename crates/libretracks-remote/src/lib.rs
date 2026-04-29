@@ -298,7 +298,10 @@ fn build_router(state: AppState, static_dir: Option<PathBuf>) -> Router {
             router = router
                 .route_service("/", ServeFile::new(index_path.clone()))
                 .route_service("/index.html", ServeFile::new(index_path.clone()))
-                .route_service("/manifest.json", ServeFile::new(static_dir.join("manifest.json")))
+                .route_service(
+                    "/manifest.json",
+                    ServeFile::new(static_dir.join("manifest.json")),
+                )
                 .nest_service("/assets", ServeDir::new(static_dir.join("assets")))
                 .fallback_service(ServeFile::new(index_path));
         }
@@ -323,7 +326,8 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
     let mut events_rx = state.events_tx.subscribe();
 
-    let (latest_snapshot, latest_song_view, latest_settings) = if let Ok(cache) = state.cache.read() {
+    let (latest_snapshot, latest_song_view, latest_settings) = if let Ok(cache) = state.cache.read()
+    {
         (
             cache.latest_snapshot.clone(),
             cache.latest_song_view.clone(),
@@ -431,11 +435,11 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             Message::Close(_) => break,
             Message::Ping(payload) => {
                 let _ = state.command_tx.send(RemoteCommand::Ping).await;
-                let _ = state
-                    .events_tx
-                    .send(ServerEvent::Meters(
-                        json!({ "event": "pong", "payload": payload }).to_string().into_bytes(),
-                    ));
+                let _ = state.events_tx.send(ServerEvent::Meters(
+                    json!({ "event": "pong", "payload": payload })
+                        .to_string()
+                        .into_bytes(),
+                ));
             }
             Message::Pong(_) => {}
         }

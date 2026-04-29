@@ -15,7 +15,9 @@ pub fn save_settings(
     settings: AppSettings,
     settings_store: State<'_, AppSettingsStore>,
 ) -> Result<AppSettings, String> {
-    let previous_settings = settings_store.current().map_err(|error| error.to_string())?;
+    let previous_settings = settings_store
+        .current()
+        .map_err(|error| error.to_string())?;
     settings_store
         .set(settings.clone())
         .map_err(|error| error.to_string())?;

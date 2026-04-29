@@ -14,7 +14,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
-    audio_runtime::AudioCommand, commands::events::emit_transport_lifecycle_event,
+    audio_runtime::AudioCommand,
+    commands::events::emit_transport_lifecycle_event,
     commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
     settings::{save_app_settings, AppSettings, AppSettingsStore, MidiBinding},
     state::DesktopState,
@@ -256,7 +257,9 @@ fn dispatch_midi_message(app: &AppHandle, message: MidiMessage) -> Result<(), St
     .map_err(|error| error.to_string())?;
 
     let settings_store = app.state::<AppSettingsStore>();
-    let settings = settings_store.current().map_err(|error| error.to_string())?;
+    let settings = settings_store
+        .current()
+        .map_err(|error| error.to_string())?;
 
     let Some((binding_key, binding)) = find_matching_binding(&settings, message) else {
         return Ok(());
@@ -344,9 +347,7 @@ fn dispatch_midi_action(
             snapshot
         }
         "action:save_project" => {
-            let snapshot = session
-                .save_project()
-                .map_err(|error| error.to_string())?;
+            let snapshot = session.save_project().map_err(|error| error.to_string())?;
             emit_transport_lifecycle_event(app, "sync", &snapshot);
             snapshot
         }
@@ -375,97 +376,131 @@ fn dispatch_midi_action(
             snapshot
         }
         "action:set_global_jump_mode_immediate" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.global_jump_mode = "immediate".into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:set_global_jump_mode_after_bars" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.global_jump_mode = "after_bars".into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:set_global_jump_mode_next_marker" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.global_jump_mode = "next_marker".into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:increase_global_jump_bars" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
-            next_settings.global_jump_bars = next_settings.global_jump_bars.saturating_add(1).max(1);
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
+            next_settings.global_jump_bars =
+                next_settings.global_jump_bars.saturating_add(1).max(1);
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:decrease_global_jump_bars" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
-            next_settings.global_jump_bars = next_settings.global_jump_bars.saturating_sub(1).max(1);
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
+            next_settings.global_jump_bars =
+                next_settings.global_jump_bars.saturating_sub(1).max(1);
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:set_song_jump_trigger_immediate" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.song_jump_trigger = "immediate".into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:set_song_jump_trigger_after_bars" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.song_jump_trigger = "after_bars".into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:set_song_jump_trigger_region_end" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.song_jump_trigger = "region_end".into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:increase_song_jump_bars" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.song_jump_bars = next_settings.song_jump_bars.saturating_add(1).max(1);
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:decrease_song_jump_bars" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.song_jump_bars = next_settings.song_jump_bars.saturating_sub(1).max(1);
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:set_song_transition_instant" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.song_transition_mode = "instant".into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:set_song_transition_fade_out" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.song_transition_mode = "fade_out".into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:set_vamp_mode_section" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.vamp_mode = "section".into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:set_vamp_mode_bars" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.vamp_mode = "bars".into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:increase_vamp_bars" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.vamp_bars = next_settings.vamp_bars.saturating_add(1).max(1);
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:decrease_vamp_bars" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.vamp_bars = next_settings.vamp_bars.saturating_sub(1).max(1);
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
@@ -480,13 +515,17 @@ fn dispatch_midi_action(
             snapshot
         }
         "action:toggle_metronome" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.metronome_enabled = !next_settings.metronome_enabled;
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
         "action:toggle_split_stereo" => {
-            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            let mut next_settings = settings_store
+                .current()
+                .map_err(|error| error.to_string())?;
             next_settings.split_stereo_enabled = !next_settings.split_stereo_enabled;
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
@@ -531,7 +570,9 @@ fn dispatch_midi_parameter(
         return Ok(());
     }
 
-    let previous_settings = settings_store.current().map_err(|error| error.to_string())?;
+    let previous_settings = settings_store
+        .current()
+        .map_err(|error| error.to_string())?;
     let mut next_settings = previous_settings.clone();
     let mut changed = false;
 
@@ -600,14 +641,22 @@ fn dispatch_midi_parameter(
             }
         }
         "param:song_transition_mode" => {
-            let next_mode = if message.data2 < 64 { "instant" } else { "fade_out" };
+            let next_mode = if message.data2 < 64 {
+                "instant"
+            } else {
+                "fade_out"
+            };
             if next_settings.song_transition_mode != next_mode {
                 next_settings.song_transition_mode = next_mode.to_string();
                 changed = true;
             }
         }
         "param:vamp_mode" => {
-            let next_mode = if message.data2 < 64 { "section" } else { "bars" };
+            let next_mode = if message.data2 < 64 {
+                "section"
+            } else {
+                "bars"
+            };
             if next_settings.vamp_mode != next_mode {
                 next_settings.vamp_mode = next_mode.to_string();
                 changed = true;
@@ -652,7 +701,9 @@ fn apply_midi_settings_update(
     settings_store: &AppSettingsStore,
     next_settings: AppSettings,
 ) -> Result<(), String> {
-    let previous_settings = settings_store.current().map_err(|error| error.to_string())?;
+    let previous_settings = settings_store
+        .current()
+        .map_err(|error| error.to_string())?;
     if previous_settings == next_settings {
         return Ok(());
     }
@@ -700,18 +751,14 @@ fn jump_to_next_region(
         .or_else(|| song.regions.first())
         .ok_or_else(|| "no song regions available".to_string())?;
 
-    let jump_trigger = parse_jump_trigger(&settings.song_jump_trigger, Some(settings.song_jump_bars))
-        .map_err(|error| error.to_string())?;
+    let jump_trigger =
+        parse_jump_trigger(&settings.song_jump_trigger, Some(settings.song_jump_bars))
+            .map_err(|error| error.to_string())?;
     let transition = parse_transition_type(Some(&settings.song_transition_mode), None)
         .map_err(|error| error.to_string())?;
 
     session
-        .schedule_region_jump(
-            &next_region.id,
-            jump_trigger,
-            transition,
-            audio,
-        )
+        .schedule_region_jump(&next_region.id, jump_trigger, transition, audio)
         .map_err(|error| error.to_string())
 }
 

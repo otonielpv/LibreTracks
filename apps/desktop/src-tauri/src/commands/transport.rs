@@ -99,7 +99,9 @@ pub fn schedule_marker_jump(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    let settings = settings_store.current().map_err(|error| error.to_string())?;
+    let settings = settings_store
+        .current()
+        .map_err(|error| error.to_string())?;
     let jump_trigger =
         parse_jump_trigger(&settings.global_jump_mode, Some(settings.global_jump_bars))
             .map_err(|error| error.to_string())?;
@@ -107,12 +109,7 @@ pub fn schedule_marker_jump(
         .map_err(|error| error.to_string())?;
 
     session
-        .schedule_marker_jump(
-            &target_marker_id,
-            jump_trigger,
-            transition,
-            &state.audio,
-        )
+        .schedule_marker_jump(&target_marker_id, jump_trigger, transition, &state.audio)
         .map_err(|error| error.to_string())
 }
 
@@ -127,7 +124,9 @@ pub fn schedule_region_jump(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    let settings = settings_store.current().map_err(|error| error.to_string())?;
+    let settings = settings_store
+        .current()
+        .map_err(|error| error.to_string())?;
     let jump_trigger =
         parse_jump_trigger(&settings.song_jump_trigger, Some(settings.song_jump_bars))
             .map_err(|error| error.to_string())?;

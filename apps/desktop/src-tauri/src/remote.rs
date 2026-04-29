@@ -7,8 +7,8 @@ use libretracks_remote::{
 use tauri::{App, AppHandle, Manager};
 
 use crate::{
-    commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
     commands::events::emit_transport_lifecycle_event,
+    commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
     settings::AppSettingsStore,
     state::DesktopState,
 };
@@ -21,11 +21,9 @@ pub struct RemoteServiceState {
 
 pub fn initialize_remote(app: &App) -> Result<(), String> {
     let static_dir = resolve_remote_static_dir(app);
-    let runtime = tauri::async_runtime::block_on(spawn_remote_server(
-        DEFAULT_REMOTE_PORT,
-        static_dir,
-    ))
-    .map_err(|error| error.to_string())?;
+    let runtime =
+        tauri::async_runtime::block_on(spawn_remote_server(DEFAULT_REMOTE_PORT, static_dir))
+            .map_err(|error| error.to_string())?;
     let handle = runtime.handle.clone();
 
     app.manage(RemoteServiceState {
@@ -69,7 +67,10 @@ fn resolve_remote_static_dir(app: &App) -> Option<PathBuf> {
             std::env::current_dir().ok(),
             Some(manifest_dir.clone()),
             manifest_dir.parent().map(PathBuf::from),
-            manifest_dir.parent().and_then(|path| path.parent()).map(PathBuf::from),
+            manifest_dir
+                .parent()
+                .and_then(|path| path.parent())
+                .map(PathBuf::from),
             manifest_dir
                 .parent()
                 .and_then(|path| path.parent())
@@ -159,7 +160,9 @@ async fn run_remote_command_bridge(
             RemoteCommand::Play => session.play(&state.audio),
             RemoteCommand::Pause => session.pause(&state.audio),
             RemoteCommand::Stop => session.stop(&state.audio),
-            RemoteCommand::Seek { position_seconds } => session.seek(*position_seconds, &state.audio),
+            RemoteCommand::Seek { position_seconds } => {
+                session.seek(*position_seconds, &state.audio)
+            }
             RemoteCommand::ScheduleMarkerJump {
                 target_marker_id,
                 trigger,
@@ -252,7 +255,9 @@ async fn run_remote_command_bridge(
             RemoteCommand::Pause => emit_transport_lifecycle_event(&app, "pause", &snapshot),
             RemoteCommand::Stop => emit_transport_lifecycle_event(&app, "stop", &snapshot),
             RemoteCommand::Seek { .. } => emit_transport_lifecycle_event(&app, "seek", &snapshot),
-            RemoteCommand::ToggleVamp { .. } => emit_transport_lifecycle_event(&app, "vamp", &snapshot),
+            RemoteCommand::ToggleVamp { .. } => {
+                emit_transport_lifecycle_event(&app, "vamp", &snapshot)
+            }
             _ => {}
         }
 

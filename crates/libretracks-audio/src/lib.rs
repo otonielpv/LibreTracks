@@ -1,6 +1,8 @@
 //! Motor de audio y transporte.
 
-use libretracks_core::{validate_song, Clip, DomainError, Marker, Song, SongRegion, Track, TrackKind};
+use libretracks_core::{
+    validate_song, Clip, DomainError, Marker, Song, SongRegion, Track, TrackKind,
+};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -263,10 +265,7 @@ impl AudioEngine {
         self.pending_fade_jump = None;
     }
 
-    pub fn toggle_vamp(
-        &mut self,
-        mode: VampMode,
-    ) -> Result<Option<ActiveVamp>, AudioEngineError> {
+    pub fn toggle_vamp(&mut self, mode: VampMode) -> Result<Option<ActiveVamp>, AudioEngineError> {
         let song = self.ensure_song_loaded()?;
 
         if self.active_vamp.is_some() {
@@ -493,7 +492,9 @@ fn find_region<'a>(song: &'a Song, region_id: &str) -> Result<&'a SongRegion, Au
 fn find_region_for_position(song: &Song, position_seconds: f64) -> Option<&SongRegion> {
     song.regions
         .iter()
-        .find(|region| position_seconds >= region.start_seconds && position_seconds < region.end_seconds)
+        .find(|region| {
+            position_seconds >= region.start_seconds && position_seconds < region.end_seconds
+        })
         .or_else(|| {
             song.regions
                 .iter()
@@ -512,7 +513,9 @@ fn jump_execute_at(
         JumpTrigger::NextMarker => Ok(song
             .next_marker_after(current_position)
             .map(|marker| marker.start_seconds)),
-        JumpTrigger::RegionEnd => Ok(find_region_for_position(song, current_position).map(|region| region.end_seconds)),
+        JumpTrigger::RegionEnd => {
+            Ok(find_region_for_position(song, current_position).map(|region| region.end_seconds))
+        }
         JumpTrigger::AfterBars(bars) => Ok(Some(jump_execute_at_after_bars(
             song,
             current_position,
@@ -551,8 +554,9 @@ fn current_bar_index_for_position(
     resolved_regions: &[ResolvedSongRegion],
     position_seconds: f64,
 ) -> Result<usize, AudioEngineError> {
-    let current_region = resolve_resolved_region_for_position(resolved_regions, position_seconds)
-        .ok_or_else(|| AudioEngineError::InvalidTimeSignature("missing song region".into()))?;
+    let current_region =
+        resolve_resolved_region_for_position(resolved_regions, position_seconds)
+            .ok_or_else(|| AudioEngineError::InvalidTimeSignature("missing song region".into()))?;
     let local_position = (position_seconds - current_region.start_seconds).max(0.0);
     Ok((current_region.cumulative_bars_start
         + local_position / current_region.bar_duration_seconds
@@ -641,8 +645,7 @@ fn cumulative_bar_start_seconds(
         let local_bar_index = target_bar_index as f64 - region.cumulative_bars_start;
         let local_start_seconds = local_bar_index * region.bar_duration_seconds;
         if local_bar_index >= -f64::EPSILON
-            && local_start_seconds
-                <= (region.end_seconds - region.start_seconds) + f64::EPSILON
+            && local_start_seconds <= (region.end_seconds - region.start_seconds) + f64::EPSILON
         {
             return (region.start_seconds + local_start_seconds)
                 .clamp(region.start_seconds, region.end_seconds);
@@ -1071,7 +1074,11 @@ mod tests {
         engine.seek(1.0).expect("seek should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_outro", JumpTrigger::Immediate, TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::Immediate,
+                TransitionType::Instant,
+            )
             .expect("jump should schedule");
 
         assert!(scheduled.is_none());
@@ -1087,7 +1094,11 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker, TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::NextMarker,
+                TransitionType::Instant,
+            )
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -1110,7 +1121,11 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2), TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::AfterBars(2),
+                TransitionType::Instant,
+            )
             .expect("jump should schedule");
 
         let (position, jump_executed) = engine
@@ -1130,7 +1145,11 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(4), TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::AfterBars(4),
+                TransitionType::Instant,
+            )
             .expect("jump should schedule");
 
         let (position, jump_executed) = engine
@@ -1152,7 +1171,11 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2), TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::AfterBars(2),
+                TransitionType::Instant,
+            )
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -1190,7 +1213,11 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_target", JumpTrigger::AfterBars(1), TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_target",
+                JumpTrigger::AfterBars(1),
+                TransitionType::Instant,
+            )
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -1280,7 +1307,11 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_intro", JumpTrigger::AfterBars(4), TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_intro",
+                JumpTrigger::AfterBars(4),
+                TransitionType::Instant,
+            )
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -1318,7 +1349,11 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_target", JumpTrigger::AfterBars(1), TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_target",
+                JumpTrigger::AfterBars(1),
+                TransitionType::Instant,
+            )
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -1334,7 +1369,11 @@ mod tests {
         engine.seek(7.0).expect("seek should work");
 
         let scheduled = engine
-            .schedule_region_jump("region_outro", JumpTrigger::RegionEnd, TransitionType::Instant)
+            .schedule_region_jump(
+                "region_outro",
+                JumpTrigger::RegionEnd,
+                TransitionType::Instant,
+            )
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -1353,7 +1392,11 @@ mod tests {
         engine.seek(1.0).expect("seek should work");
 
         let scheduled = engine
-            .schedule_region_jump("region_bridge", JumpTrigger::Immediate, TransitionType::Instant)
+            .schedule_region_jump(
+                "region_bridge",
+                JumpTrigger::Immediate,
+                TransitionType::Instant,
+            )
             .expect("jump should schedule");
 
         assert!(scheduled.is_none());
@@ -1369,7 +1412,11 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker, TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::NextMarker,
+                TransitionType::Instant,
+            )
             .expect("jump should schedule");
         engine.cancel_section_jump();
 
@@ -1390,7 +1437,11 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_marker_jump("section_outro", JumpTrigger::NextMarker, TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::NextMarker,
+                TransitionType::Instant,
+            )
             .expect("jump should schedule");
         assert!(engine.pending_marker_jump().is_some());
 
@@ -1408,7 +1459,11 @@ mod tests {
         engine.play().expect("play should work");
 
         engine
-            .schedule_marker_jump("section_outro", JumpTrigger::AfterBars(2), TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::AfterBars(2),
+                TransitionType::Instant,
+            )
             .expect("jump should schedule");
         assert!(engine.pending_marker_jump().is_some());
 
@@ -1426,7 +1481,11 @@ mod tests {
         engine.play().expect("play should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_intro", JumpTrigger::NextMarker, TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_intro",
+                JumpTrigger::NextMarker,
+                TransitionType::Instant,
+            )
             .expect("jump should schedule")
             .expect("jump should remain pending");
 
@@ -1457,7 +1516,11 @@ mod tests {
         engine.seek(13.0).expect("seek should work");
 
         let scheduled = engine
-            .schedule_marker_jump("section_intro", JumpTrigger::NextMarker, TransitionType::Instant)
+            .schedule_marker_jump(
+                "section_intro",
+                JumpTrigger::NextMarker,
+                TransitionType::Instant,
+            )
             .expect("jump should resolve safely");
 
         assert!(scheduled.is_none());

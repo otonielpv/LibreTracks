@@ -427,7 +427,10 @@ pub(crate) fn musical_position_summary(
         .last()
         .map(|region| region.cumulative_bars_end * f64::from(region.beats_per_bar))
         .unwrap_or(0.0);
-    let beats_per_bar = timing_regions.last().map(|region| region.beats_per_bar).unwrap_or(4);
+    let beats_per_bar = timing_regions
+        .last()
+        .map(|region| region.beats_per_bar)
+        .unwrap_or(4);
     let total_whole_beats = (total_beats + f64::EPSILON).floor() as u64;
     let fractional_beat = (total_beats - total_whole_beats as f64).clamp(0.0, 0.999_999);
     let bar_number = (total_whole_beats / u64::from(beats_per_bar)) as u32 + 1;
@@ -491,9 +494,9 @@ fn build_timing_regions(song: &Song, horizon_seconds: f64) -> Vec<TimingRegion> 
         let Ok((beats_per_bar, denominator)) = parse_time_signature(&time_signature) else {
             continue;
         };
-        let beat_duration_seconds = beat_frames_for_signature(bpm, denominator, TIMELINE_TIMEBASE_HZ)
-            as f64
-            / f64::from(TIMELINE_TIMEBASE_HZ);
+        let beat_duration_seconds =
+            beat_frames_for_signature(bpm, denominator, TIMELINE_TIMEBASE_HZ) as f64
+                / f64::from(TIMELINE_TIMEBASE_HZ);
         let bar_duration_seconds = beat_duration_seconds * f64::from(beats_per_bar);
         cumulative_bars_end += (boundary_seconds - start_seconds).max(0.0) / bar_duration_seconds;
         regions.push(TimingRegion {
@@ -520,8 +523,8 @@ fn build_timing_regions(song: &Song, horizon_seconds: f64) -> Vec<TimingRegion> 
         as f64
         / f64::from(TIMELINE_TIMEBASE_HZ);
     let bar_duration_seconds = beat_duration_seconds * f64::from(beats_per_bar);
-    cumulative_bars_end += (horizon_seconds.max(start_seconds) - start_seconds).max(0.0)
-        / bar_duration_seconds;
+    cumulative_bars_end +=
+        (horizon_seconds.max(start_seconds) - start_seconds).max(0.0) / bar_duration_seconds;
     regions.push(TimingRegion {
         start_seconds,
         end_seconds: horizon_seconds.max(start_seconds),

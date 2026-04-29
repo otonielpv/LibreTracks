@@ -48,6 +48,62 @@ fn song_time_signature_at(song: &Song, position_seconds: f64) -> String {
         .unwrap_or(song.time_signature.clone())
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryManifest {
+    #[serde(default)]
+    file_paths: Vec<String>,
+    #[serde(default)]
+    assets: Vec<PackageLibraryAssetEntry>,
+}
+
+fn normalize_package_file_path(file_path: &str) -> String {
+    file_path.replace('\\', "/")
+}
+
+fn read_library_meta(song_dir: &Path) -> Result<Vec<PackageLibraryAssetEntry>, ProjectError> {
+    let manifest_path = song_dir.join("library.json");
+    if !manifest_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let manifest = serde_json::from_slice::<LibraryManifest>(&fs::read(manifest_path)?)
+        .map_err(ProjectError::from)?;
+    if !manifest.assets.is_empty() {
+        return Ok(manifest
+            .assets
+            .into_iter()
+            .map(|mut entry| {
+                entry.file_path = normalize_package_file_path(&entry.file_path);
+                entry.folder_path = entry
+                    .folder_path
+                    .map(|folder_path| folder_path.replace('\\', "/"));
+                entry
+            })
+            .collect());
+    }
+
+    Ok(manifest
+        .file_paths
+        .into_iter()
+        .map(|file_path| PackageLibraryAssetEntry {
+            file_path: normalize_package_file_path(&file_path),
+            detected_bpm: None,
+            folder_path: None,
+        })
+        .collect())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageLibraryAssetEntry {
+    pub file_path: String,
+    #[serde(default)]
+    pub detected_bpm: Option<f64>,
+    #[serde(default)]
+    pub folder_path: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SongPackageManifest {
@@ -65,6 +121,8 @@ struct SongPackageManifest {
     tempo_markers: Vec<TempoMarker>,
     #[serde(default)]
     time_signature_markers: Vec<TimeSignatureMarker>,
+    #[serde(default)]
+    library_meta: Vec<PackageLibraryAssetEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +133,8 @@ pub struct SongPackageExport {
 #[derive(Debug, Clone)]
 pub struct SongPackageImportResult {
     pub song: Song,
+    pub package_title: String,
+    pub library_meta: Vec<PackageLibraryAssetEntry>,
 }
 
 pub fn export_region_as_package(
@@ -103,7 +163,10 @@ pub fn export_region_as_package(
             clip
         })
         .collect::<Vec<_>>();
-    let used_track_ids = clips.iter().map(|clip| clip.track_id.as_str()).collect::<HashSet<_>>();
+    let used_track_ids = clips
+        .iter()
+        .map(|clip| clip.track_id.as_str())
+        .collect::<HashSet<_>>();
     let tracks = song
         .tracks
         .iter()
@@ -149,6 +212,39 @@ pub fn export_region_as_package(
             marker
         })
         .collect::<Vec<_>>();
+    let library_meta = {
+        let region_name = region.name.clone();
+        let library_meta_map = read_library_meta(song_dir)?
+            .into_iter()
+            .map(|entry| (normalize_package_file_path(&entry.file_path), entry))
+            .collect::<HashMap<_, _>>();
+        let mut entries = Vec::new();
+        let mut added_files = HashSet::new();
+
+        for clip in &clips {
+            let normalized_file_path = normalize_package_file_path(&clip.file_path);
+            if !added_files.insert(normalized_file_path.clone()) {
+                continue;
+            }
+
+            let mut entry = library_meta_map
+                .get(&normalized_file_path)
+                .cloned()
+                .unwrap_or(PackageLibraryAssetEntry {
+                    file_path: normalized_file_path.clone(),
+                    detected_bpm: None,
+                    folder_path: None,
+                });
+
+            if entry.folder_path.is_none() {
+                entry.folder_path = Some(region_name.clone());
+            }
+            entry.file_path = normalized_file_path;
+            entries.push(entry);
+        }
+
+        entries
+    };
 
     let manifest = SongPackageManifest {
         song_title: region.name.clone(),
@@ -160,12 +256,12 @@ pub fn export_region_as_package(
         section_markers,
         tempo_markers,
         time_signature_markers,
+        library_meta,
     };
 
     let file = File::create(output_path)?;
     let mut zip = ZipWriter::new(file);
-    let options =
-        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     let audio_options =
         SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     zip.start_file("manifest.json", options)
@@ -197,8 +293,8 @@ pub fn import_song_package(
     insert_at_seconds: f64,
 ) -> Result<SongPackageImportResult, ProjectError> {
     let file = File::open(package_path)?;
-    let mut archive = ZipArchive::new(file)
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
     import_song_package_from_archive(song_dir, song, &mut archive, insert_at_seconds)
 }
 
@@ -209,8 +305,8 @@ pub fn import_song_package_from_bytes(
     insert_at_seconds: f64,
 ) -> Result<SongPackageImportResult, ProjectError> {
     let cursor = Cursor::new(package_bytes.to_vec());
-    let mut archive = ZipArchive::new(cursor)
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    let mut archive =
+        ZipArchive::new(cursor).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
     import_song_package_from_archive(song_dir, song, &mut archive, insert_at_seconds)
 }
 
@@ -238,6 +334,7 @@ fn import_song_package_from_archive<R: Read + Seek>(
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?
         .read_to_string(&mut manifest_json)?;
     let manifest: SongPackageManifest = serde_json::from_str(&manifest_json)?;
+    let library_meta = manifest.library_meta.clone();
 
     let audio_dir = song_dir.join("audio");
     fs::create_dir_all(&audio_dir)?;
@@ -259,6 +356,7 @@ fn import_song_package_from_archive<R: Read + Seek>(
         .map(|clip| clip.id.clone())
         .collect::<HashSet<_>>();
     let insert_at_seconds = insert_at_seconds.max(0.0);
+    let is_empty_session = next_song.tracks.is_empty() && next_song.clips.is_empty();
 
     for clip in &manifest.clips {
         let mut zip_file = archive
@@ -350,7 +448,9 @@ fn import_song_package_from_archive<R: Read + Seek>(
         .first()
         .map(|marker| marker.bpm)
         .unwrap_or(manifest.base_bpm);
-    if (song_bpm_at(&next_song, insert_at_seconds) - injected_bpm).abs() > 0.001 {
+    if is_empty_session {
+        next_song.bpm = injected_bpm;
+    } else if (song_bpm_at(&next_song, insert_at_seconds) - injected_bpm).abs() > 0.001 {
         next_song.tempo_markers.push(TempoMarker {
             id: format!("tempo_marker_import_{}", timestamp_suffix()),
             start_seconds: insert_at_seconds,
@@ -375,7 +475,9 @@ fn import_song_package_from_archive<R: Read + Seek>(
         .first()
         .map(|marker| marker.signature.clone())
         .unwrap_or(manifest.base_time_signature.clone());
-    if song_time_signature_at(&next_song, insert_at_seconds) != injected_signature {
+    if is_empty_session {
+        next_song.time_signature = injected_signature.clone();
+    } else if song_time_signature_at(&next_song, insert_at_seconds) != injected_signature {
         next_song.time_signature_markers.push(TimeSignatureMarker {
             id: format!("time_signature_marker_import_{}", timestamp_suffix()),
             start_seconds: insert_at_seconds,
@@ -399,7 +501,11 @@ fn import_song_package_from_archive<R: Read + Seek>(
         .duration_seconds
         .max(insert_at_seconds + manifest.duration_seconds);
 
-    Ok(SongPackageImportResult { song: next_song })
+    Ok(SongPackageImportResult {
+        song: next_song,
+        package_title: manifest.song_title,
+        library_meta,
+    })
 }
 
 fn unique_id(prefix: &str, seed: &str, used: &mut HashSet<String>) -> String {

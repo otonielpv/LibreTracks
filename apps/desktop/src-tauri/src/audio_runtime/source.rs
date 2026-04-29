@@ -212,11 +212,7 @@ impl MappedAudioSource {
 
 impl AudioBufferCache {
     #[cfg(test)]
-    pub(crate) fn insert_for_test(
-        &self,
-        file_path: PathBuf,
-        source: SharedAudioSource,
-    ) {
+    pub(crate) fn insert_for_test(&self, file_path: PathBuf, source: SharedAudioSource) {
         self.entries
             .write()
             .expect("audio cache should lock")
@@ -345,11 +341,7 @@ impl MemoryClipReader {
         &self.shared_source
     }
 
-    pub(crate) fn next_stereo_frame(
-        &mut self,
-        gain: f32,
-        pan: f32,
-    ) -> Option<(f32, f32)> {
+    pub(crate) fn next_stereo_frame(&mut self, gain: f32, pan: f32) -> Option<(f32, f32)> {
         if self.eof {
             return None;
         }

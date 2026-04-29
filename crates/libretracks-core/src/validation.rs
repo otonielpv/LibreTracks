@@ -52,9 +52,7 @@ pub enum DomainError {
     DuplicateMarkerDigit { digit: u8 },
     #[error("time signature marker {marker_id} has invalid position")]
     InvalidTimeSignatureMarkerPosition { marker_id: String },
-    #[error(
-        "time signature markers are out of order: {previous_marker_id} before {marker_id}"
-    )]
+    #[error("time signature markers are out of order: {previous_marker_id} before {marker_id}")]
     TimeSignatureMarkersOutOfOrder {
         previous_marker_id: String,
         marker_id: String,

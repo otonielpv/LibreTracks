@@ -284,12 +284,16 @@ impl Mixer {
                     clip_state.plan.clip_gain,
                     is_any_track_soloed,
                 );
-                let target_pan = resolve_track_runtime_pan(live_mix_state, &clip_state.plan.track_id);
+                let target_pan =
+                    resolve_track_runtime_pan(live_mix_state, &clip_state.plan.track_id);
                 let parent_gain =
                     resolve_parent_track_runtime_gain(live_mix_state, &clip_state.plan.track_id)
                         .unwrap_or(1.0);
-                let output_routing =
-                    resolve_track_output_routing(live_mix_state, &clip_state.plan.track_id, self.output_channels);
+                let output_routing = resolve_track_output_routing(
+                    live_mix_state,
+                    &clip_state.plan.track_id,
+                    self.output_channels,
+                );
 
                 let (left_peak, right_peak) = clip_state.mix_into(
                     &mut mixed,
@@ -338,12 +342,7 @@ impl Mixer {
         self.active_clips.retain(|clip_state| {
             !clip_state.reader.eof && block_end < clip_state.plan.timeline_end_frame()
         });
-        self.mix_metronome_into_output(
-            &mut mixed,
-            block_start,
-            block_frames,
-            metronome_settings,
-        );
+        self.mix_metronome_into_output(&mut mixed, block_start, block_frames, metronome_settings);
         self.apply_master_gain(&mut mixed, block_frames);
         self.apply_declick_crossfade(&mut mixed, block_frames);
         self.capture_last_output_frame(&mixed, block_frames);
@@ -547,10 +546,8 @@ impl Mixer {
                 next_event_index += 1;
             }
 
-            let sample = self
-                .metronome_voice
-                .next_sample(self.output_sample_rate)
-                * settings.volume;
+            let sample =
+                self.metronome_voice.next_sample(self.output_sample_rate) * settings.volume;
             if sample.abs() <= GAIN_EPSILON {
                 continue;
             }
@@ -1022,7 +1019,10 @@ fn resolve_clip_target_pan(
         return resolve_track_runtime_pan(live_mix_state, track_id);
     }
 
-    match live_mix_state.get(track_id).map(|track| track.output_bus_id.as_str()) {
+    match live_mix_state
+        .get(track_id)
+        .map(|track| track.output_bus_id.as_str())
+    {
         Some("monitor") => -1.0,
         Some("main") => 1.0,
         _ => resolve_track_runtime_pan(live_mix_state, track_id),
