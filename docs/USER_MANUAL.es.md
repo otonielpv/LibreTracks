@@ -42,6 +42,16 @@ Uso típico en escenario:
 
 > 🎛️ Resultado práctico: un único par estéreo se convierte en una salida split simple, con las guías a la izquierda y el material del show a la derecha.
 
+### Usa el `Metronomo` integrado
+
+Activa `Metronomo` desde `Configuracion` cuando necesites una claqueta fiable sin importar un archivo de audio aparte. LibreTracks envia el click al bus `Monitor` y lo mantiene bloqueado al timeline del transporte. Ajusta `Volumen del metronomo` antes del ensayo para colocarlo bien en la mezcla de cue.
+
+### Conecta hardware MIDI
+
+En `Configuracion`, elige un `Dispositivo de entrada MIDI`, por ejemplo una pedalera, un controlador de pads o un teclado. Usa `Refrescar dispositivos MIDI` si conectaste el controlador despues de abrir LibreTracks.
+
+Abre `Aprendizaje MIDI` para asignar notas o mensajes CC del hardware a controles en vivo. Son mapeos utiles `Reproducir`, `Detener`, `Vamp`, modos de salto de marca, disparadores de salto de cancion, modo de transicion de cancion y controles de numero de compases.
+
 ## 3. Organización del Proyecto
 
 ### `Biblioteca`
@@ -54,6 +64,10 @@ Usa `Biblioteca` como el área de preparación de assets del show.
 4. Arrastra esos assets al timeline cuando quieras empezar a organizar.
 
 `Crear carpeta virtual` te permite agrupar assets por set, escena, sección o instrumentación sin mover los archivos fuente originales. Un enfoque práctico es usar una carpeta virtual por canción o por bloque del show.
+
+### Importar canciones y paquetes
+
+Usa `Importar cancion` cuando quieras traer otra cancion o paquete de sesion de LibreTracks a la sesion actual. Tambien puedes arrastrar un paquete externo de LibreTracks al timeline. Es util para construir un show a partir de canciones preparadas sin rehacer pistas y marcas a mano.
 
 ### `Audio track` vs `Folder track`
 
@@ -113,6 +127,19 @@ Configura el comportamiento global desde `Salto`:
 
 Esto te permite reaccionar en tiempo real si la banda alarga un estribillo, se salta un puente o necesita repetir una sección.
 
+### `Vamp`
+
+Usa `Vamp` para mantener la reproduccion en un bucle musical cuando la banda o la accion de escenario necesita mas tiempo. `Modo Vamp` puede repetir la `Seccion` actual o un numero fijo de `Compases`. Pulsa `Vamp` de nuevo para salir del bucle.
+
+### Saltos de cancion y transiciones
+
+Usa los controles de `Salto de Cancion` cuando la sesion contiene varias regiones de cancion y necesitas moverte a otra zona durante la reproduccion. El disparador puede ser inmediato, tras un numero configurado de compases o al final de la cancion/region.
+
+`Transicion de Cancion` controla como pasa la cancion actual a la siguiente:
+
+- `Clean cut`: cambia directamente.
+- `Fade out`: desvanece la reproduccion actual antes del salto.
+
 ### Atajos
 
 - `Espacio`: alterna `Reproducir` / `Pausar`
@@ -139,6 +166,7 @@ LibreTracks desktop puede publicar una superficie web remota para controlar tran
 
 - Usa controles de transporte (`Reproducir`, `Pausar`, `Detener`) desde el movil.
 - Arma y cancela saltos desde remote cuando necesites adaptar secciones en vivo.
+- Activa `Vamp`, ajusta saltos de marca/cancion y selecciona el modo de transicion de cancion desde el remote.
 - Cambia a `Mixer` para ajustar volumen, paneo, mute y solo por pista sin tocar el desktop.
 
 ![Vista de mixer remote](../screenshots/Remote_Mixer.png)

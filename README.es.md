@@ -7,6 +7,15 @@
 
 LibreTracks es una DAW y estación de reproducción multitrack para directo, construida con un stack de audio en Rust y una shell de escritorio en React/Tauri. El monorepo actual está centrado en edición no destructiva, saltos musicales entre secciones, importación de WAV y un runtime de escritorio que separa claramente la UI de la lógica de audio.
 
+## Novedades de v0.0.3
+
+- Entrada MIDI y aprendizaje MIDI: selecciona un dispositivo, refresca la lista, asigna notas o CC a acciones en vivo y conserva los mapeos en los ajustes.
+- Metronomo integrado: envia una claqueta sintetizada al bus `Monitor` con control de volumen propio.
+- Vamp y saltos de cancion: repite la seccion actual o un numero fijo de compases, dispara saltos entre canciones y elige transicion inmediata o con fade out.
+- Remote mejorado: el control movil incluye transporte, salto, vamp, transicion de cancion y mixer en una interfaz mas adaptable.
+- Importacion de canciones/sesiones: importa paquetes de LibreTracks
+- Mejoras de timing musical: compases, planificacion de saltos, fade/declick al detener y ajustes visuales para un directo mas estable.
+
 ## Capturas de pantalla
 | Captura | Captura |
 | --- | --- |
@@ -22,8 +31,8 @@ LibreTracks se divide en dos capas principales:
 - `apps/desktop` es el frontend de escritorio. Usa React, stores con Zustand y renderizado por canvas para el timeline, el ruler, las marcas y las formas de onda.
 - `apps/desktop/src-tauri` es el puente nativo. Expone comandos Tauri, mantiene el estado desktop, aplica ajustes de audio y conecta la UI con el runtime en Rust.
 - `crates/libretracks-core` contiene el modelo de dominio y las validaciones de canciones, tracks, clips, marcas, buses y tempo.
-- `crates/libretracks-audio` contiene la lógica de transporte y mezcla. Resuelve clips activos, ganancia efectiva por pista, `play`/`pause`/`seek` y saltos musicales.
-- `crates/libretracks-project` gestiona persistencia de proyecto, `song.json`, assets de librería e importación/probing de WAV mediante `symphonia`.
+- `crates/libretracks-audio` contiene la lógica de transporte y mezcla. Resuelve clips activos, ganancia efectiva por pista, `play`/`pause`/`seek`/`stop`, metronomo, vamp, transiciones de cancion y saltos musicales.
+- `crates/libretracks-project` gestiona persistencia de proyecto, `song.json`, assets de librería, importacion de paquetes LibreTracks e importación/probing de WAV mediante `symphonia`.
 - La salida de audio nativa del escritorio usa `cpal` para I/O del dispositivo. La decodificación y lectura de metadatos WAV se resuelve mediante `symphonia` en la capa de proyecto/importación.
 
 Esta separación es intencional: el frontend decide cómo presentar y editar la sesión; Rust mantiene las reglas del transporte, la persistencia, la validación y el comportamiento de audio.
@@ -90,6 +99,8 @@ LibreTracks ahora incluye un flujo de acceso remoto integrado en la UI desktop:
 3. Asegurate de que desktop y movil esten en la misma red.
 
 La superficie web remota refleja acciones en vivo desde desktop y expone controles de transporte, controles de salto y una vista dedicada de mixer para ajustes rapidos de volumen/mute/solo durante ensayos y show.
+
+El remote tambien expone los controles nuevos de directo: `Vamp`, ajustes de salto de marca, ajustes de salto de cancion y modo de transicion de cancion. Es util como superficie compacta cuando el operador desktop necesita seguir centrado en el timeline.
 
 ## Project Structure
 

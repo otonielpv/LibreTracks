@@ -42,6 +42,16 @@ Typical stage use:
 
 > 🎛️ Practical result: one stereo pair becomes a simple live split, with cue material on the left and show material on the right.
 
+### Use the built-in `Metronome`
+
+Enable `Metronome` from `Settings` when you need a reliable click without importing a separate audio file. LibreTracks sends the click to the `Monitor` bus and keeps it locked to the transport timeline. Adjust `Metronome volume` before rehearsal so it sits correctly in the cue mix.
+
+### Connect MIDI hardware
+
+In `Settings`, choose a `MIDI input device` such as a pedalboard, pad controller, or keyboard. Use `Refresh MIDI devices` if the controller was connected after LibreTracks opened.
+
+Open `MIDI Learn` to map hardware notes or CC messages to live controls. Useful mappings include `Play`, `Stop`, `Vamp`, marker jump modes, song jump triggers, song transition mode, and bar-count controls.
+
 ## 3. Project Organization
 
 ### `Library`
@@ -54,6 +64,10 @@ Use `Library` as the preparation area for your show assets.
 4. Drag those assets onto the timeline when you are ready to arrange them.
 
 `Create virtual folder` helps you group assets by set, scene, song section, or instrumentation without changing the original source files. A practical setup is one virtual folder per song or per show segment.
+
+### Import songs and packages
+
+Use `Import song` when you want to bring another LibreTracks song/session package into the current session. You can also drag an external LibreTracks package onto the timeline. This is useful for building a show from prepared songs without rebuilding every track and marker by hand.
 
 ### `Audio track` vs `Folder track`
 
@@ -113,6 +127,19 @@ Set the global jump behavior from `Jump`:
 
 This lets you recover in real time if the band extends a chorus, skips a bridge, or needs to repeat a section.
 
+### `Vamp`
+
+Use `Vamp` to keep playback looping musically while the band or stage action needs more time. `Vamp Mode` can repeat the current `Section` or a fixed number of `Bars`. Press `Vamp` again to leave the loop.
+
+### Song jumps and transitions
+
+Use `Song Jump` controls when your session contains multiple song regions and you need to move to another song area during playback. The jump trigger can be immediate, after a configured number of bars, or at the song/region end.
+
+`Song Transition` controls how the current song hands off to the next one:
+
+- `Clean cut`: switches directly.
+- `Fade out`: fades the current playback before the jump.
+
 ### Shortcuts
 
 - `Space`: toggle `Play` / `Pause`
@@ -139,6 +166,7 @@ LibreTracks desktop can publish a mobile web remote for transport and mixer cont
 
 - Use transport controls (`Play`, `Pause`, `Stop`) from the mobile view.
 - Arm and cancel jumps from the remote when you need to adapt sections live.
+- Toggle `Vamp`, adjust marker/song jump behavior, and select song transition mode from the remote.
 - Switch to `Mixer` to adjust track volume, pan, mute, and solo without touching the desktop.
 
 ![Remote mixer view](../screenshots/Remote_Mixer.png)

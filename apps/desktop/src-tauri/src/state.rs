@@ -5383,7 +5383,7 @@ mod tests {
     }
 
     #[test]
-    fn deleting_a_song_region_expands_the_previous_region() {
+    fn deleting_a_song_region_preserves_neighbor_region_bounds() {
         let mut session = session_with_song_dir(
             "region-delete-demo",
             demo_song_with_region_changes_and_sections(),
@@ -5402,7 +5402,7 @@ mod tests {
         assert_eq!(song_view.regions.len(), 2);
         assert_eq!(song_view.regions[0].id, "region_1");
         assert_eq!(song_view.regions[0].start_seconds, 0.0);
-        assert_eq!(song_view.regions[0].end_seconds, 14.0);
+        assert_eq!(song_view.regions[0].end_seconds, 8.0);
         assert_eq!(song_view.regions[1].id, "region_3");
         assert_eq!(song_view.regions[1].start_seconds, 14.0);
         assert_eq!(song_view.regions[1].end_seconds, 18.0);

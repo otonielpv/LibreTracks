@@ -9,6 +9,15 @@
 
 LibreTracks is a multitrack DAW and live playback workstation for desktop, built with a Rust audio stack and a React/Tauri shell. The current monorepo focuses on non-destructive arrangement, live section jumps, WAV import, and a desktop runtime that keeps audio concerns separate from UI concerns.
 
+## What's New in v0.0.3
+
+- MIDI input and MIDI Learn: select an input device, refresh the device list, map notes or CC messages to live actions, and keep mappings saved with app settings.
+- Built-in metronome: send a synthesized click to the `Monitor` bus with its own volume control.
+- Vamp and song jumps: loop the current section or a fixed bar count, trigger song jumps, and choose instant or fade-out transitions.
+- Better remote control: the mobile remote now includes responsive transport, jump, vamp, song transition, and mixer controls.
+- Song/session import: import LibreTracks song packages
+- Musical timing improvements: time signatures, jump scheduling, stop fade/declick behavior, and layout fixes make live playback smoother.
+
 ## Screenshots
 | Screenshot | Screenshot |
 | --- | --- |
@@ -23,8 +32,8 @@ LibreTracks is split into two clear layers:
 - `apps/desktop` is the desktop frontend. It uses React, Zustand state stores, and canvas-based timeline rendering for the arrangement view, ruler, markers, and waveform lanes.
 - `apps/desktop/src-tauri` is the native bridge. It exposes Tauri commands, manages desktop state, applies audio settings, and connects the UI to the Rust runtime.
 - `crates/libretracks-core` contains the domain model and validation rules for songs, tracks, clips, markers, buses, and tempo data.
-- `crates/libretracks-audio` contains the transport and mixing logic. It resolves active clips, effective track gain, play/pause/seek, and musical jump behavior.
-- `crates/libretracks-project` handles project persistence, `song.json`, library assets, and WAV probing/import through `symphonia`.
+- `crates/libretracks-audio` contains the transport and mixing logic. It resolves active clips, effective track gain, play/pause/seek/stop, metronome output, vamp loops, song transitions, and musical jump behavior.
+- `crates/libretracks-project` handles project persistence, `song.json`, library assets, LibreTracks package import, and WAV probing/import through `symphonia`.
 - The native desktop audio path uses `cpal` for output device I/O. WAV decoding and metadata probing are handled through `symphonia` in the project/import layer.
 
 This separation matters: the frontend decides how to present and edit the session, while the Rust side owns transport rules, persistence, validation, and audio behavior.
@@ -91,6 +100,8 @@ LibreTracks now includes an integrated remote access flow in the desktop UI:
 3. Keep desktop and mobile devices on the same network.
 
 The remote web surface mirrors live actions from desktop and exposes transport controls, jump controls, and a dedicated mixer view for fast level/mute/solo adjustments during rehearsals and shows.
+
+The remote also exposes the newer live controls: `Vamp`, marker jump settings, song jump settings, and song transition mode. Use it as a compact stage surface when the desktop operator needs to stay focused on the timeline.
 
 ## Project Structure
 
