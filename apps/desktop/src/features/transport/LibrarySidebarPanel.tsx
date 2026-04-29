@@ -12,6 +12,8 @@ import { useTranslation } from "react-i18next";
 import type { LibraryAssetSummary, LibraryImportProgressEvent } from "./desktopApi";
 
 const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
+const INTERNAL_DRAG_START_EVENT = "libretracks-internal-drag-start";
+const INTERNAL_DRAG_END_EVENT = "libretracks-internal-drag-end";
 const ROOT_GROUP_ID = "__root__";
 
 type ContextMenuAction = {
@@ -96,6 +98,11 @@ export function LibrarySidebarPanel({
   const dragPreviewElementRef = useRef<HTMLElement | null>(null);
   const activeDraggedFilePathsRef = useRef<string[]>([]);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const handleFolderDragEnter = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
 
   useEffect(() => {
     setSelectedAssetPaths((current) => current.filter((filePath) => assets.some((asset) => asset.filePath === filePath)));
@@ -305,6 +312,17 @@ export function LibrarySidebarPanel({
       }
     }
 
+    window.dispatchEvent(
+      new CustomEvent(INTERNAL_DRAG_START_EVENT, {
+        detail: {
+          assetCount: dragPayload.length,
+          filePaths: dragPayload.map((item) => item.file_path),
+          types: Array.from(event.dataTransfer.types ?? []),
+          effectAllowed: event.dataTransfer.effectAllowed,
+        },
+      }),
+    );
+
     onDragAssetsStart?.(dragPayload);
   };
 
@@ -313,6 +331,11 @@ export function LibrarySidebarPanel({
     dragPreviewElementRef.current = null;
     activeDraggedFilePathsRef.current = [];
     setDragTargetGroupId(null);
+    window.dispatchEvent(
+      new CustomEvent(INTERNAL_DRAG_END_EVENT, {
+        detail: { reason: "dragend" },
+      }),
+    );
     onDragAssetsEnd?.();
   };
 
@@ -323,6 +346,7 @@ export function LibrarySidebarPanel({
     }
 
     event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
     setDragTargetGroupId(folderPath ?? ROOT_GROUP_ID);
   };
@@ -455,6 +479,7 @@ export function LibrarySidebarPanel({
               <summary
                 className={`lt-library-folder-summary ${dragTargetGroupId === ROOT_GROUP_ID ? "is-drag-target" : ""}`}
                 onContextMenu={(event) => openContextMenu(event, t("library.rootFolder"), folderContextMenu(null))}
+                onDragEnter={handleFolderDragEnter}
                 onDragLeave={handleGroupDragLeave}
                 onDragOver={(event) => handleGroupDragOver(event, null)}
                 onDrop={(event) => handleGroupDrop(event, null)}
@@ -473,6 +498,7 @@ export function LibrarySidebarPanel({
                 <summary
                   className={`lt-library-folder-summary ${dragTargetGroupId === group.folderPath ? "is-drag-target" : ""}`}
                   onContextMenu={(event) => openContextMenu(event, group.folderPath, folderContextMenu(group.folderPath))}
+                  onDragEnter={handleFolderDragEnter}
                   onDragLeave={handleGroupDragLeave}
                   onDragOver={(event) => handleGroupDragOver(event, group.folderPath)}
                   onDrop={(event) => handleGroupDrop(event, group.folderPath)}

@@ -4,6 +4,7 @@ use crate::commands::events::emit_ready_library_waveforms;
 use crate::error::DesktopError;
 use crate::models::{LibraryAssetSummary, SongView, TransportSnapshot};
 use crate::state::{CreateClipRequest, DesktopState};
+use rfd::FileDialog;
 
 #[tauri::command]
 pub fn get_song_view(state: State<'_, DesktopState>) -> Result<Option<SongView>, String> {
@@ -147,18 +148,49 @@ pub fn import_library_assets_from_dialog(
 }
 
 #[tauri::command]
-pub fn export_region_as_package(
+pub async fn export_region_as_package(
     region_id: String,
     state: State<'_, DesktopState>,
 ) -> Result<(), String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    let (song_dir, song, region_name) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        let song_dir = session
+            .song_dir
+            .clone()
+            .ok_or_else(|| "No song loaded".to_string())?;
+        let song = session
+            .engine
+            .song()
+            .cloned()
+            .ok_or_else(|| "No song loaded".to_string())?;
+        let region_name = song
+            .regions
+            .iter()
+            .find(|region| region.id == region_id)
+            .map(|region| region.name.clone())
+            .ok_or_else(|| "Region not found".to_string())?;
+        (song_dir, song, region_name)
+    };
 
-    session
-        .export_region_as_package(&region_id)
-        .map_err(|error| error.to_string())
+    let output_path = FileDialog::new()
+        .add_filter("LibreTracks Package", &["ltpkg"])
+        .set_title("Exportar Cancion")
+        .set_file_name(&format!("{}.ltpkg", crate::state::slugify(&region_name)))
+        .save_file();
+
+    if let Some(path) = output_path {
+        tauri::async_runtime::spawn_blocking(move || {
+            libretracks_project::export_region_as_package(&song_dir, &song, &region_id, &path)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|error| error.to_string())??;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -174,5 +206,35 @@ pub fn import_song_package(
 
     session
         .import_song_package(&package_path, insert_at_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn import_song_package_from_bytes(
+    package_bytes: Vec<u8>,
+    insert_at_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .import_song_package_from_bytes(&package_bytes, insert_at_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn import_song_package_from_base64(
+    package_base64: String,
+    insert_at_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .import_song_package_from_base64(&package_base64, insert_at_seconds, &state.audio)
         .map_err(|error| error.to_string())
 }

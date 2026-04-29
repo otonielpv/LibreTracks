@@ -505,6 +505,10 @@ body {
   overflow: hidden;
 }
 
+.lt-shell-body.is-hidden {
+  visibility: hidden;
+}
+
 .lt-side-nav {
   width: 5rem;
   flex-shrink: 0;
@@ -595,6 +599,10 @@ body {
   overflow: auto;
 }
 
+.lt-settings-modal--compact {
+  width: min(34rem, 100%);
+}
+
 .lt-settings-modal-header {
   display: flex;
   align-items: flex-start;
@@ -649,6 +657,32 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.lt-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.lt-inline-actions button {
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+  color: #f3f0ef;
+  padding: 0.7rem 1rem;
+  font: 700 0.82rem/1 "Space Grotesk", sans-serif;
+}
+
+.lt-inline-actions button:hover {
+  border-color: rgb(87 241 219 / 0.28);
+  color: #57f1db;
+}
+
+.lt-inline-actions button.is-primary {
+  border-color: rgb(87 241 219 / 0.24);
+  background: rgb(87 241 219 / 0.14);
 }
 
 .lt-settings-modal-body .lt-remote-card {
@@ -2636,7 +2670,7 @@ body {
 .busy-overlay {
   position: absolute;
   inset: 0;
-  z-index: 30;
+  z-index: 140;
   display: flex;
   align-items: center;
   justify-content: center;

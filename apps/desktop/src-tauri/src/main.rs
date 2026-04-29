@@ -45,7 +45,9 @@ fn main() {
                         .ok()
                         .and_then(|settings| settings.selected_midi_device),
                 )
-                .map_err(|error| std::io::Error::other(error.to_string()))?;
+                .unwrap_or_else(|error| {
+                    eprintln!("[libretracks-midi] startup warning: {error}");
+                });
             remote::initialize_remote(app)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
             Ok(())
@@ -66,11 +68,14 @@ fn main() {
             audio_runtime::get_audio_output_devices,
             commands::system::get_audio_debug_snapshot,
             commands::system::get_desktop_performance_snapshot,
+            commands::system::append_debug_log,
             commands::system::report_ui_render_metric,
             commands::project::create_song,
             commands::project::import_library_assets_from_dialog,
             commands::project::export_region_as_package,
             commands::project::import_song_package,
+            commands::project::import_song_package_from_base64,
+            commands::project::import_song_package_from_bytes,
             commands::library::delete_library_asset,
             commands::library::move_library_asset,
             commands::library::create_library_folder,

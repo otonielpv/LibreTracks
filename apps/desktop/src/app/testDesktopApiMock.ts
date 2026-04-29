@@ -325,6 +325,7 @@ function buildInitialState(): DesktopApiMockState {
     appSettings: {
       selectedOutputDevice: null,
       selectedMidiDevice: null,
+      suppressMissingMidiDeviceWarning: false,
       splitStereoEnabled: false,
       locale: "en",
       metronomeEnabled: false,

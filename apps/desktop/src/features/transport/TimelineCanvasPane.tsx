@@ -17,8 +17,18 @@ import type {
   TrackSummary,
   WaveformSummaryDto,
 } from "./desktopApi";
+import {
+  buildSongTempoRegions,
+  getSongBaseBpm,
+  getSongBaseTimeSignature,
+} from "./desktopApi";
 import { PlayheadOverlay } from "./PlayheadOverlay";
-import type { TimelineGrid } from "./timelineMath";
+import {
+  BASE_PIXELS_PER_SECOND,
+  clientXToTimelineSeconds,
+  snapToTimelineGrid,
+  type TimelineGrid,
+} from "./timelineMath";
 
 const RULER_HEIGHT = 92;
 
@@ -110,6 +120,9 @@ type TimelineCanvasPaneProps = {
   onTrackLaneLibraryDrop: (event: ReactDragEvent<HTMLDivElement>, track: TrackSummary) => void;
   onLibraryPreviewLaneDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
   onLibraryPreviewLaneDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onExternalPackageDragOver: (seconds: number) => void;
+  onExternalPackageDragLeave: () => void;
+  onExternalPackageDrop: (file: File, seconds: number) => void;
 };
 
 export function TimelineCanvasPane({
@@ -171,11 +184,114 @@ export function TimelineCanvasPane({
   onTrackLaneLibraryDrop,
   onLibraryPreviewLaneDragOver,
   onLibraryPreviewLaneDrop,
+  onExternalPackageDragOver,
+  onExternalPackageDragLeave,
+  onExternalPackageDrop,
 }: TimelineCanvasPaneProps) {
   const { t } = useTranslation();
 
+  const handleTimelineDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const isExternalFileDrag = (event: ReactDragEvent<HTMLDivElement>) => {
+    const types = event.dataTransfer.types as unknown as {
+      length: number;
+      [index: number]: string;
+      contains?: (value: string) => boolean;
+      includes?: (value: string) => boolean;
+    };
+    if (!types) {
+      return false;
+    }
+
+    if (typeof types.includes === "function") {
+      return types.includes("Files");
+    }
+
+    if (typeof types.contains === "function") {
+      return types.contains("Files");
+    }
+
+    for (let index = 0; index < types.length; index += 1) {
+      if (types[index] === "Files") {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const resolveExternalPackageDropSeconds = (clientX: number, element: HTMLElement) => {
+    const rawSeconds = clientXToTimelineSeconds(clientX, element, scrollViewportRef.current, pixelsPerSecond);
+    if (!song) {
+      return rawSeconds;
+    }
+
+    return snapToTimelineGrid(
+      rawSeconds,
+      getSongBaseBpm(song),
+      getSongBaseTimeSignature(song),
+      pixelsPerSecond / BASE_PIXELS_PER_SECOND,
+      pixelsPerSecond,
+      buildSongTempoRegions(song),
+    );
+  };
+
+  const handleExternalPackageDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!isExternalFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    onExternalPackageDragOver(resolveExternalPackageDropSeconds(event.clientX, event.currentTarget));
+  };
+
+  const handleExternalPackageDragLeave = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!isExternalFileDrag(event)) {
+      return;
+    }
+
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+
+    onExternalPackageDragLeave();
+  };
+
+  const handleExternalPackageDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!isExternalFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const file = event.dataTransfer.files[0] ?? null;
+    if (!file) {
+      onExternalPackageDragLeave();
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith(".ltpkg")) {
+      onExternalPackageDragLeave();
+      return;
+    }
+
+    onExternalPackageDrop(file, resolveExternalPackageDropSeconds(event.clientX, event.currentTarget));
+  };
+
   return (
-    <div className="lt-timeline-canvas-pane">
+    <div
+      className="lt-timeline-canvas-pane"
+      onDragOver={handleExternalPackageDragOver}
+      onDragLeave={handleExternalPackageDragLeave}
+      onDrop={handleExternalPackageDrop}
+    >
       <div
         className="lt-ruler-track"
         ref={rulerTrackRef}
@@ -345,6 +461,7 @@ export function TimelineCanvasPane({
         className={`lt-track-list ${libraryClipPreview.length ? "is-library-drag-over" : ""}`}
         ref={laneAreaRef}
         onContextMenu={onTrackListContextMenu}
+        onDragEnter={handleTimelineDragEnter}
         onDragOver={onTrackListLibraryDragOver}
         onDrop={onTrackListLibraryDrop}
         onDragLeave={onTrackListLibraryDragLeave}
@@ -409,6 +526,7 @@ export function TimelineCanvasPane({
             <div
               className="lt-empty-arrangement-dropzone"
               aria-label={t("transport.shell.emptyArrangementDropzone")}
+              onDragEnter={handleTimelineDragEnter}
               onDragOver={onEmptyArrangementLibraryDragOver}
               onDrop={onEmptyArrangementLibraryDrop}
             >
@@ -450,6 +568,7 @@ export function TimelineCanvasPane({
                   className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""}`}
                   style={{ height: trackHeight }}
                   aria-label={`Lane ${track.name}`}
+                  onDragEnter={handleTimelineDragEnter}
                   onMouseDown={(event) => onTrackLaneMouseDown(event, track, trackClips)}
                   onContextMenu={(event) => onTrackLaneContextMenu(event, track, trackClips)}
                   onDragOver={(event) => onTrackLaneLibraryDragOver(event, track)}
@@ -485,6 +604,7 @@ export function TimelineCanvasPane({
                     className="lt-track-lane is-library-preview"
                     style={{ height: trackHeight }}
                     aria-label={`Preview lane ${previewRow.title}`}
+                    onDragEnter={handleTimelineDragEnter}
                     onDragOver={onLibraryPreviewLaneDragOver}
                     onDrop={onLibraryPreviewLaneDrop}
                   >
@@ -509,6 +629,7 @@ export function TimelineCanvasPane({
             <div
               className="lt-track-list-dropzone"
               aria-label="Dropzone para nuevas pistas"
+              onDragEnter={handleTimelineDragEnter}
               onDragOver={onTrackListLibraryDragOver}
               onDrop={onTrackListLibraryDrop}
               onDragLeave={onTrackListLibraryDragLeave}

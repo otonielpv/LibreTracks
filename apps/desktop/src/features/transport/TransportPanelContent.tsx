@@ -47,7 +47,8 @@ import {
   getTransportSnapshot,
   getWaveformSummaries,
   importLibraryAssetsFromDialog,
-  importSongPackage,
+  pickAndImportSong,
+  importSongPackageFromBase64,
   isTauriApp,
   listenToLibraryImportProgress,
   listenToAudioMeters,
@@ -431,14 +432,12 @@ function hasLibraryAssetDragType(dataTransfer: DataTransfer | null) {
   return dragTypes.includes(LIBRARY_ASSET_DRAG_MIME) || dragTypes.includes("text/plain");
 }
 
-function readSongPackageDragPath(dataTransfer: DataTransfer | null) {
-  const file = dataTransfer?.files?.[0];
-  if (!file) {
-    return null;
-  }
+function debugLibraryDrag(..._args: Array<unknown>) {}
 
-  const nativeFile = file as File & { path?: string };
-  return file.name.toLowerCase().endsWith(".ltpkg") ? nativeFile.path ?? file.name : null;
+async function waitForUiPaint() {
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
 }
 
 function formatMusicalPosition(seconds: number, song: SongView | null | undefined) {
@@ -850,6 +849,7 @@ export function TransportPanelContent() {
   const [isImportingLibrary, setIsImportingLibrary] = useState(false);
   const [libraryImportProgress, setLibraryImportProgress] = useState<LibraryImportProgressEvent | null>(null);
   const [deletingLibraryFilePath, setDeletingLibraryFilePath] = useState<string | null>(null);
+  const [missingMidiDeviceWarning, setMissingMidiDeviceWarning] = useState<string | null>(null);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const appSettingsRef = useRef(appSettings);
   const metronomeLiveRequestIdRef = useRef(0);
@@ -1917,6 +1917,30 @@ export function TransportPanelContent() {
       unlisten?.();
     };
   }, []);
+
+  useEffect(() => {
+    const selectedMidiDevice = appSettings.selectedMidiDevice;
+    if (!selectedMidiDevice) {
+      setMissingMidiDeviceWarning(null);
+      return;
+    }
+
+    if (appSettings.suppressMissingMidiDeviceWarning) {
+      setMissingMidiDeviceWarning(null);
+      return;
+    }
+
+    if (midiInputDevices.includes(selectedMidiDevice)) {
+      setMissingMidiDeviceWarning(null);
+      return;
+    }
+
+    setMissingMidiDeviceWarning(selectedMidiDevice);
+  }, [
+    appSettings.selectedMidiDevice,
+    appSettings.suppressMissingMidiDeviceWarning,
+    midiInputDevices,
+  ]);
 
   useEffect(() => {
     const shell = timelineShellRef.current;
@@ -3331,7 +3355,7 @@ export function TransportPanelContent() {
           await runAction(async () => {
             await exportRegionAsPackage(region.id);
             setStatus(`Paquete exportado para ${region.name}`);
-          });
+          }, { busy: true });
         },
       },
       {
@@ -4091,6 +4115,22 @@ export function TransportPanelContent() {
     );
   }
 
+  function handleImportSongClick() {
+    void runAction(
+      async () => {
+        const nextSnapshot = await pickAndImportSong();
+        if (!nextSnapshot) {
+          return;
+        }
+
+        applyPlaybackSnapshot(nextSnapshot);
+        setActiveSidebarTab(null);
+        setStatus(t("transport.status.songImported"));
+      },
+      { busy: true },
+    );
+  }
+
   function handleToggleTopMenu(menuKey: "file") {
     setOpenTopMenu((currentMenu) => (currentMenu === menuKey ? null : menuKey));
   }
@@ -4400,6 +4440,21 @@ export function TransportPanelContent() {
     );
   }
 
+  function handleDismissMissingMidiDeviceWarning() {
+    setMissingMidiDeviceWarning(null);
+  }
+
+  function handleHideMissingMidiDeviceWarning() {
+    setMissingMidiDeviceWarning(null);
+    persistAudioSettings(
+      {
+        ...appSettings,
+        suppressMissingMidiDeviceWarning: true,
+      },
+      t("transport.status.midiWarningHidden"),
+    );
+  }
+
   function handleLocaleChange(nextValue: string) {
     persistAudioSettings(
       {
@@ -4422,6 +4477,8 @@ export function TransportPanelContent() {
 
     setIsImportingLibrary(true);
     setLibraryImportProgress(null);
+    setStatus(t("transport.status.libraryImportStarting"));
+    await waitForUiPaint();
     await runAction(async () => {
       const assets = await importLibraryAssetsFromDialog();
       if (!assets) {
@@ -4573,17 +4630,32 @@ export function TransportPanelContent() {
     const payload = readLibraryAssetDragPayload(dataTransfer);
     if (payload?.length) {
       activeLibraryDragPayloadRef.current = payload;
+      debugLibraryDrag("resolveLibraryDragPayload:from-dataTransfer", {
+        count: payload.length,
+        types: Array.from(dataTransfer?.types ?? []),
+        files: payload.map((item) => item.file_path),
+      });
       return payload;
     }
 
     if (activeLibraryDragPayloadRef.current?.length) {
+      debugLibraryDrag("resolveLibraryDragPayload:from-ref", {
+        count: activeLibraryDragPayloadRef.current.length,
+        types: Array.from(dataTransfer?.types ?? []),
+      });
       return activeLibraryDragPayloadRef.current;
     }
 
     if (hasLibraryAssetDragType(dataTransfer)) {
+      debugLibraryDrag("resolveLibraryDragPayload:drag-type-without-payload", {
+        types: Array.from(dataTransfer?.types ?? []),
+      });
       return activeLibraryDragPayloadRef.current;
     }
 
+    debugLibraryDrag("resolveLibraryDragPayload:none", {
+      types: Array.from(dataTransfer?.types ?? []),
+    });
     return null;
   }
 
@@ -4722,6 +4794,21 @@ export function TransportPanelContent() {
 
   function clearActiveLibraryDragPayload() {
     activeLibraryDragPayloadRef.current = null;
+  }
+
+  function resolveTimelineDropTargetAtClientPoint(clientX: number, clientY: number) {
+    const target = document.elementFromPoint(clientX, clientY);
+    if (!(target instanceof HTMLElement)) {
+      return null;
+    }
+
+    if (!timelineShellRef.current?.contains(target)) {
+      return null;
+    }
+
+    return target.closest(
+      ".lt-track-lane, .lt-track-list, .lt-track-list-dropzone, .lt-empty-arrangement-dropzone",
+    ) as HTMLDivElement | null;
   }
 
   function resolveLibraryAutoScrollVelocity(distancePx: number) {
@@ -5031,7 +5118,6 @@ export function TransportPanelContent() {
       return;
     }
 
-    setPackageDropPreviewSeconds(null);
     clearLibraryDragPreview();
   }
 
@@ -5039,21 +5125,12 @@ export function TransportPanelContent() {
     event: ReactDragEvent<HTMLDivElement>,
     track: TrackSummary,
   ) {
-    const packagePath = readSongPackageDragPath(event.dataTransfer);
-    if (packagePath) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.dataTransfer.dropEffect = "copy";
-      setPackageDropPreviewSeconds(resolveLibraryDropSeconds(event, event.currentTarget));
-      return;
-    }
-
+    event.preventDefault();
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload || track.kind === "folder") {
       return;
     }
 
-    event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
     beginLibraryDragHover(event, payload, track.id);
@@ -5063,22 +5140,6 @@ export function TransportPanelContent() {
     event: ReactDragEvent<HTMLDivElement>,
     track: TrackSummary,
   ) {
-    const packagePath = readSongPackageDragPath(event.dataTransfer);
-    if (packagePath) {
-      event.preventDefault();
-      event.stopPropagation();
-      setPackageDropPreviewSeconds(null);
-      void runAction(async () => {
-        const nextSnapshot = await importSongPackage(
-          packagePath,
-          resolveLibraryDropSeconds(event, event.currentTarget),
-        );
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(`Paquete importado en ${formatClock(resolveLibraryDropSeconds(event, event.currentTarget))}`);
-      });
-      return;
-    }
-
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload || track.kind === "folder") {
       return;
@@ -5100,20 +5161,13 @@ export function TransportPanelContent() {
   }
 
   function handleTrackListLibraryDragOver(event: ReactDragEvent<HTMLDivElement>) {
-    const packagePath = readSongPackageDragPath(event.dataTransfer);
-    if (packagePath) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-      setPackageDropPreviewSeconds(resolveLibraryDropSeconds(event, event.currentTarget));
-      return;
-    }
-
+    event.preventDefault();
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
     }
 
-    event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
 
     const target = event.target instanceof HTMLElement ? event.target : null;
@@ -5126,22 +5180,6 @@ export function TransportPanelContent() {
   }
 
   function handleTrackListLibraryDrop(event: ReactDragEvent<HTMLDivElement>) {
-    const packagePath = readSongPackageDragPath(event.dataTransfer);
-    if (packagePath) {
-      event.preventDefault();
-      clearLibraryDragPreview();
-      clearActiveLibraryDragPayload();
-      setPackageDropPreviewSeconds(null);
-
-      void runAction(async () => {
-        const insertAtSeconds = resolveLibraryDropSeconds(event, event.currentTarget);
-        const nextSnapshot = await importSongPackage(packagePath, insertAtSeconds);
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(`Paquete importado en ${formatClock(insertAtSeconds)}`);
-      });
-      return;
-    }
-
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (!payload || target?.closest(".lt-track-lane")) {
@@ -5149,6 +5187,7 @@ export function TransportPanelContent() {
     }
 
     event.preventDefault();
+    event.stopPropagation();
     clearLibraryDragPreview();
     clearActiveLibraryDragPayload();
 
@@ -5163,41 +5202,18 @@ export function TransportPanelContent() {
   }
 
   function handleLibraryPreviewLaneDragOver(event: ReactDragEvent<HTMLDivElement>) {
-    if (readSongPackageDragPath(event.dataTransfer)) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-      setPackageDropPreviewSeconds(resolveLibraryDropSeconds(event, event.currentTarget));
-      return;
-    }
-
+    event.preventDefault();
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
     }
 
-    event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
     beginLibraryDragHover(event, payload, null);
   }
 
   function handleLibraryPreviewLaneDrop(event: ReactDragEvent<HTMLDivElement>) {
-    const packagePath = readSongPackageDragPath(event.dataTransfer);
-    if (packagePath) {
-      event.preventDefault();
-      clearLibraryDragPreview();
-      clearActiveLibraryDragPayload();
-      setPackageDropPreviewSeconds(null);
-
-      void runAction(async () => {
-        const insertAtSeconds = resolveLibraryDropSeconds(event, event.currentTarget);
-        const nextSnapshot = await importSongPackage(packagePath, insertAtSeconds);
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(`Paquete importado en ${formatClock(insertAtSeconds)}`);
-      });
-      return;
-    }
-
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
@@ -5219,41 +5235,18 @@ export function TransportPanelContent() {
   }
 
   function handleEmptyArrangementLibraryDragOver(event: ReactDragEvent<HTMLDivElement>) {
-    if (readSongPackageDragPath(event.dataTransfer)) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-      setPackageDropPreviewSeconds(resolveLibraryDropSeconds(event, event.currentTarget));
-      return;
-    }
-
+    event.preventDefault();
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
     }
 
-    event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
     beginLibraryDragHover(event, payload, null);
   }
 
   function handleEmptyArrangementLibraryDrop(event: ReactDragEvent<HTMLDivElement>) {
-    const packagePath = readSongPackageDragPath(event.dataTransfer);
-    if (packagePath) {
-      event.preventDefault();
-      clearLibraryDragPreview();
-      clearActiveLibraryDragPayload();
-      setPackageDropPreviewSeconds(null);
-
-      void runAction(async () => {
-        const insertAtSeconds = resolveLibraryDropSeconds(event, event.currentTarget);
-        const nextSnapshot = await importSongPackage(packagePath, insertAtSeconds);
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(`Paquete importado en ${formatClock(insertAtSeconds)}`);
-      });
-      return;
-    }
-
     const payload = resolveLibraryDragPayload(event.dataTransfer);
     if (!payload) {
       return;
@@ -5287,7 +5280,7 @@ export function TransportPanelContent() {
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
       <div
-        className={`lt-daw-shell ${midiLearnMode !== null ? "is-midi-learn-active" : ""}`}
+        className={`lt-daw-shell ${midiLearnMode !== null ? "is-midi-learn-active" : ""} ${isBusy ? "is-busy" : ""}`}
         ref={panelRef}
         onContextMenu={(event) => event.preventDefault()}
       >
@@ -5297,6 +5290,45 @@ export function TransportPanelContent() {
             <strong>{t("transport.shell.busyTitle")}</strong>
             <p>{t("transport.shell.busyDescription")}</p>
           </div>
+        </div>
+      ) : null}
+
+      {missingMidiDeviceWarning ? (
+        <div className="lt-modal-backdrop" onClick={handleDismissMissingMidiDeviceWarning}>
+          <section
+            className="lt-settings-modal lt-settings-modal--compact"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lt-missing-midi-warning-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="lt-settings-modal-header">
+              <div>
+                <span className="lt-settings-modal-eyebrow">{t("transport.midiWarning.eyebrow")}</span>
+                <h2 id="lt-missing-midi-warning-title">{t("transport.midiWarning.title")}</h2>
+                <p>{t("transport.midiWarning.description")}</p>
+                <p>{t("transport.midiWarning.detail", { name: missingMidiDeviceWarning })}</p>
+              </div>
+              <button
+                type="button"
+                className="lt-settings-modal-close"
+                onClick={handleDismissMissingMidiDeviceWarning}
+              >
+                <span className="material-symbols-outlined">close</span>
+                {t("transport.midiWarning.dismiss")}
+              </button>
+            </header>
+            <div className="lt-settings-modal-body">
+              <div className="lt-inline-actions">
+                <button type="button" onClick={handleDismissMissingMidiDeviceWarning}>
+                  {t("transport.midiWarning.dismiss")}
+                </button>
+                <button type="button" className="is-primary" onClick={handleHideMissingMidiDeviceWarning}>
+                  {t("transport.midiWarning.dontShowAgain")}
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
       ) : null}
 
@@ -5321,6 +5353,7 @@ export function TransportPanelContent() {
         onTopMenuAction={handleTopMenuAction}
         onCreateSong={handleCreateSongClick}
         onOpenProject={handleOpenProjectClick}
+        onImportSong={handleImportSongClick}
         onSaveProject={handleSaveProjectClick}
         onSaveProjectAs={handleSaveProjectAsClick}
         onStopTransport={() =>
@@ -5390,7 +5423,7 @@ export function TransportPanelContent() {
         onMidiLearnTarget={handleMidiLearnTarget}
       />
 
-      <div className="lt-shell-body">
+      <div className={`lt-shell-body ${isBusy ? "is-hidden" : ""}`}>
         <aside className="lt-side-nav" aria-label={t("transport.shell.navigation")}>
           <button
             type="button"
@@ -5827,6 +5860,41 @@ export function TransportPanelContent() {
                 onTrackLaneLibraryDrop={handleTrackLaneLibraryDrop}
                 onLibraryPreviewLaneDragOver={handleLibraryPreviewLaneDragOver}
                 onLibraryPreviewLaneDrop={handleLibraryPreviewLaneDrop}
+                onExternalPackageDragOver={setPackageDropPreviewSeconds}
+                onExternalPackageDragLeave={() => setPackageDropPreviewSeconds(null)}
+                onExternalPackageDrop={(file, dropSeconds) => {
+                  setPackageDropPreviewSeconds(null);
+                  setIsBusy(true);
+
+                  const reader = new FileReader();
+                  reader.onload = async (event) => {
+                    try {
+                      const dataUrl = event.target?.result;
+                      if (typeof dataUrl !== "string") {
+                        throw new Error("Failed to read the dropped package file.");
+                      }
+
+                      const base64Data = dataUrl.split(",")[1];
+                      if (!base64Data) {
+                        throw new Error("Failed to extract Base64 data from dropped file.");
+                      }
+
+                      const nextSnapshot = await importSongPackageFromBase64(base64Data, dropSeconds);
+                      applyPlaybackSnapshot(nextSnapshot);
+                      setStatus(t("transport.status.packageImportedAt", { time: formatClock(dropSeconds) }));
+                    } catch (error) {
+                      setStatus(formatErrorStatus(error));
+                    } finally {
+                      setIsBusy(false);
+                    }
+                  };
+                  reader.onerror = () => {
+                    setStatus(t("transport.status.error", { message: "Failed to read the dropped package file." }));
+                    setIsBusy(false);
+                  };
+
+                  reader.readAsDataURL(file);
+                }}
               />
             </div>
           </div>

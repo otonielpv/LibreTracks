@@ -53,6 +53,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub selected_midi_device: Option<String>,
     #[serde(default)]
+    pub suppress_missing_midi_device_warning: bool,
+    #[serde(default)]
     pub split_stereo_enabled: bool,
     #[serde(default)]
     pub locale: Option<String>,
@@ -83,6 +85,7 @@ impl Default for AppSettings {
         Self {
             selected_output_device: None,
             selected_midi_device: None,
+            suppress_missing_midi_device_warning: false,
             split_stereo_enabled: false,
             locale: None,
             metronome_enabled: false,

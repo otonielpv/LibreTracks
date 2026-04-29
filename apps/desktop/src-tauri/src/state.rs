@@ -14,12 +14,11 @@ use libretracks_core::{
     TrackKind,
 };
 use libretracks_project::{
-    append_wav_files_to_song, export_region_as_package as export_song_region_package,
-    generate_waveform_summary, import_song_package as import_song_package_into_project,
-    import_wav_files_to_library, import_wav_song, load_song_from_file,
-    load_waveform_summary, read_audio_metadata, save_song_to_file, waveform_file_path,
-    ImportOperationMetrics, ImportedSong, ProjectError, ProjectImportRequest, WaveformSummary,
-    SONG_FILE_NAME,
+    append_wav_files_to_song, generate_waveform_summary,
+    import_song_package as import_song_package_into_project, import_wav_files_to_library,
+    load_song_from_file, load_waveform_summary, read_audio_metadata,
+    save_song_to_file, waveform_file_path, ImportOperationMetrics, ImportedSong, ProjectError,
+    ProjectImportRequest, WaveformSummary, SONG_FILE_NAME,
 };
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
@@ -421,32 +420,30 @@ impl DesktopSession {
 
     pub fn import_song_from_dialog(
         &mut self,
-        app: &AppHandle,
+        _app: &AppHandle,
         audio: &AudioController,
     ) -> Result<Option<TransportSnapshot>, DesktopError> {
-        let files = FileDialog::new()
-            .add_filter("Audio", &["wav", "mp3", "flac", "m4a", "aac", "ogg"])
-            .set_title("Selecciona las pistas de audio")
-            .pick_files();
+        let package_file = FileDialog::new()
+            .add_filter("LibreTracks Package", &["ltpkg"])
+            .set_title("Selecciona un paquete .ltpkg")
+            .pick_file();
 
-        let Some(files) = files else {
+        let Some(package_file) = package_file else {
             return Ok(None);
         };
 
-        if self.song_dir.is_some() && self.engine.song().is_some() {
-            return Ok(Some(
-                self.import_audio_files_into_current_song(&files, audio)?,
-            ));
-        }
+        self.song_dir
+            .as_ref()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        self.engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
 
-        let import_root = project_root(app);
-        let request = build_import_request(&files);
-        let folder_name = format!("{}-{}", slugify(&request.title), timestamp_suffix());
-        let imported_song = import_wav_song(import_root.join("songs"), &folder_name, &request)?;
+        let package_path = package_file.to_string_lossy().into_owned();
+        let inserted = self.import_song_package(&package_path, self.current_position(), audio)?;
 
-        self.load_imported_song(imported_song, audio)?;
-
-        Ok(Some(self.snapshot()))
+        Ok(Some(inserted))
     }
 
     pub fn import_library_assets_from_dialog(
@@ -1412,20 +1409,7 @@ impl DesktopSession {
             .position(|region| region.id == region_id)
             .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
 
-        let deleted_region = song.regions.remove(region_index);
-        if song.regions.is_empty() {
-            self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
-            return Ok(self.snapshot());
-        }
-
-        if region_index > 0 {
-            if let Some(previous_region) = song.regions.get_mut(region_index - 1) {
-                previous_region.end_seconds = deleted_region.end_seconds;
-            }
-        } else if let Some(next_region) = song.regions.first_mut() {
-            next_region.start_seconds = deleted_region.start_seconds;
-        }
-
+        song.regions.remove(region_index);
         sort_song_regions(&mut song.regions);
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
@@ -1636,31 +1620,6 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn export_region_as_package(
-        &mut self,
-        region_id: &str,
-    ) -> Result<(), DesktopError> {
-        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
-        let region = song
-            .regions
-            .iter()
-            .find(|region| region.id == region_id)
-            .ok_or_else(|| DesktopError::AudioCommand("song region not found".into()))?;
-        let output_path = FileDialog::new()
-            .add_filter("LibreTracks Package", &["ltpkg"])
-            .set_title("Exportar Cancion")
-            .set_file_name(&format!("{}.ltpkg", slugify(&region.name)))
-            .save_file();
-
-        let Some(output_path) = output_path else {
-            return Ok(());
-        };
-
-        export_song_region_package(&song_dir, &song, region_id, &output_path)?;
-        Ok(())
-    }
-
     pub fn import_song_package(
         &mut self,
         package_path: &str,
@@ -1675,6 +1634,48 @@ impl DesktopSession {
             Path::new(package_path),
             insert_at_seconds,
         )?;
+        let library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
+        write_library_manifest_assets(&song_dir, &library_assets)?;
+        self.persist_song_update(imported.song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        Ok(self.snapshot())
+    }
+
+    pub fn import_song_package_from_bytes(
+        &mut self,
+        package_bytes: &[u8],
+        insert_at_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let imported = libretracks_project::import_song_package_from_bytes(
+            &song_dir,
+            &song,
+            package_bytes,
+            insert_at_seconds,
+        )?;
+        let library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
+        write_library_manifest_assets(&song_dir, &library_assets)?;
+        self.persist_song_update(imported.song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        Ok(self.snapshot())
+    }
+
+    pub fn import_song_package_from_base64(
+        &mut self,
+        package_base64: &str,
+        insert_at_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+        let imported = libretracks_project::import_song_package_from_base64(
+            &song_dir,
+            &song,
+            package_base64,
+            insert_at_seconds,
+        )?;
+        let library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
+        write_library_manifest_assets(&song_dir, &library_assets)?;
         self.persist_song_update(imported.song, audio, AudioChangeImpact::StructureRebuild, true)?;
         Ok(self.snapshot())
     }
@@ -3234,7 +3235,7 @@ fn sort_song_regions(regions: &mut Vec<SongRegion>) {
     });
 }
 
-fn slugify(value: &str) -> String {
+pub(crate) fn slugify(value: &str) -> String {
     let mut slug = String::new();
     let mut last_was_dash = false;
 

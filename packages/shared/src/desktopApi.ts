@@ -143,6 +143,10 @@ export async function reportUiRenderMetric(renderMillis: number): Promise<void> 
   await invokeCommand("report_ui_render_metric", { renderMillis });
 }
 
+export async function appendDebugLog(line: string): Promise<void> {
+  await invokeCommand("append_debug_log", { line });
+}
+
 export async function createSong(): Promise<TransportSnapshot | null> {
   return invokeCommand<TransportSnapshot | null>("create_song");
 }
@@ -217,6 +221,26 @@ export async function importSongPackage(
   insertAtSeconds: number,
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("import_song_package", { packagePath, insertAtSeconds });
+}
+
+export async function importSongPackageFromBytes(
+  packageBytes: Uint8Array | number[],
+  insertAtSeconds: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("import_song_package_from_bytes", {
+    packageBytes,
+    insertAtSeconds,
+  });
+}
+
+export async function importSongPackageFromBase64(
+  packageBase64: string,
+  insertAtSeconds: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("import_song_package_from_base64", {
+    packageBase64,
+    insertAtSeconds,
+  });
 }
 
 export async function deleteLibraryAsset(filePath: string): Promise<LibraryAssetSummary[]> {

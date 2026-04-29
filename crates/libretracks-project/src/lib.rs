@@ -12,7 +12,8 @@ pub use importer::{
     ImportedLibraryAsset, ImportedSong, ProjectImportRequest, AudioMetadata, WavMetadata,
 };
 pub use package::{
-    export_region_as_package, import_song_package, SongPackageExport, SongPackageImportResult,
+    export_region_as_package, import_song_package, import_song_package_from_base64,
+    import_song_package_from_bytes, SongPackageExport, SongPackageImportResult,
 };
 pub use song_store::{
     create_song_folder, load_song, load_song_from_file, save_song, save_song_to_file,

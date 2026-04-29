@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+base64 = "0.22"
 hound = "3"
 libretracks-core = { path = "../libretracks-core" }
 rayon = "1.10"

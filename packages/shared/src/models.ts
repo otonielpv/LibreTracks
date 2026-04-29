@@ -247,6 +247,7 @@ export type MidiBinding = {
 export type AppSettings = {
   selectedOutputDevice: string | null;
   selectedMidiDevice: string | null;
+  suppressMissingMidiDeviceWarning: boolean;
   splitStereoEnabled: boolean;
   locale: string | null;
   metronomeEnabled: boolean;
@@ -264,6 +265,7 @@ export type AppSettings = {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   selectedOutputDevice: null,
   selectedMidiDevice: null,
+  suppressMissingMidiDeviceWarning: false,
   splitStereoEnabled: false,
   locale: null,
   metronomeEnabled: false,
@@ -315,6 +317,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   return {
     selectedOutputDevice,
     selectedMidiDevice,
+    suppressMissingMidiDeviceWarning: Boolean(settings.suppressMissingMidiDeviceWarning),
     splitStereoEnabled: Boolean(settings.splitStereoEnabled),
     locale: locale === "en" || locale === "es" ? locale : null,
     metronomeEnabled: Boolean(settings.metronomeEnabled),

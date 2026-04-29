@@ -1,17 +1,52 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
-    io::{Read, Write},
+    io::{Cursor, Read, Seek, Write},
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
+use base64::{engine::general_purpose, Engine as _};
 use libretracks_core::{
-    Clip, OutputBus, Song, TempoMarker, TimeSignatureMarker, Track,
+    Clip, OutputBus, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track,
 };
 use serde::{Deserialize, Serialize};
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
 use crate::song_store::ProjectError;
+
+fn timestamp_suffix() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
+fn song_bpm_at(song: &Song, position_seconds: f64) -> f64 {
+    song.tempo_markers
+        .iter()
+        .filter(|marker| marker.start_seconds <= position_seconds + 0.001)
+        .max_by(|a, b| {
+            a.start_seconds
+                .partial_cmp(&b.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|marker| marker.bpm)
+        .unwrap_or(song.bpm)
+}
+
+fn song_time_signature_at(song: &Song, position_seconds: f64) -> String {
+    song.time_signature_markers
+        .iter()
+        .filter(|marker| marker.start_seconds <= position_seconds + 0.001)
+        .max_by(|a, b| {
+            a.start_seconds
+                .partial_cmp(&b.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|marker| marker.signature.clone())
+        .unwrap_or(song.time_signature.clone())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,8 +94,8 @@ pub fn export_region_as_package(
         .clips
         .iter()
         .filter(|clip| {
-            let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
-            clip.timeline_start_seconds >= region.start_seconds && clip_end <= region.end_seconds
+            clip.timeline_start_seconds >= region.start_seconds - 0.01
+                && clip.timeline_start_seconds < region.end_seconds
         })
         .cloned()
         .map(|mut clip| {
@@ -78,7 +113,10 @@ pub fn export_region_as_package(
     let section_markers = song
         .section_markers
         .iter()
-        .filter(|marker| marker.start_seconds >= region.start_seconds && marker.start_seconds <= region.end_seconds)
+        .filter(|marker| {
+            marker.start_seconds >= region.start_seconds - 0.01
+                && marker.start_seconds < region.end_seconds
+        })
         .cloned()
         .map(|mut marker| {
             marker.start_seconds -= region.start_seconds;
@@ -88,7 +126,10 @@ pub fn export_region_as_package(
     let tempo_markers = song
         .tempo_markers
         .iter()
-        .filter(|marker| marker.start_seconds >= region.start_seconds && marker.start_seconds <= region.end_seconds)
+        .filter(|marker| {
+            marker.start_seconds >= region.start_seconds - 0.01
+                && marker.start_seconds < region.end_seconds
+        })
         .cloned()
         .map(|mut marker| {
             marker.start_seconds -= region.start_seconds;
@@ -98,7 +139,10 @@ pub fn export_region_as_package(
     let time_signature_markers = song
         .time_signature_markers
         .iter()
-        .filter(|marker| marker.start_seconds >= region.start_seconds && marker.start_seconds <= region.end_seconds)
+        .filter(|marker| {
+            marker.start_seconds >= region.start_seconds - 0.01
+                && marker.start_seconds < region.end_seconds
+        })
         .cloned()
         .map(|mut marker| {
             marker.start_seconds -= region.start_seconds;
@@ -122,6 +166,8 @@ pub fn export_region_as_package(
     let mut zip = ZipWriter::new(file);
     let options =
         SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let audio_options =
+        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     zip.start_file("manifest.json", options)
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
     zip.write_all(serde_json::to_vec_pretty(&manifest)?.as_slice())?;
@@ -132,7 +178,7 @@ pub fn export_region_as_package(
             continue;
         }
         let source_path = song_dir.join(&clip.file_path);
-        zip.start_file(clip.file_path.replace('\\', "/"), options)
+        zip.start_file(clip.file_path.replace('\\', "/"), audio_options)
             .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
         zip.write_all(&fs::read(source_path)?)?;
     }
@@ -150,8 +196,42 @@ pub fn import_song_package(
     package_path: &Path,
     insert_at_seconds: f64,
 ) -> Result<SongPackageImportResult, ProjectError> {
-    let mut archive = ZipArchive::new(File::open(package_path)?)
+    let file = File::open(package_path)?;
+    let mut archive = ZipArchive::new(file)
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    import_song_package_from_archive(song_dir, song, &mut archive, insert_at_seconds)
+}
+
+pub fn import_song_package_from_bytes(
+    song_dir: &Path,
+    song: &Song,
+    package_bytes: &[u8],
+    insert_at_seconds: f64,
+) -> Result<SongPackageImportResult, ProjectError> {
+    let cursor = Cursor::new(package_bytes.to_vec());
+    let mut archive = ZipArchive::new(cursor)
+        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    import_song_package_from_archive(song_dir, song, &mut archive, insert_at_seconds)
+}
+
+pub fn import_song_package_from_base64(
+    song_dir: &Path,
+    song: &Song,
+    package_base64: &str,
+    insert_at_seconds: f64,
+) -> Result<SongPackageImportResult, ProjectError> {
+    let package_bytes = general_purpose::STANDARD
+        .decode(package_base64)
+        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    import_song_package_from_bytes(song_dir, song, &package_bytes, insert_at_seconds)
+}
+
+fn import_song_package_from_archive<R: Read + Seek>(
+    song_dir: &Path,
+    song: &Song,
+    archive: &mut ZipArchive<R>,
+    insert_at_seconds: f64,
+) -> Result<SongPackageImportResult, ProjectError> {
     let mut manifest_json = String::new();
     archive
         .by_name("manifest.json")
@@ -178,6 +258,7 @@ pub fn import_song_package(
         .iter()
         .map(|clip| clip.id.clone())
         .collect::<HashSet<_>>();
+    let insert_at_seconds = insert_at_seconds.max(0.0);
 
     for clip in &manifest.clips {
         let mut zip_file = archive
@@ -232,7 +313,7 @@ pub fn import_song_package(
             id: clip_id,
             track_id: target_track_id,
             file_path: format!("audio/{file_name}"),
-            timeline_start_seconds: clip.timeline_start_seconds + insert_at_seconds.max(0.0),
+            timeline_start_seconds: clip.timeline_start_seconds + insert_at_seconds,
             source_start_seconds: clip.source_start_seconds,
             duration_seconds: clip.duration_seconds,
             gain: clip.gain,
@@ -243,10 +324,22 @@ pub fn import_song_package(
 
     for marker in &manifest.section_markers {
         let mut marker = marker.clone();
-        marker.start_seconds += insert_at_seconds.max(0.0);
+        marker.start_seconds += insert_at_seconds;
         next_song.section_markers.push(marker);
     }
     next_song.section_markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    next_song.regions.push(SongRegion {
+        id: format!("region_import_{}", timestamp_suffix()),
+        name: manifest.song_title.clone(),
+        start_seconds: insert_at_seconds,
+        end_seconds: insert_at_seconds + manifest.duration_seconds,
+    });
+    next_song.regions.sort_by(|left, right| {
         left.start_seconds
             .partial_cmp(&right.start_seconds)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -257,15 +350,19 @@ pub fn import_song_package(
         .first()
         .map(|marker| marker.bpm)
         .unwrap_or(manifest.base_bpm);
-    next_song.tempo_markers.push(TempoMarker {
-        id: format!("tempo_marker_import_{}", insert_at_seconds.max(0.0)),
-        start_seconds: insert_at_seconds.max(0.0),
-        bpm: injected_bpm,
-    });
+    if (song_bpm_at(&next_song, insert_at_seconds) - injected_bpm).abs() > 0.001 {
+        next_song.tempo_markers.push(TempoMarker {
+            id: format!("tempo_marker_import_{}", timestamp_suffix()),
+            start_seconds: insert_at_seconds,
+            bpm: injected_bpm,
+        });
+    }
     for marker in &manifest.tempo_markers {
         let mut marker = marker.clone();
-        marker.start_seconds += insert_at_seconds.max(0.0);
-        next_song.tempo_markers.push(marker);
+        marker.start_seconds += insert_at_seconds;
+        if (song_bpm_at(&next_song, marker.start_seconds) - marker.bpm).abs() > 0.001 {
+            next_song.tempo_markers.push(marker);
+        }
     }
     next_song.tempo_markers.sort_by(|left, right| {
         left.start_seconds
@@ -278,15 +375,19 @@ pub fn import_song_package(
         .first()
         .map(|marker| marker.signature.clone())
         .unwrap_or(manifest.base_time_signature.clone());
-    next_song.time_signature_markers.push(TimeSignatureMarker {
-        id: format!("time_signature_marker_import_{}", insert_at_seconds.max(0.0)),
-        start_seconds: insert_at_seconds.max(0.0),
-        signature: injected_signature,
-    });
+    if song_time_signature_at(&next_song, insert_at_seconds) != injected_signature {
+        next_song.time_signature_markers.push(TimeSignatureMarker {
+            id: format!("time_signature_marker_import_{}", timestamp_suffix()),
+            start_seconds: insert_at_seconds,
+            signature: injected_signature,
+        });
+    }
     for marker in &manifest.time_signature_markers {
         let mut marker = marker.clone();
-        marker.start_seconds += insert_at_seconds.max(0.0);
-        next_song.time_signature_markers.push(marker);
+        marker.start_seconds += insert_at_seconds;
+        if song_time_signature_at(&next_song, marker.start_seconds) != marker.signature {
+            next_song.time_signature_markers.push(marker);
+        }
     }
     next_song.time_signature_markers.sort_by(|left, right| {
         left.start_seconds
@@ -294,9 +395,9 @@ pub fn import_song_package(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    next_song.duration_seconds = next_song.duration_seconds.max(
-        insert_at_seconds.max(0.0) + manifest.duration_seconds,
-    );
+    next_song.duration_seconds = next_song
+        .duration_seconds
+        .max(insert_at_seconds + manifest.duration_seconds);
 
     Ok(SongPackageImportResult { song: next_song })
 }
