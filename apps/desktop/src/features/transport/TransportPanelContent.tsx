@@ -835,6 +835,7 @@ export function TransportPanelContent() {
   const [audioOutputDevices, setAudioOutputDevices] = useState<string[]>([]);
   const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<string | null>(null);
   const [midiInputDevices, setMidiInputDevices] = useState<string[]>([]);
+  const [isMidiInputRefreshing, setIsMidiInputRefreshing] = useState(false);
   const [remoteServerInfo, setRemoteServerInfo] = useState<RemoteServerInfo | null>(null);
   const [tempoDraft, setTempoDraft] = useState("120");
   const [timeSignatureDraft, setTimeSignatureDraft] = useState("4/4");
@@ -4474,6 +4475,23 @@ export function TransportPanelContent() {
     );
   }
 
+  async function handleRefreshMidiInputDevices() {
+    if (!isTauriApp || isMidiInputRefreshing) {
+      return;
+    }
+
+    setIsMidiInputRefreshing(true);
+    try {
+      const nextMidiInputs = await getMidiInputs();
+      setMidiInputDevices(nextMidiInputs);
+      setStatus(t("transport.status.midiDevicesRefreshed"));
+    } catch (error) {
+      setStatus(formatErrorStatus(error));
+    } finally {
+      setIsMidiInputRefreshing(false);
+    }
+  }
+
   function handleDismissMissingMidiDeviceWarning() {
     setMissingMidiDeviceWarning(null);
   }
@@ -6142,27 +6160,42 @@ export function TransportPanelContent() {
                         aria-labelledby="lt-settings-tab-midi"
                       >
                         <div className="lt-settings-section-grid">
-                          <label className="lt-settings-field">
-                            <span className="lt-settings-field-label">{t("transport.settingsModal.midiDevice")}</span>
-                            <select
-                              value={selectedMidiInputDevice}
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onChange={(event) => handleMidiInputDeviceChange(event.target.value)}
-                            >
-                              <option value="">{t("transport.settingsModal.midiDeviceNone")}</option>
-                              {selectedMidiInputDeviceMissing ? (
-                                <option value={selectedMidiInputDevice}>
-                                  {t("transport.settingsModal.midiDeviceUnavailable", { name: selectedMidiInputDevice })}
-                                </option>
-                              ) : null}
-                              {midiInputDevices.map((deviceName) => (
-                                <option key={deviceName} value={deviceName}>
-                                  {deviceName}
-                                </option>
-                              ))}
-                            </select>
+                          <div className="lt-settings-field">
+                            <label className="lt-settings-field-label" htmlFor="lt-midi-input-device">
+                              {t("transport.settingsModal.midiDevice")}
+                            </label>
+                            <div className="lt-settings-field-control-row">
+                              <select
+                                id="lt-midi-input-device"
+                                value={selectedMidiInputDevice}
+                                disabled={isSettingsLoading || isSettingsSaving || isMidiInputRefreshing}
+                                onChange={(event) => handleMidiInputDeviceChange(event.target.value)}
+                              >
+                                <option value="">{t("transport.settingsModal.midiDeviceNone")}</option>
+                                {selectedMidiInputDeviceMissing ? (
+                                  <option value={selectedMidiInputDevice}>
+                                    {t("transport.settingsModal.midiDeviceUnavailable", { name: selectedMidiInputDevice })}
+                                  </option>
+                                ) : null}
+                                {midiInputDevices.map((deviceName) => (
+                                  <option key={deviceName} value={deviceName}>
+                                    {deviceName}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="lt-settings-icon-button"
+                                aria-label={t("transport.settingsModal.midiDeviceRefresh")}
+                                title={t("transport.settingsModal.midiDeviceRefresh")}
+                                disabled={isSettingsLoading || isSettingsSaving || isMidiInputRefreshing}
+                                onClick={handleRefreshMidiInputDevices}
+                              >
+                                <span className="material-symbols-outlined">refresh</span>
+                              </button>
+                            </div>
                             <small>{t("transport.settingsModal.midiDeviceHelp")}</small>
-                          </label>
+                          </div>
                         </div>
                       </section>
                     ) : null}
