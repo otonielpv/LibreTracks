@@ -36,43 +36,57 @@ type TimelineToolbarProps = {
 type ControlGroupProps = {
   title: string;
   summary?: string;
-  expanded: boolean;
-  onToggleExpanded: () => void;
+  open: boolean;
+  onToggleOpen: () => void;
   children: ReactNode;
   details?: ReactNode;
+  action?: ReactNode;
   className?: string;
 };
 
 function ControlGroup({
   title,
   summary,
-  expanded,
-  onToggleExpanded,
+  open,
+  onToggleOpen,
   children,
   details,
+  action,
   className,
 }: ControlGroupProps) {
   return (
-    <section className={`lt-control-group ${className ?? ""} ${expanded ? "is-expanded" : "is-collapsed"}`}>
-      <div className="lt-control-group-head">
+    <section className={`lt-control-group ${className ?? ""}`}>
+      <div className="lt-control-group-main">
         <div className="lt-control-group-copy">
           <span className="lt-control-group-title">{title}</span>
           {summary ? <p>{summary}</p> : null}
         </div>
-        <button
-          type="button"
-          className="lt-control-group-toggle"
-          aria-label={expanded ? `${title}: collapse` : `${title}: expand`}
-          aria-expanded={expanded}
-          onClick={onToggleExpanded}
-        >
-          <span className="material-symbols-outlined">{expanded ? "keyboard_arrow_up" : "tune"}</span>
-        </button>
+        {action ? <div className="lt-control-group-action">{action}</div> : null}
+        <div className={`lt-control-popover ${open ? "is-open" : ""}`}>
+          <button
+            type="button"
+            className="lt-control-popover-trigger"
+            aria-label={`${title} settings`}
+            aria-expanded={open}
+            onClick={onToggleOpen}
+          >
+            <span className="material-symbols-outlined">tune</span>
+          </button>
+
+          {open ? (
+            <div className="lt-control-popover-panel">
+              <div className="lt-control-popover-header">
+                <span>{title}</span>
+                {summary ? <strong>{summary}</strong> : null}
+              </div>
+              <div className="lt-control-group-body">
+                <div className="lt-control-group-actions">{children}</div>
+                {details ? <div className="lt-control-group-details">{details}</div> : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
-
-      <div className="lt-control-group-actions">{children}</div>
-
-      {expanded && details ? <div className="lt-control-group-details">{details}</div> : null}
     </section>
   );
 }
@@ -108,11 +122,7 @@ export function TimelineToolbar({
 }: TimelineToolbarProps) {
   const { t } = useTranslation();
   const learnModeActive = midiLearnMode !== null;
-  const [expandedGroups, setExpandedGroups] = useState({
-    jump: false,
-    vamp: false,
-    song: false,
-  });
+  const [openGroup, setOpenGroup] = useState<"jump" | "vamp" | "song" | null>(null);
   const controlsDisabled = isProjectEmpty && !learnModeActive;
   const jumpSummary =
     globalJumpMode === "after_bars"
@@ -149,141 +159,30 @@ export function TimelineToolbar({
           </button>
 
           <ControlGroup
-            title={t("timelineToolbar.markerJumpLabel")}
-            summary={jumpSummary}
-            expanded={expandedGroups.jump}
-            onToggleExpanded={() =>
-              setExpandedGroups((state) => ({ ...state, jump: !state.jump }))
-            }
-            className="lt-control-group-jump"
-            details={
-              <>
-                {globalJumpMode === "after_bars" ? (
-                  <label className="lt-stepper-control">
-                    <span>{t("timelineToolbar.markerBarsLabel")}</span>
-                    <div className="lt-stepper-control-row">
-                      <button
-                        type="button"
-                        aria-label={t("timelineToolbar.markerBarsLabel")}
-                        disabled={controlsDisabled}
-                        onClick={() => {
-                          if (learnModeActive) {
-                            onMidiLearnTarget("action:decrease_global_jump_bars");
-                            return;
-                          }
-
-                          onGlobalJumpBarsChange(Math.max(1, globalJumpBars - 1));
-                        }}
-                      >
-                        -
-                      </button>
-                      <input
-                        aria-label={t("timelineToolbar.markerJumpBarsAria")}
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={globalJumpBars}
-                        onPointerDown={(event) => {
-                          if (!learnModeActive) {
-                            return;
-                          }
-
-                          event.preventDefault();
-                          event.stopPropagation();
-                          onMidiLearnTarget("param:global_jump_bars");
-                        }}
-                        onChange={(event) => onGlobalJumpBarsChange(Number(event.target.value) || 1)}
-                      />
-                      <button
-                        type="button"
-                        aria-label={t("timelineToolbar.markerBarsLabel")}
-                        disabled={controlsDisabled}
-                        onClick={() => {
-                          if (learnModeActive) {
-                            onMidiLearnTarget("action:increase_global_jump_bars");
-                            return;
-                          }
-
-                          onGlobalJumpBarsChange(globalJumpBars + 1);
-                        }}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </label>
-                ) : null}
-                {pendingMarkerJumpLabel ? <span>{pendingMarkerJumpLabel}</span> : null}
-                <button
-                  type="button"
-                  className="lt-icon-button"
-                  aria-label={t("timelineToolbar.cancelJump")}
-                  title={t("timelineToolbar.cancelJump")}
-                  disabled={!pendingMarkerJumpLabel && !learnModeActive}
-                  onClick={() => {
-                    if (learnModeActive) {
-                      onMidiLearnTarget("action:cancel_jump");
-                      return;
-                    }
-
-                    onCancelPendingJump();
-                  }}
-                >
-                  <span className="material-symbols-outlined">close</span>
-                </button>
-              </>
-            }
-          >
-            <div className="lt-segmented-control" role="group" aria-label={t("timelineToolbar.markerJumpModeAria")}>
-              <button
-                type="button"
-                className={globalJumpMode === "immediate" ? "is-active" : ""}
-                disabled={controlsDisabled}
-                onClick={() =>
-                  handleModeButtonClick(
-                    "action:set_global_jump_mode_immediate",
-                    () => onGlobalJumpModeChange("immediate"),
-                  )
-                }
-              >
-                {t("transport.jumpMode.immediate")}
-              </button>
-              <button
-                type="button"
-                className={globalJumpMode === "after_bars" ? "is-active" : ""}
-                disabled={controlsDisabled}
-                onClick={() =>
-                  handleModeButtonClick(
-                    "action:set_global_jump_mode_after_bars",
-                    () => onGlobalJumpModeChange("after_bars"),
-                  )
-                }
-              >
-                {t("timelineToolbar.afterBarsOption")}
-              </button>
-              <button
-                type="button"
-                className={globalJumpMode === "next_marker" ? "is-active" : ""}
-                disabled={controlsDisabled}
-                onClick={() =>
-                  handleModeButtonClick(
-                    "action:set_global_jump_mode_next_marker",
-                    () => onGlobalJumpModeChange("next_marker"),
-                  )
-                }
-              >
-                {t("transport.jumpMode.nextMarker")}
-              </button>
-            </div>
-          </ControlGroup>
-
-          <ControlGroup
             title={t("timelineToolbar.vampModeLabel")}
             summary={vampMode === "bars" ? `${vampBars} bars` : t("timelineToolbar.vampSectionOption")}
-            expanded={expandedGroups.vamp}
-            onToggleExpanded={() =>
-              setExpandedGroups((state) => ({ ...state, vamp: !state.vamp }))
-            }
+            open={openGroup === "vamp"}
+            onToggleOpen={() => setOpenGroup((current) => (current === "vamp" ? null : "vamp"))}
             className="lt-control-group-vamp"
+            action={
+              <button
+                type="button"
+                className={`lt-compact-action lt-vamp-button ${isVampActive ? "is-active" : ""}`}
+                aria-label={t("timelineToolbar.vampToggle")}
+                disabled={controlsDisabled}
+                onClick={() => {
+                  if (learnModeActive) {
+                    onMidiLearnTarget("action:toggle_vamp");
+                    return;
+                  }
+
+                  onToggleVamp();
+                }}
+              >
+                <span className="material-symbols-outlined">repeat</span>
+                <span>{t("timelineToolbar.vampButton")}</span>
+              </button>
+            }
             details={
               <>
                 {vampMode === "bars" ? (
@@ -371,31 +270,122 @@ export function TimelineToolbar({
                 {t("timelineToolbar.vampBarsOption")}
               </button>
             </div>
-            <button
-              type="button"
-              className={`lt-vamp-button ${isVampActive ? "is-active" : ""}`}
-              aria-label={t("timelineToolbar.vampToggle")}
-              disabled={controlsDisabled}
-              onClick={() => {
-                if (learnModeActive) {
-                  onMidiLearnTarget("action:toggle_vamp");
-                  return;
-                }
+          </ControlGroup>
 
-                onToggleVamp();
-              }}
-            >
-              {t("timelineToolbar.vampButton")}
-            </button>
+          <ControlGroup
+            title={t("timelineToolbar.markerJumpLabel")}
+            summary={jumpSummary}
+            open={openGroup === "jump"}
+            onToggleOpen={() => setOpenGroup((current) => (current === "jump" ? null : "jump"))}
+            className="lt-control-group-jump"
+            details={
+              <>
+                {globalJumpMode === "after_bars" ? (
+                  <label className="lt-stepper-control">
+                    <span>{t("timelineToolbar.markerBarsLabel")}</span>
+                    <div className="lt-stepper-control-row">
+                      <button
+                        type="button"
+                        aria-label={t("timelineToolbar.markerBarsLabel")}
+                        disabled={controlsDisabled}
+                        onClick={() => {
+                          if (learnModeActive) {
+                            onMidiLearnTarget("action:decrease_global_jump_bars");
+                            return;
+                          }
+
+                          onGlobalJumpBarsChange(Math.max(1, globalJumpBars - 1));
+                        }}
+                      >
+                        -
+                      </button>
+                      <input
+                        aria-label={t("timelineToolbar.markerJumpBarsAria")}
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={globalJumpBars}
+                        onPointerDown={(event) => {
+                          if (!learnModeActive) {
+                            return;
+                          }
+
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onMidiLearnTarget("param:global_jump_bars");
+                        }}
+                        onChange={(event) => onGlobalJumpBarsChange(Number(event.target.value) || 1)}
+                      />
+                      <button
+                        type="button"
+                        aria-label={t("timelineToolbar.markerBarsLabel")}
+                        disabled={controlsDisabled}
+                        onClick={() => {
+                          if (learnModeActive) {
+                            onMidiLearnTarget("action:increase_global_jump_bars");
+                            return;
+                          }
+
+                          onGlobalJumpBarsChange(globalJumpBars + 1);
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </label>
+                ) : null}
+                {pendingMarkerJumpLabel ? <span>{pendingMarkerJumpLabel}</span> : null}
+              </>
+            }
+          >
+            <div className="lt-segmented-control" role="group" aria-label={t("timelineToolbar.markerJumpModeAria")}>
+              <button
+                type="button"
+                className={globalJumpMode === "immediate" ? "is-active" : ""}
+                disabled={controlsDisabled}
+                onClick={() =>
+                  handleModeButtonClick(
+                    "action:set_global_jump_mode_immediate",
+                    () => onGlobalJumpModeChange("immediate"),
+                  )
+                }
+              >
+                {t("transport.jumpMode.immediate")}
+              </button>
+              <button
+                type="button"
+                className={globalJumpMode === "after_bars" ? "is-active" : ""}
+                disabled={controlsDisabled}
+                onClick={() =>
+                  handleModeButtonClick(
+                    "action:set_global_jump_mode_after_bars",
+                    () => onGlobalJumpModeChange("after_bars"),
+                  )
+                }
+              >
+                {t("timelineToolbar.afterBarsOption")}
+              </button>
+              <button
+                type="button"
+                className={globalJumpMode === "next_marker" ? "is-active" : ""}
+                disabled={controlsDisabled}
+                onClick={() =>
+                  handleModeButtonClick(
+                    "action:set_global_jump_mode_next_marker",
+                    () => onGlobalJumpModeChange("next_marker"),
+                  )
+                }
+              >
+                {t("transport.jumpMode.nextMarker")}
+              </button>
+            </div>
           </ControlGroup>
 
           <ControlGroup
             title={t("timelineToolbar.songTransitionLabel")}
             summary={songTransitionMode === "fade_out" ? t("timelineToolbar.songTransitionFadeOut") : t("timelineToolbar.songTransitionInstant")}
-            expanded={expandedGroups.song}
-            onToggleExpanded={() =>
-              setExpandedGroups((state) => ({ ...state, song: !state.song }))
-            }
+            open={openGroup === "song"}
+            onToggleOpen={() => setOpenGroup((current) => (current === "song" ? null : "song"))}
             className="lt-control-group-song"
             details={
               <>
@@ -526,6 +516,25 @@ export function TimelineToolbar({
               </button>
             </div>
           </ControlGroup>
+
+          <button
+            type="button"
+            className={`lt-global-cancel-button ${pendingMarkerJumpLabel ? "is-warning" : ""}`}
+            aria-label={t("timelineToolbar.cancelJump")}
+            title={pendingMarkerJumpLabel ?? t("timelineToolbar.cancelJump")}
+            disabled={!pendingMarkerJumpLabel && !learnModeActive}
+            onClick={() => {
+              if (learnModeActive) {
+                onMidiLearnTarget("action:cancel_jump");
+                return;
+              }
+
+              onCancelPendingJump();
+            }}
+          >
+            <span className="material-symbols-outlined">close</span>
+            <span>{t("timelineToolbar.cancelJump")}</span>
+          </button>
         </div>
         <div className="lt-timeline-stats">
           <span>{t("timelineToolbar.tracksCount", { count: trackCount })}</span>

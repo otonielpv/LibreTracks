@@ -179,6 +179,8 @@ type PlayheadDragState = {
   currentSeconds: number;
 } | null;
 
+type SettingsTab = "audio" | "metronome" | "midi" | "general" | "midiLearn";
+
 type TrackDropState = {
   targetTrackId: string;
   mode: "before" | "after" | "inside-folder";
@@ -824,6 +826,7 @@ export function TransportPanelContent() {
   const [isBusy, setIsBusy] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isRemoteModalOpen, setIsRemoteModalOpen] = useState(false);
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("audio");
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
@@ -854,6 +857,11 @@ export function TransportPanelContent() {
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
   const appSettingsRef = useRef(appSettings);
   const metronomeLiveRequestIdRef = useRef(0);
+  useEffect(() => {
+    if (isSettingsModalOpen) {
+      setActiveSettingsTab("audio");
+    }
+  }, [isSettingsModalOpen]);
   const syncSettingsLanguage = useCallback(async (settings: AppSettings) => {
     await i18n.changeLanguage(settings.locale || getSystemLanguage());
   }, [i18n]);
@@ -5284,6 +5292,13 @@ export function TransportPanelContent() {
   const selectedMidiInputDeviceMissing = Boolean(
     appSettings.selectedMidiDevice && !midiInputDevices.includes(appSettings.selectedMidiDevice),
   );
+  const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
+    { id: "audio", label: t("transport.settingsModal.tabAudio", { defaultValue: "Audio" }) },
+    { id: "metronome", label: t("transport.settingsModal.tabMetronome", { defaultValue: "Metronome" }) },
+    { id: "midi", label: t("transport.settingsModal.tabMidi", { defaultValue: "MIDI" }) },
+    { id: "general", label: t("transport.settingsModal.tabGeneral", { defaultValue: "General" }) },
+    { id: "midiLearn", label: t("transport.settingsModal.tabMidiLearn", { defaultValue: "MIDI Learn" }) },
+  ];
 
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
@@ -5956,224 +5971,326 @@ export function TransportPanelContent() {
               </header>
 
               <div className="lt-settings-modal-body">
-                <label className="lt-settings-field">
-                  <span className="lt-settings-field-label">{t("transport.settingsModal.audioDevice")}</span>
-                  <select
-                    value={selectedAudioOutputDevice}
-                    disabled={isSettingsLoading || isSettingsSaving}
-                    onChange={(event) => handleAudioOutputDeviceChange(event.target.value)}
+                <div className="lt-settings-tabs">
+                  <div
+                    className="lt-settings-tablist"
+                    role="tablist"
+                    aria-label={t("transport.settingsModal.tabListLabel", { defaultValue: "Settings sections" })}
                   >
-                    <option value="">
-                      {defaultAudioOutputDevice
-                        ? t("transport.settingsModal.audioDeviceSystemDefaultNamed", { name: defaultAudioOutputDevice })
-                        : t("transport.settingsModal.audioDeviceSystemDefault")}
-                    </option>
-                    {selectedAudioOutputDeviceMissing ? (
-                      <option value={selectedAudioOutputDevice}>
-                        {t("transport.settingsModal.audioDeviceUnavailable", { name: selectedAudioOutputDevice })}
-                      </option>
-                    ) : null}
-                    {audioOutputDevices.map((deviceName) => (
-                      <option key={deviceName} value={deviceName}>
-                        {deviceName}
-                      </option>
-                    ))}
-                  </select>
-                  <small>
-                    {defaultAudioOutputDevice
-                      ? t("transport.settingsModal.audioDeviceCurrentDefault", { name: defaultAudioOutputDevice })
-                      : t("transport.settingsModal.audioDeviceNoDefault")}
-                  </small>
-                </label>
+                    {settingsTabs.map((tab) => {
+                      const isActive = activeSettingsTab === tab.id;
 
-                <label className="lt-settings-field">
-                  <span className="lt-settings-field-label">{t("transport.settingsModal.midiDevice")}</span>
-                  <select
-                    value={selectedMidiInputDevice}
-                    disabled={isSettingsLoading || isSettingsSaving}
-                    onChange={(event) => handleMidiInputDeviceChange(event.target.value)}
-                  >
-                    <option value="">{t("transport.settingsModal.midiDeviceNone")}</option>
-                    {selectedMidiInputDeviceMissing ? (
-                      <option value={selectedMidiInputDevice}>
-                        {t("transport.settingsModal.midiDeviceUnavailable", { name: selectedMidiInputDevice })}
-                      </option>
-                    ) : null}
-                    {midiInputDevices.map((deviceName) => (
-                      <option key={deviceName} value={deviceName}>
-                        {deviceName}
-                      </option>
-                    ))}
-                  </select>
-                  <small>{t("transport.settingsModal.midiDeviceHelp")}</small>
-                </label>
-
-                <label className="lt-settings-field">
-                  <span className="lt-settings-field-label">{t("transport.settingsModal.language")}</span>
-                  <select
-                    value={selectedLocale}
-                    disabled={isSettingsLoading || isSettingsSaving}
-                    onChange={(event) => handleLocaleChange(event.target.value)}
-                  >
-                    <option value="">{t("transport.settingsModal.languageSystemDefault")}</option>
-                    <option value="en">{t("transport.settingsModal.languageEnglish")}</option>
-                    <option value="es">{t("transport.settingsModal.languageSpanish")}</option>
-                  </select>
-                </label>
-
-                <label className="lt-settings-field">
-                  <span className="lt-settings-field-label">{t("transport.settingsModal.metronomeVolume")}</span>
-                  <input
-                    className="lt-range-input"
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={metronomeVolumeDraft}
-                    disabled={isSettingsLoading || isSettingsSaving}
-                    onPointerDown={(event) => {
-                      if (midiLearnMode === null) {
-                        return;
-                      }
-
-                      event.preventDefault();
-                      event.stopPropagation();
-                      handleMidiLearnTarget("param:metronome_volume");
-                    }}
-                    onChange={(event) => handleMetronomeVolumeDraftChange(Number(event.target.value))}
-                    onPointerUp={(event) => commitMetronomeVolumeDraft(Number(event.currentTarget.value))}
-                    onBlur={(event) => commitMetronomeVolumeDraft(Number(event.currentTarget.value))}
-                  />
-                  <small>
-                    {t("transport.settingsModal.metronomeVolumeValue", {
-                      value: Math.round(metronomeVolumeDraft * 100),
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          role="tab"
+                          id={`lt-settings-tab-${tab.id}`}
+                          className={`lt-settings-tab-button ${isActive ? "is-active" : ""}`}
+                          aria-selected={isActive}
+                          aria-controls={`lt-settings-panel-${tab.id}`}
+                          onClick={() => setActiveSettingsTab(tab.id)}
+                        >
+                          {tab.label}
+                        </button>
+                      );
                     })}
-                  </small>
-                </label>
-
-                <label className="lt-settings-toggle">
-                  <input
-                    type="checkbox"
-                    checked={appSettings.splitStereoEnabled}
-                    disabled={isSettingsLoading || isSettingsSaving}
-                    onPointerDown={(event) => {
-                      if (midiLearnMode === null) {
-                        return;
-                      }
-
-                      event.preventDefault();
-                      event.stopPropagation();
-                      handleMidiLearnTarget("action:toggle_split_stereo");
-                    }}
-                    onChange={(event) => handleSplitStereoChange(event.target.checked)}
-                  />
-                  <div className="lt-settings-toggle-copy">
-                    <strong>{t("transport.settingsModal.splitStereoTitle")}</strong>
-                    <small>
-                      {t("transport.settingsModal.splitStereoDescription")}
-                    </small>
                   </div>
-                </label>
 
-                <section className="lt-midi-learn-panel" aria-labelledby="lt-midi-learn-panel-title">
-                  <div className="lt-midi-learn-panel-header">
-                    <div>
-                      <span id="lt-midi-learn-panel-title" className="lt-settings-field-label">
-                        {t("transport.settingsModal.midiLearnSectionTitle")}
-                      </span>
-                      <p>{t("transport.settingsModal.midiLearnSectionDescription")}</p>
-                    </div>
-                    <div className="lt-midi-learn-actions">
-                      <button
-                        type="button"
-                        className={`lt-midi-learn-activate ${midiLearnMode !== null ? "is-active" : ""}`}
-                        disabled={isSettingsLoading || isSettingsSaving}
-                        onClick={() => handleMidiLearnToggle({ closePanels: false })}
+                  <div className="lt-settings-tab-panels">
+                    {activeSettingsTab === "audio" ? (
+                      <section
+                        className="lt-settings-tab-panel"
+                        role="tabpanel"
+                        id="lt-settings-panel-audio"
+                        aria-labelledby="lt-settings-tab-audio"
                       >
-                        <span className="material-symbols-outlined">graphic_eq</span>
-                        {t("transport.shell.midiLearn")}
-                      </button>
-                      <button
-                        type="button"
-                        className="lt-midi-learn-reset"
-                        disabled={isSettingsLoading || isSettingsSaving || Object.keys(appSettings.midiMappings).length === 0}
-                        onClick={handleResetMidiMappings}
+                        <div className="lt-settings-section-grid">
+                          <label className="lt-settings-field">
+                            <span className="lt-settings-field-label">{t("transport.settingsModal.audioDevice")}</span>
+                            <select
+                              value={selectedAudioOutputDevice}
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onChange={(event) => handleAudioOutputDeviceChange(event.target.value)}
+                            >
+                              <option value="">
+                                {defaultAudioOutputDevice
+                                  ? t("transport.settingsModal.audioDeviceSystemDefaultNamed", { name: defaultAudioOutputDevice })
+                                  : t("transport.settingsModal.audioDeviceSystemDefault")}
+                              </option>
+                              {selectedAudioOutputDeviceMissing ? (
+                                <option value={selectedAudioOutputDevice}>
+                                  {t("transport.settingsModal.audioDeviceUnavailable", { name: selectedAudioOutputDevice })}
+                                </option>
+                              ) : null}
+                              {audioOutputDevices.map((deviceName) => (
+                                <option key={deviceName} value={deviceName}>
+                                  {deviceName}
+                                </option>
+                              ))}
+                            </select>
+                            <small>
+                              {defaultAudioOutputDevice
+                                ? t("transport.settingsModal.audioDeviceCurrentDefault", { name: defaultAudioOutputDevice })
+                                : t("transport.settingsModal.audioDeviceNoDefault")}
+                            </small>
+                          </label>
+
+                          <label className="lt-settings-toggle">
+                            <input
+                              type="checkbox"
+                              checked={appSettings.splitStereoEnabled}
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onPointerDown={(event) => {
+                                if (midiLearnMode === null) {
+                                  return;
+                                }
+
+                                event.preventDefault();
+                                event.stopPropagation();
+                                handleMidiLearnTarget("action:toggle_split_stereo");
+                              }}
+                              onChange={(event) => handleSplitStereoChange(event.target.checked)}
+                            />
+                            <div className="lt-settings-toggle-copy">
+                              <strong>{t("transport.settingsModal.splitStereoTitle")}</strong>
+                              <small>{t("transport.settingsModal.splitStereoDescription")}</small>
+                            </div>
+                          </label>
+                        </div>
+                      </section>
+                    ) : null}
+
+                    {activeSettingsTab === "metronome" ? (
+                      <section
+                        className="lt-settings-tab-panel"
+                        role="tabpanel"
+                        id="lt-settings-panel-metronome"
+                        aria-labelledby="lt-settings-tab-metronome"
                       >
-                        {t("transport.settingsModal.midiLearnReset")}
-                      </button>
-                    </div>
+                        <div className="lt-settings-section-grid">
+                          <label className="lt-settings-toggle">
+                            <input
+                              type="checkbox"
+                              checked={appSettings.metronomeEnabled}
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onPointerDown={(event) => {
+                                if (midiLearnMode === null) {
+                                  return;
+                                }
+
+                                event.preventDefault();
+                                event.stopPropagation();
+                                handleMidiLearnTarget("action:toggle_metronome");
+                              }}
+                              onChange={(event) => handleMetronomeEnabledChange(event.target.checked)}
+                            />
+                            <div className="lt-settings-toggle-copy">
+                              <strong>{t("transport.shell.metronome")}</strong>
+                              <small>{t("transport.settingsModal.metronomeStatusDescription", { defaultValue: "Toggle the metronome playback." })}</small>
+                            </div>
+                          </label>
+
+                          <label className="lt-settings-field">
+                            <span className="lt-settings-field-label">{t("transport.settingsModal.metronomeVolume")}</span>
+                            <input
+                              className="lt-range-input"
+                              type="range"
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              value={metronomeVolumeDraft}
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onPointerDown={(event) => {
+                                if (midiLearnMode === null) {
+                                  return;
+                                }
+
+                                event.preventDefault();
+                                event.stopPropagation();
+                                handleMidiLearnTarget("param:metronome_volume");
+                              }}
+                              onChange={(event) => handleMetronomeVolumeDraftChange(Number(event.target.value))}
+                              onPointerUp={(event) => commitMetronomeVolumeDraft(Number(event.currentTarget.value))}
+                              onBlur={(event) => commitMetronomeVolumeDraft(Number(event.currentTarget.value))}
+                            />
+                            <small>
+                              {t("transport.settingsModal.metronomeVolumeValue", {
+                                value: Math.round(metronomeVolumeDraft * 100),
+                              })}
+                            </small>
+                          </label>
+                        </div>
+                      </section>
+                    ) : null}
+
+                    {activeSettingsTab === "midi" ? (
+                      <section
+                        className="lt-settings-tab-panel"
+                        role="tabpanel"
+                        id="lt-settings-panel-midi"
+                        aria-labelledby="lt-settings-tab-midi"
+                      >
+                        <div className="lt-settings-section-grid">
+                          <label className="lt-settings-field">
+                            <span className="lt-settings-field-label">{t("transport.settingsModal.midiDevice")}</span>
+                            <select
+                              value={selectedMidiInputDevice}
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onChange={(event) => handleMidiInputDeviceChange(event.target.value)}
+                            >
+                              <option value="">{t("transport.settingsModal.midiDeviceNone")}</option>
+                              {selectedMidiInputDeviceMissing ? (
+                                <option value={selectedMidiInputDevice}>
+                                  {t("transport.settingsModal.midiDeviceUnavailable", { name: selectedMidiInputDevice })}
+                                </option>
+                              ) : null}
+                              {midiInputDevices.map((deviceName) => (
+                                <option key={deviceName} value={deviceName}>
+                                  {deviceName}
+                                </option>
+                              ))}
+                            </select>
+                            <small>{t("transport.settingsModal.midiDeviceHelp")}</small>
+                          </label>
+                        </div>
+                      </section>
+                    ) : null}
+
+                    {activeSettingsTab === "general" ? (
+                      <section
+                        className="lt-settings-tab-panel"
+                        role="tabpanel"
+                        id="lt-settings-panel-general"
+                        aria-labelledby="lt-settings-tab-general"
+                      >
+                        <div className="lt-settings-section-grid">
+                          <label className="lt-settings-field">
+                            <span className="lt-settings-field-label">{t("transport.settingsModal.language")}</span>
+                            <select
+                              value={selectedLocale}
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onChange={(event) => handleLocaleChange(event.target.value)}
+                            >
+                              <option value="">{t("transport.settingsModal.languageSystemDefault")}</option>
+                              <option value="en">{t("transport.settingsModal.languageEnglish")}</option>
+                              <option value="es">{t("transport.settingsModal.languageSpanish")}</option>
+                            </select>
+                          </label>
+                        </div>
+                      </section>
+                    ) : null}
+
+                    {activeSettingsTab === "midiLearn" ? (
+                      <section
+                        className="lt-settings-tab-panel"
+                        role="tabpanel"
+                        id="lt-settings-panel-midiLearn"
+                        aria-labelledby="lt-settings-tab-midiLearn"
+                      >
+                        <section className="lt-midi-learn-panel" aria-labelledby="lt-midi-learn-panel-title">
+                          <div className="lt-midi-learn-panel-header">
+                            <div>
+                              <span id="lt-midi-learn-panel-title" className="lt-settings-field-label">
+                                {t("transport.settingsModal.midiLearnSectionTitle")}
+                              </span>
+                              <p>{t("transport.settingsModal.midiLearnSectionDescription")}</p>
+                            </div>
+                            <div className="lt-midi-learn-actions">
+                              <button
+                                type="button"
+                                className={`lt-midi-learn-activate ${midiLearnMode !== null ? "is-active" : ""}`}
+                                disabled={isSettingsLoading || isSettingsSaving}
+                                onClick={() => handleMidiLearnToggle({ closePanels: false })}
+                              >
+                                <span className="material-symbols-outlined">graphic_eq</span>
+                                {t("transport.shell.midiLearn")}
+                              </button>
+                              <button
+                                type="button"
+                                className="lt-midi-learn-reset"
+                                disabled={isSettingsLoading || isSettingsSaving || Object.keys(appSettings.midiMappings).length === 0}
+                                onClick={handleResetMidiMappings}
+                              >
+                                {t("transport.settingsModal.midiLearnReset")}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="lt-midi-learn-feedback">
+                            <strong>{t("transport.settingsModal.midiLearnLatest")}</strong>
+                            {midiLearnFeedback ? (
+                              <p>
+                                {midiLearnFeedbackCommand?.label ?? midiLearnFeedback.key}: {formatMidiBinding(midiLearnFeedback.binding)}
+                              </p>
+                            ) : (
+                              <p>{t("transport.settingsModal.midiLearnEmpty")}</p>
+                            )}
+                          </div>
+
+                          {midiLearnMode !== null ? (
+                            <div className="lt-midi-learn-live">
+                              <strong>{t("transport.settingsModal.midiLearnListening")}</strong>
+                              <p>
+                                {midiLearnMode === ""
+                                  ? t("transport.settingsModal.midiLearnArmed")
+                                  : t("transport.settingsModal.midiLearnTargeting", {
+                                      key: activeMidiLearnCommand?.label ?? midiLearnMode,
+                                    })}
+                              </p>
+                            </div>
+                          ) : null}
+
+                          <div className="lt-midi-learn-table-wrap">
+                            <table className="lt-midi-learn-table">
+                              <thead>
+                                <tr>
+                                  <th scope="col">{t("transport.settingsModal.midiLearnTableCommand")}</th>
+                                  <th scope="col">{t("transport.settingsModal.midiLearnTableBinding")}</th>
+                                  <th scope="col">{t("transport.settingsModal.midiLearnTableAction")}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {midiLearnCommandRows.map((command) => {
+                                  const hasBinding = Boolean(command.binding);
+                                  const isTarget = midiLearnMode === command.key;
+
+                                  return (
+                                    <tr key={command.key} className={isTarget ? "is-midi-target" : undefined}>
+                                      <td>
+                                        <strong>{command.label}</strong>
+                                        <code>{command.key}</code>
+                                      </td>
+                                      <td>
+                                        {hasBinding && command.binding ? (
+                                          <span className="lt-midi-binding-pill">{formatMidiBinding(command.binding)}</span>
+                                        ) : (
+                                          <span className="lt-midi-binding-empty">{t("transport.settingsModal.midiLearnUnassigned")}</span>
+                                        )}
+                                      </td>
+                                      <td>
+                                        <button
+                                          type="button"
+                                          className={`lt-midi-learn-relearn ${isTarget ? "is-active" : ""}`}
+                                          disabled={isSettingsLoading || isSettingsSaving}
+                                          onClick={() => handleMidiLearnCommandRelearn(command.key)}
+                                        >
+                                          {isTarget
+                                            ? t("transport.settingsModal.midiLearnListeningShort")
+                                            : t("transport.settingsModal.midiLearnRelearn")}
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      </section>
+                    ) : null}
                   </div>
-
-                  <div className="lt-midi-learn-feedback">
-                    <strong>{t("transport.settingsModal.midiLearnLatest")}</strong>
-                    {midiLearnFeedback ? (
-                      <p>
-                        {midiLearnFeedbackCommand?.label ?? midiLearnFeedback.key}: {formatMidiBinding(midiLearnFeedback.binding)}
-                      </p>
-                    ) : (
-                      <p>{t("transport.settingsModal.midiLearnEmpty")}</p>
-                    )}
-                  </div>
-
-                  {midiLearnMode !== null ? (
-                    <div className="lt-midi-learn-live">
-                      <strong>{t("transport.settingsModal.midiLearnListening")}</strong>
-                      <p>
-                        {midiLearnMode === ""
-                          ? t("transport.settingsModal.midiLearnArmed")
-                          : t("transport.settingsModal.midiLearnTargeting", {
-                              key: activeMidiLearnCommand?.label ?? midiLearnMode,
-                            })}
-                      </p>
-                    </div>
-                  ) : null}
-
-                  <div className="lt-midi-learn-table-wrap">
-                    <table className="lt-midi-learn-table">
-                      <thead>
-                        <tr>
-                          <th scope="col">{t("transport.settingsModal.midiLearnTableCommand")}</th>
-                          <th scope="col">{t("transport.settingsModal.midiLearnTableBinding")}</th>
-                          <th scope="col">{t("transport.settingsModal.midiLearnTableAction")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {midiLearnCommandRows.map((command) => {
-                          const hasBinding = Boolean(command.binding);
-                          const isTarget = midiLearnMode === command.key;
-
-                          return (
-                            <tr key={command.key} className={isTarget ? "is-midi-target" : undefined}>
-                              <td>
-                                <strong>{command.label}</strong>
-                                <code>{command.key}</code>
-                              </td>
-                              <td>
-                                {hasBinding && command.binding ? (
-                                  <span className="lt-midi-binding-pill">{formatMidiBinding(command.binding)}</span>
-                                ) : (
-                                  <span className="lt-midi-binding-empty">{t("transport.settingsModal.midiLearnUnassigned")}</span>
-                                )}
-                              </td>
-                              <td>
-                                <button
-                                  type="button"
-                                  className={`lt-midi-learn-relearn ${isTarget ? "is-active" : ""}`}
-                                  disabled={isSettingsLoading || isSettingsSaving}
-                                  onClick={() => handleMidiLearnCommandRelearn(command.key)}
-                                >
-                                  {isTarget
-                                    ? t("transport.settingsModal.midiLearnListeningShort")
-                                    : t("transport.settingsModal.midiLearnRelearn")}
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                </div>
 
               </div>
             </section>

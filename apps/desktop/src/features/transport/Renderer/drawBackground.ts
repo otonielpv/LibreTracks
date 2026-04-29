@@ -28,6 +28,7 @@ const GRID_LABEL_TOP = 24;
 const GRID_LABEL_SECOND_LINE_TOP = 36;
 const TEMPO_LABEL_TOP = 2;
 const METRIC_LABEL_TOP = 20;
+const TIME_SIGNATURE_VERTICAL_OFFSET = 8;
 
 function formatRulerMusicalPosition(barNumber: number, beatInBar: number) {
   return `${barNumber}.${beatInBar}.00`;
@@ -372,7 +373,9 @@ export function drawRulerTempoMarker(
   const labelWidth = Math.max(30, Math.ceil(context.measureText(label).width) + 14);
   const snappedX = Math.round(x) + 0.5;
   const isMetricMarker = overrideLabel != null;
-  const flagTop = LANE_TEMPO_METRIC.top + (isMetricMarker ? METRIC_LABEL_TOP : TEMPO_LABEL_TOP);
+  const verticalOffset = isMetricMarker ? TIME_SIGNATURE_VERTICAL_OFFSET : 0;
+  const flagTop =
+    LANE_TEMPO_METRIC.top + (isMetricMarker ? METRIC_LABEL_TOP : TEMPO_LABEL_TOP) + verticalOffset;
   const flagHeight = isMetricMarker ? 12 : 13;
   const alignRight = snappedX > width - labelWidth - 12;
   const flagLeft = alignRight ? snappedX - labelWidth - 7 : snappedX + 3;
@@ -391,7 +394,7 @@ export function drawRulerTempoMarker(
   context.lineTo(
     snappedX,
     isMetricMarker
-      ? LANE_TEMPO_METRIC.top + LANE_TEMPO_METRIC.height - 2
+      ? LANE_TEMPO_METRIC.top + LANE_TEMPO_METRIC.height - 2 + verticalOffset
       : LANE_TEMPO_METRIC.top + TEMPO_LABEL_TOP + flagHeight - 1,
   );
   context.stroke();
@@ -412,7 +415,7 @@ export function drawRulerTempoMarker(
 
   context.beginPath();
   const stemBottom = isMetricMarker
-    ? LANE_TEMPO_METRIC.top + LANE_TEMPO_METRIC.height - 2
+    ? LANE_TEMPO_METRIC.top + LANE_TEMPO_METRIC.height - 2 + verticalOffset
     : LANE_TEMPO_METRIC.top + TEMPO_LABEL_TOP + flagHeight - 1;
   context.moveTo(snappedX - 4, stemBottom);
   context.lineTo(snappedX + 4, stemBottom);

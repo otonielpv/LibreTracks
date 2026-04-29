@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
@@ -265,46 +265,7 @@ function StepperField({
   );
 }
 
-type RemoteSheetKey = "jump" | "vamp" | "song";
-
-function BottomSheet({
-  open,
-  title,
-  onClose,
-  children,
-}: {
-  open: boolean;
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  if (!open) {
-    return null;
-  }
-
-  return (
-    <div className="sheet-backdrop" role="presentation" onClick={onClose}>
-      <section
-        className="sheet-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="sheet-header">
-          <div>
-            <small>{STRINGS.appTitle}</small>
-            <h2>{title}</h2>
-          </div>
-          <button type="button" className="sheet-close" onClick={onClose}>
-            X
-          </button>
-        </header>
-        <div className="sheet-body">{children}</div>
-      </section>
-    </div>
-  );
-}
+type RemotePanelKey = "jump" | "vamp" | "song";
 
 function magnetizePanValue(value: number) {
   return Math.abs(value) <= PAN_CENTER_MAGNET ? 0 : value;
@@ -839,7 +800,7 @@ function TransportView() {
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
   const activeVamp = snapshot?.activeVamp ?? null;
   const metronomeVolume = settings?.metronomeVolume ?? 0.8;
-  const [activeSheet, setActiveSheet] = useState<RemoteSheetKey | null>(null);
+  const [activePanel, setActivePanel] = useState<RemotePanelKey | null>(null);
 
   useEffect(() => {
     setMetronomeVolumeDraft(metronomeVolume);
@@ -942,18 +903,6 @@ function TransportView() {
         <StepperField label={STRINGS.bars} value={jumpBars} onChange={setJumpBars} />
       ) : null}
 
-      <button
-        className="jump-cancel-button"
-        disabled={!pendingJump}
-        onClick={() => {
-          if (pendingJump) {
-            cancelJump();
-          }
-        }}
-      >
-        {STRINGS.cancelJump}
-      </button>
-
       {pendingJump ? (
         <div className="pending-jump-card">
           <span>{STRINGS.pending}</span>
@@ -1051,27 +1000,47 @@ function TransportView() {
         <article className="transport-control-card transport-control-card-group remote-control-card">
           <div className="remote-control-card-head">
             <div>
-              <small>Jump Config</small>
-              <strong>{jumpModeSummary}</strong>
+              <small>Vamp / Loop</small>
+              <strong>{vampSummary}</strong>
             </div>
-            <button type="button" className="group-settings-button" onClick={() => setActiveSheet("jump")}>
-              Settings
+            <button
+              type="button"
+              className="group-settings-button"
+              aria-expanded={activePanel === "vamp"}
+              onClick={() => setActivePanel((current) => (current === "vamp" ? null : "vamp"))}
+            >
+              {STRINGS.settings}
             </button>
           </div>
-          <div className="remote-group-inline">{renderJumpControls()}</div>
+          <button
+            className={`remote-strip-action vamp-toggle-button ${activeVamp ? "is-active" : ""}`}
+            onClick={toggleVamp}
+          >
+            {activeVamp ? STRINGS.on : STRINGS.vamp}
+          </button>
         </article>
 
         <article className="transport-control-card transport-control-card-group remote-control-card">
           <div className="remote-control-card-head">
             <div>
-              <small>Vamp / Loop</small>
-              <strong>{vampSummary}</strong>
+              <small>Jump Config</small>
+              <strong>{jumpModeSummary}</strong>
             </div>
-            <button type="button" className="group-settings-button" onClick={() => setActiveSheet("vamp")}>
-              Settings
+            <button
+              type="button"
+              className="group-settings-button"
+              aria-expanded={activePanel === "jump"}
+              onClick={() => setActivePanel((current) => (current === "jump" ? null : "jump"))}
+            >
+              {STRINGS.settings}
             </button>
           </div>
-          <div className="remote-group-inline">{renderVampControls()}</div>
+          {pendingJump ? (
+            <div className="remote-strip-status">
+              <span>{STRINGS.pending}</span>
+              <strong>{pendingJump.targetMarkerName}</strong>
+            </div>
+          ) : null}
         </article>
 
         <article className="transport-control-card transport-control-card-song transport-control-card-group remote-control-card">
@@ -1080,12 +1049,37 @@ function TransportView() {
               <small>Song Transition</small>
               <strong>{songSummary}</strong>
             </div>
-            <button type="button" className="group-settings-button" onClick={() => setActiveSheet("song")}>
-              Settings
+            <button
+              type="button"
+              className="group-settings-button"
+              aria-expanded={activePanel === "song"}
+              onClick={() => setActivePanel((current) => (current === "song" ? null : "song"))}
+            >
+              {STRINGS.settings}
             </button>
           </div>
-          <div className="remote-group-inline">{renderSongControls()}</div>
         </article>
+
+        {activePanel ? (
+          <div className="remote-inline-panel" role="region" aria-label={STRINGS.settings}>
+            {activePanel === "jump" ? renderJumpControls() : null}
+            {activePanel === "vamp" ? renderVampControls() : null}
+            {activePanel === "song" ? renderSongControls() : null}
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          className={`transport-control-card remote-global-cancel-button ${pendingJump ? "is-warning" : ""}`}
+          disabled={!pendingJump}
+          onClick={() => {
+            if (pendingJump) {
+              cancelJump();
+            }
+          }}
+        >
+          <span>{STRINGS.cancelJump}</span>
+        </button>
 
         <div className="transport-control-card transport-control-card-region">
           <div className="region-actions-row">
@@ -1137,21 +1131,6 @@ function TransportView() {
         ))}
       </div>
 
-      <BottomSheet open={activeSheet === "jump"} title={STRINGS.jump} onClose={() => setActiveSheet(null)}>
-        {renderJumpControls()}
-      </BottomSheet>
-
-      <BottomSheet open={activeSheet === "vamp"} title={STRINGS.vamp} onClose={() => setActiveSheet(null)}>
-        {renderVampControls()}
-      </BottomSheet>
-
-      <BottomSheet
-        open={activeSheet === "song"}
-        title={STRINGS.songTransition}
-        onClose={() => setActiveSheet(null)}
-      >
-        {renderSongControls()}
-      </BottomSheet>
     </section>
   );
 }
