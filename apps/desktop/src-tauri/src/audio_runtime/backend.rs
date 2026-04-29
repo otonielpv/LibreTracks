@@ -14,6 +14,7 @@ pub(crate) struct DiskReaderState {
     pub(crate) command_receiver: Receiver<ReaderCommand>,
     pub(crate) current_generation: u64,
     pub(crate) is_running: bool,
+    pub(crate) stop_after_master_fade: bool,
 }
 
 #[derive(Default)]
@@ -157,13 +158,15 @@ pub(crate) fn run_disk_reader(mut state: DiskReaderState) -> DiskReaderReport {
         if !push_block_into_ring(&mut state.producer, &block, state.current_generation) {
             break;
         }
+
+        state.finish_stop_after_fade_if_needed();
     }
 
     DiskReaderReport
 }
 
 impl DiskReaderState {
-    fn consume_commands(&mut self) -> bool {
+    pub(crate) fn consume_commands(&mut self) -> bool {
         let mut should_shutdown = false;
 
         while let Ok(command) = self.command_receiver.try_recv() {
@@ -177,8 +180,19 @@ impl DiskReaderState {
                     self.mixer.seek(song, position_seconds);
                     self.current_generation = generation;
                     self.is_running = true;
+                    self.stop_after_master_fade = false;
                 }
-                ReaderCommand::Stop => self.is_running = false,
+                ReaderCommand::Stop {
+                    fade_duration_seconds,
+                } => {
+                    if self.is_running && fade_duration_seconds > 0.0 {
+                        self.mixer.start_master_fade(0.0, fade_duration_seconds);
+                        self.stop_after_master_fade = true;
+                    } else {
+                        self.is_running = false;
+                        self.stop_after_master_fade = false;
+                    }
+                }
                 ReaderCommand::StartMasterFade {
                     target_gain,
                     duration_seconds,
@@ -188,6 +202,16 @@ impl DiskReaderState {
         }
 
         should_shutdown
+    }
+
+    pub(crate) fn finish_stop_after_fade_if_needed(&mut self) {
+        if self.stop_after_master_fade
+            && !self.mixer.is_master_fade_active()
+            && self.mixer.master_gain() <= GAIN_EPSILON
+        {
+            self.is_running = false;
+            self.stop_after_master_fade = false;
+        }
     }
 }
 

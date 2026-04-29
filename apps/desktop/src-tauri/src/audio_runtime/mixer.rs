@@ -6,6 +6,7 @@ const METRONOME_ACCENT_FREQUENCY_HZ: f32 = 1_000.0;
 const METRONOME_BEAT_FREQUENCY_HZ: f32 = 500.0;
 const METRONOME_BEEP_DURATION_SECONDS: f32 = 0.045;
 const METRONOME_PEAK_GAIN: f32 = 0.6;
+const DECLICK_FADE_MS: f32 = 3.0;
 
 #[derive(Debug, Clone)]
 pub(crate) struct LiveTrackMix {
@@ -46,6 +47,8 @@ pub(crate) struct Mixer {
     next_plan_index: usize,
     plans: Vec<PlaybackClipPlan>,
     active_clips: Vec<MixClipState>,
+    needs_declick: bool,
+    last_output_frame: Vec<f32>,
     debug_config: telemetry::AudioDebugConfig,
     opened_files: usize,
     track_meter_indices: HashMap<String, usize>,
@@ -208,6 +211,8 @@ impl Mixer {
             next_plan_index: 0,
             plans,
             active_clips: Vec::new(),
+            needs_declick: false,
+            last_output_frame: vec![0.0; output_channels.max(1)],
             debug_config,
             opened_files: 0,
             track_meter_indices,
@@ -242,6 +247,7 @@ impl Mixer {
         self.next_plan_index = self
             .plans
             .partition_point(|plan| plan.timeline_end_frame() <= self.timeline_cursor_frame);
+        self.needs_declick = true;
         self.active_clips.clear();
         self.opened_files = 0;
         self.activate_due_clips(
@@ -339,6 +345,8 @@ impl Mixer {
             metronome_settings,
         );
         self.apply_master_gain(&mut mixed, block_frames);
+        self.apply_declick_crossfade(&mut mixed, block_frames);
+        self.capture_last_output_frame(&mixed, block_frames);
         self.timeline_cursor_frame += block_frames as u64;
 
         mixed
@@ -488,6 +496,10 @@ impl Mixer {
         self.master_gain
     }
 
+    pub(crate) fn is_master_fade_active(&self) -> bool {
+        self.master_fade.is_some()
+    }
+
     fn read_metronome_settings(&self) -> MetronomeSettingsSnapshot {
         self.audio_settings
             .read()
@@ -592,6 +604,43 @@ impl Mixer {
             );
             self.master_fade = Some(fade);
         }
+    }
+
+    fn apply_declick_crossfade(&mut self, mixed: &mut [f32], block_frames: usize) {
+        if !self.needs_declick || block_frames == 0 {
+            return;
+        }
+
+        let fade_frames =
+            ((DECLICK_FADE_MS / 1000.0) * self.output_sample_rate as f32).round() as usize;
+        let fade_frames = fade_frames.max(1);
+        let frames_to_process = fade_frames.min(block_frames);
+        let output_channels = self.output_channels.max(1);
+
+        for frame_idx in 0..frames_to_process {
+            let fade_in = frame_idx as f32 / fade_frames as f32;
+            let fade_out = 1.0 - fade_in;
+            let base_idx = frame_idx * output_channels;
+
+            for ch in 0..output_channels {
+                let old_sample = self.last_output_frame[ch];
+                let new_sample = mixed[base_idx + ch];
+                mixed[base_idx + ch] = (old_sample * fade_out) + (new_sample * fade_in);
+            }
+        }
+
+        self.needs_declick = false;
+    }
+
+    fn capture_last_output_frame(&mut self, mixed: &[f32], block_frames: usize) {
+        if block_frames == 0 {
+            return;
+        }
+
+        let output_channels = self.output_channels.max(1);
+        let last_frame_base = (block_frames - 1) * output_channels;
+        self.last_output_frame
+            .copy_from_slice(&mixed[last_frame_base..last_frame_base + output_channels]);
     }
 }
 

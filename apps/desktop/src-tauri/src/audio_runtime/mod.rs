@@ -51,6 +51,7 @@ use self::telemetry::{
 
 const PCM_RING_CAPACITY_FRAMES: usize = 4_096;
 const DISK_RENDER_BLOCK_FRAMES: usize = 512;
+const STOP_FADE_DURATION_SECONDS: f64 = 0.005;
 const GAIN_EPSILON: f32 = 0.000_001;
 const AUDIO_METER_EVENT: &str = "audio:meters";
 const AUDIO_METER_EMIT_INTERVAL: Duration = Duration::from_millis(16);
@@ -172,7 +173,9 @@ enum ReaderCommand {
         position_seconds: f64,
         generation: u64,
     },
-    Stop,
+    Stop {
+        fade_duration_seconds: f64,
+    },
     StartMasterFade {
         target_gain: f32,
         duration_seconds: f64,
@@ -571,6 +574,7 @@ impl PlaybackSession {
             command_receiver: reader_receiver,
             current_generation: 0,
             is_running: true,
+            stop_after_master_fade: false,
         });
 
         let stream = build_output_stream(
@@ -657,9 +661,10 @@ impl PlaybackSession {
     }
 
     fn stop_playback(&mut self) -> Result<bool, String> {
-        self.seek_generation.fetch_add(1, Ordering::AcqRel);
         if let Some(reader_sender) = &self.reader_sender {
-            let _ = reader_sender.send(ReaderCommand::Stop);
+            let _ = reader_sender.send(ReaderCommand::Stop {
+                fade_duration_seconds: STOP_FADE_DURATION_SECONDS,
+            });
             return Ok(true);
         }
         Ok(false)
@@ -988,8 +993,10 @@ mod tests {
         prepare_audio_source, probe_audio_file, resolve_track_runtime_pan, scheduled_clip_count,
         update_shared_track_mix, AudioBufferCache, AudioBufferCacheStats, AudioCommand,
         AudioCommandKind, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState, AudioMeterLevel,
-        MemoryClipReader, Mixer, OutputSample, PlaybackBackend, PlaybackClipPlan, PlaybackSession,
-        PlaybackStartReason, RestartReport, SharedAudioSource, StopReport, SyncReport,
+        DiskReaderState, MemoryClipReader, Mixer, OutputSample, PlaybackBackend,
+        PlaybackClipPlan, PlaybackSession, PlaybackStartReason, ReaderCommand, RestartReport,
+        SharedAudioSource, StopReport, SyncReport, DISK_RENDER_BLOCK_FRAMES, GAIN_EPSILON,
+        STOP_FADE_DURATION_SECONDS,
     };
 
     fn demo_song() -> Song {
@@ -1913,6 +1920,108 @@ mod tests {
         assert_eq!(mixer.active_clips().len(), 1);
         assert_eq!(mixer.active_clips()[0].plan().clip_id, "clip_late");
         assert_eq!(mixer.active_clips()[0].reader_current_frame(), 48_000);
+    }
+
+    #[test]
+    fn mixer_seek_crossfades_from_last_rendered_frame() {
+        let song = demo_song();
+        let song_dir = PathBuf::from("song");
+        let cache = AudioBufferCache::default();
+        cache.insert_for_test(
+            song_dir.join("audio/intro.wav"),
+            SharedAudioSource::from_preloaded(vec![0.75; 48_000 * 5], 48_000, 1, true),
+        );
+        cache.insert_for_test(
+            song_dir.join("audio/late.wav"),
+            SharedAudioSource::from_preloaded(vec![-0.25; 48_000 * 5], 48_000, 1, true),
+        );
+
+        let mut mixer = Mixer::new(
+            song_dir,
+            song.clone(),
+            0.0,
+            48_000,
+            1,
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+            shared_mix_state(&song),
+            Arc::new(RwLock::new(AppSettings::default())),
+            AudioDebugConfig {
+                enabled: false,
+                log_commands: false,
+            },
+            cache,
+        );
+
+        let first_block = mixer.render_next_block(64);
+        let previous_tail = *first_block.last().expect("block should contain samples");
+
+        mixer.seek(song, 10.0);
+        let crossfaded_block = mixer.render_next_block(64);
+
+        assert!((crossfaded_block[0] - previous_tail).abs() < 0.000_001);
+        assert!(crossfaded_block[1] < crossfaded_block[0]);
+        assert!(crossfaded_block[63] < crossfaded_block[1]);
+    }
+
+    #[test]
+    fn disk_reader_stop_waits_for_short_master_fade_before_pausing_render() {
+        let song = demo_song();
+        let song_dir = PathBuf::from("song");
+        let cache = AudioBufferCache::default();
+        cache.insert_for_test(
+            song_dir.join("audio/intro.wav"),
+            SharedAudioSource::from_preloaded(vec![0.75; 48_000 * 5], 48_000, 1, true),
+        );
+        cache.insert_for_test(
+            song_dir.join("audio/late.wav"),
+            SharedAudioSource::from_preloaded(vec![0.75; 48_000 * 5], 48_000, 1, true),
+        );
+
+        let mixer = Mixer::new(
+            song_dir,
+            song.clone(),
+            0.0,
+            48_000,
+            1,
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+            shared_mix_state(&song),
+            Arc::new(RwLock::new(AppSettings::default())),
+            AudioDebugConfig {
+                enabled: false,
+                log_commands: false,
+            },
+            cache,
+        );
+        let (producer, _consumer) = RingBuffer::<OutputSample>::new(1_024);
+        let (command_sender, command_receiver) = mpsc::channel();
+        let mut state = DiskReaderState {
+            mixer,
+            producer,
+            command_receiver,
+            current_generation: 0,
+            is_running: true,
+            stop_after_master_fade: false,
+        };
+
+        command_sender
+            .send(ReaderCommand::Stop {
+                fade_duration_seconds: STOP_FADE_DURATION_SECONDS,
+            })
+            .expect("stop command should send");
+
+        assert!(!state.consume_commands());
+        assert!(state.is_running);
+        assert!(state.stop_after_master_fade);
+        assert!(state.mixer.is_master_fade_active());
+
+        let _ = state.mixer.render_next_block(DISK_RENDER_BLOCK_FRAMES);
+        state.finish_stop_after_fade_if_needed();
+
+        assert!(!state.is_running);
+        assert!(!state.stop_after_master_fade);
+        assert!(state.mixer.master_gain() <= GAIN_EPSILON);
     }
 
     #[test]
