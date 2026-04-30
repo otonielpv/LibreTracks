@@ -25,6 +25,14 @@ body {
     #131313;
   color: #e5e2e1;
   font-family: Inter, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .lt-app-shell {

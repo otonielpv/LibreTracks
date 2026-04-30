@@ -1581,9 +1581,9 @@ impl DesktopSession {
         bpm: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        if !bpm.is_finite() || bpm <= 0.0 {
+        if !bpm.is_finite() || bpm < 20.0 || bpm > 300.0 {
             return Err(DesktopError::AudioCommand(
-                "song bpm must be greater than zero".into(),
+                "song bpm must be between 20.0 and 300.0".into(),
             ));
         }
 
@@ -1605,9 +1605,9 @@ impl DesktopSession {
         bpm: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        if !bpm.is_finite() || bpm <= 0.0 {
+        if !bpm.is_finite() || bpm < 20.0 || bpm > 300.0 {
             return Err(DesktopError::AudioCommand(
-                "song bpm marker must be greater than zero".into(),
+                "song bpm marker must be between 20.0 and 300.0".into(),
             ));
         }
 

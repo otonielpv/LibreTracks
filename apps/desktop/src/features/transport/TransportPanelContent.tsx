@@ -4263,10 +4263,6 @@ export function TransportPanelContent() {
     setMidiLearnMode(midiLearnMode === null ? "" : null);
   }
 
-  function handleMidiLearnButtonClick() {
-    handleMidiLearnToggle({ closePanels: true });
-  }
-
   function handleMidiLearnTarget(controlKey: string) {
     if (midiLearnMode === null) {
       return false;
@@ -5309,7 +5305,7 @@ export function TransportPanelContent() {
       ) : null}
 
       {missingMidiDeviceWarning ? (
-        <div className="lt-modal-backdrop" onClick={handleDismissMissingMidiDeviceWarning}>
+        <div className="lt-modal-backdrop">
           <section
             className="lt-settings-modal lt-settings-modal--compact"
             role="dialog"
@@ -5340,7 +5336,7 @@ export function TransportPanelContent() {
       ) : null}
 
       {missingFilesModalOpen && missingFilePaths.length > 0 ? (
-        <div className="lt-modal-backdrop" onClick={() => setMissingFilesModalOpen(false)}>
+        <div className="lt-modal-backdrop">
           <section
             className="lt-settings-modal lt-settings-modal--compact"
             role="dialog"
@@ -5438,16 +5434,17 @@ export function TransportPanelContent() {
         onTempoCommit={() => {
           const nextBpm = Number(tempoDraft);
           const currentBpm = songBaseBpm;
+          const clampedBpm = Math.max(20, Math.min(300, nextBpm));
 
-          if (!song || !Number.isFinite(nextBpm) || nextBpm <= 0 || nextBpm === currentBpm) {
+          if (!song || !Number.isFinite(clampedBpm) || clampedBpm === currentBpm) {
             setTempoDraft(String(currentBpm));
             return;
           }
 
           void runAction(async () => {
-            const nextSnapshot = await updateSongTempo(nextBpm);
+            const nextSnapshot = await updateSongTempo(clampedBpm);
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.tempoUpdated", { bpm: nextBpm.toFixed(1) }));
+            setStatus(t("transport.status.tempoUpdated", { bpm: clampedBpm.toFixed(1) }));
           });
         }}
         onTimeSignatureDraftChange={setTimeSignatureDraft}
@@ -5501,16 +5498,6 @@ export function TransportPanelContent() {
           >
             <span className="material-symbols-outlined">settings</span>
             {t("transport.shell.settings")}
-          </button>
-          <button
-            type="button"
-            className={midiLearnMode !== null ? "is-active is-midi-learn" : "is-midi-learn"}
-            aria-label={t("transport.shell.midiLearn")}
-            aria-pressed={midiLearnMode !== null}
-            onClick={handleMidiLearnButtonClick}
-          >
-            <span className="material-symbols-outlined">graphic_eq</span>
-            {t("transport.shell.midiLearn")}
           </button>
         </aside>
 
@@ -5977,7 +5964,7 @@ export function TransportPanelContent() {
   </div>
 
         {isSettingsModalOpen ? (
-          <div className="lt-modal-backdrop" onClick={() => setIsSettingsModalOpen(false)}>
+          <div className="lt-modal-backdrop">
             <section
               className="lt-settings-modal"
               role="dialog"
@@ -6340,7 +6327,7 @@ export function TransportPanelContent() {
         ) : null}
 
         {isRemoteModalOpen ? (
-          <div className="lt-modal-backdrop" onClick={() => setIsRemoteModalOpen(false)}>
+          <div className="lt-modal-backdrop">
             <section
               className="lt-settings-modal"
               role="dialog"
