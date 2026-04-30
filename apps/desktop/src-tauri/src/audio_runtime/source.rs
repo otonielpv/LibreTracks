@@ -181,21 +181,30 @@ impl AudioBufferCache {
 
         let prepared_entries = missing_paths
             .into_par_iter()
-            .map(|(file_path, waveform_key)| {
-                let mut source = prepare_audio_source(&file_path)?;
-                if let Ok(summary) = load_waveform_summary(song_dir, &waveform_key) {
-                    source.seek_index = summary
-                        .seek_index
-                        .into_iter()
-                        .map(|entry| SeekIndexEntry {
-                            timestamp: entry.timestamp,
-                            packet_offset: entry.packet_offset,
-                        })
-                        .collect();
+            .filter_map(|(file_path, waveform_key)| match prepare_audio_source(&file_path) {
+                Ok(mut source) => {
+                    if let Ok(summary) = load_waveform_summary(song_dir, &waveform_key) {
+                        source.seek_index = summary
+                            .seek_index
+                            .into_iter()
+                            .map(|entry| SeekIndexEntry {
+                                timestamp: entry.timestamp,
+                                packet_offset: entry.packet_offset,
+                            })
+                            .collect();
+                    }
+                    Some((file_path, Arc::new(source)))
                 }
-                Ok::<_, String>((file_path, Arc::new(source)))
+                Err(error) => {
+                    eprintln!(
+                        "[libretracks-audio] Skipping missing or invalid file {}: {}",
+                        file_path.display(),
+                        error
+                    );
+                    None
+                }
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Vec<_>>();
 
         for (file_path, prepared_source) in prepared_entries {
             next_entries.insert(file_path, prepared_source);

@@ -214,6 +214,7 @@ pub(crate) fn song_to_view(
     song: &Song,
     waveform_cache: &WaveformMemoryCache,
     project_revision: u64,
+    song_dir: Option<&std::path::Path>,
 ) -> SongView {
     SongView {
         id: song.id.clone(),
@@ -238,7 +239,7 @@ pub(crate) fn song_to_view(
         clips: song
             .clips
             .iter()
-            .map(|clip| clip_to_summary(song, clip, waveform_cache))
+            .map(|clip| clip_to_summary(song, clip, waveform_cache, song_dir))
             .collect(),
         tracks: song
             .tracks
@@ -267,6 +268,7 @@ pub(crate) fn clip_to_summary(
     song: &Song,
     clip: &Clip,
     waveform_cache: &WaveformMemoryCache,
+    song_dir: Option<&std::path::Path>,
 ) -> ClipSummary {
     let track_name = song
         .tracks
@@ -286,7 +288,16 @@ pub(crate) fn clip_to_summary(
         track_name,
         file_path: clip.file_path.clone(),
         waveform_key,
-        is_missing: !std::path::Path::new(&clip.file_path).exists(),
+        is_missing: if let Some(dir) = song_dir {
+            let path = std::path::Path::new(&clip.file_path);
+            if path.is_absolute() {
+                !path.exists()
+            } else {
+                !dir.join(path).exists()
+            }
+        } else {
+            !std::path::Path::new(&clip.file_path).exists()
+        },
         timeline_start_seconds: clip.timeline_start_seconds,
         source_start_seconds: clip.source_start_seconds,
         source_duration_seconds,

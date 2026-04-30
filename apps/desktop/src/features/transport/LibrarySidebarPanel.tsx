@@ -39,6 +39,7 @@ type LibrarySidebarPanelProps = {
   canImport: boolean;
   onDragAssetsStart?: (assets: Array<{ file_path: string; durationSeconds: number }>) => void;
   onDragAssetsEnd?: () => void;
+  onLocateAsset?: (filePath: string) => void;
   onImport: () => void;
   onCreateFolder: () => void;
   onMoveAssetsToFolder: (filePaths: string[], folderPath: string | null) => void;
@@ -80,6 +81,7 @@ export function LibrarySidebarPanel({
   canImport,
   onDragAssetsStart,
   onDragAssetsEnd,
+  onLocateAsset,
   onImport,
   onCreateFolder,
   onMoveAssetsToFolder,
@@ -211,7 +213,7 @@ export function LibrarySidebarPanel({
   const assetContextMenu = (asset: LibraryAssetSummary) => {
     const contextAssets = selectedAssetPathSet.has(asset.filePath) ? selectedAssets : [asset];
 
-    return [
+    const actions: ContextMenuAction[] = [
       {
         label: contextAssets.length > 1
           ? t("library.deleteAssets", { count: contextAssets.length })
@@ -225,6 +227,15 @@ export function LibrarySidebarPanel({
         onSelect: () => onMoveAssetsToFolder(contextAssets.map((candidate) => candidate.filePath), null),
       },
     ];
+
+    if (asset.isMissing && onLocateAsset) {
+      actions.unshift({
+        label: "Localizar archivo...",
+        onSelect: () => onLocateAsset(asset.filePath),
+      });
+    }
+
+    return actions;
   };
 
   const folderContextMenu = (folderPath: string | null) => {
@@ -377,7 +388,7 @@ export function LibrarySidebarPanel({
           return (
             <div key={asset.filePath} role="listitem" className={`lt-library-asset-row ${isSelected ? "is-selected" : ""}`}>
               <div
-                className="lt-library-asset"
+                className={`lt-library-asset ${asset.isMissing ? "is-missing" : ""}`}
                 role="button"
                 tabIndex={0}
                 aria-label={asset.fileName}
@@ -395,7 +406,9 @@ export function LibrarySidebarPanel({
                 onDragEnd={handleAssetDragEnd}
                 onDragStart={(event) => handleAssetDragStart(event, asset)}
               >
-                <span className="lt-library-asset-icon material-symbols-outlined">music_note</span>
+                <span className="lt-library-asset-icon material-symbols-outlined">
+                  {asset.isMissing ? "warning" : "music_note"}
+                </span>
                 <span className="lt-library-asset-copy" title={asset.fileName}>{asset.fileName}</span>
                 <span className="lt-library-asset-duration">{formatAssetDuration(asset.durationSeconds)}</span>
               </div>

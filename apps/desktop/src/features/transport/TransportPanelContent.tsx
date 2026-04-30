@@ -782,7 +782,6 @@ export function TransportPanelContent() {
   const [isBusy, setIsBusy] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isRemoteModalOpen, setIsRemoteModalOpen] = useState(false);
-  const [missingFilesModalOpen, setMissingFilesModalOpen] = useState(false);
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("audio");
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
@@ -1185,13 +1184,6 @@ export function TransportPanelContent() {
     }
     return [...paths].sort((left, right) => left.localeCompare(right));
   }, [libraryAssets, song?.clips]);
-  const missingFilePathsSignature = missingFilePaths.join("\n");
-
-  useEffect(() => {
-    if (missingFilePaths.length > 0) {
-      setMissingFilesModalOpen(true);
-    }
-  }, [missingFilePaths.length, missingFilePathsSignature]);
 
   const handleLocateMissingFile = useCallback(
     async (missingPath: string) => {
@@ -5335,49 +5327,6 @@ export function TransportPanelContent() {
         </div>
       ) : null}
 
-      {missingFilesModalOpen && missingFilePaths.length > 0 ? (
-        <div className="lt-modal-backdrop">
-          <section
-            className="lt-settings-modal lt-settings-modal--compact"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="lt-missing-files-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="lt-settings-modal-header">
-              <div>
-                <span className="lt-settings-modal-eyebrow">Missing Files</span>
-                <h2 id="lt-missing-files-title">Locate Missing Files</h2>
-                <p>Some audio paths no longer point to files on disk.</p>
-              </div>
-            </header>
-            <div className="lt-settings-modal-body">
-              <div className="lt-missing-files-list">
-                {missingFilePaths.map((missingPath) => (
-                  <div className="lt-missing-file-row" key={missingPath}>
-                    <span title={missingPath}>{missingPath}</span>
-                    <button
-                      type="button"
-                      className="is-primary"
-                      onClick={() => {
-                        void handleLocateMissingFile(missingPath);
-                      }}
-                    >
-                      Locate
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="lt-inline-actions">
-                <button type="button" onClick={() => setMissingFilesModalOpen(false)}>
-                  Ignore
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
       <TimelineTopbar
         openTopMenu={openTopMenu}
         menuBarRef={menuBarRef}
@@ -5512,6 +5461,7 @@ export function TransportPanelContent() {
           importProgress={libraryImportProgress}
           deletingFilePath={deletingLibraryFilePath}
           canImport={Boolean(playbackSongDir)}
+          onLocateAsset={handleLocateMissingFile}
           onDragAssetsStart={(payload) => {
             activeLibraryDragPayloadRef.current = payload;
           }}
@@ -6376,6 +6326,17 @@ export function TransportPanelContent() {
           ))}
         </div>
       ) : null}
+
+        {missingFilePaths.length > 0 ? (
+          <button
+            type="button"
+            className="lt-missing-files-indicator"
+            onClick={() => setActiveSidebarTab("library")}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">warning</span>
+            Faltan archivos multimedia
+          </button>
+        ) : null}
 
         <div className="lt-status-overlay" aria-live="polite">
           <span>{status}</span>

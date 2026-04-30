@@ -876,7 +876,14 @@ impl DesktopSession {
         let song_view = self
             .engine
             .song()
-            .map(|song| song_to_view(song, &self.waveform_cache, self.project_revision));
+            .map(|song| {
+                song_to_view(
+                    song,
+                    &self.waveform_cache,
+                    self.project_revision,
+                    self.song_dir.as_deref(),
+                )
+            });
         self.perf_metrics.song_view_build_millis = started_at.elapsed().as_millis();
         self.perf_metrics.song_view_bytes = song_view
             .as_ref()
@@ -3011,7 +3018,7 @@ fn list_library_assets(
             .and_then(|value| value.to_str())
             .unwrap_or(&file_path)
             .to_string();
-        let is_missing = !Path::new(&file_path).exists();
+        let is_missing = !path.exists();
         let duration_seconds = if path.is_file() {
             read_audio_metadata(&path)?.duration_seconds
         } else {
@@ -4131,7 +4138,7 @@ mod tests {
             section_markers: vec![],
         };
 
-        let view = song_to_view(&song, &WaveformMemoryCache::default(), 7);
+        let view = song_to_view(&song, &WaveformMemoryCache::default(), 7, None);
 
         assert_eq!(view.tracks[0].id, "folder_main");
         assert_eq!(view.tracks[0].parent_track_id, None);

@@ -1452,6 +1452,28 @@ textarea {
   background: rgb(42 42 42 / 0.92);
 }
 
+.lt-library-asset.is-missing {
+  border-color: rgb(255 138 101 / 0.5);
+  border-style: dashed;
+  background:
+    linear-gradient(135deg, rgb(255 138 101 / 0.16), rgb(255 180 171 / 0.06)),
+    rgb(42 24 20 / 0.86);
+  color: #ffb4ab;
+}
+
+.lt-library-asset.is-missing:hover {
+  border-color: rgb(255 180 92 / 0.78);
+  background:
+    linear-gradient(135deg, rgb(255 138 101 / 0.22), rgb(255 180 171 / 0.09)),
+    rgb(52 29 22 / 0.94);
+}
+
+.lt-library-asset.is-missing .lt-library-asset-icon,
+.lt-library-asset.is-missing .lt-library-asset-copy,
+.lt-library-asset.is-missing .lt-library-asset-duration {
+  color: #ffb4ab;
+}
+
 .lt-library-asset:active {
   cursor: grabbing;
 }
@@ -3059,6 +3081,40 @@ textarea {
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.24);
   color: rgb(186 202 197 / 0.82);
   pointer-events: none;
+}
+
+.lt-missing-files-indicator {
+  position: absolute;
+  right: 1rem;
+  bottom: 3.35rem;
+  z-index: 31;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: min(24rem, calc(100vw - 6rem));
+  border: 1px solid rgb(255 180 92 / 0.55);
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgb(255 138 101 / 0.95), rgb(221 91 50 / 0.92)),
+    #6f2b19;
+  box-shadow: 0 14px 34px rgb(0 0 0 / 0.32), 0 0 0 1px rgb(255 255 255 / 0.08) inset;
+  color: #1b0d08;
+  padding: 0.52rem 0.78rem;
+  font: 800 0.72rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.lt-missing-files-indicator:hover {
+  border-color: rgb(255 220 158 / 0.82);
+  transform: translateY(-1px);
+  box-shadow: 0 18px 42px rgb(0 0 0 / 0.38), 0 0 0 1px rgb(255 255 255 / 0.14) inset;
+}
+
+.lt-missing-files-indicator .material-symbols-outlined {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .lt-status-overlay span {
