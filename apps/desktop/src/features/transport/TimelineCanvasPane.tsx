@@ -94,6 +94,8 @@ type TimelineCanvasPaneProps = {
     markerId: string,
   ) => void;
   onRegionContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, regionId: string) => void;
+  midiLearnMode: string | null;
+  onMidiLearnTarget: (controlKey: string) => boolean;
   canNativeZoom: boolean;
   onNativeCameraXPreview: (cameraX: number) => number;
   onNativeCameraXCommit: (cameraX: number) => void;
@@ -169,6 +171,8 @@ export function TimelineCanvasPane({
   onTempoMarkerContextMenu,
   onTimeSignatureMarkerContextMenu,
   onRegionContextMenu,
+  midiLearnMode,
+  onMidiLearnTarget,
   canNativeZoom,
   onNativeCameraXPreview,
   onNativeCameraXCommit,
@@ -350,6 +354,16 @@ export function TimelineCanvasPane({
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
+                  if (midiLearnMode !== null) {
+                    const chronologicalRegions = [...(song?.regions ?? [])].sort((left, right) => (
+                      left.startSeconds - right.startSeconds
+                    ));
+                    const regionIndex = chronologicalRegions.findIndex((candidate) => candidate.id === region.id);
+                    if (regionIndex >= 0) {
+                      onMidiLearnTarget(`action:jump_song_${regionIndex + 1}`);
+                    }
+                    return;
+                  }
                 }}
                 onContextMenu={(event) => {
                   event.stopPropagation();
@@ -390,7 +404,18 @@ export function TimelineCanvasPane({
                   event.stopPropagation();
                 }}
                 onClick={(event) => {
+                  event.preventDefault();
                   event.stopPropagation();
+                  if (midiLearnMode !== null) {
+                    const chronologicalMarkers = [...(song?.sectionMarkers ?? [])].sort((left, right) => (
+                      left.startSeconds - right.startSeconds
+                    ));
+                    const markerIndex = chronologicalMarkers.findIndex((candidate) => candidate.id === section.id);
+                    if (markerIndex >= 0) {
+                      onMidiLearnTarget(`action:jump_marker_${markerIndex + 1}`);
+                    }
+                    return;
+                  }
                   onMarkerPrimaryAction(section.id);
                 }}
                 onContextMenu={(event) => {

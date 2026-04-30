@@ -228,6 +228,12 @@ type MidiLearnCommand = {
   labelKey: string;
 };
 
+type MidiLearnCommandRow = {
+  key: string;
+  label: string;
+  binding: MidiBinding | null;
+};
+
 type MidiLearnFeedback = {
   key: string;
   binding: MidiBinding;
@@ -787,6 +793,7 @@ export function TransportPanelContent() {
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [midiLearnFeedback, setMidiLearnFeedback] = useState<MidiLearnFeedback | null>(null);
+  const [midiLearnView, setMidiLearnView] = useState<"core" | "markers" | "songs">("core");
   const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(DEFAULT_APP_SETTINGS.metronomeVolume);
   const [audioOutputDevices, setAudioOutputDevices] = useState<string[]>([]);
   const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<string | null>(null);
@@ -860,16 +867,95 @@ export function TransportPanelContent() {
         ...command,
         label: t(command.labelKey),
         binding: appSettings.midiMappings[command.key] ?? null,
-      })),
+      })) satisfies MidiLearnCommandRow[],
     [appSettings.midiMappings, t],
   );
-  const midiLearnFeedbackCommand = useMemo(
-    () => midiLearnCommandRows.find((command) => command.key === midiLearnFeedback?.key) ?? null,
-    [midiLearnCommandRows, midiLearnFeedback],
+  const dynamicMidiLearnJumpRows = useMemo(
+    () =>
+      Object.entries(appSettings.midiMappings)
+        .filter(([key]) => {
+          if (key.startsWith("action:jump_marker_")) {
+            const index = Number(key.slice("action:jump_marker_".length));
+            return Number.isInteger(index) && index >= 1 && index <= 100;
+          }
+
+          if (key.startsWith("action:jump_song_")) {
+            const index = Number(key.slice("action:jump_song_".length));
+            return Number.isInteger(index) && index >= 1 && index <= 20;
+          }
+
+          return false;
+        })
+        .map(([key, binding]) => {
+          const markerIndex = key.startsWith("action:jump_marker_")
+            ? Number(key.slice("action:jump_marker_".length))
+            : null;
+          const songIndex = key.startsWith("action:jump_song_")
+            ? Number(key.slice("action:jump_song_".length))
+            : null;
+          return {
+            key,
+            label: markerIndex !== null && Number.isInteger(markerIndex)
+              ? t("transport.settingsModal.midiLearnJumpMarker", { index: markerIndex })
+              : t("transport.settingsModal.midiLearnJumpSong", { index: songIndex }),
+            binding,
+          };
+        })
+        .sort((left, right) => left.key.localeCompare(right.key, undefined, { numeric: true })),
+    [appSettings.midiMappings, t],
   );
+  const midiLearnRows = useMemo(
+    () => [...midiLearnCommandRows, ...dynamicMidiLearnJumpRows],
+    [dynamicMidiLearnJumpRows, midiLearnCommandRows],
+  );
+  const midiLearnMarkerRows = useMemo(
+    () => dynamicMidiLearnJumpRows.filter((command) => command.key.startsWith("action:jump_marker_")),
+    [dynamicMidiLearnJumpRows],
+  );
+  const midiLearnSongRows = useMemo(
+    () => dynamicMidiLearnJumpRows.filter((command) => command.key.startsWith("action:jump_song_")),
+    [dynamicMidiLearnJumpRows],
+  );
+  const visibleMidiLearnRows = useMemo(() => {
+    if (midiLearnView === "markers") {
+      return midiLearnMarkerRows;
+    }
+
+    if (midiLearnView === "songs") {
+      return midiLearnSongRows;
+    }
+
+    return midiLearnCommandRows;
+  }, [midiLearnCommandRows, midiLearnMarkerRows, midiLearnSongRows, midiLearnView]);
+  const midiLearnFeedbackCommand = useMemo(
+    () => midiLearnRows.find((command) => command.key === midiLearnFeedback?.key) ?? null,
+    [midiLearnRows, midiLearnFeedback],
+  );
+  const formatMidiLearnCommandLabel = useCallback((key: string) => {
+    const learnedRow = midiLearnRows.find((command) => command.key === key);
+    if (learnedRow) {
+      return learnedRow.label;
+    }
+
+    if (key.startsWith("action:jump_marker_")) {
+      const index = Number(key.slice("action:jump_marker_".length));
+      if (Number.isInteger(index) && index >= 1 && index <= 100) {
+        return t("transport.settingsModal.midiLearnJumpMarker", { index });
+      }
+    }
+
+    if (key.startsWith("action:jump_song_")) {
+      const index = Number(key.slice("action:jump_song_".length));
+      if (Number.isInteger(index) && index >= 1 && index <= 20) {
+        return t("transport.settingsModal.midiLearnJumpSong", { index });
+      }
+    }
+
+    return key;
+  }, [midiLearnRows, t]);
   const activeMidiLearnCommand = useMemo(
-    () => midiLearnCommandRows.find((command) => command.key === midiLearnMode) ?? null,
-    [midiLearnCommandRows, midiLearnMode],
+    () => midiLearnMode === null ? null : { key: midiLearnMode, label: formatMidiLearnCommandLabel(midiLearnMode) },
+    [formatMidiLearnCommandLabel, midiLearnMode],
   );
 
   useEffect(() => {
@@ -1100,8 +1186,7 @@ export function TransportPanelContent() {
         },
       });
       const previousSettings = appSettingsRef.current;
-      const learnedCommandLabel =
-        midiLearnCommandRows.find((command) => command.key === learnMode)?.label ?? learnMode;
+      const learnedCommandLabel = formatMidiLearnCommandLabel(learnMode);
 
       appSettingsRef.current = nextSettings;
       setAppSettings(nextSettings);
@@ -1134,7 +1219,7 @@ export function TransportPanelContent() {
     return () => {
       unlisten?.();
     };
-  }, [midiLearnCommandRows, runAction, setMidiLearnMode, t]);
+  }, [formatMidiLearnCommandLabel, runAction, setMidiLearnMode, t]);
 
   const persistAudioSettings = useCallback(
     (
@@ -3015,7 +3100,7 @@ export function TransportPanelContent() {
     ? t("transport.tempoSource.at", { time: formatClock(readoutTempoRegion.startSeconds) })
     : t("transport.tempoSource.base");
   const canPersistProject = Boolean(song);
-  const isProjectEmpty = !song || song.tracks.length === 0;
+  const isProjectEmpty = !song;
   const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
   const shouldShowEmptyState = !isProjectPending && !song;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
@@ -4255,8 +4340,8 @@ export function TransportPanelContent() {
     setMidiLearnMode(midiLearnMode === null ? "" : null);
   }
 
-  function handleMidiLearnTarget(controlKey: string) {
-    if (midiLearnMode === null) {
+  function handleMidiLearnTarget(controlKey: string, options?: { arm?: boolean }) {
+    if (midiLearnMode === null && !options?.arm) {
       return false;
     }
 
@@ -4266,6 +4351,28 @@ export function TransportPanelContent() {
 
   function handleMidiLearnCommandRelearn(controlKey: string) {
     setMidiLearnMode(controlKey);
+  }
+
+  function handleDynamicMidiLearnJump(kind: "marker" | "song") {
+    const maxIndex = kind === "marker" ? 100 : 20;
+    const rawValue = window.prompt(
+      kind === "marker"
+        ? t("transport.settingsModal.midiLearnMapMarkerPrompt")
+        : t("transport.settingsModal.midiLearnMapSongPrompt"),
+    );
+    if (rawValue === null) {
+      return;
+    }
+
+    const index = Number(rawValue.trim());
+    if (!Number.isInteger(index) || index < 1 || index > maxIndex) {
+      return;
+    }
+
+    handleMidiLearnTarget(
+      kind === "marker" ? `action:jump_marker_${index}` : `action:jump_song_${index}`,
+      { arm: true },
+    );
   }
 
   function handleResetMidiMappings() {
@@ -5275,8 +5382,8 @@ export function TransportPanelContent() {
   const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
     { id: "audio", label: t("transport.settingsModal.tabAudio", { defaultValue: "Audio" }) },
     { id: "metronome", label: t("transport.settingsModal.tabMetronome", { defaultValue: "Metronome" }) },
-    { id: "midi", label: t("transport.settingsModal.tabMidi", { defaultValue: "MIDI" }) },
     { id: "general", label: t("transport.settingsModal.tabGeneral", { defaultValue: "General" }) },
+    { id: "midi", label: t("transport.settingsModal.tabMidi", { defaultValue: "MIDI" }) },
     { id: "midiLearn", label: t("transport.settingsModal.tabMidiLearn", { defaultValue: "MIDI Learn" }) },
   ];
 
@@ -5594,6 +5701,8 @@ export function TransportPanelContent() {
                 selectedSectionId={selectedSectionId}
                 pendingMarkerJump={pendingMarkerJump}
                 activeVamp={activeVamp}
+                midiLearnMode={midiLearnMode}
+                onMidiLearnTarget={handleMidiLearnTarget}
                 displayPositionSecondsRef={displayPositionSecondsRef}
                 playheadDragRef={playheadDragRef}
                 clipPreviewSecondsRef={clipPreviewSecondsRef}
@@ -6220,6 +6329,34 @@ export function TransportPanelContent() {
                             </div>
                           ) : null}
 
+                          <div className="lt-segmented-control lt-midi-learn-view-tabs">
+                            <button
+                              type="button"
+                              className={midiLearnView === "core" ? "is-active" : ""}
+                              onClick={() => setMidiLearnView("core")}
+                            >
+                              {t("transport.settingsModal.midiLearnViewCore")}
+                            </button>
+                            <button
+                              type="button"
+                              className={midiLearnView === "markers" ? "is-active" : ""}
+                              onClick={() => setMidiLearnView("markers")}
+                            >
+                              {t("transport.settingsModal.midiLearnViewMarkers", {
+                                count: midiLearnMarkerRows.length,
+                              })}
+                            </button>
+                            <button
+                              type="button"
+                              className={midiLearnView === "songs" ? "is-active" : ""}
+                              onClick={() => setMidiLearnView("songs")}
+                            >
+                              {t("transport.settingsModal.midiLearnViewSongs", {
+                                count: midiLearnSongRows.length,
+                              })}
+                            </button>
+                          </div>
+
                           <div className="lt-midi-learn-table-wrap">
                             <table className="lt-midi-learn-table">
                               <thead>
@@ -6230,7 +6367,7 @@ export function TransportPanelContent() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {midiLearnCommandRows.map((command) => {
+                                {visibleMidiLearnRows.map((command) => {
                                   const hasBinding = Boolean(command.binding);
                                   const isTarget = midiLearnMode === command.key;
 
@@ -6264,6 +6401,28 @@ export function TransportPanelContent() {
                                 })}
                               </tbody>
                             </table>
+                          </div>
+                          <div className="lt-midi-learn-dynamic-actions">
+                            {midiLearnView === "markers" ? (
+                              <button
+                                type="button"
+                                className="lt-midi-learn-map-jump"
+                                disabled={isSettingsLoading || isSettingsSaving}
+                                onClick={() => handleDynamicMidiLearnJump("marker")}
+                              >
+                                {t("transport.settingsModal.midiLearnMapMarkerJump")}
+                              </button>
+                            ) : null}
+                            {midiLearnView === "songs" ? (
+                              <button
+                                type="button"
+                                className="lt-midi-learn-map-jump"
+                                disabled={isSettingsLoading || isSettingsSaving}
+                                onClick={() => handleDynamicMidiLearnJump("song")}
+                              >
+                                {t("transport.settingsModal.midiLearnMapSongJump")}
+                              </button>
+                            ) : null}
                           </div>
                         </section>
                       </section>

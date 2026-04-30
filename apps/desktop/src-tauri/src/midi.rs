@@ -293,6 +293,66 @@ fn dispatch_midi_action(
         .lock()
         .map_err(|_| "desktop session lock poisoned".to_string())?;
 
+    if let Some(marker_index) = parse_dynamic_jump_index(action_key, "action:jump_marker_") {
+        let song = session
+            .engine
+            .song()
+            .cloned()
+            .ok_or_else(|| "no song loaded".to_string())?;
+        let mut markers = song.section_markers.iter().collect::<Vec<_>>();
+        markers.sort_by(|left, right| {
+            left.start_seconds
+                .partial_cmp(&right.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let Some(target_marker_id) = markers
+            .get(marker_index.saturating_sub(1))
+            .map(|marker| marker.id.clone())
+        else {
+            return Ok(());
+        };
+        let jump_trigger =
+            parse_jump_trigger(&settings.global_jump_mode, Some(settings.global_jump_bars))
+                .map_err(|error| error.to_string())?;
+        let transition = parse_transition_type(Some(&settings.song_transition_mode), None)
+            .map_err(|error| error.to_string())?;
+        let snapshot = session
+            .schedule_marker_jump(&target_marker_id, jump_trigger, transition, &state.audio)
+            .map_err(|error| error.to_string())?;
+        emit_transport_lifecycle_event(app, "sync", &snapshot);
+        return Ok(());
+    }
+
+    if let Some(region_index) = parse_dynamic_jump_index(action_key, "action:jump_song_") {
+        let song = session
+            .engine
+            .song()
+            .cloned()
+            .ok_or_else(|| "no song loaded".to_string())?;
+        let mut regions = song.regions.iter().collect::<Vec<_>>();
+        regions.sort_by(|left, right| {
+            left.start_seconds
+                .partial_cmp(&right.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let Some(target_region_id) = regions
+            .get(region_index.saturating_sub(1))
+            .map(|region| region.id.clone())
+        else {
+            return Ok(());
+        };
+        let jump_trigger =
+            parse_jump_trigger(&settings.song_jump_trigger, Some(settings.song_jump_bars))
+                .map_err(|error| error.to_string())?;
+        let transition = parse_transition_type(Some(&settings.song_transition_mode), None)
+            .map_err(|error| error.to_string())?;
+        let snapshot = session
+            .schedule_region_jump(&target_region_id, jump_trigger, transition, &state.audio)
+            .map_err(|error| error.to_string())?;
+        emit_transport_lifecycle_event(app, "sync", &snapshot);
+        return Ok(());
+    }
+
     let _snapshot = match action_key {
         "action:play" => {
             if session.engine.playback_state() == PlaybackState::Playing {
@@ -557,6 +617,14 @@ fn dispatch_midi_action(
     };
 
     Ok(())
+}
+
+fn parse_dynamic_jump_index(action_key: &str, prefix: &str) -> Option<usize> {
+    action_key
+        .strip_prefix(prefix)?
+        .parse::<usize>()
+        .ok()
+        .filter(|index| *index > 0)
 }
 
 fn dispatch_midi_parameter(

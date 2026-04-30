@@ -843,7 +843,8 @@ textarea {
 }
 
 .lt-midi-learn-activate,
-.lt-midi-learn-relearn {
+.lt-midi-learn-relearn,
+.lt-midi-learn-map-jump {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -860,7 +861,8 @@ textarea {
 }
 
 .lt-midi-learn-activate:hover,
-.lt-midi-learn-relearn:hover {
+.lt-midi-learn-relearn:hover,
+.lt-midi-learn-map-jump:hover {
   border-color: rgb(87 241 219 / 0.42);
   background: rgb(87 241 219 / 0.12);
   color: #ffffff;
@@ -874,7 +876,8 @@ textarea {
 }
 
 .lt-midi-learn-activate:disabled,
-.lt-midi-learn-relearn:disabled {
+.lt-midi-learn-relearn:disabled,
+.lt-midi-learn-map-jump:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -955,6 +958,17 @@ textarea {
   color: rgb(229 226 225 / 0.56);
   font: 500 10px/1.2 "Space Grotesk", sans-serif;
   white-space: nowrap;
+}
+
+.lt-midi-learn-dynamic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.lt-midi-learn-view-tabs {
+  justify-content: flex-start;
 }
 
 .lt-midi-binding-pill,
