@@ -1,14 +1,25 @@
 use std::{
-    fs, io,
+    collections::hash_map::DefaultHasher,
+    fs,
+    hash::{Hash, Hasher},
+    io,
     path::{Path, PathBuf},
 };
 
-use hound::{SampleFormat, WavReader};
 use serde::{Deserialize, Serialize};
+use symphonia::core::{
+    audio::SampleBuffer,
+    codecs::{DecoderOptions, CODEC_TYPE_NULL},
+    errors::Error as SymphoniaError,
+    formats::FormatOptions,
+    io::MediaSourceStream,
+    meta::MetadataOptions,
+    probe::Hint,
+};
 
 use crate::ProjectError;
 
-const WAVEFORM_FORMAT_VERSION: u32 = 3;
+const WAVEFORM_FORMAT_VERSION: u32 = 4;
 const WAVEFORM_FILE_MAGIC: &[u8; 8] = b"LTPEAKS1";
 const WAVEFORM_LOD_RESOLUTIONS: [usize; 4] = [256, 2_048, 16_384, 131_072];
 
@@ -30,12 +41,21 @@ pub struct WaveformSummary {
     pub duration_seconds: f64,
     pub sample_rate: u32,
     pub lods: Vec<WaveformLod>,
+    #[serde(default)]
+    pub seek_index: Vec<SeekIndexEntry>,
 }
 
 impl WaveformSummary {
     pub fn primary_lod(&self) -> Option<&WaveformLod> {
         self.lods.first()
     }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SeekIndexEntry {
+    pub timestamp: u64,
+    pub packet_offset: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -71,11 +91,7 @@ pub fn waveform_file_path(
     song_dir: impl AsRef<Path>,
     audio_relative_path: impl AsRef<Path>,
 ) -> PathBuf {
-    let file_stem = audio_relative_path
-        .as_ref()
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("waveform");
+    let file_stem = waveform_cache_file_stem(audio_relative_path.as_ref());
 
     song_dir
         .as_ref()
@@ -86,10 +102,7 @@ pub fn waveform_file_path(
 
 pub fn waveform_file_path_for_source(source_path: impl AsRef<Path>) -> PathBuf {
     let source_path = source_path.as_ref();
-    let file_stem = source_path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("waveform");
+    let file_stem = waveform_cache_file_stem(source_path);
 
     source_path
         .parent()
@@ -100,15 +113,19 @@ pub fn waveform_file_path_for_source(source_path: impl AsRef<Path>) -> PathBuf {
         .join(format!("{file_stem}.waveform.ltpeaks"))
 }
 
+fn resolve_audio_source_path(song_dir: &Path, audio_path: &Path) -> PathBuf {
+    if audio_path.is_absolute() {
+        audio_path.to_path_buf()
+    } else {
+        song_dir.join(audio_path)
+    }
+}
+
 fn legacy_waveform_json_file_path(
     song_dir: impl AsRef<Path>,
     audio_relative_path: impl AsRef<Path>,
 ) -> PathBuf {
-    let file_stem = audio_relative_path
-        .as_ref()
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("waveform");
+    let file_stem = waveform_cache_file_stem(audio_relative_path.as_ref());
 
     song_dir
         .as_ref()
@@ -117,39 +134,141 @@ fn legacy_waveform_json_file_path(
         .join(format!("{file_stem}.waveform.json"))
 }
 
+fn waveform_cache_file_stem(audio_path: &Path) -> String {
+    let stem = audio_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("waveform");
+    if !audio_path.is_absolute() {
+        return stem.to_string();
+    }
+
+    let mut hasher = DefaultHasher::new();
+    audio_path.to_string_lossy().hash(&mut hasher);
+    format!("{stem}-{:016x}", hasher.finish())
+}
+
 pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectError> {
     let path = path.as_ref();
-    let mut reader = WavReader::open(path)?;
-    let spec = reader.spec();
-    let frame_count = reader.duration() as usize;
-    let duration_seconds = frame_count as f64 / f64::from(spec.sample_rate.max(1));
-    let lods = match spec.sample_format {
-        SampleFormat::Float => collect_float_waveform_streaming(
-            &mut reader,
-            frame_count,
-            spec.channels,
-            WAVEFORM_LOD_RESOLUTIONS[0],
-        )?,
-        SampleFormat::Int => collect_int_waveform_streaming(
-            &mut reader,
-            frame_count,
-            spec.channels,
-            spec.bits_per_sample,
-            WAVEFORM_LOD_RESOLUTIONS[0],
-        )?,
-    };
+    let file = fs::File::open(path)?;
+    let mut hint = Hint::new();
+    if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
+        hint.with_extension(extension);
+    }
+    let media_source_stream = MediaSourceStream::new(Box::new(file), Default::default());
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            media_source_stream,
+            &FormatOptions {
+                prebuild_seek_index: true,
+                seek_index_fill_rate: 1,
+                ..FormatOptions::default()
+            },
+            &MetadataOptions::default(),
+        )
+        .map_err(|_| ProjectError::UnsupportedAudioFormat {
+            path: path.to_path_buf(),
+        })?;
+    let mut format = probed.format;
+    let track = format
+        .default_track()
+        .or_else(|| {
+            format
+                .tracks()
+                .iter()
+                .find(|track| track.codec_params.codec != CODEC_TYPE_NULL)
+        })
+        .ok_or_else(|| ProjectError::UnsupportedAudioFormat {
+            path: path.to_path_buf(),
+        })?;
+    let track_id = track.id;
+    let sample_rate = track.codec_params.sample_rate.ok_or_else(|| {
+        ProjectError::AudioDecode(format!("missing sample rate for {}", path.display()))
+    })?;
+    let channels = track
+        .codec_params
+        .channels
+        .map(|channels| channels.count() as u16)
+        .unwrap_or(1)
+        .max(1);
+    let codec_params = track.codec_params.clone();
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&codec_params, &DecoderOptions::default())
+        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    let mut buckets = WaveformBuckets::new(
+        codec_params.n_frames.unwrap_or(sample_rate as u64) as usize,
+        WAVEFORM_LOD_RESOLUTIONS[0],
+    );
+    let mut frame_index = 0usize;
+    let mut seek_index = Vec::new();
+    let mut packet_offset = 0u64;
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(packet) => packet,
+            Err(SymphoniaError::IoError(error)) if error.kind() == io::ErrorKind::UnexpectedEof => {
+                break;
+            }
+            Err(error) => return Err(ProjectError::AudioDecode(error.to_string())),
+        };
+
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        if seek_index
+            .last()
+            .map(|entry: &SeekIndexEntry| {
+                packet.ts().saturating_sub(entry.timestamp) >= u64::from(sample_rate)
+            })
+            .unwrap_or(true)
+        {
+            seek_index.push(SeekIndexEntry {
+                timestamp: packet.ts(),
+                packet_offset,
+            });
+        }
+        packet_offset = packet_offset.saturating_add(1);
+
+        let decoded = match decoder.decode(&packet) {
+            Ok(decoded) => decoded,
+            Err(SymphoniaError::DecodeError(_)) => continue,
+            Err(SymphoniaError::IoError(error)) if error.kind() == io::ErrorKind::UnexpectedEof => {
+                break;
+            }
+            Err(error) => return Err(ProjectError::AudioDecode(error.to_string())),
+        };
+        let mut sample_buffer =
+            SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
+        sample_buffer.copy_interleaved_ref(decoded);
+        let channel_count = usize::from(channels.max(1));
+        for frame in sample_buffer.samples().chunks(channel_count) {
+            let value = if frame.is_empty() {
+                0.0
+            } else {
+                frame.iter().copied().sum::<f32>() / frame.len() as f32
+            };
+            buckets.push_frame(frame_index, value.clamp(-1.0, 1.0));
+            frame_index += 1;
+        }
+    }
+
+    buckets.truncate(frame_index);
+    let duration_seconds = frame_index as f64 / f64::from(sample_rate.max(1));
 
     let waveform = WaveformSummary {
         version: WAVEFORM_FORMAT_VERSION,
         duration_seconds,
-        sample_rate: spec.sample_rate,
-        lods: build_waveform_lods(lods),
+        sample_rate,
+        lods: build_waveform_lods(buckets.finish()),
+        seek_index,
     };
 
     Ok(AnalyzedWav {
         duration_seconds,
-        sample_rate: spec.sample_rate,
-        channels: spec.channels,
+        sample_rate,
+        channels,
         tempo_candidate: estimate_tempo_candidate(&waveform),
         waveform,
     })
@@ -304,7 +423,7 @@ pub fn generate_waveform_summary(
 ) -> Result<WaveformSummary, ProjectError> {
     let song_dir = song_dir.as_ref();
     let audio_relative_path = audio_relative_path.as_ref();
-    let source_path = song_dir.join(audio_relative_path);
+    let source_path = resolve_audio_source_path(song_dir, audio_relative_path);
     let summary = analyze_wav_file(&source_path)?.waveform;
 
     let path = waveform_file_path(song_dir, audio_relative_path);
@@ -382,9 +501,10 @@ fn load_legacy_waveform_summary(
         ));
     }
 
-    let reader = WavReader::open(song_dir.join(audio_relative_path))?;
-    let spec = reader.spec();
-    let frame_count = reader.duration() as usize;
+    let metadata = analyze_wav_file(resolve_audio_source_path(song_dir, audio_relative_path))?;
+    let frame_count = (metadata.duration_seconds * f64::from(metadata.sample_rate.max(1)))
+        .round()
+        .max(1.0) as usize;
     let resolution_frames = frame_count.div_ceil(legacy.bucket_count).max(1);
     let base_lod = WaveformLod {
         resolution_frames,
@@ -395,8 +515,9 @@ fn load_legacy_waveform_summary(
     let summary = WaveformSummary {
         version: WAVEFORM_FORMAT_VERSION,
         duration_seconds: legacy.duration_seconds,
-        sample_rate: spec.sample_rate,
+        sample_rate: metadata.sample_rate,
         lods: build_waveform_lods(base_lod),
+        seek_index: Vec::new(),
     };
     validate_waveform_summary(&summary, legacy_path)?;
     Ok(summary)
@@ -474,6 +595,11 @@ fn encode_waveform_summary_binary(summary: &WaveformSummary) -> Result<Vec<u8>, 
             bytes.extend_from_slice(&value.to_le_bytes());
         }
     }
+    bytes.extend_from_slice(&(summary.seek_index.len() as u32).to_le_bytes());
+    for entry in &summary.seek_index {
+        bytes.extend_from_slice(&entry.timestamp.to_le_bytes());
+        bytes.extend_from_slice(&entry.packet_offset.to_le_bytes());
+    }
 
     Ok(bytes)
 }
@@ -512,6 +638,18 @@ fn decode_waveform_summary_binary(bytes: &[u8]) -> Option<WaveformSummary> {
         });
     }
 
+    let mut seek_index = Vec::new();
+    if version >= 4 {
+        let seek_count = read_u32(bytes, &mut offset)? as usize;
+        seek_index.reserve(seek_count);
+        for _ in 0..seek_count {
+            seek_index.push(SeekIndexEntry {
+                timestamp: read_u64(bytes, &mut offset)?,
+                packet_offset: read_u64(bytes, &mut offset)?,
+            });
+        }
+    }
+
     if offset != bytes.len() {
         return None;
     }
@@ -521,6 +659,7 @@ fn decode_waveform_summary_binary(bytes: &[u8]) -> Option<WaveformSummary> {
         duration_seconds,
         sample_rate,
         lods,
+        seek_index,
     })
 }
 
@@ -582,6 +721,7 @@ impl WaveformBuckets {
     }
 
     fn finish(mut self) -> WaveformLod {
+        self.truncate(self.bucket_count.saturating_mul(self.resolution_frames));
         for bucket_index in 0..self.bucket_count {
             if !self.touched[bucket_index] {
                 self.min_peaks[bucket_index] = 0.0;
@@ -595,67 +735,14 @@ impl WaveformBuckets {
             max_peaks: self.max_peaks,
         }
     }
-}
 
-fn collect_float_waveform_streaming(
-    reader: &mut WavReader<std::io::BufReader<std::fs::File>>,
-    frame_count: usize,
-    channels: u16,
-    resolution_frames: usize,
-) -> Result<WaveformLod, ProjectError> {
-    let channel_count = usize::from(channels.max(1));
-    let mut buckets = WaveformBuckets::new(frame_count, resolution_frames);
-    let mut channel_index = 0usize;
-    let mut frame_index = 0usize;
-    let mut frame_sum = 0.0_f32;
-
-    for sample in reader.samples::<f32>() {
-        frame_sum += sample?.clamp(-1.0, 1.0);
-        channel_index += 1;
-
-        if channel_index == channel_count {
-            buckets.push_frame(
-                frame_index,
-                (frame_sum / channel_count as f32).clamp(-1.0, 1.0),
-            );
-            frame_sum = 0.0;
-            channel_index = 0;
-            frame_index += 1;
+    fn truncate(&mut self, frame_count: usize) {
+        let bucket_count = frame_count.div_ceil(self.resolution_frames.max(1)).max(1);
+        if bucket_count < self.bucket_count {
+            self.bucket_count = bucket_count;
+            self.min_peaks.truncate(bucket_count);
+            self.max_peaks.truncate(bucket_count);
+            self.touched.truncate(bucket_count);
         }
     }
-
-    Ok(buckets.finish())
-}
-
-fn collect_int_waveform_streaming(
-    reader: &mut WavReader<std::io::BufReader<std::fs::File>>,
-    frame_count: usize,
-    channels: u16,
-    bits_per_sample: u16,
-    resolution_frames: usize,
-) -> Result<WaveformLod, ProjectError> {
-    let channel_count = usize::from(channels.max(1));
-    let mut buckets = WaveformBuckets::new(frame_count, resolution_frames);
-    let max_value = ((1_i64 << (bits_per_sample.saturating_sub(1))) - 1).max(1) as f32;
-    let mut channel_index = 0usize;
-    let mut frame_index = 0usize;
-    let mut frame_sum = 0.0_f32;
-
-    for sample in reader.samples::<i32>() {
-        let value = (sample? as f32 / max_value).clamp(-1.0, 1.0);
-        frame_sum += value;
-        channel_index += 1;
-
-        if channel_index == channel_count {
-            buckets.push_frame(
-                frame_index,
-                (frame_sum / channel_count as f32).clamp(-1.0, 1.0),
-            );
-            frame_sum = 0.0;
-            channel_index = 0;
-            frame_index += 1;
-        }
-    }
-
-    Ok(buckets.finish())
 }

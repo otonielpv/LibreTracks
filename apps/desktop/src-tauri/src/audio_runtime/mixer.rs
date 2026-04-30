@@ -359,8 +359,10 @@ impl Mixer {
 
     fn activate_due_clips(&mut self, window_end_frame: u64) {
         let activation_start_frame = self.timeline_cursor_frame;
+        let pre_roll_frames = self.output_sample_rate;
         while self.next_plan_index < self.plans.len()
-            && self.plans[self.next_plan_index].timeline_start_frame < window_end_frame
+            && self.plans[self.next_plan_index].timeline_start_frame
+                < window_end_frame.saturating_add(pre_roll_frames as u64)
         {
             let plan = self.plans[self.next_plan_index].clone();
             self.next_plan_index += 1;
@@ -369,7 +371,7 @@ impl Mixer {
                 continue;
             }
 
-            match source::MemoryClipReader::open(
+            match source::StreamingClipReader::open(
                 &plan,
                 self.output_sample_rate,
                 &self.audio_buffers,
@@ -867,7 +869,7 @@ pub(crate) fn build_playback_plans(
         plans.push(PlaybackClipPlan {
             clip_id: clip.id.clone(),
             track_id: clip.track_id.clone(),
-            file_path: song_dir.join(&clip.file_path),
+            file_path: source::resolve_clip_audio_path(song_dir, &clip.file_path),
             clip_gain: clip.gain as f32,
             timeline_start_frame: seconds_to_frames(
                 clip.timeline_start_seconds,

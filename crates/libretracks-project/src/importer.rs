@@ -1,32 +1,19 @@
 use std::{
     collections::HashSet,
-    fs,
     fs::File,
     path::{Path, PathBuf},
     thread,
     time::Instant,
 };
 
-use hound::{SampleFormat, WavSpec, WavWriter};
 use libretracks_core::{validate_song, Clip, OutputBus, Song, SongRegion, Track, TrackKind};
 use rayon::prelude::*;
 use symphonia::core::{
-    audio::{AudioBufferRef, SampleBuffer},
-    codecs::{DecoderOptions, CODEC_TYPE_NULL},
-    errors::Error as SymphoniaError,
-    formats::FormatOptions,
-    io::MediaSourceStream,
-    meta::MetadataOptions,
+    codecs::CODEC_TYPE_NULL, formats::FormatOptions, io::MediaSourceStream, meta::MetadataOptions,
     probe::Hint,
 };
 
-use crate::{
-    analyze_wav_file, create_song_folder, save_song, waveform_file_path_for_source,
-    write_waveform_summary, ProjectError, TempoCandidate,
-};
-
-const INTERNAL_SAMPLE_RATE: u32 = 48_000;
-const INTERNAL_BITS_PER_SAMPLE: u16 = 32;
+use crate::{create_song_folder, save_song, ProjectError, TempoCandidate};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectImportRequest {
@@ -173,11 +160,12 @@ pub fn import_wav_files_to_library(
     }
 
     let song_dir = song_dir.as_ref();
-    let mut used_file_names = collect_existing_file_names(song_dir)?;
     let mut metrics = ImportOperationMetrics::default();
-    let planned_files = plan_import_files(song_dir, audio_files, &mut used_file_names)?;
-    metrics.copy_millis = copy_import_files(&planned_files, &mut on_progress)?;
-    let (imported_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
+    metrics.copy_millis = 0;
+    announce_probe_progress(audio_files, &mut on_progress);
+    let planned_files = plan_import_files(audio_files)?;
+    let (imported_files, analysis_metrics) =
+        analyze_import_files_in_parallel(song_dir, planned_files)?;
     merge_import_metrics(&mut metrics, &analysis_metrics);
 
     let assets = imported_files
@@ -206,9 +194,11 @@ pub fn import_wav_song(
 
     let song_dir = create_song_folder(root, folder_name)?;
     let mut metrics = ImportOperationMetrics::default();
-    let planned_files = plan_import_files(&song_dir, &request.wav_files, &mut HashSet::new())?;
-    metrics.copy_millis = copy_import_files(&planned_files, &mut on_progress)?;
-    let (analyzed_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
+    metrics.copy_millis = 0;
+    announce_probe_progress(&request.wav_files, &mut on_progress);
+    let planned_files = plan_import_files(&request.wav_files)?;
+    let (analyzed_files, analysis_metrics) =
+        analyze_import_files_in_parallel(&song_dir, planned_files)?;
     merge_import_metrics(&mut metrics, &analysis_metrics);
 
     let mut imported_files = Vec::with_capacity(analyzed_files.len());
@@ -218,7 +208,7 @@ pub fn import_wav_song(
         duration_seconds = duration_seconds.max(analyzed_file.metadata.duration_seconds);
 
         let stem = analyzed_file
-            .destination_path
+            .source_path
             .file_stem()
             .and_then(|value| value.to_str())
             .ok_or_else(|| ProjectError::InvalidFileName(analyzed_file.source_path.clone()))?;
@@ -274,10 +264,7 @@ pub fn import_wav_song(
             .map(|file| Clip {
                 id: file.clip_id.clone(),
                 track_id: file.track_id.clone(),
-                file_path: file
-                    .imported_relative_path
-                    .to_string_lossy()
-                    .replace('\\', "/"),
+                file_path: file.source_path.to_string_lossy().replace('\\', "/"),
                 timeline_start_seconds: 0.0,
                 source_start_seconds: 0.0,
                 duration_seconds: file.duration_seconds,
@@ -314,20 +301,21 @@ pub fn append_wav_files_to_song(
 
     let song_dir = song_dir.as_ref();
     let mut next_song = song.clone();
-    let mut used_file_names = collect_used_file_names(song_dir, song)?;
     let mut used_track_ids: HashSet<String> =
         song.tracks.iter().map(|track| track.id.clone()).collect();
     let mut used_clip_ids: HashSet<String> =
         song.clips.iter().map(|clip| clip.id.clone()).collect();
     let mut metrics = ImportOperationMetrics::default();
-    let planned_files = plan_import_files(song_dir, audio_files, &mut used_file_names)?;
-    metrics.copy_millis = copy_import_files(&planned_files, &mut on_progress)?;
-    let (analyzed_files, analysis_metrics) = analyze_import_files_in_parallel(planned_files)?;
+    metrics.copy_millis = 0;
+    announce_probe_progress(audio_files, &mut on_progress);
+    let planned_files = plan_import_files(audio_files)?;
+    let (analyzed_files, analysis_metrics) =
+        analyze_import_files_in_parallel(song_dir, planned_files)?;
     merge_import_metrics(&mut metrics, &analysis_metrics);
 
     for analyzed_file in analyzed_files {
         let stem = analyzed_file
-            .destination_path
+            .source_path
             .file_stem()
             .and_then(|value| value.to_str())
             .ok_or_else(|| ProjectError::InvalidFileName(analyzed_file.source_path.clone()))?;
@@ -351,7 +339,7 @@ pub fn append_wav_files_to_song(
             id: clip_id,
             track_id,
             file_path: analyzed_file
-                .imported_relative_path
+                .source_path
                 .to_string_lossy()
                 .replace('\\', "/"),
             timeline_start_seconds: 0.0,
@@ -376,38 +364,10 @@ pub fn append_wav_files_to_song(
     })
 }
 
-fn unique_file_name(
-    source_path: &Path,
-    used_file_names: &mut HashSet<String>,
-) -> Result<String, ProjectError> {
-    let stem = source_path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| ProjectError::InvalidFileName(source_path.to_path_buf()))?;
-    let base_slug = slugify(stem);
-    let mut index = 0_u32;
-
-    loop {
-        let suffix = if index == 0 {
-            String::new()
-        } else {
-            format!("-{index}")
-        };
-        let candidate = format!("{base_slug}{suffix}.wav");
-
-        if used_file_names.insert(candidate.clone()) {
-            return Ok(candidate);
-        }
-
-        index += 1;
-    }
-}
-
 #[derive(Debug, Clone)]
 struct PlannedImportFile {
     index: usize,
     source_path: PathBuf,
-    destination_path: PathBuf,
     imported_relative_path: PathBuf,
 }
 
@@ -415,217 +375,49 @@ struct PlannedImportFile {
 struct AnalyzedImportFile {
     index: usize,
     source_path: PathBuf,
-    destination_path: PathBuf,
     imported_relative_path: PathBuf,
     metadata: AudioMetadata,
 }
 
-fn plan_import_files(
-    song_dir: &Path,
-    audio_files: &[PathBuf],
-    used_file_names: &mut HashSet<String>,
-) -> Result<Vec<PlannedImportFile>, ProjectError> {
-    let audio_dir = song_dir.join("audio");
-    fs::create_dir_all(&audio_dir)?;
-
+fn plan_import_files(audio_files: &[PathBuf]) -> Result<Vec<PlannedImportFile>, ProjectError> {
     audio_files
         .iter()
         .enumerate()
         .map(|(index, source_path)| {
-            let file_name = unique_file_name(source_path, used_file_names)?;
-            let destination_path = audio_dir.join(&file_name);
+            let absolute_path = source_path
+                .canonicalize()
+                .unwrap_or_else(|_| source_path.clone());
             Ok(PlannedImportFile {
                 index,
-                source_path: source_path.clone(),
-                imported_relative_path: PathBuf::from("audio").join(&file_name),
-                destination_path,
+                source_path: absolute_path.clone(),
+                imported_relative_path: absolute_path,
             })
         })
         .collect()
 }
 
-fn copy_import_files(
-    planned_files: &[PlannedImportFile],
-    on_progress: &mut impl FnMut(u8, String),
-) -> Result<u128, ProjectError> {
-    let started_at = Instant::now();
-    let total = planned_files.len().max(1);
-
-    for (index, planned_file) in planned_files.iter().enumerate() {
-        let file_name = planned_file
-            .source_path
+fn announce_probe_progress(audio_files: &[PathBuf], on_progress: &mut impl FnMut(u8, String)) {
+    let total = audio_files.len().max(1);
+    for (index, source_path) in audio_files.iter().enumerate() {
+        let file_name = source_path
             .file_name()
             .and_then(|value| value.to_str())
-            .map(|value| value.to_string())
-            .unwrap_or_else(|| planned_file.source_path.to_string_lossy().to_string());
-        let percent = 10 + (((index + 1) * 70) / total) as u8;
+            .unwrap_or_else(|| source_path.to_str().unwrap_or("audio"));
+        let percent = 10 + (((index + 1) * 20) / total) as u8;
         on_progress(
             percent,
             format!(
-                "Procesando archivo {} de {}: {}",
+                "Analizando archivo {} de {}: {}",
                 index + 1,
                 total,
                 file_name
             ),
         );
-        transcode_to_project_wav(&planned_file.source_path, &planned_file.destination_path)?;
     }
-
-    Ok(started_at.elapsed().as_millis())
-}
-
-fn transcode_to_project_wav(
-    source_path: &Path,
-    destination_path: &Path,
-) -> Result<(), ProjectError> {
-    let file = File::open(source_path)?;
-    let mut hint = Hint::new();
-    if let Some(extension) = source_path.extension().and_then(|value| value.to_str()) {
-        hint.with_extension(extension);
-    }
-
-    let media_source_stream = MediaSourceStream::new(Box::new(file), Default::default());
-    let probed = symphonia::default::get_probe()
-        .format(
-            &hint,
-            media_source_stream,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        )
-        .map_err(|_| ProjectError::UnsupportedAudioFormat {
-            path: source_path.to_path_buf(),
-        })?;
-
-    let mut format = probed.format;
-    let track = format
-        .default_track()
-        .or_else(|| {
-            format
-                .tracks()
-                .iter()
-                .find(|track| track.codec_params.codec != CODEC_TYPE_NULL)
-        })
-        .ok_or_else(|| ProjectError::UnsupportedAudioFormat {
-            path: source_path.to_path_buf(),
-        })?;
-
-    let track_id = track.id;
-    let input_sample_rate = track.codec_params.sample_rate.ok_or_else(|| {
-        ProjectError::AudioDecode(format!("missing sample rate for {}", source_path.display()))
-    })?;
-    let channel_count = track
-        .codec_params
-        .channels
-        .map(|channels| channels.count())
-        .unwrap_or(1)
-        .max(1);
-    let mut decoder = symphonia::default::get_codecs()
-        .make(&track.codec_params, &DecoderOptions::default())
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-
-    let mut decoded_samples = Vec::new();
-
-    loop {
-        let packet = match format.next_packet() {
-            Ok(packet) => packet,
-            Err(SymphoniaError::IoError(error))
-                if error.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
-                break;
-            }
-            Err(error) => return Err(ProjectError::AudioDecode(error.to_string())),
-        };
-
-        if packet.track_id() != track_id {
-            continue;
-        }
-
-        let decoded = match decoder.decode(&packet) {
-            Ok(decoded) => decoded,
-            Err(SymphoniaError::DecodeError(_)) => continue,
-            Err(SymphoniaError::IoError(error))
-                if error.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
-                break;
-            }
-            Err(error) => return Err(ProjectError::AudioDecode(error.to_string())),
-        };
-
-        append_decoded_samples(&mut decoded_samples, decoded);
-    }
-
-    let normalized_samples = resample_interleaved(
-        &decoded_samples,
-        channel_count,
-        input_sample_rate,
-        INTERNAL_SAMPLE_RATE,
-    );
-    write_normalized_wav(destination_path, &normalized_samples, channel_count as u16)?;
-    Ok(())
-}
-
-fn append_decoded_samples(target: &mut Vec<f32>, decoded: AudioBufferRef<'_>) {
-    let mut sample_buffer = SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
-    sample_buffer.copy_interleaved_ref(decoded);
-    target.extend_from_slice(sample_buffer.samples());
-}
-
-fn resample_interleaved(
-    samples: &[f32],
-    channels: usize,
-    source_sample_rate: u32,
-    target_sample_rate: u32,
-) -> Vec<f32> {
-    if samples.is_empty() || channels == 0 || source_sample_rate == target_sample_rate {
-        return samples.to_vec();
-    }
-
-    let source_frame_count = samples.len() / channels;
-    if source_frame_count <= 1 {
-        return samples.to_vec();
-    }
-
-    let ratio = target_sample_rate as f64 / source_sample_rate.max(1) as f64;
-    let target_frame_count = ((source_frame_count as f64) * ratio).round().max(1.0) as usize;
-    let mut output = vec![0.0_f32; target_frame_count * channels];
-
-    for target_frame in 0..target_frame_count {
-        let source_position = target_frame as f64 / ratio;
-        let base_frame = source_position.floor() as usize;
-        let next_frame = (base_frame + 1).min(source_frame_count - 1);
-        let blend = (source_position - base_frame as f64) as f32;
-
-        for channel in 0..channels {
-            let base_sample = samples[base_frame * channels + channel];
-            let next_sample = samples[next_frame * channels + channel];
-            output[target_frame * channels + channel] =
-                base_sample + (next_sample - base_sample) * blend;
-        }
-    }
-
-    output
-}
-
-fn write_normalized_wav(
-    destination_path: &Path,
-    samples: &[f32],
-    channels: u16,
-) -> Result<(), ProjectError> {
-    let spec = WavSpec {
-        channels: channels.max(1),
-        sample_rate: INTERNAL_SAMPLE_RATE,
-        bits_per_sample: INTERNAL_BITS_PER_SAMPLE,
-        sample_format: SampleFormat::Float,
-    };
-    let mut writer = WavWriter::create(destination_path, spec)?;
-    for &sample in samples {
-        writer.write_sample(sample)?;
-    }
-    writer.finalize()?;
-    Ok(())
 }
 
 fn analyze_import_files_in_parallel(
+    _song_dir: &Path,
     planned_files: Vec<PlannedImportFile>,
 ) -> Result<(Vec<AnalyzedImportFile>, ImportOperationMetrics), ProjectError> {
     if planned_files.is_empty() {
@@ -647,20 +439,9 @@ fn analyze_import_files_in_parallel(
         .into_par_iter()
         .map(|next_file| {
             let analysis_started_at = Instant::now();
-            let analysis = analyze_wav_file(&next_file.destination_path)?;
+            let metadata = read_audio_metadata(&next_file.source_path)?;
             let wav_analysis_millis = analysis_started_at.elapsed().as_millis();
-
-            let waveform_write_started_at = Instant::now();
-            let waveform_path = waveform_file_path_for_source(&next_file.destination_path);
-            write_waveform_summary(&waveform_path, &analysis.waveform)?;
-            let waveform_write_millis = waveform_write_started_at.elapsed().as_millis();
-
-            let metadata = AudioMetadata {
-                channels: analysis.channels,
-                sample_rate: analysis.sample_rate,
-                duration_seconds: analysis.duration_seconds,
-                tempo_candidate: analysis.tempo_candidate,
-            };
+            let waveform_write_millis = 0;
 
             Ok((
                 next_file,
@@ -678,7 +459,6 @@ fn analyze_import_files_in_parallel(
         analyzed_files.push(AnalyzedImportFile {
             index: planned_file.index,
             source_path: planned_file.source_path,
-            destination_path: planned_file.destination_path,
             imported_relative_path: planned_file.imported_relative_path,
             metadata,
         });
@@ -751,36 +531,6 @@ fn merge_import_metrics(target: &mut ImportOperationMetrics, source: &ImportOper
     target.waveform_write_millis += source.waveform_write_millis;
     target.song_save_millis += source.song_save_millis;
     target.analysis_workers = target.analysis_workers.max(source.analysis_workers);
-}
-
-fn collect_existing_file_names(song_dir: &Path) -> Result<HashSet<String>, ProjectError> {
-    let mut used_file_names = HashSet::new();
-    let audio_dir = song_dir.join("audio");
-    if audio_dir.exists() {
-        for entry in fs::read_dir(audio_dir)? {
-            let entry = entry?;
-            if let Some(file_name) = entry.file_name().to_str() {
-                used_file_names.insert(file_name.to_string());
-            }
-        }
-    }
-
-    Ok(used_file_names)
-}
-
-fn collect_used_file_names(song_dir: &Path, song: &Song) -> Result<HashSet<String>, ProjectError> {
-    let mut used_file_names = collect_existing_file_names(song_dir)?;
-
-    for clip in &song.clips {
-        if let Some(file_name) = Path::new(&clip.file_path)
-            .file_name()
-            .and_then(|value| value.to_str())
-        {
-            used_file_names.insert(file_name.to_string());
-        }
-    }
-
-    Ok(used_file_names)
 }
 
 fn unique_entity_id(prefix: &str, slug: &str, used_ids: &mut HashSet<String>) -> String {

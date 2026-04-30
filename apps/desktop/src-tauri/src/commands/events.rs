@@ -1,5 +1,4 @@
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::{collections::HashSet, path::PathBuf};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -59,12 +58,8 @@ pub(crate) fn emit_ready_library_waveforms(
         .map(|file_path| file_path.replace('\\', "/"))
         .collect::<Vec<_>>();
     let summaries = session
-        .load_library_waveforms(&normalized_paths)
+        .load_library_waveforms(&normalized_paths, &state.waveform_jobs, app)
         .map_err(|error| error.to_string())?;
-    let ready_keys = summaries
-        .iter()
-        .map(|summary| summary.waveform_key.clone())
-        .collect::<HashSet<_>>();
     let normalized_song_dir = song_dir.replace('\\', "/");
 
     for summary in summaries {
@@ -78,17 +73,6 @@ pub(crate) fn emit_ready_library_waveforms(
             },
         )
         .map_err(|error| error.to_string())?;
-    }
-
-    for waveform_key in normalized_paths {
-        if ready_keys.contains(&waveform_key) {
-            continue;
-        }
-
-        state
-            .waveform_jobs
-            .enqueue(app.clone(), PathBuf::from(song_dir), waveform_key)
-            .map_err(|error| error.to_string())?;
     }
 
     Ok(())

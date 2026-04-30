@@ -582,8 +582,8 @@ impl DesktopSession {
         library_assets.retain(|asset| asset.file_path != normalized_file_path);
         write_library_manifest_assets(&song_dir, &library_assets)?;
 
-        let audio_file_path = song_dir.join(&normalized_file_path);
-        if audio_file_path.exists() {
+        let audio_file_path = resolve_audio_file_path(&song_dir, &normalized_file_path);
+        if !Path::new(&normalized_file_path).is_absolute() && audio_file_path.exists() {
             fs::remove_file(&audio_file_path)?;
         }
 
@@ -820,6 +820,8 @@ impl DesktopSession {
     pub fn load_library_waveforms(
         &mut self,
         file_paths: &[String],
+        waveform_jobs: &WaveformGenerationQueue,
+        app: &AppHandle,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_library_paths = collect_library_file_paths(&song_dir, self.engine.song())?
@@ -833,10 +835,16 @@ impl DesktopSession {
                 continue;
             }
 
-            match self.load_waveform_summary_cached(&song_dir, &normalized_path, true) {
+            match self.load_waveform_summary_cached(&song_dir, &normalized_path, false) {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(&normalized_path, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
-                | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {}
+                | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
+                    waveform_jobs.enqueue(
+                        app.clone(),
+                        song_dir.clone(),
+                        normalized_path.clone(),
+                    )?;
+                }
                 Err(error) => return Err(error),
             }
         }
@@ -2705,7 +2713,7 @@ fn merge_package_library_meta(
             continue;
         }
 
-        let path = song_dir.join(&normalized_file_path);
+        let path = resolve_audio_file_path(song_dir, &normalized_file_path);
         if !path.is_file() {
             continue;
         }
@@ -2882,7 +2890,7 @@ fn list_library_assets(
         .unwrap_or_default();
     let mut assets = Vec::new();
     for file_path in collect_library_file_paths(song_dir, song)? {
-        let path = song_dir.join(&file_path);
+        let path = resolve_audio_file_path(song_dir, &file_path);
         if !path.is_file() {
             continue;
         }
@@ -3180,7 +3188,7 @@ fn build_waveform_cache_token(
     song_dir: &Path,
     waveform_key: &str,
 ) -> Result<WaveformCacheToken, DesktopError> {
-    let audio_metadata = fs::metadata(song_dir.join(waveform_key))?;
+    let audio_metadata = fs::metadata(resolve_audio_file_path(song_dir, waveform_key))?;
     let waveform_metadata = fs::metadata(waveform_file_path(song_dir, waveform_key))?;
 
     Ok(WaveformCacheToken {
@@ -3189,6 +3197,15 @@ fn build_waveform_cache_token(
         waveform_size: waveform_metadata.len(),
         waveform_modified_millis: modified_millis(&waveform_metadata)?,
     })
+}
+
+fn resolve_audio_file_path(song_dir: &Path, file_path: &str) -> PathBuf {
+    let path = Path::new(file_path);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        song_dir.join(path)
+    }
 }
 
 fn modified_millis(metadata: &fs::Metadata) -> Result<u128, DesktopError> {
@@ -3210,7 +3227,7 @@ fn validate_clip_window(
         return Err(DesktopError::InvalidClipRange);
     }
 
-    let audio_metadata = read_audio_metadata(song_dir.join(clip_file_path))?;
+    let audio_metadata = read_audio_metadata(resolve_audio_file_path(song_dir, clip_file_path))?;
     if source_start_seconds + duration_seconds > audio_metadata.duration_seconds + 0.0001 {
         return Err(DesktopError::InvalidClipRange);
     }
@@ -3235,7 +3252,8 @@ fn append_clip_to_song(
     }
 
     let normalized_file_path = request.file_path.replace('\\', "/");
-    let wav_metadata = read_audio_metadata(song_dir.join(&normalized_file_path))?;
+    let wav_metadata =
+        read_audio_metadata(resolve_audio_file_path(song_dir, &normalized_file_path))?;
     let clip_id = format!("clip_{}_{}", timestamp_suffix(), song.clips.len());
 
     song.clips.push(Clip {

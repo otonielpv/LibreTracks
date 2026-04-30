@@ -22,8 +22,8 @@ pub use song_store::{
 };
 pub use waveform::{
     analyze_wav_file, generate_waveform_summary, load_waveform_summary, waveform_file_path,
-    waveform_file_path_for_source, write_waveform_summary, AnalyzedWav, TempoCandidate,
-    WaveformLod, WaveformSummary,
+    waveform_file_path_for_source, write_waveform_summary, AnalyzedWav, SeekIndexEntry,
+    TempoCandidate, WaveformLod, WaveformSummary,
 };
 
 #[cfg(test)]

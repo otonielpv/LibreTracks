@@ -49,6 +49,7 @@ pub fn get_waveform_summaries(
 #[tauri::command]
 pub fn get_library_waveform_summaries(
     file_paths: Vec<String>,
+    app: tauri::AppHandle,
     state: State<'_, DesktopState>,
 ) -> Result<Vec<WaveformSummaryDto>, String> {
     let mut session = state
@@ -57,7 +58,7 @@ pub fn get_library_waveform_summaries(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .load_library_waveforms(&file_paths)
+        .load_library_waveforms(&file_paths, &state.waveform_jobs, &app)
         .map_err(|error| error.to_string())
 }
 
