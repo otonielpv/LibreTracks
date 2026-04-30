@@ -1,0 +1,15 @@
+---
+import SiteLayout from "../../layouts/SiteLayout.astro";
+import GithubReleases from "../../components/GithubReleases.astro";
+---
+
+<SiteLayout title="Descargar LibreTracks" description="Descarga la ultima release de LibreTracks desde GitHub." lang="es">
+  <main class="site-shell band">
+    <div class="section-heading">
+      <p class="eyebrow">Descargas</p>
+      <h2>Ultima release de GitHub.</h2>
+      <p>Los instaladores se cargan desde la API publica de GitHub Releases durante el build estatico, asi que esta pagina sigue la version publicada actual.</p>
+    </div>
+    <GithubReleases lang="es" />
+  </main>
+</SiteLayout>

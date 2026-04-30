@@ -1,0 +1,75 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+
+const features = [
+  ["Separated engine and UI", "Rust owns transport, jump scheduling, mixing rules, persistence, and audio behavior while React presents and edits the session."],
+  ["Non-destructive editing", "Split, move, and duplicate clips without rewriting the original WAV files that your show depends on."],
+  ["Web remote control", "Scan the desktop QR code and control transport, jumps, vamp, and mixer from a phone or tablet on the local network."],
+  ["Native MIDI Learn", "Map notes or CC messages from pedals, keyboards, and controllers to jumps, transport, song transitions, and Vamps."],
+];
+
+const comparison = [
+  ["Primary job", "Playback, musical jumps, live interaction, and show control.", "Production, recording, editing, mixing, and broad studio workflows."],
+  ["Section jumps", "Built-in Immediate, At next marker, and After X bars logic resolved by the Rust transport.", "Usually built with markers, actions, macros, scenes, or custom control rigs."],
+  ["Runtime weight", "Focused on WAV playback, timeline state, routing, remote control, and predictable live operations.", "Large general-purpose environments with instruments, plug-ins, recording, and production tooling."],
+  ["Live intent", "Designed to avoid fragile production-session complexity during a show.", "Extremely powerful, but not specialized around musical directors extending, skipping, or repeating sections."],
+];
+---
+
+<SiteLayout title="LibreTracks - Live Playback Workstation" description="LibreTracks is a live playback workstation for musicians and musical directors." lang="en">
+  <main>
+    <section class="site-shell hero">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Live playback workstation</p>
+          <h1>LibreTracks</h1>
+          <p>The DAW built specifically for live musicians and musical directors. Rust audio engine, decoupled UI, 100% predictable.</p>
+          <div class="hero-actions">
+            <a class="button-link primary" href="/download">Download</a>
+            <a class="button-link" href="/docs/">Read docs</a>
+          </div>
+        </div>
+        <div class="product-shot">
+          <img src="/screenshots/Proyecto.png" alt="LibreTracks project timeline with tracks and transport controls" />
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">Built from the codebase</p>
+          <h2>Stage-first features without studio clutter.</h2>
+          <p>LibreTracks keeps the live surface focused on playback, routing, markers, song regions, MIDI control, and remote operation.</p>
+        </div>
+        <div class="feature-grid">
+          {features.map(([title, body]) => (
+            <article class="feature-card">
+              <strong>{title}</strong>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">LibreTracks vs. traditional DAWs</p>
+          <h2>Not for producing. Built for the gig.</h2>
+        </div>
+        <table class="compare-table">
+          <thead>
+            <tr><th>Focus</th><th>LibreTracks</th><th>Reaper / Ableton Live</th></tr>
+          </thead>
+          <tbody>
+            {comparison.map(([focus, libretracks, daws]) => (
+              <tr><td>{focus}</td><td>{libretracks}</td><td>{daws}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</SiteLayout>

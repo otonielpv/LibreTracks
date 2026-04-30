@@ -1,0 +1,41 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+  lang?: "en" | "es";
+}
+
+const { title, description, lang = "en" } = Astro.props;
+const isSpanish = lang === "es";
+const prefix = isSpanish ? "/es" : "";
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="icon" href="/icon.svg" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <div class="site-page">
+      <header class="site-shell site-nav">
+        <a class="brand" href={prefix || "/"}>
+          <img src="/icon.svg" alt="" />
+          <span>LibreTracks</span>
+        </a>
+        <nav class="nav-links" aria-label={isSpanish ? "Navegacion principal" : "Primary navigation"}>
+          <a href={`${prefix}/download`}>{isSpanish ? "Descargas" : "Downloads"}</a>
+          <a href={`${prefix}/docs/`}>{isSpanish ? "Documentacion" : "Docs"}</a>
+          <a href={isSpanish ? "/" : "/es/"}>{isSpanish ? "English" : "Espanol"}</a>
+          <a href="https://github.com/otonielpv/LibreTracks">GitHub</a>
+        </nav>
+      </header>
+      <slot />
+    </div>
+  </body>
+</html>

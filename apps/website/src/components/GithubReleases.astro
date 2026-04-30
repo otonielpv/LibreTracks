@@ -1,0 +1,94 @@
+---
+interface Props {
+  owner?: string;
+  repo?: string;
+  lang?: "en" | "es";
+}
+
+type ReleaseAsset = {
+  name: string;
+  browser_download_url: string;
+  size: number;
+};
+
+type Release = {
+  tag_name: string;
+  published_at: string | null;
+  html_url: string;
+  body: string | null;
+  assets: ReleaseAsset[];
+};
+
+const { owner = "otonielpv", repo = "LibreTracks", lang = "en" } = Astro.props;
+const isSpanish = lang === "es";
+const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
+
+let release: Release | null = null;
+let error: string | null = null;
+
+try {
+  const response = await fetch(apiUrl, {
+    headers: { Accept: "application/vnd.github+json" },
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub returned ${response.status}`);
+  }
+  release = await response.json();
+} catch (caught) {
+  error = caught instanceof Error ? caught.message : "Unknown error";
+}
+
+const labels = {
+  currentVersion: isSpanish ? "Version actual" : "Current version",
+  published: isSpanish ? "Publicado" : "Published",
+  assets: isSpanish ? "Instaladores" : "Installers",
+  notes: isSpanish ? "Notas de la version" : "Release notes",
+  fallback: isSpanish
+    ? "No se pudo cargar la ultima release durante el build. Puedes abrir GitHub Releases directamente."
+    : "The latest release could not be loaded during the build. You can open GitHub Releases directly.",
+  noAssets: isSpanish ? "Esta release no contiene instaladores publicados." : "This release has no published installers.",
+  open: isSpanish ? "Abrir en GitHub" : "Open on GitHub",
+};
+
+const releaseUrl = `https://github.com/${owner}/${repo}/releases/latest`;
+const date = release?.published_at
+  ? new Intl.DateTimeFormat(isSpanish ? "es" : "en", { dateStyle: "medium" }).format(new Date(release.published_at))
+  : null;
+---
+
+<section class="download-panel">
+  {release ? (
+    <>
+      <p class="eyebrow">{labels.currentVersion}</p>
+      <h1 style="font-size: clamp(2.7rem, 7vw, 5rem); margin-bottom: 0.5rem;">{release.tag_name}</h1>
+      {date ? <p>{labels.published}: {date}</p> : null}
+      <div class="download-list" aria-label={labels.assets}>
+        {release.assets.length > 0 ? release.assets.map((asset) => (
+          <div class="download-row">
+            <strong>{asset.name}</strong>
+            <a class="button-link primary" href={asset.browser_download_url}>
+              {Math.max(1, Math.round(asset.size / 1024 / 1024))} MB
+            </a>
+          </div>
+        )) : <p>{labels.noAssets}</p>}
+      </div>
+      {release.body ? (
+        <>
+          <h2>{labels.notes}</h2>
+          <div class="release-notes">{release.body}</div>
+        </>
+      ) : null}
+      <div class="hero-actions">
+        <a class="button-link" href={release.html_url}>{labels.open}</a>
+      </div>
+    </>
+  ) : (
+    <>
+      <p>{labels.fallback}</p>
+      <p style="color: #ffe2ab;">{error}</p>
+      <div class="hero-actions">
+        <a class="button-link primary" href={releaseUrl}>{labels.open}</a>
+      </div>
+    </>
+  )}
+</section>

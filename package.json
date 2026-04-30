@@ -17,6 +17,8 @@
     "dev:remote": "npm --prefix apps/remote run dev --",
     "build:remote": "npm --prefix apps/remote run build",
     "test:remote": "npm --prefix apps/remote run test",
+    "dev:website": "npm --prefix apps/website run dev --",
+    "build:website": "npm --prefix apps/website run build",
     "test": "npm run test:desktop",
     "lint": "npm --prefix apps/desktop run lint && npm --prefix apps/remote run lint && npm --prefix packages/shared run lint"
   },
