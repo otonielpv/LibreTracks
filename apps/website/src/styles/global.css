@@ -273,6 +273,11 @@ h1 {
   white-space: pre-wrap;
 }
 
+.site-title img {
+  max-height: 2.5rem !important;
+  width: auto !important;
+}
+
 @media (max-width: 900px) {
   .hero-grid,
   .feature-grid {
