@@ -819,7 +819,7 @@ impl Default for MetronomeVoice {
 
 impl MetronomeVoice {
     fn trigger(&mut self, is_downbeat: bool, output_sample_rate: u32) {
-        self.phase = 0.25;
+        self.phase = 0.0;
         self.frequency_hz = if is_downbeat {
             METRONOME_ACCENT_FREQUENCY_HZ
         } else {
@@ -836,7 +836,13 @@ impl MetronomeVoice {
         let total_frames = metronome_beep_duration_frames(output_sample_rate);
         let elapsed_frames = total_frames.saturating_sub(self.frames_remaining) as f32;
         let progress = elapsed_frames / total_frames.max(1) as f32;
-        let envelope = (1.0 - progress).powi(3);
+        let attack_frames = ((0.001 * output_sample_rate.max(1) as f32).round() as u32).max(1);
+        let attack_gain = if elapsed_frames < attack_frames as f32 {
+            elapsed_frames / attack_frames as f32
+        } else {
+            1.0
+        };
+        let envelope = (1.0 - progress).powi(3) * attack_gain;
         let sample = (self.phase * std::f32::consts::TAU).sin() * envelope * METRONOME_PEAK_GAIN;
 
         self.phase = (self.phase + self.frequency_hz / output_sample_rate.max(1) as f32).fract();
@@ -1040,10 +1046,33 @@ fn resolve_track_audio_to<'a>(
     live_mix_state: &'a HashMap<String, LiveTrackMix>,
     track_id: &str,
 ) -> &'a str {
-    live_mix_state
-        .get(track_id)
-        .map(|track| track.audio_to.as_str())
-        .unwrap_or("master")
+    let Some(track) = live_mix_state.get(track_id) else {
+        return "master";
+    };
+
+    let mut audio_to = track.audio_to.as_str();
+    let mut cursor = track.parent_track_id.as_deref();
+    let mut depth = 0;
+
+    while let Some(parent_track_id) = cursor {
+        if depth >= MAX_HIERARCHY_DEPTH {
+            return "master";
+        }
+
+        let Some(parent_track) = live_mix_state.get(parent_track_id) else {
+            return "master";
+        };
+
+        if parent_track.kind != TrackKind::Folder {
+            return "master";
+        }
+
+        audio_to = parent_track.audio_to.as_str();
+        cursor = parent_track.parent_track_id.as_deref();
+        depth += 1;
+    }
+
+    audio_to
 }
 
 fn is_master_route(audio_to: &str) -> bool {
@@ -1425,5 +1454,65 @@ mod tests {
         assert_eq!(parse_audio_output_route("master", 4), vec![0, 1]);
         assert_eq!(parse_audio_output_route("ext:0", 4), vec![0]);
         assert_eq!(parse_audio_output_route("ext:2-3", 4), vec![2, 3]);
+    }
+
+    #[test]
+    fn metronome_voice_starts_at_zero_crossing_with_short_attack() {
+        let mut voice = MetronomeVoice::default();
+        voice.trigger(true, 48_000);
+
+        assert_eq!(voice.next_sample(48_000), 0.0);
+
+        let attack_sample = voice.next_sample(48_000).abs();
+        for _ in 0..48 {
+            let _ = voice.next_sample(48_000);
+        }
+        let post_attack_sample = voice.next_sample(48_000).abs();
+
+        assert!(attack_sample < post_attack_sample);
+    }
+
+    #[test]
+    fn resolve_track_audio_to_inherits_topmost_folder_route() {
+        let mut song = metronome_song();
+        song.tracks = vec![
+            Track {
+                id: "root_folder".into(),
+                name: "Root".into(),
+                kind: TrackKind::Folder,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                audio_to: "ext:2-3".to_string(),
+            },
+            Track {
+                id: "child_folder".into(),
+                name: "Child".into(),
+                kind: TrackKind::Folder,
+                parent_track_id: Some("root_folder".into()),
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                audio_to: "ext:4-5".to_string(),
+            },
+            Track {
+                id: "track".into(),
+                name: "Track".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: Some("child_folder".into()),
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                audio_to: "master".to_string(),
+            },
+        ];
+
+        let live_mix_state = build_live_mix_map(&song);
+
+        assert_eq!(resolve_track_audio_to(&live_mix_state, "track"), "ext:2-3");
     }
 }

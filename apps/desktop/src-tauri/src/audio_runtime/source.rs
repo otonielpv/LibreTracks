@@ -46,9 +46,10 @@ pub(crate) struct SeekIndexEntry {
 
 pub(crate) struct StreamingClipReader {
     shared_source: Arc<StreamingAudioSource>,
-    consumer: Consumer<f32>,
+    consumer: Consumer<ClipSample>,
     command_sender: Sender<StreamingWorkerCommand>,
     output_sample_rate: u32,
+    current_generation: u64,
     emitted_frames: usize,
     total_output_frames: usize,
     declick_fade_frames: usize,
@@ -56,8 +57,17 @@ pub(crate) struct StreamingClipReader {
     pub(crate) eof: bool,
 }
 
+#[derive(Clone, Copy)]
+struct ClipSample {
+    generation: u64,
+    value: f32,
+}
+
 enum StreamingWorkerCommand {
-    Seek { source_start_seconds: f64 },
+    Seek {
+        source_start_seconds: f64,
+        generation: u64,
+    },
     Shutdown,
 }
 
@@ -263,7 +273,7 @@ impl StreamingClipReader {
             source_start_frame as f64 / f64::from(shared_source.sample_rate.max(1));
         let ring_capacity =
             output_sample_rate as usize * STREAM_SECONDS_PER_CLIP * shared_source.channels.max(1);
-        let (producer, consumer) = RingBuffer::<f32>::new(ring_capacity.max(256));
+        let (producer, consumer) = RingBuffer::<ClipSample>::new(ring_capacity.max(256));
         let (command_sender, command_receiver) = mpsc::channel();
         let worker_source = Arc::clone(&shared_source);
         let _worker_handle = thread::Builder::new()
@@ -282,20 +292,28 @@ impl StreamingClipReader {
         let elapsed_frames = timeline_frame.saturating_sub(plan.timeline_start_frame);
         let remaining_frames = plan.duration_frames.saturating_sub(elapsed_frames) as usize;
         let declick_fade_frames = (0.005 * output_sample_rate as f32).round() as usize;
+        let is_true_clip_start =
+            elapsed_frames == 0 && plan.source_start_seconds <= f64::EPSILON;
         Ok(Self {
             shared_source,
             consumer,
             command_sender,
             output_sample_rate,
+            current_generation: 0,
             emitted_frames: 0,
             total_output_frames: remaining_frames,
             declick_fade_frames,
-            declick_frames_remaining: declick_fade_frames,
+            declick_frames_remaining: if is_true_clip_start {
+                0
+            } else {
+                declick_fade_frames
+            },
             eof: remaining_frames == 0,
         })
     }
 
     fn seek_to_internal(&mut self, target_frame: usize) -> Result<(), String> {
+        self.current_generation = self.current_generation.saturating_add(1);
         let channels = self.shared_source.channels.max(1);
         let slots = self.consumer.slots();
         let frames_to_drop = slots / channels;
@@ -311,6 +329,7 @@ impl StreamingClipReader {
         self.command_sender
             .send(StreamingWorkerCommand::Seek {
                 source_start_seconds,
+                generation: self.current_generation,
             })
             .map_err(|_| "streaming worker is unavailable".to_string())
     }
@@ -338,25 +357,33 @@ impl StreamingClipReader {
 
         let channels = self.shared_source.channels.max(1);
 
-        if self.consumer.slots() < channels {
-            self.declick_frames_remaining = self.declick_fade_frames;
-            return Some((0.0, 0.0));
+        // SPIN WAIT TO PREVENT DESYNC: Wait for the background decoder to deliver the first frames
+        // before advancing the timeline. This guarantees the clip and metronome start perfectly synced.
+        let mut retries = 0;
+        while self.consumer.slots() < channels {
+            if retries > 500 {
+                // 500ms maximum wait
+                self.declick_frames_remaining = self.declick_fade_frames;
+                return Some((0.0, 0.0));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            retries += 1;
         }
 
         let pan = pan.clamp(-1.0, 1.0);
         let (left_input, right_input) = if channels <= 1 {
-            match self.consumer.pop() {
-                Ok(sample) => (sample, sample),
-                Err(_) => {
+            match self.pop_current_sample() {
+                Some(sample) => (sample, sample),
+                None => {
                     self.declick_frames_remaining = self.declick_fade_frames;
                     (0.0, 0.0)
                 }
             }
         } else {
-            match (self.consumer.pop(), self.consumer.pop()) {
-                (Ok(left), Ok(right)) => {
+            match (self.pop_current_sample(), self.pop_current_sample()) {
+                (Some(left), Some(right)) => {
                     for _ in 2..channels {
-                        let _ = self.consumer.pop();
+                        let _ = self.pop_current_sample();
                     }
                     (left, right)
                 }
@@ -387,6 +414,17 @@ impl StreamingClipReader {
         let (left_output, right_output) =
             mixer::apply_runtime_pan(left_input, right_input, pan, channels);
         Some((left_output * final_gain, right_output * final_gain))
+    }
+
+    fn pop_current_sample(&mut self) -> Option<f32> {
+        loop {
+            let sample = self.consumer.pop().ok()?;
+            if sample.generation < self.current_generation {
+                continue;
+            }
+
+            return Some(sample.value);
+        }
     }
 
     pub(crate) fn mix_into_with_channel_gains(
@@ -437,27 +475,38 @@ fn run_streaming_worker(
     source: Arc<StreamingAudioSource>,
     output_sample_rate: u32,
     initial_start_seconds: f64,
-    mut producer: Producer<f32>,
+    mut producer: Producer<ClipSample>,
     command_receiver: Receiver<StreamingWorkerCommand>,
 ) {
     let mut start_seconds = initial_start_seconds;
+    let mut generation = 0;
 
     loop {
         match stream_decode_from(
             &source,
             output_sample_rate,
             start_seconds,
+            generation,
             &mut producer,
             &command_receiver,
         ) {
-            WorkerOutcome::Restart(next_start) => start_seconds = next_start,
+            WorkerOutcome::Restart {
+                start_seconds: next_start,
+                generation: next_generation,
+            } => {
+                start_seconds = next_start;
+                generation = next_generation;
+            }
             WorkerOutcome::Shutdown | WorkerOutcome::Finished => break,
         }
     }
 }
 
 enum WorkerOutcome {
-    Restart(f64),
+    Restart {
+        start_seconds: f64,
+        generation: u64,
+    },
     Finished,
     Shutdown,
 }
@@ -466,7 +515,8 @@ fn stream_decode_from(
     source: &StreamingAudioSource,
     output_sample_rate: u32,
     start_seconds: f64,
-    producer: &mut Producer<f32>,
+    generation: u64,
+    producer: &mut Producer<ClipSample>,
     command_receiver: &Receiver<StreamingWorkerCommand>,
 ) -> WorkerOutcome {
     let mut decoder = match StreamingDecoder::open(source, output_sample_rate, start_seconds) {
@@ -479,8 +529,12 @@ fn stream_decode_from(
             match command {
                 StreamingWorkerCommand::Seek {
                     source_start_seconds,
+                    generation,
                 } => {
-                    return WorkerOutcome::Restart(source_start_seconds);
+                    return WorkerOutcome::Restart {
+                        start_seconds: source_start_seconds,
+                        generation,
+                    };
                 }
                 StreamingWorkerCommand::Shutdown => return WorkerOutcome::Shutdown,
             }
@@ -505,7 +559,13 @@ fn stream_decode_from(
                     match command {
                         StreamingWorkerCommand::Seek {
                             source_start_seconds,
-                        } => return WorkerOutcome::Restart(source_start_seconds),
+                            generation,
+                        } => {
+                            return WorkerOutcome::Restart {
+                                start_seconds: source_start_seconds,
+                                generation,
+                            }
+                        }
                         StreamingWorkerCommand::Shutdown => return WorkerOutcome::Shutdown,
                     }
                 }
@@ -514,7 +574,10 @@ fn stream_decode_from(
 
             // Space is guaranteed, now we can push all samples in the frame
             for &sample in frame {
-                let _ = producer.push(sample);
+                let _ = producer.push(ClipSample {
+                    generation,
+                    value: sample,
+                });
             }
         }
     }
@@ -833,4 +896,72 @@ fn write_test_wav(
             .map_err(|error| error.to_string())?;
     }
     writer.finalize().map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn streaming_clip_reader_drops_stale_generation_samples() {
+        let (mut producer, consumer) = RingBuffer::<ClipSample>::new(4);
+        producer
+            .push(ClipSample {
+                generation: 1,
+                value: 0.25,
+            })
+            .expect("sample should fit");
+        producer
+            .push(ClipSample {
+                generation: 2,
+                value: 0.5,
+            })
+            .expect("sample should fit");
+
+        let (command_sender, _command_receiver) = mpsc::channel();
+        let mut reader = StreamingClipReader {
+            shared_source: Arc::new(StreamingAudioSource::from_preloaded(
+                vec![0.0],
+                48_000,
+                1,
+                false,
+            )),
+            consumer,
+            command_sender,
+            output_sample_rate: 48_000,
+            current_generation: 2,
+            emitted_frames: 0,
+            total_output_frames: 1,
+            declick_fade_frames: 1,
+            declick_frames_remaining: 0,
+            eof: false,
+        };
+
+        assert_eq!(reader.pop_current_sample(), Some(0.5));
+    }
+
+    #[test]
+    fn streaming_clip_reader_preserves_true_start_transient() {
+        let audio_buffers = AudioBufferCache::default();
+        let source = StreamingAudioSource::from_preloaded(vec![1.0, 0.0], 48_000, 1, false);
+        let file_path = source.file_path.clone();
+        audio_buffers.insert_for_test(file_path.clone(), source);
+        let plan = mixer::PlaybackClipPlan {
+            clip_id: "clip".into(),
+            track_id: "track".into(),
+            file_path,
+            clip_gain: 1.0,
+            timeline_start_frame: 0,
+            duration_frames: 2,
+            fade_in_frames: 0,
+            fade_out_frames: 0,
+            source_start_seconds: 0.0,
+        };
+
+        let reader = StreamingClipReader::open(&plan, 48_000, &audio_buffers, 0)
+            .expect("reader should open");
+
+        assert_eq!(reader.declick_frames_remaining, 0);
+        assert!(reader.declick_fade_frames > 0);
+    }
 }
