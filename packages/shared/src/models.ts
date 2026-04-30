@@ -58,6 +58,7 @@ export type TrackSummary = {
   pan: number;
   muted: boolean;
   solo: boolean;
+  audioTo: string;
 };
 
 export type ClipSummary = {
@@ -248,10 +249,11 @@ export type AppSettings = {
   selectedOutputDevice: string | null;
   selectedMidiDevice: string | null;
   suppressMissingMidiDeviceWarning: boolean;
-  splitStereoEnabled: boolean;
+  enabledOutputChannels: number[];
   locale: string | null;
   metronomeEnabled: boolean;
   metronomeVolume: number;
+  metronomeOutput: string;
   globalJumpMode: "immediate" | "after_bars" | "next_marker";
   globalJumpBars: number;
   songJumpTrigger: "immediate" | "region_end" | "after_bars";
@@ -266,10 +268,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   selectedOutputDevice: null,
   selectedMidiDevice: null,
   suppressMissingMidiDeviceWarning: false,
-  splitStereoEnabled: false,
+  enabledOutputChannels: [0, 1],
   locale: null,
   metronomeEnabled: false,
   metronomeVolume: 0.8,
+  metronomeOutput: "master",
   globalJumpMode: "immediate",
   globalJumpBars: 4,
   songJumpTrigger: "immediate",
@@ -299,6 +302,15 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const metronomeVolume = Number.isFinite(settings.metronomeVolume)
     ? Math.min(1, Math.max(0, settings.metronomeVolume))
     : DEFAULT_APP_SETTINGS.metronomeVolume;
+  const enabledOutputChannels = Array.from(
+    new Set(
+      (settings.enabledOutputChannels ?? DEFAULT_APP_SETTINGS.enabledOutputChannels)
+        .map((channel) => Math.floor(channel))
+        .filter((channel) => Number.isFinite(channel) && channel >= 0 && channel < 64),
+    ),
+  ).sort((left, right) => left - right);
+  const metronomeOutput =
+    settings.metronomeOutput?.trim().toLowerCase() || DEFAULT_APP_SETTINGS.metronomeOutput;
   const globalJumpMode =
     settings.globalJumpMode === "after_bars" || settings.globalJumpMode === "next_marker"
       ? settings.globalJumpMode
@@ -318,10 +330,11 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     selectedOutputDevice,
     selectedMidiDevice,
     suppressMissingMidiDeviceWarning: Boolean(settings.suppressMissingMidiDeviceWarning),
-    splitStereoEnabled: Boolean(settings.splitStereoEnabled),
+    enabledOutputChannels: enabledOutputChannels.length ? enabledOutputChannels : DEFAULT_APP_SETTINGS.enabledOutputChannels,
     locale: locale === "en" || locale === "es" ? locale : null,
     metronomeEnabled: Boolean(settings.metronomeEnabled),
     metronomeVolume,
+    metronomeOutput,
     globalJumpMode,
     globalJumpBars: normalizeJumpBars(settings.globalJumpBars, DEFAULT_APP_SETTINGS.globalJumpBars),
     songJumpTrigger,
@@ -336,6 +349,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
 export type AudioOutputDevices = {
   devices: string[];
   defaultDevice?: string | null;
+  channelCounts?: Record<string, number>;
 };
 
 export type MidiRawMessage = {

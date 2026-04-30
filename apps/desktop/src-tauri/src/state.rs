@@ -10,7 +10,7 @@ use std::{
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
 use libretracks_core::{
-    Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track, TrackKind,
+    Clip, Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track, TrackKind,
 };
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary,
@@ -873,17 +873,14 @@ impl DesktopSession {
 
     pub fn song_view(&mut self) -> Result<Option<SongView>, DesktopError> {
         let started_at = Instant::now();
-        let song_view = self
-            .engine
-            .song()
-            .map(|song| {
-                song_to_view(
-                    song,
-                    &self.waveform_cache,
-                    self.project_revision,
-                    self.song_dir.as_deref(),
-                )
-            });
+        let song_view = self.engine.song().map(|song| {
+            song_to_view(
+                song,
+                &self.waveform_cache,
+                self.project_revision,
+                self.song_dir.as_deref(),
+            )
+        });
         self.perf_metrics.song_view_build_millis = started_at.elapsed().as_millis();
         self.perf_metrics.song_view_bytes = song_view
             .as_ref()
@@ -1010,26 +1007,31 @@ impl DesktopSession {
             previous_settings.selected_output_device != next_settings.selected_output_device;
         let midi_changed =
             previous_settings.selected_midi_device != next_settings.selected_midi_device;
-        let split_changed =
-            previous_settings.split_stereo_enabled != next_settings.split_stereo_enabled;
+        let output_channels_changed =
+            previous_settings.enabled_output_channels != next_settings.enabled_output_channels;
         let metronome_enabled_changed =
             previous_settings.metronome_enabled != next_settings.metronome_enabled;
         let metronome_volume_changed =
             (previous_settings.metronome_volume - next_settings.metronome_volume).abs()
                 > f64::EPSILON;
+        let metronome_output_changed =
+            previous_settings.metronome_output != next_settings.metronome_output;
 
         if !device_changed
             && !midi_changed
-            && !split_changed
+            && !output_channels_changed
             && !metronome_enabled_changed
             && !metronome_volume_changed
+            && !metronome_output_changed
         {
             return Ok(next_settings);
         }
 
         audio.apply_settings(next_settings.clone())?;
 
-        if device_changed && self.engine.playback_state() == PlaybackState::Playing {
+        if (device_changed || output_channels_changed)
+            && self.engine.playback_state() == PlaybackState::Playing
+        {
             self.restart_audio(audio, PlaybackStartReason::TransportResync)?;
             self.transport_clock
                 .reanchor_playing(self.engine.position_seconds());
@@ -1880,14 +1882,14 @@ impl DesktopSession {
             ));
         }
 
-        let output_bus_id = parent_track_id
+        let audio_to = parent_track_id
             .and_then(|parent_id| {
                 song.tracks
                     .iter()
                     .find(|track| track.id == parent_id)
-                    .map(|track| track.output_bus_id.clone())
+                    .map(|track| track.audio_to.clone())
             })
-            .unwrap_or_else(|| OutputBus::Main.id());
+            .unwrap_or_else(|| "master".to_string());
 
         let track = Track {
             id: format!("track_{}", timestamp_suffix()),
@@ -1898,7 +1900,7 @@ impl DesktopSession {
             pan: 0.0,
             muted: false,
             solo: false,
-            output_bus_id,
+            audio_to,
         };
 
         insert_track(
@@ -1989,6 +1991,7 @@ impl DesktopSession {
         pan: Option<f64>,
         muted: Option<bool>,
         solo: Option<bool>,
+        audio_to: Option<&str>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
@@ -1996,11 +1999,16 @@ impl DesktopSession {
         self.push_history_entry();
         self.redo_stack.clear();
 
-        self.update_loaded_track(track_id, name, volume, pan, muted, solo)?;
-        if volume.is_some() || pan.is_some() || muted.is_some() || solo.is_some() {
+        self.update_loaded_track(track_id, name, volume, pan, muted, solo, audio_to)?;
+        if volume.is_some()
+            || pan.is_some()
+            || muted.is_some()
+            || solo.is_some()
+            || audio_to.is_some()
+        {
             let loaded_song = self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
             audio.ensure_live_track(loaded_song, track_id)?;
-            audio.update_live_track_mix(track_id, volume, pan, muted, solo)?;
+            audio.update_live_track_mix(track_id, volume, pan, muted, solo, audio_to)?;
         }
 
         self.perf_metrics.song_save_millis = 0;
@@ -2016,13 +2024,14 @@ impl DesktopSession {
         pan: Option<f64>,
         muted: Option<bool>,
         solo: Option<bool>,
+        audio_to: Option<&str>,
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
         self.capture_live_history_anchor();
-        self.update_loaded_track(track_id, None, volume, pan, muted, solo)?;
+        self.update_loaded_track(track_id, None, volume, pan, muted, solo, audio_to)?;
         let loaded_song = self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
         audio.ensure_live_track(loaded_song, track_id)?;
-        audio.update_live_track_mix(track_id, volume, pan, muted, solo)?;
+        audio.update_live_track_mix(track_id, volume, pan, muted, solo, audio_to)?;
 
         Ok(())
     }
@@ -2269,6 +2278,7 @@ impl DesktopSession {
         pan: Option<f64>,
         muted: Option<bool>,
         solo: Option<bool>,
+        audio_to: Option<&str>,
     ) -> Result<(), DesktopError> {
         let track = self
             .engine
@@ -2302,6 +2312,15 @@ impl DesktopSession {
 
         if let Some(solo) = solo {
             track.solo = solo;
+        }
+
+        if let Some(audio_to) = audio_to {
+            let trimmed = audio_to.trim();
+            track.audio_to = if trimmed.is_empty() {
+                "master".to_string()
+            } else {
+                trimmed.to_ascii_lowercase()
+            };
         }
 
         Ok(())
@@ -3605,9 +3624,7 @@ mod tests {
     use std::{fs, path::Path, thread, time::Duration};
 
     use libretracks_audio::{JumpTrigger, PlaybackState, TransitionType};
-    use libretracks_core::{
-        Clip, Marker, OutputBus, Song, SongRegion, TempoMarker, Track, TrackKind,
-    };
+    use libretracks_core::{Clip, Marker, Song, SongRegion, TempoMarker, Track, TrackKind};
     use libretracks_project::{
         create_song_folder, generate_waveform_summary, load_song, save_song, SONG_FILE_NAME,
     };
@@ -3648,7 +3665,7 @@ mod tests {
                 pan: 0.0,
                 muted: false,
                 solo: false,
-                output_bus_id: OutputBus::Main.id(),
+                audio_to: "master".to_string(),
             }],
             clips: vec![Clip {
                 id: "clip_1".into(),
@@ -3846,7 +3863,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
                 Track {
                     id: "track_child_a".into(),
@@ -3857,7 +3874,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
                 Track {
                     id: "track_folder_b".into(),
@@ -3868,7 +3885,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
                 Track {
                     id: "track_child_b".into(),
@@ -3879,7 +3896,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
             ],
             clips: vec![],
@@ -4120,7 +4137,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
                 Track {
                     id: "track-drums_01".into(),
@@ -4131,7 +4148,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
             ],
             clips: vec![],
@@ -4295,6 +4312,7 @@ mod tests {
                 Some(-0.22),
                 Some(true),
                 Some(true),
+                None,
                 &audio,
             )
             .expect("live mix update should succeed");
@@ -4339,6 +4357,7 @@ mod tests {
                 Some(-0.22),
                 Some(true),
                 Some(true),
+                None,
                 &audio,
             )
             .expect("live mix update should succeed");
@@ -4352,6 +4371,7 @@ mod tests {
                 Some(-0.22),
                 Some(true),
                 Some(true),
+                None,
                 &audio,
             )
             .expect("mix commit should succeed");

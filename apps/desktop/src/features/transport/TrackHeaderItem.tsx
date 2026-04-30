@@ -32,6 +32,8 @@ type TrackHeaderItemProps = {
   trackMuted: boolean;
   trackSolo: boolean;
   volumeValue: number;
+  audioTo: string;
+  audioRoutingOptions: Array<{ value: string; label: string }>;
   isCollapsed: boolean;
   isSelected: boolean;
   isDropTarget: boolean;
@@ -51,6 +53,7 @@ type TrackHeaderItemProps = {
   onCommitVolume: (trackId: string) => void;
   onPanChange: (trackId: string, nextPan: number) => void;
   onCommitPan: (trackId: string) => void;
+  onAudioToChange: (trackId: string, nextAudioTo: string) => void;
 };
 
 function TrackHeaderItemComponent({
@@ -64,6 +67,8 @@ function TrackHeaderItemComponent({
   trackMuted,
   trackSolo,
   volumeValue,
+  audioTo,
+  audioRoutingOptions,
   isCollapsed,
   isSelected,
   isDropTarget,
@@ -80,6 +85,7 @@ function TrackHeaderItemComponent({
   onCommitVolume,
   onPanChange,
   onCommitPan,
+  onAudioToChange,
 }: TrackHeaderItemProps) {
   const { t } = useTranslation();
   const optimisticMix = useTransportStore((state) => state.optimisticMix[trackId] ?? null);
@@ -236,6 +242,21 @@ function TrackHeaderItemComponent({
                   }}
                 />
               </label>
+              <label className="lt-track-audio-to">
+                <span>{t("trackHeader.audioTo", { defaultValue: "Audio To" })}</span>
+                <select
+                  value={audioTo}
+                  aria-label={t("trackHeader.audioToAria", { name: trackName, defaultValue: `Audio To ${trackName}` })}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(event) => onAudioToChange(trackId, event.target.value)}
+                >
+                  {audioRoutingOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
         </div>
@@ -258,6 +279,8 @@ function areTrackHeaderPropsEqual(previous: TrackHeaderItemProps, next: TrackHea
     previous.trackMuted === next.trackMuted &&
     previous.trackSolo === next.trackSolo &&
     previous.volumeValue === next.volumeValue &&
+    previous.audioTo === next.audioTo &&
+    previous.audioRoutingOptions === next.audioRoutingOptions &&
     previous.isCollapsed === next.isCollapsed &&
     previous.isSelected === next.isSelected &&
     previous.isDropTarget === next.isDropTarget &&

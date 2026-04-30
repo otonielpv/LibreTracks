@@ -129,6 +129,7 @@ function buildInitialSong(): SongView {
         pan: 0,
         muted: false,
         solo: false,
+        audioTo: "master",
       },
       {
         id: "track-drums",
@@ -141,6 +142,7 @@ function buildInitialSong(): SongView {
         pan: 0,
         muted: false,
         solo: false,
+        audioTo: "master",
       },
       {
         id: "track-bass",
@@ -153,6 +155,7 @@ function buildInitialSong(): SongView {
         pan: -0.04,
         muted: false,
         solo: false,
+        audioTo: "master",
       },
       {
         id: "track-folder-guide",
@@ -165,6 +168,7 @@ function buildInitialSong(): SongView {
         pan: 0,
         muted: false,
         solo: false,
+        audioTo: "master",
       },
       {
         id: "track-click",
@@ -177,6 +181,7 @@ function buildInitialSong(): SongView {
         pan: 0,
         muted: false,
         solo: false,
+        audioTo: "master",
       },
       {
         id: "track-vocal",
@@ -189,6 +194,7 @@ function buildInitialSong(): SongView {
         pan: 0.08,
         muted: false,
         solo: false,
+        audioTo: "master",
       },
       {
         id: "track-keys",
@@ -201,6 +207,7 @@ function buildInitialSong(): SongView {
         pan: 0.12,
         muted: false,
         solo: false,
+        audioTo: "master",
       },
     ],
     clips: [
@@ -330,10 +337,11 @@ function buildInitialState(): DesktopApiMockState {
       selectedOutputDevice: null,
       selectedMidiDevice: null,
       suppressMissingMidiDeviceWarning: false,
-      splitStereoEnabled: false,
+      enabledOutputChannels: [0, 1],
       locale: "en",
       metronomeEnabled: false,
       metronomeVolume: 0.8,
+      metronomeOutput: "master",
       globalJumpMode: "immediate",
       globalJumpBars: 4,
       songJumpTrigger: "immediate",
@@ -346,6 +354,7 @@ function buildInitialState(): DesktopApiMockState {
     audioOutputDevices: {
       devices: ["Mock Built-in Output"],
       defaultDevice: "Mock Built-in Output",
+      channelCounts: { "Mock Built-in Output": 8 },
     },
     midiInputs: ["Mock MIDI Pedal"],
     libraryAssets,
@@ -416,6 +425,7 @@ function normalizeSong(song: SongView): SongView {
   const tracks = song.tracks.map((track) => ({
     ...track,
     parentTrackId: track.parentTrackId ?? null,
+    audioTo: track.audioTo ?? "master",
   }));
   const trackIndex = new Map(tracks.map((track) => [track.id, track]));
   const normalizedTracks = tracks.map((track) => {
@@ -1066,6 +1076,7 @@ export const testDesktopApiMock = {
       pan: 0,
       muted: false,
       solo: false,
+      audioTo: "master",
     });
     replaceSong({
       ...state.song,
@@ -1157,6 +1168,7 @@ export const testDesktopApiMock = {
     solo?: boolean;
     volume?: number;
     pan?: number;
+    audioTo?: string;
   }) => {
     replaceSong({
       ...state.song,
@@ -1169,6 +1181,7 @@ export const testDesktopApiMock = {
               solo: args.solo ?? track.solo,
               volume: args.volume ?? track.volume,
               pan: args.pan ?? track.pan,
+              audioTo: args.audioTo ?? track.audioTo,
             }
           : track,
       ),
@@ -1181,6 +1194,7 @@ export const testDesktopApiMock = {
     solo?: boolean;
     volume?: number;
     pan?: number;
+    audioTo?: string;
   }) => {
     replaceSong({
       ...state.song,
@@ -1192,6 +1206,7 @@ export const testDesktopApiMock = {
               solo: args.solo ?? track.solo,
               volume: args.volume ?? track.volume,
               pan: args.pan ?? track.pan,
+              audioTo: args.audioTo ?? track.audioTo,
             }
           : track,
       ),

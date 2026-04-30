@@ -75,7 +75,12 @@ pub struct Track {
     pub pan: f64,
     pub muted: bool,
     pub solo: bool,
-    pub output_bus_id: String,
+    #[serde(default = "default_audio_to", alias = "outputBusId")]
+    pub audio_to: String,
+}
+
+pub fn default_audio_to() -> String {
+    "master".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -120,12 +125,6 @@ pub struct TempoMetadata {
     pub reference_file_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OutputBus {
-    Main,
-    Monitor,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeSignatureMarker {
@@ -134,21 +133,12 @@ pub struct TimeSignatureMarker {
     pub signature: String,
 }
 
-impl OutputBus {
-    pub fn id(self) -> String {
-        match self {
-            Self::Main => "main".to_string(),
-            Self::Monitor => "monitor".to_string(),
-        }
-    }
-}
-
-pub fn parse_track_output_channels(output_bus_id: &str, available_channels: usize) -> Vec<usize> {
+pub fn parse_audio_output_route(audio_to: &str, available_channels: usize) -> Vec<usize> {
     let channel_count = available_channels.max(1);
-    let normalized = output_bus_id.trim().to_ascii_lowercase();
+    let normalized = audio_to.trim().to_ascii_lowercase();
 
     match normalized.as_str() {
-        "" | "main" => return stereo_pair(0, channel_count),
+        "" | "master" | "main" => return stereo_pair(0, channel_count),
         "monitor" => {
             return if channel_count >= 4 {
                 stereo_pair(2, channel_count)
@@ -159,18 +149,19 @@ pub fn parse_track_output_channels(output_bus_id: &str, available_channels: usiz
         _ => {}
     }
 
-    if let Some(explicit) = parse_explicit_output_channels(&normalized, channel_count) {
+    if let Some(explicit) = parse_external_output_channels(&normalized, channel_count) {
         return explicit;
     }
 
     stereo_pair(0, channel_count)
 }
 
-fn parse_explicit_output_channels(
-    normalized_output_bus_id: &str,
+fn parse_external_output_channels(
+    normalized_audio_to: &str,
     available_channels: usize,
 ) -> Option<Vec<usize>> {
-    let mut value = normalized_output_bus_id
+    let mut value = normalized_audio_to
+        .trim_start_matches("ext:")
         .trim_start_matches("hardware:")
         .trim()
         .to_string();
@@ -187,13 +178,17 @@ fn parse_explicit_output_channels(
     if let Some((start, end)) = value.split_once('-') {
         let start = start.trim().parse::<usize>().ok()?;
         let end = end.trim().parse::<usize>().ok()?;
-        if start == 0 || end == 0 || end < start {
+        if end < start || (!normalized_audio_to.starts_with("ext:") && (start == 0 || end == 0)) {
             return None;
         }
 
         let mut channels = Vec::new();
         for channel in start..=end {
-            let zero_based = channel - 1;
+            let zero_based = if normalized_audio_to.starts_with("ext:") {
+                channel
+            } else {
+                channel - 1
+            };
             if zero_based < available_channels {
                 channels.push(zero_based);
             }
@@ -202,10 +197,14 @@ fn parse_explicit_output_channels(
     }
 
     let channel = value.parse::<usize>().ok()?;
-    if channel == 0 {
+    if channel == 0 && !normalized_audio_to.starts_with("ext:") {
         return None;
     }
-    let zero_based = channel - 1;
+    let zero_based = if normalized_audio_to.starts_with("ext:") {
+        channel
+    } else {
+        channel - 1
+    };
     (zero_based < available_channels).then_some(vec![zero_based])
 }
 

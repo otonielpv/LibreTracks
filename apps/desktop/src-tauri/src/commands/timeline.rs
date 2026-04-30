@@ -392,6 +392,7 @@ pub fn update_track(
     pan: Option<f64>,
     muted: Option<bool>,
     solo: Option<bool>,
+    audio_to: Option<String>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -407,6 +408,7 @@ pub fn update_track(
             pan,
             muted,
             solo,
+            audio_to.as_deref(),
             &state.audio,
         )
         .map_err(|error| error.to_string())
@@ -419,6 +421,7 @@ pub fn update_track_mix_live(
     pan: Option<f64>,
     muted: Option<bool>,
     solo: Option<bool>,
+    audio_to: Option<String>,
     state: State<'_, DesktopState>,
 ) -> Result<(), String> {
     let mut session = state
@@ -427,7 +430,15 @@ pub fn update_track_mix_live(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .update_track_mix_live(&track_id, volume, pan, muted, solo, &state.audio)
+        .update_track_mix_live(
+            &track_id,
+            volume,
+            pan,
+            muted,
+            solo,
+            audio_to.as_deref(),
+            &state.audio,
+        )
         .map_err(|error| error.to_string())
 }
 

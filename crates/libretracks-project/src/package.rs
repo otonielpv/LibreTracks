@@ -7,9 +7,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose, Engine as _};
-use libretracks_core::{
-    Clip, OutputBus, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track,
-};
+use libretracks_core::{Clip, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track};
 use serde::{Deserialize, Serialize};
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
@@ -397,7 +395,7 @@ fn import_song_package_from_archive<R: Read + Seek>(
             pan: track.pan,
             muted: false,
             solo: false,
-            output_bus_id: OutputBus::Main.id(),
+            audio_to: "master".to_string(),
         });
         track_ids_by_name.insert(track.name.clone(), track_id);
     }

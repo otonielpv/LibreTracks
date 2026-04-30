@@ -87,6 +87,7 @@ pub struct AudioController {
 pub struct AudioOutputDevicesResponse {
     pub devices: Vec<String>,
     pub default_device: Option<String>,
+    pub channel_counts: HashMap<String, usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -434,9 +435,18 @@ impl AudioController {
         pan: Option<f64>,
         muted: Option<bool>,
         solo: Option<bool>,
+        audio_to: Option<&str>,
     ) -> Result<(), DesktopError> {
-        update_shared_track_mix(&self.live_mix_state, track_id, volume, pan, muted, solo)
-            .map_err(DesktopError::AudioCommand)
+        update_shared_track_mix(
+            &self.live_mix_state,
+            track_id,
+            volume,
+            pan,
+            muted,
+            solo,
+            audio_to,
+        )
+        .map_err(DesktopError::AudioCommand)
     }
 
     pub fn current_settings(&self) -> Result<AppSettings, DesktopError> {
@@ -549,8 +559,14 @@ impl PlaybackSession {
             });
         };
 
-        let supported_config = device
-            .default_output_config()
+        let desired_output_channels = audio_settings
+            .read()
+            .ok()
+            .and_then(|settings| settings.enabled_output_channels.iter().max().copied())
+            .map(|channel| channel.saturating_add(1))
+            .unwrap_or(2)
+            .max(1);
+        let supported_config = resolve_output_stream_config(&device, desired_output_channels)
             .map_err(|error| error.to_string())?;
         let sample_format = supported_config.sample_format();
         let config: StreamConfig = supported_config.into();
@@ -886,9 +902,24 @@ pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> 
     let default_device = host
         .default_output_device()
         .and_then(|device| device.name().ok());
-    let mut devices = host
+    let output_devices = host
         .output_devices()
         .map_err(|error| error.to_string())?
+        .collect::<Vec<_>>();
+    let mut channel_counts = HashMap::new();
+    for device in &output_devices {
+        let Ok(name) = device.name() else {
+            continue;
+        };
+        let channel_count = device
+            .default_output_config()
+            .ok()
+            .map(|config| usize::from(config.channels().max(1)))
+            .unwrap_or(2);
+        channel_counts.insert(name, channel_count);
+    }
+    let mut devices = output_devices
+        .into_iter()
         .filter_map(|device| device.name().ok())
         .collect::<Vec<_>>();
 
@@ -898,6 +929,7 @@ pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> 
     Ok(AudioOutputDevicesResponse {
         devices,
         default_device,
+        channel_counts,
     })
 }
 
@@ -926,6 +958,30 @@ fn resolve_output_device(host: &cpal::Host, selected_device_name: Option<&str>) 
     }
 
     host.default_output_device()
+}
+
+fn resolve_output_stream_config(
+    device: &Device,
+    desired_channels: usize,
+) -> Result<cpal::SupportedStreamConfig, cpal::DefaultStreamConfigError> {
+    let default_config = device.default_output_config()?;
+    let desired_channels = desired_channels.clamp(1, u16::MAX as usize) as u16;
+    if default_config.channels() >= desired_channels {
+        return Ok(default_config);
+    }
+
+    let Ok(mut supported_configs) = device.supported_output_configs() else {
+        return Ok(default_config);
+    };
+
+    if let Some(config_range) = supported_configs.find(|config| {
+        config.channels() >= desired_channels
+            && config.sample_format() == default_config.sample_format()
+    }) {
+        return Ok(config_range.with_max_sample_rate());
+    }
+
+    Ok(default_config)
 }
 
 fn next_audio_command(
@@ -1002,7 +1058,7 @@ mod tests {
         time::{Duration, Instant},
     };
 
-    use libretracks_core::{Clip, OutputBus, Song, SongRegion, Track};
+    use libretracks_core::{Clip, Song, SongRegion, Track};
     use rtrb::RingBuffer;
     use tempfile::tempdir;
 
@@ -1046,7 +1102,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
                 Track {
                     id: "track_drums".into(),
@@ -1057,7 +1113,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
             ],
             clips: vec![
@@ -1599,7 +1655,7 @@ mod tests {
                     pan: 0.25,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
                 Track {
                     id: "folder_b".into(),
@@ -1610,7 +1666,7 @@ mod tests {
                     pan: 0.25,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
                 Track {
                     id: "track_cycle".into(),
@@ -1621,7 +1677,7 @@ mod tests {
                     pan: 0.25,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
             ],
             clips: vec![],
@@ -1746,6 +1802,7 @@ mod tests {
                         Some(volume * 2.0 - 1.0),
                         Some(false),
                         Some(solo),
+                        None,
                     )
                     .expect("track mix update should succeed");
                     update_iterations.fetch_add(1, Ordering::Relaxed);

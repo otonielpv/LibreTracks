@@ -9,6 +9,14 @@ fn default_metronome_volume() -> f64 {
     0.8
 }
 
+fn default_enabled_output_channels() -> Vec<usize> {
+    vec![0, 1]
+}
+
+fn default_audio_route() -> String {
+    "master".into()
+}
+
 fn default_global_jump_mode() -> String {
     "immediate".into()
 }
@@ -54,14 +62,16 @@ pub struct AppSettings {
     pub selected_midi_device: Option<String>,
     #[serde(default)]
     pub suppress_missing_midi_device_warning: bool,
-    #[serde(default)]
-    pub split_stereo_enabled: bool,
+    #[serde(default = "default_enabled_output_channels")]
+    pub enabled_output_channels: Vec<usize>,
     #[serde(default)]
     pub locale: Option<String>,
     #[serde(default)]
     pub metronome_enabled: bool,
     #[serde(default = "default_metronome_volume")]
     pub metronome_volume: f64,
+    #[serde(default = "default_audio_route")]
+    pub metronome_output: String,
     #[serde(default = "default_global_jump_mode")]
     pub global_jump_mode: String,
     #[serde(default = "default_global_jump_bars")]
@@ -86,10 +96,11 @@ impl Default for AppSettings {
             selected_output_device: None,
             selected_midi_device: None,
             suppress_missing_midi_device_warning: false,
-            split_stereo_enabled: false,
+            enabled_output_channels: default_enabled_output_channels(),
             locale: None,
             metronome_enabled: false,
             metronome_volume: default_metronome_volume(),
+            metronome_output: default_audio_route(),
             global_jump_mode: default_global_jump_mode(),
             global_jump_bars: default_global_jump_bars(),
             song_jump_trigger: default_song_jump_trigger(),

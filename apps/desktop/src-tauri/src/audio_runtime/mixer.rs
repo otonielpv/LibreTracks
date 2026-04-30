@@ -1,5 +1,5 @@
 use super::*;
-use libretracks_core::{parse_track_output_channels, Track, TrackKind};
+use libretracks_core::{parse_audio_output_route, Track, TrackKind};
 use tauri::Emitter;
 
 const METRONOME_ACCENT_FREQUENCY_HZ: f32 = 1_000.0;
@@ -12,7 +12,7 @@ const DECLICK_FADE_MS: f32 = 3.0;
 pub(crate) struct LiveTrackMix {
     parent_track_id: Option<String>,
     kind: TrackKind,
-    output_bus_id: String,
+    audio_to: String,
     volume: f32,
     pan: f32,
     muted: bool,
@@ -81,11 +81,11 @@ struct MetronomeVoice {
     frames_remaining: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct MetronomeSettingsSnapshot {
     enabled: bool,
     volume: f32,
-    split_stereo_enabled: bool,
+    audio_to: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -148,7 +148,7 @@ impl LiveTrackMix {
         Self {
             parent_track_id: track.parent_track_id.clone(),
             kind: track.kind,
-            output_bus_id: track.output_bus_id.clone(),
+            audio_to: track.audio_to.clone(),
             volume: track.volume as f32,
             pan: track.pan as f32,
             muted: track.muted,
@@ -259,7 +259,8 @@ impl Mixer {
     pub(crate) fn render_next_block(&mut self, block_frames: usize) -> Vec<f32> {
         let block_start = self.timeline_cursor_frame;
         let block_end = block_start + block_frames as u64;
-        let mut mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
+        let mut master_mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
+        let mut direct_mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
         let should_capture_track_meters = self.meter_emitter.capture_enabled();
         let mut track_meters = should_capture_track_meters.then(|| self.empty_track_meters());
         let metronome_settings = self.read_metronome_settings();
@@ -289,14 +290,16 @@ impl Mixer {
                 let parent_gain =
                     resolve_parent_track_runtime_gain(live_mix_state, &clip_state.plan.track_id)
                         .unwrap_or(1.0);
-                let output_routing = resolve_track_output_routing(
-                    live_mix_state,
-                    &clip_state.plan.track_id,
-                    self.output_channels,
-                );
+                let audio_to = resolve_track_audio_to(live_mix_state, &clip_state.plan.track_id);
+                let output_routing = parse_audio_output_route(audio_to, self.output_channels);
+                let target_buffer = if is_master_route(audio_to) {
+                    &mut master_mixed
+                } else {
+                    &mut direct_mixed
+                };
 
                 let (left_peak, right_peak) = clip_state.mix_into(
-                    &mut mixed,
+                    target_buffer,
                     offset_frames,
                     overlap_frames,
                     self.output_channels,
@@ -342,8 +345,26 @@ impl Mixer {
         self.active_clips.retain(|clip_state| {
             !clip_state.reader.eof && block_end < clip_state.plan.timeline_end_frame()
         });
-        self.mix_metronome_into_output(&mut mixed, block_start, block_frames, metronome_settings);
-        self.apply_master_gain(&mut mixed, block_frames);
+        if is_master_route(&metronome_settings.audio_to) {
+            self.mix_metronome_into_output(
+                &mut master_mixed,
+                block_start,
+                block_frames,
+                &metronome_settings,
+            );
+        } else {
+            self.mix_metronome_into_output(
+                &mut direct_mixed,
+                block_start,
+                block_frames,
+                &metronome_settings,
+            );
+        }
+        self.apply_master_gain(&mut master_mixed, block_frames);
+        let mut mixed = master_mixed;
+        for (sample, direct_sample) in mixed.iter_mut().zip(direct_mixed) {
+            *sample += direct_sample;
+        }
         self.apply_declick_crossfade(&mut mixed, block_frames);
         self.capture_last_output_frame(&mixed, block_frames);
         self.timeline_cursor_frame += block_frames as u64;
@@ -384,16 +405,8 @@ impl Mixer {
                         plan.clip_gain,
                         self.cached_live_mix.is_any_track_soloed,
                     );
-                    let split_stereo_enabled = self
-                        .audio_settings
-                        .read()
-                        .map(|settings| settings.split_stereo_enabled)
-                        .unwrap_or(false);
-                    let current_pan = resolve_clip_target_pan(
-                        &self.cached_live_mix.tracks,
-                        &plan.track_id,
-                        split_stereo_enabled,
-                    );
+                    let current_pan =
+                        resolve_track_runtime_pan(&self.cached_live_mix.tracks, &plan.track_id);
                     self.active_clips.push(MixClipState {
                         plan,
                         reader,
@@ -507,12 +520,12 @@ impl Mixer {
             .map(|settings| MetronomeSettingsSnapshot {
                 enabled: settings.metronome_enabled,
                 volume: settings.metronome_volume.clamp(0.0, 1.0) as f32,
-                split_stereo_enabled: settings.split_stereo_enabled,
+                audio_to: settings.metronome_output.clone(),
             })
             .unwrap_or(MetronomeSettingsSnapshot {
                 enabled: false,
                 volume: 0.0,
-                split_stereo_enabled: false,
+                audio_to: "master".to_string(),
             })
     }
 
@@ -521,7 +534,7 @@ impl Mixer {
         buffer: &mut [f32],
         block_start_frame: u64,
         block_frames: usize,
-        settings: MetronomeSettingsSnapshot,
+        settings: &MetronomeSettingsSnapshot,
     ) {
         if !settings.enabled || settings.volume <= 0.0 || block_frames == 0 {
             return;
@@ -533,8 +546,7 @@ impl Mixer {
             block_frames,
             self.output_sample_rate,
         );
-        let output_routing =
-            monitor_output_routing(self.output_channels, settings.split_stereo_enabled);
+        let output_routing = parse_audio_output_route(&settings.audio_to, self.output_channels);
         let mut next_event_index = 0;
 
         for frame_offset in 0..block_frames {
@@ -571,8 +583,10 @@ impl Mixer {
             if (self.master_gain - 1.0).abs() <= GAIN_EPSILON {
                 return;
             }
-            for sample in mixed {
-                *sample *= self.master_gain;
+            for frame in mixed.chunks_exact_mut(output_channels) {
+                for channel in 0..output_channels.min(2) {
+                    frame[channel] *= self.master_gain;
+                }
             }
             return;
         };
@@ -585,7 +599,7 @@ impl Mixer {
                 fade.total_frames as usize,
             );
             let frame_base = frame_index * output_channels;
-            for channel in 0..output_channels {
+            for channel in 0..output_channels.min(2) {
                 mixed[frame_base + channel] *= frame_gain;
             }
             fade.elapsed_frames = fade.elapsed_frames.saturating_add(1);
@@ -943,6 +957,7 @@ pub(crate) fn update_shared_track_mix(
     pan: Option<f64>,
     muted: Option<bool>,
     solo: Option<bool>,
+    audio_to: Option<&str>,
 ) -> Result<(), String> {
     let mut live_mix_state = shared_mix_state
         .write()
@@ -965,6 +980,15 @@ pub(crate) fn update_shared_track_mix(
 
     if let Some(solo) = solo {
         track_mix.solo = solo;
+    }
+
+    if let Some(audio_to) = audio_to {
+        let trimmed = audio_to.trim();
+        track_mix.audio_to = if trimmed.is_empty() {
+            "master".to_string()
+        } else {
+            trimmed.to_ascii_lowercase()
+        };
     }
 
     Ok(())
@@ -1012,47 +1036,21 @@ pub(crate) fn resolve_track_runtime_pan(
     pan.clamp(-1.0, 1.0)
 }
 
-fn resolve_clip_target_pan(
-    live_mix_state: &HashMap<String, LiveTrackMix>,
+fn resolve_track_audio_to<'a>(
+    live_mix_state: &'a HashMap<String, LiveTrackMix>,
     track_id: &str,
-    split_stereo_enabled: bool,
-) -> f32 {
-    if !split_stereo_enabled {
-        return resolve_track_runtime_pan(live_mix_state, track_id);
-    }
-
-    match live_mix_state
+) -> &'a str {
+    live_mix_state
         .get(track_id)
-        .map(|track| track.output_bus_id.as_str())
-    {
-        Some("monitor") => -1.0,
-        Some("main") => 1.0,
-        _ => resolve_track_runtime_pan(live_mix_state, track_id),
-    }
+        .map(|track| track.audio_to.as_str())
+        .unwrap_or("master")
 }
 
-fn resolve_track_output_routing(
-    live_mix_state: &HashMap<String, LiveTrackMix>,
-    track_id: &str,
-    output_channels: usize,
-) -> Vec<usize> {
-    let output_bus_id = live_mix_state
-        .get(track_id)
-        .map(|track| track.output_bus_id.as_str())
-        .unwrap_or("main");
-    parse_track_output_channels(output_bus_id, output_channels)
-}
-
-fn monitor_output_routing(output_channels: usize, split_stereo_enabled: bool) -> Vec<usize> {
-    if output_channels <= 1 {
-        return vec![0];
-    }
-
-    if split_stereo_enabled && output_channels < 4 {
-        return vec![0];
-    }
-
-    parse_track_output_channels("monitor", output_channels)
+fn is_master_route(audio_to: &str) -> bool {
+    matches!(
+        audio_to.trim().to_ascii_lowercase().as_str(),
+        "" | "master" | "main"
+    )
 }
 
 fn write_frame_to_output(
@@ -1352,7 +1350,7 @@ fn is_track_soloed_in_hierarchy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libretracks_core::{Marker, OutputBus, SongRegion, TempoMarker};
+    use libretracks_core::{Marker, SongRegion, TempoMarker};
 
     fn metronome_song() -> Song {
         Song {
@@ -1380,7 +1378,7 @@ mod tests {
                 pan: 0.0,
                 muted: false,
                 solo: false,
-                output_bus_id: OutputBus::Main.id(),
+                audio_to: "master".to_string(),
             }],
             clips: vec![],
             section_markers: vec![Marker {
@@ -1423,9 +1421,9 @@ mod tests {
     }
 
     #[test]
-    fn monitor_output_routing_respects_split_stereo_for_two_channel_outputs() {
-        assert_eq!(monitor_output_routing(2, false), vec![0, 1]);
-        assert_eq!(monitor_output_routing(2, true), vec![0]);
-        assert_eq!(monitor_output_routing(4, true), vec![2, 3]);
+    fn external_output_routing_uses_zero_based_hardware_channels() {
+        assert_eq!(parse_audio_output_route("master", 4), vec![0, 1]);
+        assert_eq!(parse_audio_output_route("ext:0", 4), vec![0]);
+        assert_eq!(parse_audio_output_route("ext:2-3", 4), vec![2, 3]);
     }
 }

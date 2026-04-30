@@ -239,6 +239,45 @@ type MidiLearnFeedback = {
   binding: MidiBinding;
 };
 
+const HARDWARE_OUTPUT_CHANNEL_COUNT = 8;
+
+function formatAudioRouteLabel(route: string, t: ReturnType<typeof useTranslation>["t"]) {
+  if (route === "master") {
+    return t("trackHeader.master", { defaultValue: "Master" });
+  }
+
+  if (route.startsWith("ext:")) {
+    const channelPart = route.slice(4);
+    if (channelPart.includes("-")) {
+      const [left, right] = channelPart.split("-").map((value) => Number(value) + 1);
+      return t("trackHeader.extOutStereo", { left, right, defaultValue: `Ext. Out ${left}/${right}` });
+    }
+
+    const channel = Number(channelPart) + 1;
+    return t("trackHeader.extOutMono", { channel, defaultValue: `Ext. Out ${channel}` });
+  }
+
+  return route;
+}
+
+function buildAudioRoutingOptions(enabledChannels: number[], t: ReturnType<typeof useTranslation>["t"]) {
+  const channels = Array.from(new Set(enabledChannels)).sort((left, right) => left - right);
+  const options = [{ value: "master", label: formatAudioRouteLabel("master", t) }];
+
+  for (let index = 0; index < channels.length; index += 1) {
+    const channel = channels[index];
+    const nextChannel = channels[index + 1];
+    if (nextChannel === channel + 1) {
+      const stereoRoute = `ext:${channel}-${nextChannel}`;
+      options.push({ value: stereoRoute, label: formatAudioRouteLabel(stereoRoute, t) });
+    }
+    const monoRoute = `ext:${channel}`;
+    options.push({ value: monoRoute, label: formatAudioRouteLabel(monoRoute, t) });
+  }
+
+  return options;
+}
+
 const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 const LIBRARY_DRAG_EDGE_BUFFER_PX = 50;
 const LIBRARY_DRAG_MAX_SCROLL_SPEED_PX = 22;
@@ -269,7 +308,6 @@ const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
   { key: "action:next_song", labelKey: "timelineTopbar.next" },
   { key: "action:toggle_metronome", labelKey: "timelineTopbar.metronome" },
   { key: "action:toggle_vamp", labelKey: "timelineToolbar.vampButton" },
-  { key: "action:toggle_split_stereo", labelKey: "transport.settingsModal.midiLearnToggleSplitStereo" },
   { key: "action:cancel_jump", labelKey: "timelineToolbar.cancelJump" },
   { key: "action:create_marker", labelKey: "transport.settingsModal.midiLearnCreateMarker" },
   { key: "action:set_global_jump_mode_immediate", labelKey: "transport.settingsModal.midiLearnGlobalJumpModeImmediate" },
@@ -796,6 +834,7 @@ export function TransportPanelContent() {
   const [midiLearnView, setMidiLearnView] = useState<"core" | "markers" | "songs">("core");
   const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(DEFAULT_APP_SETTINGS.metronomeVolume);
   const [audioOutputDevices, setAudioOutputDevices] = useState<string[]>([]);
+  const [audioOutputChannelCounts, setAudioOutputChannelCounts] = useState<Record<string, number>>({});
   const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<string | null>(null);
   const [midiInputDevices, setMidiInputDevices] = useState<string[]>([]);
   const [isMidiInputRefreshing, setIsMidiInputRefreshing] = useState(false);
@@ -1131,6 +1170,7 @@ export function TransportPanelContent() {
     setAppSettings(normalizedSettings);
     await syncSettingsLanguage(normalizedSettings);
     setAudioOutputDevices(nextAudioDevices.devices);
+    setAudioOutputChannelCounts(nextAudioDevices.channelCounts ?? {});
     setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
     setMidiInputDevices(nextMidiInputs);
     return normalizedSettings;
@@ -1835,6 +1875,7 @@ export function TransportPanelContent() {
           return;
         }
         setAudioOutputDevices(nextAudioDevices.devices);
+        setAudioOutputChannelCounts(nextAudioDevices.channelCounts ?? {});
         setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
         setMidiInputDevices(nextMidiInputs);
       })
@@ -4398,16 +4439,40 @@ export function TransportPanelContent() {
     );
   }
 
-  function handleSplitStereoChange(nextValue: boolean) {
+  function handleEnabledOutputChannelChange(channelIndex: number, enabled: boolean) {
+    const currentChannels = new Set(appSettingsRef.current.enabledOutputChannels);
+    if (enabled) {
+      currentChannels.add(channelIndex);
+    } else {
+      currentChannels.delete(channelIndex);
+    }
+
+    const nextChannels = Array.from(currentChannels).sort((left, right) => left - right);
     persistAudioSettings(
-      {
-        ...appSettings,
-        splitStereoEnabled: nextValue,
-      },
-      nextValue
-        ? t("transport.status.splitStereoEnabled")
-        : t("transport.status.splitStereoDisabled"),
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        enabledOutputChannels: nextChannels.length ? nextChannels : [0, 1],
+      }),
+      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
     );
+  }
+
+  function handleMetronomeOutputChange(nextValue: string) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        metronomeOutput: nextValue,
+      }),
+      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
+    );
+  }
+
+  function handleTrackAudioToChange(trackId: string, nextAudioTo: string) {
+    void runAction(async () => {
+      const nextSnapshot = await updateTrack({ trackId, audioTo: nextAudioTo });
+      applyPlaybackSnapshot(nextSnapshot);
+      setStatus(t("transport.status.trackRoutingUpdated", { defaultValue: "Track routing updated." }));
+    });
   }
 
   function handleMetronomeEnabledChange(nextValue: boolean) {
@@ -5373,6 +5438,19 @@ export function TransportPanelContent() {
   const selectedAudioOutputDevice = appSettings.selectedOutputDevice ?? "";
   const selectedMidiInputDevice = appSettings.selectedMidiDevice ?? "";
   const selectedLocale = appSettings.locale ?? "";
+  const audioRoutingOptions = useMemo(
+    () => buildAudioRoutingOptions(appSettings.enabledOutputChannels, t),
+    [appSettings.enabledOutputChannels, t],
+  );
+  const selectedOutputChannelCount = Math.max(
+    1,
+    Math.min(
+      64,
+      audioOutputChannelCounts[appSettings.selectedOutputDevice ?? ""] ??
+        (defaultAudioOutputDevice ? audioOutputChannelCounts[defaultAudioOutputDevice] : undefined) ??
+        HARDWARE_OUTPUT_CHANNEL_COUNT,
+    ),
+  );
   const selectedAudioOutputDeviceMissing = Boolean(
     appSettings.selectedOutputDevice && !audioOutputDevices.includes(appSettings.selectedOutputDevice),
   );
@@ -5681,6 +5759,8 @@ export function TransportPanelContent() {
                 onCommitVolume={handleTrackHeaderVolumeCommit}
                 onPanChange={handleTrackHeaderPanChange}
                 onCommitPan={handleTrackHeaderPanCommit}
+                audioRoutingOptions={audioRoutingOptions}
+                onAudioToChange={handleTrackAudioToChange}
               />
 
               <TimelineCanvasPane
@@ -6109,27 +6189,31 @@ export function TransportPanelContent() {
                             </small>
                           </label>
 
-                          <label className="lt-settings-toggle">
-                            <input
-                              type="checkbox"
-                              checked={appSettings.splitStereoEnabled}
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onPointerDown={(event) => {
-                                if (midiLearnMode === null) {
-                                  return;
-                                }
-
-                                event.preventDefault();
-                                event.stopPropagation();
-                                handleMidiLearnTarget("action:toggle_split_stereo");
-                              }}
-                              onChange={(event) => handleSplitStereoChange(event.target.checked)}
-                            />
-                            <div className="lt-settings-toggle-copy">
-                              <strong>{t("transport.settingsModal.splitStereoTitle")}</strong>
-                              <small>{t("transport.settingsModal.splitStereoDescription")}</small>
+                          <div className="lt-settings-field">
+                            <span className="lt-settings-field-label">
+                              {t("transport.settingsModal.hardwareOutputs", { defaultValue: "Hardware Outputs" })}
+                            </span>
+                            <div className="lt-output-channel-grid">
+                              {Array.from({ length: selectedOutputChannelCount }, (_, channelIndex) => (
+                                <label key={channelIndex} className="lt-settings-checkbox">
+                                  <input
+                                    type="checkbox"
+                                    checked={appSettings.enabledOutputChannels.includes(channelIndex)}
+                                    disabled={isSettingsLoading || isSettingsSaving}
+                                    onChange={(event) =>
+                                      handleEnabledOutputChannelChange(channelIndex, event.target.checked)
+                                    }
+                                  />
+                                  <span>
+                                    {t("transport.settingsModal.hardwareOutputChannel", {
+                                      channel: channelIndex + 1,
+                                      defaultValue: `Channel ${channelIndex + 1}`,
+                                    })}
+                                  </span>
+                                </label>
+                              ))}
                             </div>
-                          </label>
+                          </div>
                         </div>
                       </section>
                     ) : null}
@@ -6162,6 +6246,23 @@ export function TransportPanelContent() {
                               <strong>{t("transport.shell.metronome")}</strong>
                               <small>{t("transport.settingsModal.metronomeStatusDescription", { defaultValue: "Toggle the metronome playback." })}</small>
                             </div>
+                          </label>
+
+                          <label className="lt-settings-field">
+                            <span className="lt-settings-field-label">
+                              {t("transport.settingsModal.metronomeOutput", { defaultValue: "Metronome Output" })}
+                            </span>
+                            <select
+                              value={appSettings.metronomeOutput}
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onChange={(event) => handleMetronomeOutputChange(event.target.value)}
+                            >
+                              {audioRoutingOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
                           </label>
 
                           <label className="lt-settings-field">

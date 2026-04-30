@@ -1028,6 +1028,26 @@ textarea {
   align-items: stretch;
 }
 
+.lt-output-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.45rem;
+}
+
+.lt-settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #d7dfdc;
+  font: 600 0.82rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-settings-checkbox input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #3cddc7;
+}
+
 .lt-settings-icon-button {
   display: inline-flex;
   align-items: center;
@@ -2375,7 +2395,8 @@ textarea {
 }
 
 .lt-track-volume,
-.lt-track-pan {
+.lt-track-pan,
+.lt-track-audio-to {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -2383,7 +2404,8 @@ textarea {
 }
 
 .lt-track-volume span,
-.lt-track-pan span {
+.lt-track-pan span,
+.lt-track-audio-to span {
   color: #bacac5;
   font: 600 10px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.12em;
@@ -2398,6 +2420,22 @@ textarea {
   flex: 0 0 1.9rem;
   white-space: nowrap;
   text-align: left;
+}
+
+.lt-track-audio-to span {
+  flex: 0 0 3.25rem;
+  white-space: nowrap;
+}
+
+.lt-track-audio-to select {
+  min-width: 0;
+  width: 100%;
+  height: 22px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  background: #0e0e0e;
+  color: #d8fff7;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
 }
 
 .lt-track-volume input[type="range"],

@@ -22,8 +22,7 @@ pub use song_store::{
 };
 pub use waveform::{
     analyze_wav_file, generate_waveform_summary, load_waveform_summary, waveform_file_path,
-    write_waveform_summary, AnalyzedWav, SeekIndexEntry,
-    WaveformLod, WaveformSummary,
+    write_waveform_summary, AnalyzedWav, SeekIndexEntry, WaveformLod, WaveformSummary,
 };
 
 #[cfg(test)]
@@ -31,7 +30,7 @@ mod tests {
     use std::{fs, path::Path};
 
     use hound::{SampleFormat, WavSpec, WavWriter};
-    use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind};
+    use libretracks_core::{Clip, Marker, Song, SongRegion, Track, TrackKind};
     use tempfile::tempdir;
 
     use crate::{
@@ -67,7 +66,7 @@ mod tests {
                 pan: 0.0,
                 muted: false,
                 solo: false,
-                output_bus_id: OutputBus::Monitor.id(),
+                audio_to: "ext:2-3".to_string(),
             }],
             clips: vec![Clip {
                 id: "clip_click".into(),
@@ -273,14 +272,21 @@ mod tests {
         assert!((imported.song.duration_seconds - 3.0).abs() < 0.001);
         assert_eq!(
             imported.song.clips[0].file_path,
-            drums_path.canonicalize().unwrap().to_string_lossy().replace('\\', "/")
+            drums_path
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/")
         );
         assert_eq!(
             imported.song.clips[1].file_path,
-            bass_path.canonicalize().unwrap().to_string_lossy().replace('\\', "/")
+            bass_path
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/")
         );
-        let drums_reader =
-            hound::WavReader::open(&drums_path).expect("drums wav should open");
+        let drums_reader = hound::WavReader::open(&drums_path).expect("drums wav should open");
         let drums_spec = drums_reader.spec();
         assert_eq!(drums_spec.sample_rate, 44_100);
         assert_eq!(drums_spec.bits_per_sample, 16);
@@ -295,7 +301,6 @@ mod tests {
         let loaded = load_song(&imported.song_dir).expect("imported song should load");
         assert_eq!(loaded.tracks.len(), 2);
         assert_eq!(loaded.clips[0].timeline_start_seconds, 0.0);
-
     }
 
     #[test]
@@ -492,7 +497,7 @@ mod tests {
       "pan": 0.0,
       "muted": false,
       "solo": false,
-      "outputBusId": "main"
+      "audioTo": "master"
     }
   ],
   "groups": [
@@ -501,7 +506,7 @@ mod tests {
       "name": "Old Group",
       "volume": 1.0,
       "muted": false,
-      "outputBusId": "main"
+      "audioTo": "master"
     }
   ],
   "clips": [],

@@ -203,7 +203,15 @@ async fn run_remote_command_bridge(
                 solo,
             } => {
                 if session
-                    .update_track_mix_live(track_id, *volume, *pan, *muted, *solo, &state.audio)
+                    .update_track_mix_live(
+                        track_id,
+                        *volume,
+                        *pan,
+                        *muted,
+                        *solo,
+                        None,
+                        &state.audio,
+                    )
                     .is_err()
                 {
                     continue;
@@ -216,7 +224,16 @@ async fn run_remote_command_bridge(
                 pan,
                 muted,
                 solo,
-            } => session.update_track(track_id, None, *volume, *pan, *muted, *solo, &state.audio),
+            } => session.update_track(
+                track_id,
+                None,
+                *volume,
+                *pan,
+                *muted,
+                *solo,
+                None,
+                &state.audio,
+            ),
             RemoteCommand::UpdateMetronome { enabled, volume } => {
                 let settings_store = app.state::<AppSettingsStore>();
                 let mut next_settings = match settings_store.current() {

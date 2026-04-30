@@ -12,7 +12,7 @@ LibreTracks is a multitrack DAW and live playback workstation for desktop, built
 ## What's New in v0.0.3
 
 - MIDI input and MIDI Learn: select an input device, refresh the device list, map notes or CC messages to live actions, and keep mappings saved with app settings.
-- Built-in metronome: send a synthesized click to the `Monitor` bus with its own volume control.
+- Built-in metronome: send a synthesized click to Master or any enabled external output with its own volume control.
 - Vamp and song jumps: loop the current section or a fixed bar count, trigger song jumps, and choose instant or fade-out transitions.
 - Better remote control: the mobile remote now includes responsive transport, jump, vamp, song transition, and mixer controls.
 - Song/session import: import LibreTracks song packages

@@ -19,7 +19,7 @@ pub struct ActiveClip {
     pub track_id: String,
     pub track_name: String,
     pub file_path: String,
-    pub output_bus_id: String,
+    pub audio_to: String,
     pub timeline_offset_seconds: f64,
     pub gain: f64,
 }
@@ -441,7 +441,7 @@ impl AudioEngine {
                 track_id: track.id.clone(),
                 track_name: track.name.clone(),
                 file_path: clip.file_path.clone(),
-                output_bus_id: track.output_bus_id.clone(),
+                audio_to: track.audio_to.clone(),
                 timeline_offset_seconds: position_seconds - clip.timeline_start_seconds,
                 gain: gain * clip.gain,
             });
@@ -764,7 +764,7 @@ fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, Audi
 
 #[cfg(test)]
 mod tests {
-    use libretracks_core::{Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind};
+    use libretracks_core::{Clip, Marker, Song, SongRegion, Track, TrackKind};
 
     use crate::{
         ActiveVamp, AudioEngine, AudioEngineError, JumpTrigger, PlaybackState, TransitionType,
@@ -798,7 +798,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Monitor.id(),
+                    audio_to: "ext:2-3".to_string(),
                 },
                 Track {
                     id: "track_click".into(),
@@ -809,7 +809,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Monitor.id(),
+                    audio_to: "ext:2-3".to_string(),
                 },
                 Track {
                     id: "folder_main".into(),
@@ -820,7 +820,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
                 Track {
                     id: "track_drums".into(),
@@ -831,7 +831,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".to_string(),
                 },
             ],
             clips: vec![
@@ -932,7 +932,7 @@ mod tests {
                 pan: 0.0,
                 muted: false,
                 solo: false,
-                output_bus_id: OutputBus::Main.id(),
+                audio_to: "master".to_string(),
             }],
             clips: vec![Clip {
                 id: "clip_main".into(),

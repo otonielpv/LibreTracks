@@ -6,7 +6,7 @@ use std::{
     time::Instant,
 };
 
-use libretracks_core::{validate_song, Clip, OutputBus, Song, SongRegion, Track, TrackKind};
+use libretracks_core::{validate_song, Clip, Song, SongRegion, Track, TrackKind};
 use rayon::prelude::*;
 use symphonia::core::{
     codecs::CODEC_TYPE_NULL, formats::FormatOptions, io::MediaSourceStream, meta::MetadataOptions,
@@ -247,7 +247,7 @@ pub fn import_wav_song(
                 pan: 0.0,
                 muted: false,
                 solo: false,
-                output_bus_id: OutputBus::Main.id(),
+                audio_to: "master".to_string(),
             })
             .collect(),
         clips: imported_files
@@ -323,7 +323,7 @@ pub fn append_wav_files_to_song(
             pan: 0.0,
             muted: false,
             solo: false,
-            output_bus_id: OutputBus::Main.id(),
+            audio_to: "master".to_string(),
         });
 
         next_song.clips.push(Clip {

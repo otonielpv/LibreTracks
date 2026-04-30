@@ -582,14 +582,6 @@ fn dispatch_midi_action(
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
-        "action:toggle_split_stereo" => {
-            let mut next_settings = settings_store
-                .current()
-                .map_err(|error| error.to_string())?;
-            next_settings.split_stereo_enabled = !next_settings.split_stereo_enabled;
-            apply_midi_settings_update(app, settings_store, next_settings)?;
-            return Ok(());
-        }
         "action:cancel_jump" => {
             let snapshot = session
                 .cancel_marker_jump(&state.audio)

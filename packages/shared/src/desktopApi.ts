@@ -463,6 +463,7 @@ export async function updateTrack(args: {
   pan?: number;
   muted?: boolean;
   solo?: boolean;
+  audioTo?: string;
 }): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("update_track", args);
 }
@@ -473,6 +474,7 @@ export async function updateTrackMixLive(args: {
   pan?: number;
   muted?: boolean;
   solo?: boolean;
+  audioTo?: string;
 }): Promise<void> {
   await invokeCommand("update_track_mix_live", args);
 }

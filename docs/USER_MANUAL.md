@@ -24,27 +24,19 @@ Why it is safe for live use:
 
 If `Audio device` is left on `System Default`, LibreTracks follows the operating system default output. For a live rig, a dedicated interface is usually safer than the system default.
 
-### Use `Split Stereo Mode (Monitor L / Main R)`
+### Configure hardware outputs
 
-This is the key live-playback feature.
-
-When `Split Stereo Mode (Monitor L / Main R)` is enabled:
-
-- Everything routed to the `Monitor` bus is forced to the left channel.
-- Everything routed to the `Main` bus is forced to the right channel.
-- Regular pan behavior is preserved when the mode is off.
+Enable the hardware channels you want to use in `Settings > Audio`. Tracks can then route to `Master` or directly to `Ext. Out` mono channels and stereo pairs from the track header.
 
 Typical stage use:
 
-- Put click, count-ins, spoken cues, or guide tracks on `Monitor`.
-- Put stems, tracks, or musical playback on `Main`.
-- Send the left channel to the MD / drummer cue feed and the right channel to FOH or a playback rack input.
-
-> 🎛️ Practical result: one stereo pair becomes a simple live split, with cue material on the left and show material on the right.
+- Send stems and musical playback to `Master`.
+- Route click, count-ins, spoken cues, or guide tracks directly to an external cue output.
+- Keep cue outputs independent from the Master fader.
 
 ### Use the built-in `Metronome`
 
-Enable `Metronome` from `Settings` when you need a reliable click without importing a separate audio file. LibreTracks sends the click to the `Monitor` bus and keeps it locked to the transport timeline. Adjust `Metronome volume` before rehearsal so it sits correctly in the cue mix.
+Enable `Metronome` from `Settings` when you need a reliable click without importing a separate audio file. Choose the metronome output route in settings and adjust `Metronome volume` before rehearsal so it sits correctly in the cue mix.
 
 ### Connect MIDI hardware
 

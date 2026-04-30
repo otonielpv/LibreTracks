@@ -2,14 +2,14 @@ pub mod model;
 pub mod validation;
 
 pub use model::{
-    parse_track_output_channels, Clip, Marker, OutputBus, Project, Song, SongRegion, TempoMarker,
-    TempoMetadata, TempoSource, TimeSignatureMarker, Track, TrackKind,
+    default_audio_to, parse_audio_output_route, Clip, Marker, Project, Song, SongRegion,
+    TempoMarker, TempoMetadata, TempoSource, TimeSignatureMarker, Track, TrackKind,
 };
 pub use validation::{validate_song, DomainError};
 
 #[cfg(test)]
 mod tests {
-    use crate::{validate_song, Clip, Marker, OutputBus, Song, SongRegion, Track, TrackKind};
+    use crate::{validate_song, Clip, Marker, Song, SongRegion, Track, TrackKind};
 
     fn valid_song() -> Song {
         Song {
@@ -38,7 +38,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Main.id(),
+                    audio_to: "master".into(),
                 },
                 Track {
                     id: "track_click".into(),
@@ -49,7 +49,7 @@ mod tests {
                     pan: 0.0,
                     muted: false,
                     solo: false,
-                    output_bus_id: OutputBus::Monitor.id(),
+                    audio_to: "ext:2-3".into(),
                 },
             ],
             clips: vec![Clip {

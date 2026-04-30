@@ -25,6 +25,19 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install LLVM for ASIO bindings
+        if: runner.os == 'Windows'
+        run: choco install llvm -y
+
+      - name: Prepare Steinberg ASIO SDK
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $asioDir = Join-Path $env:RUNNER_TEMP "asio_sdk"
+          New-Item -ItemType Directory -Force -Path $asioDir | Out-Null
+          "CPAL_ASIO_DIR=$asioDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
 
@@ -73,6 +86,19 @@ jobs:
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM for ASIO bindings
+        if: matrix.platform == 'windows'
+        run: choco install llvm -y
+
+      - name: Prepare Steinberg ASIO SDK
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $asioDir = Join-Path $env:RUNNER_TEMP "asio_sdk"
+          New-Item -ItemType Directory -Force -Path $asioDir | Out-Null
+          "CPAL_ASIO_DIR=$asioDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2

@@ -30,6 +30,8 @@ type TrackHeadersPaneProps = {
   onCommitVolume: (trackId: string) => void;
   onPanChange: (trackId: string, nextPan: number) => void;
   onCommitPan: (trackId: string) => void;
+  audioRoutingOptions: Array<{ value: string; label: string }>;
+  onAudioToChange: (trackId: string, nextAudioTo: string) => void;
 };
 
 export function TrackHeadersPane({
@@ -53,6 +55,8 @@ export function TrackHeadersPane({
   onCommitVolume,
   onPanChange,
   onCommitPan,
+  audioRoutingOptions,
+  onAudioToChange,
 }: TrackHeadersPaneProps) {
   return (
     <div className="lt-track-headers-pane">
@@ -88,6 +92,8 @@ export function TrackHeadersPane({
                 trackMuted={track.muted}
                 trackSolo={track.solo}
                 volumeValue={track.volume}
+                audioTo={track.audioTo}
+                audioRoutingOptions={audioRoutingOptions}
                 isCollapsed={collapsedFolders.has(track.id)}
                 isSelected={isTrackSelected}
                 isDropTarget={false}
@@ -104,6 +110,7 @@ export function TrackHeadersPane({
                 onCommitVolume={onCommitVolume}
                 onPanChange={onPanChange}
                 onCommitPan={onCommitPan}
+                onAudioToChange={onAudioToChange}
               />
             </div>
           );

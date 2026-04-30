@@ -24,27 +24,19 @@ Por qué es seguro para directo:
 
 Si dejas `Dispositivo de audio` en `Predeterminado del sistema`, LibreTracks seguirá la salida por defecto del sistema operativo. En directo, normalmente es más seguro usar una interfaz dedicada.
 
-### Usa `Modo Split Stereo (Monitor Izq. / Main Der.)`
+### Configura salidas de hardware
 
-Esta es la función clave para playback en vivo.
+Activa los canales de hardware que quieras usar en `Configuracion > Audio`. Cada pista puede rutear a `Master` o directamente a salidas `Ext. Out` mono y pares estereo desde la cabecera de pista.
 
-Cuando activas `Modo Split Stereo (Monitor Izq. / Main Der.)`:
+Uso tipico en escenario:
 
-- Todo lo que esté en el bus `Monitor` se fuerza al canal izquierdo.
-- Todo lo que esté en el bus `Main` se fuerza al canal derecho.
-- El paneo normal se mantiene cuando el modo está apagado.
-
-Uso típico en escenario:
-
-- Coloca click, count-ins, cues habladas o guías en `Monitor`.
-- Coloca stems, secuencias o reproducción musical en `Main`.
-- Envía el canal izquierdo al sistema de referencia del MD o del baterista y el derecho a FOH o al rack de playback.
-
-> 🎛️ Resultado práctico: un único par estéreo se convierte en una salida split simple, con las guías a la izquierda y el material del show a la derecha.
+- Envia stems y playback musical a `Master`.
+- Rutea click, count-ins, cues habladas o guias directamente a una salida externa de cue.
+- Mant�n las salidas de cue independientes del fader de Master.
 
 ### Usa el `Metronomo` integrado
 
-Activa `Metronomo` desde `Configuracion` cuando necesites una claqueta fiable sin importar un archivo de audio aparte. LibreTracks envia el click al bus `Monitor` y lo mantiene bloqueado al timeline del transporte. Ajusta `Volumen del metronomo` antes del ensayo para colocarlo bien en la mezcla de cue.
+Activa `Metronomo` desde `Configuracion` cuando necesites una claqueta fiable sin importar un archivo de audio aparte. Elige la salida del metronomo en ajustes y ajusta `Volumen del metronomo` antes del ensayo para colocarlo bien en la mezcla de cue.
 
 ### Conecta hardware MIDI
 

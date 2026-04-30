@@ -10,7 +10,7 @@ LibreTracks es una DAW y estación de reproducción multitrack para directo, con
 ## Novedades de v0.0.3
 
 - Entrada MIDI y aprendizaje MIDI: selecciona un dispositivo, refresca la lista, asigna notas o CC a acciones en vivo y conserva los mapeos en los ajustes.
-- Metronomo integrado: envia una claqueta sintetizada al bus `Monitor` con control de volumen propio.
+- Metronomo integrado: envia una claqueta sintetizada a Master o a cualquier salida externa activa con control de volumen propio.
 - Vamp y saltos de cancion: repite la seccion actual o un numero fijo de compases, dispara saltos entre canciones y elige transicion inmediata o con fade out.
 - Remote mejorado: el control movil incluye transporte, salto, vamp, transicion de cancion y mixer en una interfaz mas adaptable.
 - Importacion de canciones/sesiones: importa paquetes de LibreTracks

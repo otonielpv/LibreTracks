@@ -109,6 +109,7 @@ pub struct TrackSummary {
     pub pan: f64,
     pub muted: bool,
     pub solo: bool,
+    pub audio_to: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -258,6 +259,7 @@ pub(crate) fn song_to_view(
                 pan: track.pan,
                 muted: track.muted,
                 solo: track.solo,
+                audio_to: track.audio_to.clone(),
             })
             .collect(),
         project_revision,

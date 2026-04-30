@@ -8,7 +8,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 base64 = "0.22"
-cpal = "0.15"
 libretracks-audio = { path = "../../../crates/libretracks-audio" }
 libretracks-project = { path = "../../../crates/libretracks-project" }
 libretracks-remote = { path = "../../../crates/libretracks-remote" }
@@ -26,6 +25,12 @@ tauri-plugin-dialog = "2.7.0"
 
 [dependencies.libretracks-core]
 path = "../../../crates/libretracks-core"
+
+[target.'cfg(windows)'.dependencies]
+cpal = { version = "0.15", features = ["asio"] }
+
+[target.'cfg(not(windows))'.dependencies]
+cpal = "0.15"
 
 [dev-dependencies]
 hound = "3"
