@@ -3,7 +3,7 @@ use std::{
     fs,
     path::Path,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{mpsc, Arc, Mutex},
     thread,
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
@@ -57,8 +57,16 @@ pub struct WaveformReadyEvent {
     pub summary: WaveformSummaryDto,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
+pub struct WaveformJob {
+    pub app: tauri::AppHandle,
+    pub song_dir: PathBuf,
+    pub waveform_key: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct WaveformGenerationQueue {
+    sender: mpsc::Sender<WaveformJob>,
     in_flight: Arc<Mutex<HashSet<String>>>,
 }
 
@@ -128,7 +136,7 @@ impl WaveformGenerationQueue {
         song_dir: PathBuf,
         waveform_key: String,
     ) -> Result<(), DesktopError> {
-        let job_key = format!("{}\n{waveform_key}", song_dir.to_string_lossy());
+        let job_key = waveform_job_key(&song_dir, &waveform_key);
         {
             let mut in_flight = self
                 .in_flight
@@ -139,38 +147,87 @@ impl WaveformGenerationQueue {
             }
         }
 
-        let in_flight = Arc::clone(&self.in_flight);
-        thread::spawn(move || {
-            let summary_result = generate_waveform_summary(&song_dir, &waveform_key)
-                .map(|summary| waveform_summary_to_dto(&waveform_key, &summary));
-
-            match summary_result {
-                Ok(summary) => {
-                    let payload = WaveformReadyEvent {
-                        song_dir: song_dir.to_string_lossy().replace('\\', "/"),
-                        waveform_key: waveform_key.clone(),
-                        summary,
-                    };
-                    if let Err(error) = app.emit(WAVEFORM_READY_EVENT, payload) {
-                        eprintln!(
-                            "[libretracks-waveform] failed to emit waveform ready event: {error}"
-                        );
-                    }
-                }
-                Err(error) => {
-                    eprintln!(
-                        "[libretracks-waveform] failed to generate waveform for {}: {error}",
-                        waveform_key
-                    );
-                }
-            }
-
-            if let Ok(mut in_flight) = in_flight.lock() {
+        if self
+            .sender
+            .send(WaveformJob {
+                app,
+                song_dir,
+                waveform_key,
+            })
+            .is_err()
+        {
+            if let Ok(mut in_flight) = self.in_flight.lock() {
                 in_flight.remove(&job_key);
+            }
+            return Err(DesktopError::AudioCommand(
+                "waveform generation worker is not available".into(),
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+impl Default for WaveformGenerationQueue {
+    fn default() -> Self {
+        let (sender, receiver) = mpsc::channel::<WaveformJob>();
+        let in_flight = Arc::new(Mutex::new(HashSet::new()));
+        let worker_in_flight = Arc::clone(&in_flight);
+
+        thread::spawn(move || {
+            while let Ok(job) = receiver.recv() {
+                let job_key = waveform_job_key(&job.song_dir, &job.waveform_key);
+                process_waveform_job(job);
+                if let Ok(mut in_flight) = worker_in_flight.lock() {
+                    in_flight.remove(&job_key);
+                }
             }
         });
 
-        Ok(())
+        Self { sender, in_flight }
+    }
+}
+
+fn waveform_job_key(song_dir: &Path, waveform_key: &str) -> String {
+    format!("{}\n{waveform_key}", song_dir.to_string_lossy())
+}
+
+fn process_waveform_job(job: WaveformJob) {
+    let WaveformJob {
+        app,
+        song_dir,
+        waveform_key,
+    } = job;
+
+    let summary_result = generate_waveform_summary(&song_dir, &waveform_key);
+
+    match summary_result {
+        Ok(summary) => {
+            let summary = waveform_summary_to_dto(&waveform_key, &summary);
+            emit_waveform_ready(&app, &song_dir, &waveform_key, summary);
+        }
+        Err(error) => {
+            eprintln!(
+                "[libretracks-waveform] failed to generate waveform for {}: {error}",
+                waveform_key
+            );
+        }
+    }
+}
+
+fn emit_waveform_ready(
+    app: &AppHandle,
+    song_dir: &Path,
+    waveform_key: &str,
+    summary: WaveformSummaryDto,
+) {
+    let payload = WaveformReadyEvent {
+        song_dir: song_dir.to_string_lossy().replace('\\', "/"),
+        waveform_key: waveform_key.to_string(),
+        summary,
+    };
+    if let Err(error) = app.emit(WAVEFORM_READY_EVENT, payload) {
+        eprintln!("[libretracks-waveform] failed to emit waveform ready event: {error}");
     }
 }
 

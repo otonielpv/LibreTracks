@@ -96,7 +96,6 @@ export type WaveformSummaryDto = {
   durationSeconds: number;
   sampleRate: number;
   lods: WaveformLodDto[];
-  isPreview?: boolean;
 };
 
 export type WaveformLodDto = {

@@ -145,7 +145,6 @@ function tileNamespace(request: TileRequest) {
     request.clip.sourceDurationSeconds.toFixed(6),
     request.clip.durationSeconds.toFixed(6),
     request.pixelsPerSecond.toFixed(4),
-    request.waveform.isPreview ? "preview" : "ready",
   ].join(":");
 }
 
@@ -198,7 +197,7 @@ function renderWaveformTile(
   }
 
   context.clearRect(0, 0, tileWidth, TILE_HEIGHT_PX);
-  context.fillStyle = request.waveform.isPreview ? "rgba(20, 20, 20, 0.34)" : "rgba(20, 20, 20, 0.72)";
+  context.fillStyle = "rgba(20, 20, 20, 0.72)";
   context.lineJoin = "round";
   context.lineCap = "round";
   context.beginPath();

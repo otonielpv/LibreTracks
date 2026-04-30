@@ -185,7 +185,7 @@ function buildWaveformCacheSignature(waveformCache: Record<string, WaveformSumma
             const rawMax = lod.maxPeaks?.[0]?.toFixed(4) ?? lod.maxPeaksBase64?.slice(0, 12) ?? "0";
             return `${lod.resolutionFrames}:${lod.bucketCount}:${rawMin}:${rawMax}`;
           })
-          .join(",")}:${summary.isPreview ? "preview" : "ready"}`,
+          .join(",")}`,
     )
     .join("|");
 }

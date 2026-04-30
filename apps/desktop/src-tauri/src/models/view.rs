@@ -179,8 +179,6 @@ pub struct WaveformSummaryDto {
     pub duration_seconds: f64,
     pub sample_rate: u32,
     pub lods: Vec<WaveformLodDto>,
-    #[serde(default)]
-    pub is_preview: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -308,7 +306,6 @@ pub(crate) fn waveform_summary_to_dto(
         duration_seconds: summary.duration_seconds,
         sample_rate: summary.sample_rate,
         lods: summary.lods.iter().map(waveform_lod_to_dto).collect(),
-        is_preview: false,
     }
 }
 

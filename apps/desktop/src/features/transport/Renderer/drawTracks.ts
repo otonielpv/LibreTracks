@@ -37,17 +37,17 @@ function drawWaveformPlaceholder(
   context.roundRect(left, top, width, height, 2);
   context.clip();
 
-  context.fillStyle = "rgba(255, 255, 255, 0.12)";
-  for (let offset = left - 24; offset < left + width + 24; offset += 18) {
-    context.fillRect(offset, top + 6, 8, Math.max(4, height - 12));
-  }
+  // Solid background
+  context.fillStyle = "rgba(229, 226, 225, 0.12)";
+  context.fillRect(left, top, width, height);
 
-  context.strokeStyle = "rgba(36, 38, 36, 0.18)";
-  context.lineWidth = 1;
-  context.beginPath();
-  context.moveTo(left + 8, top + height * 0.5);
-  context.lineTo(left + width - 8, top + height * 0.5);
-  context.stroke();
+  // Text "ANALYZING..."
+  context.fillStyle = "rgba(20, 20, 20, 0.85)";
+  context.font = '700 11px "Space Grotesk", sans-serif';
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText("ANALYZING...", left + width / 2, top + height / 2);
+
   context.restore();
 }
 

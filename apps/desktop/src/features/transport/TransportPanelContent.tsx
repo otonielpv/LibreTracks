@@ -21,7 +21,6 @@ import {
   createSong,
   createTrack,
   deleteLibraryFolder,
-  buildWaveformLodsFromPeaks,
   deleteClip,
   deleteSongRegion,
   deleteSongTempoMarker,
@@ -147,7 +146,6 @@ const ZOOM_MIN = 0.0625;
 const ZOOM_MAX = 64;
 const DRAG_THRESHOLD_PX = 6;
 const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
-const INSTANT_WAVEFORM_BUCKET_COUNT = 96;
 const SCROLL_COMMIT_DEBOUNCE_MS = 100;
 const LIVE_ZOOM_COMMIT_DEBOUNCE_MS = 150;
 
@@ -453,51 +451,6 @@ function formatMusicalPosition(seconds: number, song: SongView | null | undefine
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function hashWaveformPreviewSeed(value: string) {
-  let hash = 2166136261;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return hash >>> 0;
-}
-
-function buildInstantWaveformPreview(
-  waveformKey: string,
-  durationSeconds: number,
-): WaveformSummaryDto {
-  const bucketCount = Math.max(32, Math.round(INSTANT_WAVEFORM_BUCKET_COUNT));
-  const minPeaks: number[] = [];
-  const maxPeaks: number[] = [];
-  let state = hashWaveformPreviewSeed(`${waveformKey}:${durationSeconds.toFixed(3)}`) || 1;
-  const cadence = 3 + (state % 5);
-  const accentStride = 5 + (state % 7);
-
-  for (let index = 0; index < bucketCount; index += 1) {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    const normalizedIndex = index / Math.max(1, bucketCount - 1);
-    const envelope = 0.2 + Math.sin(normalizedIndex * Math.PI) * 0.2;
-    const phrase = 0.16 + Math.abs(Math.sin(normalizedIndex * Math.PI * cadence)) * 0.26;
-    const accent = index % accentStride === 0 ? 0.12 : 0;
-    const jitter = ((state >>> 8) & 0xffff) / 0xffff;
-    const maxPeak = clamp(envelope + phrase + accent + jitter * 0.16, 0.12, 0.92);
-    const symmetry = 0.68 + (((state >>> 24) & 0xff) / 0xff) * 0.24;
-    maxPeaks.push(maxPeak);
-    minPeaks.push(-maxPeak * symmetry);
-  }
-
-  return {
-    waveformKey,
-    version: 3,
-    durationSeconds,
-    sampleRate: 48_000,
-    lods: buildWaveformLodsFromPeaks(minPeaks, maxPeaks, durationSeconds, 48_000),
-    isPreview: true,
-  };
 }
 
 function keyboardDigit(eventCode: string) {
@@ -2108,7 +2061,7 @@ export function TransportPanelContent() {
         .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index)
         .filter((waveformKey) => {
           const summary = waveformCache[waveformKey];
-          return !summary || summary.isPreview;
+          return !summary;
         });
 
       if (!missingWaveformKeys.length) {
@@ -2180,7 +2133,7 @@ export function TransportPanelContent() {
         .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index)
         .filter((waveformKey) => {
           const summary = waveformCache[waveformKey];
-          return !summary || summary.isPreview;
+          return !summary;
         });
 
       if (!missingWaveformKeys.length) {
@@ -4991,24 +4944,6 @@ export function TransportPanelContent() {
     if (args.pendingTrackSnapshot) {
       applyPlaybackSnapshot(args.pendingTrackSnapshot);
     }
-
-    setWaveformCache((current) => {
-      const nextCache = { ...current };
-
-      for (const placement of args.placements) {
-        const waveformKey = placement.asset.filePath;
-        if (nextCache[waveformKey] && !nextCache[waveformKey].isPreview) {
-          continue;
-        }
-
-        nextCache[waveformKey] = buildInstantWaveformPreview(
-          waveformKey,
-          placement.asset.durationSeconds,
-        );
-      }
-
-      return nextCache;
-    });
 
     const optimisticOperationId = startOptimisticClipOperation(
       args.placements.map((placement, index) => ({

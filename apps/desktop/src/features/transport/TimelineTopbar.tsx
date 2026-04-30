@@ -195,7 +195,7 @@ export function TimelineTopbar({
             <span>{t("timelineTopbar.bpmLabel")}</span>
             <input
               aria-label={t("timelineTopbar.songBpmAria")}
-              disabled={isProjectEmpty}
+              disabled={!song}
               type="number"
               min={1}
               step={0.1}
@@ -220,7 +220,7 @@ export function TimelineTopbar({
             <span>Compas</span>
             <input
               aria-label="Compas de la cancion"
-              disabled={isProjectEmpty}
+              disabled={!song}
               type="text"
               value={timeSignatureDraft}
               onChange={(event) => onTimeSignatureDraftChange(event.target.value)}
