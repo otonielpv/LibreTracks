@@ -112,7 +112,6 @@ export type LibraryAssetSummary = {
   fileName: string;
   filePath: string;
   durationSeconds: number;
-  detectedBpm?: number | null;
   folderPath?: string | null;
 };
 

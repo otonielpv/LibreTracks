@@ -23,7 +23,7 @@ pub use song_store::{
 pub use waveform::{
     analyze_wav_file, generate_waveform_summary, load_waveform_summary, waveform_file_path,
     waveform_file_path_for_source, write_waveform_summary, AnalyzedWav, SeekIndexEntry,
-    TempoCandidate, WaveformLod, WaveformSummary,
+    WaveformLod, WaveformSummary,
 };
 
 #[cfg(test)]
@@ -237,36 +237,6 @@ mod tests {
         assert_eq!(metadata.channels, 2);
         assert_eq!(metadata.sample_rate, 48_000);
         assert!((metadata.duration_seconds - 2.0).abs() < 0.001);
-    }
-
-    #[test]
-    fn analyzes_click_track_and_estimates_tempo() {
-        let root = tempdir().expect("temp dir should exist");
-        let wav_path = root.path().join("click.wav");
-        write_click_test_wav(&wav_path, 44_100, 1, 8, 120.0);
-
-        let analysis = analyze_wav_file(&wav_path).expect("analysis should succeed");
-        let tempo_candidate = analysis
-            .tempo_candidate
-            .expect("tempo candidate should be detected");
-
-        assert!((tempo_candidate.bpm - 120.0).abs() < 2.0);
-        assert!(tempo_candidate.confidence > 0.1);
-    }
-
-    #[test]
-    fn analyzes_click_track_and_snaps_near_integer_bpm() {
-        let root = tempdir().expect("temp dir should exist");
-        let wav_path = root.path().join("click-91.wav");
-        write_click_test_wav(&wav_path, 44_100, 1, 12, 91.0);
-
-        let analysis = analyze_wav_file(&wav_path).expect("analysis should succeed");
-        let tempo_candidate = analysis
-            .tempo_candidate
-            .expect("tempo candidate should be detected");
-
-        assert_eq!(tempo_candidate.bpm, 91.0);
-        assert!(tempo_candidate.confidence > 0.1);
     }
 
     #[test]

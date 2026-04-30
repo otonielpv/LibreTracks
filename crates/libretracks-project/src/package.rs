@@ -88,7 +88,6 @@ fn read_library_meta(song_dir: &Path) -> Result<Vec<PackageLibraryAssetEntry>, P
         .into_iter()
         .map(|file_path| PackageLibraryAssetEntry {
             file_path: normalize_package_file_path(&file_path),
-            detected_bpm: None,
             folder_path: None,
         })
         .collect())
@@ -98,8 +97,6 @@ fn read_library_meta(song_dir: &Path) -> Result<Vec<PackageLibraryAssetEntry>, P
 #[serde(rename_all = "camelCase")]
 pub struct PackageLibraryAssetEntry {
     pub file_path: String,
-    #[serde(default)]
-    pub detected_bpm: Option<f64>,
     #[serde(default)]
     pub folder_path: Option<String>,
 }
@@ -232,7 +229,6 @@ pub fn export_region_as_package(
                 .cloned()
                 .unwrap_or(PackageLibraryAssetEntry {
                     file_path: normalized_file_path.clone(),
-                    detected_bpm: None,
                     folder_path: None,
                 });
 

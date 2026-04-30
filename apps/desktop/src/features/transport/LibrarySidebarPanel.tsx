@@ -54,10 +54,6 @@ function formatAssetDuration(durationSeconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function formatAssetBpm(detectedBpm: number | null | undefined) {
-  return detectedBpm ? `${detectedBpm.toFixed(1)} BPM` : "-- BPM";
-}
-
 function readDraggedLibraryFilePaths(dataTransfer: DataTransfer | null) {
   const payload = dataTransfer?.getData(LIBRARY_ASSET_DRAG_MIME);
   if (!payload) {
@@ -401,7 +397,6 @@ export function LibrarySidebarPanel({
               >
                 <span className="lt-library-asset-icon material-symbols-outlined">music_note</span>
                 <span className="lt-library-asset-copy" title={asset.fileName}>{asset.fileName}</span>
-                <span className="lt-library-asset-bpm">{formatAssetBpm(asset.detectedBpm)}</span>
                 <span className="lt-library-asset-duration">{formatAssetDuration(asset.durationSeconds)}</span>
               </div>
             </div>

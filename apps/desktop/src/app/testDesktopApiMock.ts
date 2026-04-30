@@ -295,28 +295,24 @@ function buildInitialState(): DesktopApiMockState {
       fileName: "drums.wav",
       filePath: "audio/drums.wav",
       durationSeconds: 180,
-      detectedBpm: null,
       folderPath: null,
     },
     {
       fileName: "bass.wav",
       filePath: "audio/bass.wav",
       durationSeconds: 164,
-      detectedBpm: null,
       folderPath: null,
     },
     {
       fileName: "click.wav",
       filePath: "audio/click.wav",
       durationSeconds: 180,
-      detectedBpm: 120,
       folderPath: null,
     },
     {
       fileName: "guide.wav",
       filePath: "audio/guide.wav",
       durationSeconds: 140,
-      detectedBpm: null,
       folderPath: null,
     },
   ]);

@@ -4672,7 +4672,6 @@ export function TransportPanelContent() {
         fileName: libraryAssetFileName(filePath),
         filePath,
         durationSeconds,
-        detectedBpm: null,
         folderPath: null,
       }
     );
@@ -4961,31 +4960,6 @@ export function TransportPanelContent() {
     updateLibraryDragAutoScroll(event);
   }
 
-  async function maybePromptForInitialTempo(asset: LibraryAssetSummary) {
-    const currentSong = songRef.current;
-    const currentBpm = getSongBaseBpm(currentSong);
-    if (
-      !currentSong ||
-      currentSong.clips.length > 0 ||
-      asset.detectedBpm == null ||
-      !Number.isFinite(asset.detectedBpm) ||
-      Math.abs(asset.detectedBpm - currentBpm) < 0.01
-    ) {
-      return;
-    }
-
-    const shouldUpdateTempo = window.confirm(
-      t("transport.confirm.adjustProjectTempo", { bpm: asset.detectedBpm.toFixed(1) }),
-    );
-    if (!shouldUpdateTempo) {
-      return;
-    }
-
-    const nextSnapshot = await updateSongTempo(asset.detectedBpm);
-    applyPlaybackSnapshot(nextSnapshot);
-    setTempoDraft(String(asset.detectedBpm));
-  }
-
   async function createLibraryTrackForAsset(asset: LibraryAssetSummary) {
     const snapshot = await createTrack({
       name: humanizeLibraryTrackName(asset.filePath),
@@ -5078,8 +5052,6 @@ export function TransportPanelContent() {
     if (!assets.length) {
       return;
     }
-
-    await maybePromptForInitialTempo(assets[0]);
 
     if (args.layout === "horizontal") {
       let targetTrackId = args.targetTrackId;

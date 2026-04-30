@@ -522,7 +522,6 @@ impl DesktopSession {
                 .iter_mut()
                 .find(|existing_asset| existing_asset.file_path == normalized_path)
             {
-                existing_asset.detected_bpm = asset.detected_bpm;
                 existing_asset.duration_seconds = asset.duration_seconds;
                 existing_asset.file_name = file_name.clone();
             } else {
@@ -530,7 +529,6 @@ impl DesktopSession {
                     file_name,
                     file_path: normalized_path,
                     duration_seconds: asset.duration_seconds,
-                    detected_bpm: asset.detected_bpm,
                     folder_path: asset.folder_path.clone(),
                 });
             }
@@ -2592,8 +2590,6 @@ struct LibraryManifest {
 struct LibraryManifestAssetEntry {
     file_path: String,
     #[serde(default)]
-    detected_bpm: Option<f64>,
-    #[serde(default)]
     folder_path: Option<String>,
 }
 
@@ -2663,7 +2659,6 @@ fn write_library_manifest(song_dir: &Path, file_paths: &[String]) -> Result<(), 
             file_name: String::new(),
             file_path: normalize_library_file_path(file_path),
             duration_seconds: 0.0,
-            detected_bpm: None,
             folder_path: None,
         })
         .collect::<Vec<_>>();
@@ -2693,7 +2688,6 @@ fn merge_package_library_meta(
 
     for asset in assets.iter_mut() {
         if let Some(entry) = meta_by_path.remove(&asset.file_path) {
-            asset.detected_bpm = entry.detected_bpm;
             asset.folder_path = entry
                 .folder_path
                 .as_deref()
@@ -2728,7 +2722,6 @@ fn merge_package_library_meta(
             file_name,
             file_path: normalized_file_path,
             duration_seconds: metadata.duration_seconds,
-            detected_bpm: entry.detected_bpm,
             folder_path: entry
                 .folder_path
                 .as_deref()
@@ -2761,7 +2754,6 @@ fn write_library_manifest_state(
         .iter()
         .map(|asset| LibraryManifestAssetEntry {
             file_path: normalize_library_file_path(&asset.file_path),
-            detected_bpm: asset.detected_bpm,
             folder_path: asset
                 .folder_path
                 .as_deref()
@@ -2906,7 +2898,6 @@ fn list_library_assets(
             file_name: file_name.clone(),
             file_path: file_path.clone(),
             duration_seconds: metadata.duration_seconds,
-            detected_bpm: manifest_entry.and_then(|entry| entry.detected_bpm),
             folder_path: manifest_entry
                 .and_then(|entry| entry.folder_path.clone())
                 .and_then(|folder_path| normalize_library_folder_path(&folder_path)),
@@ -4445,7 +4436,7 @@ mod tests {
     }
 
     #[test]
-    fn get_library_assets_preserves_detected_bpm_from_manifest() {
+    fn get_library_assets_preserves_folder_from_manifest() {
         let root = tempdir().expect("temp dir should exist");
         let root_path = root.keep();
         let song_dir =
@@ -4458,7 +4449,6 @@ mod tests {
                 file_name: "click.wav".into(),
                 file_path: "audio/click.wav".into(),
                 duration_seconds: 2.0,
-                detected_bpm: Some(128.0),
                 folder_path: Some("Percusion/Clicks".into()),
             }],
         )
@@ -4468,7 +4458,6 @@ mod tests {
 
         assert_eq!(assets.len(), 1);
         assert_eq!(assets[0].file_path, "audio/click.wav");
-        assert_eq!(assets[0].detected_bpm, Some(128.0));
         assert_eq!(assets[0].folder_path.as_deref(), Some("Percusion/Clicks"));
     }
 
@@ -4556,7 +4545,6 @@ mod tests {
                 file_name: "move-me.wav".into(),
                 file_path: "audio/move-me.wav".into(),
                 duration_seconds: 3.0,
-                detected_bpm: Some(96.0),
                 folder_path: None,
             }],
         )
@@ -4595,7 +4583,6 @@ mod tests {
                 file_name: "move-me.wav".into(),
                 file_path: "audio/move-me.wav".into(),
                 duration_seconds: 3.0,
-                detected_bpm: Some(96.0),
                 folder_path: Some("Set A/Sub".into()),
             }],
         )
@@ -4633,7 +4620,6 @@ mod tests {
                 file_name: "move-me.wav".into(),
                 file_path: "audio/move-me.wav".into(),
                 duration_seconds: 3.0,
-                detected_bpm: Some(96.0),
                 folder_path: Some("Set A/Sub".into()),
             }],
         )
