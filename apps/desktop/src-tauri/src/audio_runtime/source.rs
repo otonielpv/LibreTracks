@@ -50,6 +50,7 @@ pub(crate) struct StreamingClipReader {
     command_sender: Sender<StreamingWorkerCommand>,
     output_sample_rate: u32,
     current_generation: u64,
+    current_source_start_frame: usize,
     emitted_frames: usize,
     total_output_frames: usize,
     declick_fade_frames: usize,
@@ -191,29 +192,31 @@ impl AudioBufferCache {
 
         let prepared_entries = missing_paths
             .into_par_iter()
-            .filter_map(|(file_path, waveform_key)| match prepare_audio_source(&file_path) {
-                Ok(mut source) => {
-                    if let Ok(summary) = load_waveform_summary(song_dir, &waveform_key) {
-                        source.seek_index = summary
-                            .seek_index
-                            .into_iter()
-                            .map(|entry| SeekIndexEntry {
-                                timestamp: entry.timestamp,
-                                packet_offset: entry.packet_offset,
-                            })
-                            .collect();
+            .filter_map(
+                |(file_path, waveform_key)| match prepare_audio_source(&file_path) {
+                    Ok(mut source) => {
+                        if let Ok(summary) = load_waveform_summary(song_dir, &waveform_key) {
+                            source.seek_index = summary
+                                .seek_index
+                                .into_iter()
+                                .map(|entry| SeekIndexEntry {
+                                    timestamp: entry.timestamp,
+                                    packet_offset: entry.packet_offset,
+                                })
+                                .collect();
+                        }
+                        Some((file_path, Arc::new(source)))
                     }
-                    Some((file_path, Arc::new(source)))
-                }
-                Err(error) => {
-                    eprintln!(
-                        "[libretracks-audio] Skipping missing or invalid file {}: {}",
-                        file_path.display(),
-                        error
-                    );
-                    None
-                }
-            })
+                    Err(error) => {
+                        eprintln!(
+                            "[libretracks-audio] Skipping missing or invalid file {}: {}",
+                            file_path.display(),
+                            error
+                        );
+                        None
+                    }
+                },
+            )
             .collect::<Vec<_>>();
 
         for (file_path, prepared_source) in prepared_entries {
@@ -292,14 +295,14 @@ impl StreamingClipReader {
         let elapsed_frames = timeline_frame.saturating_sub(plan.timeline_start_frame);
         let remaining_frames = plan.duration_frames.saturating_sub(elapsed_frames) as usize;
         let declick_fade_frames = (0.005 * output_sample_rate as f32).round() as usize;
-        let is_true_clip_start =
-            elapsed_frames == 0 && plan.source_start_seconds <= f64::EPSILON;
+        let is_true_clip_start = elapsed_frames == 0 && plan.source_start_seconds <= f64::EPSILON;
         Ok(Self {
             shared_source,
             consumer,
             command_sender,
             output_sample_rate,
             current_generation: 0,
+            current_source_start_frame: source_start_frame,
             emitted_frames: 0,
             total_output_frames: remaining_frames,
             declick_fade_frames,
@@ -322,6 +325,7 @@ impl StreamingClipReader {
         }
 
         self.emitted_frames = 0;
+        self.current_source_start_frame = target_frame;
         self.declick_frames_remaining = self.declick_fade_frames;
         self.eof = self.total_output_frames == 0;
         let source_start_seconds =
@@ -342,7 +346,8 @@ impl StreamingClipReader {
     #[cfg(test)]
     pub(crate) fn current_frame(&self) -> usize {
         let source_ratio = self.shared_source.sample_rate as f64 / self.output_sample_rate as f64;
-        (self.emitted_frames as f64 * source_ratio).round() as usize
+        self.current_source_start_frame
+            .saturating_add((self.emitted_frames as f64 * source_ratio).round() as usize)
     }
 
     #[cfg(test)]
@@ -497,16 +502,23 @@ fn run_streaming_worker(
                 start_seconds = next_start;
                 generation = next_generation;
             }
-            WorkerOutcome::Shutdown | WorkerOutcome::Finished => break,
+            WorkerOutcome::Finished => match command_receiver.recv() {
+                Ok(StreamingWorkerCommand::Seek {
+                    source_start_seconds,
+                    generation: next_generation,
+                }) => {
+                    start_seconds = source_start_seconds;
+                    generation = next_generation;
+                }
+                Ok(StreamingWorkerCommand::Shutdown) | Err(_) => break,
+            },
+            WorkerOutcome::Shutdown => break,
         }
     }
 }
 
 enum WorkerOutcome {
-    Restart {
-        start_seconds: f64,
-        generation: u64,
-    },
+    Restart { start_seconds: f64, generation: u64 },
     Finished,
     Shutdown,
 }
@@ -930,6 +942,7 @@ mod tests {
             command_sender,
             output_sample_rate: 48_000,
             current_generation: 2,
+            current_source_start_frame: 0,
             emitted_frames: 0,
             total_output_frames: 1,
             declick_fade_frames: 1,

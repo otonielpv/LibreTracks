@@ -4470,6 +4470,11 @@ mod tests {
         let imports_root = tempdir().expect("temp dir should exist");
         let imported_click = imports_root.path().join("click.wav");
         write_silent_test_wav(&imported_click, 6);
+        let imported_click_path = imported_click
+            .canonicalize()
+            .unwrap_or_else(|_| imported_click.clone())
+            .to_string_lossy()
+            .replace('\\', "/");
 
         let before = session
             .song_view()
@@ -4487,7 +4492,7 @@ mod tests {
         assert_eq!(before.clips.len(), after.clips.len());
         assert!(assets
             .iter()
-            .any(|asset| asset.file_path == "audio/click.wav"));
+            .any(|asset| asset.file_path.replace('\\', "/") == imported_click_path));
     }
 
     #[test]
