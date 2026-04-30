@@ -34,7 +34,7 @@ jobs:
         shell: pwsh
         run: |
           $asioDir = Join-Path $env:RUNNER_TEMP "asio_sdk"
-          git clone https://github.com/RustAudio/asio-sdk.git $asioDir
+          git clone https://github.com/steinbergmedia/asiosdk.git $asioDir
           "CPAL_ASIO_DIR=$asioDir" | Out-File -FilePath $env:GITHUB_ENV -Append
           "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
 
@@ -96,7 +96,7 @@ jobs:
         shell: pwsh
         run: |
           $asioDir = Join-Path $env:RUNNER_TEMP "asio_sdk"
-          git clone https://github.com/RustAudio/asio-sdk.git $asioDir
+          git clone https://github.com/steinbergmedia/asiosdk.git $asioDir
           "CPAL_ASIO_DIR=$asioDir" | Out-File -FilePath $env:GITHUB_ENV -Append
           "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
 
