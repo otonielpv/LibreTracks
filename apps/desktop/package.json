@@ -15,6 +15,7 @@
   "dependencies": {
     "@libretracks/shared": "file:../../packages/shared",
     "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
     "i18next": "^26.0.8",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",

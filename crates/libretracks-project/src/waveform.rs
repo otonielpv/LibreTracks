@@ -92,19 +92,6 @@ pub fn waveform_file_path(
         .join(format!("{file_stem}.waveform.ltpeaks"))
 }
 
-pub fn waveform_file_path_for_source(source_path: impl AsRef<Path>) -> PathBuf {
-    let source_path = source_path.as_ref();
-    let file_stem = waveform_cache_file_stem(source_path);
-
-    source_path
-        .parent()
-        .and_then(Path::parent)
-        .unwrap_or_else(|| Path::new("."))
-        .join("cache")
-        .join("waveforms")
-        .join(format!("{file_stem}.waveform.ltpeaks"))
-}
-
 fn resolve_audio_source_path(song_dir: &Path, audio_path: &Path) -> PathBuf {
     if audio_path.is_absolute() {
         audio_path.to_path_buf()

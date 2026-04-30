@@ -22,6 +22,7 @@ symphonia = { version = "0.5", default-features = false, features = ["aac", "fla
 tauri = { version = "2", features = [] }
 thiserror = "2"
 tokio = { version = "1", features = ["sync", "time"] }
+tauri-plugin-dialog = "2.7.0"
 
 [dependencies.libretracks-core]
 path = "../../../crates/libretracks-core"

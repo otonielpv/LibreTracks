@@ -397,6 +397,69 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn resolve_missing_file(
+        &mut self,
+        old_path: &str,
+        new_path: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song_file_path = self.current_song_file_path()?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        for clip in song.clips.iter_mut() {
+            if clip.file_path == old_path {
+                clip.file_path = new_path.to_string();
+            }
+        }
+
+        if let Some(mut manifest) = read_library_manifest(&song_dir)? {
+            for file_path in manifest.file_paths.iter_mut() {
+                if file_path == old_path {
+                    *file_path = new_path.to_string();
+                }
+            }
+            for asset in manifest.assets.iter_mut() {
+                if asset.file_path == old_path {
+                    asset.file_path = new_path.to_string();
+                }
+            }
+            let manifest_json = serde_json::to_vec_pretty(&manifest)
+                .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+            fs::write(library_manifest_path(&song_dir), manifest_json)?;
+        }
+
+        let old_waveform_path = waveform_file_path(&song_dir, old_path);
+        let new_waveform_path = waveform_file_path(&song_dir, new_path);
+        if old_waveform_path.exists() && old_waveform_path != new_waveform_path {
+            if let Some(parent) = new_waveform_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            if new_waveform_path.exists() {
+                fs::remove_file(&new_waveform_path)?;
+            }
+            fs::rename(&old_waveform_path, &new_waveform_path)?;
+        }
+
+        self.waveform_cache.remove(&song_dir, old_path);
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+
+        let save_started_at = Instant::now();
+        let saved_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        save_song_to_file(&song_file_path, &saved_song)?;
+        self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
+
+        Ok(self.snapshot())
+    }
+
     pub fn save_project_as(&mut self) -> Result<Option<TransportSnapshot>, DesktopError> {
         let source_song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let song = self
@@ -586,6 +649,7 @@ impl DesktopSession {
                     file_name,
                     file_path: normalized_path,
                     duration_seconds: asset.duration_seconds,
+                    is_missing: false,
                     folder_path: asset.folder_path.clone(),
                 });
             }
@@ -2716,6 +2780,7 @@ fn write_library_manifest(song_dir: &Path, file_paths: &[String]) -> Result<(), 
             file_name: String::new(),
             file_path: normalize_library_file_path(file_path),
             duration_seconds: 0.0,
+            is_missing: !Path::new(file_path).exists(),
             folder_path: None,
         })
         .collect::<Vec<_>>();
@@ -2779,6 +2844,7 @@ fn merge_package_library_meta(
             file_name,
             file_path: normalized_file_path,
             duration_seconds: metadata.duration_seconds,
+            is_missing: false,
             folder_path: entry
                 .folder_path
                 .as_deref()
@@ -2940,21 +3006,23 @@ fn list_library_assets(
     let mut assets = Vec::new();
     for file_path in collect_library_file_paths(song_dir, song)? {
         let path = resolve_audio_file_path(song_dir, &file_path);
-        if !path.is_file() {
-            continue;
-        }
-
         let file_name = path
             .file_name()
             .and_then(|value| value.to_str())
             .unwrap_or(&file_path)
             .to_string();
-        let metadata = read_audio_metadata(&path)?;
+        let is_missing = !Path::new(&file_path).exists();
+        let duration_seconds = if path.is_file() {
+            read_audio_metadata(&path)?.duration_seconds
+        } else {
+            0.0
+        };
         let manifest_entry = manifest_assets.get(&file_path);
         assets.push(LibraryAssetSummary {
             file_name: file_name.clone(),
             file_path: file_path.clone(),
-            duration_seconds: metadata.duration_seconds,
+            duration_seconds,
+            is_missing,
             folder_path: manifest_entry
                 .and_then(|entry| entry.folder_path.clone())
                 .and_then(|folder_path| normalize_library_folder_path(&folder_path)),
@@ -3709,6 +3777,9 @@ mod tests {
     }
 
     fn write_silent_test_wav(path: &Path, duration_seconds: u32) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("wav parent dir should exist");
+        }
         let spec = hound::WavSpec {
             channels: 2,
             sample_rate: 44_100,
@@ -4506,6 +4577,7 @@ mod tests {
                 file_name: "click.wav".into(),
                 file_path: "audio/click.wav".into(),
                 duration_seconds: 2.0,
+                is_missing: false,
                 folder_path: Some("Percusion/Clicks".into()),
             }],
         )
@@ -4602,6 +4674,7 @@ mod tests {
                 file_name: "move-me.wav".into(),
                 file_path: "audio/move-me.wav".into(),
                 duration_seconds: 3.0,
+                is_missing: false,
                 folder_path: None,
             }],
         )
@@ -4640,6 +4713,7 @@ mod tests {
                 file_name: "move-me.wav".into(),
                 file_path: "audio/move-me.wav".into(),
                 duration_seconds: 3.0,
+                is_missing: false,
                 folder_path: Some("Set A/Sub".into()),
             }],
         )
@@ -4677,6 +4751,7 @@ mod tests {
                 file_name: "move-me.wav".into(),
                 file_path: "audio/move-me.wav".into(),
                 duration_seconds: 3.0,
+                is_missing: false,
                 folder_path: Some("Set A/Sub".into()),
             }],
         )

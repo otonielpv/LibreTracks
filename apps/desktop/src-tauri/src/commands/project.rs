@@ -57,6 +57,22 @@ pub fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot,
 }
 
 #[tauri::command]
+pub fn resolve_missing_file(
+    old_path: String,
+    new_path: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .resolve_missing_file(&old_path, &new_path, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn save_project_as(
     state: State<'_, DesktopState>,
 ) -> Result<Option<TransportSnapshot>, String> {

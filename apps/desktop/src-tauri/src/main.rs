@@ -19,6 +19,7 @@ use state::DesktopState;
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(DesktopState::default())
         .setup(|app| {
             let initial_settings = load_app_settings(&app.handle()).unwrap_or_else(|error| {
@@ -76,6 +77,7 @@ fn main() {
             commands::project::import_song_package,
             commands::project::import_song_package_from_base64,
             commands::project::import_song_package_from_bytes,
+            commands::project::resolve_missing_file,
             commands::library::delete_library_asset,
             commands::library::move_library_asset,
             commands::library::create_library_folder,

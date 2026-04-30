@@ -66,6 +66,7 @@ export type ClipSummary = {
   trackName: string;
   filePath: string;
   waveformKey: string;
+  isMissing: boolean;
   timelineStartSeconds: number;
   sourceStartSeconds: number;
   sourceDurationSeconds: number;
@@ -111,6 +112,7 @@ export type LibraryAssetSummary = {
   fileName: string;
   filePath: string;
   durationSeconds: number;
+  isMissing: boolean;
   folderPath?: string | null;
 };
 

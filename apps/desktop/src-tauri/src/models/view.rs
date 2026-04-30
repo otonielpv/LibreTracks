@@ -155,6 +155,7 @@ pub struct ClipSummary {
     pub track_name: String,
     pub file_path: String,
     pub waveform_key: String,
+    pub is_missing: bool,
     pub timeline_start_seconds: f64,
     pub source_start_seconds: f64,
     pub source_duration_seconds: f64,
@@ -187,6 +188,7 @@ pub struct LibraryAssetSummary {
     pub file_name: String,
     pub file_path: String,
     pub duration_seconds: f64,
+    pub is_missing: bool,
     pub folder_path: Option<String>,
 }
 
@@ -284,6 +286,7 @@ pub(crate) fn clip_to_summary(
         track_name,
         file_path: clip.file_path.clone(),
         waveform_key,
+        is_missing: !std::path::Path::new(&clip.file_path).exists(),
         timeline_start_seconds: clip.timeline_start_seconds,
         source_start_seconds: clip.source_start_seconds,
         source_duration_seconds,

@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default desktop capability for the main LibreTracks UI.","local":true,"windows":["*"],"permissions":["core:default"]}}
+{"default":{"identifier":"default","description":"Default desktop capability for the main LibreTracks UI.","local":true,"windows":["*"],"permissions":["core:default","dialog:allow-open"]}}

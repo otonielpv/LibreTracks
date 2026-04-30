@@ -210,6 +210,7 @@ function buildInitialSong(): SongView {
         trackName: "Drums",
         filePath: "audio/drums.wav",
         waveformKey: "audio/drums.wav",
+        isMissing: false,
         timelineStartSeconds: 0,
         sourceStartSeconds: 0,
         sourceDurationSeconds: 180,
@@ -222,6 +223,7 @@ function buildInitialSong(): SongView {
         trackName: "Bass",
         filePath: "audio/bass.wav",
         waveformKey: "audio/bass.wav",
+        isMissing: false,
         timelineStartSeconds: 8,
         sourceStartSeconds: 0,
         sourceDurationSeconds: 164,
@@ -234,6 +236,7 @@ function buildInitialSong(): SongView {
         trackName: "Click",
         filePath: "audio/click.wav",
         waveformKey: "audio/click.wav",
+        isMissing: false,
         timelineStartSeconds: 0,
         sourceStartSeconds: 0,
         sourceDurationSeconds: 180,
@@ -246,6 +249,7 @@ function buildInitialSong(): SongView {
         trackName: "Guide Vox",
         filePath: "audio/guide.wav",
         waveformKey: "audio/guide.wav",
+        isMissing: false,
         timelineStartSeconds: 12,
         sourceStartSeconds: 0,
         sourceDurationSeconds: 140,
@@ -295,24 +299,28 @@ function buildInitialState(): DesktopApiMockState {
       fileName: "drums.wav",
       filePath: "audio/drums.wav",
       durationSeconds: 180,
+      isMissing: false,
       folderPath: null,
     },
     {
       fileName: "bass.wav",
       filePath: "audio/bass.wav",
       durationSeconds: 164,
+      isMissing: false,
       folderPath: null,
     },
     {
       fileName: "click.wav",
       filePath: "audio/click.wav",
       durationSeconds: 180,
+      isMissing: false,
       folderPath: null,
     },
     {
       fileName: "guide.wav",
       filePath: "audio/guide.wav",
       durationSeconds: 140,
+      isMissing: false,
       folderPath: null,
     },
   ]);
@@ -428,6 +436,7 @@ function normalizeSong(song: SongView): SongView {
 
   const normalizedClips = song.clips.map((clip) => ({
     ...clip,
+    isMissing: clip.isMissing ?? false,
     trackName: trackIndex.get(clip.trackId)?.name ?? clip.trackName,
   }));
 
@@ -683,6 +692,28 @@ export const testDesktopApiMock = {
   importLibraryAssetsFromDialog: async () => clone(state.libraryAssets),
   exportRegionAsPackage: async (_regionId: string) => {},
   importSongPackage: async (_packagePath: string, _insertAtSeconds: number) => clone(buildSnapshot()),
+  resolveMissingFile: async (oldPath: string, newPath: string) => {
+    state.libraryAssets = sortLibraryAssets(
+      state.libraryAssets.map((asset) =>
+        asset.filePath === oldPath
+          ? { ...asset, filePath: newPath, fileName: newPath.split(/[\\/]/).pop() ?? newPath, isMissing: false }
+          : asset,
+      ),
+    );
+    replaceSong({
+      ...state.song,
+      clips: state.song.clips.map((clip) =>
+        clip.filePath === oldPath
+          ? { ...clip, filePath: newPath, waveformKey: newPath, isMissing: false }
+          : clip,
+      ),
+    });
+    if (state.waveforms[oldPath]) {
+      state.waveforms[newPath] = { ...state.waveforms[oldPath], waveformKey: newPath };
+      delete state.waveforms[oldPath];
+    }
+    return clone(buildSnapshot());
+  },
   deleteLibraryAsset: async (filePath: string) => {
     state.libraryAssets = state.libraryAssets.filter((asset) => asset.filePath !== filePath);
     delete state.waveforms[filePath];
@@ -1056,6 +1087,7 @@ export const testDesktopApiMock = {
         trackName: track?.name ?? entry.trackId,
         filePath: entry.filePath,
         waveformKey: entry.filePath,
+        isMissing: false,
         timelineStartSeconds: Math.max(0, entry.timelineStartSeconds),
         sourceStartSeconds: 0,
         sourceDurationSeconds: durationSeconds,

@@ -48,6 +48,7 @@ function buildClip(overrides?: Partial<ClipSummary>): ClipSummary {
     trackName: "Track 1",
     filePath: "audio/test.wav",
     waveformKey: "audio/test.wav",
+    isMissing: false,
     timelineStartSeconds: 0,
     sourceStartSeconds: 0,
     sourceDurationSeconds: 8,

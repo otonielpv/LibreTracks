@@ -127,7 +127,6 @@ pub fn create_song_folder(
     }
 
     let song_dir = root.as_ref().join(trimmed);
-    fs::create_dir_all(song_dir.join("audio"))?;
     fs::create_dir_all(song_dir.join("cache").join("waveforms"))?;
 
     Ok(song_dir)

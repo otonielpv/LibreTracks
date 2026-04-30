@@ -13,7 +13,7 @@ use libretracks_core::{
 use serde::{Deserialize, Serialize};
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
-use crate::song_store::ProjectError;
+use crate::{song_store::ProjectError, waveform_file_path};
 
 fn timestamp_suffix() -> u128 {
     SystemTime::now()
@@ -258,7 +258,7 @@ pub fn export_region_as_package(
     let file = File::create(output_path)?;
     let mut zip = ZipWriter::new(file);
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-    let audio_options =
+    let waveform_options =
         SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     zip.start_file("manifest.json", options)
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
@@ -269,10 +269,16 @@ pub fn export_region_as_package(
         if !added_files.insert(clip.file_path.clone()) {
             continue;
         }
-        let source_path = song_dir.join(&clip.file_path);
-        zip.start_file(clip.file_path.replace('\\', "/"), audio_options)
+        let waveform_path = waveform_file_path(song_dir, &clip.file_path);
+        if !waveform_path.exists() {
+            continue;
+        }
+        let Some(file_name) = waveform_path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        zip.start_file(format!("waveforms/{file_name}"), waveform_options)
             .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-        zip.write_all(&fs::read(source_path)?)?;
+        zip.write_all(&fs::read(waveform_path)?)?;
     }
 
     zip.finish()
@@ -332,8 +338,8 @@ fn import_song_package_from_archive<R: Read + Seek>(
     let manifest: SongPackageManifest = serde_json::from_str(&manifest_json)?;
     let library_meta = manifest.library_meta.clone();
 
-    let audio_dir = song_dir.join("audio");
-    fs::create_dir_all(&audio_dir)?;
+    let waveform_dir = song_dir.join("cache").join("waveforms");
+    fs::create_dir_all(&waveform_dir)?;
 
     let mut next_song = song.clone();
     let mut track_ids_by_name = next_song
@@ -354,16 +360,24 @@ fn import_song_package_from_archive<R: Read + Seek>(
     let insert_at_seconds = insert_at_seconds.max(0.0);
     let is_empty_session = next_song.tracks.is_empty() && next_song.clips.is_empty();
 
-    for clip in &manifest.clips {
+    for index in 0..archive.len() {
         let mut zip_file = archive
-            .by_name(&clip.file_path.replace('\\', "/"))
+            .by_index(index)
             .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-        let destination_path = audio_dir.join(
-            Path::new(&clip.file_path)
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("audio.wav"),
-        );
+        let file_name = match zip_file
+            .name()
+            .strip_prefix("waveforms/")
+            .filter(|file_name| !file_name.is_empty() && !file_name.contains('/'))
+        {
+            Some(file_name) => file_name.to_string(),
+            None => {
+                continue;
+            }
+        };
+        if file_name.contains('\\') {
+            continue;
+        }
+        let destination_path = waveform_dir.join(&file_name);
         let mut bytes = Vec::new();
         zip_file.read_to_end(&mut bytes)?;
         fs::write(&destination_path, bytes)?;
@@ -399,14 +413,10 @@ fn import_song_package_from_archive<R: Read + Seek>(
             .cloned()
             .ok_or_else(|| ProjectError::AudioDecode("merged track not found".into()))?;
         let clip_id = unique_id("clip", &clip.id, &mut used_clip_ids);
-        let file_name = Path::new(&clip.file_path)
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("audio.wav");
         next_song.clips.push(Clip {
             id: clip_id,
             track_id: target_track_id,
-            file_path: format!("audio/{file_name}"),
+            file_path: clip.file_path.clone(),
             timeline_start_seconds: clip.timeline_start_seconds + insert_at_seconds,
             source_start_seconds: clip.source_start_seconds,
             duration_seconds: clip.duration_seconds,

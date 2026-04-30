@@ -22,7 +22,7 @@ pub use song_store::{
 };
 pub use waveform::{
     analyze_wav_file, generate_waveform_summary, load_waveform_summary, waveform_file_path,
-    waveform_file_path_for_source, write_waveform_summary, AnalyzedWav, SeekIndexEntry,
+    write_waveform_summary, AnalyzedWav, SeekIndexEntry,
     WaveformLod, WaveformSummary,
 };
 
@@ -96,7 +96,7 @@ mod tests {
             create_song_folder(root.path(), "digno-y-santo").expect("folder should be created");
 
         assert!(song_dir.exists());
-        assert!(song_dir.join("audio").exists());
+        assert!(!song_dir.join("audio").exists());
         assert!(song_dir.join("cache").exists());
         assert!(song_dir.join("cache").join("waveforms").exists());
     }
@@ -147,6 +147,9 @@ mod tests {
     }
 
     fn write_test_wav(path: &Path, sample_rate: u32, channels: u16, duration_seconds: u32) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("wav parent dir should exist");
+        }
         let spec = WavSpec {
             channels,
             sample_rate,
@@ -268,22 +271,24 @@ mod tests {
         assert_eq!(imported.song.clips.len(), 2);
         assert!(imported.song.section_markers.is_empty());
         assert!((imported.song.duration_seconds - 3.0).abs() < 0.001);
-        assert!(imported.song_dir.join("audio").join("drums.wav").exists());
-        assert!(imported.song_dir.join("audio").join("bass.wav").exists());
-        assert!(waveform_file_path(&imported.song_dir, "audio/drums.wav").exists());
-
+        assert_eq!(
+            imported.song.clips[0].file_path,
+            drums_path.canonicalize().unwrap().to_string_lossy().replace('\\', "/")
+        );
+        assert_eq!(
+            imported.song.clips[1].file_path,
+            bass_path.canonicalize().unwrap().to_string_lossy().replace('\\', "/")
+        );
         let drums_reader =
-            hound::WavReader::open(imported.song_dir.join("audio").join("drums.wav"))
-                .expect("normalized drums wav should open");
+            hound::WavReader::open(&drums_path).expect("drums wav should open");
         let drums_spec = drums_reader.spec();
-        assert_eq!(drums_spec.sample_rate, 48_000);
-        assert_eq!(drums_spec.bits_per_sample, 32);
-        assert_eq!(drums_spec.sample_format, SampleFormat::Float);
+        assert_eq!(drums_spec.sample_rate, 44_100);
+        assert_eq!(drums_spec.bits_per_sample, 16);
+        assert_eq!(drums_spec.sample_format, SampleFormat::Int);
         assert_eq!(drums_spec.channels, 2);
 
-        let bass_metadata = read_wav_metadata(imported.song_dir.join("audio").join("bass.wav"))
-            .expect("normalized bass metadata should load");
-        assert_eq!(bass_metadata.sample_rate, 48_000);
+        let bass_metadata = read_wav_metadata(&bass_path).expect("bass metadata should load");
+        assert_eq!(bass_metadata.sample_rate, 44_100);
         assert_eq!(bass_metadata.channels, 1);
         assert!((bass_metadata.duration_seconds - 2.0).abs() < 0.01);
 
@@ -291,14 +296,6 @@ mod tests {
         assert_eq!(loaded.tracks.len(), 2);
         assert_eq!(loaded.clips[0].timeline_start_seconds, 0.0);
 
-        let waveform = load_waveform_summary(&imported.song_dir, "audio/drums.wav")
-            .expect("waveform should load");
-        let base_lod = waveform.primary_lod().expect("waveform lod should exist");
-        assert_eq!(base_lod.min_peaks.len(), base_lod.max_peaks.len());
-        assert_eq!(base_lod.resolution_frames, 256);
-        assert!(waveform.lods.len() >= 3);
-        assert!(waveform.duration_seconds > 0.0);
-        assert!(waveform.sample_rate > 0);
     }
 
     #[test]
@@ -414,7 +411,7 @@ mod tests {
         write_test_wav(&duplicate_click_path, 44_100, 2, 3);
 
         let appended_song =
-            append_wav_files_to_song(&song_dir, &song, &[duplicate_click_path], |_, _| {})
+            append_wav_files_to_song(&song_dir, &song, &[duplicate_click_path.clone()], |_, _| {})
                 .expect("append should succeed");
 
         assert_eq!(appended_song.song.tracks.len(), 2);
@@ -428,15 +425,19 @@ mod tests {
             .song
             .tracks
             .iter()
-            .any(|track| track.id == "track_click-1" && track.name == "Click 1"));
+            .any(|track| track.id == "track_click-1" && track.name == "Click"));
         assert!(appended_song
             .song
             .clips
             .iter()
-            .any(|clip| clip.track_id == "track_click-1" && clip.file_path == "audio/click-1.wav"));
-        assert!(song_dir.join("audio").join("click.wav").exists());
-        assert!(song_dir.join("audio").join("click-1.wav").exists());
-        assert!(waveform_file_path(&song_dir, "audio/click-1.wav").exists());
+            .any(|clip| clip.track_id == "track_click-1"
+                && clip.file_path
+                    == duplicate_click_path
+                        .canonicalize()
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/")));
+        assert!(duplicate_click_path.exists());
         assert!((appended_song.song.duration_seconds - 4.0).abs() < 0.001);
         assert!((appended_song.song.regions[0].end_seconds - 2.0).abs() < 0.001);
     }
@@ -452,17 +453,16 @@ mod tests {
         let click_path = imports_dir.join("click.wav");
         write_test_wav(&click_path, 44_100, 2, 3);
 
-        let imported = import_wav_files_to_library(&song_dir, &[click_path], |_, _| {})
+        let imported = import_wav_files_to_library(&song_dir, &[click_path.clone()], |_, _| {})
             .expect("library import should succeed");
 
         assert_eq!(imported.assets.len(), 1);
         assert_eq!(
             imported.assets[0].imported_relative_path,
-            Path::new("audio").join("click.wav")
+            click_path.canonicalize().unwrap()
         );
         assert!((imported.assets[0].duration_seconds - 3.0).abs() < 0.001);
-        assert!(song_dir.join("audio").join("click.wav").exists());
-        assert!(waveform_file_path(&song_dir, "audio/click.wav").exists());
+        assert!(click_path.exists());
         assert!(!song_file_path(&song_dir).exists());
     }
 

@@ -757,6 +757,43 @@ body {
   background: rgb(87 241 219 / 0.14);
 }
 
+.lt-missing-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: min(42vh, 22rem);
+  overflow: auto;
+}
+
+.lt-missing-file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.04);
+}
+
+.lt-missing-file-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: rgb(243 240 239 / 0.86);
+  font: 600 0.78rem/1.35 "Space Grotesk", sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-missing-file-row button {
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.24);
+  background: rgb(87 241 219 / 0.14);
+  color: #f3f0ef;
+  padding: 0.58rem 0.85rem;
+  font: 700 0.76rem/1 "Space Grotesk", sans-serif;
+}
+
 .lt-settings-modal-body .lt-remote-card {
   min-width: 0;
   max-width: none;

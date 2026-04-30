@@ -10,6 +10,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   DEFAULT_APP_SETTINGS,
   assignSectionMarkerDigit,
@@ -64,6 +65,7 @@ import {
   playTransport,
   redoAction,
   renameLibraryFolder,
+  resolveMissingFile,
   saveProject,
   saveProjectAs,
   saveSettings,
@@ -568,6 +570,7 @@ function isClipStructurallyEqual(left: ClipSummary, right: ClipSummary) {
     left.id === right.id &&
     left.trackId === right.trackId &&
     left.waveformKey === right.waveformKey &&
+    left.isMissing === right.isMissing &&
     left.timelineStartSeconds === right.timelineStartSeconds &&
     left.sourceStartSeconds === right.sourceStartSeconds &&
     left.sourceDurationSeconds === right.sourceDurationSeconds &&
@@ -779,6 +782,7 @@ export function TransportPanelContent() {
   const [isBusy, setIsBusy] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isRemoteModalOpen, setIsRemoteModalOpen] = useState(false);
+  const [missingFilesModalOpen, setMissingFilesModalOpen] = useState(false);
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("audio");
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
@@ -1166,6 +1170,49 @@ export function TransportPanelContent() {
     snapshotRef.current = nextSnapshot;
     useTransportStore.getState().setPlaybackState(nextSnapshot);
   }, []);
+
+  const missingFilePaths = useMemo(() => {
+    const paths = new Set<string>();
+    for (const clip of song?.clips ?? []) {
+      if (clip.isMissing) {
+        paths.add(clip.filePath);
+      }
+    }
+    for (const asset of libraryAssets) {
+      if (asset.isMissing) {
+        paths.add(asset.filePath);
+      }
+    }
+    return [...paths].sort((left, right) => left.localeCompare(right));
+  }, [libraryAssets, song?.clips]);
+  const missingFilePathsSignature = missingFilePaths.join("\n");
+
+  useEffect(() => {
+    if (missingFilePaths.length > 0) {
+      setMissingFilesModalOpen(true);
+    }
+  }, [missingFilePaths.length, missingFilePathsSignature]);
+
+  const handleLocateMissingFile = useCallback(
+    async (missingPath: string) => {
+      await runAction(async () => {
+        const selectedPath = await open({
+          multiple: false,
+          directory: false,
+          title: "Locate missing audio file",
+        });
+        if (typeof selectedPath !== "string") {
+          return;
+        }
+
+        const nextSnapshot = await resolveMissingFile(missingPath, selectedPath);
+        applyPlaybackSnapshot(nextSnapshot);
+        await Promise.all([refreshSongView(), refreshLibraryState()]);
+        setStatus(t("transport.status.projectSaved"));
+      }, { busy: true });
+    },
+    [applyPlaybackSnapshot, refreshLibraryState, refreshSongView, runAction, t],
+  );
 
   const getTrackOptimisticMix = useCallback((trackId: string) => {
     return useTransportStore.getState().optimisticMix[trackId] ?? {};
@@ -4625,6 +4672,7 @@ export function TransportPanelContent() {
         fileName: libraryAssetFileName(filePath),
         filePath,
         durationSeconds,
+        isMissing: false,
         folderPath: null,
       }
     );
@@ -4953,6 +5001,7 @@ export function TransportPanelContent() {
           tracksByIdRef.current[placement.trackId]?.name ?? humanizeLibraryTrackName(placement.asset.filePath),
         filePath: placement.asset.filePath,
         waveformKey: placement.asset.filePath,
+        isMissing: placement.asset.isMissing,
         timelineStartSeconds: Math.max(0, placement.timelineStartSeconds),
         sourceStartSeconds: 0,
         sourceDurationSeconds: placement.asset.durationSeconds,
@@ -5283,6 +5332,49 @@ export function TransportPanelContent() {
                 </button>
                 <button type="button" className="is-primary" onClick={handleHideMissingMidiDeviceWarning}>
                   {t("transport.midiWarning.dontShowAgain")}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {missingFilesModalOpen && missingFilePaths.length > 0 ? (
+        <div className="lt-modal-backdrop" onClick={() => setMissingFilesModalOpen(false)}>
+          <section
+            className="lt-settings-modal lt-settings-modal--compact"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lt-missing-files-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="lt-settings-modal-header">
+              <div>
+                <span className="lt-settings-modal-eyebrow">Missing Files</span>
+                <h2 id="lt-missing-files-title">Locate Missing Files</h2>
+                <p>Some audio paths no longer point to files on disk.</p>
+              </div>
+            </header>
+            <div className="lt-settings-modal-body">
+              <div className="lt-missing-files-list">
+                {missingFilePaths.map((missingPath) => (
+                  <div className="lt-missing-file-row" key={missingPath}>
+                    <span title={missingPath}>{missingPath}</span>
+                    <button
+                      type="button"
+                      className="is-primary"
+                      onClick={() => {
+                        void handleLocateMissingFile(missingPath);
+                      }}
+                    >
+                      Locate
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="lt-inline-actions">
+                <button type="button" onClick={() => setMissingFilesModalOpen(false)}>
+                  Ignore
                 </button>
               </div>
             </div>

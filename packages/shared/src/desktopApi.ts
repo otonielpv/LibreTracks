@@ -243,6 +243,13 @@ export async function importSongPackageFromBase64(
   });
 }
 
+export async function resolveMissingFile(
+  oldPath: string,
+  newPath: string,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("resolve_missing_file", { oldPath, newPath });
+}
+
 export async function deleteLibraryAsset(filePath: string): Promise<LibraryAssetSummary[]> {
   return invokeCommand<LibraryAssetSummary[]>("delete_library_asset", { filePath });
 }
