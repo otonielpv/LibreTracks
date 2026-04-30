@@ -1,7 +1,7 @@
 {
   "name": "libretracks",
   "private": true,
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Editor y reproductor multitrack con escritorio Tauri y control remoto web.",
   "workspaces": [
     "apps/*",

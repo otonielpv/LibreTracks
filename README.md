@@ -9,14 +9,13 @@
 
 LibreTracks is a multitrack DAW and live playback workstation for desktop, built with a Rust audio stack and a React/Tauri shell. The current monorepo focuses on non-destructive arrangement, live section jumps, WAV import, and a desktop runtime that keeps audio concerns separate from UI concerns.
 
-## What's New in v0.0.3
+## What's New in v0.0.4
 
-- MIDI input and MIDI Learn: select an input device, refresh the device list, map notes or CC messages to live actions, and keep mappings saved with app settings.
-- Built-in metronome: send a synthesized click to Master or any enabled external output with its own volume control.
-- Vamp and song jumps: loop the current section or a fixed bar count, trigger song jumps, and choose instant or fade-out transitions.
-- Better remote control: the mobile remote now includes responsive transport, jump, vamp, song transition, and mixer controls.
-- Song/session import: import LibreTracks song packages
-- Musical timing improvements: time signatures, jump scheduling, stop fade/declick behavior, and layout fixes make live playback smoother.
+- New website and download page: the project now ships with a public site, documentation, screenshots, and release downloads.
+- Audio routing controls: choose where each track plays, and route metronome output to Master or an external device.
+- MIDI Learn for live jump actions: map notes or CC messages to jump controls and keep them saved with your app settings.
+- Missing-file recovery: the app now flags missing media and helps you locate and relink the files from the library or transport view.
+- Playback and input polish: smoother stop/declick behavior, better transport stability, and BPM values are now kept within a safe range.
 
 ## Screenshots
 | Screenshot | Screenshot |

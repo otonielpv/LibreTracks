@@ -27,9 +27,13 @@ let release: Release | null = null;
 let error: string | null = null;
 
 try {
-  const response = await fetch(apiUrl, {
-    headers: { Accept: "application/vnd.github+json" },
-  });
+  const headers: HeadersInit = { Accept: "application/vnd.github+json" };
+  // Añadimos el token si lo configuramos en Cloudflare
+  if (import.meta.env.GITHUB_TOKEN) {
+    headers["Authorization"] = `Bearer ${import.meta.env.GITHUB_TOKEN}`;
+  }
+
+  const response = await fetch(apiUrl, { headers });
   if (!response.ok) {
     throw new Error(`GitHub returned ${response.status}`);
   }

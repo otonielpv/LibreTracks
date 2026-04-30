@@ -7,14 +7,13 @@
 
 LibreTracks es una DAW y estación de reproducción multitrack para directo, construida con un stack de audio en Rust y una shell de escritorio en React/Tauri. El monorepo actual está centrado en edición no destructiva, saltos musicales entre secciones, importación de WAV y un runtime de escritorio que separa claramente la UI de la lógica de audio.
 
-## Novedades de v0.0.3
+## Novedades de v0.0.4
 
-- Entrada MIDI y aprendizaje MIDI: selecciona un dispositivo, refresca la lista, asigna notas o CC a acciones en vivo y conserva los mapeos en los ajustes.
-- Metronomo integrado: envia una claqueta sintetizada a Master o a cualquier salida externa activa con control de volumen propio.
-- Vamp y saltos de cancion: repite la seccion actual o un numero fijo de compases, dispara saltos entre canciones y elige transicion inmediata o con fade out.
-- Remote mejorado: el control movil incluye transporte, salto, vamp, transicion de cancion y mixer en una interfaz mas adaptable.
-- Importacion de canciones/sesiones: importa paquetes de LibreTracks
-- Mejoras de timing musical: compases, planificacion de saltos, fade/declick al detener y ajustes visuales para un directo mas estable.
+- Nuevo sitio web y pagina de descargas: el proyecto ahora incluye web publica, documentacion, capturas y descargas de versiones.
+- Controles de audio por ruta: ahora puedes elegir por donde sale cada pista y enviar el metronomo a Master o a un dispositivo externo.
+- MIDI Learn para acciones de salto: asigna notas o mensajes CC a los controles de salto y guarda los mapeos en los ajustes.
+- Recuperacion de archivos perdidos: la app marca los medios faltantes y ayuda a localizarlos y relinkearlos desde la biblioteca o la vista de transporte.
+- Mejoras de reproduccion y entrada: el stop/declick es mas suave, el transporte es mas estable y los BPM quedan limitados a un rango seguro.
 
 ## Capturas de pantalla
 | Captura | Captura |
