@@ -6,7 +6,7 @@ const METRONOME_ACCENT_FREQUENCY_HZ: f32 = 1_000.0;
 const METRONOME_BEAT_FREQUENCY_HZ: f32 = 500.0;
 const METRONOME_BEEP_DURATION_SECONDS: f32 = 0.045;
 const METRONOME_PEAK_GAIN: f32 = 0.6;
-const DECLICK_FADE_MS: f32 = 3.0;
+const DECLICK_FADE_MS: f32 = 5.0;
 
 #[derive(Debug, Clone)]
 pub(crate) struct LiveTrackMix {

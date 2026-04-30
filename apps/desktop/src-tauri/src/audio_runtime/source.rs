@@ -296,7 +296,13 @@ impl StreamingClipReader {
     }
 
     fn seek_to_internal(&mut self, target_frame: usize) -> Result<(), String> {
-        while self.consumer.pop().is_ok() {}
+        let channels = self.shared_source.channels.max(1);
+        let slots = self.consumer.slots();
+        let frames_to_drop = slots / channels;
+        for _ in 0..(frames_to_drop * channels) {
+            let _ = self.consumer.pop();
+        }
+
         self.emitted_frames = 0;
         self.declick_frames_remaining = self.declick_fade_frames;
         self.eof = self.total_output_frames == 0;
@@ -330,8 +336,14 @@ impl StreamingClipReader {
             return None;
         }
 
-        let pan = pan.clamp(-1.0, 1.0);
         let channels = self.shared_source.channels.max(1);
+
+        if self.consumer.slots() < channels {
+            self.declick_frames_remaining = self.declick_fade_frames;
+            return Some((0.0, 0.0));
+        }
+
+        let pan = pan.clamp(-1.0, 1.0);
         let (left_input, right_input) = if channels <= 1 {
             match self.consumer.pop() {
                 Ok(sample) => (sample, sample),
@@ -485,8 +497,10 @@ fn stream_decode_from(
             Err(_) => return WorkerOutcome::Finished,
         };
 
-        for sample in samples {
-            while producer.push(sample).is_err() {
+        let channels = source.channels.max(1);
+        for frame in samples.chunks_exact(channels) {
+            // Wait until there is enough space for the WHOLE frame
+            while producer.slots() < channels {
                 if let Ok(command) = command_receiver.try_recv() {
                     match command {
                         StreamingWorkerCommand::Seek {
@@ -496,6 +510,11 @@ fn stream_decode_from(
                     }
                 }
                 thread::yield_now();
+            }
+
+            // Space is guaranteed, now we can push all samples in the frame
+            for &sample in frame {
+                let _ = producer.push(sample);
             }
         }
     }
