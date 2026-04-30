@@ -51,6 +51,8 @@ pub(crate) struct StreamingClipReader {
     output_sample_rate: u32,
     emitted_frames: usize,
     total_output_frames: usize,
+    declick_fade_frames: usize,
+    declick_frames_remaining: usize,
     pub(crate) eof: bool,
 }
 
@@ -270,6 +272,7 @@ impl StreamingClipReader {
 
         let elapsed_frames = timeline_frame.saturating_sub(plan.timeline_start_frame);
         let remaining_frames = plan.duration_frames.saturating_sub(elapsed_frames) as usize;
+        let declick_fade_frames = (0.005 * output_sample_rate as f32).round() as usize;
         Ok(Self {
             shared_source,
             consumer,
@@ -277,6 +280,8 @@ impl StreamingClipReader {
             output_sample_rate,
             emitted_frames: 0,
             total_output_frames: remaining_frames,
+            declick_fade_frames,
+            declick_frames_remaining: declick_fade_frames,
             eof: remaining_frames == 0,
         })
     }
@@ -284,6 +289,7 @@ impl StreamingClipReader {
     fn seek_to_internal(&mut self, target_frame: usize) -> Result<(), String> {
         while self.consumer.pop().is_ok() {}
         self.emitted_frames = 0;
+        self.declick_frames_remaining = self.declick_fade_frames;
         self.eof = self.total_output_frames == 0;
         let source_start_seconds =
             target_frame as f64 / f64::from(self.shared_source.sample_rate.max(1));
@@ -318,15 +324,26 @@ impl StreamingClipReader {
         let pan = pan.clamp(-1.0, 1.0);
         let channels = self.shared_source.channels.max(1);
         let (left_input, right_input) = if channels <= 1 {
-            let mono = self.consumer.pop().unwrap_or(0.0);
-            (mono, mono)
-        } else {
-            let left = self.consumer.pop().unwrap_or(0.0);
-            let right = self.consumer.pop().unwrap_or(0.0);
-            for _ in 2..channels {
-                let _ = self.consumer.pop();
+            match self.consumer.pop() {
+                Ok(sample) => (sample, sample),
+                Err(_) => {
+                    self.declick_frames_remaining = self.declick_fade_frames;
+                    (0.0, 0.0)
+                }
             }
-            (left, right)
+        } else {
+            match (self.consumer.pop(), self.consumer.pop()) {
+                (Ok(left), Ok(right)) => {
+                    for _ in 2..channels {
+                        let _ = self.consumer.pop();
+                    }
+                    (left, right)
+                }
+                _ => {
+                    self.declick_frames_remaining = self.declick_fade_frames;
+                    (0.0, 0.0)
+                }
+            }
         };
 
         self.emitted_frames = self.emitted_frames.saturating_add(1);
@@ -334,13 +351,21 @@ impl StreamingClipReader {
             self.eof = true;
         }
 
-        if gain.abs() <= GAIN_EPSILON {
+        let mut final_gain = gain;
+        if self.declick_frames_remaining > 0 {
+            let fade_progress =
+                1.0 - (self.declick_frames_remaining as f32 / self.declick_fade_frames as f32);
+            final_gain *= fade_progress;
+            self.declick_frames_remaining -= 1;
+        }
+
+        if final_gain.abs() <= GAIN_EPSILON {
             return Some((0.0, 0.0));
         }
 
         let (left_output, right_output) =
             mixer::apply_runtime_pan(left_input, right_input, pan, channels);
-        Some((left_output * gain, right_output * gain))
+        Some((left_output * final_gain, right_output * final_gain))
     }
 
     pub(crate) fn mix_into_with_channel_gains(
