@@ -2,10 +2,10 @@
 import SiteLayout from "../layouts/SiteLayout.astro";
 
 const features = [
-  ["Separated engine and UI", "Rust owns transport, jump scheduling, mixing rules, persistence, and audio behavior while React presents and edits the session."],
-  ["Non-destructive editing", "Split, move, and duplicate clips without rewriting the original WAV files that your show depends on."],
-  ["Web remote control", "Scan the desktop QR code and control transport, jumps, vamp, and mixer from a phone or tablet on the local network."],
-  ["Native MIDI Learn", "Map notes or CC messages from pedals, keyboards, and controllers to jumps, transport, song transitions, and Vamps."],
+  ["Live routing", "Send stems to Master and route click, cues, count-ins, or guides directly to dedicated external outputs."],
+  ["Musical jumps", "Use Immediate, At next marker, After X bars, Vamp, song jumps, and fade transitions from the same live surface."],
+  ["Non-destructive editing", "Split, move, duplicate, and arrange clips without rewriting the audio files your show depends on."],
+  ["Remote and MIDI", "Control transport, mixer, jumps, Vamp, and song transitions from MIDI hardware or the mobile web remote."],
 ];
 
 const comparison = [
@@ -13,6 +13,18 @@ const comparison = [
   ["Section jumps", "Built-in Immediate, At next marker, and After X bars logic resolved by the Rust transport.", "Usually built with markers, actions, macros, scenes, or custom control rigs."],
   ["Runtime weight", "Focused on WAV playback, timeline state, routing, remote control, and predictable live operations.", "Large general-purpose environments with instruments, plug-ins, recording, and production tooling."],
   ["Live intent", "Designed to avoid fragile production-session complexity during a show.", "Extremely powerful, but not specialized around musical directors extending, skipping, or repeating sections."],
+];
+
+const workflow = [
+  ["Prepare", "Import audio into the Library, organize assets into virtual folders, and create audio or folder tracks for stems, cues, and playback blocks.", "/screenshots/Library-Assets-Import.gif"],
+  ["Arrange", "Drag clips to the timeline, duplicate repeated material, split at the cursor, enable Snap to Grid, and define song regions.", "/screenshots/Create-Region.png"],
+  ["Perform", "Create markers, configure jump behavior, enable Vamp, export prepared songs, and hand transport or mixer control to a phone or tablet.", "/screenshots/Remote_Mixer.png"],
+];
+
+const docsHighlights = [
+  ["Audio setup", "Dedicated audio device selection, hardware output activation, track routing, metronome routing, and MIDI Learn configuration."],
+  ["Project organization", "Library import, virtual folders, audio tracks, folder tracks, clip duplication, splitting, and grid-based editing."],
+  ["Live control", "Markers, meter changes, section/song regions, marker jumps, Vamp loops, song jumps, transitions, shortcuts, and mobile remote operation."],
 ];
 ---
 
@@ -23,7 +35,7 @@ const comparison = [
         <div>
           <p class="eyebrow">Live playback workstation</p>
           <h1>LibreTracks</h1>
-          <p>The DAW built specifically for live musicians and musical directors. Rust audio engine, decoupled UI, 100% predictable.</p>
+          <p>A focused multitrack playback workstation for live musicians, musical directors, and playback engineers. Prepare stems, route cues, create song regions, and adapt the show in real time.</p>
           <div class="hero-actions">
             <a class="button-link primary" href="/download">Download</a>
             <a class="button-link" href="/docs/">Read docs</a>
@@ -38,13 +50,55 @@ const comparison = [
     <section class="band">
       <div class="site-shell">
         <div class="section-heading">
-          <p class="eyebrow">Built from the codebase</p>
-          <h2>Stage-first features without studio clutter.</h2>
-          <p>LibreTracks keeps the live surface focused on playback, routing, markers, song regions, MIDI control, and remote operation.</p>
+          <p class="eyebrow">Stage-first surface</p>
+          <h2>Everything needed for playback, routing, and live decisions.</h2>
+          <p>LibreTracks keeps the show workflow focused: import prepared audio, arrange it on a musical timeline, route it clearly, and control it from desktop, MIDI, or mobile.</p>
         </div>
         <div class="feature-grid">
           {features.map(([title, body]) => (
             <article class="feature-card">
+              <strong>{title}</strong>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">Workflow</p>
+          <h2>From prepared stems to a controlled live show.</h2>
+        </div>
+        <div class="workflow-grid">
+          {workflow.map(([title, body, image]) => (
+            <article class="workflow-card">
+              <img src={image} alt={`${title} workflow in LibreTracks`} loading="lazy" />
+              <div>
+                <strong>{title}</strong>
+                <p>{body}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell docs-preview">
+        <div class="section-heading">
+          <p class="eyebrow">Documentation</p>
+          <h2>A detailed manual with screenshots and stage workflows.</h2>
+          <p>The docs now follow the user manual: audio setup, routing, metronome, MIDI, library organization, timeline editing, markers, time signatures, Vamp, song packages, and mobile remote control.</p>
+          <div class="hero-actions">
+            <a class="button-link primary" href="/docs/">Open documentation</a>
+            <a class="button-link" href="https://github.com/otonielpv/LibreTracks/blob/main/docs/USER_MANUAL.md">User manual</a>
+          </div>
+        </div>
+        <div class="docs-list">
+          {docsHighlights.map(([title, body]) => (
+            <article>
               <strong>{title}</strong>
               <p>{body}</p>
             </article>

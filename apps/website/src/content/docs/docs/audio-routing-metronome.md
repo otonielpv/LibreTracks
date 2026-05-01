@@ -1,43 +1,47 @@
 ---
 title: Audio Routing & Metronome
-description: Master routing, external outputs, and the internal metronome.
+description: Audio device selection, external outputs, track routes, metronome, and MIDI setup.
 ---
+
+## Audio Device
+
+Open `Settings`, choose the correct `Audio device`, and verify the output before rehearsal and before the show. `System Default` follows the operating system output, but a dedicated interface is usually safer for live use.
+
+![Audio settings](/screenshots/Configuracion-Audio.gif)
+
+## Hardware Outputs
+
+Enable the physical outputs you want to use in `Settings > Audio`. Track headers can then route each track to `Master` or directly to mono/stereo `Ext. Out` destinations.
+
+![Track routing menu](/screenshots/Track-Audio-Route.png)
+
+Typical routing:
+
+- Playback stems to `Master`.
+- Click, count-ins, spoken cues, or guide tracks to an external cue output.
+- Cue outputs kept independent from the Master fader.
 
 ## Routing Strings
 
-Tracks store their destination in `audioTo`. The core parser resolves common routes:
+Internally, tracks store their destination in `audioTo`.
 
 - `master` and `main` route to the main stereo pair.
 - `monitor` routes to channels 2-3 when at least four hardware channels are available, otherwise it falls back to the main pair.
 - `ext:0` routes to physical channel 0.
-- `ext:2-3` routes to a stereo physical pair using zero-based external channel indexes.
-
-The parser also accepts hardware-style output names such as `out 1` or `out_1`, converting them to the matching zero-based channel internally.
-
-## Master Vs. Physical Outputs
-
-Use `Master` for musical playback that should follow the main mix. Use external outputs for material that must bypass the main mix, such as click, count-ins, spoken cues, or guide stems.
-
-The desktop settings panel controls which output channels are enabled. Track headers can then choose the route.
+- `ext:2-3` routes to a stereo physical pair using zero-based external indexes.
 
 ## Metronome
 
-LibreTracks includes a synthesized metronome. It does not require a separate imported audio file.
+LibreTracks includes a built-in metronome, so a separate click audio file is not required. Enable `Metronome` from the top bar, then choose the metronome output and volume in settings.
 
-The settings model stores:
+![Enable the metronome](/screenshots/Activate-Click.png)
 
-- Whether the metronome is enabled.
-- Metronome volume.
-- Metronome output route.
+![Metronome configuration](/screenshots/Click-Config.png)
 
-The audio runtime applies metronome settings independently from regular clip playback, which lets click routing remain separate from the Master bus.
+## MIDI Hardware
 
-## Live Routing Pattern
+Choose a `MIDI input device` in `Settings`. Use `Refresh MIDI devices` if the controller was connected after the app opened.
 
-A typical live setup is:
+`MIDI Learn` maps notes or CC messages to live controls such as `Play`, `Stop`, `Vamp`, marker jump modes, song jump triggers, song transition mode, and bar-count controls.
 
-- Playback stems to `Master`.
-- Click and cue tracks to an external output such as `ext:2-3`.
-- Metronome to the same cue output or another dedicated channel.
-
-Always rehearse with the same interface and channel map that will be used on stage.
+![MIDI configuration](/screenshots/Midi-Config.gif)

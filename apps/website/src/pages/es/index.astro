@@ -2,10 +2,10 @@
 import SiteLayout from "../../layouts/SiteLayout.astro";
 
 const features = [
-  ["Motor y UI separados", "Rust gestiona transporte, saltos, mezcla, persistencia y audio mientras React presenta y edita la sesion."],
-  ["Edicion no destructiva", "Corta, mueve y duplica clips sin reescribir los WAV originales de los que depende el show."],
-  ["Control remoto web", "Escanea el QR del desktop y controla transporte, saltos, Vamp y mixer desde movil o tablet en la red local."],
-  ["MIDI Learn nativo", "Asigna notas o CC de pedaleras, teclados y controladores a saltos, transporte, transiciones y Vamps."],
+  ["Routing de directo", "Envia stems a Master y rutea click, cues, count-ins o guias directamente a salidas externas dedicadas."],
+  ["Saltos musicales", "Usa Immediate, At next marker, After X bars, Vamp, saltos de cancion y transiciones desde la misma superficie."],
+  ["Edicion no destructiva", "Corta, mueve, duplica y organiza clips sin reescribir los audios de los que depende el show."],
+  ["Remote y MIDI", "Controla transporte, mixer, saltos, Vamp y transiciones desde hardware MIDI o el remote web movil."],
 ];
 
 const comparison = [
@@ -13,6 +13,18 @@ const comparison = [
   ["Saltos de seccion", "Logica integrada Immediate, At next marker y After X bars resuelta por el transporte Rust.", "Normalmente requiere marcadores, acciones, macros, escenas o rigs de control personalizados."],
   ["Peso en runtime", "Enfocado en WAV, estado de timeline, routing, remote y operaciones predecibles de directo.", "Entornos generales con instrumentos, plug-ins, grabacion y herramientas de produccion."],
   ["Intencion en vivo", "Disenado para evitar la complejidad fragil de una sesion de produccion durante un show.", "Muy potentes, pero no especializados en extender, saltar o repetir secciones desde direccion musical."],
+];
+
+const workflow = [
+  ["Prepara", "Importa audio en Biblioteca, organiza assets en carpetas virtuales y crea pistas de audio o carpetas para stems, cues y bloques de playback.", "/screenshots/Library-Assets-Import.gif"],
+  ["Organiza", "Arrastra clips al timeline, duplica material repetido, corta en el cursor, activa Snap to Grid y define regiones de cancion.", "/screenshots/Create-Region.png"],
+  ["Ejecuta", "Crea marcas, configura saltos, activa Vamp, exporta canciones preparadas y delega transporte o mixer a un movil o tablet.", "/screenshots/Remote_Mixer.png"],
+];
+
+const docsHighlights = [
+  ["Audio", "Seleccion de dispositivo dedicado, salidas hardware, routing por pista, metronomo y configuracion MIDI Learn."],
+  ["Proyecto", "Importacion en Biblioteca, carpetas virtuales, audio tracks, folder tracks, duplicado, cortes y edicion con rejilla."],
+  ["Directo", "Marcas, cambios de compas, regiones, saltos de marca, Vamp, saltos de cancion, transiciones, atajos y remote movil."],
 ];
 ---
 
@@ -23,7 +35,7 @@ const comparison = [
         <div>
           <p class="eyebrow">Workstation de playback en vivo</p>
           <h1>LibreTracks</h1>
-          <p>La DAW creada especificamente para musicos en vivo y directores musicales. Motor de audio Rust, UI desacoplada, 100% predecible.</p>
+          <p>Una workstation multitrack enfocada en musicos en vivo, directores musicales y playback engineers. Prepara stems, rutea cues, crea regiones de cancion y adapta el show en tiempo real.</p>
           <div class="hero-actions">
             <a class="button-link primary" href="/es/download">Descargar</a>
             <a class="button-link" href="/es/docs/">Leer docs</a>
@@ -38,13 +50,55 @@ const comparison = [
     <section class="band">
       <div class="site-shell">
         <div class="section-heading">
-          <p class="eyebrow">Basado en el codigo real</p>
-          <h2>Funciones de directo sin ruido de estudio.</h2>
-          <p>LibreTracks centra la superficie en playback, routing, marcas, regiones de cancion, control MIDI y operacion remota.</p>
+          <p class="eyebrow">Superficie de directo</p>
+          <h2>Todo lo necesario para playback, routing y decisiones en vivo.</h2>
+          <p>LibreTracks mantiene el flujo centrado: importa audio preparado, organizalo en un timeline musical, rutealo con claridad y controlalo desde desktop, MIDI o movil.</p>
         </div>
         <div class="feature-grid">
           {features.map(([title, body]) => (
             <article class="feature-card">
+              <strong>{title}</strong>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">Flujo</p>
+          <h2>De stems preparados a un show controlado.</h2>
+        </div>
+        <div class="workflow-grid">
+          {workflow.map(([title, body, image]) => (
+            <article class="workflow-card">
+              <img src={image} alt={`${title} en LibreTracks`} loading="lazy" />
+              <div>
+                <strong>{title}</strong>
+                <p>{body}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell docs-preview">
+        <div class="section-heading">
+          <p class="eyebrow">Documentacion</p>
+          <h2>Manual detallado con screenshots y flujos de directo.</h2>
+          <p>La documentacion sigue el manual de usuario: audio, routing, metronomo, MIDI, Biblioteca, edicion de timeline, marcas, compases, Vamp, paquetes de cancion y remote movil.</p>
+          <div class="hero-actions">
+            <a class="button-link primary" href="/es/docs/">Abrir documentacion</a>
+            <a class="button-link" href="https://github.com/otonielpv/LibreTracks/blob/main/docs/USER_MANUAL.es.md">Manual de usuario</a>
+          </div>
+        </div>
+        <div class="docs-list">
+          {docsHighlights.map(([title, body]) => (
+            <article>
               <strong>{title}</strong>
               <p>{body}</p>
             </article>

@@ -1,33 +1,40 @@
 ---
 title: LibreTracks Documentation
-description: Technical and user documentation for LibreTracks.
+description: User and technical documentation for LibreTracks.
 ---
 
-LibreTracks is a desktop multitrack playback workstation for live musicians, musical directors, and playback engineers. It is built around a Rust audio stack, a React/Tauri desktop shell, and a local web remote.
+LibreTracks is a desktop multitrack playback workstation for live musicians, music directors, and playback engineers. It is built for preparing a show in advance, saving the session, and performing with predictable audio routing, markers, jumps, MIDI, and a mobile remote.
 
-The important design rule is separation: React presents the session and editing tools, while Rust owns transport behavior, audio routing, persistence, validation, remote commands, and live jump scheduling.
+![LibreTracks project timeline](/screenshots/Proyecto.png)
 
 ## What LibreTracks Is For
 
-LibreTracks is for playback and live interaction. It helps you prepare WAV assets, arrange clips on a timeline, route stems and click tracks, create section markers, define song regions, and adapt the show in real time.
+Use LibreTracks when the show needs prepared audio files, a clear timeline, dedicated click or cue outputs, section markers, song regions, and live control from desktop, MIDI hardware, or a phone.
 
-It is not meant to replace a production DAW for composing, recording, plug-in chains, or mixing records. Use Reaper, Ableton Live, Logic, Cubase, or another studio DAW for production, then bring the prepared WAV playback material into LibreTracks for the live rig.
+LibreTracks is not a production DAW. Produce and mix stems in Reaper, Ableton Live, Logic, Cubase, or another studio tool, then bring prepared audio into LibreTracks for the live playback rig.
 
-## Codebase Map
+## Core Live Workflow
 
-- `apps/desktop` contains the React desktop UI, timeline canvas, Zustand stores, localization, and Tauri command calls.
-- `apps/desktop/src-tauri` hosts the native desktop bridge, app state, settings, MIDI, remote server, and audio runtime coordination.
-- `crates/libretracks-core` defines projects, songs, tracks, clips, markers, tempo markers, time signature markers, song regions, routing strings, and validation.
-- `crates/libretracks-audio` resolves transport state, active clips, effective gains, jump scheduling, Vamp loops, song transitions, and metronome behavior.
-- `crates/libretracks-project` handles `song.json`, library assets, package import/export, and WAV metadata probing.
-- `crates/libretracks-remote` defines the remote protocol and serves state/control messages for the mobile browser remote.
+1. Import audio into `Library`.
+2. Organize assets with virtual folders.
+3. Drag assets to the timeline and create audio or folder tracks.
+4. Configure the audio device, hardware outputs, track routes, metronome, and MIDI input.
+5. Create song regions, markers, and optional meter changes.
+6. Rehearse marker jumps, Vamp, song jumps, transitions, keyboard shortcuts, MIDI mappings, and the mobile remote.
+7. Export prepared songs or packages when you want to reuse them in future sessions.
 
-## Current Format Bias
-
-The project is WAV-first. The importer and playback documentation assume WAV assets as the reliable live-performance format.
+![Library import workflow](/screenshots/Library-Assets-Import.gif)
 
 ## Live Safety Model
 
-Edits are non-destructive. Splitting, moving, and duplicating clips changes timeline references such as `timelineStartSeconds`, `sourceStartSeconds`, and `durationSeconds`; it does not rewrite the original audio file.
+Editing is non-destructive. Splitting, moving, duplicating, or arranging clips changes timeline references; it does not rewrite the original audio file.
 
-Live control is also explicit. Jump behavior is represented as transport state, not as a UI timer, so the same concepts are available from desktop, MIDI Learn, and the remote.
+Transport behavior is also explicit. Marker jumps, song jumps, Vamp loops, metronome behavior, and remote commands are resolved through the same application state and Rust-side transport logic instead of temporary UI timers.
+
+## Main Areas
+
+- `Settings`: audio device, hardware outputs, metronome, and MIDI Learn.
+- `Library`: imported audio assets and virtual folders.
+- `Timeline`: audio tracks, folder tracks, clips, song regions, markers, time signatures, and grid editing.
+- `Remote`: local web control surface for transport, jumps, Vamp, and mixer.
+- `File`: import songs/packages and export prepared songs.

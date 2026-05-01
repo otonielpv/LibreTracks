@@ -1,43 +1,47 @@
 ---
 title: Routing Y Metronomo
-description: Routing a Master, salidas externas y metronomo interno.
+description: Dispositivo de audio, salidas externas, rutas por pista, metronomo y MIDI.
 ---
 
-## Strings De Routing
+## Dispositivo De Audio
 
-Las pistas guardan su destino en `audioTo`. El parser del core resuelve rutas comunes:
+Abre `Configuracion`, elige el `Dispositivo de audio` correcto y verifica la salida antes del ensayo y antes del show. `Predeterminado del sistema` sigue la salida del sistema operativo, pero una interfaz dedicada suele ser mas segura para directo.
+
+![Configuracion de audio](/screenshots/Configuracion-Audio.gif)
+
+## Salidas Hardware
+
+Activa las salidas fisicas que quieras usar en `Configuracion > Audio`. Desde la cabecera de cada pista puedes rutear a `Master` o directamente a destinos `Ext. Out` mono o estereo.
+
+![Menu de routing de pista](/screenshots/Track-Audio-Route.png)
+
+Routing habitual:
+
+- Stems y playback musical a `Master`.
+- Click, count-ins, cues habladas o guias a una salida externa de cue.
+- Salidas de cue independientes del fader de Master.
+
+## Rutas Internas
+
+Internamente, las pistas guardan su destino en `audioTo`.
 
 - `master` y `main` van al par estereo principal.
-- `monitor` va a los canales 2-3 si hay al menos cuatro canales de hardware; si no, cae al par principal.
+- `monitor` va a canales 2-3 si hay al menos cuatro canales hardware; si no, vuelve al par principal.
 - `ext:0` va al canal fisico 0.
-- `ext:2-3` va a un par fisico estereo usando indices externos base cero.
-
-El parser tambien acepta nombres de hardware como `out 1` u `out_1`, convirtiendolos al canal base cero correspondiente.
-
-## Master Vs. Salidas Fisicas
-
-Usa `Master` para playback musical que debe seguir la mezcla principal. Usa salidas externas para material que debe evitar la mezcla principal: click, count-ins, cues habladas o guias.
-
-El panel de ajustes desktop controla que canales de salida estan activos. Luego las cabeceras de pista pueden elegir la ruta.
+- `ext:2-3` va a un par estereo fisico usando indices externos desde cero.
 
 ## Metronomo
 
-LibreTracks incluye un metronomo sintetizado. No necesita importar un archivo de audio separado.
+LibreTracks incluye metronomo integrado, asi que no hace falta importar un archivo de click. Activa `Metronomo` desde la barra superior y despues elige salida y volumen en ajustes.
 
-El modelo de ajustes guarda:
+![Activar metronomo](/screenshots/Activate-Click.png)
 
-- Si el metronomo esta activo.
-- Volumen del metronomo.
-- Ruta de salida del metronomo.
+![Configuracion de metronomo](/screenshots/Click-Config.png)
 
-El runtime de audio aplica estos ajustes de forma independiente al playback de clips, lo que permite mantener el click separado del bus Master.
+## Hardware MIDI
 
-## Patron De Routing En Vivo
+Elige un `Dispositivo de entrada MIDI` en `Configuracion`. Usa `Refrescar dispositivos MIDI` si conectaste el controlador despues de abrir la app.
 
-Una configuracion habitual:
+`MIDI Learn` asigna notas o mensajes CC a controles de directo como `Play`, `Stop`, `Vamp`, modos de salto de marca, disparadores de salto de cancion, modo de transicion y controles de numero de compases.
 
-- Stems de playback a `Master`.
-- Click y cues a una salida externa como `ext:2-3`.
-- Metronomo a la misma salida de cue u otro canal dedicado.
-
-Ensaya siempre con la misma interfaz y mapa de canales que usaras en escenario.
+![Configuracion MIDI](/screenshots/Midi-Config.gif)

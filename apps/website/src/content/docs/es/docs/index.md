@@ -3,31 +3,38 @@ title: Documentacion de LibreTracks
 description: Documentacion tecnica y de usuario para LibreTracks.
 ---
 
-LibreTracks es una workstation desktop de playback multitrack para musicos en vivo, directores musicales y playback engineers. Esta construida con audio en Rust, una shell desktop React/Tauri y un remote web local.
+LibreTracks es una workstation desktop de playback multitrack para musicos en vivo, directores musicales y playback engineers. Esta pensada para preparar el show con antelacion, guardar la sesion y tocar con routing, marcas, saltos, MIDI y remote movil de forma predecible.
 
-La regla clave de diseno es la separacion: React presenta la sesion y las herramientas de edicion, mientras Rust gestiona transporte, audio, persistencia, validacion, comandos remotos y planificacion de saltos.
+![Timeline de proyecto en LibreTracks](/screenshots/Proyecto.png)
 
 ## Para Que Sirve
 
-LibreTracks sirve para playback e interaccion en vivo. Permite preparar WAV, organizar clips en un timeline, rutear stems y click, crear marcas de seccion, definir regiones de cancion y adaptar el show en tiempo real.
+Usa LibreTracks cuando el show necesita audios preparados, un timeline claro, salidas dedicadas de click o cue, marcas de seccion, regiones de cancion y control en vivo desde desktop, hardware MIDI o movil.
 
-No pretende sustituir una DAW de produccion para componer, grabar, usar cadenas de plug-ins o mezclar discos. Usa Reaper, Ableton Live, Logic, Cubase u otra DAW para producir y trae los WAV preparados a LibreTracks para el rig de directo.
+LibreTracks no pretende ser una DAW de produccion. Produce y mezcla stems en Reaper, Ableton Live, Logic, Cubase u otra herramienta de estudio, y trae los audios preparados a LibreTracks para el rig de directo.
 
-## Mapa Del Codigo
+## Flujo Principal
 
-- `apps/desktop` contiene la UI React, timeline canvas, stores Zustand, localizacion y llamadas Tauri.
-- `apps/desktop/src-tauri` contiene el puente nativo, estado de app, ajustes, MIDI, servidor remote y coordinacion del runtime de audio.
-- `crates/libretracks-core` define proyectos, canciones, pistas, clips, marcas, tempo, compases, regiones, routing y validacion.
-- `crates/libretracks-audio` resuelve transporte, clips activos, ganancias efectivas, saltos, Vamp, transiciones y metronomo.
-- `crates/libretracks-project` gestiona `song.json`, assets de biblioteca, paquetes e inspeccion de WAV.
-- `crates/libretracks-remote` define el protocolo remote y sirve mensajes de estado/control para el navegador movil.
+1. Importa audio en `Biblioteca`.
+2. Organiza assets con carpetas virtuales.
+3. Arrastra assets al timeline y crea audio tracks o folder tracks.
+4. Configura dispositivo de audio, salidas hardware, rutas por pista, metronomo y entrada MIDI.
+5. Crea regiones de cancion, marcas y cambios de compas si hace falta.
+6. Ensaya saltos de marca, Vamp, saltos de cancion, transiciones, atajos, mapeos MIDI y remote movil.
+7. Exporta canciones o paquetes preparados cuando quieras reutilizarlos en futuras sesiones.
 
-## Formato Actual
-
-El proyecto es WAV-first. La importacion y la documentacion de playback asumen WAV como formato fiable para directo.
+![Importacion en Biblioteca](/screenshots/Library-Assets-Import.gif)
 
 ## Modelo De Seguridad En Vivo
 
-La edicion es no destructiva. Cortar, mover y duplicar clips cambia referencias del timeline como `timelineStartSeconds`, `sourceStartSeconds` y `durationSeconds`; no reescribe el archivo de audio original.
+La edicion es no destructiva. Cortar, mover, duplicar u organizar clips cambia referencias del timeline; no reescribe el audio original.
 
-El control en vivo tambien es explicito. Los saltos viven como estado de transporte, no como timers de UI, asi que los mismos conceptos estan disponibles desde desktop, MIDI Learn y remote.
+El transporte tambien es explicito. Saltos de marca, saltos de cancion, bucles Vamp, metronomo y comandos remotos se resuelven sobre el mismo estado de aplicacion y logica Rust de transporte, no con timers temporales de UI.
+
+## Areas Principales
+
+- `Configuracion`: dispositivo de audio, salidas hardware, metronomo y MIDI Learn.
+- `Biblioteca`: assets importados y carpetas virtuales.
+- `Timeline`: pistas, clips, regiones de cancion, marcas, compases y edicion con rejilla.
+- `Remote`: superficie web local para transporte, saltos, Vamp y mixer.
+- `Archivo`: importar canciones/paquetes y exportar canciones preparadas.

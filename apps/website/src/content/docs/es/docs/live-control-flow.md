@@ -1,48 +1,54 @@
 ---
 title: Control En Vivo
-description: Saltos, Vamp, transiciones, MIDI y remote.
+description: Saltos de marca, Vamp, saltos de cancion, transiciones, atajos y remote.
 ---
 
-## Logica De Saltos A Marcador
+## Modos De Salto De Marca
 
-LibreTracks soporta tres disparadores de salto:
+LibreTracks soporta tres comportamientos de salto:
 
-- `Immediate` salta en cuanto se acepta el comando.
-- `Next Marker` espera al siguiente limite de seccion.
-- `After X Bars` planifica el salto en un limite musical usando tempo y compas.
+- `Immediate`: salta al instante.
+- `At next marker`: espera al siguiente limite de seccion.
+- `After X bars`: programa el salto tras el numero de compases configurado.
 
-Esta es una diferencia central frente a configurar una DAW tradicional con acciones o macros. El salto es comportamiento nativo del transporte y esta disponible desde desktop, MIDI, atajos y remote.
+Es comportamiento nativo del transporte, asi que la misma logica esta disponible desde desktop, atajos, mapeos MIDI y remote.
 
-Los saltos pendientes pueden cancelarse antes de ejecutarse.
+![Modos de salto de marca](/screenshots/Marker-Jump-Modes.png)
 
 ## Vamp
 
-Vamp mantiene el playback en bucle mientras la banda, la escena o una intervencion necesita mas tiempo.
+`Vamp` mantiene la reproduccion en un bucle musical mientras la banda, la accion de escenario o una intervencion necesita mas tiempo. `Vamp Mode` puede repetir la `Section` actual o un numero fijo de `Bars`. Pulsa `Vamp` de nuevo para salir.
 
-LibreTracks soporta dos modos:
+![Configuracion de Vamp](/screenshots/Vamp-Config.png)
 
-- `Section` repite la seccion actual.
-- `Bars` repite un numero fijo de compases.
+## Saltos De Cancion Y Transiciones
 
-Pulsar Vamp de nuevo sale del bucle. El estado activo de Vamp forma parte del snapshot de playback para mantener sincronizados desktop y remote.
+Los saltos de cancion apuntan a regiones de cancion. Son utiles cuando una sesion contiene un set completo, una sesion de ensayo o varios cues.
 
-## Saltos De Cancion
+El disparador puede ser inmediato, tras un numero de compases o al final de la cancion/region actual.
 
-Los saltos de cancion apuntan a song regions. Son utiles cuando un timeline contiene un set completo, una sesion de ensayo o varios cues de show.
+`Song Transition` controla como pasa la cancion actual a la siguiente:
 
-Los controles actuales soportan saltos inmediatos, saltos tras un numero configurado de compases y saltos al final de la region actual.
+- `Clean cut`: cambia directamente.
+- `Fade out`: desvanece la reproduccion actual antes del salto.
 
-## Transiciones De Cancion
+![Configuracion de saltos de cancion](/screenshots/Song-Jump-Config.png)
 
-El modo de transicion controla como pasa el playback entre regiones:
+## Atajos
 
-- `Clean cut` cambia directamente.
-- `Fade out` desvanece el playback actual antes de la transicion.
+- `Space`: alterna `Play` / `Pause`
+- `Esc`: cancela un salto pendiente
+- `0-9`: arma un salto a la marca correspondiente
+- `Shift + 0-9`: arma un salto a la region de cancion seleccionada
 
-Usa clean cuts para paradas duras o cues teatrales ensayados. Usa fade-outs cuando la siguiente region debe entrar con un traspaso mas suave.
+Si armas el destino equivocado, pulsa `Esc` inmediatamente.
 
-## MIDI Learn
+## Remote Movil
 
-MIDI Learn asigna notas o mensajes CC a acciones en vivo. Mapeos practicos incluyen Play, Stop, saltos de marcador, saltos de cancion, Vamp, modo global de salto, transicion de cancion y ajuste de compases.
+Abre `Remote` en la app desktop y escanea el codigo QR o abre la URL mostrada desde un movil o tablet en la misma red local.
 
-Los ajustes desktop guardan el dispositivo MIDI seleccionado y los mapeos para preparar el rig antes del ensayo.
+![Panel de conexion remote](/screenshots/Remote.png)
+
+El remote incluye transporte, saltos de marca, saltos de cancion, Vamp, modo de transicion y una vista de mixer para volumen, paneo, mute y solo.
+
+![Mixer remote](/screenshots/Remote_Mixer.png)

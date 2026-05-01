@@ -57,6 +57,7 @@ a {
   justify-content: space-between;
   gap: 1rem;
   min-height: 4.25rem;
+  padding-block: 0.5rem;
 }
 
 .brand {
@@ -78,6 +79,7 @@ a {
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .nav-links a,
@@ -107,7 +109,7 @@ a {
 }
 
 .hero {
-  min-height: calc(100vh - 4.25rem);
+  min-height: min(760px, calc(100vh - 4.25rem));
   display: grid;
   align-items: center;
   padding: 3rem 0 5rem;
@@ -115,7 +117,7 @@ a {
 
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: 2rem;
   align-items: center;
 }
@@ -150,7 +152,7 @@ h1 {
 }
 
 .product-shot {
-  min-height: 26rem;
+  aspect-ratio: 16 / 10;
   border: 1px solid color-mix(in srgb, var(--lt-muted) 18%, transparent);
   border-radius: 4px;
   background: var(--lt-surface-low);
@@ -161,7 +163,6 @@ h1 {
 .product-shot img {
   width: 100%;
   height: 100%;
-  min-height: 26rem;
   object-fit: cover;
   object-position: left top;
   display: block;
@@ -194,29 +195,75 @@ h1 {
 
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: 0.75rem;
 }
 
 .feature-card,
-.download-panel {
+.download-panel,
+.workflow-card,
+.docs-list article {
   border: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
   border-radius: 4px;
   background: linear-gradient(180deg, #201f1f, #161515);
   padding: 1rem;
 }
 
-.feature-card strong {
+.feature-card strong,
+.workflow-card strong,
+.docs-list strong {
   display: block;
   color: #f3f0ef;
   margin-bottom: 0.55rem;
 }
 
 .feature-card p,
-.download-panel p {
+.download-panel p,
+.workflow-card p,
+.docs-list p {
   margin: 0;
   color: color-mix(in srgb, var(--lt-text) 70%, transparent);
   line-height: 1.55;
+}
+
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 0.9rem;
+}
+
+.workflow-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 1rem;
+  overflow: hidden;
+  padding: 0;
+}
+
+.workflow-card img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  object-position: left top;
+  display: block;
+  background: var(--lt-surface-low);
+  border-bottom: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
+}
+
+.workflow-card div {
+  padding: 0 1rem 1rem;
+}
+
+.docs-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(18rem, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.docs-list {
+  display: grid;
+  gap: 0.75rem;
 }
 
 .compare-table {
@@ -273,6 +320,13 @@ h1 {
   white-space: pre-wrap;
 }
 
+.sl-markdown-content img {
+  border: 1px solid color-mix(in srgb, var(--lt-muted) 18%, transparent);
+  border-radius: 4px;
+  background: var(--lt-surface-low);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.28);
+}
+
 .site-title img {
   max-height: 2.5rem !important;
   width: auto !important;
@@ -280,7 +334,7 @@ h1 {
 
 @media (max-width: 900px) {
   .hero-grid,
-  .feature-grid {
+  .docs-preview {
     grid-template-columns: 1fr;
   }
 
@@ -291,5 +345,57 @@ h1 {
   .compare-table {
     display: block;
     overflow-x: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-shell {
+    width: min(100% - 1rem, 1180px);
+  }
+
+  .site-nav {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .nav-links {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .nav-links a,
+  .button-link {
+    min-height: 2.2rem;
+    padding-inline: 0.65rem;
+    font-size: 0.72rem;
+  }
+
+  .hero {
+    min-height: auto;
+    padding: 1.5rem 0 3rem;
+  }
+
+  .hero p {
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .product-shot {
+    aspect-ratio: 4 / 3;
+  }
+
+  .band {
+    padding: 3rem 0;
+  }
+
+  .compare-table th,
+  .compare-table td {
+    min-width: 13rem;
+    padding: 0.8rem;
+  }
+
+  .download-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

@@ -1,43 +1,51 @@
 ---
 title: Core Concepts
-description: Tracks, markers, tempo, time signatures, and song regions in LibreTracks.
+description: Library, tracks, clips, markers, meter changes, and song regions.
 ---
+
+## Library And Assets
+
+`Library` is the preparation area for show audio. Import one or more audio files, then drag them onto the timeline when you are ready to arrange.
+
+![Import assets into the library](/screenshots/Library-Assets-Import.gif)
+
+Virtual folders group assets by song, set, scene, section, or instrumentation without moving the original files. A practical live setup is one folder per song or show block.
+
+![Virtual asset folders](/screenshots/Assets-Folder.gif)
 
 ## Audio Tracks And Folder Tracks
 
-LibreTracks has two track kinds in the core model:
+- `Audio track` holds clips and produces playback.
+- `Folder track` organizes child tracks and provides grouped control.
 
-- `Audio` tracks hold clips and produce playback.
-- `Folder` tracks organize child tracks and provide grouped control.
+Use folder tracks for related stems such as drums, band tracks, choirs, backing vocals, or auxiliary playback. Use audio tracks for lanes that contain clips.
 
-Use audio tracks for stems, cues, count-ins, and playback files. Use folder tracks when a set of tracks belongs together, such as drums, band stems, choir, backing vocals, or show cues.
+![Tracks and folders](/screenshots/Tracks-Folder.gif)
 
-Folder tracks are part of the effective mix calculation. Parent/child relationships let the app resolve grouped gain, mute, and solo behavior without forcing the UI to own audio rules.
+## Clips And Timeline Editing
 
-## Clips And Non-Destructive Editing
+Clips are non-destructive timeline references to source audio. You can drag assets from the Library, move clips, duplicate repeated sections, and split clips at the cursor without rewriting the original WAV.
 
-Each clip points to a source file path and stores timeline placement, source offset, duration, gain, and optional fades. A split creates new timeline references into the same source WAV. A move changes placement. A duplicate creates another clip reference.
+![Duplicate a clip](/screenshots/DuplicateTrack.png)
 
-The source WAV is not rewritten by split, move, or duplicate operations.
+`Snap to Grid` keeps cursor movement, clips, and edits aligned to musical divisions. Disable it only when a free placement is needed.
 
-## Section Markers
-
-Section markers define musical destinations on the timeline: Intro, Verse, Chorus, Bridge, Vamp, Outro, and similar points. The model supports an optional `digit` field for numeric marker shortcuts.
-
-In the current desktop build, `0-9` jump shortcuts are resolved by marker order on the timeline. The data model already supports explicit marker digits, but the UI does not yet expose a dedicated digit assignment control.
-
-## Tempo Markers
-
-A song has a base BPM and can also contain tempo markers. Tempo data lets transport logic calculate bar boundaries for quantized jumps and Vamp behavior.
-
-Tempo changes are stored as marker data instead of being inferred from clip content at playback time.
-
-## Time Signature Markers
-
-Songs also have a base time signature and optional time signature markers. These markers affect musical grid calculations and make bar-based live operations behave correctly when a song changes meter.
+![Snap to Grid control](/screenshots/Snap-To-Grid-Button.png)
 
 ## Song Regions
 
-Song regions define named ranges in a single timeline. This lets one session contain several songs or show sections without forcing every song into a separate project.
+Song regions define named ranges on the timeline. They let one session hold several songs or show cues and are used by song jump controls.
 
-Song regions are used by song jump controls, including moving to another song region immediately, after a bar count, or at the current region end.
+Create a song region by selecting a region on the timeline, right-clicking it, and choosing `Create song from selection`.
+
+![Create a song region](/screenshots/Create-Region.png)
+
+## Markers And Meter Changes
+
+Markers define musical destinations such as Intro, Verse, Chorus, Bridge, Vamp, and Outro. Create them from the ruler with `Create Marker`.
+
+![Create a marker](/screenshots/Create-Marker.gif)
+
+Time signature markers keep bar-based operations correct when a song changes meter. Create them from the timeline header with `Create Meter Marker`, then choose the new meter.
+
+![Create a time signature change](/screenshots/Change-Time-Signature.png)

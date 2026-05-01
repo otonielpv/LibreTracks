@@ -1,48 +1,54 @@
 ---
 title: Live Control Flow
-description: Jump logic, Vamp mode, song transitions, MIDI, and remote control.
+description: Marker jumps, Vamp, song jumps, transitions, shortcuts, and remote control.
 ---
 
-## Marker Jump Logic
+## Marker Jump Modes
 
-LibreTracks supports three marker jump triggers:
+LibreTracks supports three marker jump behaviors:
 
-- `Immediate` jumps as soon as the command is accepted.
-- `Next Marker` waits until the next section marker boundary.
-- `After X Bars` schedules the jump on a musical bar boundary using tempo and time signature data.
+- `Immediate`: jump instantly.
+- `At next marker`: wait until the next section boundary.
+- `After X bars`: schedule the jump after the configured number of bars.
 
-This is the main difference from configuring a traditional DAW with action chains or macros. Jump behavior is native transport behavior, available to desktop controls, MIDI mappings, keyboard shortcuts, and remote commands.
+This is native transport behavior, so the same logic is available from desktop controls, keyboard shortcuts, MIDI mappings, and the remote.
 
-Pending jumps can be cancelled before they execute.
+![Marker jump modes](/screenshots/Marker-Jump-Modes.png)
 
-## Vamp Mode
+## Vamp
 
-Vamp keeps playback looping while the band, stage action, or speaker needs more time.
+`Vamp` keeps playback looping musically while the band, stage action, or speaker needs more time. `Vamp Mode` can repeat the current `Section` or a fixed number of `Bars`. Press `Vamp` again to leave the loop.
 
-LibreTracks supports two Vamp modes:
+![Vamp configuration](/screenshots/Vamp-Config.png)
 
-- `Section` loops the current section.
-- `Bars` loops a fixed number of bars.
+## Song Jumps And Transitions
 
-Pressing Vamp again leaves the loop. The active Vamp state is part of the playback snapshot so desktop and remote views can stay aligned.
+Song jumps target song regions. They are useful when one session contains a full set, a rehearsal timeline, or several cues.
 
-## Song Jumps
+The trigger can be immediate, after a configured number of bars, or at the end of the current song/region.
 
-Song jumps target song regions. They are useful when one timeline contains a full set, a rehearsal session, or multiple show cues.
+`Song Transition` controls how the current song hands off to the next one:
 
-The current controls support immediate song jumps, jumps after a configured number of bars, and jumps at the end of the current song region.
+- `Clean cut`: switches directly.
+- `Fade out`: fades current playback before the jump.
 
-## Song Transitions
+![Song jump configuration](/screenshots/Song-Jump-Config.png)
 
-Song transition mode controls how playback moves between song regions:
+## Shortcuts
 
-- `Clean cut` switches directly.
-- `Fade out` fades the current playback before the transition.
+- `Space`: toggle `Play` / `Pause`
+- `Esc`: cancel a pending jump
+- `0-9`: arm a jump to the corresponding marker
+- `Shift + 0-9`: arm a jump to the selected song region
 
-Use clean cuts for rehearsed hard stops or theatrical cues. Use fade-outs when the next region should enter after a smoother handoff.
+If you arm the wrong destination, press `Esc` immediately.
 
-## MIDI Learn
+## Mobile Remote
 
-MIDI Learn maps incoming notes or CC messages to live actions. Practical mappings include Play, Stop, marker jumps, song jumps, Vamp, global jump mode, song transition mode, and bar-count adjustments.
+Open `Remote` in the desktop app, then scan the QR code or open the displayed URL from a phone or tablet on the same local network.
 
-The desktop settings store the selected MIDI input device and mappings so the live rig can be prepared before rehearsal.
+![Remote connection panel](/screenshots/Remote.png)
+
+The remote exposes transport, marker jumps, song jumps, Vamp controls, song transition mode, and a mixer view for volume, pan, mute, and solo.
+
+![Remote mixer](/screenshots/Remote_Mixer.png)

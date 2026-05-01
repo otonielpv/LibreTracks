@@ -1,34 +1,30 @@
 ---
 title: Integracion Y Ecosistema
-description: Remote, paquetes, portabilidad de proyecto y flujo de trabajo.
+description: Paquetes de cancion, import/export, arquitectura remote y flujo recomendado.
 ---
 
-## Remote Movil
+## Exportar Canciones
 
-LibreTracks desktop puede publicar un remote web local para moviles y tablets.
+Despues de crear una region de cancion, exportala cuando quieras reutilizar la configuracion en futuras sesiones.
 
-Abre `Remote` en la app desktop y escanea el codigo QR. La app tambien muestra URLs locales por IP y hostname `.local`. El movil o tablet debe estar en la misma red local que el ordenador.
+1. Crea una cancion desde una region seleccionada del timeline.
+2. Haz clic derecho sobre la region creada.
+3. Elige `Export Song`.
 
-El remote expone transporte, saltos de marcador, Vamp, transiciones de cancion y una vista de mixer para volumen, pan, mute y solo.
+![Exportar una cancion](/screenshots/Export-Song.png)
 
-## Arquitectura Remote
+## Importar Canciones Y Paquetes
 
-El remote controla estado. No reproduce audio. El audio permanece en el runtime desktop, lo que mantiene el rig predecible y evita la complejidad de dispositivos de audio en navegador.
+Usa `Import song` desde la seccion superior `Archivo` cuando quieras traer otra cancion o paquete de sesion de LibreTracks a la sesion actual. Es util para construir un show completo desde canciones preparadas sin rehacer pistas, clips, routing y marcas a mano.
 
-Los comandos remotos llegan al backend desktop, donde se resuelven mediante la misma logica de sesion y transporte que usa la UI desktop.
+## Arquitectura Del Remote Movil
 
-## Paquetes LibreTracks
+El remote controla estado; no reproduce audio. El audio permanece en el runtime desktop, lo que mantiene el rig de directo predecible y evita la complejidad de dispositivos de audio en navegador.
 
-LibreTracks soporta paquetes `.ltpkg` para mover canciones o sesiones preparadas entre contextos.
+Los comandos remotos se envian al backend desktop y se resuelven mediante la misma logica de sesion y transporte que usa la UI desktop, los mapeos MIDI y los atajos.
 
-Usa paquetes cuando quieras:
-
-- Traer otra cancion preparada a la sesion actual.
-- Compartir una cancion entre maquinas de ensayo y show.
-- Construir un timeline completo a partir de material ya preparado.
-
-La capa de proyecto gestiona la importacion de paquetes y mantiene la persistencia en `song.json` con sus assets de biblioteca.
+![Superficie remote](/screenshots/Remote.png)
 
 ## Flujo Recomendado
 
-Prepara el audio en una DAW de produccion, exporta stems WAV, importalos en LibreTracks, crea marcas y regiones, configura routing, ensaya los saltos y conecta MIDI y remote para el control del show.
+Prepara audio en una DAW de produccion, exporta stems, importalos en LibreTracks, organiza Biblioteca, construye el timeline, configura routing de salidas, crea regiones y marcas, ensaya saltos, conecta MIDI y usa el remote movil para transporte o mixer durante ensayo y show.

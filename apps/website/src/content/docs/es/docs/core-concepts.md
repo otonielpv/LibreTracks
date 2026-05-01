@@ -1,43 +1,51 @@
 ---
 title: Conceptos Base
-description: Pistas, marcas, tempo, compases y regiones de cancion en LibreTracks.
+description: Biblioteca, pistas, clips, marcas, cambios de compas y regiones de cancion.
 ---
+
+## Biblioteca Y Assets
+
+`Biblioteca` es el area de preparacion de audio del show. Importa uno o varios archivos y arrastralos al timeline cuando quieras empezar a organizar.
+
+![Importar assets en Biblioteca](/screenshots/Library-Assets-Import.gif)
+
+Las carpetas virtuales agrupan assets por cancion, set, escena, seccion o instrumentacion sin mover los archivos originales. Un flujo practico es usar una carpeta por cancion o bloque del show.
+
+![Carpetas virtuales](/screenshots/Assets-Folder.gif)
 
 ## Audio Tracks Y Folder Tracks
 
-LibreTracks tiene dos tipos de pista en el modelo:
+- `Audio track` contiene clips y produce playback.
+- `Folder track` organiza pistas hijas y permite control agrupado.
 
-- `Audio` contiene clips y produce playback.
-- `Folder` organiza pistas hijas y permite control agrupado.
+Usa folder tracks para stems relacionados como bateria, tracks de banda, coros, voces de apoyo o playback auxiliar. Usa audio tracks para lanes que contienen clips.
 
-Usa pistas de audio para stems, cues, count-ins y archivos de playback. Usa folder tracks cuando varias pistas pertenecen juntas, por ejemplo bateria, stems de banda, coro, backing vocals o cues del show.
+![Tracks y carpetas](/screenshots/Tracks-Folder.gif)
 
-Las folder tracks participan en el calculo de mezcla efectiva. Las relaciones padre/hijo permiten resolver ganancia, mute y solo agrupados sin que la UI tenga que poseer las reglas de audio.
+## Clips Y Edicion De Timeline
 
-## Clips Y Edicion No Destructiva
+Los clips son referencias no destructivas a archivos de audio. Puedes arrastrar assets desde Biblioteca, mover clips, duplicar secciones repetidas y cortar en el cursor sin reescribir el WAV original.
 
-Cada clip apunta a un archivo fuente y guarda posicion en timeline, offset de fuente, duracion, ganancia y fades opcionales. Un corte crea nuevas referencias al mismo WAV. Un movimiento cambia posicion. Un duplicado crea otra referencia.
+![Duplicar un clip](/screenshots/DuplicateTrack.png)
 
-El WAV fuente no se reescribe con operaciones de cortar, mover o duplicar.
+`Snap to Grid` mantiene cursor, clips y ediciones alineados a divisiones musicales. Desactivalo solo cuando necesites una colocacion libre.
 
-## Section Markers
+![Control Snap to Grid](/screenshots/Snap-To-Grid-Button.png)
 
-Las section markers definen destinos musicales en el timeline: Intro, Verse, Chorus, Bridge, Vamp, Outro y puntos similares. El modelo soporta un campo opcional `digit` para atajos numericos.
+## Regiones De Cancion
 
-En la build desktop actual, los atajos `0-9` se resuelven por orden de marca en el timeline. El modelo ya soporta digitos explicitos, pero la UI aun no expone un control dedicado para asignarlos.
+Las regiones de cancion definen rangos con nombre en el timeline. Permiten que una sesion contenga varias canciones o cues de show y se usan en los controles de salto de cancion.
 
-## Tempo Markers
+Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`.
 
-Una cancion tiene BPM base y puede contener tempo markers. El tempo permite al transporte calcular limites de compas para saltos cuantizados y Vamp.
+![Crear region de cancion](/screenshots/Create-Region.png)
 
-Los cambios de tempo se guardan como datos de marca en vez de inferirse del contenido de los clips durante el playback.
+## Marcas Y Cambios De Compas
 
-## Time Signature Markers
+Las marcas definen destinos musicales como Intro, Verso, Estribillo, Puente, Vamp u Outro. Se crean desde el ruler con `Create Marker`.
 
-Las canciones tambien tienen un compas base y time signature markers opcionales. Estas marcas afectan los calculos de rejilla musical y hacen que las operaciones por compases funcionen correctamente cuando cambia la metrica.
+![Crear una marca](/screenshots/Create-Marker.gif)
 
-## Song Regions
+Los cambios de compas mantienen correctas las operaciones por compases cuando una cancion cambia de metrica. Se crean desde el header del timeline con `Create Meter Marker`.
 
-Las song regions definen rangos con nombre en un unico timeline. Asi una sesion puede contener varias canciones o bloques de show sin forzar cada cancion a un proyecto separado.
-
-Las regiones se usan en los controles de salto de cancion, incluyendo moverse a otra region al instante, tras un numero de compases o al final de la region actual.
+![Crear cambio de compas](/screenshots/Change-Time-Signature.png)
