@@ -29,8 +29,8 @@ let error: string | null = null;
 try {
   const headers: HeadersInit = { Accept: "application/vnd.github+json" };
   // Añadimos el token si lo configuramos en Cloudflare
-  if (import.meta.env.GITHUB_TOKEN) {
-    headers["Authorization"] = `Bearer ${import.meta.env.GITHUB_TOKEN}`;
+  if (import.meta.env.GITHUB_RELEASES_TOKEN) {
+    headers["Authorization"] = `Bearer ${import.meta.env.GITHUB_RELEASES_TOKEN}`;
   }
 
   const response = await fetch(apiUrl, { headers });

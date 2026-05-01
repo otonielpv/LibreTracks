@@ -118,7 +118,7 @@ jobs:
       - name: Build and publish Tauri release
         uses: tauri-apps/tauri-action@v0.5
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RELEASES_TOKEN: ${{ secrets.GITHUB_RELEASES_TOKEN }}
         with:
           projectPath: 'apps/desktop'
           tagName: ${{ github.ref_name }}
