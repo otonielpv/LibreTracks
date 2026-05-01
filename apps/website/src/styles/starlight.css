@@ -31,14 +31,23 @@ starlight-theme-select {
   display: none !important;
 }
 
-/* Shrink right sidebar (ToC) and widen main content */
+/* Shrink right sidebar (ToC) and center main content */
 :root {
-  --sl-sidebar-width: 18rem;
-  --sl-content-width: 55rem;
+  --sl-sidebar-width: 9rem;
+  --sl-content-width: 27.5rem;
 }
 
 starlight-toc {
   width: clamp(10rem, 15vw, 14rem);
+}
+
+/* Center the main content area */
+.main-frame {
+  margin-inline: auto;
+}
+
+.content-panel {
+  margin-inline: auto;
 }
 
 /* Markdown content images */
