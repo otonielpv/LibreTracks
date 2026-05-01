@@ -33,12 +33,7 @@ starlight-theme-select {
 
 /* Shrink right sidebar (ToC) and center main content */
 :root {
-  --sl-sidebar-width: 9rem;
-  --sl-content-width: 27.5rem;
-}
-
-starlight-toc {
-  width: clamp(10rem, 15vw, 14rem);
+  --sl-content-width: 75rem;
 }
 
 /* Markdown content images */
