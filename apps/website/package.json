@@ -9,9 +9,10 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@astrojs/tailwind": "^6.0.2",
     "@astrojs/starlight": "^0.37.0",
+    "@astrojs/tailwind": "^6.0.2",
     "astro": "^5.15.0",
+    "marked": "^18.0.2",
     "tailwindcss": "^3.4.17"
   },
   "devDependencies": {

@@ -41,15 +41,6 @@ starlight-toc {
   width: clamp(10rem, 15vw, 14rem);
 }
 
-/* Center the main content area */
-.main-frame {
-  margin-inline: auto;
-}
-
-.content-panel {
-  margin-inline: auto;
-}
-
 /* Markdown content images */
 .sl-markdown-content img {
   display: block;

@@ -1,4 +1,6 @@
 ---
+import { marked } from "marked";
+
 interface Props {
   owner?: string;
   repo?: string;
@@ -28,7 +30,6 @@ let error: string | null = null;
 
 try {
   const headers: HeadersInit = { Accept: "application/vnd.github+json" };
-  // Añadimos el token si lo configuramos en Cloudflare
   if (import.meta.env.GITHUB_TOKEN) {
     headers["Authorization"] = `Bearer ${import.meta.env.GITHUB_TOKEN}`;
   }
@@ -58,32 +59,56 @@ const releaseUrl = `https://github.com/${owner}/${repo}/releases/latest`;
 const date = release?.published_at
   ? new Intl.DateTimeFormat(isSpanish ? "es" : "en", { dateStyle: "medium" }).format(new Date(release.published_at))
   : null;
+
+const bodyHtml = release?.body ? await marked.parse(release.body) : null;
+
+function iconForAsset(name: string): string {
+  if (/\.msi$|\.exe$/i.test(name)) return "🪟";
+  if (/\.dmg$/i.test(name)) return "🍎";
+  if (/\.deb$|\.AppImage$|\.rpm$/i.test(name)) return "🐧";
+  return "📦";
+}
 ---
 
 <section class="download-panel">
   {release ? (
     <>
-      <p class="eyebrow">{labels.currentVersion}</p>
-      <h1 style="font-size: clamp(2.7rem, 7vw, 5rem); margin-bottom: 0.5rem;">{release.tag_name}</h1>
-      {date ? <p>{labels.published}: {date}</p> : null}
-      <div class="download-list" aria-label={labels.assets}>
-        {release.assets.length > 0 ? release.assets.map((asset) => (
-          <div class="download-row">
-            <strong>{asset.name}</strong>
-            <a class="button-link primary" href={asset.browser_download_url}>
-              {Math.max(1, Math.round(asset.size / 1024 / 1024))} MB
-            </a>
-          </div>
-        )) : <p>{labels.noAssets}</p>}
+      <div class="release-header">
+        <p class="eyebrow">{labels.currentVersion}</p>
+        <h1 class="release-version">{release.tag_name}</h1>
+        {date ? <p class="release-date">{labels.published}: {date}</p> : null}
       </div>
-      {release.body ? (
-        <>
-          <h2>{labels.notes}</h2>
-          <div class="release-notes">{release.body}</div>
-        </>
-      ) : null}
-      <div class="hero-actions">
-        <a class="button-link" href={release.html_url}>{labels.open}</a>
+
+      <div class="release-layout">
+        {/* ── Assets column ── */}
+        <div class="release-assets">
+          <h3 class="release-section-title">{labels.assets}</h3>
+          {release.assets.length > 0 ? (
+            <div class="download-list">
+              {release.assets.map((asset) => (
+                <a class="download-card" href={asset.browser_download_url}>
+                  <span class="download-icon">{iconForAsset(asset.name)}</span>
+                  <span class="download-info">
+                    <strong>{asset.name}</strong>
+                    <span class="download-size">{Math.max(1, Math.round(asset.size / 1024 / 1024))} MB</span>
+                  </span>
+                  <span class="download-arrow">↓</span>
+                </a>
+              ))}
+            </div>
+          ) : <p>{labels.noAssets}</p>}
+          <div class="hero-actions" style="margin-top: 1.25rem;">
+            <a class="button-link" href={release.html_url}>{labels.open}</a>
+          </div>
+        </div>
+
+        {/* ── Release notes column ── */}
+        {bodyHtml ? (
+          <div class="release-notes-panel">
+            <h3 class="release-section-title">{labels.notes}</h3>
+            <div class="release-notes-body" set:html={bodyHtml} />
+          </div>
+        ) : null}
       </div>
     </>
   ) : (
