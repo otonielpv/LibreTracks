@@ -1,0 +1,41 @@
+/* ==========================================================================
+   LibreTracks – Starlight Documentation Styles (Dark-only)
+   ========================================================================== */
+
+/* Force dark palette on all themes */
+:root,
+:root[data-theme="light"] {
+  --sl-color-accent-low: #0d3d35;
+  --sl-color-accent: #2dd4bf;
+  --sl-color-accent-high: #57f1db;
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #eeeeee;
+  --sl-color-gray-2: #c2c2c2;
+  --sl-color-gray-3: #8b8b8b;
+  --sl-color-gray-4: #585858;
+  --sl-color-gray-5: #383838;
+  --sl-color-gray-6: #272727;
+  --sl-color-gray-7: #181818;
+  --sl-color-black: #101010;
+  --sl-color-bg: var(--sl-color-black);
+  --sl-color-bg-nav: var(--sl-color-gray-7);
+  --sl-color-bg-sidebar: var(--sl-color-gray-7);
+  --sl-color-hairline-light: rgba(255, 255, 255, 0.08);
+  --sl-color-hairline: rgba(255, 255, 255, 0.12);
+  --sl-color-text: var(--sl-color-gray-1);
+  --sl-color-text-accent: var(--sl-color-accent-high);
+}
+
+/* Hide theme toggle – documentation is dark-only */
+starlight-theme-select {
+  display: none !important;
+}
+
+/* Markdown content images */
+.sl-markdown-content img {
+  display: block;
+  margin: 2.5rem auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
