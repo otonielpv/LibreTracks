@@ -15,6 +15,10 @@ LibreTracks es una DAW y estación de reproducción multitrack para directo, con
 - Recuperacion de archivos perdidos: la app marca los medios faltantes y ayuda a localizarlos y relinkearlos desde la biblioteca o la vista de transporte.
 - Mejoras de reproduccion y entrada: el stop/declick es mas suave, el transporte es mas estable y los BPM quedan limitados a un rango seguro.
 
+## Novedades de v0.0.5
+
+- Añadida compatibilidad para MacOS Intel
+
 ## Capturas de pantalla
 | Captura | Captura |
 | --- | --- |

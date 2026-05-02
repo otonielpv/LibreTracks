@@ -17,6 +17,10 @@ LibreTracks is a multitrack DAW and live playback workstation for desktop, built
 - Missing-file recovery: the app now flags missing media and helps you locate and relink the files from the library or transport view.
 - Playback and input polish: smoother stop/declick behavior, better transport stability, and BPM values are now kept within a safe range.
 
+## What's New in v0.0.5
+
+- Added compatibility with Intel MacOS
+
 ## Screenshots
 | Screenshot | Screenshot |
 | --- | --- |
