@@ -132,9 +132,32 @@ jobs:
           releaseDraft: false
           prerelease: false
 
+    update-release-notes:
+    name: Update release notes
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update GitHub release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES_FILE="docs/releases/${GITHUB_REF_NAME}.md"
+
+          if [ -f "$NOTES_FILE" ]; then
+            gh release edit "$GITHUB_REF_NAME" --notes-file "$NOTES_FILE"
+          else
+            gh release edit "$GITHUB_REF_NAME" --notes "See the Assets section to download this version."
+          fi
+
   notify-website:
     name: Trigger Website Rebuild
-    needs: release # Esto obliga a esperar a que toda la matriz de release termine
+    needs: update-release-notes # Esto obliga a esperar a que toda la matriz de release termine
     runs-on: ubuntu-latest
     steps:
       - name: Send Deploy Hook to Cloudflare
