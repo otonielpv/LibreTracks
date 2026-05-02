@@ -131,3 +131,11 @@ jobs:
           releaseBody: See the Assets section to download this version.
           releaseDraft: false
           prerelease: false
+
+  notify-website:
+    name: Trigger Website Rebuild
+    needs: release # Esto obliga a esperar a que toda la matriz de release termine
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Deploy Hook to Cloudflare
+        run: curl -X POST "${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}"
