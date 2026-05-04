@@ -375,11 +375,6 @@ export function TimelineCanvasPane({
                   onRegionContextMenu(event, region.id);
                 }}
               >
-                {region.transposeSemitones !== 0 ? (
-                  <span className="lt-region-transpose-badge">
-                    {formatTransposeSemitones(region.transposeSemitones)} st
-                  </span>
-                ) : null}
                 <span className="lt-sr-only">{region.name}</span>
               </button>
             ))}

@@ -427,7 +427,7 @@ textarea {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  min-width: 5.8rem;
+  min-width: 6.5rem;
   flex-shrink: 0;
 }
 
@@ -444,7 +444,7 @@ textarea {
   letter-spacing: 0;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
-  width: 9ch;
+  width: 11ch;
   text-align: right;
 }
 
@@ -2184,6 +2184,11 @@ textarea {
   font-size: 9px;
 }
 
+.lt-track-header.is-condensed .lt-track-toggle-group {
+  grid-template-columns: repeat(2, 20px);
+  grid-auto-rows: 20px;
+}
+
 .lt-track-header.is-condensed .lt-track-volume,
 .lt-track-header.is-condensed .lt-track-pan {
   gap: 0.3rem;
@@ -2237,6 +2242,11 @@ textarea {
   width: 18px;
   height: 18px;
   font-size: 8px;
+}
+
+.lt-track-header.is-compact .lt-track-toggle-group {
+  grid-template-columns: repeat(2, 18px);
+  grid-auto-rows: 18px;
 }
 
 .lt-track-header.is-compact .lt-track-volume,
@@ -2370,7 +2380,9 @@ textarea {
 }
 
 .lt-track-toggle-group {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 24px);
+  grid-auto-rows: 24px;
   gap: 0.25rem;
 }
 
@@ -2392,6 +2404,10 @@ textarea {
 .lt-track-toggle-group button:nth-child(2).is-active {
   color: #402d00;
   background: #ffe2ab;
+}
+
+.lt-track-toggle-group button:nth-child(3) {
+  grid-column: 1 / span 2;
 }
 
 .lt-track-volume,
@@ -2632,24 +2648,6 @@ textarea {
 .lt-region-hotspot:focus-visible {
   outline: 1px solid rgb(255 226 171 / 0.88);
   outline-offset: 1px;
-}
-
-.lt-region-transpose-badge {
-  position: absolute;
-  top: 0.12rem;
-  left: 0.14rem;
-  display: inline-flex;
-  align-items: center;
-  padding: 0.08rem 0.34rem;
-  border-radius: 999px;
-  background: rgb(12 12 18 / 0.82);
-  box-shadow: 0 0 0 1px rgb(255 226 171 / 0.24);
-  color: rgb(255 244 210);
-  font-size: 0.62rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  pointer-events: none;
 }
 
 .lt-marker-hotspot:focus-visible {
@@ -2895,6 +2893,11 @@ textarea {
 .lt-control-group-vamp .lt-control-popover-panel {
   left: 0;
   transform: none;
+  min-width: 22rem;
+}
+
+.lt-control-group-region .lt-control-popover-panel {
+  min-width: 16rem;
 }
 
 .lt-control-group-song .lt-control-popover-panel {

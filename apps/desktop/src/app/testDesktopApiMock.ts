@@ -115,6 +115,7 @@ function buildInitialSong(): SongView {
         name: "LibreTracks Session",
         startSeconds: 0,
         endSeconds: 180,
+        transposeSemitones: 0,
       },
     ],
     tracks: [
@@ -130,6 +131,7 @@ function buildInitialSong(): SongView {
         muted: false,
         solo: false,
         audioTo: "master",
+        transposeEnabled: false,
       },
       {
         id: "track-drums",
@@ -143,6 +145,7 @@ function buildInitialSong(): SongView {
         muted: false,
         solo: false,
         audioTo: "master",
+        transposeEnabled: false,
       },
       {
         id: "track-bass",
@@ -156,6 +159,7 @@ function buildInitialSong(): SongView {
         muted: false,
         solo: false,
         audioTo: "master",
+        transposeEnabled: false,
       },
       {
         id: "track-folder-guide",
@@ -169,6 +173,7 @@ function buildInitialSong(): SongView {
         muted: false,
         solo: false,
         audioTo: "master",
+        transposeEnabled: false,
       },
       {
         id: "track-click",
@@ -182,6 +187,7 @@ function buildInitialSong(): SongView {
         muted: false,
         solo: false,
         audioTo: "master",
+        transposeEnabled: false,
       },
       {
         id: "track-vocal",
@@ -195,6 +201,7 @@ function buildInitialSong(): SongView {
         muted: false,
         solo: false,
         audioTo: "master",
+        transposeEnabled: false,
       },
       {
         id: "track-keys",
@@ -208,6 +215,7 @@ function buildInitialSong(): SongView {
         muted: false,
         solo: false,
         audioTo: "master",
+        transposeEnabled: false,
       },
     ],
     clips: [
@@ -401,6 +409,7 @@ function buildSongTempoRegions(song: SongView | null | undefined): Array<SongReg
       name: `Tempo ${bpm.toFixed(2)}`,
       startSeconds,
       endSeconds: marker.startSeconds,
+      transposeSemitones: 0,
       bpm,
       timeSignature,
     });
@@ -414,6 +423,7 @@ function buildSongTempoRegions(song: SongView | null | undefined): Array<SongReg
     name: `Tempo ${bpm.toFixed(2)}`,
     startSeconds,
     endSeconds: Math.max(startSeconds, SONG_TEMPO_REGION_VISUAL_END_SECONDS),
+    transposeSemitones: 0,
     bpm,
     timeSignature,
   });
@@ -574,6 +584,7 @@ function createRegionFromSelection(startSeconds: number, endSeconds: number): So
     name: state.song.title,
     startSeconds: Math.max(0, startSeconds),
     endSeconds: Math.max(startSeconds, endSeconds),
+    transposeSemitones: 0,
   };
 }
 
@@ -1077,6 +1088,7 @@ export const testDesktopApiMock = {
       muted: false,
       solo: false,
       audioTo: "master",
+      transposeEnabled: false,
     });
     replaceSong({
       ...state.song,

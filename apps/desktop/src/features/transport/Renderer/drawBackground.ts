@@ -256,7 +256,32 @@ export function drawRulerRegion(
   context.fillStyle = isSelected ? "#fff4d6" : "rgba(255, 244, 214, 0.92)";
   context.font = '700 10px "Space Grotesk", sans-serif';
   context.textBaseline = "middle";
-  context.fillText(region.name, blockLeft + 7, blockTop + blockHeight / 2 + 0.5);
+  const textLeft = blockLeft + 7;
+  const textCenterY = blockTop + blockHeight / 2 + 0.5;
+  context.fillText(region.name, textLeft, textCenterY);
+
+  if (region.transposeSemitones !== 0) {
+    const textWidth = context.measureText(region.name).width;
+    const badgeText = `${region.transposeSemitones > 0 ? `+${region.transposeSemitones}` : region.transposeSemitones} st`;
+    context.font = '700 9px "Space Grotesk", sans-serif';
+    const badgeTextWidth = context.measureText(badgeText).width;
+    const badgePaddingX = 5;
+    const badgeHeight = 12;
+    const badgeWidth = Math.ceil(badgeTextWidth + badgePaddingX * 2);
+    const badgeLeft = blockLeft + 7 + textWidth + 8;
+    const badgeTop = Math.round(textCenterY - badgeHeight / 2);
+
+    context.fillStyle = "rgba(12, 12, 18, 0.82)";
+    context.strokeStyle = "rgba(255, 226, 171, 0.24)";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.roundRect(badgeLeft, badgeTop, badgeWidth, badgeHeight, 999);
+    context.fill();
+    context.stroke();
+
+    context.fillStyle = "rgb(255, 244, 210)";
+    context.fillText(badgeText, badgeLeft + badgePaddingX, textCenterY + 0.1);
+  }
   context.restore();
 }
 
