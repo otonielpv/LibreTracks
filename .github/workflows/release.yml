@@ -132,7 +132,7 @@ jobs:
           releaseDraft: false
           prerelease: false
 
-    update-release-notes:
+  update-release-notes:
     name: Update release notes
     needs: release
     runs-on: ubuntu-latest
