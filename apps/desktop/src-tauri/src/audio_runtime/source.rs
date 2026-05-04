@@ -545,6 +545,8 @@ fn stream_decode_from(
         source.channels.max(1),
         transpose_semitones,
     );
+    let channels = source.channels.max(1);
+    let mut frames_to_discard = pitch_engine.latency_frames();
 
     loop {
         while let Ok(command) = command_receiver.try_recv() {
@@ -570,21 +572,23 @@ fn stream_decode_from(
         let samples = match decoder.next_output_chunk(STREAM_WORKER_CHUNK_FRAMES) {
             Ok(samples) if samples.is_empty() => {
                 let flushed = pitch_engine.process_interleaved(&[], true);
-                push_streaming_samples(producer, &flushed, generation, source.channels.max(1));
+                let flushed = discard_initial_latency(&flushed, channels, &mut frames_to_discard);
+                push_streaming_samples(producer, flushed, generation, channels);
                 return WorkerOutcome::Finished;
             }
             Ok(samples) => samples,
             Err(_) => {
                 let flushed = pitch_engine.process_interleaved(&[], true);
-                push_streaming_samples(producer, &flushed, generation, source.channels.max(1));
+                let flushed = discard_initial_latency(&flushed, channels, &mut frames_to_discard);
+                push_streaming_samples(producer, flushed, generation, channels);
                 return WorkerOutcome::Finished;
             }
         };
 
         let processed_samples = pitch_engine.process_interleaved(&samples, false);
 
-        let channels = source.channels.max(1);
-        for frame in processed_samples.chunks_exact(channels) {
+        let output_slice = discard_initial_latency(&processed_samples, channels, &mut frames_to_discard);
+        for frame in output_slice.chunks_exact(channels) {
             // Wait until there is enough space for the WHOLE frame
             while producer.slots() < channels {
                 if let Ok(command) = command_receiver.try_recv() {
@@ -613,6 +617,23 @@ fn stream_decode_from(
             }
         }
     }
+}
+
+fn discard_initial_latency<'a>(
+    samples: &'a [f32],
+    channels: usize,
+    frames_to_discard: &mut usize,
+) -> &'a [f32] {
+    let mut output_slice = samples;
+
+    if *frames_to_discard > 0 {
+        let frames_in_output = output_slice.len() / channels;
+        let drop_frames = frames_to_discard.min(frames_in_output);
+        *frames_to_discard -= drop_frames;
+        output_slice = &output_slice[(drop_frames * channels)..];
+    }
+
+    output_slice
 }
 
 fn push_streaming_samples(

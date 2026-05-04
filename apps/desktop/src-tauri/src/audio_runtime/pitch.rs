@@ -2,6 +2,7 @@ use signalsmith_stretch::Stretch;
 
 pub(crate) trait PitchShiftEngine: Send {
     fn process_interleaved(&mut self, input_interleaved: &[f32], finish: bool) -> Vec<f32>;
+    fn latency_frames(&self) -> usize;
     fn reset(&mut self);
 }
 
@@ -30,6 +31,10 @@ struct BypassPitchShiftEngine;
 impl PitchShiftEngine for BypassPitchShiftEngine {
     fn process_interleaved(&mut self, input_interleaved: &[f32], _finish: bool) -> Vec<f32> {
         input_interleaved.to_vec()
+    }
+
+    fn latency_frames(&self) -> usize {
+        0
     }
 
     fn reset(&mut self) {}
@@ -128,6 +133,10 @@ impl PitchShiftEngine for SignalsmithPitchShiftEngine {
         }
 
         self.process_and_flush(input_interleaved, finish)
+    }
+
+    fn latency_frames(&self) -> usize {
+        self.stretch.output_latency().max(0)
     }
 
     fn reset(&mut self) {
