@@ -628,7 +628,7 @@ fn discard_initial_latency<'a>(
 
     if *frames_to_discard > 0 {
         let frames_in_output = output_slice.len() / channels;
-        let drop_frames = frames_to_discard.min(frames_in_output);
+        let drop_frames = (*frames_to_discard).min(frames_in_output);
         *frames_to_discard -= drop_frames;
         output_slice = &output_slice[(drop_frames * channels)..];
     }
