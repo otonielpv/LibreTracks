@@ -428,6 +428,10 @@ type InternalLibraryPointerDrag = {
         targetTrackId: string | null;
         layout: LibraryDropLayout;
       }
+    | {
+        kind: "library-folder";
+        folderPath: string | null;
+      }
     | null;
 };
 
@@ -1058,10 +1062,6 @@ export function TransportPanelContent() {
       return;
     }
 
-    if (!(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-      return;
-    }
-
     let disposed = false;
     let unlisten: (() => void) | null = null;
 
@@ -1100,6 +1100,10 @@ export function TransportPanelContent() {
         }
 
         unlisten = dispose;
+      })
+      .catch(() => {
+        nativeExternalDropPathsRef.current = [];
+        setExternalDropPreview(null);
       });
 
     return () => {
@@ -5162,6 +5166,27 @@ export function TransportPanelContent() {
     return resolveTimelineDropFromClientPoint(clientPoint.clientX, clientPoint.clientY);
   }
 
+  function resolveLibraryFolderDropFromClientPoint(clientX: number, clientY: number) {
+    if (typeof document.elementFromPoint !== "function") {
+      return null;
+    }
+
+    const target = document.elementFromPoint(clientX, clientY);
+    if (!(target instanceof HTMLElement)) {
+      return null;
+    }
+
+    const folderSummary = target.closest('[data-library-folder-drop-target="true"]');
+    if (!(folderSummary instanceof HTMLElement)) {
+      return null;
+    }
+
+    const folderPath = folderSummary.getAttribute("data-library-folder-path");
+    return {
+      folderPath: folderPath && folderPath.length > 0 ? folderPath : null,
+    };
+  }
+
   function resolveLibraryAutoScrollVelocity(distancePx: number) {
     if (distancePx >= LIBRARY_DRAG_EDGE_BUFFER_PX) {
       return 0;
@@ -5276,6 +5301,18 @@ export function TransportPanelContent() {
     ctrlKey: boolean;
     metaKey: boolean;
   }) {
+    const libraryFolderTarget = resolveLibraryFolderDropFromClientPoint(args.clientX, args.clientY);
+    if (libraryFolderTarget) {
+      clearLibraryDragPreview();
+      return {
+        ...args.drag,
+        hover: {
+          kind: "library-folder" as const,
+          folderPath: libraryFolderTarget.folderPath,
+        },
+      };
+    }
+
     const hit = resolveTimelineDropFromClientPoint(args.clientX, args.clientY);
     if (!hit.isOverTimeline) {
       clearLibraryDragPreview();
@@ -5376,7 +5413,15 @@ export function TransportPanelContent() {
     const hover = nextDrag.hover;
     clearInternalLibraryPointerDrag();
 
-    if (!nextDrag.isDragging || !hover || hover.kind !== "timeline") {
+    if (!nextDrag.isDragging || !hover) {
+      return;
+    }
+
+    if (hover.kind === "library-folder") {
+      void handleMoveLibraryAssets(
+        nextDrag.payload.map((item) => item.file_path),
+        hover.folderPath,
+      );
       return;
     }
 
@@ -6099,6 +6144,11 @@ export function TransportPanelContent() {
           importProgress={libraryImportProgress}
           deletingFilePath={deletingLibraryFilePath}
           canImport={Boolean(playbackSongDir)}
+          dragTargetFolderPath={
+            internalLibraryPointerDrag?.hover?.kind === "library-folder"
+              ? internalLibraryPointerDrag.hover.folderPath
+              : undefined
+          }
           onLocateAsset={handleLocateMissingFile}
           onPointerDragStart={startInternalLibraryPointerDrag}
           onImport={() => {

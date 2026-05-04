@@ -208,13 +208,6 @@ afterEach(() => {
   cleanup();
 });
 
-function enableMockTauriInternals() {
-  Object.defineProperty(window, "__TAURI_INTERNALS__", {
-    configurable: true,
-    value: { mock: true },
-  });
-}
-
 function disablePointerEventSupport() {
   Object.defineProperty(window, "PointerEvent", {
     configurable: true,
@@ -787,6 +780,56 @@ describe("App", () => {
     expect(await screen.findByText(interpolate(en.timelineToolbar.clipsCount, { count: 6 }))).toBeTruthy();
   });
 
+  it("moves a library asset into a folder with pointer drag", async () => {
+    disablePointerEventSupport();
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Band");
+    const desktopApi = await import("../features/transport/desktopApi");
+    const moveLibraryAssetMock = vi.mocked(desktopApi.moveLibraryAsset);
+
+    await renderApp();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.transport.shell.library) }));
+    });
+
+    await screen.findByText("drums.wav");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.library.folderButton) }));
+    });
+
+    const bandFolderLabel = await screen.findByText("Band");
+    const bandFolderSummary = bandFolderLabel.closest(".lt-library-folder-summary") as HTMLElement | null;
+    expect(bandFolderSummary).toBeTruthy();
+
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: vi.fn(() => bandFolderSummary),
+    });
+
+    await act(async () => {
+      fireEvent.mouseDown(getLibraryAssetButton("drums.wav"), {
+        button: 0,
+        clientX: 90,
+        clientY: 210,
+      });
+      fireEvent.mouseMove(window, {
+        clientX: 120,
+        clientY: 320,
+      });
+      fireEvent.mouseUp(window, {
+        clientX: 120,
+        clientY: 320,
+      });
+    });
+
+    await waitFor(() => {
+      expect(moveLibraryAssetMock).toHaveBeenCalledWith("audio/drums.wav", "Band");
+    });
+
+    promptSpy.mockRestore();
+  });
+
   it("drops a song package on the timeline", async () => {
     const { container } = await renderApp();
     mockRulerBounds(container);
@@ -891,8 +934,6 @@ describe("App", () => {
       return testDesktopApiMock.importAudioFilesFromPaths(files);
     });
 
-    enableMockTauriInternals();
-
     const { container } = await renderApp();
     mockRulerBounds(container);
     mockLaneBounds(container);
@@ -964,7 +1005,6 @@ describe("App", () => {
   });
 
   it("rejects mixed external drops", async () => {
-    enableMockTauriInternals();
     const { container } = await renderApp();
     mockRulerBounds(container);
     mockLaneBounds(container);
@@ -988,7 +1028,6 @@ describe("App", () => {
   });
 
   it("rejects unsupported external drops", async () => {
-    enableMockTauriInternals();
     const { container } = await renderApp();
     mockRulerBounds(container);
     mockLaneBounds(container);

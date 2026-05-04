@@ -33,6 +33,7 @@ type LibrarySidebarPanelProps = {
   importProgress: LibraryImportProgressEvent | null;
   deletingFilePath: string | null;
   canImport: boolean;
+  dragTargetFolderPath?: string | null;
   onPointerDragStart?: (args: {
     payload: Array<{ file_path: string; durationSeconds: number }>;
     origin: { x: number; y: number };
@@ -62,6 +63,7 @@ export function LibrarySidebarPanel({
   importProgress,
   deletingFilePath,
   canImport,
+  dragTargetFolderPath,
   onPointerDragStart,
   onLocateAsset,
   onImport,
@@ -407,7 +409,9 @@ export function LibrarySidebarPanel({
           <div className="lt-library-asset-groups">
             <details className="lt-library-root-group" open>
               <summary
-                className="lt-library-folder-summary"
+                className={`lt-library-folder-summary ${dragTargetFolderPath === null ? "is-drag-target" : ""}`}
+                data-library-folder-drop-target="true"
+                data-library-folder-path=""
                 onContextMenu={(event) => openContextMenu(event, t("library.rootFolder"), folderContextMenu(null))}
               >
                 <span className="material-symbols-outlined">home_storage</span>
@@ -422,7 +426,9 @@ export function LibrarySidebarPanel({
             {folderGroups.map((group) => (
               <details key={group.folderPath} className="lt-library-folder-group" open>
                 <summary
-                  className="lt-library-folder-summary"
+                  className={`lt-library-folder-summary ${dragTargetFolderPath === group.folderPath ? "is-drag-target" : ""}`}
+                  data-library-folder-drop-target="true"
+                  data-library-folder-path={group.folderPath}
                   onContextMenu={(event) => openContextMenu(event, group.folderPath, folderContextMenu(group.folderPath))}
                 >
                   <span className="material-symbols-outlined">folder</span>
