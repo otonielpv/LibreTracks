@@ -3,7 +3,9 @@ use tauri::{AppHandle, State};
 use crate::commands::events::emit_ready_library_waveforms;
 use crate::error::DesktopError;
 use crate::models::{LibraryAssetSummary, SongView, TransportSnapshot};
-use crate::state::{AudioFileImportPayload, CreateClipRequest, DesktopState};
+use crate::state::{
+    AudioFileImportPayload, AudioFilePathImportPayload, CreateClipRequest, DesktopState,
+};
 use rfd::FileDialog;
 
 #[tauri::command]
@@ -175,6 +177,21 @@ pub fn import_audio_files_from_bytes(
 
     session
         .import_audio_files_from_bytes(&files)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn import_audio_files_from_paths(
+    files: Vec<AudioFilePathImportPayload>,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<LibraryAssetSummary>, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .import_audio_files_from_paths(&files)
         .map_err(|error| error.to_string())
 }
 

@@ -74,6 +74,7 @@ fn main() {
             commands::project::create_song,
             commands::project::import_library_assets_from_dialog,
             commands::project::import_audio_files_from_bytes,
+            commands::project::import_audio_files_from_paths,
             commands::project::export_region_as_package,
             commands::project::export_region_rendered_audio,
             commands::project::import_song_package,

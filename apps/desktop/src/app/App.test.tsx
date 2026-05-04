@@ -50,6 +50,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     openProject: vi.fn(testDesktopApiMock.openProject),
     pickAndImportSong: vi.fn(testDesktopApiMock.pickAndImportSong),
     importLibraryAssetsFromDialog: vi.fn(testDesktopApiMock.importLibraryAssetsFromDialog),
+    importAudioFilesFromPaths: vi.fn(testDesktopApiMock.importAudioFilesFromPaths),
     importAudioFilesFromBytes: vi.fn(testDesktopApiMock.importAudioFilesFromBytes),
     importSongPackage: vi.fn(testDesktopApiMock.importSongPackage),
     importSongPackageFromBytes: vi.fn(testDesktopApiMock.importSongPackageFromBytes),
@@ -158,6 +159,7 @@ beforeEach(async () => {
     meters: {},
     playback: null,
     optimisticMix: {},
+    pendingAudioImports: [],
   });
   useTimelineUIStore.setState({
     cameraX: 0,
@@ -206,6 +208,14 @@ function createTestFile(fileName: string, bytes: number[], type = "application/o
     value: async () => Uint8Array.from(bytes).buffer,
   });
   return file;
+}
+
+function attachNativePath(file: File, path: string) {
+  Object.defineProperty(file, "path", {
+    configurable: true,
+    value: path,
+  });
+  return file as File & { path: string };
 }
 
 async function renderApp() {
@@ -906,6 +916,43 @@ describe("App", () => {
       emitWaveformReadyForTest("audio/lead.wav", 45);
       emitWaveformReadyForTest("audio/pad.mp3", 60);
     });
+  });
+
+  it("uses native file paths for external audio drops when available", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    const importAudioFilesFromPathsMock = vi.mocked(desktopApi.importAudioFilesFromPaths);
+    const importAudioFilesFromBytesMock = vi.mocked(desktopApi.importAudioFilesFromBytes);
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTrackListBounds(container);
+    mockTimelinePaneBounds(container);
+
+    const timelinePane = container.querySelector(".lt-timeline-canvas-pane") as HTMLElement | null;
+    expect(timelinePane).toBeTruthy();
+
+    const leadFile = attachNativePath(
+      createTestFile("lead.wav", [1, 2, 3], "audio/wav"),
+      "C:/mock/imports/lead.wav",
+    );
+    const padFile = attachNativePath(
+      createTestFile("pad.mp3", [4, 5, 6], "audio/mpeg"),
+      "C:/mock/imports/pad.mp3",
+    );
+    const dataTransfer = createExternalFileDataTransfer([leadFile, padFile]);
+
+    await act(async () => {
+      fireEvent.dragOver(timelinePane as HTMLElement, { dataTransfer, clientX: 420, clientY: 180 });
+      fireEvent.drop(timelinePane as HTMLElement, { dataTransfer, clientX: 420, clientY: 180 });
+    });
+
+    await waitFor(() => {
+      expect(importAudioFilesFromPathsMock).toHaveBeenCalledWith([
+        { fileName: "lead.wav", sourcePath: "C:/mock/imports/lead.wav" },
+        { fileName: "pad.mp3", sourcePath: "C:/mock/imports/pad.mp3" },
+      ]);
+    });
+    expect(importAudioFilesFromBytesMock).not.toHaveBeenCalled();
   });
 
   it("marks pending external audio imports as failed when the import rejects", async () => {

@@ -70,6 +70,7 @@ import {
   getWaveformSummaries,
   importLibraryAssetsFromDialog,
   importAudioFilesFromBytes,
+  importAudioFilesFromPaths,
   importSongPackageFromBytes,
   isTauriApp,
   listenToAudioMeters,
@@ -442,6 +443,28 @@ function formatCompactTime(seconds: number) {
 
 function libraryAssetFileName(filePath: string) {
   return filePath.split("/").at(-1) ?? filePath;
+}
+
+type NativeDroppedFile = File & {
+  path?: string;
+};
+
+function resolveNativeAudioImportPayloads(files: File[]) {
+  const payloads = files
+    .map((file) => {
+      const sourcePath = (file as NativeDroppedFile).path?.trim();
+      if (!sourcePath) {
+        return null;
+      }
+
+      return {
+        fileName: file.name,
+        sourcePath,
+      };
+    })
+    .filter((payload): payload is { fileName: string; sourcePath: string } => payload !== null);
+
+  return payloads.length === files.length ? payloads : null;
 }
 
 function humanizeLibraryTrackName(filePath: string) {
@@ -5414,17 +5437,25 @@ export function TransportPanelContent() {
     await nextPaint();
 
     try {
-      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "reading");
+      const nativePayloads = isTauriApp ? resolveNativeAudioImportPayloads(files) : null;
 
-      const payloads = await Promise.all(
-        files.map(async (file) => ({
-          fileName: file.name,
-          bytes: new Uint8Array(await file.arrayBuffer()),
-        })),
-      );
+      let importedAssets: LibraryAssetSummary[];
+      if (nativePayloads) {
+        useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "importing");
+        importedAssets = await importAudioFilesFromPaths(nativePayloads);
+      } else {
+        useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "reading");
 
-      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "importing");
-      const importedAssets = await importAudioFilesFromBytes(payloads);
+        const payloads = await Promise.all(
+          files.map(async (file) => ({
+            fileName: file.name,
+            bytes: new Uint8Array(await file.arrayBuffer()),
+          })),
+        );
+
+        useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "importing");
+        importedAssets = await importAudioFilesFromBytes(payloads);
+      }
 
       useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "metadata");
       await refreshLibraryState();

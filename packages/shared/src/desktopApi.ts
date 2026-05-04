@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   AudioFileImportPayload,
+  AudioFilePathImportPayload,
   AudioMeterLevel,
   AudioOutputDevices,
   CreateClipArgs,
@@ -217,6 +218,12 @@ export async function importAudioFilesFromBytes(
   files: AudioFileImportPayload[],
 ): Promise<LibraryAssetSummary[]> {
   return invokeCommand<LibraryAssetSummary[]>("import_audio_files_from_bytes", { files });
+}
+
+export async function importAudioFilesFromPaths(
+  files: AudioFilePathImportPayload[],
+): Promise<LibraryAssetSummary[]> {
+  return invokeCommand<LibraryAssetSummary[]>("import_audio_files_from_paths", { files });
 }
 
 export async function exportRegionAsPackage(regionId: string): Promise<void> {

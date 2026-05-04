@@ -732,6 +732,30 @@ export const testDesktopApiMock = {
   },
   pickAndImportSong: async () => clone(buildSnapshot()),
   importLibraryAssetsFromDialog: async () => clone(state.libraryAssets),
+  importAudioFilesFromPaths: async (files: Array<{ fileName: string; sourcePath: string }>) => {
+    const importedAssets = files.map((file, index) => {
+      const normalizedName = file.fileName.replace(/^.*[\\/]/, "");
+      const filePath = `audio/${normalizedName}`;
+      const durationSeconds = 45 + index * 15;
+      return {
+        fileName: normalizedName,
+        filePath,
+        durationSeconds,
+        isMissing: false,
+        folderPath: null,
+      } satisfies LibraryAssetSummary;
+    });
+
+    for (const asset of importedAssets) {
+      if (!state.libraryAssets.some((existing) => existing.filePath === asset.filePath)) {
+        state.libraryAssets.push(asset);
+      }
+      delete state.waveforms[asset.filePath];
+    }
+
+    state.libraryAssets = sortLibraryAssets(state.libraryAssets);
+    return clone(importedAssets);
+  },
   importAudioFilesFromBytes: async (files: Array<{ fileName: string; bytes: Uint8Array | number[] }>) => {
     const importedAssets = files.map((file, index) => {
       const normalizedName = file.fileName.replace(/^.*[\\/]/, "");

@@ -132,6 +132,11 @@ export type AudioFileImportPayload = {
   bytes: Uint8Array | number[];
 };
 
+export type AudioFilePathImportPayload = {
+  fileName: string;
+  sourcePath: string;
+};
+
 export type DesktopPerformanceSnapshot = {
   copyMillis: number;
   wavAnalysisMillis: number;
