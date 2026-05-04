@@ -462,7 +462,8 @@ impl Mixer {
                     clip_state.plan.clip_gain,
                     is_any_track_soloed,
                 );
-                clip_state.current_pan = resolve_track_runtime_pan(live_mix_state, &clip_state.plan.track_id);
+                clip_state.current_pan =
+                    resolve_track_runtime_pan(live_mix_state, &clip_state.plan.track_id);
             }
 
             refreshed_clips.push(clip_state);
@@ -471,12 +472,13 @@ impl Mixer {
         if refreshed_clips.len() != self.active_clips.len() {
             self.needs_declick = true;
         } else if refreshed_clips.iter().any(|clip_state| {
-            clip_state.plan.transpose_semitones != refreshed_song
-                .clips
-                .iter()
-                .find(|clip| clip.id == clip_state.plan.clip_id)
-                .map(|_| clip_state.plan.transpose_semitones)
-                .unwrap_or(clip_state.plan.transpose_semitones)
+            clip_state.plan.transpose_semitones
+                != refreshed_song
+                    .clips
+                    .iter()
+                    .find(|clip| clip.id == clip_state.plan.clip_id)
+                    .map(|_| clip_state.plan.transpose_semitones)
+                    .unwrap_or(clip_state.plan.transpose_semitones)
         }) {
             self.needs_declick = true;
         }
@@ -990,7 +992,8 @@ fn split_clip_by_region_boundaries(
     output_sample_rate: u32,
 ) -> Vec<PlaybackClipPlan> {
     let clip_start_seconds = clip.timeline_start_seconds.max(0.0);
-    let clip_end_seconds = (clip.timeline_start_seconds + clip.duration_seconds).max(clip_start_seconds);
+    let clip_end_seconds =
+        (clip.timeline_start_seconds + clip.duration_seconds).max(clip_start_seconds);
 
     let mut split_points = vec![clip_start_seconds, clip_end_seconds];
     for region in &song.regions {
@@ -1002,7 +1005,8 @@ fn split_clip_by_region_boundaries(
         }
     }
 
-    split_points.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    split_points
+        .sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
     split_points.dedup_by(|left, right| (*left - *right).abs() <= f64::EPSILON);
 
     let track = song.tracks.iter().find(|track| track.id == clip.track_id);
@@ -1566,7 +1570,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn build_playback_plans_split_on_region_boundaries() {
         let song = Song {
@@ -1628,6 +1631,70 @@ mod tests {
         assert_eq!(plans[1].transpose_semitones, 2);
         assert_eq!(plans[0].source_start_seconds, 1.0);
         assert_eq!(plans[1].source_start_seconds, 3.0);
+        assert_eq!(
+            plans.iter().map(|plan| plan.duration_frames).sum::<u64>(),
+            seconds_to_frames(song.clips[0].duration_seconds, 48_000)
+        );
+    }
+
+    #[test]
+    fn build_playback_plans_force_zero_transpose_when_track_disables_transpose() {
+        let song = Song {
+            id: "song".into(),
+            title: "Track Disabled".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 4.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![
+                SongRegion {
+                    id: "region_a".into(),
+                    name: "A".into(),
+                    start_seconds: 0.0,
+                    end_seconds: 2.0,
+                    transpose_semitones: 0,
+                },
+                SongRegion {
+                    id: "region_b".into(),
+                    name: "B".into(),
+                    start_seconds: 2.0,
+                    end_seconds: 4.0,
+                    transpose_semitones: 2,
+                },
+            ],
+            tracks: vec![Track {
+                id: "track".into(),
+                name: "Track".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: false,
+                audio_to: "master".to_string(),
+            }],
+            clips: vec![Clip {
+                id: "clip".into(),
+                track_id: "track".into(),
+                file_path: "audio/test.wav".into(),
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 1.0,
+                duration_seconds: 4.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            }],
+            section_markers: vec![],
+        };
+
+        let plans = build_playback_plans(Path::new("song"), &song, 48_000);
+
+        assert_eq!(plans.len(), 2);
+        assert!(plans.iter().all(|plan| plan.transpose_semitones == 0));
     }
 
     #[test]

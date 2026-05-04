@@ -1143,6 +1143,7 @@ mod tests {
         apply_runtime_pan, build_live_mix_map, build_playback_plans, coalesce_sync_song_commands,
         drain_consumer_samples, env_flag, interpolated_gain, playback_reason_label,
         prepare_audio_source, probe_audio_file, resolve_track_runtime_pan, scheduled_clip_count,
+        seconds_to_frames,
         update_shared_track_mix, AudioBufferCache, AudioBufferCacheStats, AudioCommand,
         AudioCommandKind, AudioController, AudioDebugConfig, AudioDebugSnapshot, AudioDebugState,
         AudioMeterLevel, DiskReaderState, MemoryClipReader, Mixer, OutputSample, PlaybackBackend,
@@ -1318,6 +1319,154 @@ mod tests {
         song: &Song,
     ) -> Arc<RwLock<std::collections::HashMap<String, super::LiveTrackMix>>> {
         Arc::new(RwLock::new(build_live_mix_map(song)))
+    }
+
+    fn write_impulse_train_test_wav(
+        path: &Path,
+        sample_rate: u32,
+        total_frames: usize,
+        interval_frames: usize,
+    ) {
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).expect("wav should be created");
+        let click_frames = ((sample_rate as f32) * 0.01).round() as usize;
+        let click_frequency_hz = 1_000.0_f32;
+
+        for frame in 0..total_frames {
+            let phase = frame % interval_frames.max(1);
+            let sample = if phase < click_frames {
+                let envelope = 1.0 - (phase as f32 / click_frames.max(1) as f32);
+                let radians =
+                    2.0 * std::f32::consts::PI * click_frequency_hz * phase as f32
+                        / sample_rate.max(1) as f32;
+                radians.cos() * envelope
+            } else {
+                0.0
+            };
+            writer.write_sample(sample).expect("sample should write");
+        }
+
+        writer.finalize().expect("wav should finalize");
+    }
+
+    fn ab_sync_song(audio_path: &Path, duration_seconds: f64) -> Song {
+        let audio_path = audio_path.to_string_lossy().to_string();
+        Song {
+            id: "ab-sync-song".into(),
+            title: "AB Sync".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![SongRegion {
+                id: "region-ab".into(),
+                name: "AB".into(),
+                start_seconds: 0.0,
+                end_seconds: duration_seconds,
+                transpose_semitones: 2,
+            }],
+            tracks: vec![
+                Track {
+                    id: "track-bypass".into(),
+                    name: "Bypass".into(),
+                    kind: libretracks_core::TrackKind::Audio,
+                    parent_track_id: None,
+                    volume: 1.0,
+                    pan: -1.0,
+                    muted: false,
+                    solo: false,
+                    transpose_enabled: false,
+                    audio_to: "master".to_string(),
+                },
+                Track {
+                    id: "track-transposed".into(),
+                    name: "Transposed".into(),
+                    kind: libretracks_core::TrackKind::Audio,
+                    parent_track_id: None,
+                    volume: 1.0,
+                    pan: 1.0,
+                    muted: false,
+                    solo: false,
+                    transpose_enabled: true,
+                    audio_to: "master".to_string(),
+                },
+            ],
+            clips: vec![
+                Clip {
+                    id: "clip-bypass".into(),
+                    track_id: "track-bypass".into(),
+                    file_path: audio_path.clone(),
+                    timeline_start_seconds: 0.0,
+                    source_start_seconds: 0.0,
+                    duration_seconds,
+                    gain: 1.0,
+                    fade_in_seconds: None,
+                    fade_out_seconds: None,
+                },
+                Clip {
+                    id: "clip-transposed".into(),
+                    track_id: "track-transposed".into(),
+                    file_path: audio_path,
+                    timeline_start_seconds: 0.0,
+                    source_start_seconds: 0.0,
+                    duration_seconds,
+                    gain: 1.0,
+                    fade_in_seconds: None,
+                    fade_out_seconds: None,
+                },
+            ],
+            section_markers: vec![],
+        }
+    }
+
+    fn best_envelope_alignment_offset(
+        left: &[f32],
+        right: &[f32],
+        center: usize,
+        radius: usize,
+        max_shift: usize,
+    ) -> usize {
+        let start = center.saturating_sub(radius + max_shift);
+        let end = (center + radius + max_shift + 1).min(left.len()).min(right.len());
+        let left_window = &left[start..end];
+        let right_window = &right[start..end];
+
+        (-(max_shift as isize)..=(max_shift as isize))
+            .map(|shift| {
+                let (left_offset, right_offset, compare_len) = if shift >= 0 {
+                    let shift = shift as usize;
+                    (0, shift, left_window.len().saturating_sub(shift))
+                } else {
+                    let shift = (-shift) as usize;
+                    (shift, 0, left_window.len().saturating_sub(shift))
+                };
+
+                let error = left_window[left_offset..left_offset + compare_len]
+                    .iter()
+                    .zip(&right_window[right_offset..right_offset + compare_len])
+                    .map(|(left, right)| {
+                        let delta = left.abs() - right.abs();
+                        delta * delta
+                    })
+                    .sum::<f32>();
+
+                (shift.unsigned_abs(), error)
+            })
+            .min_by(|(left_shift, left_error), (right_shift, right_error)| {
+                left_error
+                    .total_cmp(right_error)
+                    .then_with(|| left_shift.cmp(right_shift))
+            })
+            .map(|(shift, _)| shift)
+            .unwrap_or_default()
     }
 
     #[test]
@@ -2036,11 +2185,150 @@ mod tests {
 
         reader.seek_to(8_000 * 2 + 32);
         let mut mixed = [0.0_f32; 260];
-        let (_left_peak, right_peak) = reader.mix_into_with_channel_gains(&mut mixed, 0, 260, 1, 1.0, 0.0);
+        let (_left_peak, right_peak) =
+            reader.mix_into_with_channel_gains(&mut mixed, 0, 260, 1, 1.0, 0.0);
 
         assert!(mixed.iter().any(|sample| sample.abs() > 0.01));
         assert!(right_peak.abs() > 0.01);
         assert!(!reader.shared_source().has_mapped_audio());
+    }
+
+    #[test]
+    fn duplicated_transposed_and_bypass_tracks_stay_frame_aligned_for_30_seconds() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = root.path().to_path_buf();
+        let audio_path = song_dir.join("audio/impulse-train.wav");
+        if let Some(parent) = audio_path.parent() {
+            fs::create_dir_all(parent).expect("audio directory should exist");
+        }
+
+        let sample_rate = 48_000;
+        let total_duration_seconds = 45.0;
+        let analysis_start_seconds = 10.0;
+        let analysis_duration_seconds = 30.0;
+        let total_duration_frames = sample_rate as usize * total_duration_seconds as usize;
+        let analysis_start_frame = sample_rate as usize * analysis_start_seconds as usize;
+        let interval_frames = sample_rate as usize;
+        write_impulse_train_test_wav(
+            &audio_path,
+            sample_rate,
+            total_duration_frames,
+            interval_frames,
+        );
+
+        let cache = AudioBufferCache::default();
+        cache.insert_for_test(
+            audio_path.clone(),
+            prepare_audio_source(&audio_path).expect("audio source should prepare"),
+        );
+
+        let song = ab_sync_song(&audio_path, total_duration_seconds);
+        let plans = build_playback_plans(&song_dir, &song, sample_rate);
+        let left_plan = plans
+            .iter()
+            .find(|plan| plan.track_id == "track-bypass")
+            .expect("bypass plan should exist");
+        let right_plan = plans
+            .iter()
+            .find(|plan| plan.track_id == "track-transposed")
+            .expect("transposed plan should exist");
+        let left = super::source::render_plan_frames_for_test(
+            left_plan,
+            sample_rate,
+            &cache,
+            0,
+            total_duration_frames,
+        )
+        .expect("bypass render should succeed");
+        let right = super::source::render_plan_frames_for_test(
+            right_plan,
+            sample_rate,
+            &cache,
+            0,
+            total_duration_frames,
+        )
+        .expect("transposed render should succeed");
+        let marker_frames = (0..analysis_duration_seconds as usize)
+            .map(|index| analysis_start_frame + (index * interval_frames))
+            .collect::<Vec<_>>();
+        let offsets = marker_frames
+            .iter()
+            .map(|&marker_frame| {
+                best_envelope_alignment_offset(&left, &right, marker_frame, 1_024, 32)
+            })
+            .collect::<Vec<_>>();
+
+        assert!(
+            offsets.iter().copied().max().unwrap_or_default() <= 1,
+            "peak offsets exceeded one frame: {offsets:?}"
+        );
+        assert!(
+            offsets.iter().copied().max().unwrap_or_default()
+                - offsets.iter().copied().min().unwrap_or_default()
+                <= 1,
+            "peak offset drift exceeded one frame: {offsets:?}"
+        );
+    }
+
+    #[test]
+    fn seek_rebuild_keeps_first_post_seek_block_aligned() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = root.path().to_path_buf();
+        let audio_path = song_dir.join("audio/seek-impulse-train.wav");
+        if let Some(parent) = audio_path.parent() {
+            fs::create_dir_all(parent).expect("audio directory should exist");
+        }
+
+        let sample_rate = 48_000;
+        let duration_seconds = 30.0;
+        let duration_frames = sample_rate as usize * duration_seconds as usize;
+        write_impulse_train_test_wav(
+            &audio_path,
+            sample_rate,
+            duration_frames,
+            sample_rate as usize,
+        );
+
+        let cache = AudioBufferCache::default();
+        cache.insert_for_test(
+            audio_path.clone(),
+            prepare_audio_source(&audio_path).expect("audio source should prepare"),
+        );
+
+        let song = ab_sync_song(&audio_path, duration_seconds);
+        let plans = build_playback_plans(&song_dir, &song, sample_rate);
+        let left_plan = plans
+            .iter()
+            .find(|plan| plan.track_id == "track-bypass")
+            .expect("bypass plan should exist");
+        let right_plan = plans
+            .iter()
+            .find(|plan| plan.track_id == "track-transposed")
+            .expect("transposed plan should exist");
+        let seek_frame = seconds_to_frames(9.75, sample_rate);
+        let expected_peak = sample_rate as usize / 4;
+        let left = super::source::render_plan_frames_for_test(
+            left_plan,
+            sample_rate,
+            &cache,
+            seek_frame,
+            16_384,
+        )
+        .expect("bypass seek render should succeed");
+        let right = super::source::render_plan_frames_for_test(
+            right_plan,
+            sample_rate,
+            &cache,
+            seek_frame,
+            16_384,
+        )
+        .expect("transposed seek render should succeed");
+        let offset = best_envelope_alignment_offset(&left, &right, expected_peak, 1_024, 32);
+
+        assert!(
+            offset <= 1,
+            "post-seek offset exceeded one frame: offset={offset}"
+        );
     }
 
     #[test]
@@ -2110,14 +2398,24 @@ mod tests {
 
         let flat_path = song_dir.join("flat.wav");
         controller
-            .export_region_rendered_audio(song_dir.clone(), base_song.clone(), "region_render", &flat_path)
+            .export_region_rendered_audio(
+                song_dir.clone(),
+                base_song.clone(),
+                "region_render",
+                &flat_path,
+            )
             .expect("flat export should succeed");
 
         let mut transposed_song = base_song;
         transposed_song.regions[0].transpose_semitones = 5;
         let transposed_path = song_dir.join("transposed.wav");
         controller
-            .export_region_rendered_audio(song_dir, transposed_song, "region_render", &transposed_path)
+            .export_region_rendered_audio(
+                song_dir,
+                transposed_song,
+                "region_render",
+                &transposed_path,
+            )
             .expect("transposed export should succeed");
 
         let read_samples = |path: &Path| -> Vec<i16> {

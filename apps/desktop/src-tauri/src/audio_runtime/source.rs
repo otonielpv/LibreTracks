@@ -3,6 +3,8 @@ use libretracks_project::load_waveform_summary;
 use rayon::prelude::*;
 use rtrb::{Consumer, Producer, RingBuffer};
 use std::{collections::HashSet, fs::File};
+#[cfg(test)]
+use std::time::Instant;
 use symphonia::core::{
     audio::SampleBuffer,
     codecs::{DecoderOptions, CODEC_TYPE_NULL},
@@ -16,6 +18,7 @@ use symphonia::core::{
 
 const STREAM_SECONDS_PER_CLIP: usize = 2;
 const STREAM_WORKER_CHUNK_FRAMES: usize = 512;
+const STREAM_WORKER_READY_TIMEOUT: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct AudioBufferCacheStats {
@@ -66,10 +69,15 @@ struct ClipSample {
 
 enum StreamingWorkerCommand {
     Seek {
-        source_start_seconds: f64,
+        target_start_seconds: f64,
         generation: u64,
     },
     Shutdown,
+}
+
+enum WorkerReadyState {
+    Ready,
+    Finished,
 }
 
 impl StreamingAudioSource {
@@ -278,6 +286,7 @@ impl StreamingClipReader {
             output_sample_rate as usize * STREAM_SECONDS_PER_CLIP * shared_source.channels.max(1);
         let (producer, consumer) = RingBuffer::<ClipSample>::new(ring_capacity.max(256));
         let (command_sender, command_receiver) = mpsc::channel();
+        let (ready_sender, ready_receiver) = mpsc::sync_channel(1);
         let worker_source = Arc::clone(&shared_source);
         let transpose_semitones = plan.transpose_semitones;
         let _worker_handle = thread::Builder::new()
@@ -290,9 +299,20 @@ impl StreamingClipReader {
                     transpose_semitones,
                     producer,
                     command_receiver,
+                    Some(ready_sender),
                 )
             })
             .map_err(|error| error.to_string())?;
+
+        match ready_receiver.recv_timeout(STREAM_WORKER_READY_TIMEOUT) {
+            Ok(WorkerReadyState::Ready | WorkerReadyState::Finished) => {}
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                return Err("streaming worker did not become ready in time".to_string())
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("streaming worker exited before becoming ready".to_string())
+            }
+        }
 
         let elapsed_frames = timeline_frame.saturating_sub(plan.timeline_start_frame);
         let remaining_frames = plan.duration_frames.saturating_sub(elapsed_frames) as usize;
@@ -330,11 +350,11 @@ impl StreamingClipReader {
         self.current_source_start_frame = target_frame;
         self.declick_frames_remaining = self.declick_fade_frames;
         self.eof = self.total_output_frames == 0;
-        let source_start_seconds =
+        let target_start_seconds =
             target_frame as f64 / f64::from(self.shared_source.sample_rate.max(1));
         self.command_sender
             .send(StreamingWorkerCommand::Seek {
-                source_start_seconds,
+                target_start_seconds,
                 generation: self.current_generation,
             })
             .map_err(|_| "streaming worker is unavailable".to_string())
@@ -363,19 +383,6 @@ impl StreamingClipReader {
         }
 
         let channels = self.shared_source.channels.max(1);
-
-        // SPIN WAIT TO PREVENT DESYNC: Wait for the background decoder to deliver the first frames
-        // before advancing the timeline. This guarantees the clip and metronome start perfectly synced.
-        let mut retries = 0;
-        while self.consumer.slots() < channels {
-            if retries > 500 {
-                // 500ms maximum wait
-                self.declick_frames_remaining = self.declick_fade_frames;
-                return Some((0.0, 0.0));
-            }
-            std::thread::sleep(std::time::Duration::from_millis(1));
-            retries += 1;
-        }
 
         let pan = pan.clamp(-1.0, 1.0);
         let (left_input, right_input) = if channels <= 1 {
@@ -424,6 +431,23 @@ impl StreamingClipReader {
     }
 
     fn pop_current_sample(&mut self) -> Option<f32> {
+        #[cfg(test)]
+        {
+            let started_at = Instant::now();
+            loop {
+                match self.consumer.pop() {
+                    Ok(sample) if sample.generation < self.current_generation => continue,
+                    Ok(sample) => return Some(sample.value),
+                    Err(_) if started_at.elapsed() < STREAM_WORKER_READY_TIMEOUT => {
+                        thread::yield_now();
+                        continue;
+                    }
+                    Err(_) => return None,
+                }
+            }
+        }
+
+        #[cfg(not(test))]
         loop {
             let sample = self.consumer.pop().ok()?;
             if sample.generation < self.current_generation {
@@ -481,12 +505,13 @@ pub(crate) type MemoryClipReader = StreamingClipReader;
 fn run_streaming_worker(
     source: Arc<StreamingAudioSource>,
     output_sample_rate: u32,
-    initial_start_seconds: f64,
+    initial_target_start_seconds: f64,
     transpose_semitones: i32,
     mut producer: Producer<ClipSample>,
     command_receiver: Receiver<StreamingWorkerCommand>,
+    mut ready_sender: Option<mpsc::SyncSender<WorkerReadyState>>,
 ) {
-    let mut start_seconds = initial_start_seconds;
+    let mut target_start_seconds = initial_target_start_seconds;
     let mut generation = 0;
     let mut pitch_engine = pitch::create_pitch_shift_engine(
         output_sample_rate,
@@ -498,25 +523,26 @@ fn run_streaming_worker(
         match stream_decode_from(
             &source,
             output_sample_rate,
-            start_seconds,
+            target_start_seconds,
             generation,
             &mut producer,
             &command_receiver,
             &mut pitch_engine,
+            ready_sender.take(),
         ) {
             WorkerOutcome::Restart {
-                start_seconds: next_start,
+                target_start_seconds: next_start,
                 generation: next_generation,
             } => {
-                start_seconds = next_start;
+                target_start_seconds = next_start;
                 generation = next_generation;
             }
             WorkerOutcome::Finished => match command_receiver.recv() {
                 Ok(StreamingWorkerCommand::Seek {
-                    source_start_seconds,
+                    target_start_seconds: next_start_seconds,
                     generation: next_generation,
                 }) => {
-                    start_seconds = source_start_seconds;
+                    target_start_seconds = next_start_seconds;
                     generation = next_generation;
                 }
                 Ok(StreamingWorkerCommand::Shutdown) | Err(_) => break,
@@ -527,7 +553,10 @@ fn run_streaming_worker(
 }
 
 enum WorkerOutcome {
-    Restart { start_seconds: f64, generation: u64 },
+    Restart {
+        target_start_seconds: f64,
+        generation: u64,
+    },
     Finished,
     Shutdown,
 }
@@ -535,56 +564,82 @@ enum WorkerOutcome {
 fn stream_decode_from(
     source: &StreamingAudioSource,
     output_sample_rate: u32,
-    start_seconds: f64,
+    target_start_seconds: f64,
     generation: u64,
     producer: &mut Producer<ClipSample>,
     command_receiver: &Receiver<StreamingWorkerCommand>,
     pitch_engine: &mut Box<dyn pitch::PitchShiftEngine>,
+    ready_sender: Option<mpsc::SyncSender<WorkerReadyState>>,
 ) -> WorkerOutcome {
-    let mut decoder = match StreamingDecoder::open(source, output_sample_rate, start_seconds) {
-        Ok(decoder) => decoder,
-        Err(_) => return WorkerOutcome::Finished,
-    };
+    let pitch_preroll_frames = pitch_engine.latency_frames();
+    let target_start_frames = seconds_to_frames(target_start_seconds, output_sample_rate) as usize;
+    let history_preroll_frames = target_start_frames.min(pitch_preroll_frames);
+    let missing_preroll_frames = pitch_preroll_frames.saturating_sub(history_preroll_frames);
+    let decoder_start_seconds = (target_start_frames.saturating_sub(history_preroll_frames)
+        as f64)
+        / f64::from(output_sample_rate.max(1));
+    let mut decoder =
+        match StreamingDecoder::open(source, output_sample_rate, decoder_start_seconds) {
+            Ok(decoder) => decoder,
+            Err(_) => return WorkerOutcome::Finished,
+        };
     pitch_engine.reset();
     let channels = source.channels.max(1);
-    let latency_frames = pitch_engine.latency_frames();
-    // TRUE LOOKAHEAD PRIMING:
-    // To get output for `start_seconds` immediately, we must feed the engine
-    // with the first `latency_frames` starting from `start_seconds` and discard its output.
-    if latency_frames > 0 {
-        let mut remaining_priming = latency_frames;
+    let mut pending_samples = Vec::new();
+    if missing_preroll_frames > 0 {
+        let mut remaining_silence = missing_preroll_frames;
+        while remaining_silence > 0 {
+            let chunk_size = remaining_silence.min(STREAM_WORKER_CHUNK_FRAMES);
+            let silence = vec![0.0_f32; chunk_size * channels];
+            let mut discarded_output = vec![0.0_f32; silence.len()];
+            if pitch_engine
+                .process_realtime_block(&silence, &mut discarded_output)
+                .is_err()
+            {
+                return WorkerOutcome::Finished;
+            }
+            remaining_silence = remaining_silence.saturating_sub(chunk_size);
+        }
+    }
+    if history_preroll_frames > 0 {
+        let mut remaining_priming = history_preroll_frames;
         while remaining_priming > 0 {
             let chunk_size = remaining_priming.min(STREAM_WORKER_CHUNK_FRAMES);
-            match decoder.next_output_chunk(chunk_size) {
-                Ok(samples) if samples.is_empty() => {
-                    // Hit EOF during priming (the clip is extremely short).
-                    // Feed silence to push the remaining latency out.
-                    let silence = vec![0.0; remaining_priming * channels];
-                    let _ = pitch_engine.process_interleaved(&silence, false);
-                    break;
-                }
-                Ok(samples) => {
-                    // Process the future samples and deliberately discard the output
-                    let _ = pitch_engine.process_interleaved(&samples, false);
-                    remaining_priming = remaining_priming.saturating_sub(samples.len() / channels);
-                }
-                Err(_) => break, // Handle decode errors gracefully
+            let mut samples = match take_decoder_samples(
+                &mut decoder,
+                &mut pending_samples,
+                chunk_size,
+                channels,
+                true,
+            ) {
+                Ok(samples) => samples,
+                Err(_) => return WorkerOutcome::Finished,
+            };
+            if samples.is_empty() {
+                samples.resize(chunk_size * channels, 0.0);
             }
+            let mut discarded_output = vec![0.0_f32; samples.len()];
+            if pitch_engine
+                .process_realtime_block(&samples, &mut discarded_output)
+                .is_err()
+            {
+                return WorkerOutcome::Finished;
+            }
+            remaining_priming = remaining_priming.saturating_sub(chunk_size);
         }
     }
 
-    // MAIN LOOP:
-    // The decoder is now naturally pointing at `start_seconds + latency`,
-    // so the engine's next outputs will correspond exactly to the timeline.
+    let mut ready_sender = ready_sender;
+
     loop {
         while let Ok(command) = command_receiver.try_recv() {
             match command {
                 StreamingWorkerCommand::Seek {
-                    source_start_seconds,
+                    target_start_seconds,
                     generation,
                 } => {
                     return WorkerOutcome::Restart {
-                        start_seconds: source_start_seconds,
+                        target_start_seconds,
                         generation,
                     };
                 }
@@ -597,21 +652,31 @@ fn stream_decode_from(
             continue;
         }
 
-        let samples = match decoder.next_output_chunk(STREAM_WORKER_CHUNK_FRAMES) {
+        let samples = match take_decoder_samples(
+            &mut decoder,
+            &mut pending_samples,
+            STREAM_WORKER_CHUNK_FRAMES,
+            channels,
+            false,
+        ) {
             Ok(samples) if samples.is_empty() => {
-                let flushed = pitch_engine.process_interleaved(&[], true);
-                push_streaming_samples(producer, &flushed, generation, channels);
+                signal_worker_ready(&mut ready_sender, WorkerReadyState::Finished);
                 return WorkerOutcome::Finished;
             }
             Ok(samples) => samples,
             Err(_) => {
-                let flushed = pitch_engine.process_interleaved(&[], true);
-                push_streaming_samples(producer, &flushed, generation, channels);
+                signal_worker_ready(&mut ready_sender, WorkerReadyState::Finished);
                 return WorkerOutcome::Finished;
             }
         };
 
-        let processed_samples = pitch_engine.process_interleaved(&samples, false);
+        let mut processed_samples = vec![0.0_f32; samples.len()];
+        if pitch_engine
+            .process_realtime_block(&samples, &mut processed_samples)
+            .is_err()
+        {
+            return WorkerOutcome::Finished;
+        }
 
         for frame in processed_samples.chunks_exact(channels) {
             // Wait until there is enough space for the WHOLE frame
@@ -619,11 +684,11 @@ fn stream_decode_from(
                 if let Ok(command) = command_receiver.try_recv() {
                     match command {
                         StreamingWorkerCommand::Seek {
-                            source_start_seconds,
+                            target_start_seconds,
                             generation,
                         } => {
                             return WorkerOutcome::Restart {
-                                start_seconds: source_start_seconds,
+                                target_start_seconds,
                                 generation,
                             }
                         }
@@ -641,25 +706,17 @@ fn stream_decode_from(
                 });
             }
         }
+
+        signal_worker_ready(&mut ready_sender, WorkerReadyState::Ready);
     }
 }
 
-fn push_streaming_samples(
-    producer: &mut Producer<ClipSample>,
-    samples: &[f32],
-    generation: u64,
-    channels: usize,
+fn signal_worker_ready(
+    ready_sender: &mut Option<mpsc::SyncSender<WorkerReadyState>>,
+    state: WorkerReadyState,
 ) {
-    let channels = channels.max(1);
-
-    for frame in samples.chunks_exact(channels) {
-        while producer.slots() < channels {
-            thread::yield_now();
-        }
-
-        for &sample in frame {
-            let _ = producer.push(ClipSample { generation, value: sample });
-        }
+    if let Some(sender) = ready_sender.take() {
+        let _ = sender.send(state);
     }
 }
 
@@ -947,6 +1004,152 @@ fn decode_file_region(
     let samples = decoder.next_output_chunk(frames)?;
     let wanted = frames.saturating_mul(channels.max(1));
     Ok(samples.into_iter().take(wanted).collect())
+}
+
+#[cfg(test)]
+pub(crate) fn render_plan_frames_for_test(
+    plan: &mixer::PlaybackClipPlan,
+    output_sample_rate: u32,
+    audio_buffers: &AudioBufferCache,
+    timeline_frame: u64,
+    frame_count: usize,
+) -> Result<Vec<f32>, String> {
+    let shared_source = audio_buffers
+        .get(&plan.file_path)?
+        .ok_or_else(|| format!("audio source is not prepared: {}", plan.file_path.display()))?;
+    let channels = shared_source.channels.max(1);
+    let source_start_frame = source_frame_for_timeline_position(
+        plan,
+        timeline_frame,
+        output_sample_rate,
+        shared_source.sample_rate,
+    );
+    let target_start_seconds =
+        source_start_frame as f64 / f64::from(shared_source.sample_rate.max(1));
+    let mut pitch_engine = pitch::create_pitch_shift_engine(
+        output_sample_rate,
+        channels,
+        plan.transpose_semitones,
+    );
+
+    render_pitch_aligned_frames_for_test(
+        &shared_source,
+        output_sample_rate,
+        target_start_seconds,
+        frame_count,
+        pitch_engine.as_mut(),
+    )
+}
+
+#[cfg(test)]
+fn render_pitch_aligned_frames_for_test(
+    source: &StreamingAudioSource,
+    output_sample_rate: u32,
+    target_start_seconds: f64,
+    frame_count: usize,
+    pitch_engine: &mut dyn pitch::PitchShiftEngine,
+) -> Result<Vec<f32>, String> {
+    let channels = source.channels.max(1);
+    let pitch_preroll_frames = pitch_engine.latency_frames();
+    let target_start_frames = seconds_to_frames(target_start_seconds, output_sample_rate) as usize;
+    let history_preroll_frames = target_start_frames.min(pitch_preroll_frames);
+    let missing_preroll_frames = pitch_preroll_frames.saturating_sub(history_preroll_frames);
+    let decoder_start_seconds = (target_start_frames.saturating_sub(history_preroll_frames)
+        as f64)
+        / f64::from(output_sample_rate.max(1));
+    let mut decoder = StreamingDecoder::open(source, output_sample_rate, decoder_start_seconds)?;
+    let mut pending_samples = Vec::new();
+
+    pitch_engine.reset();
+
+    if missing_preroll_frames > 0 {
+        let mut remaining_silence = missing_preroll_frames;
+        while remaining_silence > 0 {
+            let chunk_frames = remaining_silence.min(STREAM_WORKER_CHUNK_FRAMES);
+            let silence = vec![0.0_f32; chunk_frames * channels];
+            let mut discarded_output = vec![0.0_f32; silence.len()];
+            pitch_engine
+                .process_realtime_block(&silence, &mut discarded_output)
+                .map_err(|error| format!("pitch priming failed: {error:?}"))?;
+            remaining_silence = remaining_silence.saturating_sub(chunk_frames);
+        }
+    }
+
+    if history_preroll_frames > 0 {
+        let mut remaining_priming = history_preroll_frames;
+        while remaining_priming > 0 {
+            let chunk_frames = remaining_priming.min(STREAM_WORKER_CHUNK_FRAMES);
+            let mut input =
+                take_decoder_samples(&mut decoder, &mut pending_samples, chunk_frames, channels, true)?;
+            if input.is_empty() {
+                input.resize(chunk_frames * channels, 0.0);
+            }
+            let mut discarded_output = vec![0.0_f32; input.len()];
+            pitch_engine
+                .process_realtime_block(&input, &mut discarded_output)
+                .map_err(|error| format!("pitch priming failed: {error:?}"))?;
+            remaining_priming = remaining_priming.saturating_sub(chunk_frames);
+        }
+    }
+
+    let mut rendered = Vec::with_capacity(frame_count * channels);
+    let wanted_samples = frame_count * channels;
+    while rendered.len() < wanted_samples {
+        let remaining_frames = (wanted_samples - rendered.len()).div_ceil(channels);
+        let chunk_frames = remaining_frames.min(STREAM_WORKER_CHUNK_FRAMES).max(1);
+        let samples =
+            take_decoder_samples(&mut decoder, &mut pending_samples, chunk_frames, channels, false)?;
+        let input = if samples.is_empty() {
+            vec![0.0_f32; chunk_frames * channels]
+        } else {
+            samples
+        };
+
+        let mut output = vec![0.0_f32; input.len()];
+        pitch_engine
+            .process_realtime_block(&input, &mut output)
+            .map_err(|error| format!("pitch render failed: {error:?}"))?;
+        rendered.extend_from_slice(&output);
+    }
+
+    rendered.truncate(wanted_samples);
+
+    Ok(rendered)
+}
+
+fn take_decoder_samples(
+    decoder: &mut StreamingDecoder,
+    pending_samples: &mut Vec<f32>,
+    requested_frames: usize,
+    channels: usize,
+    pad_with_silence: bool,
+) -> Result<Vec<f32>, String> {
+    let requested_samples = requested_frames.saturating_mul(channels.max(1));
+
+    while pending_samples.len() < requested_samples {
+        let samples = decoder.next_output_chunk(requested_frames)?;
+        if samples.is_empty() {
+            break;
+        }
+        pending_samples.extend_from_slice(&samples);
+    }
+
+    if pending_samples.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut output = if pending_samples.len() > requested_samples {
+        let overflow = pending_samples.split_off(requested_samples);
+        std::mem::replace(pending_samples, overflow)
+    } else {
+        std::mem::take(pending_samples)
+    };
+
+    if pad_with_silence && output.len() < requested_samples {
+        output.resize(requested_samples, 0.0);
+    }
+
+    Ok(output)
 }
 
 #[cfg(test)]
