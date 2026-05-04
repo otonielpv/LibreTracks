@@ -90,17 +90,11 @@ impl SignalsmithPitchShiftEngine {
     fn flush_tail(&mut self) -> Vec<f32> {
         let flush_frames = self.stretch.output_latency().max(1);
         let mut flushed = Vec::new();
+        let mut output = vec![0.0_f32; flush_frames * self.channels];
 
         loop {
-            let mut planar_output = (0..self.channels)
-                .map(|_| vec![0.0_f32; flush_frames])
-                .collect::<Vec<_>>();
-            let mut output_refs = planar_output
-                .iter_mut()
-                .map(|channel| channel.as_mut_slice())
-                .collect::<Vec<_>>();
-            self.stretch.flush(&mut output_refs);
-            let output = self.interleave(&planar_output);
+            output.fill(0.0);
+            self.stretch.flush(&mut output);
 
             if output.iter().all(|sample| *sample == 0.0) {
                 break;
@@ -115,25 +109,11 @@ impl SignalsmithPitchShiftEngine {
     fn process_and_flush(&mut self, input_interleaved: &[f32], finish: bool) -> Vec<f32> {
         debug_assert_eq!(0, input_interleaved.len() % self.channels);
 
-        let planar_input = self.deinterleave(input_interleaved);
-        let frames = input_interleaved.len() / self.channels;
-        let mut planar_output = (0..self.channels)
-            .map(|_| vec![0.0_f32; frames])
-            .collect::<Vec<_>>();
+        let mut output = vec![0.0_f32; input_interleaved.len()];
 
-        if frames > 0 {
-            let input_refs = planar_input
-                .iter()
-                .map(|channel| channel.as_slice())
-                .collect::<Vec<_>>();
-            let mut output_refs = planar_output
-                .iter_mut()
-                .map(|channel| channel.as_mut_slice())
-                .collect::<Vec<_>>();
-            self.stretch.process(&input_refs, &mut output_refs);
+        if !input_interleaved.is_empty() {
+            self.stretch.process(input_interleaved, &mut output);
         }
-
-        let mut output = self.interleave(&planar_output);
 
         if finish {
             output.extend_from_slice(&self.flush_tail());
@@ -154,7 +134,7 @@ impl PitchShiftEngine for SignalsmithPitchShiftEngine {
     }
 
     fn latency_frames(&self) -> usize {
-        0
+        self.stretch.output_latency()
     }
 
     fn reset(&mut self) {

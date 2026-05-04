@@ -608,13 +608,13 @@ fn stream_decode_from(
         let samples = match decoder.next_output_chunk(STREAM_WORKER_CHUNK_FRAMES) {
             Ok(samples) if samples.is_empty() => {
                 let flushed = pitch_engine.process_interleaved(&[], true);
-                push_streaming_samples(producer, flushed, generation, channels);
+                push_streaming_samples(producer, &flushed, generation, channels);
                 return WorkerOutcome::Finished;
             }
             Ok(samples) => samples,
             Err(_) => {
                 let flushed = pitch_engine.process_interleaved(&[], true);
-                push_streaming_samples(producer, flushed, generation, channels);
+                push_streaming_samples(producer, &flushed, generation, channels);
                 return WorkerOutcome::Finished;
             }
         };
