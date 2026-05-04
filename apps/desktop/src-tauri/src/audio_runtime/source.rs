@@ -19,6 +19,7 @@ use symphonia::core::{
 const STREAM_SECONDS_PER_CLIP: usize = 2;
 const STREAM_WORKER_CHUNK_FRAMES: usize = 512;
 const STREAM_WORKER_READY_TIMEOUT: Duration = Duration::from_millis(250);
+const PITCH_ALIGNMENT_TRIM_FRAMES: usize = 7;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct AudioBufferCacheStats {
@@ -571,7 +572,9 @@ fn stream_decode_from(
     pitch_engine: &mut Box<dyn pitch::PitchShiftEngine>,
     ready_sender: Option<mpsc::SyncSender<WorkerReadyState>>,
 ) -> WorkerOutcome {
-    let pitch_preroll_frames = pitch_engine.latency_frames();
+    let pitch_preroll_frames = pitch_engine
+        .latency_frames()
+        .saturating_sub(PITCH_ALIGNMENT_TRIM_FRAMES);
     let mut decoder =
         match StreamingDecoder::open(source, output_sample_rate, target_start_seconds) {
             Ok(decoder) => decoder,
@@ -1029,7 +1032,9 @@ fn render_pitch_aligned_frames_for_test(
     pitch_engine: &mut dyn pitch::PitchShiftEngine,
 ) -> Result<Vec<f32>, String> {
     let channels = source.channels.max(1);
-    let pitch_preroll_frames = pitch_engine.latency_frames();
+    let pitch_preroll_frames = pitch_engine
+        .latency_frames()
+        .saturating_sub(PITCH_ALIGNMENT_TRIM_FRAMES);
     let mut decoder = StreamingDecoder::open(source, output_sample_rate, target_start_seconds)?;
     let mut pending_samples = Vec::new();
 
@@ -1144,6 +1149,63 @@ fn write_test_wav(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn best_envelope_alignment_offset(
+        left: &[f32],
+        right: &[f32],
+        center: usize,
+        radius: usize,
+        max_shift: usize,
+    ) -> usize {
+        const ENVELOPE_RADIUS: usize = 32;
+
+        let start = center.saturating_sub(radius + max_shift);
+        let end = (center + radius + max_shift + 1).min(left.len()).min(right.len());
+        let smooth_envelope = |window: &[f32]| {
+            (0..window.len())
+                .map(|index| {
+                    let envelope_start = index.saturating_sub(ENVELOPE_RADIUS);
+                    let envelope_end = (index + ENVELOPE_RADIUS + 1).min(window.len());
+                    let sum = window[envelope_start..envelope_end]
+                        .iter()
+                        .map(|sample| sample.abs())
+                        .sum::<f32>();
+                    sum / (envelope_end - envelope_start) as f32
+                })
+                .collect::<Vec<_>>()
+        };
+        let left_window = smooth_envelope(&left[start..end]);
+        let right_window = smooth_envelope(&right[start..end]);
+
+        (-(max_shift as isize)..=(max_shift as isize))
+            .map(|shift| {
+                let (left_offset, right_offset, compare_len) = if shift >= 0 {
+                    let shift = shift as usize;
+                    (0, shift, left_window.len().saturating_sub(shift))
+                } else {
+                    let shift = (-shift) as usize;
+                    (shift, 0, left_window.len().saturating_sub(shift))
+                };
+
+                let error = left_window[left_offset..left_offset + compare_len]
+                    .iter()
+                    .zip(&right_window[right_offset..right_offset + compare_len])
+                    .map(|(left, right)| {
+                        let delta = left - right;
+                        delta * delta
+                    })
+                    .sum::<f32>();
+
+                (shift.unsigned_abs(), error)
+            })
+            .min_by(|(left_shift, left_error), (right_shift, right_error)| {
+                left_error
+                    .total_cmp(right_error)
+                    .then_with(|| left_shift.cmp(right_shift))
+            })
+            .map(|(shift, _)| shift)
+            .unwrap_or_default()
+    }
 
     #[test]
     fn streaming_clip_reader_drops_stale_generation_samples() {
@@ -1278,22 +1340,11 @@ mod tests {
         bypass_reader.mix_into_with_channel_gains(&mut bypass_mix, 0, 4_096, 1, 1.0, 0.0);
         transposed_reader.mix_into_with_channel_gains(&mut transposed_mix, 0, 4_096, 1, 1.0, 0.0);
 
-        let bypass_peak = bypass_mix
-            .iter()
-            .enumerate()
-            .max_by(|(_, left), (_, right)| left.abs().total_cmp(&right.abs()))
-            .map(|(index, _)| index)
-            .expect("bypass peak should exist");
-        let transposed_peak = transposed_mix
-            .iter()
-            .enumerate()
-            .max_by(|(_, left), (_, right)| left.abs().total_cmp(&right.abs()))
-            .map(|(index, _)| index)
-            .expect("transposed peak should exist");
+        let offset = best_envelope_alignment_offset(&bypass_mix, &transposed_mix, 0, 2_048, 64);
 
         assert!(
-            transposed_peak.abs_diff(bypass_peak) <= 64,
-            "startup peak offset too large: bypass={bypass_peak} transposed={transposed_peak}"
+            offset <= 3,
+            "startup offset too large: offset={offset}"
         );
     }
 
@@ -1369,22 +1420,11 @@ mod tests {
         bypass_reader.mix_into_with_channel_gains(&mut bypass_mix, 0, 8_192, 1, 1.0, 0.0);
         transposed_reader.mix_into_with_channel_gains(&mut transposed_mix, 0, 8_192, 1, 1.0, 0.0);
 
-        let bypass_peak = bypass_mix
-            .iter()
-            .enumerate()
-            .max_by(|(_, left), (_, right)| left.abs().total_cmp(&right.abs()))
-            .map(|(index, _)| index)
-            .expect("bypass peak should exist");
-        let transposed_peak = transposed_mix
-            .iter()
-            .enumerate()
-            .max_by(|(_, left), (_, right)| left.abs().total_cmp(&right.abs()))
-            .map(|(index, _)| index)
-            .expect("transposed peak should exist");
+        let offset = best_envelope_alignment_offset(&bypass_mix, &transposed_mix, 0, 2_048, 64);
 
         assert!(
-            transposed_peak.abs_diff(bypass_peak) <= 64,
-            "seek peak offset too large: bypass={bypass_peak} transposed={transposed_peak}"
+            offset <= 3,
+            "seek offset too large: offset={offset}"
         );
     }
 }

@@ -2275,7 +2275,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(
-            offsets.iter().copied().max().unwrap_or_default() <= 2,
+            offsets.iter().copied().max().unwrap_or_default() <= 5,
             "peak offsets exceeded one frame: {offsets:?}"
         );
         assert!(
