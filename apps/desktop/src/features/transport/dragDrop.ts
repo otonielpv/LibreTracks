@@ -4,7 +4,7 @@ export const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set(["wav", "mp3", "flac", "ogg", "aiff", "aif", "m4a"]);
 
-export type ExternalDropKind = "package" | "audio" | "mixed" | "unsupported";
+export type ExternalDropKind = "package" | "audio" | "mixed" | "unsupported" | "unknown";
 
 export type ExternalDropPreview = {
   kind: ExternalDropKind;

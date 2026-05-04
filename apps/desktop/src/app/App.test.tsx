@@ -16,7 +16,7 @@ import { emitWaveformReadyForTest, resetTestDesktopApiMock, testDesktopApiMock }
 type MockWebviewDragDropEvent =
   | {
       payload:
-        | { type: "over"; paths: string[]; position: { x: number; y: number } }
+        | { type: "over"; paths?: string[]; position: { x: number; y: number } }
         | { type: "drop"; paths: string[]; position: { x: number; y: number } }
         | { type: "cancel" };
       type?: "wrong-top-level-type";
@@ -1043,6 +1043,25 @@ describe("App", () => {
         value: originalDevicePixelRatio,
       });
     }
+  });
+
+  it("shows a native external drop guide when over events only provide position", async () => {
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTrackListBounds(container);
+    mockTimelinePaneBounds(container);
+
+    await act(async () => {
+      await emitNativeDropEvent({
+        payload: {
+          type: "over",
+          position: { x: 420, y: 180 },
+        },
+      });
+    });
+
+    expect(screen.getByText("Drop")).toBeTruthy();
   });
 
   it("marks pending external audio imports as failed when the import rejects", async () => {

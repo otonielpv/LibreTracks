@@ -482,12 +482,16 @@ export function TimelineCanvasPane({
                     ? "rgba(122,229,130,0.18)"
                     : externalDropPreview.kind === "package"
                       ? "rgba(255,184,107,0.18)"
+                      : externalDropPreview.kind === "unknown"
+                        ? "rgba(118, 184, 255, 0.16)"
                       : "rgba(255,107,107,0.18)",
                 border:
                   externalDropPreview.kind === "audio"
                     ? "1px solid rgba(122,229,130,0.34)"
                     : externalDropPreview.kind === "package"
                       ? "1px solid rgba(255,184,107,0.34)"
+                      : externalDropPreview.kind === "unknown"
+                        ? "1px solid rgba(118,184,255,0.34)"
                       : "1px solid rgba(255,107,107,0.34)",
                 color: "#f4f3ee",
                 font: '600 11px "Space Grotesk", sans-serif',
@@ -500,6 +504,8 @@ export function TimelineCanvasPane({
                 ? "Audio"
                 : externalDropPreview.kind === "package"
                   ? "Package"
+                  : externalDropPreview.kind === "unknown"
+                    ? "Drop"
                   : externalDropPreview.kind === "mixed"
                     ? "Mixed"
                     : "Unsupported"}
@@ -561,12 +567,16 @@ export function TimelineCanvasPane({
                     ? "#7ae582"
                     : externalDropPreview.kind === "package"
                       ? "#ffb86b"
+                      : externalDropPreview.kind === "unknown"
+                        ? "#76b8ff"
                       : "#ff6b6b",
                 boxShadow:
                   externalDropPreview.kind === "audio"
                     ? "0 0 0 1px rgba(122,229,130,0.24), 0 0 18px rgba(122,229,130,0.44)"
                     : externalDropPreview.kind === "package"
                       ? "0 0 0 1px rgba(255,184,107,0.22), 0 0 18px rgba(255,184,107,0.42)"
+                      : externalDropPreview.kind === "unknown"
+                        ? "0 0 0 1px rgba(118,184,255,0.22), 0 0 18px rgba(118,184,255,0.42)"
                       : "0 0 0 1px rgba(255,107,107,0.22), 0 0 18px rgba(255,107,107,0.42)",
                 pointerEvents: "none",
               }}

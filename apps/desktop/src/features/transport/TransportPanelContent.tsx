@@ -5920,16 +5920,18 @@ export function TransportPanelContent() {
     }
 
     const paths = args.paths?.length ? args.paths : nativeExternalDropPathsRef.current;
-    if (!paths.length) {
-      console.debug("[native-dnd] over ignored: no paths");
-      setExternalDropPreview(null);
-      return;
-    }
-
     const hit = resolveTimelineDropFromNativePosition(args.position);
     console.debug("[native-dnd] over hit", hit);
     if (!hit.isOverTimeline) {
       setExternalDropPreview(null);
+      return;
+    }
+
+    if (!paths.length) {
+      setExternalDropPreview((current) => ({
+        kind: current?.kind ?? "unknown",
+        seconds: hit.dropSeconds,
+      }));
       return;
     }
 
