@@ -166,32 +166,54 @@ pub fn import_library_assets_from_dialog(
 }
 
 #[tauri::command]
-pub fn import_audio_files_from_bytes(
+pub async fn import_audio_files_from_bytes(
     files: Vec<AudioFileImportPayload>,
     state: State<'_, DesktopState>,
 ) -> Result<Vec<LibraryAssetSummary>, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    let (song_dir, current_song) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        let song_dir = session
+            .song_dir
+            .clone()
+            .ok_or_else(|| DesktopError::NoSongLoaded.to_string())?;
+        let current_song = session.engine.song().cloned();
+        (song_dir, current_song)
+    };
 
-    session
-        .import_audio_files_from_bytes(&files)
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::state::import_audio_files_from_bytes_to_library(&song_dir, current_song.as_ref(), &files)
+    })
+    .await
+    .map_err(|error| error.to_string())?
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-pub fn import_audio_files_from_paths(
+pub async fn import_audio_files_from_paths(
     files: Vec<AudioFilePathImportPayload>,
     state: State<'_, DesktopState>,
 ) -> Result<Vec<LibraryAssetSummary>, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    let (song_dir, current_song) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        let song_dir = session
+            .song_dir
+            .clone()
+            .ok_or_else(|| DesktopError::NoSongLoaded.to_string())?;
+        let current_song = session.engine.song().cloned();
+        (song_dir, current_song)
+    };
 
-    session
-        .import_audio_files_from_paths(&files)
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::state::import_audio_files_from_paths_to_library(&song_dir, current_song.as_ref(), &files)
+    })
+    .await
+    .map_err(|error| error.to_string())?
         .map_err(|error| error.to_string())
 }
 

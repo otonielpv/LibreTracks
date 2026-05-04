@@ -697,160 +697,16 @@ impl DesktopSession {
         &mut self,
         files: &[AudioFileImportPayload],
     ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
-        if files.is_empty() {
-            return Err(DesktopError::AudioCommand(
-                "at least one audio file is required".into(),
-            ));
-        }
-
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let audio_dir = song_dir.join("audio");
-        fs::create_dir_all(&audio_dir)?;
-
-        let mut written_paths = Vec::with_capacity(files.len());
-        let import_result = (|| {
-            let mut imported_assets = Vec::with_capacity(files.len());
-            let mut reserved_paths = collect_library_file_paths(&song_dir, self.engine.song())?
-                .into_iter()
-                .collect::<HashSet<_>>();
-
-            for file in files {
-                let sanitized_file_name = sanitize_import_file_name(&file.file_name)?;
-                let relative_path = allocate_library_audio_path(&reserved_paths, &sanitized_file_name);
-                reserved_paths.insert(relative_path.clone());
-
-                let absolute_path = resolve_audio_file_path(&song_dir, &relative_path);
-                fs::write(&absolute_path, &file.bytes)?;
-                written_paths.push(absolute_path.clone());
-
-                let metadata = read_audio_metadata(&absolute_path)?;
-                let file_name = Path::new(&relative_path)
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or(&relative_path)
-                    .to_string();
-
-                imported_assets.push(LibraryAssetSummary {
-                    file_name,
-                    file_path: relative_path,
-                    duration_seconds: metadata.duration_seconds,
-                    is_missing: false,
-                    folder_path: None,
-                });
-            }
-
-            let current_song = self.engine.song().cloned();
-            let mut library_assets = list_library_assets(&song_dir, current_song.as_ref())?;
-            for asset in &imported_assets {
-                if let Some(existing_asset) = library_assets
-                    .iter_mut()
-                    .find(|existing_asset| existing_asset.file_path == asset.file_path)
-                {
-                    *existing_asset = asset.clone();
-                } else {
-                    library_assets.push(asset.clone());
-                }
-            }
-
-            library_assets.sort_by(|left, right| {
-                left.folder_path
-                    .cmp(&right.folder_path)
-                    .then_with(|| left.file_name.cmp(&right.file_name))
-            });
-            write_library_manifest_assets(&song_dir, &library_assets)?;
-            Ok::<Vec<LibraryAssetSummary>, DesktopError>(imported_assets)
-        })();
-
-        if import_result.is_err() {
-            for path in written_paths {
-                let _ = fs::remove_file(path);
-            }
-        }
-
-        import_result
+        import_audio_files_from_bytes_to_library(&song_dir, self.engine.song(), files)
     }
 
     pub fn import_audio_files_from_paths(
         &mut self,
         files: &[AudioFilePathImportPayload],
     ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
-        if files.is_empty() {
-            return Err(DesktopError::AudioCommand(
-                "at least one audio file is required".into(),
-            ));
-        }
-
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let audio_dir = song_dir.join("audio");
-        fs::create_dir_all(&audio_dir)?;
-
-        let mut written_paths = Vec::with_capacity(files.len());
-        let import_result = (|| {
-            let mut imported_assets = Vec::with_capacity(files.len());
-            let mut reserved_paths = collect_library_file_paths(&song_dir, self.engine.song())?
-                .into_iter()
-                .collect::<HashSet<_>>();
-
-            for file in files {
-                if file.source_path.trim().is_empty() {
-                    return Err(DesktopError::AudioCommand(
-                        "source path is required for audio import".into(),
-                    ));
-                }
-
-                let sanitized_file_name = sanitize_import_file_name(&file.file_name)?;
-                let relative_path = allocate_library_audio_path(&reserved_paths, &sanitized_file_name);
-                reserved_paths.insert(relative_path.clone());
-
-                let absolute_path = resolve_audio_file_path(&song_dir, &relative_path);
-                fs::copy(Path::new(&file.source_path), &absolute_path)?;
-                written_paths.push(absolute_path.clone());
-
-                let metadata = read_audio_metadata(&absolute_path)?;
-                let file_name = Path::new(&relative_path)
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or(&relative_path)
-                    .to_string();
-
-                imported_assets.push(LibraryAssetSummary {
-                    file_name,
-                    file_path: relative_path,
-                    duration_seconds: metadata.duration_seconds,
-                    is_missing: false,
-                    folder_path: None,
-                });
-            }
-
-            let current_song = self.engine.song().cloned();
-            let mut library_assets = list_library_assets(&song_dir, current_song.as_ref())?;
-            for asset in &imported_assets {
-                if let Some(existing_asset) = library_assets
-                    .iter_mut()
-                    .find(|existing_asset| existing_asset.file_path == asset.file_path)
-                {
-                    *existing_asset = asset.clone();
-                } else {
-                    library_assets.push(asset.clone());
-                }
-            }
-
-            library_assets.sort_by(|left, right| {
-                left.folder_path
-                    .cmp(&right.folder_path)
-                    .then_with(|| left.file_name.cmp(&right.file_name))
-            });
-            write_library_manifest_assets(&song_dir, &library_assets)?;
-            Ok::<Vec<LibraryAssetSummary>, DesktopError>(imported_assets)
-        })();
-
-        if import_result.is_err() {
-            for path in written_paths {
-                let _ = fs::remove_file(path);
-            }
-        }
-
-        import_result
+        import_audio_files_from_paths_to_library(&song_dir, self.engine.song(), files)
     }
 
     pub fn get_library_assets(&self) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
@@ -3091,6 +2947,164 @@ fn allocate_library_audio_path(reserved_paths: &HashSet<String>, file_name: &str
         }
         index += 1;
     }
+}
+
+pub fn import_audio_files_from_bytes_to_library(
+    song_dir: &Path,
+    song: Option<&Song>,
+    files: &[AudioFileImportPayload],
+) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+    if files.is_empty() {
+        return Err(DesktopError::AudioCommand(
+            "at least one audio file is required".into(),
+        ));
+    }
+
+    let audio_dir = song_dir.join("audio");
+    fs::create_dir_all(&audio_dir)?;
+
+    let mut written_paths = Vec::with_capacity(files.len());
+    let import_result = (|| {
+        let mut imported_assets = Vec::with_capacity(files.len());
+        let mut reserved_paths = collect_library_file_paths(song_dir, song)?
+            .into_iter()
+            .collect::<HashSet<_>>();
+
+        for file in files {
+            let sanitized_file_name = sanitize_import_file_name(&file.file_name)?;
+            let relative_path = allocate_library_audio_path(&reserved_paths, &sanitized_file_name);
+            reserved_paths.insert(relative_path.clone());
+
+            let absolute_path = resolve_audio_file_path(song_dir, &relative_path);
+            fs::write(&absolute_path, &file.bytes)?;
+            written_paths.push(absolute_path.clone());
+
+            let metadata = read_audio_metadata(&absolute_path)?;
+            let file_name = Path::new(&relative_path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or(&relative_path)
+                .to_string();
+
+            imported_assets.push(LibraryAssetSummary {
+                file_name,
+                file_path: relative_path,
+                duration_seconds: metadata.duration_seconds,
+                is_missing: false,
+                folder_path: None,
+            });
+        }
+
+        let mut library_assets = list_library_assets(song_dir, song)?;
+        for asset in &imported_assets {
+            if let Some(existing_asset) = library_assets
+                .iter_mut()
+                .find(|existing_asset| existing_asset.file_path == asset.file_path)
+            {
+                *existing_asset = asset.clone();
+            } else {
+                library_assets.push(asset.clone());
+            }
+        }
+
+        library_assets.sort_by(|left, right| {
+            left.folder_path
+                .cmp(&right.folder_path)
+                .then_with(|| left.file_name.cmp(&right.file_name))
+        });
+        write_library_manifest_assets(song_dir, &library_assets)?;
+        Ok::<Vec<LibraryAssetSummary>, DesktopError>(imported_assets)
+    })();
+
+    if import_result.is_err() {
+        for path in written_paths {
+            let _ = fs::remove_file(path);
+        }
+    }
+
+    import_result
+}
+
+pub fn import_audio_files_from_paths_to_library(
+    song_dir: &Path,
+    song: Option<&Song>,
+    files: &[AudioFilePathImportPayload],
+) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
+    if files.is_empty() {
+        return Err(DesktopError::AudioCommand(
+            "at least one audio file is required".into(),
+        ));
+    }
+
+    let audio_dir = song_dir.join("audio");
+    fs::create_dir_all(&audio_dir)?;
+
+    let mut written_paths = Vec::with_capacity(files.len());
+    let import_result = (|| {
+        let mut imported_assets = Vec::with_capacity(files.len());
+        let mut reserved_paths = collect_library_file_paths(song_dir, song)?
+            .into_iter()
+            .collect::<HashSet<_>>();
+
+        for file in files {
+            if file.source_path.trim().is_empty() {
+                return Err(DesktopError::AudioCommand(
+                    "source path is required for audio import".into(),
+                ));
+            }
+
+            let sanitized_file_name = sanitize_import_file_name(&file.file_name)?;
+            let relative_path = allocate_library_audio_path(&reserved_paths, &sanitized_file_name);
+            reserved_paths.insert(relative_path.clone());
+
+            let absolute_path = resolve_audio_file_path(song_dir, &relative_path);
+            fs::copy(Path::new(&file.source_path), &absolute_path)?;
+            written_paths.push(absolute_path.clone());
+
+            let metadata = read_audio_metadata(&absolute_path)?;
+            let file_name = Path::new(&relative_path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or(&relative_path)
+                .to_string();
+
+            imported_assets.push(LibraryAssetSummary {
+                file_name,
+                file_path: relative_path,
+                duration_seconds: metadata.duration_seconds,
+                is_missing: false,
+                folder_path: None,
+            });
+        }
+
+        let mut library_assets = list_library_assets(song_dir, song)?;
+        for asset in &imported_assets {
+            if let Some(existing_asset) = library_assets
+                .iter_mut()
+                .find(|existing_asset| existing_asset.file_path == asset.file_path)
+            {
+                *existing_asset = asset.clone();
+            } else {
+                library_assets.push(asset.clone());
+            }
+        }
+
+        library_assets.sort_by(|left, right| {
+            left.folder_path
+                .cmp(&right.folder_path)
+                .then_with(|| left.file_name.cmp(&right.file_name))
+        });
+        write_library_manifest_assets(song_dir, &library_assets)?;
+        Ok::<Vec<LibraryAssetSummary>, DesktopError>(imported_assets)
+    })();
+
+    if import_result.is_err() {
+        for path in written_paths {
+            let _ = fs::remove_file(path);
+        }
+    }
+
+    import_result
 }
 
 fn normalize_library_folder_path(folder_path: &str) -> Option<String> {
