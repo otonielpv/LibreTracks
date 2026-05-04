@@ -1,8 +1,4 @@
-use std::convert::TryInto;
-
-use pitch_shift::{Shifter, TOTAL_F32};
-
-const PITCH_BLOCK_FRAMES: usize = 128;
+use signalsmith_stretch::Stretch;
 
 pub(crate) trait PitchShiftEngine: Send {
     fn process_interleaved(&mut self, input_interleaved: &[f32], finish: bool) -> Vec<f32>;
@@ -17,12 +13,16 @@ pub(crate) fn create_pitch_shift_engine(
     if transpose_semitones == 0 {
         Box::new(BypassPitchShiftEngine)
     } else {
-        Box::new(PhaseVocoderPitchShiftEngine::new(
+        Box::new(SignalsmithPitchShiftEngine::new(
             sample_rate,
             channels.max(1),
             transpose_semitones,
         ))
     }
+}
+
+fn semitones_to_pitch_ratio(transpose_semitones: i32) -> f32 {
+    2.0_f32.powf(transpose_semitones as f32 / 12.0)
 }
 
 struct BypassPitchShiftEngine;
@@ -35,102 +35,119 @@ impl PitchShiftEngine for BypassPitchShiftEngine {
     fn reset(&mut self) {}
 }
 
-struct PhaseVocoderPitchShiftEngine {
-    sample_rate: u32,
+struct SignalsmithPitchShiftEngine {
+    stretch: Stretch,
     channels: usize,
-    transpose_semitones: i32,
-    shifters: Vec<Shifter<Box<[f32; TOTAL_F32]>>>,
-    pending_samples: Vec<f32>,
+    pitch_ratio: f32,
 }
 
-impl PhaseVocoderPitchShiftEngine {
+impl SignalsmithPitchShiftEngine {
     fn new(sample_rate: u32, channels: usize, transpose_semitones: i32) -> Self {
-        let shifters = (0..channels)
-            .map(|_| {
-                let state: Box<[f32; TOTAL_F32]> = vec![0.0; TOTAL_F32]
-                    .into_boxed_slice()
-                    .try_into()
-                    .expect("pitch shifter state should have the expected size");
-                Shifter::new(state)
-            })
-            .collect();
+        let pitch_ratio = semitones_to_pitch_ratio(transpose_semitones);
+        let mut stretch = Stretch::preset_default(channels as u32, sample_rate);
+        stretch.set_transpose_factor(pitch_ratio, None);
 
         Self {
-            sample_rate,
+            stretch,
             channels,
-            transpose_semitones,
-            shifters,
-            pending_samples: Vec::new(),
+            pitch_ratio,
         }
     }
 
-    fn process_block(&mut self, block_interleaved: &[f32], output: &mut Vec<f32>) {
-        let mut channel_input = [0.0_f32; PITCH_BLOCK_FRAMES];
-        let mut channel_output = vec![0.0_f32; PITCH_BLOCK_FRAMES * self.channels];
+    fn deinterleave(&self, input_interleaved: &[f32]) -> Vec<Vec<f32>> {
+        let frame_count = input_interleaved.len() / self.channels;
+        let mut planar = (0..self.channels)
+            .map(|_| Vec::with_capacity(frame_count))
+            .collect::<Vec<_>>();
 
-        for channel in 0..self.channels {
-            for frame in 0..PITCH_BLOCK_FRAMES {
-                channel_input[frame] = block_interleaved[frame * self.channels + channel];
-            }
-
-            let shifted = self.shifters[channel].shift(
-                &channel_input,
-                self.transpose_semitones as f32,
-                PITCH_BLOCK_FRAMES,
-                self.sample_rate as f32,
-            );
-
-            for frame in 0..PITCH_BLOCK_FRAMES {
-                channel_output[frame * self.channels + channel] = shifted[frame];
+        for frame in input_interleaved.chunks_exact(self.channels) {
+            for (channel, sample) in frame.iter().enumerate() {
+                planar[channel].push(*sample);
             }
         }
 
-        output.extend_from_slice(&channel_output);
+        planar
     }
-}
 
-impl PitchShiftEngine for PhaseVocoderPitchShiftEngine {
-    fn process_interleaved(&mut self, input_interleaved: &[f32], finish: bool) -> Vec<f32> {
-        if input_interleaved.is_empty() && !finish {
-            return Vec::new();
+    fn interleave(&self, planar: &[Vec<f32>]) -> Vec<f32> {
+        let frame_count = planar.first().map_or(0, Vec::len);
+        let mut interleaved = Vec::with_capacity(frame_count * self.channels);
+
+        for frame in 0..frame_count {
+            for channel in 0..self.channels {
+                interleaved.push(planar[channel][frame]);
+            }
         }
 
-        self.pending_samples.extend_from_slice(input_interleaved);
-        let block_samples = PITCH_BLOCK_FRAMES * self.channels;
-        let mut output = Vec::new();
+        interleaved
+    }
 
-        while self.pending_samples.len() >= block_samples {
-            let block = self.pending_samples[..block_samples].to_vec();
-            self.pending_samples.drain(..block_samples);
-            self.process_block(&block, &mut output);
+    fn flush_tail(&mut self) -> Vec<f32> {
+        let flush_frames = self.stretch.output_latency().max(1);
+        let flush_samples = flush_frames * self.channels;
+        let mut flushed = Vec::new();
+
+        loop {
+            let mut output = vec![0.0_f32; flush_samples];
+            self.stretch.flush(&mut output);
+
+            if output.iter().all(|sample| *sample == 0.0) {
+                break;
+            }
+
+            flushed.extend_from_slice(&output);
         }
 
-        if finish && !self.pending_samples.is_empty() {
-            let mut block = self.pending_samples.split_off(0);
-            block.resize(block_samples, 0.0);
-            self.process_block(&block, &mut output);
+        flushed
+    }
+
+    fn process_and_flush(&mut self, input_interleaved: &[f32], finish: bool) -> Vec<f32> {
+        debug_assert_eq!(0, input_interleaved.len() % self.channels);
+
+        let planar_input = self.deinterleave(input_interleaved);
+        let interleaved_input = self.interleave(&planar_input);
+        let mut output = vec![0.0_f32; interleaved_input.len()];
+
+        if !interleaved_input.is_empty() {
+            self.stretch.process(&interleaved_input, &mut output);
+        }
+
+        if finish {
+            output.extend_from_slice(&self.flush_tail());
         }
 
         output
     }
 
+}
+
+impl PitchShiftEngine for SignalsmithPitchShiftEngine {
+    fn process_interleaved(&mut self, input_interleaved: &[f32], finish: bool) -> Vec<f32> {
+        if input_interleaved.is_empty() && !finish {
+            return Vec::new();
+        }
+
+        self.process_and_flush(input_interleaved, finish)
+    }
+
     fn reset(&mut self) {
-        self.pending_samples.clear();
-        self.shifters = (0..self.channels)
-            .map(|_| {
-                let state: Box<[f32; TOTAL_F32]> = vec![0.0; TOTAL_F32]
-                    .into_boxed_slice()
-                    .try_into()
-                    .expect("pitch shifter state should have the expected size");
-                Shifter::new(state)
-            })
-            .collect();
+        self.stretch.reset();
+        self.stretch.set_transpose_factor(self.pitch_ratio, None);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn semitone_ratio_matches_equal_temperament() {
+        let octave_up = semitones_to_pitch_ratio(12);
+        let octave_down = semitones_to_pitch_ratio(-12);
+
+        assert!((octave_up - 2.0).abs() < f32::EPSILON);
+        assert!((octave_down - 0.5).abs() < f32::EPSILON);
+    }
 
     #[test]
     fn bypass_engine_returns_input_unchanged() {
