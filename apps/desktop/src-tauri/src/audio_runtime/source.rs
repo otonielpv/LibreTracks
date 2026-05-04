@@ -572,37 +572,16 @@ fn stream_decode_from(
     ready_sender: Option<mpsc::SyncSender<WorkerReadyState>>,
 ) -> WorkerOutcome {
     let pitch_preroll_frames = pitch_engine.latency_frames();
-    let target_start_frames = seconds_to_frames(target_start_seconds, output_sample_rate) as usize;
-    let history_preroll_frames = target_start_frames.min(pitch_preroll_frames);
-    let missing_preroll_frames = pitch_preroll_frames.saturating_sub(history_preroll_frames);
-    let decoder_start_seconds = (target_start_frames.saturating_sub(history_preroll_frames)
-        as f64)
-        / f64::from(output_sample_rate.max(1));
     let mut decoder =
-        match StreamingDecoder::open(source, output_sample_rate, decoder_start_seconds) {
+        match StreamingDecoder::open(source, output_sample_rate, target_start_seconds) {
             Ok(decoder) => decoder,
             Err(_) => return WorkerOutcome::Finished,
         };
     pitch_engine.reset();
     let channels = source.channels.max(1);
     let mut pending_samples = Vec::new();
-    if missing_preroll_frames > 0 {
-        let mut remaining_silence = missing_preroll_frames;
-        while remaining_silence > 0 {
-            let chunk_size = remaining_silence.min(STREAM_WORKER_CHUNK_FRAMES);
-            let silence = vec![0.0_f32; chunk_size * channels];
-            let mut discarded_output = vec![0.0_f32; silence.len()];
-            if pitch_engine
-                .process_realtime_block(&silence, &mut discarded_output)
-                .is_err()
-            {
-                return WorkerOutcome::Finished;
-            }
-            remaining_silence = remaining_silence.saturating_sub(chunk_size);
-        }
-    }
-    if history_preroll_frames > 0 {
-        let mut remaining_priming = history_preroll_frames;
+    if pitch_preroll_frames > 0 {
+        let mut remaining_priming = pitch_preroll_frames;
         while remaining_priming > 0 {
             let chunk_size = remaining_priming.min(STREAM_WORKER_CHUNK_FRAMES);
             let mut samples = match take_decoder_samples(
@@ -1051,32 +1030,13 @@ fn render_pitch_aligned_frames_for_test(
 ) -> Result<Vec<f32>, String> {
     let channels = source.channels.max(1);
     let pitch_preroll_frames = pitch_engine.latency_frames();
-    let target_start_frames = seconds_to_frames(target_start_seconds, output_sample_rate) as usize;
-    let history_preroll_frames = target_start_frames.min(pitch_preroll_frames);
-    let missing_preroll_frames = pitch_preroll_frames.saturating_sub(history_preroll_frames);
-    let decoder_start_seconds = (target_start_frames.saturating_sub(history_preroll_frames)
-        as f64)
-        / f64::from(output_sample_rate.max(1));
-    let mut decoder = StreamingDecoder::open(source, output_sample_rate, decoder_start_seconds)?;
+    let mut decoder = StreamingDecoder::open(source, output_sample_rate, target_start_seconds)?;
     let mut pending_samples = Vec::new();
 
     pitch_engine.reset();
 
-    if missing_preroll_frames > 0 {
-        let mut remaining_silence = missing_preroll_frames;
-        while remaining_silence > 0 {
-            let chunk_frames = remaining_silence.min(STREAM_WORKER_CHUNK_FRAMES);
-            let silence = vec![0.0_f32; chunk_frames * channels];
-            let mut discarded_output = vec![0.0_f32; silence.len()];
-            pitch_engine
-                .process_realtime_block(&silence, &mut discarded_output)
-                .map_err(|error| format!("pitch priming failed: {error:?}"))?;
-            remaining_silence = remaining_silence.saturating_sub(chunk_frames);
-        }
-    }
-
-    if history_preroll_frames > 0 {
-        let mut remaining_priming = history_preroll_frames;
+    if pitch_preroll_frames > 0 {
+        let mut remaining_priming = pitch_preroll_frames;
         while remaining_priming > 0 {
             let chunk_frames = remaining_priming.min(STREAM_WORKER_CHUNK_FRAMES);
             let mut input =
@@ -1248,5 +1208,183 @@ mod tests {
 
         assert_eq!(reader.declick_frames_remaining, 0);
         assert!(reader.declick_fade_frames > 0);
+    }
+
+    #[test]
+    fn streaming_clip_reader_transposed_start_is_not_latency_delayed() {
+        let sample_rate = 48_000;
+        let interval_frames = sample_rate as usize;
+        let total_frames = sample_rate as usize * 4;
+        let click_frames = ((sample_rate as f32) * 0.01).round() as usize;
+        let click_frequency_hz = 1_000.0_f32;
+        let mut samples = Vec::with_capacity(total_frames);
+
+        for frame in 0..total_frames {
+            let phase = frame % interval_frames;
+            let sample = if phase < click_frames {
+                let envelope = 1.0 - (phase as f32 / click_frames.max(1) as f32);
+                let radians =
+                    2.0 * std::f32::consts::PI * click_frequency_hz * phase as f32
+                        / sample_rate as f32;
+                radians.cos() * envelope
+            } else {
+                0.0
+            };
+            samples.push(sample);
+        }
+
+        let audio_buffers = AudioBufferCache::default();
+        let source = StreamingAudioSource::from_preloaded(samples, sample_rate, 1, false);
+        let file_path = source.file_path.clone();
+        audio_buffers.insert_for_test(file_path.clone(), source);
+
+        let bypass_plan = mixer::PlaybackClipPlan {
+            clip_id: "clip-bypass".into(),
+            track_id: "track-bypass".into(),
+            file_path: file_path.clone(),
+            clip_gain: 1.0,
+            timeline_start_frame: 0,
+            duration_frames: total_frames as u64,
+            fade_in_frames: 0,
+            fade_out_frames: 0,
+            source_start_seconds: 0.0,
+            transpose_semitones: 0,
+        };
+        let transposed_plan = mixer::PlaybackClipPlan {
+            clip_id: "clip-transposed".into(),
+            track_id: "track-transposed".into(),
+            file_path,
+            clip_gain: 1.0,
+            timeline_start_frame: 0,
+            duration_frames: total_frames as u64,
+            fade_in_frames: 0,
+            fade_out_frames: 0,
+            source_start_seconds: 0.0,
+            transpose_semitones: 2,
+        };
+
+        let mut bypass_reader = StreamingClipReader::open(&bypass_plan, sample_rate, &audio_buffers, 0)
+            .expect("bypass reader should open");
+        let mut transposed_reader = StreamingClipReader::open(
+            &transposed_plan,
+            sample_rate,
+            &audio_buffers,
+            0,
+        )
+        .expect("transposed reader should open");
+
+        let mut bypass_mix = vec![0.0_f32; 4_096];
+        let mut transposed_mix = vec![0.0_f32; 4_096];
+        bypass_reader.mix_into_with_channel_gains(&mut bypass_mix, 0, 4_096, 1, 1.0, 0.0);
+        transposed_reader.mix_into_with_channel_gains(&mut transposed_mix, 0, 4_096, 1, 1.0, 0.0);
+
+        let bypass_peak = bypass_mix
+            .iter()
+            .enumerate()
+            .max_by(|(_, left), (_, right)| left.abs().total_cmp(&right.abs()))
+            .map(|(index, _)| index)
+            .expect("bypass peak should exist");
+        let transposed_peak = transposed_mix
+            .iter()
+            .enumerate()
+            .max_by(|(_, left), (_, right)| left.abs().total_cmp(&right.abs()))
+            .map(|(index, _)| index)
+            .expect("transposed peak should exist");
+
+        assert!(
+            transposed_peak.abs_diff(bypass_peak) <= 64,
+            "startup peak offset too large: bypass={bypass_peak} transposed={transposed_peak}"
+        );
+    }
+
+    #[test]
+    fn streaming_clip_reader_seek_keeps_transposed_reader_close_to_bypass() {
+        let sample_rate = 48_000;
+        let interval_frames = sample_rate as usize;
+        let total_frames = sample_rate as usize * 30;
+        let click_frames = ((sample_rate as f32) * 0.01).round() as usize;
+        let click_frequency_hz = 1_000.0_f32;
+        let mut samples = Vec::with_capacity(total_frames);
+
+        for frame in 0..total_frames {
+            let phase = frame % interval_frames;
+            let sample = if phase < click_frames {
+                let envelope = 1.0 - (phase as f32 / click_frames.max(1) as f32);
+                let radians =
+                    2.0 * std::f32::consts::PI * click_frequency_hz * phase as f32
+                        / sample_rate as f32;
+                radians.cos() * envelope
+            } else {
+                0.0
+            };
+            samples.push(sample);
+        }
+
+        let audio_buffers = AudioBufferCache::default();
+        let source = StreamingAudioSource::from_preloaded(samples, sample_rate, 1, false);
+        let file_path = source.file_path.clone();
+        audio_buffers.insert_for_test(file_path.clone(), source);
+
+        let bypass_plan = mixer::PlaybackClipPlan {
+            clip_id: "clip-bypass".into(),
+            track_id: "track-bypass".into(),
+            file_path: file_path.clone(),
+            clip_gain: 1.0,
+            timeline_start_frame: 0,
+            duration_frames: total_frames as u64,
+            fade_in_frames: 0,
+            fade_out_frames: 0,
+            source_start_seconds: 0.0,
+            transpose_semitones: 0,
+        };
+        let transposed_plan = mixer::PlaybackClipPlan {
+            clip_id: "clip-transposed".into(),
+            track_id: "track-transposed".into(),
+            file_path,
+            clip_gain: 1.0,
+            timeline_start_frame: 0,
+            duration_frames: total_frames as u64,
+            fade_in_frames: 0,
+            fade_out_frames: 0,
+            source_start_seconds: 0.0,
+            transpose_semitones: 2,
+        };
+
+        let mut bypass_reader = StreamingClipReader::open(&bypass_plan, sample_rate, &audio_buffers, 0)
+            .expect("bypass reader should open");
+        let mut transposed_reader = StreamingClipReader::open(
+            &transposed_plan,
+            sample_rate,
+            &audio_buffers,
+            0,
+        )
+        .expect("transposed reader should open");
+
+        let seek_frame = sample_rate as usize * 10;
+        bypass_reader.seek_to(seek_frame);
+        transposed_reader.seek_to(seek_frame);
+
+        let mut bypass_mix = vec![0.0_f32; 8_192];
+        let mut transposed_mix = vec![0.0_f32; 8_192];
+        bypass_reader.mix_into_with_channel_gains(&mut bypass_mix, 0, 8_192, 1, 1.0, 0.0);
+        transposed_reader.mix_into_with_channel_gains(&mut transposed_mix, 0, 8_192, 1, 1.0, 0.0);
+
+        let bypass_peak = bypass_mix
+            .iter()
+            .enumerate()
+            .max_by(|(_, left), (_, right)| left.abs().total_cmp(&right.abs()))
+            .map(|(index, _)| index)
+            .expect("bypass peak should exist");
+        let transposed_peak = transposed_mix
+            .iter()
+            .enumerate()
+            .max_by(|(_, left), (_, right)| left.abs().total_cmp(&right.abs()))
+            .map(|(index, _)| index)
+            .expect("transposed peak should exist");
+
+        assert!(
+            transposed_peak.abs_diff(bypass_peak) <= 64,
+            "seek peak offset too large: bypass={bypass_peak} transposed={transposed_peak}"
+        );
     }
 }
