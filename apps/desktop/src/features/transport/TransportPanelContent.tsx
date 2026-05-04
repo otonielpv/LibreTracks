@@ -140,6 +140,17 @@ import {
   type OptimisticMixState,
 } from "./store";
 import {
+  createPendingAudioImports,
+  mergePendingClipsByTrack,
+  nextPaint,
+  toPendingLibraryAsset,
+  toPendingTrack,
+  type PendingAudioImport,
+  type PendingLibraryAssetSummary,
+  type TimelineClipSummary,
+  type TimelineTrackSummary,
+} from "./pendingAudioImports";
+import {
   TIMELINE_DEFAULT_TRACK_HEIGHT,
   useTimelineUIStore,
 } from "./uiStore";
@@ -1103,6 +1114,7 @@ export function TransportPanelContent() {
   const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
   const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
   const playbackSongDir = useTransportStore((state) => state.playback?.songDir ?? null);
+  const pendingAudioImports = useTransportStore((state) => state.pendingAudioImports);
   const projectIdentityRef = useRef<string | null>(null);
   const pendingMarkerJumpSignature = useTransportStore((state) => {
     const pendingJump = state.playback?.pendingMarkerJump;
@@ -3093,23 +3105,26 @@ export function TransportPanelContent() {
     laneViewportWidth - Math.min(TIMELINE_FIT_RIGHT_GUTTER_PX, laneViewportWidth * 0.16),
   );
   const timelineContentEndSeconds = useMemo(() => {
-    if (!song) {
+    if (!song && pendingAudioImports.length === 0) {
       return 0;
     }
 
-    let furthestContentSeconds = song.durationSeconds;
-    for (const clip of song.clips) {
+    let furthestContentSeconds = song?.durationSeconds ?? 0;
+    for (const clip of song?.clips ?? []) {
       furthestContentSeconds = Math.max(
         furthestContentSeconds,
         clip.timelineStartSeconds + clip.durationSeconds,
       );
     }
-    for (const marker of song.sectionMarkers) {
+    for (const marker of song?.sectionMarkers ?? []) {
       furthestContentSeconds = Math.max(furthestContentSeconds, marker.startSeconds);
+    }
+    for (const pendingImport of pendingAudioImports) {
+      furthestContentSeconds = Math.max(furthestContentSeconds, pendingImport.dropSeconds + 8);
     }
 
     return furthestContentSeconds;
-  }, [song]);
+  }, [pendingAudioImports, song]);
   const workspaceDurationSeconds = getTimelineWorkspaceEndSeconds(
     song?.durationSeconds ?? 0,
     timelineContentEndSeconds,
@@ -3135,9 +3150,13 @@ export function TransportPanelContent() {
     ? snapshotRef.current?.pendingMarkerJump ?? null
     : null;
   const activeVamp = activeVampSignature ? snapshotRef.current?.activeVamp ?? null : null;
-  const renderedClipsByTrack = useMemo(
-    () => mergeOptimisticClipsByTrack(clipsByTrack, optimisticClipOperations),
-    [clipsByTrack, optimisticClipOperations],
+  const renderedClipsByTrack = useMemo<Record<string, TimelineClipSummary[]>>(
+    () =>
+      mergePendingClipsByTrack(
+        mergeOptimisticClipsByTrack(clipsByTrack, optimisticClipOperations),
+        pendingAudioImports,
+      ),
+    [clipsByTrack, optimisticClipOperations, pendingAudioImports],
   );
   const readoutPositionSeconds = displayPositionSecondsRef.current;
   const readoutTempoRegion = getSongTempoRegionAtPosition(song, readoutPositionSeconds);
@@ -3156,7 +3175,14 @@ export function TransportPanelContent() {
   const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
   const shouldShowEmptyState = !isProjectPending && !song;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
-  const visibleTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
+  const visibleTracks = useMemo<TimelineTrackSummary[]>(() => {
+    const realTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
+    return [...realTracks, ...pendingAudioImports.map(toPendingTrack)];
+  }, [collapsedFolders, pendingAudioImports, song]);
+  const visibleLibraryAssets = useMemo<PendingLibraryAssetSummary[]>(
+    () => [...libraryAssets, ...pendingAudioImports.map(toPendingLibraryAsset)],
+    [libraryAssets, pendingAudioImports],
+  );
   const shouldShowEmptyArrangementHint = Boolean(song && visibleTracks.length === 0);
   const previewTrackDensityClass =
     trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
@@ -5335,18 +5361,10 @@ export function TransportPanelContent() {
     setStatus(t("transport.status.packageImportedAt", { time: formatClock(dropSeconds) }));
   }
 
-  async function handleDroppedAudioFiles(files: File[], dropSeconds: number) {
-    const importedAssets = await importAudioFilesFromBytes(
-      await Promise.all(
-        files.map(async (file) => ({
-          fileName: file.name,
-          bytes: new Uint8Array(await file.arrayBuffer()),
-        })),
-      ),
-    );
-
-    await refreshLibraryState();
-
+  async function createRealTracksAndClipsForImportedAssets(args: {
+    importedAssets: LibraryAssetSummary[];
+    dropSeconds: number;
+  }) {
     const placements: Array<{
       asset: LibraryAssetSummary;
       trackId: string;
@@ -5355,7 +5373,7 @@ export function TransportPanelContent() {
     let pendingTrackSnapshot: TransportSnapshot | null = null;
     let selectedTrackId: string | null = null;
 
-    for (const asset of importedAssets) {
+    for (const asset of args.importedAssets) {
       const createdTrack = await createLibraryTrackForAsset(asset);
       if (!createdTrack.trackId) {
         if (createdTrack.snapshot) {
@@ -5369,7 +5387,7 @@ export function TransportPanelContent() {
       placements.push({
         asset,
         trackId: createdTrack.trackId,
-        timelineStartSeconds: dropSeconds,
+        timelineStartSeconds: args.dropSeconds,
       });
     }
 
@@ -5383,11 +5401,72 @@ export function TransportPanelContent() {
     }
 
     setSelectedSectionId(null);
+  }
+
+  async function startDroppedAudioImportJob(args: {
+    files: File[];
+    pendingImports: PendingAudioImport[];
+    dropSeconds: number;
+  }) {
+    const { files, pendingImports, dropSeconds } = args;
+    const pendingIds = pendingImports.map((item) => item.id);
+
+    await nextPaint();
+
+    try {
+      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "reading");
+
+      const payloads = await Promise.all(
+        files.map(async (file) => ({
+          fileName: file.name,
+          bytes: new Uint8Array(await file.arrayBuffer()),
+        })),
+      );
+
+      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "importing");
+      const importedAssets = await importAudioFilesFromBytes(payloads);
+
+      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "metadata");
+      await refreshLibraryState();
+
+      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "analyzing");
+      await createRealTracksAndClipsForImportedAssets({
+        importedAssets,
+        dropSeconds,
+      });
+
+      useTransportStore.getState().removePendingAudioImports(pendingIds);
+      setStatus(
+        importedAssets.length === 1
+          ? t("transport.status.clipAdded", { name: importedAssets[0].fileName })
+          : t("transport.status.clipsAdded", { count: importedAssets.length }),
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not import audio files. Please check the files and try again.";
+
+      useTransportStore.getState().markPendingAudioImportsFailed(pendingIds, message);
+      setStatus(message);
+    }
+  }
+
+  function handleDroppedAudioFiles(files: File[], dropSeconds: number) {
+    const pendingImports = createPendingAudioImports(files, dropSeconds);
+    useTransportStore.getState().addPendingAudioImports(pendingImports);
+
     setStatus(
-      importedAssets.length === 1
-        ? t("transport.status.clipAdded", { name: importedAssets[0].fileName })
-        : t("transport.status.clipsAdded", { count: importedAssets.length }),
+      files.length === 1
+        ? `Importing ${files[0].name}...`
+        : `Importing ${files.length} audio files...`,
     );
+
+    void startDroppedAudioImportJob({
+      files,
+      pendingImports,
+      dropSeconds,
+    });
   }
 
   function rejectExternalDrop(kind: DroppedFileClassification["kind"]) {
@@ -5406,19 +5485,19 @@ export function TransportPanelContent() {
       return;
     }
 
-    void runAction(async () => {
-      if (classification.kind === "package") {
+    if (classification.kind === "package") {
+      void runAction(async () => {
         if (!classification.packageFile) {
           rejectExternalDrop("unsupported");
           return;
         }
 
         await handleDroppedSongPackage(classification.packageFile, dropSeconds);
-        return;
-      }
+      }, { busy: true });
+      return;
+    }
 
-      await handleDroppedAudioFiles(classification.audioFiles, dropSeconds);
-    }, classification.kind === "package" ? { busy: true } : undefined);
+    handleDroppedAudioFiles(classification.audioFiles, dropSeconds);
   }
 
   function handleTrackListLibraryDragLeave(event: ReactDragEvent<HTMLDivElement>) {
@@ -5780,7 +5859,7 @@ export function TransportPanelContent() {
       <div className="lt-workspace-body">
       {activeSidebarTab === "library" ? (
         <LibrarySidebarPanel
-          assets={libraryAssets}
+          assets={visibleLibraryAssets}
           folders={libraryFolders}
           isLoading={isLibraryLoading}
           isImporting={isImportingLibrary}

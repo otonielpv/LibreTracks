@@ -1,4 +1,5 @@
-import type { ClipSummary, SongView, TrackSummary } from "../desktopApi";
+import type { SongView } from "../desktopApi";
+import { getPendingClipLabel, type TimelineClipSummary, type TimelineTrackSummary } from "../pendingAudioImports";
 import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
 import { clamp, secondsToScreenX } from "../timelineMath";
 import { WaveformTileCache, WAVEFORM_TILE_WIDTH_PX } from "./WaveformTileCache";
@@ -14,7 +15,7 @@ export function drawTrackCanvasBackground(
 }
 
 function clipScreenBounds(
-  clip: ClipSummary,
+  clip: TimelineClipSummary,
   startSeconds: number,
   cameraX: number,
   pixelsPerSecond: number,
@@ -31,6 +32,7 @@ function drawWaveformPlaceholder(
   width: number,
   top: number,
   height: number,
+  label = "ANALYZING WAVEFORM...",
 ) {
   context.save();
   context.beginPath();
@@ -41,12 +43,11 @@ function drawWaveformPlaceholder(
   context.fillStyle = "rgba(229, 226, 225, 0.12)";
   context.fillRect(left, top, width, height);
 
-  // Text "ANALYZING..."
   context.fillStyle = "rgba(20, 20, 20, 0.85)";
   context.font = '700 11px "Space Grotesk", sans-serif';
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText("ANALYZING...", left + width / 2, top + height / 2);
+  context.fillText(label.toUpperCase(), left + width / 2, top + height / 2);
 
   context.restore();
 }
@@ -145,8 +146,19 @@ export function drawTrackClipsLayer(
       context.fill();
       context.stroke();
 
+      const pendingLabel =
+        clip.isPending ||
+        clip.waveformStatus === "pending" ||
+        clip.waveformStatus === "analyzing" ||
+        clip.waveformStatus === "failed"
+          ? getPendingClipLabel(
+              clip.pendingStatus ?? (clip.waveformStatus === "failed" ? "failed" : "analyzing"),
+            )
+          : null;
       const waveform = snapshot.waveformCache[clip.waveformKey];
-      if (waveform) {
+      if (pendingLabel) {
+        drawWaveformPlaceholder(context, clippedLeft, visibleWidth, clipTop, clipHeight, pendingLabel);
+      } else if (waveform) {
         context.save();
         context.beginPath();
         context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
@@ -214,7 +226,7 @@ export function drawTrackClipsLayer(
   context.restore();
 }
 
-export function buildTrackStructureSignature(song: SongView, visibleTracks: TrackSummary[]) {
+export function buildTrackStructureSignature(song: SongView, visibleTracks: TimelineTrackSummary[]) {
   const trackStructureSignature = song.tracks
     .map((track) => [track.id, track.kind, track.parentTrackId ?? "root"].join(":"))
     .join("|");

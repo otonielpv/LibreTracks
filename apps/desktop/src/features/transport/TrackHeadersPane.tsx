@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, WheelEvent as ReactWheelEvent } from "react";
 
-import type { SongView, TrackSummary } from "./desktopApi";
+import type { SongView } from "./desktopApi";
+import type { TimelineTrackSummary } from "./pendingAudioImports";
 import { TrackHeaderItem } from "./TrackHeaderItem";
 
 type LibraryPreviewRow = {
@@ -11,7 +12,7 @@ type LibraryPreviewRow = {
 
 type TrackHeadersPaneProps = {
   song: SongView | null;
-  visibleTracks: TrackSummary[];
+  visibleTracks: TimelineTrackSummary[];
   selectedTrackIds: string[];
   trackHeight: number;
   collapsedFolders: Set<string>;
@@ -75,6 +76,36 @@ export function TrackHeadersPane({
           const childCount = getTrackChildCount(track.id);
           const trackDensityClass =
             trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
+
+          if (track.isPending) {
+            return (
+              <div
+                key={track.id}
+                className="lt-track-header-row"
+                data-track-id={track.id}
+                style={{ height: trackHeight }}
+              >
+                <div
+                  className={`lt-track-header ${trackDensityClass} is-library-preview`}
+                  style={{ height: trackHeight, paddingLeft: 16 + track.depth * 22 }}
+                  aria-hidden="true"
+                >
+                  <div className="lt-track-header-body">
+                    <div className="lt-track-header-content">
+                      <div className="lt-track-header-summary">
+                        <div className="lt-track-header-main">
+                          <div className="lt-track-title-row">
+                            <strong>{track.name}</strong>
+                          </div>
+                          <span className="lt-track-meta">Importing audio...</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
 
           return (
             <div

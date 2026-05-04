@@ -1,6 +1,7 @@
 import type { MutableRefObject } from "react";
 
-import type { ClipSummary, SongView, TrackSummary, WaveformSummaryDto } from "../desktopApi";
+import type { SongView, WaveformSummaryDto } from "../desktopApi";
+import type { TimelineClipSummary, TimelineTrackSummary } from "../pendingAudioImports";
 import type { TimelineGrid } from "../timelineMath";
 
 export type TrackSceneSnapshot = {
@@ -8,8 +9,8 @@ export type TrackSceneSnapshot = {
   height: number;
   trackHeight: number;
   song: SongView;
-  visibleTracks: TrackSummary[];
-  clipsByTrack: Record<string, ClipSummary[]>;
+  visibleTracks: TimelineTrackSummary[];
+  clipsByTrack: Record<string, TimelineClipSummary[]>;
   waveformCache: Record<string, WaveformSummaryDto>;
   pixelsPerSecond: number;
   zoomLevel: number;

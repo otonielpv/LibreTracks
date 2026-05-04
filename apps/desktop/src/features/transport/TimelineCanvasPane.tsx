@@ -14,9 +14,9 @@ import type {
   SongRegionSummary,
   SongView,
   TimeSignatureMarkerSummary,
-  TrackSummary,
   WaveformSummaryDto,
 } from "./desktopApi";
+import type { TimelineClipSummary, TimelineTrackSummary } from "./pendingAudioImports";
 import {
   buildSongTempoRegions,
   formatTransposeSemitones,
@@ -65,8 +65,8 @@ type TimelineCanvasPaneProps = {
   trackHeight: number;
   playheadDurationSeconds: number;
   song: SongView | null;
-  visibleTracks: TrackSummary[];
-  renderedClipsByTrack: Record<string, ClipSummary[]>;
+  visibleTracks: TimelineTrackSummary[];
+  renderedClipsByTrack: Record<string, TimelineClipSummary[]>;
   clipsByTrack: Record<string, ClipSummary[]>;
   waveformCache: Record<string, WaveformSummaryDto>;
   cameraXRef: MutableRefObject<number>;
@@ -124,16 +124,16 @@ type TimelineCanvasPaneProps = {
   onEmptyArrangementLibraryDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   onTrackLaneMouseDown: (
     event: ReactMouseEvent<HTMLDivElement>,
-    track: TrackSummary,
+    track: TimelineTrackSummary,
     trackClips: ClipSummary[],
   ) => void;
   onTrackLaneContextMenu: (
     event: ReactMouseEvent<HTMLDivElement>,
-    track: TrackSummary,
+    track: TimelineTrackSummary,
     trackClips: ClipSummary[],
   ) => void;
-  onTrackLaneLibraryDragOver: (event: ReactDragEvent<HTMLDivElement>, track: TrackSummary) => void;
-  onTrackLaneLibraryDrop: (event: ReactDragEvent<HTMLDivElement>, track: TrackSummary) => void;
+  onTrackLaneLibraryDragOver: (event: ReactDragEvent<HTMLDivElement>, track: TimelineTrackSummary) => void;
+  onTrackLaneLibraryDrop: (event: ReactDragEvent<HTMLDivElement>, track: TimelineTrackSummary) => void;
   onLibraryPreviewLaneDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
   onLibraryPreviewLaneDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   onExternalDropPreviewChange: (preview: ExternalDropPreview | null) => void;
@@ -633,6 +633,7 @@ export function TimelineCanvasPane({
 
           {song?.tracks && visibleTracks.map((track) => {
             const trackClips = clipsByTrack[track.id] ?? [];
+            const isPendingTrack = Boolean(track.isPending);
 
             return (
               <div
@@ -642,14 +643,30 @@ export function TimelineCanvasPane({
                 style={{ height: trackHeight }}
               >
                 <div
-                  className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""}`}
+                  className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""} ${isPendingTrack ? "is-pending" : ""}`}
                   style={{ height: trackHeight }}
                   aria-label={`Lane ${track.name}`}
                   onDragEnter={handleTimelineDragEnter}
-                  onMouseDown={(event) => onTrackLaneMouseDown(event, track, trackClips)}
-                  onContextMenu={(event) => onTrackLaneContextMenu(event, track, trackClips)}
-                  onDragOver={(event) => onTrackLaneLibraryDragOver(event, track)}
-                  onDrop={(event) => onTrackLaneLibraryDrop(event, track)}
+                  onMouseDown={(event) => {
+                    if (!isPendingTrack) {
+                      onTrackLaneMouseDown(event, track, trackClips);
+                    }
+                  }}
+                  onContextMenu={(event) => {
+                    if (!isPendingTrack) {
+                      onTrackLaneContextMenu(event, track, trackClips);
+                    }
+                  }}
+                  onDragOver={(event) => {
+                    if (!isPendingTrack) {
+                      onTrackLaneLibraryDragOver(event, track);
+                    }
+                  }}
+                  onDrop={(event) => {
+                    if (!isPendingTrack) {
+                      onTrackLaneLibraryDrop(event, track);
+                    }
+                  }}
                 >
                   {libraryClipPreview
                     .filter((preview) => preview.trackId === track.id)

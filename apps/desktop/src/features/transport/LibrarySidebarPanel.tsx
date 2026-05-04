@@ -9,8 +9,9 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { LibraryAssetSummary, LibraryImportProgressEvent } from "./desktopApi";
+import type { LibraryImportProgressEvent } from "./desktopApi";
 import { LIBRARY_ASSET_DRAG_MIME } from "./dragDrop";
+import { getPendingClipLabel, type PendingLibraryAssetSummary } from "./pendingAudioImports";
 
 const INTERNAL_DRAG_START_EVENT = "libretracks-internal-drag-start";
 const INTERNAL_DRAG_END_EVENT = "libretracks-internal-drag-end";
@@ -30,7 +31,7 @@ type ContextMenuState = {
 } | null;
 
 type LibrarySidebarPanelProps = {
-  assets: LibraryAssetSummary[];
+  assets: PendingLibraryAssetSummary[];
   folders: string[];
   isLoading: boolean;
   isImporting: boolean;
@@ -45,7 +46,7 @@ type LibrarySidebarPanelProps = {
   onMoveAssetsToFolder: (filePaths: string[], folderPath: string | null) => void;
   onRenameFolder: (folderPath: string) => void;
   onDeleteFolder: (folderPath: string) => void;
-  onDeleteRequested: (assets: LibraryAssetSummary[]) => void;
+  onDeleteRequested: (assets: PendingLibraryAssetSummary[]) => void;
 };
 
 function formatAssetDuration(durationSeconds: number) {
@@ -170,7 +171,7 @@ export function LibrarySidebarPanel({
       }));
   }, [assets, folders]);
 
-  const updateAssetSelection = (asset: LibraryAssetSummary, isToggleSelection: boolean) => {
+  const updateAssetSelection = (asset: PendingLibraryAssetSummary, isToggleSelection: boolean) => {
     setSelectedAssetPaths((current) => {
       if (!isToggleSelection) {
         return [asset.filePath];
@@ -182,7 +183,7 @@ export function LibrarySidebarPanel({
     });
   };
 
-  const handleAssetSelect = (event: MouseEvent<HTMLDivElement>, asset: LibraryAssetSummary) => {
+  const handleAssetSelect = (event: MouseEvent<HTMLDivElement>, asset: PendingLibraryAssetSummary) => {
     updateAssetSelection(asset, event.ctrlKey || event.metaKey);
   };
 
@@ -210,7 +211,11 @@ export function LibrarySidebarPanel({
     return activeDraggedFilePathsRef.current;
   };
 
-  const assetContextMenu = (asset: LibraryAssetSummary) => {
+  const assetContextMenu = (asset: PendingLibraryAssetSummary) => {
+    if (asset.isPending) {
+      return [];
+    }
+
     const contextAssets = selectedAssetPathSet.has(asset.filePath) ? selectedAssets : [asset];
 
     const actions: ContextMenuAction[] = [
@@ -379,24 +384,30 @@ export function LibrarySidebarPanel({
     onMoveAssetsToFolder(draggedFilePaths, folderPath);
   };
 
-  const renderAssetRows = (groupAssets: LibraryAssetSummary[]) => {
+  const renderAssetRows = (groupAssets: PendingLibraryAssetSummary[]) => {
     return groupAssets.length ? (
       <div className="lt-library-asset-list" role="list" aria-label={t("library.assetListAria")}>
         {groupAssets.map((asset) => {
           const isSelected = selectedAssetPathSet.has(asset.filePath);
+          const isPending = Boolean(asset.isPending);
 
           return (
             <div key={asset.filePath} role="listitem" className={`lt-library-asset-row ${isSelected ? "is-selected" : ""}`}>
               <div
-                className={`lt-library-asset ${asset.isMissing ? "is-missing" : ""}`}
+                className={`lt-library-asset ${asset.isMissing ? "is-missing" : ""} ${isPending ? "is-pending" : ""}`}
                 role="button"
                 tabIndex={0}
                 aria-label={asset.fileName}
                 aria-pressed={isSelected}
                 title={asset.fileName}
-                draggable
+                draggable={!isPending}
                 onClick={(event) => handleAssetSelect(event, asset)}
                 onContextMenu={(event) => {
+                  if (isPending) {
+                    event.preventDefault();
+                    return;
+                  }
+
                   if (!selectedAssetPathSet.has(asset.filePath)) {
                     updateAssetSelection(asset, event.ctrlKey || event.metaKey);
                   }
@@ -404,13 +415,19 @@ export function LibrarySidebarPanel({
                 }}
                 onKeyDown={(event) => handleAssetKeyDown(event, asset)}
                 onDragEnd={handleAssetDragEnd}
-                onDragStart={(event) => handleAssetDragStart(event, asset)}
+                onDragStart={(event) => {
+                  if (!isPending) {
+                    handleAssetDragStart(event, asset);
+                  }
+                }}
               >
                 <span className="lt-library-asset-icon material-symbols-outlined">
-                  {asset.isMissing ? "warning" : "music_note"}
+                  {isPending ? "hourglass_top" : asset.isMissing ? "warning" : "music_note"}
                 </span>
                 <span className="lt-library-asset-copy" title={asset.fileName}>{asset.fileName}</span>
-                <span className="lt-library-asset-duration">{formatAssetDuration(asset.durationSeconds)}</span>
+                <span className="lt-library-asset-duration">
+                  {isPending ? getPendingClipLabel(asset.pendingStatus ?? "queued") : formatAssetDuration(asset.durationSeconds)}
+                </span>
               </div>
             </div>
           );

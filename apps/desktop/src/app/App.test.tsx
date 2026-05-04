@@ -11,7 +11,7 @@ import {
   useTimelineUIStore,
 } from "../features/transport/uiStore";
 import { App } from "./App";
-import { emitWaveformReadyForTest, resetTestDesktopApiMock } from "./testDesktopApiMock";
+import { emitWaveformReadyForTest, resetTestDesktopApiMock, testDesktopApiMock } from "./testDesktopApiMock";
 
 vi.mock("../features/transport/desktopApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../features/transport/desktopApi")>();
@@ -847,6 +847,14 @@ describe("App", () => {
   it("drops audio files on the timeline, imports them, and creates one new track per file", async () => {
     const desktopApi = await import("../features/transport/desktopApi");
     const getWaveformSummariesMock = vi.mocked(desktopApi.getWaveformSummaries);
+    let releaseImport: (() => void) | null = null;
+    const importGate = new Promise<void>((resolve) => {
+      releaseImport = resolve;
+    });
+    vi.mocked(desktopApi.importAudioFilesFromBytes).mockImplementationOnce(async (files) => {
+      await importGate;
+      return testDesktopApiMock.importAudioFilesFromBytes(files);
+    });
     const { container } = await renderApp();
     mockRulerBounds(container);
     mockLaneBounds(container);
@@ -866,11 +874,25 @@ describe("App", () => {
       fireEvent.drop(timelinePane as HTMLElement, { dataTransfer, clientX: 420, clientY: 180 });
     });
 
+    expect(screen.getByText("lead.wav")).toBeTruthy();
+    expect(screen.getByText("pad.mp3")).toBeTruthy();
+    expect(screen.getByText(/Importing 2 audio files/i)).toBeTruthy();
+    expect(useTransportStore.getState().pendingAudioImports).toHaveLength(2);
+
+    await act(async () => {
+      releaseImport?.();
+    });
+
     expect(
       await screen.findByText(textMatcher(interpolate(en.transport.status.clipsAdded, { count: 2 }))),
     ).toBeTruthy();
     expect(screen.getByText("Lead")).toBeTruthy();
     expect(screen.getByText("Pad")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByText("lead.wav")).toBeNull();
+      expect(screen.queryByText("pad.mp3")).toBeNull();
+      expect(useTransportStore.getState().pendingAudioImports).toHaveLength(0);
+    });
 
     await waitFor(() => {
       expect(
@@ -884,6 +906,32 @@ describe("App", () => {
       emitWaveformReadyForTest("audio/lead.wav", 45);
       emitWaveformReadyForTest("audio/pad.mp3", 60);
     });
+  });
+
+  it("marks pending external audio imports as failed when the import rejects", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    vi.mocked(desktopApi.importAudioFilesFromBytes).mockRejectedValueOnce(new Error("Import failed in test"));
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTrackListBounds(container);
+    mockTimelinePaneBounds(container);
+
+    const timelinePane = container.querySelector(".lt-timeline-canvas-pane") as HTMLElement | null;
+    expect(timelinePane).toBeTruthy();
+
+    const dataTransfer = createExternalFileDataTransfer([
+      createTestFile("broken.wav", [1, 2, 3], "audio/wav"),
+    ]);
+
+    await act(async () => {
+      fireEvent.dragOver(timelinePane as HTMLElement, { dataTransfer, clientX: 420, clientY: 180 });
+      fireEvent.drop(timelinePane as HTMLElement, { dataTransfer, clientX: 420, clientY: 180 });
+    });
+
+    expect(screen.getByText("broken.wav")).toBeTruthy();
+    expect(await screen.findByText(/Import failed in test/i)).toBeTruthy();
+    expect(useTransportStore.getState().pendingAudioImports[0]?.status).toBe("failed");
   });
 
   it("rejects mixed external drops", async () => {

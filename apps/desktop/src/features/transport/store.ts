@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
 import type { AudioMeterLevel, TransportSnapshot } from "./desktopApi";
+import type { PendingAudioImport, PendingAudioImportStatus } from "./pendingAudioImports";
 
 export type TrackMeterState = {
   leftPeak: number;
@@ -21,9 +22,18 @@ type TransportStore = {
   meters: MeterDictionary;
   playback: TransportSnapshot | null;
   optimisticMix: Record<string, OptimisticMixState>;
+  pendingAudioImports: PendingAudioImport[];
   setMeters: (meters: MeterDictionary) => void;
   setPlaybackState: (playback: TransportSnapshot | null) => void;
   setOptimisticMix: (trackId: string, mix: OptimisticMixState | null) => void;
+  addPendingAudioImports: (imports: PendingAudioImport[]) => void;
+  updatePendingAudioImportStatus: (
+    ids: string[],
+    status: PendingAudioImportStatus,
+    error?: string,
+  ) => void;
+  removePendingAudioImports: (ids: string[]) => void;
+  markPendingAudioImportsFailed: (ids: string[], error: string) => void;
 };
 
 export function meterDictionaryFromLevels(levels: AudioMeterLevel[]): MeterDictionary {
@@ -44,6 +54,7 @@ export const useTransportStore = create<TransportStore>()(
     meters: {},
     playback: null,
     optimisticMix: {},
+    pendingAudioImports: [],
     setMeters: (meters) => {
       set({ meters });
     },
@@ -69,6 +80,61 @@ export const useTransportStore = create<TransportStore>()(
           },
         };
       });
+    },
+    addPendingAudioImports: (imports) => {
+      if (!imports.length) {
+        return;
+      }
+
+      set((state) => ({
+        pendingAudioImports: [...state.pendingAudioImports, ...imports],
+      }));
+    },
+    updatePendingAudioImportStatus: (ids, status, error) => {
+      if (!ids.length) {
+        return;
+      }
+
+      const idSet = new Set(ids);
+      set((state) => ({
+        pendingAudioImports: state.pendingAudioImports.map((item) =>
+          idSet.has(item.id)
+            ? {
+                ...item,
+                status,
+                error,
+              }
+            : item,
+        ),
+      }));
+    },
+    removePendingAudioImports: (ids) => {
+      if (!ids.length) {
+        return;
+      }
+
+      const idSet = new Set(ids);
+      set((state) => ({
+        pendingAudioImports: state.pendingAudioImports.filter((item) => !idSet.has(item.id)),
+      }));
+    },
+    markPendingAudioImportsFailed: (ids, error) => {
+      if (!ids.length) {
+        return;
+      }
+
+      const idSet = new Set(ids);
+      set((state) => ({
+        pendingAudioImports: state.pendingAudioImports.map((item) =>
+          idSet.has(item.id)
+            ? {
+                ...item,
+                status: "failed",
+                error,
+              }
+            : item,
+        ),
+      }));
     },
   })),
 );

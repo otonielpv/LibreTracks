@@ -2,16 +2,15 @@ import { useEffect, useMemo, useRef, type MutableRefObject, type ReactNode, type
 
 import type {
   ActiveVampSummary,
-  ClipSummary,
   PendingJumpSummary,
   SectionMarkerSummary,
   SongRegionSummary,
   TempoMarkerSummary,
   TimeSignatureMarkerSummary,
   SongView,
-  TrackSummary,
   WaveformSummaryDto,
 } from "./desktopApi";
+import type { TimelineClipSummary, TimelineTrackSummary } from "./pendingAudioImports";
 import { InputManager } from "./Renderer/InputManager";
 import {
   drawGridLines,
@@ -67,8 +66,8 @@ type TrackCanvasProps = {
   height: number;
   trackHeight: number;
   song: SongView;
-  visibleTracks: TrackSummary[];
-  clipsByTrack: Record<string, ClipSummary[]>;
+  visibleTracks: TimelineTrackSummary[];
+  clipsByTrack: Record<string, TimelineClipSummary[]>;
   waveformCache: Record<string, WaveformSummaryDto>;
   cameraXRef: MutableRefObject<number>;
   pixelsPerSecond: number;

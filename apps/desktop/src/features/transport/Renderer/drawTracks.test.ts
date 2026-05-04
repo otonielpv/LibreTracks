@@ -154,8 +154,25 @@ describe("drawTrackClipsLayer", () => {
 
     drawTrackClipsLayer(context, createSnapshot(false), viewport);
 
-    expect((context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(([text]) => text === "ANALYZING...")).toBe(true);
+    expect((context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(([text]) => text === "ANALYZING WAVEFORM...")).toBe(true);
     expect((context.drawImage as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+  });
+
+  it("renders the pending import label for optimistic clips", () => {
+    const context = createContextSpy();
+    const snapshot = createSnapshot(false);
+    snapshot.clipsByTrack["track-1"] = [
+      {
+        ...snapshot.clipsByTrack["track-1"][0],
+        isPending: true,
+        pendingStatus: "importing",
+        waveformStatus: "pending",
+      },
+    ];
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    expect((context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(([text]) => text === "IMPORTING...")).toBe(true);
   });
 
   it("renders waveform tiles once analysis is ready", () => {
