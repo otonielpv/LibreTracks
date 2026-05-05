@@ -1,11 +1,8 @@
 use super::*;
 use libretracks_project::load_waveform_summary;
+use memmap2::Mmap;
 use rayon::prelude::*;
 use rtrb::{Consumer, Producer, RingBuffer};
-#[cfg(unix)]
-use std::os::unix::fs::FileExt;
-#[cfg(windows)]
-use std::os::windows::fs::FileExt;
 #[cfg(test)]
 use std::time::Instant;
 use std::{
@@ -32,7 +29,7 @@ const LTAF_MAGIC: &[u8; 4] = b"LTAF";
 const LTAF_VERSION: u32 = 1;
 const LTAF_HEADER_LEN: u64 = 64;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct AudioBufferCacheStats {
     pub cached_buffers: usize,
     pub fully_cached_buffers: usize,
@@ -40,6 +37,9 @@ pub(crate) struct AudioBufferCacheStats {
     pub prepare_queue_len: usize,
     pub ram_cache_used_mb: usize,
     pub disk_cache_used_mb: usize,
+    pub silence_fallback_count: u64,
+    pub last_silence_fallback_position: Option<TimelinePosition>,
+    pub last_silence_fallback_file: Option<String>,
 }
 
 #[derive(Clone, Default)]
@@ -51,6 +51,7 @@ pub(crate) struct AudioBufferCache {
     previous_pitch_entries: Arc<RwLock<HashMap<PathBuf, (i32, Arc<StreamingAudioSource>)>>>,
     seek_readiness_maps: Arc<RwLock<HashMap<SongId, SeekReadinessMap>>>,
     prepare_requests: Arc<RwLock<Vec<PrepareRequest>>>,
+    silence_fallback: Arc<RwLock<SilenceFallbackTelemetry>>,
 }
 
 #[derive(Debug)]
@@ -131,11 +132,18 @@ pub(crate) struct RawRamSource {
 
 #[derive(Debug)]
 pub(crate) struct RawDiskSource {
-    file: Arc<File>,
+    mmap: Arc<Mmap>,
     sample_rate: u32,
     channels: usize,
     frame_count: u64,
-    payload_offset: u64,
+    payload_offset: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+struct SilenceFallbackTelemetry {
+    count: u64,
+    last_position: Option<TimelinePosition>,
+    last_file: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -459,13 +467,14 @@ impl RawDiskSource {
             u32::from_le_bytes(header[12..16].try_into().expect("channel bytes")) as usize;
         let frame_count = u64::from_le_bytes(header[16..24].try_into().expect("frame count bytes"));
         let file = File::open(path).map_err(|error| error.to_string())?;
+        let mmap = unsafe { Mmap::map(&file).map_err(|error| error.to_string())? };
 
         Ok(Self {
-            file: Arc::new(file),
+            mmap: Arc::new(mmap),
             sample_rate: sample_rate.max(1),
             channels: channels.max(1),
             frame_count,
-            payload_offset: LTAF_HEADER_LEN,
+            payload_offset: LTAF_HEADER_LEN as usize,
         })
     }
 
@@ -501,19 +510,20 @@ impl PreparedAudioSource for RawDiskSource {
         }
 
         let frames_to_read = requested_frames.min((self.frame_count - source_frame) as usize);
-        let samples_to_read = frames_to_read * channels;
-        let mut bytes = vec![0_u8; samples_to_read * size_of::<f32>()];
+        let sample_count = frames_to_read * channels;
         let byte_offset = self.payload_offset.saturating_add(
-            source_frame
-                .saturating_mul(channels as u64)
-                .saturating_mul(4),
+            (source_frame as usize)
+                .saturating_mul(channels)
+                .saturating_mul(size_of::<f32>()),
         );
-
-        let Ok(bytes_read) = file_read_at(&self.file, &mut bytes, byte_offset) else {
+        let byte_count = sample_count.saturating_mul(size_of::<f32>());
+        let Some(bytes) = self
+            .mmap
+            .get(byte_offset..byte_offset.saturating_add(byte_count))
+        else {
             return 0;
         };
-        let whole_samples = bytes_read / size_of::<f32>();
-        let frames_read = (whole_samples / channels).min(frames_to_read);
+        let frames_read = (bytes.len() / size_of::<f32>() / channels).min(frames_to_read);
         for sample_index in 0..(frames_read * channels) {
             let byte_index = sample_index * 4;
             output[sample_index] = f32::from_le_bytes(
@@ -647,7 +657,15 @@ impl PreparedAudioCache {
         frame: u64,
     ) -> Option<Arc<dyn PreparedAudioSource>> {
         let states = self.states.try_read().ok()?;
-        let source = match states.get(key)? {
+        let state = states.get(key).or_else(|| {
+            states.iter().find_map(|(candidate_key, state)| {
+                (candidate_key.file_id == key.file_id
+                    && candidate_key.file_hash == key.file_hash
+                    && candidate_key.transpose_semitones == key.transpose_semitones)
+                    .then_some(state)
+            })
+        })?;
+        let source = match state {
             PreparedState::ReadyRam(source) | PreparedState::ReadyDisk(source) => source.clone(),
             PreparedState::Preparing | PreparedState::Missing | PreparedState::Failed(_) => {
                 return None
@@ -826,7 +844,15 @@ impl PreparedAudioCache {
 
     fn state_kind(&self, key: &PreparedAudioKey) -> Option<SeekSourceKind> {
         let states = self.states.try_read().ok()?;
-        match states.get(key)? {
+        let state = states.get(key).or_else(|| {
+            states.iter().find_map(|(candidate_key, state)| {
+                (candidate_key.file_id == key.file_id
+                    && candidate_key.file_hash == key.file_hash
+                    && candidate_key.transpose_semitones == key.transpose_semitones)
+                    .then_some(state)
+            })
+        })?;
+        match state {
             PreparedState::ReadyRam(_) => Some(SeekSourceKind::ExactRam),
             PreparedState::ReadyDisk(_) => Some(SeekSourceKind::ExactDisk),
             PreparedState::Preparing | PreparedState::Missing | PreparedState::Failed(_) => None,
@@ -1023,35 +1049,35 @@ impl AudioBufferCache {
 
         let prepared_entries = missing_paths
             .into_par_iter()
-            .filter_map(
-                |(file_path, waveform_key)| match prepare_audio_source(&file_path) {
-                    Ok(mut source) => {
-                        if let Ok(summary) = load_waveform_summary(song_dir, &waveform_key) {
-                            source.seek_index = summary
-                                .seek_index
-                                .into_iter()
-                                .map(|entry| SeekIndexEntry {
-                                    timestamp: entry.timestamp,
-                                    packet_offset: entry.packet_offset,
-                                })
-                                .collect();
-                        }
-                        Some((file_path, Arc::new(source)))
-                    }
-                    Err(error) => {
-                        eprintln!(
-                            "[libretracks-audio] Skipping missing or invalid file {}: {}",
-                            file_path.display(),
-                            error
-                        );
-                        None
-                    }
-                },
-            )
-            .collect::<Vec<_>>();
+            .map(|(file_path, waveform_key)| {
+                let mut source = prepare_audio_source(&file_path).map_err(|error| {
+                    format!(
+                        "failed to prepare original audio {}: {error}",
+                        file_path.display()
+                    )
+                })?;
+                if let Ok(summary) = load_waveform_summary(song_dir, &waveform_key) {
+                    source.seek_index = summary
+                        .seek_index
+                        .into_iter()
+                        .map(|entry| SeekIndexEntry {
+                            timestamp: entry.timestamp,
+                            packet_offset: entry.packet_offset,
+                        })
+                        .collect();
+                }
+                let original_source = decode_original_to_raw_ram(&source)?;
+                Ok::<_, String>((file_path, Arc::new(source), Arc::new(original_source)))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
-        for (file_path, prepared_source) in prepared_entries {
+        for (file_path, prepared_source, original_source) in prepared_entries {
+            self.insert_original_prepared_source(&file_path, original_source);
             next_entries.insert(file_path, prepared_source);
+        }
+
+        for file_path in next_entries.keys() {
+            self.ensure_original_prepared_source(file_path)?;
         }
 
         let mut entries = self
@@ -1062,6 +1088,44 @@ impl AudioBufferCache {
         self.rebuild_seek_readiness_map(song_dir, song, 0.0);
 
         Ok(())
+    }
+
+    fn ensure_original_prepared_source(&self, file_path: &Path) -> Result<(), String> {
+        let key = PreparedAudioKey {
+            file_id: file_path.to_string_lossy().to_string(),
+            file_hash: file_path.to_string_lossy().to_string(),
+            sample_rate: 48_000,
+            channels: 2,
+            transpose_semitones: 0,
+        };
+        if self.prepared_audio.get_original(&key, 0).is_some() {
+            return Ok(());
+        }
+        let source = self
+            .entries
+            .read()
+            .map_err(|_| "audio buffer cache lock poisoned".to_string())?
+            .get(file_path)
+            .cloned()
+            .ok_or_else(|| format!("audio source is not prepared: {}", file_path.display()))?;
+        let original_source = Arc::new(decode_original_to_raw_ram(&source)?);
+        self.insert_original_prepared_source(file_path, original_source);
+        Ok(())
+    }
+
+    fn insert_original_prepared_source(
+        &self,
+        file_path: &Path,
+        source: Arc<dyn PreparedAudioSource>,
+    ) {
+        let key = PreparedAudioKey {
+            file_id: file_path.to_string_lossy().to_string(),
+            file_hash: file_path.to_string_lossy().to_string(),
+            sample_rate: source.sample_rate(),
+            channels: source.channels(),
+            transpose_semitones: 0,
+        };
+        self.prepared_audio.insert_ready_ram(key, source);
     }
 
     pub(crate) fn get(
@@ -1097,6 +1161,17 @@ impl AudioBufferCache {
             file_path: plan.file_path.clone(),
             transpose_semitones: required_transpose,
         };
+        let prepared_key = PreparedAudioKey {
+            file_id: plan.file_path.to_string_lossy().to_string(),
+            file_hash: plan.file_path.to_string_lossy().to_string(),
+            sample_rate: 48_000,
+            channels: 2,
+            transpose_semitones: required_transpose,
+        };
+        let prepared_decision = self.prepared_audio.get_best_available(&prepared_key, 0);
+        if !matches!(prepared_decision, SeekSourceDecision::Silence) {
+            return prepared_decision;
+        }
         if let Ok(hot_entries) = self.hot_entries.try_read() {
             if let Some(source) = hot_entries.get(&exact_key).cloned() {
                 return SeekSourceDecision::ExactRam(source);
@@ -1156,7 +1231,75 @@ impl AudioBufferCache {
             window_seconds: 30.0,
             priority: PreparePriority::RealtimeCritical,
         });
+        if required_transpose != 0 {
+            self.push_prepare_request(PrepareRequest {
+                song_id: song.id.clone(),
+                position,
+                transpose_semitones: 0,
+                window_seconds: 30.0,
+                priority: PreparePriority::RealtimeCritical,
+            });
+        }
+        let _ = self.prepare_window_now(song_dir, song, position, 0);
+        if required_transpose != 0 {
+            let _ = self.prepare_window_now(song_dir, song, position, required_transpose);
+        }
         self.rebuild_seek_readiness_map(song_dir, song, position);
+    }
+
+    fn prepare_window_now(
+        &self,
+        song_dir: &Path,
+        song: &Song,
+        position: TimelinePosition,
+        transpose_semitones: i32,
+    ) -> Result<(), String> {
+        let Some(plan) = mixer::build_playback_plans(song_dir, song, 48_000)
+            .into_iter()
+            .find(|plan| {
+                let position_frame = seconds_to_frames(position, 48_000);
+                position_frame >= plan.timeline_start_frame
+                    && position_frame < plan.timeline_end_frame()
+            })
+        else {
+            return Ok(());
+        };
+
+        self.ensure_original_prepared_source(&plan.file_path)?;
+        if transpose_semitones == 0 {
+            return Ok(());
+        }
+
+        let exact_key = PreparedAudioKey {
+            file_id: plan.file_path.to_string_lossy().to_string(),
+            file_hash: plan.file_path.to_string_lossy().to_string(),
+            sample_rate: 48_000,
+            channels: 2,
+            transpose_semitones,
+        };
+        if self.prepared_audio.get_exact(&exact_key, 0).is_some() {
+            return Ok(());
+        }
+        let Some(original_source) = self.prepared_audio.get_original(&exact_key, 0) else {
+            return Ok(());
+        };
+        let output_path = std::env::temp_dir().join(format!(
+            "libretracks-runtime-render-{}-{}-{}.ltaf",
+            std::process::id(),
+            sanitize_cache_name(&plan.file_path),
+            transpose_semitones
+        ));
+        let rendered = render_transposed_to_cache(original_source, exact_key.clone(), output_path)?;
+        self.prepared_audio.insert_ready_disk(exact_key, rendered);
+        Ok(())
+    }
+
+    pub(crate) fn record_silence_fallback(&self, position: TimelinePosition, file: String) {
+        if let Ok(mut telemetry) = self.silence_fallback.write() {
+            telemetry.count = telemetry.count.saturating_add(1);
+            telemetry.last_position = Some(position);
+            telemetry.last_file = Some(file);
+        }
     }
 
     pub(crate) fn on_timeline_hover_or_drag(
@@ -1321,6 +1464,11 @@ impl AudioBufferCache {
     }
 
     pub(crate) fn stats(&self) -> AudioBufferCacheStats {
+        let silence_fallback = self
+            .silence_fallback
+            .read()
+            .map(|telemetry| telemetry.clone())
+            .unwrap_or_default();
         self.entries
             .read()
             .map(|entries| AudioBufferCacheStats {
@@ -1334,6 +1482,9 @@ impl AudioBufferCache {
                     .try_read()
                     .map(|entries| entries.len())
                     .unwrap_or_default(),
+                silence_fallback_count: silence_fallback.count,
+                last_silence_fallback_position: silence_fallback.last_position,
+                last_silence_fallback_file: silence_fallback.last_file.clone(),
             })
             .unwrap_or_default()
     }
@@ -1558,10 +1709,6 @@ impl StreamingClipReader {
         }
 
         (left_peak, right_peak)
-    }
-
-    pub(crate) fn suppress_initial_declick(&mut self) {
-        self.declick_frames_remaining = 0;
     }
 }
 
@@ -1955,6 +2102,22 @@ pub(crate) fn prepare_audio_source(file_path: &Path) -> Result<StreamingAudioSou
     })
 }
 
+fn decode_original_to_raw_ram(source: &StreamingAudioSource) -> Result<RawRamSource, String> {
+    let mut decoder = StreamingDecoder::open(source, source.sample_rate, 0.0)?;
+    let channels = source.channels.max(1);
+    let mut samples = Vec::with_capacity(source.frame_count.saturating_mul(channels));
+
+    loop {
+        let chunk = decoder.next_output_chunk(STREAM_WORKER_CHUNK_FRAMES)?;
+        if chunk.is_empty() {
+            break;
+        }
+        samples.extend_from_slice(&chunk);
+    }
+
+    Ok(RawRamSource::new(samples, source.sample_rate, channels))
+}
+
 fn nearest_seek_time(source: &StreamingAudioSource, start_seconds: f64, sample_rate: u32) -> f64 {
     if source.seek_index.is_empty() {
         return start_seconds.max(0.0);
@@ -2037,16 +2200,6 @@ fn transpose_for_position(song: &Song, position_seconds: f64) -> i32 {
         .unwrap_or(0)
 }
 
-#[cfg(windows)]
-fn file_read_at(file: &File, buffer: &mut [u8], offset: u64) -> std::io::Result<usize> {
-    file.seek_read(buffer, offset)
-}
-
-#[cfg(unix)]
-fn file_read_at(file: &File, buffer: &mut [u8], offset: u64) -> std::io::Result<usize> {
-    file.read_at(buffer, offset)
-}
-
 fn write_ltaf_file(
     path: &Path,
     samples: &[f32],
@@ -2094,6 +2247,19 @@ pub(crate) fn resolve_clip_audio_path(song_dir: &Path, file_path: &str) -> PathB
     } else {
         song_dir.join(path)
     }
+}
+
+fn sanitize_cache_name(path: &Path) -> String {
+    path.to_string_lossy()
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

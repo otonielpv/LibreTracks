@@ -6,7 +6,8 @@ const METRONOME_ACCENT_FREQUENCY_HZ: f32 = 1_000.0;
 const METRONOME_BEAT_FREQUENCY_HZ: f32 = 500.0;
 const METRONOME_BEEP_DURATION_SECONDS: f32 = 0.045;
 const METRONOME_PEAK_GAIN: f32 = 0.6;
-const SEEK_DECLICK_FADE_MS: f32 = 2.0;
+const PLAY_FROM_ZERO_FADE_MS: f32 = 2.0;
+const DEFAULT_SEEK_SPLICE_FRAMES: usize = 64;
 
 #[cfg(test)]
 static ZERO_LATENCY_TEST_MODE: std::sync::atomic::AtomicBool =
@@ -52,7 +53,10 @@ pub(crate) struct Mixer {
     next_plan_index: usize,
     plans: Vec<PlaybackClipPlan>,
     active_clips: Vec<MixClipState>,
-    needs_declick: bool,
+    seek_smoother: Option<SeekSpliceSmoother>,
+    recent_output_tail: Option<Vec<f32>>,
+    fade_from_zero: Option<FadeFromZeroSmoother>,
+    mix_scratch: MixScratchBuffers,
     debug_config: telemetry::AudioDebugConfig,
     opened_files: usize,
     track_meter_indices: HashMap<String, usize>,
@@ -81,6 +85,42 @@ pub(crate) struct PendingSourceSwap {
     new_kind: source::SeekSourceKind,
     crossfade_total_frames: usize,
     crossfade_remaining_frames: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TransportTransitionKind {
+    InitialPlay,
+    ResumePlay,
+    ManualTimelineSeek,
+    MusicalJump,
+    DragPreview,
+    Stop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SeekSmoothingMode {
+    None,
+    MicroSplice64,
+    MicroSplice128,
+    FadeInFromZero,
+}
+
+struct SeekSpliceSmoother {
+    old_tail: Vec<f32>,
+    total_frames: usize,
+    remaining_frames: usize,
+}
+
+struct FadeFromZeroSmoother {
+    total_frames: usize,
+    remaining_frames: usize,
+}
+
+#[derive(Default)]
+struct MixScratchBuffers {
+    interleaved: Vec<f32>,
+    old_interleaved: Vec<f32>,
+    new_interleaved: Vec<f32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -240,7 +280,10 @@ impl Mixer {
             next_plan_index: 0,
             plans,
             active_clips: Vec::new(),
-            needs_declick: false,
+            seek_smoother: None,
+            recent_output_tail: None,
+            fade_from_zero: None,
+            mix_scratch: MixScratchBuffers::default(),
             debug_config,
             opened_files: 0,
             track_meter_indices,
@@ -251,7 +294,11 @@ impl Mixer {
             metronome_voice: MetronomeVoice::default(),
         };
         mixer.cached_live_mix = LiveMixSnapshot::from_song(&mixer.song);
-        mixer.seek(mixer.song.clone(), position_seconds);
+        mixer.seek_with_transition(
+            mixer.song.clone(),
+            position_seconds,
+            TransportTransitionKind::InitialPlay,
+        );
         mixer
     }
 
@@ -265,6 +312,15 @@ impl Mixer {
     }
 
     pub(crate) fn seek(&mut self, song: Song, position_seconds: f64) {
+        self.seek_with_transition(song, position_seconds, TransportTransitionKind::MusicalJump);
+    }
+
+    pub(crate) fn seek_with_transition(
+        &mut self,
+        song: Song,
+        position_seconds: f64,
+        transition: TransportTransitionKind,
+    ) {
         let _ = replace_shared_live_mix(&self.live_mix_state, &song);
         self.song = song;
         self.cached_live_mix = LiveMixSnapshot::from_song(&self.song);
@@ -276,7 +332,7 @@ impl Mixer {
         self.next_plan_index = self
             .plans
             .partition_point(|plan| plan.timeline_end_frame() <= self.timeline_cursor_frame);
-        self.needs_declick = true;
+        self.configure_seek_smoothing(transition);
         self.active_clips.clear();
         self.opened_files = 0;
         self.activate_due_clips(
@@ -342,6 +398,7 @@ impl Mixer {
                     target_gain,
                     target_pan,
                     &output_routing,
+                    &mut self.mix_scratch,
                 );
 
                 if let Some(index) = track_meters.as_ref().and_then(|_| {
@@ -401,7 +458,9 @@ impl Mixer {
         for (sample, direct_sample) in mixed.iter_mut().zip(direct_mixed) {
             *sample += direct_sample;
         }
-        self.apply_seek_declick_fade_in(&mut mixed, block_frames);
+        self.apply_seek_splice_crossfade(&mut mixed, block_frames);
+        self.apply_fade_from_zero(&mut mixed, block_frames);
+        self.capture_recent_output_tail(&mixed, block_frames);
         self.timeline_cursor_frame += block_frames as u64;
 
         mixed
@@ -459,24 +518,10 @@ impl Mixer {
             }
 
             if zero_latency_mode_enabled() {
-                let current_gain = resolve_clip_runtime_gain(
-                    &self.cached_live_mix.tracks,
-                    &plan.track_id,
-                    plan.clip_gain,
-                    self.cached_live_mix.is_any_track_soloed,
+                self.audio_buffers.record_silence_fallback(
+                    activation_start_frame as f64 / f64::from(self.output_sample_rate.max(1)),
+                    plan.file_path.to_string_lossy().to_string(),
                 );
-                let current_pan =
-                    resolve_track_runtime_pan(&self.cached_live_mix.tracks, &plan.track_id);
-                self.active_clips.push(MixClipState {
-                    plan,
-                    reader: None,
-                    prepared_source: Some(self.silent_prepared_source()),
-                    source_kind: Some(source::SeekSourceKind::Silence),
-                    source_key: Some(prepared_key),
-                    pending_swap: None,
-                    current_gain,
-                    current_pan,
-                });
                 continue;
             }
 
@@ -490,10 +535,7 @@ impl Mixer {
                 &self.audio_buffers,
                 activation_start_frame,
             ) {
-                Ok(mut reader) => {
-                    if self.needs_declick {
-                        reader.suppress_initial_declick();
-                    }
+                Ok(reader) => {
                     let current_gain = resolve_clip_runtime_gain(
                         &self.cached_live_mix.tracks,
                         &plan.track_id,
@@ -524,7 +566,6 @@ impl Mixer {
 
     fn refresh_active_clips_after_song_update(&mut self) {
         let current_frame = self.timeline_cursor_frame;
-        let refreshed_song = self.song.clone();
         let plans = self.plans.clone();
         let live_mix_state = &self.cached_live_mix.tracks;
         let is_any_track_soloed = self.cached_live_mix.is_any_track_soloed;
@@ -532,7 +573,6 @@ impl Mixer {
         let output_channels = self.output_channels.max(1);
         let audio_buffers = self.audio_buffers.clone();
         let prepared_cache = self.audio_buffers.prepared_audio();
-        let silent_source = self.silent_prepared_source();
         let mut refreshed_clips = Vec::with_capacity(self.active_clips.len());
 
         for mut clip_state in self.active_clips.drain(..) {
@@ -570,11 +610,10 @@ impl Mixer {
                     clip_state.source_key = Some(prepared_key);
                     clip_state.pending_swap = None;
                 } else if zero_latency_mode_enabled() {
-                    clip_state.reader = None;
-                    clip_state.prepared_source = Some(silent_source.clone());
-                    clip_state.source_kind = Some(source::SeekSourceKind::Silence);
-                    clip_state.source_key = Some(prepared_key);
-                    clip_state.pending_swap = None;
+                    self.audio_buffers.record_silence_fallback(
+                        current_frame as f64 / f64::from(output_sample_rate.max(1)),
+                        next_plan.file_path.to_string_lossy().to_string(),
+                    );
                 } else if let Ok(reader) = source::StreamingClipReader::open(
                     &next_plan,
                     output_sample_rate,
@@ -598,20 +637,6 @@ impl Mixer {
             }
 
             refreshed_clips.push(clip_state);
-        }
-
-        if refreshed_clips.len() != self.active_clips.len() {
-            self.needs_declick = true;
-        } else if refreshed_clips.iter().any(|clip_state| {
-            clip_state.plan.transpose_semitones
-                != refreshed_song
-                    .clips
-                    .iter()
-                    .find(|clip| clip.id == clip_state.plan.clip_id)
-                    .map(|_| clip_state.plan.transpose_semitones)
-                    .unwrap_or(clip_state.plan.transpose_semitones)
-        }) {
-            self.needs_declick = true;
         }
 
         self.active_clips = refreshed_clips;
@@ -660,12 +685,6 @@ impl Mixer {
             return None;
         }
         Some((prepared_cache.source_or_silence(&decision), decision.kind()))
-    }
-
-    fn silent_prepared_source(&self) -> Arc<dyn source::PreparedAudioSource> {
-        self.audio_buffers
-            .prepared_audio()
-            .source_or_silence(&source::SeekSourceDecision::Silence)
     }
 
     fn empty_track_meters(&self) -> Vec<AudioMeterLevel> {
@@ -843,28 +862,161 @@ impl Mixer {
         }
     }
 
-    fn apply_seek_declick_fade_in(&mut self, mixed: &mut [f32], block_frames: usize) {
-        if !self.needs_declick || block_frames == 0 {
+    fn configure_seek_smoothing(&mut self, transition: TransportTransitionKind) {
+        self.seek_smoother = None;
+        self.fade_from_zero = None;
+
+        match smoothing_mode_for_transition(transition) {
+            SeekSmoothingMode::None => {}
+            SeekSmoothingMode::MicroSplice64 => {
+                self.seek_smoother = self
+                    .recent_output_tail
+                    .as_ref()
+                    .map(|tail| SeekSpliceSmoother::new(tail.clone(), 64));
+            }
+            SeekSmoothingMode::MicroSplice128 => {
+                self.seek_smoother = self
+                    .recent_output_tail
+                    .as_ref()
+                    .map(|tail| SeekSpliceSmoother::new(tail.clone(), 128));
+            }
+            SeekSmoothingMode::FadeInFromZero => {
+                let fade_frames = ((PLAY_FROM_ZERO_FADE_MS / 1000.0)
+                    * self.output_sample_rate as f32)
+                    .round() as usize;
+                self.fade_from_zero = Some(FadeFromZeroSmoother::new(fade_frames.max(1)));
+            }
+        }
+    }
+
+    fn apply_seek_splice_crossfade(&mut self, mixed: &mut [f32], block_frames: usize) {
+        let Some(smoother) = self.seek_smoother.as_mut() else {
+            return;
+        };
+        if block_frames == 0 {
             return;
         }
 
-        let fade_frames =
-            ((SEEK_DECLICK_FADE_MS / 1000.0) * self.output_sample_rate as f32).round() as usize;
-        let fade_frames = fade_frames.max(1);
-        let frames_to_process = fade_frames.min(block_frames);
         let output_channels = self.output_channels.max(1);
+        let old_tail_frames = smoother.old_tail.len() / output_channels;
+        let frames_to_process = smoother
+            .remaining_frames
+            .min(block_frames)
+            .min(old_tail_frames);
 
         for frame_idx in 0..frames_to_process {
-            let x = frame_idx as f32 / fade_frames as f32;
-            let fade_in = x * x * (3.0 - (2.0 * x));
+            let completed_frames = smoother
+                .total_frames
+                .saturating_sub(smoother.remaining_frames)
+                .saturating_add(frame_idx);
+            let progress =
+                (completed_frames as f32 / smoother.total_frames.max(1) as f32).clamp(0.0, 1.0);
+            let fade_in = (progress * std::f32::consts::FRAC_PI_2).sin();
+            let fade_out = ((1.0 - progress) * std::f32::consts::FRAC_PI_2).sin();
             let base_idx = frame_idx * output_channels;
 
+            for ch in 0..output_channels {
+                let old_sample = smoother.old_tail[base_idx + ch];
+                mixed[base_idx + ch] = old_sample * fade_out + mixed[base_idx + ch] * fade_in;
+            }
+        }
+
+        smoother.remaining_frames = smoother.remaining_frames.saturating_sub(frames_to_process);
+        if smoother.remaining_frames == 0 {
+            self.seek_smoother = None;
+        }
+    }
+
+    fn apply_fade_from_zero(&mut self, mixed: &mut [f32], block_frames: usize) {
+        let Some(smoother) = self.fade_from_zero.as_mut() else {
+            return;
+        };
+        if block_frames == 0 {
+            return;
+        }
+
+        let output_channels = self.output_channels.max(1);
+        let frames_to_process = smoother.remaining_frames.min(block_frames);
+        for frame_idx in 0..frames_to_process {
+            let completed_frames = smoother
+                .total_frames
+                .saturating_sub(smoother.remaining_frames)
+                .saturating_add(frame_idx);
+            let x = completed_frames as f32 / smoother.total_frames.max(1) as f32;
+            let fade_in = x * x * (3.0 - (2.0 * x));
+            let base_idx = frame_idx * output_channels;
             for ch in 0..output_channels {
                 mixed[base_idx + ch] *= fade_in;
             }
         }
 
-        self.needs_declick = false;
+        smoother.remaining_frames = smoother.remaining_frames.saturating_sub(frames_to_process);
+        if smoother.remaining_frames == 0 {
+            self.fade_from_zero = None;
+        }
+    }
+
+    fn capture_recent_output_tail(&mut self, mixed: &[f32], block_frames: usize) {
+        let output_channels = self.output_channels.max(1);
+        let tail_frames = DEFAULT_SEEK_SPLICE_FRAMES.min(block_frames);
+        if tail_frames == 0 || mixed.is_empty() {
+            return;
+        }
+        let sample_count = tail_frames * output_channels;
+        let start = mixed.len().saturating_sub(sample_count);
+        let tail = self.recent_output_tail.get_or_insert_with(Vec::new);
+        tail.clear();
+        tail.extend_from_slice(&mixed[start..]);
+    }
+}
+
+impl SeekSpliceSmoother {
+    fn new(old_tail: Vec<f32>, total_frames: usize) -> Self {
+        Self {
+            old_tail,
+            total_frames: total_frames.max(1),
+            remaining_frames: total_frames.max(1),
+        }
+    }
+}
+
+impl FadeFromZeroSmoother {
+    fn new(total_frames: usize) -> Self {
+        Self {
+            total_frames: total_frames.max(1),
+            remaining_frames: total_frames.max(1),
+        }
+    }
+}
+
+pub(crate) fn smoothing_mode_for_transition(
+    transition: TransportTransitionKind,
+) -> SeekSmoothingMode {
+    match transition {
+        TransportTransitionKind::InitialPlay | TransportTransitionKind::ResumePlay => {
+            SeekSmoothingMode::FadeInFromZero
+        }
+        TransportTransitionKind::ManualTimelineSeek => SeekSmoothingMode::MicroSplice128,
+        TransportTransitionKind::MusicalJump => SeekSmoothingMode::MicroSplice64,
+        TransportTransitionKind::DragPreview | TransportTransitionKind::Stop => {
+            SeekSmoothingMode::None
+        }
+    }
+}
+
+impl From<PlaybackStartReason> for TransportTransitionKind {
+    fn from(reason: PlaybackStartReason) -> Self {
+        match reason {
+            PlaybackStartReason::InitialPlay => Self::InitialPlay,
+            PlaybackStartReason::ResumePlay => Self::ResumePlay,
+            PlaybackStartReason::Seek | PlaybackStartReason::TimelineWindow => {
+                Self::ManualTimelineSeek
+            }
+            PlaybackStartReason::ImmediateJump => Self::MusicalJump,
+            PlaybackStartReason::StructureRebuild | PlaybackStartReason::TransportResync => {
+                Self::MusicalJump
+            }
+        }
     }
 }
 
@@ -1035,6 +1187,7 @@ impl MixClipState {
         target_gain: f32,
         target_pan: f32,
         output_routing: &[usize],
+        scratch: &mut MixScratchBuffers,
     ) -> (f32, f32) {
         let start_gain = self.current_gain;
         let start_pan = self.current_pan;
@@ -1048,21 +1201,25 @@ impl MixClipState {
                 output_sample_rate,
                 source.sample_rate(),
             );
-            let mut interleaved = vec![0.0_f32; frame_count * source_channels];
+            let sample_count = frame_count * source_channels;
+            scratch.interleaved.resize(sample_count, 0.0);
+            scratch.interleaved[..sample_count].fill(0.0);
             let mut completed_swap: Option<(
                 Arc<dyn source::PreparedAudioSource>,
                 source::SeekSourceKind,
             )> = None;
             let frames_read = if let Some(swap) = self.pending_swap.as_mut() {
                 let _old_kind = swap.old_kind;
-                let mut old_interleaved = vec![0.0_f32; frame_count * source_channels];
-                let mut new_interleaved = vec![0.0_f32; frame_count * source_channels];
+                scratch.old_interleaved.resize(sample_count, 0.0);
+                scratch.new_interleaved.resize(sample_count, 0.0);
+                scratch.old_interleaved[..sample_count].fill(0.0);
+                scratch.new_interleaved[..sample_count].fill(0.0);
                 let old_frames = swap
                     .old_source
-                    .read_interleaved_at(source_start_frame, &mut old_interleaved);
+                    .read_interleaved_at(source_start_frame, &mut scratch.old_interleaved);
                 let new_frames = swap
                     .new_source
-                    .read_interleaved_at(source_start_frame, &mut new_interleaved);
+                    .read_interleaved_at(source_start_frame, &mut scratch.new_interleaved);
                 let frames = old_frames.max(new_frames);
                 for frame in 0..frames {
                     let remaining = swap.crossfade_remaining_frames.saturating_sub(frame);
@@ -1073,8 +1230,8 @@ impl MixClipState {
                     let fade_out = ((1.0 - progress) * std::f32::consts::FRAC_PI_2).sin();
                     for channel in 0..source_channels {
                         let index = frame * source_channels + channel;
-                        interleaved[index] = (old_interleaved[index] * fade_out)
-                            + (new_interleaved[index] * fade_in);
+                        scratch.interleaved[index] = (scratch.old_interleaved[index] * fade_out)
+                            + (scratch.new_interleaved[index] * fade_in);
                     }
                 }
                 swap.crossfade_remaining_frames =
@@ -1084,7 +1241,7 @@ impl MixClipState {
                 }
                 frames
             } else {
-                source.read_interleaved_at(source_start_frame, &mut interleaved)
+                source.read_interleaved_at(source_start_frame, &mut scratch.interleaved)
             };
             if let Some((new_source, new_kind)) = completed_swap {
                 self.prepared_source = Some(new_source);
@@ -1102,9 +1259,9 @@ impl MixClipState {
                 let edge_gain = self.plan.edge_gain(clip_frame_position);
                 let final_gain = dynamic_gain * edge_gain;
                 let sample_base = frame_offset * source_channels;
-                let left_input = interleaved[sample_base];
+                let left_input = scratch.interleaved[sample_base];
                 let right_input = if source_channels > 1 {
-                    interleaved[sample_base + 1]
+                    scratch.interleaved[sample_base + 1]
                 } else {
                     left_input
                 };

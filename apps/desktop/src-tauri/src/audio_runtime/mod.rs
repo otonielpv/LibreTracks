@@ -180,11 +180,13 @@ enum ReaderCommand {
     Play {
         song: Song,
         position_seconds: f64,
+        reason: PlaybackStartReason,
         generation: u64,
     },
     Seek {
         song: Song,
         position_seconds: f64,
+        reason: PlaybackStartReason,
         generation: u64,
     },
     Stop {
@@ -234,13 +236,14 @@ impl AudioRuntime {
         song_dir: &Path,
         song: &Song,
         position_seconds: f64,
+        reason: PlaybackStartReason,
         debug_config: AudioDebugConfig,
     ) -> Result<RestartReport, String> {
         let started_at = Instant::now();
         let scheduled_clips = scheduled_clip_count(song, position_seconds);
         let cache_stats = if let Some(session) = self.session.as_mut() {
             if session.song_dir == song_dir {
-                session.play(song.clone(), position_seconds)?;
+                session.play(song.clone(), position_seconds, reason)?;
                 session.cache_stats()
             } else {
                 let old_session = self.session.take();
@@ -302,9 +305,14 @@ impl AudioRuntime {
         })
     }
 
-    fn seek(&mut self, song: &Song, position_seconds: f64) -> Result<SeekReport, String> {
+    fn seek(
+        &mut self,
+        song: &Song,
+        position_seconds: f64,
+        reason: PlaybackStartReason,
+    ) -> Result<SeekReport, String> {
         match self.session.as_mut() {
-            Some(session) => session.seek(song.clone(), position_seconds),
+            Some(session) => session.seek(song.clone(), position_seconds, reason),
             None => Ok(SeekReport {
                 active_sinks: 0,
                 far_seek: FarSeekTelemetry {
@@ -542,6 +550,12 @@ impl AudioController {
             .find(|region| region.id == region_id)
             .cloned()
             .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        self.audio_buffers.record_recent_seek_and_reprioritize(
+            &song_dir,
+            &song,
+            region.start_seconds,
+            region.transpose_semitones,
+        );
 
         let render_live_mix_state = Arc::new(RwLock::new(HashMap::new()));
         let render_app_handle = Arc::new(RwLock::new(None));
@@ -727,7 +741,12 @@ impl PlaybackSession {
         Ok(false)
     }
 
-    fn seek(&mut self, song: Song, position_seconds: f64) -> Result<SeekReport, String> {
+    fn seek(
+        &mut self,
+        song: Song,
+        position_seconds: f64,
+        reason: PlaybackStartReason,
+    ) -> Result<SeekReport, String> {
         let required_transpose = transpose_for_song_position(&song, position_seconds);
         let decision = self.audio_buffers.get_best_source_for_seek(
             &self.song_dir,
@@ -765,6 +784,7 @@ impl PlaybackSession {
                 .send(ReaderCommand::Seek {
                     song,
                     position_seconds,
+                    reason,
                     generation,
                 })
                 .map_err(|_| "disk reader thread is unavailable".to_string())?;
@@ -780,7 +800,12 @@ impl PlaybackSession {
         })
     }
 
-    fn play(&mut self, song: Song, position_seconds: f64) -> Result<bool, String> {
+    fn play(
+        &mut self,
+        song: Song,
+        position_seconds: f64,
+        reason: PlaybackStartReason,
+    ) -> Result<bool, String> {
         let generation = self
             .seek_generation
             .fetch_add(1, Ordering::AcqRel)
@@ -791,6 +816,7 @@ impl PlaybackSession {
                 .send(ReaderCommand::Play {
                     song,
                     position_seconds,
+                    reason,
                     generation,
                 })
                 .map_err(|_| "disk reader thread is unavailable".to_string())?;
@@ -881,7 +907,7 @@ fn run_audio_thread(
                     &live_mix_state,
                     &audio_settings,
                 )
-                .restart(&song_dir, &song, position_seconds, debug_config)
+                .restart(&song_dir, &song, position_seconds, reason, debug_config)
                 .map(|report| {
                     debug_state.record_restart(
                         reason,
@@ -912,7 +938,7 @@ fn run_audio_thread(
                     &live_mix_state,
                     &audio_settings,
                 )
-                .seek(&song, position_seconds)
+                .seek(&song, position_seconds, reason)
                 .map(|report| {
                     debug_state.record_seek(
                         reason,
@@ -1642,6 +1668,9 @@ mod tests {
                     prepare_queue_len: 0,
                     ram_cache_used_mb: 0,
                     disk_cache_used_mb: 0,
+                    silence_fallback_count: 0,
+                    last_silence_fallback_position: None,
+                    last_silence_fallback_file: None,
                 },
             },
         );
@@ -1716,6 +1745,9 @@ mod tests {
                     prepare_queue_len: 0,
                     ram_cache_used_mb: 0,
                     disk_cache_used_mb: 0,
+                    silence_fallback_count: 0,
+                    last_silence_fallback_position: None,
+                    last_silence_fallback_file: None,
                 },
             },
         );
@@ -2560,17 +2592,35 @@ mod tests {
     }
 
     #[test]
-    fn mixer_seek_declick_fades_in_from_zero_without_last_output_frame() {
+    fn musical_seek_splices_previous_tail_instead_of_fading_from_zero() {
         let song = demo_song();
         let song_dir = PathBuf::from("song");
         let cache = AudioBufferCache::default();
-        cache.insert_for_test(
-            song_dir.join("audio/intro.wav"),
-            SharedAudioSource::from_preloaded(vec![0.75; 48_000 * 5], 48_000, 1, true),
+        let intro_path = song_dir.join("audio/intro.wav");
+        let late_path = song_dir.join("audio/late.wav");
+        cache.insert_prepared_ram_for_test(
+            source::PreparedAudioKey {
+                file_id: intro_path.to_string_lossy().to_string(),
+                file_hash: intro_path.to_string_lossy().to_string(),
+                sample_rate: 48_000,
+                channels: 1,
+                transpose_semitones: 0,
+            },
+            Arc::new(source::RawRamSource::new(vec![0.75; 48_000 * 5], 48_000, 1)),
         );
-        cache.insert_for_test(
-            song_dir.join("audio/late.wav"),
-            SharedAudioSource::from_preloaded(vec![-0.25; 48_000 * 5], 48_000, 1, true),
+        cache.insert_prepared_ram_for_test(
+            source::PreparedAudioKey {
+                file_id: late_path.to_string_lossy().to_string(),
+                file_hash: late_path.to_string_lossy().to_string(),
+                sample_rate: 48_000,
+                channels: 1,
+                transpose_semitones: 0,
+            },
+            Arc::new(source::RawRamSource::new(
+                vec![-0.25; 48_000 * 5],
+                48_000,
+                1,
+            )),
         );
 
         let mut mixer = Mixer::new(
@@ -2590,14 +2640,54 @@ mod tests {
             cache,
         );
 
-        let _first_block = mixer.render_next_block(64);
+        let _first_block = mixer.render_next_block(192);
 
         mixer.seek(song, 10.0);
-        let faded_block = mixer.render_next_block(64);
+        let spliced_block = mixer.render_next_block(64);
 
-        assert!(faded_block[0].abs() < 0.000_001);
-        assert!(faded_block[1] < faded_block[0]);
-        assert!(faded_block[63] < faded_block[1]);
+        assert!(spliced_block[0] > 0.24);
+        assert!(spliced_block[1] > 0.23);
+        assert!(spliced_block[63] < -0.07);
+    }
+
+    #[test]
+    fn initial_play_still_fades_from_zero() {
+        let song = demo_song();
+        let song_dir = PathBuf::from("song");
+        let cache = AudioBufferCache::default();
+        let intro_path = song_dir.join("audio/intro.wav");
+        cache.insert_prepared_ram_for_test(
+            source::PreparedAudioKey {
+                file_id: intro_path.to_string_lossy().to_string(),
+                file_hash: intro_path.to_string_lossy().to_string(),
+                sample_rate: 48_000,
+                channels: 1,
+                transpose_semitones: 0,
+            },
+            Arc::new(source::RawRamSource::new(vec![0.75; 48_000 * 5], 48_000, 1)),
+        );
+
+        let mut mixer = Mixer::new(
+            song_dir,
+            song.clone(),
+            0.0,
+            48_000,
+            1,
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+            shared_mix_state(&song),
+            Arc::new(RwLock::new(AppSettings::default())),
+            AudioDebugConfig {
+                enabled: false,
+                log_commands: false,
+            },
+            cache,
+        );
+
+        let block = mixer.render_next_block(64);
+
+        assert!(block[0].abs() < 0.000_001);
+        assert!(block[1] > block[0]);
     }
 
     #[test]
@@ -2704,10 +2794,11 @@ mod tests {
     }
 
     #[test]
-    fn zero_latency_mode_uses_silence_instead_of_streaming_reader_when_unprepared() {
+    fn zero_latency_mode_counts_silence_fallback_as_preparation_failure() {
         set_zero_latency_test_mode(true);
         let song = demo_song();
         let song_dir = PathBuf::from("song");
+        let cache = AudioBufferCache::default();
         let mut mixer = Mixer::new(
             song_dir,
             song.clone(),
@@ -2722,15 +2813,12 @@ mod tests {
                 enabled: false,
                 log_commands: false,
             },
-            AudioBufferCache::default(),
+            cache.clone(),
         );
         set_zero_latency_test_mode(false);
 
-        assert_eq!(
-            mixer.active_clips()[0].source_kind(),
-            Some(source::SeekSourceKind::Silence)
-        );
-        assert_eq!(mixer.active_clips()[0].reader_current_frame(), 0);
+        assert!(mixer.active_clips().is_empty());
+        assert_eq!(cache.stats().silence_fallback_count, 1);
         let block = mixer.render_next_block(64);
         assert!(block.iter().all(|sample| sample.abs() <= GAIN_EPSILON));
     }
@@ -2850,6 +2938,7 @@ mod tests {
             .send(ReaderCommand::Play {
                 song,
                 position_seconds: 1.0,
+                reason: PlaybackStartReason::ResumePlay,
                 generation: 1,
             })
             .expect("play command should send");
@@ -2937,7 +3026,7 @@ mod tests {
         };
 
         let seek_report = session
-            .seek(song, 8.0)
+            .seek(song, 8.0, PlaybackStartReason::Seek)
             .expect("seek should succeed on null backend");
 
         assert_eq!(seek_report.active_sinks, 1);
@@ -3013,7 +3102,7 @@ mod tests {
         };
 
         let report = session
-            .seek(song, 11.0)
+            .seek(song, 11.0, PlaybackStartReason::ImmediateJump)
             .expect("far seek should schedule preparation");
         let requests = session.audio_buffers.prepare_requests_for_test();
 
@@ -3022,7 +3111,70 @@ mod tests {
             requests[0].priority,
             source::PreparePriority::RealtimeCritical
         );
-        assert_eq!(requests[0].transpose_semitones, 4);
+        assert!(requests
+            .iter()
+            .any(|request| request.transpose_semitones == 4));
+        assert!(requests
+            .iter()
+            .any(|request| request.transpose_semitones == 0));
+    }
+
+    #[test]
+    fn replace_song_buffers_prepares_original_sources_for_active_song() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = root.path().join("song");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        write_counting_test_wav(&song_dir.join("audio/intro.wav"), 48_000, 48_000);
+        write_counting_test_wav(&song_dir.join("audio/late.wav"), 48_000, 48_000);
+        let song = demo_song();
+        let cache = AudioBufferCache::default();
+
+        cache
+            .replace_song_buffers(&song_dir, &song)
+            .expect("song buffers should prepare");
+
+        for clip in &song.clips {
+            let file_path = song_dir.join(&clip.file_path);
+            let key = source::PreparedAudioKey {
+                file_id: file_path.to_string_lossy().to_string(),
+                file_hash: file_path.to_string_lossy().to_string(),
+                sample_rate: 48_000,
+                channels: 2,
+                transpose_semitones: 0,
+            };
+            assert!(
+                cache.prepared_audio().get_original(&key, 0).is_some(),
+                "missing original prepared source for {}",
+                file_path.display()
+            );
+        }
+    }
+
+    #[test]
+    fn urgent_seek_prepares_original_and_exact_runtime_sources() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir = root.path().join("song");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        write_counting_test_wav(&song_dir.join("audio/intro.wav"), 48_000, 48_000);
+        write_counting_test_wav(&song_dir.join("audio/late.wav"), 48_000, 48_000);
+        let song = transposed_far_seek_song();
+        let cache = AudioBufferCache::default();
+        cache
+            .replace_song_buffers(&song_dir, &song)
+            .expect("song buffers should prepare");
+
+        cache.record_recent_seek_and_reprioritize(&song_dir, &song, 11.0, 4);
+
+        let late_path = song_dir.join("audio/late.wav");
+        let exact_key = source::PreparedAudioKey {
+            file_id: late_path.to_string_lossy().to_string(),
+            file_hash: late_path.to_string_lossy().to_string(),
+            sample_rate: 48_000,
+            channels: 2,
+            transpose_semitones: 4,
+        };
+        assert!(cache.prepared_audio().get_original(&exact_key, 0).is_some());
+        assert!(cache.prepared_audio().get_exact(&exact_key, 0).is_some());
     }
 
     #[test]
@@ -3051,17 +3203,35 @@ mod tests {
     }
 
     #[test]
-    fn exact_source_swap_uses_seek_fade_in_not_last_output_frame() {
+    fn first_output_frame_after_musical_seek_is_not_forced_to_zero() {
         let song = demo_song();
         let song_dir = PathBuf::from("song");
         let cache = AudioBufferCache::default();
-        cache.insert_for_test(
-            song_dir.join("audio/intro.wav"),
-            SharedAudioSource::from_preloaded(vec![0.75; 48_000 * 5], 48_000, 1, true),
+        let intro_path = song_dir.join("audio/intro.wav");
+        let late_path = song_dir.join("audio/late.wav");
+        cache.insert_prepared_ram_for_test(
+            source::PreparedAudioKey {
+                file_id: intro_path.to_string_lossy().to_string(),
+                file_hash: intro_path.to_string_lossy().to_string(),
+                sample_rate: 48_000,
+                channels: 1,
+                transpose_semitones: 0,
+            },
+            Arc::new(source::RawRamSource::new(vec![0.75; 48_000 * 5], 48_000, 1)),
         );
-        cache.insert_for_test(
-            song_dir.join("audio/late.wav"),
-            SharedAudioSource::from_preloaded(vec![-0.25; 48_000 * 5], 48_000, 1, true),
+        cache.insert_prepared_ram_for_test(
+            source::PreparedAudioKey {
+                file_id: late_path.to_string_lossy().to_string(),
+                file_hash: late_path.to_string_lossy().to_string(),
+                sample_rate: 48_000,
+                channels: 1,
+                transpose_semitones: 0,
+            },
+            Arc::new(source::RawRamSource::new(
+                vec![-0.25; 48_000 * 5],
+                48_000,
+                1,
+            )),
         );
 
         let mut mixer = Mixer::new(
@@ -3081,12 +3251,12 @@ mod tests {
             cache,
         );
 
-        let _first_block = mixer.render_next_block(64);
+        let _first_block = mixer.render_next_block(192);
         mixer.seek(song, 10.0);
-        let faded_block = mixer.render_next_block(64);
+        let spliced_block = mixer.render_next_block(64);
 
-        assert!(faded_block[0].abs() < 0.000_001);
-        assert!(faded_block[1] < faded_block[0]);
+        assert!(spliced_block[0].abs() > 0.08);
+        assert!(spliced_block.iter().any(|sample| *sample < -0.07));
     }
 
     #[test]

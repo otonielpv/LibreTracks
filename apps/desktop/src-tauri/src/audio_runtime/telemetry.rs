@@ -66,6 +66,9 @@ pub(crate) struct AudioRuntimeStateSummary {
     pub prepare_active_tasks: usize,
     pub prepare_cancelled_tasks: usize,
     pub source_swap_count: u64,
+    pub silence_fallback_count: u64,
+    pub last_silence_fallback_position: Option<f64>,
+    pub last_silence_fallback_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -150,6 +153,9 @@ impl Default for AudioRuntimeStateSummary {
             prepare_active_tasks: 0,
             prepare_cancelled_tasks: 0,
             source_swap_count: 0,
+            silence_fallback_count: 0,
+            last_silence_fallback_position: None,
+            last_silence_fallback_file: None,
         }
     }
 }
@@ -215,6 +221,11 @@ impl AudioDebugState {
         self.runtime_state.prepare_queue_len = report.cache_stats.prepare_queue_len;
         self.runtime_state.ram_cache_used_mb = report.cache_stats.ram_cache_used_mb;
         self.runtime_state.disk_cache_used_mb = report.cache_stats.disk_cache_used_mb;
+        self.runtime_state.silence_fallback_count = report.cache_stats.silence_fallback_count;
+        self.runtime_state.last_silence_fallback_position =
+            report.cache_stats.last_silence_fallback_position;
+        self.runtime_state.last_silence_fallback_file =
+            report.cache_stats.last_silence_fallback_file.clone();
         self.playback_anchor_position_seconds = Some(position_seconds.max(0.0));
         self.playback_anchor_started_at = Some(Instant::now());
         self.playback_song_duration_seconds = Some(song_duration_seconds.max(0.0));

@@ -12,6 +12,7 @@ libretracks-audio = { path = "../../../crates/libretracks-audio" }
 libretracks-project = { path = "../../../crates/libretracks-project" }
 libretracks-remote = { path = "../../../crates/libretracks-remote" }
 midir = "0.9"
+memmap2 = "0.9"
 rtrb = "0.3"
 rfd = "0.15"
 rayon = "1.10"

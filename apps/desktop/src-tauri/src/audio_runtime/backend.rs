@@ -175,9 +175,11 @@ impl DiskReaderState {
                 ReaderCommand::Play {
                     song,
                     position_seconds,
+                    reason,
                     generation,
                 } => {
-                    self.mixer.seek(song, position_seconds);
+                    self.mixer
+                        .seek_with_transition(song, position_seconds, reason.into());
                     self.mixer.start_master_fade(1.0, 0.0);
                     self.current_generation = generation;
                     self.is_running = true;
@@ -186,9 +188,11 @@ impl DiskReaderState {
                 ReaderCommand::Seek {
                     song,
                     position_seconds,
+                    reason,
                     generation,
                 } => {
-                    self.mixer.seek(song, position_seconds);
+                    self.mixer
+                        .seek_with_transition(song, position_seconds, reason.into());
                     self.current_generation = generation;
                     self.is_running = true;
                     self.stop_after_master_fade = false;
