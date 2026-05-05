@@ -1,5 +1,11 @@
 import type { DragEvent as ReactDragEvent } from "react";
 
+import {
+  clamp,
+  screenXToSeconds,
+  secondsToScreenX,
+} from "./timelineMath";
+
 export const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set(["wav", "mp3", "flac", "ogg", "aiff", "aif", "m4a"]);
@@ -9,7 +15,65 @@ export type ExternalDropKind = "package" | "audio" | "mixed" | "unsupported" | "
 export type ExternalDropPreview = {
   kind: ExternalDropKind;
   seconds: number;
+  previewLeftPx?: number;
+  previewClientX?: number;
+  rawSeconds?: number;
+  snappedSeconds?: number;
+  snapApplied?: boolean;
 };
+
+export function resolveExternalDropGuideLeft(
+  preview: ExternalDropPreview,
+  trackLayersBounds: Pick<DOMRect, "left"> | null,
+  fallbackLeft: number,
+) {
+  if (preview.snapApplied) {
+    return Math.round(fallbackLeft);
+  }
+
+  return preview.previewClientX != null && trackLayersBounds
+    ? preview.previewClientX - trackLayersBounds.left
+    : preview.previewLeftPx ?? fallbackLeft;
+}
+
+export function buildTimelineDropPreviewGeometry(args: {
+  clientX: number;
+  viewportLeft: number;
+  viewportWidth: number;
+  cameraX: number;
+  pixelsPerSecond: number;
+  snappedSeconds: number;
+  snapEnabled: boolean;
+}) {
+  const viewportX = clamp(args.clientX - args.viewportLeft, 0, args.viewportWidth);
+  const rawSeconds = screenXToSeconds(viewportX, args.cameraX, args.pixelsPerSecond);
+  const dropSeconds = args.snapEnabled ? args.snappedSeconds : rawSeconds;
+  const rawLeftPx = clamp(
+    secondsToScreenX(rawSeconds, args.cameraX, args.pixelsPerSecond),
+    0,
+    args.viewportWidth,
+  );
+  const snappedLeftPx = clamp(
+    secondsToScreenX(args.snappedSeconds, args.cameraX, args.pixelsPerSecond),
+    0,
+    args.viewportWidth,
+  );
+  const previewLeftPx = args.snapEnabled ? Math.round(snappedLeftPx) : rawLeftPx;
+
+  return {
+    viewportX,
+    rawSeconds,
+    snappedSeconds: args.snappedSeconds,
+    dropSeconds,
+    rawLeftPx,
+    rawClientX: args.viewportLeft + rawLeftPx,
+    snappedLeftPx,
+    snappedClientX: args.viewportLeft + snappedLeftPx,
+    previewLeftPx,
+    previewClientX: args.viewportLeft + previewLeftPx,
+    snapApplied: args.snapEnabled,
+  };
+}
 
 export type DroppedFileClassification = {
   kind: ExternalDropKind;

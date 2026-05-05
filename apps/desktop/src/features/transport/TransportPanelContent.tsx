@@ -158,6 +158,7 @@ import {
   useTimelineUIStore,
 } from "./uiStore";
 import {
+  buildTimelineDropPreviewGeometry,
   classifyDroppedPaths,
   type DroppedFileClassification,
   type ExternalDropKind,
@@ -178,9 +179,10 @@ const DRAG_THRESHOLD_PX = 6;
 const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
 const SCROLL_COMMIT_DEBOUNCE_MS = 100;
 const LIVE_ZOOM_COMMIT_DEBOUNCE_MS = 150;
+const DOM_EXTERNAL_DROP_PREVIEW_TTL_MS = 250;
 const NATIVE_DND_DEBUG_ENABLED = import.meta.env.DEV && import.meta.env.VITE_NATIVE_DND_DEBUG === "true";
 
-type NativeDropCoordinateMode = "raw" | "raw/dpr" | "minus-webview" | "minus-webview/dpr";
+export type NativeDropCoordinateMode = "raw" | "raw/dpr" | "minus-webview" | "minus-webview/dpr";
 
 type NativeClientPointCandidate = {
   label: NativeDropCoordinateMode;
@@ -197,7 +199,24 @@ type NativeDropDebugRect = {
   height: number;
 };
 
-type NativeDropCandidateDebug = {
+type TimelineDropGeometry = {
+  targetElement: HTMLElement;
+  targetTrackId: string | null;
+  viewportBounds: DOMRect;
+  viewportX: number;
+  rawSeconds: number;
+  snappedSeconds: number;
+  dropSeconds: number;
+  rawLeftPx: number;
+  rawClientX: number;
+  snappedLeftPx: number;
+  snappedClientX: number;
+  previewLeftPx: number;
+  previewClientX: number;
+  snapApplied: boolean;
+};
+
+export type NativeDropCandidateDebug = {
   label: NativeDropCoordinateMode;
   clientX: number;
   clientY: number;
@@ -205,12 +224,44 @@ type NativeDropCandidateDebug = {
   laneBounds: NativeDropDebugRect | null;
   rulerBounds: NativeDropDebugRect | null;
   dropSeconds: number | null;
-  renderedLeft: number | null;
-  renderedClientX: number | null;
+  rawSeconds: number | null;
+  snappedSeconds: number | null;
+  rawLeftPx: number | null;
+  rawClientX: number | null;
+  snappedLeftPx: number | null;
+  snappedClientX: number | null;
+  previewLeftPx: number | null;
+  previewClientX: number | null;
+  rawDeltaPx: number | null;
+  snapDeltaPx: number | null;
+  snapApplied: boolean;
   score: number;
   isOverTimeline: boolean;
   targetTrackId: string | null;
 };
+
+export function getNativeCandidatePointerDelta(candidate: NativeDropCandidateDebug) {
+  return candidate.rawDeltaPx ?? Number.POSITIVE_INFINITY;
+}
+
+export function selectNativeDropCandidate(
+  candidates: NativeDropCandidateDebug[],
+): NativeDropCandidateDebug | null {
+  return (
+    candidates
+      .filter((candidate) => candidate.isOverTimeline && candidate.dropSeconds != null)
+      .sort((a, b) => {
+        const aDelta = getNativeCandidatePointerDelta(a);
+        const bDelta = getNativeCandidatePointerDelta(b);
+
+        if (aDelta !== bDelta) {
+          return aDelta - bDelta;
+        }
+
+        return b.score - a.score;
+      })[0] ?? null
+  );
+}
 
 type ContextMenuAction = {
   label: string;
@@ -1142,6 +1193,14 @@ export function TransportPanelContent() {
       });
   }, []);
 
+  const handleNativeFileDragOverRef = useRef(handleNativeFileDragOver);
+  const handleNativeFileDropRef = useRef(handleNativeFileDrop);
+
+  useEffect(() => {
+    handleNativeFileDragOverRef.current = handleNativeFileDragOver;
+    handleNativeFileDropRef.current = handleNativeFileDrop;
+  });
+
   useEffect(() => {
     if (!isTauriApp) {
       return;
@@ -1171,7 +1230,7 @@ export function TransportPanelContent() {
 
         if (payload.type === "over") {
           const overPayload = payload as typeof payload & { paths?: string[] };
-          handleNativeFileDragOver({
+          handleNativeFileDragOverRef.current({
             paths: overPayload.paths,
             position: payload.position,
           });
@@ -1179,7 +1238,7 @@ export function TransportPanelContent() {
         }
 
         if (payload.type === "drop") {
-          handleNativeFileDrop({
+          handleNativeFileDropRef.current({
             paths: payload.paths,
             position: payload.position,
           });
@@ -1188,6 +1247,8 @@ export function TransportPanelContent() {
 
         nativeExternalDropPathsRef.current = [];
         nativeDropKindRef.current = null;
+        domExternalDropPreviewUntilRef.current = 0;
+        lastNativeTimelineDropRef.current = null;
         nativeDropCoordinateModeRef.current = null;
         setExternalDropPreview(null);
         if (NATIVE_DND_DEBUG_ENABLED) {
@@ -1206,6 +1267,8 @@ export function TransportPanelContent() {
         console.error("[native-dnd] failed to register drag/drop listener", error);
         nativeExternalDropPathsRef.current = [];
         nativeDropKindRef.current = null;
+        domExternalDropPreviewUntilRef.current = 0;
+        lastNativeTimelineDropRef.current = null;
         setExternalDropPreview(null);
       });
 
@@ -1254,7 +1317,16 @@ export function TransportPanelContent() {
   const pendingRenderMetricRef = useRef(0);
   const nativeExternalDropPathsRef = useRef<string[]>([]);
   const nativeDropKindRef = useRef<ExternalDropKind | null>(null);
+  const domExternalDropPreviewUntilRef = useRef(0);
   const nativeDropCoordinateModeRef = useRef<NativeDropCoordinateMode | null>(null);
+  const lastNativeTimelineDropRef = useRef<{
+    seconds: number;
+    rawSeconds: number;
+    snappedSeconds: number;
+    previewClientX: number;
+    snapApplied: boolean;
+    coordinateMode: NativeDropCoordinateMode;
+  } | null>(null);
   const nativeWebviewPositionRef = useRef<{ x: number; y: number } | null>(null);
   const transportReadoutTempoRef = useRef<HTMLElement | null>(null);
   const transportReadoutValueRef = useRef<HTMLElement | null>(null);
@@ -2967,7 +3039,7 @@ export function TransportPanelContent() {
       const clipDrag = clipDragRef.current;
       const effectSong = songRef.current;
       if (clipDrag && effectSong) {
-        const effectPixelsPerSecond = zoomLevel * BASE_PIXELS_PER_SECOND;
+        const effectPixelsPerSecond = livePixelsPerSecondRef.current;
         const exceededThreshold = Math.abs(event.clientX - clipDrag.startClientX) > DRAG_THRESHOLD_PX;
         if (!clipDrag.hasMoved && exceededThreshold) {
           restoreConfirmedTransportVisual();
@@ -2980,7 +3052,7 @@ export function TransportPanelContent() {
               clipDrag.originSeconds + deltaSeconds,
               timingRegion?.bpm ?? effectSong.bpm,
               timingRegion?.timeSignature ?? effectSong.timeSignature,
-              zoomLevel,
+              liveZoomLevelRef.current,
               effectPixelsPerSecond,
               buildSongTempoRegions(effectSong),
             )
@@ -3287,8 +3359,8 @@ export function TransportPanelContent() {
             clampedPosition,
             timingRegion?.bpm ?? songBaseBpm,
             timingRegion?.timeSignature ?? songBaseTimeSignature,
-            zoomLevel,
-            pixelsPerSecond,
+            liveZoomLevelRef.current,
+            livePixelsPerSecondRef.current,
             buildSongTempoRegions(song),
           ),
           0,
@@ -3308,7 +3380,7 @@ export function TransportPanelContent() {
         rulerTrackRef.current as HTMLElement,
         getTimelineScrollContainer(),
         durationSeconds,
-        pixelsPerSecond,
+        livePixelsPerSecondRef.current,
       ),
       durationSeconds,
     );
@@ -3321,7 +3393,13 @@ export function TransportPanelContent() {
     }
 
     return normalizeTimelineSeekSeconds(
-      rulerClientXToSeconds(clientX, rulerTrack, getCameraX(), durationSeconds, pixelsPerSecond),
+      rulerClientXToSeconds(
+        clientX,
+        rulerTrack,
+        getCameraX(),
+        durationSeconds,
+        livePixelsPerSecondRef.current,
+      ),
       durationSeconds,
     );
   }
@@ -4346,7 +4424,7 @@ export function TransportPanelContent() {
       event.currentTarget,
       event.clientX,
       getCameraX(),
-      pixelsPerSecond,
+      livePixelsPerSecondRef.current,
     );
 
     if (hitClip) {
@@ -4357,7 +4435,7 @@ export function TransportPanelContent() {
           event.currentTarget,
           getTimelineScrollContainer(),
           songRef.current?.durationSeconds ?? 0,
-          pixelsPerSecond,
+          livePixelsPerSecondRef.current,
         ),
         songRef.current?.durationSeconds ?? 0,
       );
@@ -4385,7 +4463,7 @@ export function TransportPanelContent() {
         event.currentTarget,
         getTimelineScrollContainer(),
         songRef.current?.durationSeconds ?? 0,
-        pixelsPerSecond,
+        livePixelsPerSecondRef.current,
       ),
       songRef.current?.durationSeconds ?? 0,
     );
@@ -4447,7 +4525,7 @@ export function TransportPanelContent() {
       event.currentTarget,
       event.clientX,
       getCameraX(),
-      pixelsPerSecond,
+      livePixelsPerSecondRef.current,
     );
 
     if (hitClip) {
@@ -5204,26 +5282,79 @@ export function TransportPanelContent() {
     return rulerTrackRef.current?.getBoundingClientRect() ?? element.getBoundingClientRect();
   }
 
+  function snapTimelineDropSeconds(rawSeconds: number) {
+    const candidates = timelineGrid.markers
+      .map((marker) => marker.seconds)
+      .filter((seconds) => Number.isFinite(seconds));
+
+    if (candidates.length > 0) {
+      return candidates.reduce((nearest, seconds) => (
+        Math.abs(seconds - rawSeconds) < Math.abs(nearest - rawSeconds) ? seconds : nearest
+      ), candidates[0]);
+    }
+
+    const timingRegion = getSongTempoRegionAtPosition(song, rawSeconds);
+    return snapToTimelineGrid(
+      rawSeconds,
+      timingRegion?.bpm ?? songBaseBpm,
+      timingRegion?.timeSignature ?? songBaseTimeSignature,
+      liveZoomLevelRef.current,
+      livePixelsPerSecondRef.current,
+      buildSongTempoRegions(song),
+    );
+  }
+
   function resolveLibraryDropSecondsAtClientX(clientX: number, element: HTMLElement) {
     const bounds = getLibraryDragViewportBounds(element);
     const viewportX = clamp(clientX - bounds.left, 0, bounds.width);
-    const rawSeconds = screenXToSeconds(viewportX, getCameraX(), pixelsPerSecond);
-    const timingRegion = getSongTempoRegionAtPosition(song, rawSeconds);
+    const rawSeconds = screenXToSeconds(viewportX, getCameraX(), livePixelsPerSecondRef.current);
 
-    return snapEnabled
-      ? snapToTimelineGrid(
-          rawSeconds,
-          timingRegion?.bpm ?? songBaseBpm,
-          timingRegion?.timeSignature ?? songBaseTimeSignature,
-          zoomLevel,
-          pixelsPerSecond,
-          buildSongTempoRegions(song),
-        )
-      : rawSeconds;
+    return snapEnabled ? snapTimelineDropSeconds(rawSeconds) : rawSeconds;
+  }
+
+  function resolveTimelineDropGeometryFromClientPoint(
+    clientX: number,
+    clientY: number,
+  ): TimelineDropGeometry | null {
+    const targetElement = resolveTimelineDropTargetAtClientPoint(clientX, clientY);
+    if (!targetElement) {
+      return null;
+    }
+
+    const viewportBounds = getLibraryDragViewportBounds(targetElement);
+    const viewportX = clamp(clientX - viewportBounds.left, 0, viewportBounds.width);
+    const rawSeconds = screenXToSeconds(viewportX, getCameraX(), livePixelsPerSecondRef.current);
+    const snappedSeconds = snapTimelineDropSeconds(rawSeconds);
+    const previewGeometry = buildTimelineDropPreviewGeometry({
+      clientX,
+      viewportLeft: viewportBounds.left,
+      viewportWidth: viewportBounds.width,
+      cameraX: getCameraX(),
+      pixelsPerSecond: livePixelsPerSecondRef.current,
+      snappedSeconds,
+      snapEnabled,
+    });
+
+    return {
+      targetElement,
+      targetTrackId: targetElement.closest("[data-track-id]")?.getAttribute("data-track-id") ?? null,
+      viewportBounds,
+      viewportX: previewGeometry.viewportX,
+      rawSeconds: previewGeometry.rawSeconds,
+      snappedSeconds: previewGeometry.snappedSeconds,
+      dropSeconds: previewGeometry.dropSeconds,
+      rawLeftPx: previewGeometry.rawLeftPx,
+      rawClientX: previewGeometry.rawClientX,
+      snappedLeftPx: previewGeometry.snappedLeftPx,
+      snappedClientX: previewGeometry.snappedClientX,
+      previewLeftPx: previewGeometry.previewLeftPx,
+      previewClientX: previewGeometry.previewClientX,
+      snapApplied: previewGeometry.snapApplied,
+    };
   }
 
   function resolveLibraryGhostLeft(timelineStartSeconds: number) {
-    return secondsToScreenX(timelineStartSeconds, getCameraX(), pixelsPerSecond);
+    return secondsToScreenX(timelineStartSeconds, getCameraX(), livePixelsPerSecondRef.current);
   }
 
   function updateLibraryClipPreview(hoverState: LibraryDragHoverState, element: HTMLElement) {
@@ -5291,19 +5422,29 @@ export function TransportPanelContent() {
   }
 
   function resolveTimelineDropFromClientPoint(clientX: number, clientY: number) {
-    const targetElement = resolveTimelineDropTargetAtClientPoint(clientX, clientY);
-    if (!targetElement) {
+    const geometry = resolveTimelineDropGeometryFromClientPoint(clientX, clientY);
+    if (!geometry) {
       return {
         isOverTimeline: false,
         dropSeconds: 0,
         targetTrackId: null,
+        previewLeftPx: null,
+        previewClientX: null,
+        rawSeconds: null,
+        snappedSeconds: null,
+        snapApplied: snapEnabled,
       };
     }
 
     return {
       isOverTimeline: true,
-      dropSeconds: resolveLibraryDropSecondsAtClientX(clientX, targetElement),
-      targetTrackId: targetElement.closest("[data-track-id]")?.getAttribute("data-track-id") ?? null,
+      dropSeconds: geometry.dropSeconds,
+      targetTrackId: geometry.targetTrackId,
+      previewLeftPx: geometry.previewLeftPx,
+      previewClientX: geometry.previewClientX,
+      rawSeconds: geometry.rawSeconds,
+      snappedSeconds: geometry.snappedSeconds,
+      snapApplied: geometry.snapApplied,
     };
   }
 
@@ -5340,8 +5481,16 @@ export function TransportPanelContent() {
       score += 20;
     }
 
-    if (candidate.renderedClientX != null) {
-      score += Math.max(0, 30 - Math.abs(candidate.renderedClientX - candidate.clientX));
+    if (candidate.rawDeltaPx != null) {
+      if (candidate.rawDeltaPx <= 2) {
+        score += 300;
+      } else if (candidate.rawDeltaPx <= 8) {
+        score += 200;
+      } else if (candidate.rawDeltaPx <= 24) {
+        score += 80;
+      } else {
+        score -= Math.min(300, candidate.rawDeltaPx);
+      }
     }
 
     return score;
@@ -5349,7 +5498,8 @@ export function TransportPanelContent() {
 
   function resolveNativeDropCandidate(candidate: NativeClientPointCandidate): NativeDropCandidateDebug {
     const rawElement = getClientElementAtPoint(candidate.clientX, candidate.clientY);
-    const targetElement = resolveTimelineDropTargetAtClientPoint(candidate.clientX, candidate.clientY);
+    const geometry = resolveTimelineDropGeometryFromClientPoint(candidate.clientX, candidate.clientY);
+    const targetElement = geometry?.targetElement ?? null;
     const laneElement =
       targetElement?.classList.contains("lt-track-lane")
         ? targetElement
@@ -5357,7 +5507,7 @@ export function TransportPanelContent() {
     const laneBounds = laneElement?.getBoundingClientRect() ?? null;
     const rulerBounds = rulerTrackRef.current?.getBoundingClientRect() ?? null;
 
-    if (!targetElement) {
+    if (!geometry) {
       return {
         label: candidate.label,
         clientX: candidate.clientX,
@@ -5366,22 +5516,25 @@ export function TransportPanelContent() {
         laneBounds: toNativeDropDebugRect(laneBounds),
         rulerBounds: toNativeDropDebugRect(rulerBounds),
         dropSeconds: null,
-        renderedLeft: null,
-        renderedClientX: null,
+        rawSeconds: null,
+        snappedSeconds: null,
+        rawLeftPx: null,
+        rawClientX: null,
+        snappedLeftPx: null,
+        snappedClientX: null,
+        previewLeftPx: null,
+        previewClientX: null,
+        rawDeltaPx: null,
+        snapDeltaPx: null,
+        snapApplied: snapEnabled,
         score: 0,
         isOverTimeline: false,
         targetTrackId: null,
       };
     }
 
-    const viewportBounds = getLibraryDragViewportBounds(targetElement);
-    const dropSeconds = resolveLibraryDropSecondsAtClientX(candidate.clientX, targetElement);
-    const renderedLeft = clamp(
-      secondsToScreenX(dropSeconds, getCameraX(), pixelsPerSecond),
-      0,
-      viewportBounds.width,
-    );
-    const renderedClientX = viewportBounds.left + renderedLeft;
+    const rawDeltaPx = Math.abs(geometry.rawClientX - candidate.clientX);
+    const snapDeltaPx = Math.abs(geometry.previewClientX - candidate.clientX);
     const debugCandidate: NativeDropCandidateDebug = {
       label: candidate.label,
       clientX: candidate.clientX,
@@ -5389,12 +5542,21 @@ export function TransportPanelContent() {
       elementFromPoint: describeNativeDropElement(rawElement),
       laneBounds: toNativeDropDebugRect(laneBounds),
       rulerBounds: toNativeDropDebugRect(rulerBounds),
-      dropSeconds,
-      renderedLeft,
-      renderedClientX,
+      dropSeconds: geometry.dropSeconds,
+      rawSeconds: geometry.rawSeconds,
+      snappedSeconds: geometry.snappedSeconds,
+      rawLeftPx: geometry.rawLeftPx,
+      rawClientX: geometry.rawClientX,
+      snappedLeftPx: geometry.snappedLeftPx,
+      snappedClientX: geometry.snappedClientX,
+      previewLeftPx: geometry.previewLeftPx,
+      previewClientX: geometry.previewClientX,
+      rawDeltaPx,
+      snapDeltaPx,
+      snapApplied: geometry.snapApplied,
       score: 0,
       isOverTimeline: true,
-      targetTrackId: targetElement.closest("[data-track-id]")?.getAttribute("data-track-id") ?? null,
+      targetTrackId: geometry.targetTrackId,
     };
     debugCandidate.score = scoreNativeDropCandidate(debugCandidate);
     return debugCandidate;
@@ -5410,18 +5572,13 @@ export function TransportPanelContent() {
         nativePosition: position,
         webviewPosition: nativeWebviewPositionRef.current,
         cameraX: getCameraX(),
-        pixelsPerSecond,
+        pixelsPerSecond: livePixelsPerSecondRef.current,
         candidates,
       });
       setNativeDropDebugCandidates(candidates);
     }
 
-    const selectedCandidate =
-      candidates.find((candidate) => candidate.label === "raw" && candidate.isOverTimeline) ??
-      candidates.find((candidate) => candidate.label === "raw/dpr" && candidate.isOverTimeline) ??
-      candidates.find((candidate) => candidate.label === "minus-webview" && candidate.isOverTimeline) ??
-      candidates.find((candidate) => candidate.label === "minus-webview/dpr" && candidate.isOverTimeline) ??
-      null;
+    const selectedCandidate = selectNativeDropCandidate(candidates);
 
     nativeDropCoordinateModeRef.current = selectedCandidate?.label ?? null;
 
@@ -5430,6 +5587,12 @@ export function TransportPanelContent() {
         isOverTimeline: true,
         dropSeconds: selectedCandidate.dropSeconds,
         targetTrackId: selectedCandidate.targetTrackId,
+        previewLeftPx: selectedCandidate.previewLeftPx,
+        previewClientX: selectedCandidate.previewClientX,
+        rawSeconds: selectedCandidate.rawSeconds,
+        snappedSeconds: selectedCandidate.snappedSeconds,
+        snapApplied: selectedCandidate.snapApplied,
+        coordinateMode: selectedCandidate.label,
       };
     }
 
@@ -5437,6 +5600,12 @@ export function TransportPanelContent() {
       isOverTimeline: false,
       dropSeconds: 0,
       targetTrackId: null,
+      previewLeftPx: null,
+      previewClientX: null,
+      rawSeconds: null,
+      snappedSeconds: null,
+      snapApplied: snapEnabled,
+      coordinateMode: null,
     };
   }
 
@@ -6120,6 +6289,8 @@ export function TransportPanelContent() {
   function handleExternalTimelineDrop(classification: DroppedFileClassification, dropSeconds: number) {
     setExternalDropPreview(null);
     nativeDropKindRef.current = null;
+    domExternalDropPreviewUntilRef.current = 0;
+    lastNativeTimelineDropRef.current = null;
 
     if (classification.kind === "mixed" || classification.kind === "unsupported") {
       rejectExternalDrop(classification.kind);
@@ -6149,6 +6320,8 @@ export function TransportPanelContent() {
     setExternalDropPreview(null);
     nativeExternalDropPathsRef.current = [];
     nativeDropKindRef.current = null;
+    domExternalDropPreviewUntilRef.current = 0;
+    lastNativeTimelineDropRef.current = null;
     nativeDropCoordinateModeRef.current = null;
     if (NATIVE_DND_DEBUG_ENABLED) {
       setNativeDropDebugCandidates([]);
@@ -6182,18 +6355,64 @@ export function TransportPanelContent() {
     const kind = paths.length ? classifyDroppedPaths(paths).kind : "unknown";
     nativeDropKindRef.current = kind;
 
+    if (Date.now() < domExternalDropPreviewUntilRef.current) {
+      setExternalDropPreview((current) => {
+        if (!current) {
+          return current;
+        }
+
+        lastNativeTimelineDropRef.current = {
+          seconds: current.seconds,
+          rawSeconds: current.rawSeconds ?? current.seconds,
+          snappedSeconds: current.snappedSeconds ?? current.seconds,
+          previewClientX: current.previewClientX ?? 0,
+          snapApplied: current.snapApplied ?? false,
+          coordinateMode: nativeDropCoordinateModeRef.current ?? "raw/dpr",
+        };
+
+        return {
+          ...current,
+          kind,
+        };
+      });
+      return;
+    }
+
     const hit = resolveTimelineDropFromNativePosition(args.position);
     if (NATIVE_DND_DEBUG_ENABLED) {
       console.debug("[native-dnd] over hit", hit);
     }
     if (!hit.isOverTimeline) {
       setExternalDropPreview(null);
+      domExternalDropPreviewUntilRef.current = 0;
+      lastNativeTimelineDropRef.current = null;
       return;
+    }
+
+    if (
+      hit.rawSeconds != null &&
+      hit.snappedSeconds != null &&
+      hit.previewClientX != null &&
+      hit.coordinateMode != null
+    ) {
+      lastNativeTimelineDropRef.current = {
+        seconds: hit.dropSeconds,
+        rawSeconds: hit.rawSeconds,
+        snappedSeconds: hit.snappedSeconds,
+        previewClientX: hit.previewClientX,
+        snapApplied: hit.snapApplied,
+        coordinateMode: hit.coordinateMode,
+      };
     }
 
     setExternalDropPreview({
       kind,
       seconds: hit.dropSeconds,
+      previewLeftPx: hit.previewLeftPx ?? undefined,
+      previewClientX: hit.previewClientX ?? undefined,
+      rawSeconds: hit.rawSeconds ?? undefined,
+      snappedSeconds: hit.snappedSeconds ?? undefined,
+      snapApplied: hit.snapApplied,
     });
   }
 
@@ -6206,6 +6425,8 @@ export function TransportPanelContent() {
     nativeDropKindRef.current = null;
 
     if (!args.paths.length) {
+      domExternalDropPreviewUntilRef.current = 0;
+      lastNativeTimelineDropRef.current = null;
       nativeDropCoordinateModeRef.current = null;
       setExternalDropPreview(null);
       if (NATIVE_DND_DEBUG_ENABLED) {
@@ -6218,7 +6439,8 @@ export function TransportPanelContent() {
     if (NATIVE_DND_DEBUG_ENABLED) {
       console.debug("[native-dnd] drop hit", hit);
     }
-    if (!hit.isOverTimeline && externalDropPreview === null) {
+    if (!hit.isOverTimeline && externalDropPreview === null && lastNativeTimelineDropRef.current === null) {
+      lastNativeTimelineDropRef.current = null;
       nativeDropCoordinateModeRef.current = null;
       setExternalDropPreview(null);
       if (NATIVE_DND_DEBUG_ENABLED) {
@@ -6227,7 +6449,30 @@ export function TransportPanelContent() {
       return;
     }
 
-    handleNativeExternalTimelineDrop(classifyDroppedPaths(args.paths), externalDropPreview?.seconds ?? hit.dropSeconds);
+    const dropSeconds =
+      lastNativeTimelineDropRef.current?.seconds ??
+      externalDropPreview?.seconds ??
+      hit.dropSeconds;
+
+    handleNativeExternalTimelineDrop(classifyDroppedPaths(args.paths), dropSeconds);
+  }
+
+  function handleDomExternalDropPreviewChange(preview: ExternalDropPreview | null) {
+    domExternalDropPreviewUntilRef.current =
+      preview === null ? 0 : Date.now() + DOM_EXTERNAL_DROP_PREVIEW_TTL_MS;
+
+    if (preview !== null) {
+      lastNativeTimelineDropRef.current = {
+        seconds: preview.seconds,
+        rawSeconds: preview.rawSeconds ?? preview.seconds,
+        snappedSeconds: preview.snappedSeconds ?? preview.seconds,
+        previewClientX: preview.previewClientX ?? 0,
+        snapApplied: preview.snapApplied ?? false,
+        coordinateMode: nativeDropCoordinateModeRef.current ?? "raw/dpr",
+      };
+    }
+
+    setExternalDropPreview(preview);
   }
 
   const selectedAudioOutputDevice = appSettings.selectedOutputDevice ?? "";
@@ -6611,7 +6856,13 @@ export function TransportPanelContent() {
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {`${candidate.label} (${candidate.score.toFixed(0)})`}
+                      {`${candidate.label} score=${candidate.score.toFixed(0)} raw\u0394=${
+                        candidate.rawDeltaPx?.toFixed(1) ?? "n/a"
+                      } snap\u0394=${candidate.snapDeltaPx?.toFixed(1) ?? "n/a"} raw=${
+                        candidate.rawSeconds?.toFixed(2) ?? "n/a"
+                      } snap=${candidate.snappedSeconds?.toFixed(2) ?? "n/a"} drop=${
+                        candidate.dropSeconds?.toFixed(2) ?? "n/a"
+                      } snap=${candidate.snapApplied ? "on" : "off"}`}
                     </div>
                   </div>
                 );
@@ -6916,7 +7167,7 @@ export function TransportPanelContent() {
                 onTrackLaneContextMenu={handleTrackLaneContextMenu}
                 onResolveTimelineDropFromClientPoint={resolveTimelineDropFromClientPoint}
                 nativeDropKindRef={nativeDropKindRef}
-                onExternalDropPreviewChange={setExternalDropPreview}
+                onExternalDropPreviewChange={handleDomExternalDropPreviewChange}
                 onExternalDrop={handleExternalTimelineDrop}
               />
             </div>

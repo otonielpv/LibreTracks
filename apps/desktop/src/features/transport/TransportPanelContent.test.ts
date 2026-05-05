@@ -1,0 +1,189 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  selectNativeDropCandidate,
+  type NativeDropCandidateDebug,
+  type NativeDropCoordinateMode,
+} from "./TransportPanelContent";
+import {
+  buildTimelineDropPreviewGeometry,
+  resolveExternalDropGuideLeft,
+} from "./dragDrop";
+
+function candidate(
+  label: NativeDropCoordinateMode,
+  overrides: Partial<NativeDropCandidateDebug> = {},
+): NativeDropCandidateDebug {
+  return {
+    label,
+    clientX: 100,
+    clientY: 80,
+    elementFromPoint: ".lt-track-lane",
+    laneBounds: null,
+    rulerBounds: null,
+    dropSeconds: 4,
+    rawSeconds: 4,
+    snappedSeconds: 4,
+    rawLeftPx: 100,
+    rawClientX: 100,
+    snappedLeftPx: 100,
+    snappedClientX: 100,
+    previewLeftPx: 100,
+    previewClientX: 100,
+    rawDeltaPx: 0,
+    snapDeltaPx: 0,
+    snapApplied: false,
+    score: 100,
+    isOverTimeline: true,
+    targetTrackId: null,
+    ...overrides,
+  };
+}
+
+describe("selectNativeDropCandidate", () => {
+  it("selects raw/dpr when raw is over the timeline but raw/dpr has the smaller raw delta", () => {
+    const selected = selectNativeDropCandidate([
+      candidate("raw", {
+        rawClientX: 126,
+        rawDeltaPx: 26,
+        score: 300,
+      }),
+      candidate("raw/dpr", {
+        rawClientX: 101,
+        rawDeltaPx: 1,
+        score: 120,
+      }),
+    ]);
+
+    expect(selected?.label).toBe("raw/dpr");
+  });
+
+  it("does not select candidates outside the timeline", () => {
+    const selected = selectNativeDropCandidate([
+      candidate("raw", {
+        isOverTimeline: false,
+        dropSeconds: null,
+        rawLeftPx: null,
+        rawClientX: null,
+        rawDeltaPx: null,
+        score: 0,
+      }),
+      candidate("raw/dpr", {
+        isOverTimeline: false,
+        dropSeconds: 4,
+      }),
+    ]);
+
+    expect(selected).toBeNull();
+  });
+
+  it("uses score as the tiebreaker when candidates have the same visual delta", () => {
+    const selected = selectNativeDropCandidate([
+      candidate("raw", {
+        rawClientX: 104,
+        rawDeltaPx: 4,
+        score: 220,
+      }),
+      candidate("raw/dpr", {
+        rawClientX: 96,
+        rawDeltaPx: 4,
+        score: 340,
+      }),
+    ]);
+
+    expect(selected?.label).toBe("raw/dpr");
+  });
+
+  it("selects by raw pointer alignment, not snapped preview alignment", () => {
+    const selected = selectNativeDropCandidate([
+      candidate("raw", {
+        clientX: 620,
+        rawClientX: 600,
+        previewClientX: 624,
+        rawDeltaPx: 20,
+        snapDeltaPx: 4,
+        score: 500,
+        snapApplied: true,
+      }),
+      candidate("raw/dpr", {
+        clientX: 620,
+        rawClientX: 620.3,
+        previewClientX: 644,
+        rawDeltaPx: 0.3,
+        snapDeltaPx: 24,
+        score: 300,
+        snapApplied: true,
+      }),
+    ]);
+
+    expect(selected?.label).toBe("raw/dpr");
+  });
+});
+
+describe("resolveExternalDropGuideLeft", () => {
+  it("converts previewClientX to the local origin of the rendered guide container", () => {
+    expect(
+      resolveExternalDropGuideLeft(
+        {
+          kind: "audio",
+          seconds: 10,
+          previewLeftPx: 240,
+          previewClientX: 620,
+        },
+        { left: 300 },
+        180,
+      ),
+    ).toBe(320);
+  });
+
+  it("uses the rounded timeline seconds fallback for snapped previews", () => {
+    expect(
+      resolveExternalDropGuideLeft(
+        {
+          kind: "audio",
+          seconds: 10,
+          previewLeftPx: 241.8,
+          previewClientX: 620,
+          snapApplied: true,
+        },
+        { left: 300 },
+        241.3,
+      ),
+    ).toBe(241);
+  });
+});
+
+describe("buildTimelineDropPreviewGeometry", () => {
+  it("uses raw seconds and raw client position when snap is disabled", () => {
+    const geometry = buildTimelineDropPreviewGeometry({
+      clientX: 123.4,
+      viewportLeft: 100,
+      viewportWidth: 500,
+      cameraX: 0,
+      pixelsPerSecond: 10,
+      snappedSeconds: 5,
+      snapEnabled: false,
+    });
+
+    expect(geometry.rawSeconds).toBeCloseTo(2.34);
+    expect(geometry.dropSeconds).toBe(geometry.rawSeconds);
+    expect(geometry.previewClientX).toBeCloseTo(123.4);
+  });
+
+  it("uses snapped seconds and snapped client position when snap is enabled", () => {
+    const geometry = buildTimelineDropPreviewGeometry({
+      clientX: 123.4,
+      viewportLeft: 100,
+      viewportWidth: 500,
+      cameraX: 0,
+      pixelsPerSecond: 10,
+      snappedSeconds: 2.5,
+      snapEnabled: true,
+    });
+
+    expect(geometry.rawSeconds).toBeCloseTo(2.34);
+    expect(geometry.dropSeconds).toBe(2.5);
+    expect(geometry.previewClientX).toBeCloseTo(125);
+    expect(geometry.previewLeftPx).toBe(25);
+  });
+});

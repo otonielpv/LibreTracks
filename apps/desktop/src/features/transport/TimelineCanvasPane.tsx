@@ -1,4 +1,4 @@
-import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, MutableRefObject, RefObject } from "react";
+import { useRef, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
@@ -30,6 +30,7 @@ import {
   classifyDroppedFiles,
   getDroppedFiles,
   isExternalFileDrag,
+  resolveExternalDropGuideLeft,
   type DroppedFileClassification,
   type ExternalDropKind,
   type ExternalDropPreview,
@@ -123,6 +124,11 @@ type TimelineCanvasPaneProps = {
     isOverTimeline: boolean;
     dropSeconds: number;
     targetTrackId: string | null;
+    previewLeftPx: number | null;
+    previewClientX: number | null;
+    rawSeconds: number | null;
+    snappedSeconds: number | null;
+    snapApplied: boolean;
   };
   nativeDropKindRef: MutableRefObject<ExternalDropKind | null>;
   onExternalDropPreviewChange: (preview: ExternalDropPreview | null) => void;
@@ -188,6 +194,7 @@ export function TimelineCanvasPane({
   onExternalDrop,
 }: TimelineCanvasPaneProps) {
   const { t } = useTranslation();
+  const trackLayersRef = useRef<HTMLDivElement | null>(null);
 
   const handleTimelineDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -218,6 +225,11 @@ export function TimelineCanvasPane({
     onExternalDropPreviewChange({
       kind: effectiveKind,
       seconds: hit.dropSeconds,
+      previewLeftPx: hit.previewLeftPx ?? undefined,
+      previewClientX: hit.previewClientX ?? undefined,
+      rawSeconds: hit.rawSeconds ?? undefined,
+      snappedSeconds: hit.snappedSeconds ?? undefined,
+      snapApplied: hit.snapApplied,
     });
   };
 
@@ -252,8 +264,20 @@ export function TimelineCanvasPane({
     event.stopPropagation();
     onExternalDropPreviewChange(null);
     nativeDropKindRef.current = null;
-    onExternalDrop(classification, hit.dropSeconds);
+    onExternalDrop(classification, externalDropPreview?.seconds ?? hit.dropSeconds);
   };
+
+  const externalDropGuideLeft = (() => {
+    if (!externalDropPreview) {
+      return 0;
+    }
+
+    return resolveExternalDropGuideLeft(
+      externalDropPreview,
+      trackLayersRef.current?.getBoundingClientRect() ?? null,
+      resolveLibraryGhostLeft(externalDropPreview.seconds),
+    );
+  })();
 
   return (
     <div
@@ -470,7 +494,7 @@ export function TimelineCanvasPane({
         onContextMenu={onTrackListContextMenu}
         onDragEnter={handleTimelineDragEnter}
       >
-        <div className="lt-track-layers" style={{ width: laneViewportWidth }}>
+        <div ref={trackLayersRef} className="lt-track-layers" style={{ width: laneViewportWidth }}>
           {song ? (
             <TimelineTrackCanvas
               width={laneViewportWidth}
@@ -517,8 +541,8 @@ export function TimelineCanvasPane({
                 position: "absolute",
                 top: 0,
                 bottom: 0,
-                left: resolveLibraryGhostLeft(externalDropPreview.seconds),
-                width: 2,
+                left: externalDropGuideLeft,
+                width: 1,
                 background:
                   externalDropPreview.kind === "audio"
                     ? "#7ae582"
