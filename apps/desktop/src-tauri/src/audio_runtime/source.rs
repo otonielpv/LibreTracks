@@ -707,6 +707,10 @@ impl PreparedAudioCache {
             };
         }
 
+        if key.transpose_semitones != 0 {
+            return SeekSourceDecision::Silence;
+        }
+
         if let Some(source) = self.get_original(key, frame) {
             return match self.state_kind(&PreparedAudioKey {
                 transpose_semitones: 0,
@@ -1321,10 +1325,21 @@ impl AudioBufferCache {
                 priority: PreparePriority::RealtimeCritical,
             });
         }
-        let _ = self.prepare_window_now(song_dir, song, position, 0);
-        if required_transpose != 0 {
-            let _ = self.prepare_window_now(song_dir, song, position, required_transpose);
-        }
+        let cache = self.clone();
+        let song_dir_clone = song_dir.to_path_buf();
+        let song_clone = song.clone();
+        std::thread::spawn(move || {
+            let _ = cache.prepare_window_now(&song_dir_clone, &song_clone, position, 0);
+            if required_transpose != 0 {
+                let _ = cache.prepare_window_now(
+                    &song_dir_clone,
+                    &song_clone,
+                    position,
+                    required_transpose,
+                );
+            }
+        });
+
         self.rebuild_seek_readiness_map(song_dir, song, position);
     }
 
@@ -2448,7 +2463,7 @@ pub(crate) fn prepared_playback_disabled() -> bool {
 }
 
 pub(crate) fn prepared_pitch_render_enabled() -> bool {
-    false
+    true
 }
 
 fn validate_prepared_key_matches_source(
@@ -2878,7 +2893,7 @@ mod tests {
     }
 
     #[test]
-    fn prepared_audio_cache_prefers_exact_over_original_and_silence() {
+    fn prepared_audio_cache_requires_exact_for_transposed_audio() {
         let cache = PreparedAudioCache::default();
         let exact_key = PreparedAudioKey {
             file_id: "file-a".into(),
@@ -2899,7 +2914,7 @@ mod tests {
             .expect("prepared source should insert");
 
         let fallback = cache.get_best_available(&exact_key, 1);
-        assert_eq!(fallback.kind(), SeekSourceKind::OriginalRam);
+        assert_eq!(fallback.kind(), SeekSourceKind::Silence);
 
         cache
             .insert_ready_ram(
@@ -2932,7 +2947,7 @@ mod tests {
     }
 
     #[test]
-    fn prepared_audio_cache_previous_pitch_fallback_works() {
+    fn prepared_audio_cache_does_not_use_previous_pitch_for_transposed_seek() {
         let cache = PreparedAudioCache::default();
         let old_pitch_key = PreparedAudioKey {
             file_id: "file-a".into(),
@@ -2954,7 +2969,7 @@ mod tests {
 
         let decision = cache.get_best_available(&requested_key, 0);
 
-        assert_eq!(decision.kind(), SeekSourceKind::PreviousPitch);
+        assert_eq!(decision.kind(), SeekSourceKind::Silence);
     }
 
     #[test]
@@ -3004,11 +3019,11 @@ mod tests {
     }
 
     #[test]
-    fn render_transposed_to_cache_is_disabled_for_prepared_pitch() {
+    fn render_transposed_to_cache_renders_when_prepared_pitch_is_enabled() {
         let temp_dir = tempfile::tempdir().expect("temp dir should exist");
         let output_path = temp_dir.path().join("audio-renders/transposed.ltaf");
         let raw: Arc<dyn PreparedAudioSource> =
-            Arc::new(RawRamSource::new(vec![0.1; 1_024], 48_000, 1));
+            Arc::new(RawRamSource::new(vec![0.1; 4_096], 48_000, 1));
         let key = PreparedAudioKey {
             file_id: "file-a".into(),
             file_hash: "hash-a".into(),
@@ -3017,12 +3032,12 @@ mod tests {
             transpose_semitones: 2,
         };
 
-        let error = match render_transposed_to_cache(raw, key, output_path) {
-            Ok(_) => panic!("prepared pitch render should be disabled"),
-            Err(error) => error,
-        };
+        let rendered = render_transposed_to_cache(raw, key, output_path)
+            .expect("prepared pitch should render");
 
-        assert!(error.contains("temporarily disabled"));
+        assert_eq!(rendered.sample_rate(), 48_000);
+        assert_eq!(rendered.channels(), 1);
+        assert!(rendered.frame_count() > 0);
     }
 
     #[test]
@@ -3071,7 +3086,7 @@ mod tests {
     }
 
     #[test]
-    fn prepare_window_now_skips_transposed_render_when_prepared_pitch_is_disabled() {
+    fn prepare_window_now_renders_transposed_cache_when_prepared_pitch_is_enabled() {
         let root = tempfile::tempdir().expect("temp dir should exist");
         let song_dir = root.path().join("song");
         std::fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
@@ -3136,7 +3151,7 @@ mod tests {
             channels: 2,
             transpose_semitones: 4,
         };
-        assert!(cache.prepared_audio.get_exact(&exact_key, 0).is_none());
+        assert!(cache.prepared_audio.get_exact(&exact_key, 0).is_some());
         assert!(cache.prepared_audio.get_original(&exact_key, 0).is_some());
     }
 
