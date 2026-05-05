@@ -31,6 +31,7 @@ import {
   getDroppedFiles,
   isExternalFileDrag,
   type DroppedFileClassification,
+  type ExternalDropKind,
   type ExternalDropPreview,
 } from "./dragDrop";
 
@@ -123,6 +124,7 @@ type TimelineCanvasPaneProps = {
     dropSeconds: number;
     targetTrackId: string | null;
   };
+  nativeDropKindRef: MutableRefObject<ExternalDropKind | null>;
   onExternalDropPreviewChange: (preview: ExternalDropPreview | null) => void;
   onExternalDrop: (classification: DroppedFileClassification, seconds: number) => void;
 };
@@ -181,6 +183,7 @@ export function TimelineCanvasPane({
   onTrackLaneMouseDown,
   onTrackLaneContextMenu,
   onResolveTimelineDropFromClientPoint,
+  nativeDropKindRef,
   onExternalDropPreviewChange,
   onExternalDrop,
 }: TimelineCanvasPaneProps) {
@@ -196,18 +199,24 @@ export function TimelineCanvasPane({
       return;
     }
 
-    const classification = classifyDroppedFiles(getDroppedFiles(event.dataTransfer));
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+
     const hit = onResolveTimelineDropFromClientPoint(event.clientX, event.clientY);
     if (!hit.isOverTimeline) {
       onExternalDropPreviewChange(null);
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
+    const fallbackClassification = classifyDroppedFiles(getDroppedFiles(event.dataTransfer));
+    const effectiveKind =
+      nativeDropKindRef.current && nativeDropKindRef.current !== "unknown"
+        ? nativeDropKindRef.current
+        : fallbackClassification.kind;
+
     onExternalDropPreviewChange({
-      kind: classification.kind,
+      kind: effectiveKind,
       seconds: hit.dropSeconds,
     });
   };
@@ -223,6 +232,7 @@ export function TimelineCanvasPane({
     }
 
     onExternalDropPreviewChange(null);
+    nativeDropKindRef.current = null;
   };
 
   const handleExternalDrop = (event: ReactDragEvent<HTMLDivElement>) => {
@@ -234,12 +244,14 @@ export function TimelineCanvasPane({
     const hit = onResolveTimelineDropFromClientPoint(event.clientX, event.clientY);
     if (!hit.isOverTimeline) {
       onExternalDropPreviewChange(null);
+      nativeDropKindRef.current = null;
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
     onExternalDropPreviewChange(null);
+    nativeDropKindRef.current = null;
     onExternalDrop(classification, hit.dropSeconds);
   };
 

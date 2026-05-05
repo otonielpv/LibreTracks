@@ -160,6 +160,7 @@ import {
 import {
   classifyDroppedPaths,
   type DroppedFileClassification,
+  type ExternalDropKind,
   type ExternalDropPreview,
   type NativeDroppedPathClassification,
 } from "./dragDrop";
@@ -1169,7 +1170,9 @@ export function TransportPanelContent() {
         const payload = event.payload;
 
         if (payload.type === "over") {
+          const overPayload = payload as typeof payload & { paths?: string[] };
           handleNativeFileDragOver({
+            paths: overPayload.paths,
             position: payload.position,
           });
           return;
@@ -1184,6 +1187,7 @@ export function TransportPanelContent() {
         }
 
         nativeExternalDropPathsRef.current = [];
+        nativeDropKindRef.current = null;
         nativeDropCoordinateModeRef.current = null;
         setExternalDropPreview(null);
         if (NATIVE_DND_DEBUG_ENABLED) {
@@ -1201,6 +1205,7 @@ export function TransportPanelContent() {
       .catch((error) => {
         console.error("[native-dnd] failed to register drag/drop listener", error);
         nativeExternalDropPathsRef.current = [];
+        nativeDropKindRef.current = null;
         setExternalDropPreview(null);
       });
 
@@ -1248,6 +1253,7 @@ export function TransportPanelContent() {
   const renderMetricTimeoutRef = useRef<number | null>(null);
   const pendingRenderMetricRef = useRef(0);
   const nativeExternalDropPathsRef = useRef<string[]>([]);
+  const nativeDropKindRef = useRef<ExternalDropKind | null>(null);
   const nativeDropCoordinateModeRef = useRef<NativeDropCoordinateMode | null>(null);
   const nativeWebviewPositionRef = useRef<{ x: number; y: number } | null>(null);
   const transportReadoutTempoRef = useRef<HTMLElement | null>(null);
@@ -6113,6 +6119,7 @@ export function TransportPanelContent() {
 
   function handleExternalTimelineDrop(classification: DroppedFileClassification, dropSeconds: number) {
     setExternalDropPreview(null);
+    nativeDropKindRef.current = null;
 
     if (classification.kind === "mixed" || classification.kind === "unsupported") {
       rejectExternalDrop(classification.kind);
@@ -6141,6 +6148,7 @@ export function TransportPanelContent() {
   ) {
     setExternalDropPreview(null);
     nativeExternalDropPathsRef.current = [];
+    nativeDropKindRef.current = null;
     nativeDropCoordinateModeRef.current = null;
     if (NATIVE_DND_DEBUG_ENABLED) {
       setNativeDropDebugCandidates([]);
@@ -6171,27 +6179,29 @@ export function TransportPanelContent() {
     }
 
     const paths = args.paths?.length ? args.paths : nativeExternalDropPathsRef.current;
-    const hit = resolveTimelineDropFromNativePosition(args.position);
-    if (NATIVE_DND_DEBUG_ENABLED) {
-      console.debug("[native-dnd] over hit", hit);
-    }
-    if (!hit.isOverTimeline) {
-      setExternalDropPreview(null);
-      return;
-    }
+    const kind = paths.length ? classifyDroppedPaths(paths).kind : "unknown";
+    nativeDropKindRef.current = kind;
 
-    if (!paths.length) {
-      setExternalDropPreview((current) => ({
-        kind: current?.kind ?? "unknown",
+    setExternalDropPreview((current) => {
+      if (current) {
+        return {
+          ...current,
+          kind,
+        };
+      }
+
+      const hit = resolveTimelineDropFromNativePosition(args.position);
+      if (NATIVE_DND_DEBUG_ENABLED) {
+        console.debug("[native-dnd] over hit", hit);
+      }
+      if (!hit.isOverTimeline) {
+        return null;
+      }
+
+      return {
+        kind,
         seconds: hit.dropSeconds,
-      }));
-      return;
-    }
-
-    const classification = classifyDroppedPaths(paths);
-    setExternalDropPreview({
-      kind: classification.kind,
-      seconds: hit.dropSeconds,
+      };
     });
   }
 
@@ -6201,6 +6211,7 @@ export function TransportPanelContent() {
     }
 
     nativeExternalDropPathsRef.current = [];
+    nativeDropKindRef.current = null;
 
     if (!args.paths.length) {
       nativeDropCoordinateModeRef.current = null;
@@ -6215,7 +6226,7 @@ export function TransportPanelContent() {
     if (NATIVE_DND_DEBUG_ENABLED) {
       console.debug("[native-dnd] drop hit", hit);
     }
-    if (!hit.isOverTimeline) {
+    if (!hit.isOverTimeline && externalDropPreview === null) {
       nativeDropCoordinateModeRef.current = null;
       setExternalDropPreview(null);
       if (NATIVE_DND_DEBUG_ENABLED) {
@@ -6224,7 +6235,7 @@ export function TransportPanelContent() {
       return;
     }
 
-    handleNativeExternalTimelineDrop(classifyDroppedPaths(args.paths), hit.dropSeconds);
+    handleNativeExternalTimelineDrop(classifyDroppedPaths(args.paths), externalDropPreview?.seconds ?? hit.dropSeconds);
   }
 
   const selectedAudioOutputDevice = appSettings.selectedOutputDevice ?? "";
@@ -6912,6 +6923,7 @@ export function TransportPanelContent() {
                 onTrackLaneMouseDown={handleTrackLaneMouseDown}
                 onTrackLaneContextMenu={handleTrackLaneContextMenu}
                 onResolveTimelineDropFromClientPoint={resolveTimelineDropFromClientPoint}
+                nativeDropKindRef={nativeDropKindRef}
                 onExternalDropPreviewChange={setExternalDropPreview}
                 onExternalDrop={handleExternalTimelineDrop}
               />
