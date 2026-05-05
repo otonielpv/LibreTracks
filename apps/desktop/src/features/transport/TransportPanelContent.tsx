@@ -5411,10 +5411,10 @@ export function TransportPanelContent() {
     }
 
     const selectedCandidate =
-      candidates.find((candidate) => candidate.label === "raw" && candidate.isOverTimeline) ??
       candidates.find((candidate) => candidate.label === "raw/dpr" && candidate.isOverTimeline) ??
-      candidates.find((candidate) => candidate.label === "minus-webview" && candidate.isOverTimeline) ??
       candidates.find((candidate) => candidate.label === "minus-webview/dpr" && candidate.isOverTimeline) ??
+      candidates.find((candidate) => candidate.label === "raw" && candidate.isOverTimeline) ??
+      candidates.find((candidate) => candidate.label === "minus-webview" && candidate.isOverTimeline) ??
       null;
 
     nativeDropCoordinateModeRef.current = selectedCandidate?.label ?? null;
