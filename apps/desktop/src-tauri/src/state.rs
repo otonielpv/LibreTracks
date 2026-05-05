@@ -34,8 +34,8 @@ use crate::models::view::{
     waveform_summary_to_dto,
 };
 use crate::models::{
-    DesktopPerformanceSnapshot, LibraryAssetSummary, SongView, TransportClockSummary,
-    TransportDriftSummary, TransportSnapshot, WaveformSummaryDto,
+    DesktopPerformanceSnapshot, LibraryAssetSummary, SongPackageImportResponse, SongView,
+    TransportClockSummary, TransportDriftSummary, TransportSnapshot, WaveformSummaryDto,
 };
 use crate::settings::AppSettings;
 
@@ -589,7 +589,7 @@ impl DesktopSession {
         let package_path = package_file.to_string_lossy().into_owned();
         let inserted = self.import_song_package(&package_path, self.current_position(), audio)?;
 
-        Ok(Some(inserted))
+        Ok(Some(inserted.snapshot))
     }
 
     pub fn import_library_assets_from_dialog(
@@ -1884,7 +1884,7 @@ impl DesktopSession {
         package_path: &str,
         insert_at_seconds: f64,
         audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
+    ) -> Result<SongPackageImportResponse, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let song = self
             .engine
@@ -1911,77 +1911,10 @@ impl DesktopSession {
             AudioChangeImpact::StructureRebuild,
             true,
         )?;
-        Ok(self.snapshot())
-    }
-
-    pub fn import_song_package_from_bytes(
-        &mut self,
-        package_bytes: &[u8],
-        insert_at_seconds: f64,
-        audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        let imported = libretracks_project::import_song_package_from_bytes(
-            &song_dir,
-            &song,
-            package_bytes,
-            insert_at_seconds,
-        )?;
-        let mut library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
-        merge_package_library_meta(
-            &song_dir,
-            &mut library_assets,
-            &imported.library_meta,
-            Some(&imported.package_title),
-        )?;
-        write_library_manifest_assets(&song_dir, &library_assets)?;
-        self.persist_song_update(
-            imported.song,
-            audio,
-            AudioChangeImpact::StructureRebuild,
-            true,
-        )?;
-        Ok(self.snapshot())
-    }
-
-    pub fn import_song_package_from_base64(
-        &mut self,
-        package_base64: &str,
-        insert_at_seconds: f64,
-        audio: &AudioController,
-    ) -> Result<TransportSnapshot, DesktopError> {
-        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self
-            .engine
-            .song()
-            .cloned()
-            .ok_or(DesktopError::NoSongLoaded)?;
-        let imported = libretracks_project::import_song_package_from_base64(
-            &song_dir,
-            &song,
-            package_base64,
-            insert_at_seconds,
-        )?;
-        let mut library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
-        merge_package_library_meta(
-            &song_dir,
-            &mut library_assets,
-            &imported.library_meta,
-            Some(&imported.package_title),
-        )?;
-        write_library_manifest_assets(&song_dir, &library_assets)?;
-        self.persist_song_update(
-            imported.song,
-            audio,
-            AudioChangeImpact::StructureRebuild,
-            true,
-        )?;
-        Ok(self.snapshot())
+        Ok(SongPackageImportResponse {
+            snapshot: self.snapshot(),
+            library_assets,
+        })
     }
 
     pub fn create_track(
@@ -3987,7 +3920,8 @@ mod tests {
     use libretracks_audio::{JumpTrigger, PlaybackState, TransitionType};
     use libretracks_core::{Clip, Marker, Song, SongRegion, TempoMarker, Track, TrackKind};
     use libretracks_project::{
-        create_song_folder, generate_waveform_summary, load_song, save_song, SONG_FILE_NAME,
+        create_song_folder, export_region_as_package, generate_waveform_summary, load_song,
+        save_song, SONG_FILE_NAME,
     };
     use tempfile::tempdir;
 
@@ -3996,8 +3930,8 @@ mod tests {
 
     use super::{
         build_empty_song, list_library_assets, write_library_manifest,
-        write_library_manifest_assets, CreateClipRequest, DesktopSession, TransportClock,
-        WaveformMemoryCache,
+        write_library_manifest_assets, AudioFileImportPayload, CreateClipRequest,
+        DesktopSession, TransportClock, WaveformMemoryCache,
     };
 
     fn demo_song() -> Song {
@@ -4960,6 +4894,65 @@ mod tests {
             .get_library_assets()
             .expect("full library assets should still load");
         assert_eq!(all_assets.len(), 6);
+    }
+
+    #[test]
+    fn import_song_package_returns_library_assets_for_missing_audio_references() {
+        let source_root = tempdir().expect("temp dir should exist");
+        let source_song_dir = create_song_folder(source_root.path(), "package-source")
+            .expect("source song dir should exist");
+        let source_song = demo_song();
+        save_song(&source_song_dir, &source_song).expect("source song should save");
+        write_library_manifest_assets(
+            &source_song_dir,
+            &[LibraryAssetSummary {
+                file_name: "test.wav".into(),
+                file_path: "audio/test.wav".into(),
+                duration_seconds: 4.0,
+                is_missing: false,
+                folder_path: Some("Imported/Refs".into()),
+            }],
+        )
+        .expect("source manifest should save");
+
+        let package_path = source_song_dir.join("demo.ltpkg");
+        export_region_as_package(&source_song_dir, &source_song, "region_1", &package_path)
+            .expect("package should export");
+
+        let target_root = tempdir().expect("temp dir should exist");
+        let target_song_dir = create_song_folder(target_root.path(), "package-import-target")
+            .expect("target song dir should exist");
+        let target_song = build_empty_song("song_target".into(), "Target".into());
+        save_song(&target_song_dir, &target_song).expect("target song should save");
+
+        let mut session = DesktopSession::default();
+        session.song_file_path = Some(target_song_dir.join(SONG_FILE_NAME));
+        session.song_dir = Some(target_song_dir);
+        session
+            .engine
+            .load_song(target_song)
+            .expect("target song should load into engine");
+        let audio = crate::audio_runtime::AudioController::default();
+
+        let result = session
+            .import_song_package(&package_path.to_string_lossy(), 0.0, &audio)
+            .expect("package import should succeed");
+
+        let imported_asset = result
+            .library_assets
+            .iter()
+            .find(|asset| asset.file_path == "audio/test.wav")
+            .unwrap_or_else(|| panic!("missing imported asset in response: {:?}", result.library_assets));
+        assert!(imported_asset.is_missing);
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song should exist");
+        assert!(song_view.clips.iter().any(|clip| {
+            clip.file_path == "audio/test.wav" && clip.is_missing
+        }));
+        assert_eq!(result.snapshot.project_revision, song_view.project_revision);
     }
 
     #[test]

@@ -12,8 +12,7 @@ pub use importer::{
     ProjectImportRequest, WavMetadata,
 };
 pub use package::{
-    export_region_as_package, import_song_package, import_song_package_from_base64,
-    import_song_package_from_bytes, PackageLibraryAssetEntry, SongPackageExport,
+    export_region_as_package, import_song_package, PackageLibraryAssetEntry, SongPackageExport,
     SongPackageImportResult,
 };
 pub use song_store::{

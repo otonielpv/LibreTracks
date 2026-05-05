@@ -72,7 +72,6 @@ import {
   importAudioFilesFromBytes,
   importAudioFilesFromPaths,
   importSongPackage,
-  importSongPackageFromBytes,
   isTauriApp,
   listenToAudioMeters,
   listenToLibraryImportProgress,
@@ -178,6 +177,39 @@ const DRAG_THRESHOLD_PX = 6;
 const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
 const SCROLL_COMMIT_DEBOUNCE_MS = 100;
 const LIVE_ZOOM_COMMIT_DEBOUNCE_MS = 150;
+const NATIVE_DND_DEBUG_ENABLED = import.meta.env.DEV;
+
+type NativeDropCoordinateMode = "raw" | "raw/dpr" | "minus-webview" | "minus-webview/dpr";
+
+type NativeClientPointCandidate = {
+  label: NativeDropCoordinateMode;
+  clientX: number;
+  clientY: number;
+};
+
+type NativeDropDebugRect = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+};
+
+type NativeDropCandidateDebug = {
+  label: NativeDropCoordinateMode;
+  clientX: number;
+  clientY: number;
+  elementFromPoint: string | null;
+  laneBounds: NativeDropDebugRect | null;
+  rulerBounds: NativeDropDebugRect | null;
+  dropSeconds: number | null;
+  renderedLeft: number | null;
+  renderedClientX: number | null;
+  score: number;
+  isOverTimeline: boolean;
+  targetTrackId: string | null;
+};
 
 type ContextMenuAction = {
   label: string;
@@ -524,27 +556,49 @@ function nativeClientPointCandidates(
   webviewPosition: { x: number; y: number } | null,
 ) {
   const scaleFactor = window.devicePixelRatio || 1;
-  const candidates = new Map<string, { clientX: number; clientY: number }>();
+  const candidates: NativeClientPointCandidate[] = [];
 
-  const addCandidate = (clientX: number, clientY: number) => {
-    const key = `${clientX}:${clientY}`;
-    if (!candidates.has(key)) {
-      candidates.set(key, { clientX, clientY });
-    }
+  const addCandidate = (label: NativeDropCoordinateMode, clientX: number, clientY: number) => {
+    candidates.push({ label, clientX, clientY });
   };
 
   if (webviewPosition) {
-    addCandidate(position.x - webviewPosition.x, position.y - webviewPosition.y);
+    addCandidate("minus-webview", position.x - webviewPosition.x, position.y - webviewPosition.y);
     addCandidate(
+      "minus-webview/dpr",
       (position.x - webviewPosition.x) / scaleFactor,
       (position.y - webviewPosition.y) / scaleFactor,
     );
   }
 
-  addCandidate(position.x, position.y);
-  addCandidate(position.x / scaleFactor, position.y / scaleFactor);
+  addCandidate("raw", position.x, position.y);
+  addCandidate("raw/dpr", position.x / scaleFactor, position.y / scaleFactor);
 
-  return [...candidates.values()];
+  return candidates;
+}
+
+function describeNativeDropElement(element: HTMLElement | null) {
+  if (!element) {
+    return null;
+  }
+
+  const className = typeof element.className === "string" ? element.className.trim() : "";
+  return `${element.tagName.toLowerCase()}${className ? `.${className.replace(/\s+/g, ".")}` : ""}`;
+}
+
+function toNativeDropDebugRect(rect: DOMRect | null): NativeDropDebugRect | null {
+  if (!rect) {
+    return null;
+  }
+
+  return {
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+    bottom: rect.bottom,
+    width: rect.width,
+    height: rect.height,
+  };
 }
 
 function formatMusicalPosition(seconds: number, song: SongView | null | undefined) {
@@ -912,6 +966,7 @@ export function TransportPanelContent() {
   const [internalLibraryPointerDrag, setInternalLibraryPointerDrag] =
     useState<InternalLibraryPointerDrag | null>(null);
   const [externalDropPreview, setExternalDropPreview] = useState<ExternalDropPreview | null>(null);
+  const [nativeDropDebugCandidates, setNativeDropDebugCandidates] = useState<NativeDropCandidateDebug[]>([]);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const selectedRegion = useMemo(
     () => song?.regions.find((region) => region.id === selectedRegionId) ?? null,
@@ -1115,7 +1170,6 @@ export function TransportPanelContent() {
 
         if (payload.type === "over") {
           handleNativeFileDragOver({
-            paths: payload.paths,
             position: payload.position,
           });
           return;
@@ -1130,7 +1184,11 @@ export function TransportPanelContent() {
         }
 
         nativeExternalDropPathsRef.current = [];
+        nativeDropCoordinateModeRef.current = null;
         setExternalDropPreview(null);
+        if (NATIVE_DND_DEBUG_ENABLED) {
+          setNativeDropDebugCandidates([]);
+        }
       });
 
       if (disposed) {
@@ -1190,6 +1248,7 @@ export function TransportPanelContent() {
   const renderMetricTimeoutRef = useRef<number | null>(null);
   const pendingRenderMetricRef = useRef(0);
   const nativeExternalDropPathsRef = useRef<string[]>([]);
+  const nativeDropCoordinateModeRef = useRef<NativeDropCoordinateMode | null>(null);
   const nativeWebviewPositionRef = useRef<{ x: number; y: number } | null>(null);
   const transportReadoutTempoRef = useRef<HTMLElement | null>(null);
   const transportReadoutValueRef = useRef<HTMLElement | null>(null);
@@ -5201,12 +5260,17 @@ export function TransportPanelContent() {
     activeLibraryDragPayloadRef.current = null;
   }
 
-  function resolveTimelineDropTargetAtClientPoint(clientX: number, clientY: number) {
+  function getClientElementAtPoint(clientX: number, clientY: number) {
     if (typeof document.elementFromPoint !== "function") {
       return null;
     }
 
     const target = document.elementFromPoint(clientX, clientY);
+    return target instanceof HTMLElement ? target : null;
+  }
+
+  function resolveTimelineDropTargetAtClientPoint(clientX: number, clientY: number) {
+    const target = getClientElementAtPoint(clientX, clientY);
     if (!(target instanceof HTMLElement)) {
       return null;
     }
@@ -5237,12 +5301,132 @@ export function TransportPanelContent() {
     };
   }
 
+  function scoreNativeDropCandidate(candidate: NativeDropCandidateDebug) {
+    if (!candidate.isOverTimeline) {
+      return 0;
+    }
+
+    let score = 100;
+    if (candidate.elementFromPoint?.includes(".lt-track-lane")) {
+      score += 200;
+    } else if (
+      candidate.elementFromPoint?.includes(".lt-empty-arrangement-dropzone") ||
+      candidate.elementFromPoint?.includes(".lt-track-list-dropzone")
+    ) {
+      score += 180;
+    } else if (candidate.elementFromPoint?.includes(".lt-track-list")) {
+      score += 140;
+    }
+
+    if (
+      candidate.laneBounds &&
+      candidate.clientX >= candidate.laneBounds.left &&
+      candidate.clientX <= candidate.laneBounds.right
+    ) {
+      score += 40;
+    }
+
+    if (
+      candidate.laneBounds &&
+      candidate.clientY >= candidate.laneBounds.top &&
+      candidate.clientY <= candidate.laneBounds.bottom
+    ) {
+      score += 20;
+    }
+
+    if (candidate.renderedClientX != null) {
+      score += Math.max(0, 30 - Math.abs(candidate.renderedClientX - candidate.clientX));
+    }
+
+    return score;
+  }
+
+  function resolveNativeDropCandidate(candidate: NativeClientPointCandidate): NativeDropCandidateDebug {
+    const rawElement = getClientElementAtPoint(candidate.clientX, candidate.clientY);
+    const targetElement = resolveTimelineDropTargetAtClientPoint(candidate.clientX, candidate.clientY);
+    const laneElement =
+      targetElement?.classList.contains("lt-track-lane")
+        ? targetElement
+        : (targetElement?.closest(".lt-track-lane") as HTMLElement | null);
+    const laneBounds = laneElement?.getBoundingClientRect() ?? null;
+    const rulerBounds = rulerTrackRef.current?.getBoundingClientRect() ?? null;
+
+    if (!targetElement) {
+      return {
+        label: candidate.label,
+        clientX: candidate.clientX,
+        clientY: candidate.clientY,
+        elementFromPoint: describeNativeDropElement(rawElement),
+        laneBounds: toNativeDropDebugRect(laneBounds),
+        rulerBounds: toNativeDropDebugRect(rulerBounds),
+        dropSeconds: null,
+        renderedLeft: null,
+        renderedClientX: null,
+        score: 0,
+        isOverTimeline: false,
+        targetTrackId: null,
+      };
+    }
+
+    const viewportBounds = getLibraryDragViewportBounds(targetElement);
+    const dropSeconds = resolveLibraryDropSecondsAtClientX(candidate.clientX, targetElement);
+    const renderedLeft = clamp(
+      secondsToScreenX(dropSeconds, getCameraX(), pixelsPerSecond),
+      0,
+      viewportBounds.width,
+    );
+    const renderedClientX = viewportBounds.left + renderedLeft;
+    const debugCandidate: NativeDropCandidateDebug = {
+      label: candidate.label,
+      clientX: candidate.clientX,
+      clientY: candidate.clientY,
+      elementFromPoint: describeNativeDropElement(rawElement),
+      laneBounds: toNativeDropDebugRect(laneBounds),
+      rulerBounds: toNativeDropDebugRect(rulerBounds),
+      dropSeconds,
+      renderedLeft,
+      renderedClientX,
+      score: 0,
+      isOverTimeline: true,
+      targetTrackId: targetElement.closest("[data-track-id]")?.getAttribute("data-track-id") ?? null,
+    };
+    debugCandidate.score = scoreNativeDropCandidate(debugCandidate);
+    return debugCandidate;
+  }
+
   function resolveTimelineDropFromNativePosition(position: { x: number; y: number }) {
-    for (const clientPoint of nativeClientPointCandidates(position, nativeWebviewPositionRef.current)) {
-      const hit = resolveTimelineDropFromClientPoint(clientPoint.clientX, clientPoint.clientY);
-      if (hit.isOverTimeline) {
-        return hit;
-      }
+    const candidates = nativeClientPointCandidates(position, nativeWebviewPositionRef.current).map(
+      resolveNativeDropCandidate,
+    );
+
+    if (NATIVE_DND_DEBUG_ENABLED) {
+      console.debug("[native-dnd] candidates", {
+        nativePosition: position,
+        webviewPosition: nativeWebviewPositionRef.current,
+        cameraX: getCameraX(),
+        pixelsPerSecond,
+        candidates,
+      });
+      setNativeDropDebugCandidates(candidates);
+    }
+
+    const preferredMode = nativeDropCoordinateModeRef.current;
+    const selectedCandidate = preferredMode
+      ? candidates.find((candidate) => candidate.label === preferredMode && candidate.isOverTimeline) ?? null
+      : [...candidates]
+          .filter((candidate) => candidate.isOverTimeline)
+          .sort((left, right) => right.score - left.score)[0] ?? null;
+
+    if (!preferredMode) {
+      nativeDropCoordinateModeRef.current = selectedCandidate?.label ?? null;
+    }
+
+    if (selectedCandidate?.dropSeconds != null) {
+      return {
+        isOverTimeline: true,
+        dropSeconds: selectedCandidate.dropSeconds,
+        targetTrackId: selectedCandidate.targetTrackId,
+      };
     }
 
     return {
@@ -5386,7 +5570,7 @@ export function TransportPanelContent() {
     clientY: number;
     ctrlKey: boolean;
     metaKey: boolean;
-  }) {
+  }): InternalLibraryPointerDrag {
     const libraryFolderTarget = resolveLibraryFolderDropFromClientPoint(args.clientX, args.clientY);
     if (libraryFolderTarget) {
       clearLibraryDragPreview();
@@ -5732,18 +5916,12 @@ export function TransportPanelContent() {
     );
   }
 
-  async function handleDroppedSongPackage(file: File, dropSeconds: number) {
-    const packageBytes = new Uint8Array(await file.arrayBuffer());
-    const nextSnapshot = await importSongPackageFromBytes(packageBytes, dropSeconds);
-    applyPlaybackSnapshot(nextSnapshot);
-    await Promise.all([refreshSongView(), refreshLibraryState()]);
-    setStatus(t("transport.status.packageImportedAt", { time: formatClock(dropSeconds) }));
-  }
-
   async function handleDroppedSongPackagePath(packagePath: string, dropSeconds: number) {
-    const nextSnapshot = await importSongPackage(packagePath, dropSeconds);
-    applyPlaybackSnapshot(nextSnapshot);
-    await Promise.all([refreshSongView(), refreshLibraryState()]);
+    const result = await importSongPackage(packagePath, dropSeconds);
+    applyPlaybackSnapshot(result.snapshot);
+    mergeLibraryAssets(result.libraryAssets);
+    await refreshLibraryState({ preserveAssets: result.libraryAssets });
+    await refreshSongView();
     setStatus(t("transport.status.packageImportedAt", { time: formatClock(dropSeconds) }));
   }
 
@@ -5945,12 +6123,13 @@ export function TransportPanelContent() {
 
     if (classification.kind === "package") {
       void runAction(async () => {
-        if (!classification.packageFile) {
+        const packagePath = (classification.packageFile as NativeDroppedFile | null)?.path?.trim();
+        if (!packagePath) {
           rejectExternalDrop("unsupported");
           return;
         }
 
-        await handleDroppedSongPackage(classification.packageFile, dropSeconds);
+        await handleDroppedSongPackagePath(packagePath, dropSeconds);
       }, { busy: true });
       return;
     }
@@ -5964,6 +6143,10 @@ export function TransportPanelContent() {
   ) {
     setExternalDropPreview(null);
     nativeExternalDropPathsRef.current = [];
+    nativeDropCoordinateModeRef.current = null;
+    if (NATIVE_DND_DEBUG_ENABLED) {
+      setNativeDropDebugCandidates([]);
+    }
 
     if (classification.kind === "mixed" || classification.kind === "unsupported") {
       rejectExternalDrop(classification.kind);
@@ -6016,14 +6199,22 @@ export function TransportPanelContent() {
     nativeExternalDropPathsRef.current = [];
 
     if (!args.paths.length) {
+      nativeDropCoordinateModeRef.current = null;
       setExternalDropPreview(null);
+      if (NATIVE_DND_DEBUG_ENABLED) {
+        setNativeDropDebugCandidates([]);
+      }
       return;
     }
 
     const hit = resolveTimelineDropFromNativePosition(args.position);
     console.debug("[native-dnd] drop hit", hit);
     if (!hit.isOverTimeline) {
+      nativeDropCoordinateModeRef.current = null;
       setExternalDropPreview(null);
+      if (NATIVE_DND_DEBUG_ENABLED) {
+        setNativeDropDebugCandidates([]);
+      }
       return;
     }
 
@@ -6359,7 +6550,65 @@ export function TransportPanelContent() {
           onMidiLearnTarget={handleMidiLearnTarget}
         />
 
-        <div className="lt-timeline-shell" ref={timelineShellRef}>
+        <div className="lt-timeline-shell" ref={timelineShellRef} style={{ position: "relative" }}>
+          {NATIVE_DND_DEBUG_ENABLED && nativeDropDebugCandidates.length > 0 ? (
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                zIndex: 30,
+                overflow: "hidden",
+              }}
+            >
+              {nativeDropDebugCandidates.map((candidate) => {
+                const shellBounds = timelineShellRef.current?.getBoundingClientRect();
+                if (!shellBounds) {
+                  return null;
+                }
+
+                const left = candidate.clientX - shellBounds.left;
+                const color =
+                  nativeDropCoordinateModeRef.current === candidate.label
+                    ? "#ff5d5d"
+                    : candidate.isOverTimeline
+                      ? "#19c37d"
+                      : "#8a8f98";
+
+                return (
+                  <div
+                    key={candidate.label}
+                    style={{
+                      position: "absolute",
+                      left,
+                      top: 0,
+                      bottom: 0,
+                      width: 0,
+                      borderLeft: `1px dashed ${color}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 6,
+                        left: 4,
+                        padding: "2px 6px",
+                        borderRadius: 999,
+                        background: "rgba(12, 18, 28, 0.85)",
+                        color,
+                        fontSize: 11,
+                        lineHeight: 1.2,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {`${candidate.label} (${candidate.score.toFixed(0)})`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
           <div className="lt-timeline-scroll-viewport" ref={timelineScrollViewportRef}>
             <div className="lt-timeline-main-grid">
               <TrackHeadersPane

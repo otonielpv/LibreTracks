@@ -1,12 +1,11 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
-    io::{Cursor, Read, Seek, Write},
+    io::{Read, Seek, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use base64::{engine::general_purpose, Engine as _};
 use libretracks_core::{Clip, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track};
 use serde::{Deserialize, Serialize};
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
@@ -299,30 +298,6 @@ pub fn import_song_package(
     let mut archive =
         ZipArchive::new(file).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
     import_song_package_from_archive(song_dir, song, &mut archive, insert_at_seconds)
-}
-
-pub fn import_song_package_from_bytes(
-    song_dir: &Path,
-    song: &Song,
-    package_bytes: &[u8],
-    insert_at_seconds: f64,
-) -> Result<SongPackageImportResult, ProjectError> {
-    let cursor = Cursor::new(package_bytes.to_vec());
-    let mut archive =
-        ZipArchive::new(cursor).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-    import_song_package_from_archive(song_dir, song, &mut archive, insert_at_seconds)
-}
-
-pub fn import_song_package_from_base64(
-    song_dir: &Path,
-    song: &Song,
-    package_base64: &str,
-    insert_at_seconds: f64,
-) -> Result<SongPackageImportResult, ProjectError> {
-    let package_bytes = general_purpose::STANDARD
-        .decode(package_base64)
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-    import_song_package_from_bytes(song_dir, song, &package_bytes, insert_at_seconds)
 }
 
 fn import_song_package_from_archive<R: Read + Seek>(

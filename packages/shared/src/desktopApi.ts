@@ -11,6 +11,7 @@ import type {
   MidiRawMessage,
   RemoteServerInfo,
   SongView,
+  SongPackageImportResponse,
   TrackKind,
   TransportLifecycleEvent,
   TransportSnapshot,
@@ -237,26 +238,9 @@ export async function exportRegionRenderedAudio(regionId: string): Promise<void>
 export async function importSongPackage(
   packagePath: string,
   insertAtSeconds: number,
-): Promise<TransportSnapshot> {
-  return invokeCommand<TransportSnapshot>("import_song_package", { packagePath, insertAtSeconds });
-}
-
-export async function importSongPackageFromBytes(
-  packageBytes: Uint8Array | number[],
-  insertAtSeconds: number,
-): Promise<TransportSnapshot> {
-  return invokeCommand<TransportSnapshot>("import_song_package_from_bytes", {
-    packageBytes,
-    insertAtSeconds,
-  });
-}
-
-export async function importSongPackageFromBase64(
-  packageBase64: string,
-  insertAtSeconds: number,
-): Promise<TransportSnapshot> {
-  return invokeCommand<TransportSnapshot>("import_song_package_from_base64", {
-    packageBase64,
+): Promise<SongPackageImportResponse> {
+  return invokeCommand<SongPackageImportResponse>("import_song_package", {
+    packagePath,
     insertAtSeconds,
   });
 }

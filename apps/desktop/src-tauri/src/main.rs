@@ -78,8 +78,6 @@ fn main() {
             commands::project::export_region_as_package,
             commands::project::export_region_rendered_audio,
             commands::project::import_song_package,
-            commands::project::import_song_package_from_base64,
-            commands::project::import_song_package_from_bytes,
             commands::project::resolve_missing_file,
             commands::library::delete_library_asset,
             commands::library::move_library_asset,

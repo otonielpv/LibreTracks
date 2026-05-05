@@ -127,6 +127,11 @@ export type LibraryAssetSummary = {
   folderPath?: string | null;
 };
 
+export type SongPackageImportResponse = {
+  snapshot: TransportSnapshot;
+  libraryAssets: LibraryAssetSummary[];
+};
+
 export type AudioFileImportPayload = {
   fileName: string;
   bytes: Uint8Array | number[];

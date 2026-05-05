@@ -10,6 +10,7 @@ import type {
   PendingJumpSummary,
   SectionMarkerSummary,
   SongRegionSummary,
+  SongPackageImportResponse,
   SongView,
   TempoMarkerSummary,
   TrackKind,
@@ -802,23 +803,10 @@ export const testDesktopApiMock = {
       ...state.song,
       projectRevision: state.projectRevision + 1,
     });
-    return clone(buildSnapshot());
-  },
-  importSongPackageFromBytes: async (_packageBytes: Uint8Array | number[], _insertAtSeconds: number) => {
-    addImportedPackageAsset();
-    replaceSong({
-      ...state.song,
-      projectRevision: state.projectRevision + 1,
-    });
-    return clone(buildSnapshot());
-  },
-  importSongPackageFromBase64: async (_packageBase64: string, _insertAtSeconds: number) => {
-    addImportedPackageAsset();
-    replaceSong({
-      ...state.song,
-      projectRevision: state.projectRevision + 1,
-    });
-    return clone(buildSnapshot());
+    return clone({
+      snapshot: buildSnapshot(),
+      libraryAssets: state.libraryAssets,
+    } satisfies SongPackageImportResponse);
   },
   resolveMissingFile: async (oldPath: string, newPath: string) => {
     state.libraryAssets = sortLibraryAssets(

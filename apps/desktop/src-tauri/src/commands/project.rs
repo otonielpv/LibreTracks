@@ -2,7 +2,7 @@ use tauri::{AppHandle, State};
 
 use crate::commands::events::emit_ready_library_waveforms;
 use crate::error::DesktopError;
-use crate::models::{LibraryAssetSummary, SongView, TransportSnapshot};
+use crate::models::{LibraryAssetSummary, SongPackageImportResponse, SongView, TransportSnapshot};
 use crate::state::{
     AudioFileImportPayload, AudioFilePathImportPayload, CreateClipRequest, DesktopState,
 };
@@ -312,7 +312,7 @@ pub fn import_song_package(
     package_path: String,
     insert_at_seconds: f64,
     state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
+) -> Result<SongPackageImportResponse, String> {
     let mut session = state
         .session
         .lock()
@@ -320,35 +320,5 @@ pub fn import_song_package(
 
     session
         .import_song_package(&package_path, insert_at_seconds, &state.audio)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-pub async fn import_song_package_from_bytes(
-    package_bytes: Vec<u8>,
-    insert_at_seconds: f64,
-    state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-    session
-        .import_song_package_from_bytes(&package_bytes, insert_at_seconds, &state.audio)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-pub async fn import_song_package_from_base64(
-    package_base64: String,
-    insert_at_seconds: f64,
-    state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-    session
-        .import_song_package_from_base64(&package_base64, insert_at_seconds, &state.audio)
         .map_err(|error| error.to_string())
 }

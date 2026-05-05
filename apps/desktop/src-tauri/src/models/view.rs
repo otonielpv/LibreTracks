@@ -197,6 +197,13 @@ pub struct LibraryAssetSummary {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SongPackageImportResponse {
+    pub snapshot: TransportSnapshot,
+    pub library_assets: Vec<LibraryAssetSummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DesktopPerformanceSnapshot {
     pub copy_millis: u128,
     pub wav_analysis_millis: u128,
