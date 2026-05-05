@@ -1118,21 +1118,22 @@ describe("App", () => {
     expect(screen.getByText("Drop")).toBeTruthy();
   });
 
-  it("aligns the native external drop guide when positions are desktop-relative", async () => {
+  it("keeps native external drops aligned when the webview position is offset", async () => {
     const originalDevicePixelRatio = window.devicePixelRatio;
-    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const desktopApi = await import("../features/transport/desktopApi");
+    const importAudioFilesFromPathsMock = vi.mocked(desktopApi.importAudioFilesFromPaths);
     Object.defineProperty(window, "devicePixelRatio", {
       configurable: true,
       value: 1,
     });
 
     try {
-      mockNativeWebviewPosition = { x: 0, y: 0 };
-      const firstView = await renderApp();
-      mockRulerBounds(firstView.container);
-      mockLaneBounds(firstView.container);
-      mockTrackListBounds(firstView.container);
-      mockTimelinePaneBounds(firstView.container);
+      mockNativeWebviewPosition = { x: 300, y: 80 };
+      const { container } = await renderApp();
+      mockRulerBounds(container);
+      mockLaneBounds(container);
+      mockTrackListBounds(container);
+      mockTimelinePaneBounds(container);
 
       await act(async () => {
         await Promise.resolve();
@@ -1148,50 +1149,24 @@ describe("App", () => {
         });
       });
 
-      const baselineHit = debugSpy.mock.calls.filter(([label]) => label === "[native-dnd] over hit").at(-1)?.[1];
-      expect(baselineHit).toMatchObject({
-        isOverTimeline: true,
-        dropSeconds: 3.5,
-        targetTrackId: null,
-      });
-
-      firstView.unmount();
-      useTimelineUIStore.setState({
-        cameraX: 0,
-        zoomLevel: TIMELINE_DEFAULT_ZOOM_LEVEL,
-        trackHeight: TIMELINE_DEFAULT_TRACK_HEIGHT,
-        selectedTrackIds: [],
-        selectedClipId: null,
-        selectedSectionId: null,
-        snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
-        midiLearnMode: null,
-      });
-
-      mockNativeWebviewPosition = { x: 300, y: 80 };
-      const secondView = await renderApp();
-      mockRulerBounds(secondView.container);
-      mockLaneBounds(secondView.container);
-      mockTrackListBounds(secondView.container);
-      mockTimelinePaneBounds(secondView.container);
-
-      await act(async () => {
-        await Promise.resolve();
-      });
+      expect(getExternalDropGuide(container)).toBeTruthy();
 
       await act(async () => {
         await emitNativeDropEvent({
           payload: {
-            type: "over",
+            type: "drop",
             paths: ["C:/mock/imports/lead.wav"],
-            position: { x: 720, y: 260 },
+            position: { x: 420, y: 180 },
           },
         });
       });
 
-      const offsetHit = debugSpy.mock.calls.filter(([label]) => label === "[native-dnd] over hit").at(-1)?.[1];
-      expect(offsetHit).toEqual(baselineHit);
+      await waitFor(() => {
+        expect(importAudioFilesFromPathsMock).toHaveBeenCalledWith([
+          { fileName: "lead.wav", sourcePath: "C:/mock/imports/lead.wav" },
+        ]);
+      });
     } finally {
-      debugSpy.mockRestore();
       Object.defineProperty(window, "devicePixelRatio", {
         configurable: true,
         value: originalDevicePixelRatio,

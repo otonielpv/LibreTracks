@@ -177,7 +177,7 @@ const DRAG_THRESHOLD_PX = 6;
 const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
 const SCROLL_COMMIT_DEBOUNCE_MS = 100;
 const LIVE_ZOOM_COMMIT_DEBOUNCE_MS = 150;
-const NATIVE_DND_DEBUG_ENABLED = import.meta.env.DEV;
+const NATIVE_DND_DEBUG_ENABLED = import.meta.env.DEV && import.meta.env.VITE_NATIVE_DND_DEBUG === "true";
 
 type NativeDropCoordinateMode = "raw" | "raw/dpr" | "minus-webview" | "minus-webview/dpr";
 
@@ -5410,16 +5410,14 @@ export function TransportPanelContent() {
       setNativeDropDebugCandidates(candidates);
     }
 
-    const preferredMode = nativeDropCoordinateModeRef.current;
-    const selectedCandidate = preferredMode
-      ? candidates.find((candidate) => candidate.label === preferredMode && candidate.isOverTimeline) ?? null
-      : [...candidates]
-          .filter((candidate) => candidate.isOverTimeline)
-          .sort((left, right) => right.score - left.score)[0] ?? null;
+    const selectedCandidate =
+      candidates.find((candidate) => candidate.label === "raw" && candidate.isOverTimeline) ??
+      candidates.find((candidate) => candidate.label === "raw/dpr" && candidate.isOverTimeline) ??
+      candidates.find((candidate) => candidate.label === "minus-webview" && candidate.isOverTimeline) ??
+      candidates.find((candidate) => candidate.label === "minus-webview/dpr" && candidate.isOverTimeline) ??
+      null;
 
-    if (!preferredMode) {
-      nativeDropCoordinateModeRef.current = selectedCandidate?.label ?? null;
-    }
+    nativeDropCoordinateModeRef.current = selectedCandidate?.label ?? null;
 
     if (selectedCandidate?.dropSeconds != null) {
       return {
@@ -6164,7 +6162,9 @@ export function TransportPanelContent() {
   }
 
   function handleNativeFileDragOver(args: { paths?: string[]; position: { x: number; y: number } }) {
-    console.debug("[native-dnd] over", args);
+    if (NATIVE_DND_DEBUG_ENABLED) {
+      console.debug("[native-dnd] over", args);
+    }
 
     if (args.paths?.length) {
       nativeExternalDropPathsRef.current = args.paths;
@@ -6172,7 +6172,9 @@ export function TransportPanelContent() {
 
     const paths = args.paths?.length ? args.paths : nativeExternalDropPathsRef.current;
     const hit = resolveTimelineDropFromNativePosition(args.position);
-    console.debug("[native-dnd] over hit", hit);
+    if (NATIVE_DND_DEBUG_ENABLED) {
+      console.debug("[native-dnd] over hit", hit);
+    }
     if (!hit.isOverTimeline) {
       setExternalDropPreview(null);
       return;
@@ -6194,7 +6196,9 @@ export function TransportPanelContent() {
   }
 
   function handleNativeFileDrop(args: { paths: string[]; position: { x: number; y: number } }) {
-    console.debug("[native-dnd] drop", args);
+    if (NATIVE_DND_DEBUG_ENABLED) {
+      console.debug("[native-dnd] drop", args);
+    }
 
     nativeExternalDropPathsRef.current = [];
 
@@ -6208,7 +6212,9 @@ export function TransportPanelContent() {
     }
 
     const hit = resolveTimelineDropFromNativePosition(args.position);
-    console.debug("[native-dnd] drop hit", hit);
+    if (NATIVE_DND_DEBUG_ENABLED) {
+      console.debug("[native-dnd] drop hit", hit);
+    }
     if (!hit.isOverTimeline) {
       nativeDropCoordinateModeRef.current = null;
       setExternalDropPreview(null);

@@ -458,59 +458,6 @@ export function TimelineCanvasPane({
         onContextMenu={onTrackListContextMenu}
         onDragEnter={handleTimelineDragEnter}
       >
-        {externalDropPreview !== null ? (
-          <div
-            aria-hidden="true"
-            style={{
-              position: "sticky",
-              top: 10,
-              display: "flex",
-              justifyContent: "flex-end",
-              paddingRight: 14,
-              zIndex: 5,
-              pointerEvents: "none",
-            }}
-          >
-            <div
-              style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                background:
-                  externalDropPreview.kind === "audio"
-                    ? "rgba(122,229,130,0.18)"
-                    : externalDropPreview.kind === "package"
-                      ? "rgba(255,184,107,0.18)"
-                      : externalDropPreview.kind === "unknown"
-                        ? "rgba(118, 184, 255, 0.16)"
-                      : "rgba(255,107,107,0.18)",
-                border:
-                  externalDropPreview.kind === "audio"
-                    ? "1px solid rgba(122,229,130,0.34)"
-                    : externalDropPreview.kind === "package"
-                      ? "1px solid rgba(255,184,107,0.34)"
-                      : externalDropPreview.kind === "unknown"
-                        ? "1px solid rgba(118,184,255,0.34)"
-                      : "1px solid rgba(255,107,107,0.34)",
-                color: "#f4f3ee",
-                font: '600 11px "Space Grotesk", sans-serif',
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                pointerEvents: "none",
-              }}
-            >
-              {externalDropPreview.kind === "audio"
-                ? "Audio"
-                : externalDropPreview.kind === "package"
-                  ? "Package"
-                  : externalDropPreview.kind === "unknown"
-                    ? "Drop"
-                  : externalDropPreview.kind === "mixed"
-                    ? "Mixed"
-                    : "Unsupported"}
-            </div>
-          </div>
-        ) : null}
-
         <div className="lt-track-layers" style={{ width: laneViewportWidth }}>
           {song ? (
             <TimelineTrackCanvas
@@ -579,6 +526,65 @@ export function TimelineCanvasPane({
                 pointerEvents: "none",
               }}
             />
+          ) : null}
+
+          {externalDropPreview !== null ? (
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: 16,
+                bottom: 16,
+                zIndex: 12,
+                pointerEvents: "none",
+                maxWidth: "calc(100% - 32px)",
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  minHeight: 28,
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  background:
+                    externalDropPreview.kind === "audio"
+                      ? "rgba(122,229,130,0.18)"
+                      : externalDropPreview.kind === "package"
+                        ? "rgba(255,184,107,0.18)"
+                        : externalDropPreview.kind === "unknown"
+                          ? "rgba(118,184,255,0.16)"
+                        : "rgba(255,107,107,0.18)",
+                  border:
+                    externalDropPreview.kind === "audio"
+                      ? "1px solid rgba(122,229,130,0.34)"
+                      : externalDropPreview.kind === "package"
+                        ? "1px solid rgba(255,184,107,0.34)"
+                        : externalDropPreview.kind === "unknown"
+                          ? "1px solid rgba(118,184,255,0.34)"
+                        : "1px solid rgba(255,107,107,0.34)",
+                  color: "#f4f3ee",
+                  font: '600 11px "Space Grotesk", sans-serif',
+                  letterSpacing: "0.04em",
+                  textTransform: "uppercase",
+                  pointerEvents: "none",
+                  maxWidth: "100%",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {externalDropPreview.kind === "audio"
+                  ? "Audio"
+                  : externalDropPreview.kind === "package"
+                    ? "Package"
+                    : externalDropPreview.kind === "unknown"
+                      ? "Drop"
+                    : externalDropPreview.kind === "mixed"
+                      ? "Mixed"
+                      : "Unsupported"}
+              </div>
+            </div>
           ) : null}
 
           {shouldShowEmptyArrangementHint ? (
