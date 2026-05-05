@@ -66,6 +66,8 @@ pub(crate) struct AudioRuntimeStateSummary {
     pub prepare_active_tasks: usize,
     pub prepare_cancelled_tasks: usize,
     pub source_swap_count: u64,
+    pub playback_path: Option<String>,
+    pub source_kind: Option<String>,
     pub silence_fallback_count: u64,
     pub last_silence_fallback_position: Option<f64>,
     pub last_silence_fallback_file: Option<String>,
@@ -153,6 +155,8 @@ impl Default for AudioRuntimeStateSummary {
             prepare_active_tasks: 0,
             prepare_cancelled_tasks: 0,
             source_swap_count: 0,
+            playback_path: None,
+            source_kind: None,
             silence_fallback_count: 0,
             last_silence_fallback_position: None,
             last_silence_fallback_file: None,
@@ -284,6 +288,8 @@ impl AudioDebugState {
             self.runtime_state.last_seek_fallback_used = far_seek.used_fallback;
             self.runtime_state.last_seek_source_waited = false;
             self.runtime_state.source_swap_ms_after_seek = far_seek.swap_to_exact_ms;
+            self.runtime_state.playback_path = Some(far_seek.playback_path.clone());
+            self.runtime_state.source_kind = Some(far_seek.cache_status.clone());
         }
     }
 
@@ -377,6 +383,7 @@ pub(crate) fn command_kind_label(kind: AudioCommandKind) -> &'static str {
 #[derive(Debug, Clone)]
 pub(crate) struct FarSeekTelemetry {
     pub cache_status: String,
+    pub playback_path: String,
     pub exact_ready: bool,
     pub used_fallback: bool,
     pub prepare_requested: bool,

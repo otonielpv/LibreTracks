@@ -1106,7 +1106,7 @@ impl DesktopSession {
             PlaybackStartReason::InitialPlay
         };
 
-        audio.replace_song_buffers(&song_dir, &song)?;
+        audio.prepare_song_buffers_async(song_dir.clone(), song.clone());
         audio.play(song_dir, song, self.engine.position_seconds(), start_reason)?;
         self.engine.play()?;
         self.transport_clock
@@ -4347,6 +4347,32 @@ mod tests {
 
         assert_eq!(frozen_snapshot.playback_state, "paused");
         assert!((frozen_snapshot.position_seconds - paused_position).abs() < 0.01);
+    }
+
+    #[test]
+    fn play_does_not_synchronously_prepare_missing_audio() {
+        let root = tempdir().expect("temp dir should exist");
+        let root_path = root.keep();
+        let song = demo_song();
+        let song_dir =
+            create_song_folder(&root_path, "async-play-demo").expect("song dir should exist");
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        save_song(&song_dir, &song).expect("song should save");
+
+        let mut session = DesktopSession::default();
+        session.song_file_path = Some(song_dir.join(SONG_FILE_NAME));
+        session.song_dir = Some(song_dir);
+        session
+            .engine
+            .load_song(song)
+            .expect("song should load into engine");
+        let audio = crate::audio_runtime::AudioController::default();
+
+        let snapshot = session
+            .play(&audio)
+            .expect("play should not prepare inline");
+
+        assert_eq!(snapshot.playback_state, "playing");
     }
 
     #[test]

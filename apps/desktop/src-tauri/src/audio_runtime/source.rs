@@ -120,6 +120,9 @@ pub(crate) trait PreparedAudioSource: Send + Sync {
     fn channels(&self) -> usize;
     fn frame_count(&self) -> u64;
     fn read_interleaved_at(&self, source_frame: u64, output: &mut [f32]) -> usize;
+    fn alignment_valid(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -657,14 +660,7 @@ impl PreparedAudioCache {
         frame: u64,
     ) -> Option<Arc<dyn PreparedAudioSource>> {
         let states = self.states.try_read().ok()?;
-        let state = states.get(key).or_else(|| {
-            states.iter().find_map(|(candidate_key, state)| {
-                (candidate_key.file_id == key.file_id
-                    && candidate_key.file_hash == key.file_hash
-                    && candidate_key.transpose_semitones == key.transpose_semitones)
-                    .then_some(state)
-            })
-        })?;
+        let state = states.get(key)?;
         let source = match state {
             PreparedState::ReadyRam(source) | PreparedState::ReadyDisk(source) => source.clone(),
             PreparedState::Preparing | PreparedState::Missing | PreparedState::Failed(_) => {
@@ -691,6 +687,19 @@ impl PreparedAudioCache {
         key: &PreparedAudioKey,
         frame: u64,
     ) -> SeekSourceDecision {
+        if audio_safe_mode_enabled() {
+            if let Some(source) = self.get_original(key, frame) {
+                return match self.state_kind(&PreparedAudioKey {
+                    transpose_semitones: 0,
+                    ..key.clone()
+                }) {
+                    Some(SeekSourceKind::ExactDisk) => SeekSourceDecision::OriginalDisk(source),
+                    _ => SeekSourceDecision::OriginalRam(source),
+                };
+            }
+            return SeekSourceDecision::Silence;
+        }
+
         if let Some(source) = self.get_exact(key, frame) {
             return match self.state_kind(key) {
                 Some(SeekSourceKind::ExactDisk) => SeekSourceDecision::ExactDisk(source),
@@ -729,7 +738,8 @@ impl PreparedAudioCache {
         &self,
         key: PreparedAudioKey,
         source: Arc<dyn PreparedAudioSource>,
-    ) {
+    ) -> Result<(), String> {
+        validate_prepared_key_matches_source(&key, source.as_ref())?;
         if key.transpose_semitones != 0 {
             if let Ok(mut previous_pitch) = self.previous_pitch.write() {
                 previous_pitch.insert(key.file_id.clone(), source.clone());
@@ -738,13 +748,15 @@ impl PreparedAudioCache {
         if let Ok(mut states) = self.states.write() {
             states.insert(key, PreparedState::ReadyRam(source));
         }
+        Ok(())
     }
 
     pub(crate) fn insert_ready_disk(
         &self,
         key: PreparedAudioKey,
         source: Arc<dyn PreparedAudioSource>,
-    ) {
+    ) -> Result<(), String> {
+        validate_prepared_key_matches_source(&key, source.as_ref())?;
         if key.transpose_semitones != 0 {
             if let Ok(mut previous_pitch) = self.previous_pitch.write() {
                 previous_pitch.insert(key.file_id.clone(), source.clone());
@@ -753,6 +765,7 @@ impl PreparedAudioCache {
         if let Ok(mut states) = self.states.write() {
             states.insert(key, PreparedState::ReadyDisk(source));
         }
+        Ok(())
     }
 
     pub(crate) fn insert_missing(&self, key: PreparedAudioKey) {
@@ -914,15 +927,57 @@ pub(crate) fn render_transposed_to_cache(
     key: PreparedAudioKey,
     output_path: PathBuf,
 ) -> Result<Arc<dyn PreparedAudioSource>, String> {
+    validate_prepared_key_matches_source(&key, raw_source.as_ref())?;
+    if key.transpose_semitones == 0 || audio_safe_mode_enabled() {
+        return Ok(raw_source);
+    }
+    if !prepared_pitch_render_enabled() {
+        return Err("prepared pitch render is temporarily disabled".to_string());
+    }
+    let rendered =
+        render_pitch_shift_offline_aligned(raw_source.as_ref(), key.transpose_semitones)?;
+    write_ltaf_file(
+        &output_path,
+        &rendered.samples,
+        rendered.sample_rate,
+        rendered.channels,
+    )?;
+    let disk_source = Arc::new(RawDiskSource::open_ltaf(&output_path)?);
+    validate_prepared_key_matches_source(&key, disk_source.as_ref())?;
+    Ok(disk_source)
+}
+
+struct OfflinePitchRender {
+    samples: Vec<f32>,
+    sample_rate: u32,
+    channels: usize,
+}
+
+fn render_pitch_shift_offline_aligned(
+    raw_source: &dyn PreparedAudioSource,
+    transpose_semitones: i32,
+) -> Result<OfflinePitchRender, String> {
     let channels = raw_source.channels().max(1);
     let sample_rate = raw_source.sample_rate().max(1);
+    let frame_count = raw_source.frame_count() as usize;
     let mut pitch_engine =
-        pitch::create_pitch_shift_engine(sample_rate, channels, key.transpose_semitones);
+        pitch::create_pitch_shift_engine(sample_rate, channels, transpose_semitones);
     let block_frames = STREAM_WORKER_CHUNK_FRAMES;
-    let mut rendered = Vec::with_capacity(raw_source.frame_count() as usize * channels);
+    let latency_frames = pitch_engine
+        .latency_frames()
+        .saturating_sub(PITCH_ALIGNMENT_TRIM_FRAMES);
+    let mut rendered = Vec::with_capacity(frame_count.saturating_mul(channels));
     let mut source_frame = 0_u64;
 
     pitch_engine.reset();
+    if latency_frames > 0 {
+        let silence = vec![0.0_f32; latency_frames * channels];
+        let mut primed = vec![0.0_f32; silence.len()];
+        pitch_engine
+            .process_realtime_block(&silence, &mut primed)
+            .map_err(|error| format!("pitch prime failed: {error:?}"))?;
+    }
+
     while source_frame < raw_source.frame_count() {
         let frames = block_frames.min((raw_source.frame_count() - source_frame) as usize);
         let mut input = vec![0.0_f32; frames * channels];
@@ -939,9 +994,28 @@ pub(crate) fn render_transposed_to_cache(
         source_frame = source_frame.saturating_add(frames_read as u64);
     }
 
-    write_ltaf_file(&output_path, &rendered, sample_rate, channels)?;
-    let disk_source = Arc::new(RawDiskSource::open_ltaf(&output_path)?);
-    Ok(disk_source)
+    if latency_frames > 0 {
+        let silence = vec![0.0_f32; latency_frames * channels];
+        let mut drained = vec![0.0_f32; silence.len()];
+        pitch_engine
+            .process_realtime_block(&silence, &mut drained)
+            .map_err(|error| format!("pitch drain failed: {error:?}"))?;
+        rendered.extend_from_slice(&drained);
+    }
+
+    let wanted_samples = frame_count.saturating_mul(channels);
+    if rendered.len() > wanted_samples {
+        rendered.truncate(wanted_samples);
+    } else if rendered.len() < wanted_samples {
+        rendered.resize(wanted_samples, 0.0);
+    }
+    validate_rendered_samples(&rendered)?;
+
+    Ok(OfflinePitchRender {
+        samples: rendered,
+        sample_rate,
+        channels,
+    })
 }
 
 impl AudioBufferCache {
@@ -963,7 +1037,9 @@ impl AudioBufferCache {
         key: PreparedAudioKey,
         source: Arc<dyn PreparedAudioSource>,
     ) {
-        self.prepared_audio.insert_ready_ram(key, source);
+        self.prepared_audio
+            .insert_ready_ram(key, source)
+            .expect("prepared test source should match key");
     }
 
     #[cfg(test)]
@@ -1066,13 +1142,13 @@ impl AudioBufferCache {
                         })
                         .collect();
                 }
-                let original_source = decode_original_to_raw_ram(&source)?;
+                let original_source = decode_original_to_engine_ram(&source, 48_000, 2)?;
                 Ok::<_, String>((file_path, Arc::new(source), Arc::new(original_source)))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         for (file_path, prepared_source, original_source) in prepared_entries {
-            self.insert_original_prepared_source(&file_path, original_source);
+            self.insert_original_prepared_source(&file_path, original_source)?;
             next_entries.insert(file_path, prepared_source);
         }
 
@@ -1108,8 +1184,8 @@ impl AudioBufferCache {
             .get(file_path)
             .cloned()
             .ok_or_else(|| format!("audio source is not prepared: {}", file_path.display()))?;
-        let original_source = Arc::new(decode_original_to_raw_ram(&source)?);
-        self.insert_original_prepared_source(file_path, original_source);
+        let original_source = Arc::new(decode_original_to_engine_ram(&source, 48_000, 2)?);
+        self.insert_original_prepared_source(file_path, original_source)?;
         Ok(())
     }
 
@@ -1117,15 +1193,15 @@ impl AudioBufferCache {
         &self,
         file_path: &Path,
         source: Arc<dyn PreparedAudioSource>,
-    ) {
+    ) -> Result<(), String> {
         let key = PreparedAudioKey {
             file_id: file_path.to_string_lossy().to_string(),
             file_hash: file_path.to_string_lossy().to_string(),
-            sample_rate: source.sample_rate(),
-            channels: source.channels(),
+            sample_rate: 48_000,
+            channels: 2,
             transpose_semitones: 0,
         };
-        self.prepared_audio.insert_ready_ram(key, source);
+        self.prepared_audio.insert_ready_ram(key, source)
     }
 
     pub(crate) fn get(
@@ -1146,6 +1222,11 @@ impl AudioBufferCache {
         position: TimelinePosition,
         required_transpose: i32,
     ) -> SeekSourceDecision {
+        let required_transpose = if audio_safe_mode_enabled() {
+            0
+        } else {
+            required_transpose
+        };
         let Some(plan) = mixer::build_playback_plans(song_dir, song, 48_000)
             .into_iter()
             .find(|plan| {
@@ -1266,7 +1347,10 @@ impl AudioBufferCache {
         };
 
         self.ensure_original_prepared_source(&plan.file_path)?;
-        if transpose_semitones == 0 {
+        if transpose_semitones == 0 || audio_safe_mode_enabled() {
+            return Ok(());
+        }
+        if !prepared_pitch_render_enabled() {
             return Ok(());
         }
 
@@ -1290,7 +1374,7 @@ impl AudioBufferCache {
             transpose_semitones
         ));
         let rendered = render_transposed_to_cache(original_source, exact_key.clone(), output_path)?;
-        self.prepared_audio.insert_ready_disk(exact_key, rendered);
+        self.prepared_audio.insert_ready_disk(exact_key, rendered)?;
         Ok(())
     }
 
@@ -1515,7 +1599,11 @@ impl StreamingClipReader {
         let (command_sender, command_receiver) = mpsc::channel();
         let (ready_sender, ready_receiver) = mpsc::sync_channel(1);
         let worker_source = Arc::clone(&shared_source);
-        let transpose_semitones = plan.transpose_semitones;
+        let transpose_semitones = if audio_safe_mode_enabled() {
+            0
+        } else {
+            plan.transpose_semitones
+        };
         let _worker_handle = thread::Builder::new()
             .name("libretracks-streaming-source".into())
             .spawn(move || {
@@ -2102,7 +2190,25 @@ pub(crate) fn prepare_audio_source(file_path: &Path) -> Result<StreamingAudioSou
     })
 }
 
-fn decode_original_to_raw_ram(source: &StreamingAudioSource) -> Result<RawRamSource, String> {
+fn validate_rendered_samples(samples: &[f32]) -> Result<(), String> {
+    let mut peak = 0.0_f32;
+    for &sample in samples {
+        if !sample.is_finite() {
+            return Err("pitch render produced non-finite samples".to_string());
+        }
+        peak = peak.max(sample.abs());
+    }
+    if peak > 4.0 {
+        return Err(format!("pitch render peak is unsafe: {peak}"));
+    }
+    Ok(())
+}
+
+fn decode_original_to_engine_ram(
+    source: &StreamingAudioSource,
+    output_sample_rate: u32,
+    output_channels: usize,
+) -> Result<RawRamSource, String> {
     let mut decoder = StreamingDecoder::open(source, source.sample_rate, 0.0)?;
     let channels = source.channels.max(1);
     let mut samples = Vec::with_capacity(source.frame_count.saturating_mul(channels));
@@ -2115,7 +2221,64 @@ fn decode_original_to_raw_ram(source: &StreamingAudioSource) -> Result<RawRamSou
         samples.extend_from_slice(&chunk);
     }
 
-    Ok(RawRamSource::new(samples, source.sample_rate, channels))
+    let resampled = resample_interleaved(
+        &samples,
+        channels,
+        source.sample_rate,
+        output_sample_rate.max(1),
+    );
+    let converted = convert_interleaved_channels(&resampled, channels, output_channels.max(1));
+    validate_rendered_samples(&converted)?;
+
+    Ok(RawRamSource::new(
+        converted,
+        output_sample_rate.max(1),
+        output_channels.max(1),
+    ))
+}
+
+fn convert_interleaved_channels(
+    samples: &[f32],
+    source_channels: usize,
+    target_channels: usize,
+) -> Vec<f32> {
+    let source_channels = source_channels.max(1);
+    let target_channels = target_channels.max(1);
+    if source_channels == target_channels {
+        return samples.to_vec();
+    }
+
+    let frame_count = samples.len() / source_channels;
+    let mut output = vec![0.0_f32; frame_count * target_channels];
+    for frame in 0..frame_count {
+        let source_base = frame * source_channels;
+        let target_base = frame * target_channels;
+        let left = samples[source_base];
+        let right = if source_channels > 1 {
+            samples[source_base + 1]
+        } else {
+            left
+        };
+
+        if target_channels == 1 {
+            output[target_base] = if source_channels == 1 {
+                left
+            } else {
+                (left + right) * 0.5
+            };
+            continue;
+        }
+
+        output[target_base] = left;
+        output[target_base + 1] = right;
+        for extra_channel in 2..target_channels {
+            output[target_base + extra_channel] = samples
+                .get(source_base + extra_channel.min(source_channels - 1))
+                .copied()
+                .unwrap_or(right);
+        }
+    }
+    output
 }
 
 fn nearest_seek_time(source: &StreamingAudioSource, start_seconds: f64, sample_rate: u32) -> f64 {
@@ -2260,6 +2423,51 @@ fn sanitize_cache_name(path: &Path) -> String {
             }
         })
         .collect()
+}
+
+pub(crate) fn audio_safe_mode_enabled() -> bool {
+    std::env::var("LIBRETRACKS_AUDIO_SAFE_MODE")
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+pub(crate) fn prepared_playback_disabled() -> bool {
+    std::env::var("LIBRETRACKS_DISABLE_PREPARED_PLAYBACK")
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+pub(crate) fn prepared_pitch_render_enabled() -> bool {
+    false
+}
+
+fn validate_prepared_key_matches_source(
+    key: &PreparedAudioKey,
+    source: &dyn PreparedAudioSource,
+) -> Result<(), String> {
+    debug_assert_eq!(key.sample_rate, source.sample_rate());
+    debug_assert_eq!(key.channels, source.channels());
+    if key.sample_rate != source.sample_rate() || key.channels != source.channels() {
+        return Err(format!(
+            "prepared source format mismatch for {}: key={}Hz/{}ch source={}Hz/{}ch",
+            key.file_id,
+            key.sample_rate,
+            key.channels,
+            source.sample_rate(),
+            source.channels()
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -2429,6 +2637,27 @@ fn randomish_id() -> u64 {
 }
 
 #[cfg(test)]
+pub(crate) fn with_env_var_for_test<T>(
+    key: &str,
+    value: Option<&str>,
+    body: impl FnOnce() -> T,
+) -> T {
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = ENV_LOCK.lock().expect("env lock should not poison");
+    let previous = std::env::var(key).ok();
+    match value {
+        Some(value) => std::env::set_var(key, value),
+        None => std::env::remove_var(key),
+    }
+    let result = body();
+    match previous.as_deref() {
+        Some(previous) => std::env::set_var(key, previous),
+        None => std::env::remove_var(key),
+    }
+    result
+}
+
+#[cfg(test)]
 fn write_test_wav(
     path: &Path,
     samples: &[f32],
@@ -2453,6 +2682,7 @@ fn write_test_wav(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use libretracks_core::{Clip, SongRegion, Track, TrackKind};
 
     fn best_envelope_alignment_offset(
         left: &[f32],
@@ -2664,7 +2894,8 @@ mod tests {
         cache.insert_ready_ram(
             original_key,
             Arc::new(RawRamSource::new(vec![0.1, 0.2, 0.3], 48_000, 1)),
-        );
+        )
+        .expect("prepared source should insert");
 
         let fallback = cache.get_best_available(&exact_key, 1);
         assert_eq!(fallback.kind(), SeekSourceKind::OriginalRam);
@@ -2672,7 +2903,8 @@ mod tests {
         cache.insert_ready_ram(
             exact_key.clone(),
             Arc::new(TransposedRamSource::new(vec![0.4, 0.5, 0.6], 48_000, 1)),
-        );
+        )
+        .expect("prepared source should insert");
         let exact = cache.get_best_available(&exact_key, 1);
 
         assert_eq!(exact.kind(), SeekSourceKind::ExactRam);
@@ -2714,7 +2946,8 @@ mod tests {
         cache.insert_ready_ram(
             old_pitch_key,
             Arc::new(TransposedRamSource::new(vec![0.1, 0.2], 48_000, 1)),
-        );
+        )
+        .expect("prepared source should insert");
 
         let decision = cache.get_best_available(&requested_key, 0);
 
@@ -2722,7 +2955,53 @@ mod tests {
     }
 
     #[test]
-    fn render_transposed_to_cache_writes_ltaf_off_playback_path() {
+    fn prepared_audio_cache_requires_exact_format_match() {
+        let cache = PreparedAudioCache::default();
+        let cached_key = PreparedAudioKey {
+            file_id: "file-a".into(),
+            file_hash: "hash-a".into(),
+            sample_rate: 44_100,
+            channels: 1,
+            transpose_semitones: 0,
+        };
+        let requested_key = PreparedAudioKey {
+            sample_rate: 48_000,
+            channels: 2,
+            ..cached_key.clone()
+        };
+        cache
+            .insert_ready_ram(
+                cached_key,
+                Arc::new(RawRamSource::new(vec![0.1, 0.2, 0.3], 44_100, 1)),
+            )
+            .expect("prepared source should insert");
+
+        assert!(cache.get_exact(&requested_key, 0).is_none());
+    }
+
+    #[test]
+    fn insert_ready_ram_rejects_mismatched_key_and_source_format() {
+        let cache = PreparedAudioCache::default();
+        let key = PreparedAudioKey {
+            file_id: "file-a".into(),
+            file_hash: "hash-a".into(),
+            sample_rate: 48_000,
+            channels: 2,
+            transpose_semitones: 0,
+        };
+
+        let error = match cache
+            .insert_ready_ram(key, Arc::new(RawRamSource::new(vec![0.1, 0.2], 44_100, 1)))
+        {
+            Ok(_) => panic!("mismatched source should be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(error.contains("prepared source format mismatch"));
+    }
+
+    #[test]
+    fn render_transposed_to_cache_is_disabled_for_prepared_pitch() {
         let temp_dir = tempfile::tempdir().expect("temp dir should exist");
         let output_path = temp_dir.path().join("audio-renders/transposed.ltaf");
         let raw: Arc<dyn PreparedAudioSource> =
@@ -2735,13 +3014,186 @@ mod tests {
             transpose_semitones: 2,
         };
 
-        let rendered = render_transposed_to_cache(raw, key, output_path)
-            .expect("transpose render should work");
-        let mut output = vec![0.0_f32; 64];
-        let frames = rendered.read_interleaved_at(0, &mut output);
+        let error = match render_transposed_to_cache(raw, key, output_path) {
+            Ok(_) => panic!("prepared pitch render should be disabled"),
+            Err(error) => error,
+        };
 
-        assert!(frames > 0);
-        assert_eq!(rendered.channels(), 1);
+        assert!(error.contains("temporarily disabled"));
+    }
+
+    #[test]
+    fn render_transposed_to_cache_rejects_mismatched_format() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should exist");
+        let output_path = temp_dir.path().join("audio-renders/transposed.ltaf");
+        let raw: Arc<dyn PreparedAudioSource> =
+            Arc::new(RawRamSource::new(vec![0.1; 1_024], 44_100, 1));
+        let key = PreparedAudioKey {
+            file_id: "file-a".into(),
+            file_hash: "hash-a".into(),
+            sample_rate: 48_000,
+            channels: 2,
+            transpose_semitones: 2,
+        };
+
+        let error = match render_transposed_to_cache(raw, key, output_path) {
+            Ok(_) => panic!("mismatched source should be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(error.contains("prepared source format mismatch"));
+    }
+
+    #[test]
+    fn decode_original_to_engine_ram_normalizes_to_output_format() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should exist");
+        let path = temp_dir.path().join("mono-44100.wav");
+        let input = vec![0.25_f32; 44_100];
+        write_test_wav(&path, &input, 44_100, 1).expect("wav should write");
+        let source = prepare_audio_source(&path).expect("source should prepare");
+
+        let decoded =
+            decode_original_to_engine_ram(&source, 48_000, 2).expect("decode should normalize");
+
+        assert_eq!(decoded.sample_rate(), 48_000);
+        assert_eq!(decoded.channels(), 2);
+        assert_eq!(decoded.frame_count(), 48_000);
+
+        let mut output = vec![0.0_f32; 16];
+        let frames = decoded.read_interleaved_at(0, &mut output);
+        assert_eq!(frames, 8);
+        assert!(output.chunks_exact(2).all(|frame| (frame[0] - frame[1]).abs() <= 1e-6));
+    }
+
+    #[test]
+    fn prepare_window_now_skips_transposed_render_when_prepared_pitch_is_disabled() {
+        let root = tempfile::tempdir().expect("temp dir should exist");
+        let song_dir = root.path().join("song");
+        std::fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        let audio_path = song_dir.join("audio/test.wav");
+        write_test_wav(&audio_path, &vec![0.25_f32; 48_000], 48_000, 2)
+            .expect("wav should write");
+
+        let song = Song {
+            id: "song".into(),
+            title: "Prepared Pitch Off".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 1.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![SongRegion {
+                id: "region".into(),
+                name: "Song".into(),
+                start_seconds: 0.0,
+                end_seconds: 1.0,
+                transpose_semitones: 4,
+            }],
+            tracks: vec![Track {
+                id: "track".into(),
+                name: "Track".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: true,
+                audio_to: "master".to_string(),
+            }],
+            clips: vec![Clip {
+                id: "clip".into(),
+                track_id: "track".into(),
+                file_path: "audio/test.wav".into(),
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 1.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            }],
+            section_markers: vec![],
+        };
+
+        let cache = AudioBufferCache::default();
+        cache
+            .replace_song_buffers(&song_dir, &song)
+            .expect("song buffers should prepare");
+        cache
+            .prepare_window_now(&song_dir, &song, 0.0, 4)
+            .expect("prepare should not fail");
+
+        let exact_key = PreparedAudioKey {
+            file_id: audio_path.to_string_lossy().to_string(),
+            file_hash: audio_path.to_string_lossy().to_string(),
+            sample_rate: 48_000,
+            channels: 2,
+            transpose_semitones: 4,
+        };
+        assert!(cache.prepared_audio.get_exact(&exact_key, 0).is_none());
+        assert!(cache.prepared_audio.get_original(&exact_key, 0).is_some());
+    }
+
+    #[test]
+    fn safe_mode_streaming_reader_bypasses_transpose() {
+        with_env_var_for_test("LIBRETRACKS_AUDIO_SAFE_MODE", Some("1"), || {
+            let sample_rate = 48_000;
+            let total_frames = sample_rate as usize;
+            let mut samples = Vec::with_capacity(total_frames);
+            for frame in 0..total_frames {
+                let radians = 2.0 * std::f32::consts::PI * 440.0 * frame as f32
+                    / sample_rate as f32;
+                samples.push(radians.sin());
+            }
+
+            let audio_buffers = AudioBufferCache::default();
+            let source = StreamingAudioSource::from_preloaded(samples, sample_rate, 1, false);
+            let file_path = source.file_path.clone();
+            audio_buffers.insert_for_test(file_path.clone(), source);
+
+            let bypass_plan = mixer::PlaybackClipPlan {
+                clip_id: "clip-bypass".into(),
+                track_id: "track-bypass".into(),
+                file_path: file_path.clone(),
+                clip_gain: 1.0,
+                timeline_start_frame: 0,
+                duration_frames: total_frames as u64,
+                fade_in_frames: 0,
+                fade_out_frames: 0,
+                source_start_seconds: 0.0,
+                transpose_semitones: 0,
+            };
+            let transposed_plan = mixer::PlaybackClipPlan {
+                clip_id: "clip-transposed".into(),
+                track_id: "track-transposed".into(),
+                file_path,
+                clip_gain: 1.0,
+                timeline_start_frame: 0,
+                duration_frames: total_frames as u64,
+                fade_in_frames: 0,
+                fade_out_frames: 0,
+                source_start_seconds: 0.0,
+                transpose_semitones: 7,
+            };
+
+            let mut bypass_reader =
+                StreamingClipReader::open(&bypass_plan, sample_rate, &audio_buffers, 0)
+                    .expect("bypass reader should open");
+            let mut transposed_reader =
+                StreamingClipReader::open(&transposed_plan, sample_rate, &audio_buffers, 0)
+                    .expect("transposed reader should open");
+            let mut bypass_mix = vec![0.0_f32; 2_048];
+            let mut transposed_mix = vec![0.0_f32; 2_048];
+
+            bypass_reader
+                .mix_into_with_channel_gains(&mut bypass_mix, 0, 2_048, 1, 1.0, 0.0);
+            transposed_reader
+                .mix_into_with_channel_gains(&mut transposed_mix, 0, 2_048, 1, 1.0, 0.0);
+
+            assert_eq!(bypass_mix, transposed_mix);
+        });
     }
 
     #[test]

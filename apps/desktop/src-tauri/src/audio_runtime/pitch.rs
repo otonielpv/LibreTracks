@@ -21,7 +21,15 @@ pub(crate) fn create_pitch_shift_engine(
     channels: usize,
     transpose_semitones: i32,
 ) -> Box<dyn PitchShiftEngine> {
-    if transpose_semitones == 0 {
+    let safe_mode_enabled = std::env::var("LIBRETRACKS_AUDIO_SAFE_MODE")
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false);
+    if transpose_semitones == 0 || safe_mode_enabled {
         Box::new(BypassPitchShiftEngine)
     } else {
         Box::new(SignalsmithPitchShiftEngine::new(
@@ -216,6 +224,26 @@ mod tests {
                 input_len: 2,
                 output_len: 1,
             }
+        );
+    }
+
+    #[test]
+    fn safe_mode_forces_bypass_even_with_non_zero_semitones() {
+        crate::audio_runtime::source::with_env_var_for_test(
+            "LIBRETRACKS_AUDIO_SAFE_MODE",
+            Some("1"),
+            || {
+                let mut engine = create_pitch_shift_engine(48_000, 2, 7);
+                let input = vec![0.25, -0.25, 0.5, -0.5];
+                let mut output = vec![0.0_f32; input.len()];
+
+                engine
+                    .process_realtime_block(&input, &mut output)
+                    .expect("safe mode bypass should process");
+
+                assert_eq!(engine.latency_frames(), 0);
+                assert_eq!(output, input);
+            },
         );
     }
 

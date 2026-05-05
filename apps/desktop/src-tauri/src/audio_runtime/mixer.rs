@@ -7,7 +7,6 @@ const METRONOME_BEAT_FREQUENCY_HZ: f32 = 500.0;
 const METRONOME_BEEP_DURATION_SECONDS: f32 = 0.045;
 const METRONOME_PEAK_GAIN: f32 = 0.6;
 const PLAY_FROM_ZERO_FADE_MS: f32 = 2.0;
-const DEFAULT_SEEK_SPLICE_FRAMES: usize = 64;
 
 #[cfg(test)]
 static ZERO_LATENCY_TEST_MODE: std::sync::atomic::AtomicBool =
@@ -53,8 +52,9 @@ pub(crate) struct Mixer {
     next_plan_index: usize,
     plans: Vec<PlaybackClipPlan>,
     active_clips: Vec<MixClipState>,
-    seek_smoother: Option<SeekSpliceSmoother>,
-    recent_output_tail: Option<Vec<f32>>,
+    pending_seek_boundary_frames: Option<usize>,
+    seek_boundary_smoother: Option<SeekBoundarySmoother>,
+    last_output_frame: Option<Vec<f32>>,
     fade_from_zero: Option<FadeFromZeroSmoother>,
     mix_scratch: MixScratchBuffers,
     debug_config: telemetry::AudioDebugConfig,
@@ -100,13 +100,13 @@ pub(crate) enum TransportTransitionKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SeekSmoothingMode {
     None,
-    MicroSplice64,
-    MicroSplice128,
+    BoundarySmooth32,
+    BoundarySmooth64,
     FadeInFromZero,
 }
 
-struct SeekSpliceSmoother {
-    old_tail: Vec<f32>,
+struct SeekBoundarySmoother {
+    correction: Vec<f32>,
     total_frames: usize,
     remaining_frames: usize,
 }
@@ -280,8 +280,9 @@ impl Mixer {
             next_plan_index: 0,
             plans,
             active_clips: Vec::new(),
-            seek_smoother: None,
-            recent_output_tail: None,
+            pending_seek_boundary_frames: None,
+            seek_boundary_smoother: None,
+            last_output_frame: None,
             fade_from_zero: None,
             mix_scratch: MixScratchBuffers::default(),
             debug_config,
@@ -458,9 +459,9 @@ impl Mixer {
         for (sample, direct_sample) in mixed.iter_mut().zip(direct_mixed) {
             *sample += direct_sample;
         }
-        self.apply_seek_splice_crossfade(&mut mixed, block_frames);
+        self.apply_seek_boundary_smoothing(&mut mixed, block_frames);
         self.apply_fade_from_zero(&mut mixed, block_frames);
-        self.capture_recent_output_tail(&mixed, block_frames);
+        self.capture_last_output_frame(&mixed, block_frames);
         self.timeline_cursor_frame += block_frames as u64;
 
         mixed
@@ -476,6 +477,7 @@ impl Mixer {
     fn activate_due_clips(&mut self, window_end_frame: u64) {
         let activation_start_frame = self.timeline_cursor_frame;
         let pre_roll_frames = self.output_sample_rate;
+        let prepared_playback_disabled = source::prepared_playback_disabled();
         while self.next_plan_index < self.plans.len()
             && self.plans[self.next_plan_index].timeline_start_frame
                 < window_end_frame.saturating_add(pre_roll_frames as u64)
@@ -488,33 +490,35 @@ impl Mixer {
             }
 
             let prepared_key = self.prepared_key_for_plan(&plan);
-            let source_frame = plan.source_frame_at_timeline_frame(
-                activation_start_frame,
-                self.output_sample_rate,
-                self.output_sample_rate,
-            );
-            if let Some((prepared_source, source_kind)) =
-                self.prepared_source_for_plan(&prepared_key, source_frame, false)
-            {
-                let current_gain = resolve_clip_runtime_gain(
-                    &self.cached_live_mix.tracks,
-                    &plan.track_id,
-                    plan.clip_gain,
-                    self.cached_live_mix.is_any_track_soloed,
+            if !prepared_playback_disabled {
+                let source_frame = plan.source_frame_at_timeline_frame(
+                    activation_start_frame,
+                    self.output_sample_rate,
+                    self.output_sample_rate,
                 );
-                let current_pan =
-                    resolve_track_runtime_pan(&self.cached_live_mix.tracks, &plan.track_id);
-                self.active_clips.push(MixClipState {
-                    plan,
-                    reader: None,
-                    prepared_source: Some(prepared_source),
-                    source_kind: Some(source_kind),
-                    source_key: Some(prepared_key),
-                    pending_swap: None,
-                    current_gain,
-                    current_pan,
-                });
-                continue;
+                if let Some((prepared_source, source_kind)) =
+                    self.prepared_source_for_plan(&prepared_key, source_frame, false)
+                {
+                    let current_gain = resolve_clip_runtime_gain(
+                        &self.cached_live_mix.tracks,
+                        &plan.track_id,
+                        plan.clip_gain,
+                        self.cached_live_mix.is_any_track_soloed,
+                    );
+                    let current_pan =
+                        resolve_track_runtime_pan(&self.cached_live_mix.tracks, &plan.track_id);
+                    self.active_clips.push(MixClipState {
+                        plan,
+                        reader: None,
+                        prepared_source: Some(prepared_source),
+                        source_kind: Some(source_kind),
+                        source_key: Some(prepared_key),
+                        pending_swap: None,
+                        current_gain,
+                        current_pan,
+                    });
+                    continue;
+                }
             }
 
             if zero_latency_mode_enabled() {
@@ -573,6 +577,7 @@ impl Mixer {
         let output_channels = self.output_channels.max(1);
         let audio_buffers = self.audio_buffers.clone();
         let prepared_cache = self.audio_buffers.prepared_audio();
+        let prepared_playback_disabled = source::prepared_playback_disabled();
         let mut refreshed_clips = Vec::with_capacity(self.active_clips.len());
 
         for mut clip_state in self.active_clips.drain(..) {
@@ -602,7 +607,14 @@ impl Mixer {
                     output_sample_rate,
                     output_sample_rate,
                 );
-                let decision = prepared_cache.get_best_available(&prepared_key, source_frame);
+                let decision = if prepared_playback_disabled
+                    || (prepared_key.transpose_semitones != 0
+                        && !source::prepared_pitch_render_enabled())
+                {
+                    source::SeekSourceDecision::Silence
+                } else {
+                    prepared_cache.get_best_available(&prepared_key, source_frame)
+                };
                 if !matches!(decision, source::SeekSourceDecision::Silence) {
                     clip_state.reader = None;
                     clip_state.prepared_source = Some(prepared_cache.source_or_silence(&decision));
@@ -679,6 +691,9 @@ impl Mixer {
         source_frame: u64,
         allow_silence: bool,
     ) -> Option<(Arc<dyn source::PreparedAudioSource>, source::SeekSourceKind)> {
+        if key.transpose_semitones != 0 && !source::prepared_pitch_render_enabled() {
+            return None;
+        }
         let prepared_cache = self.audio_buffers.prepared_audio();
         let decision = prepared_cache.get_best_available(key, source_frame);
         if matches!(decision, source::SeekSourceDecision::Silence) && !allow_silence {
@@ -863,23 +878,14 @@ impl Mixer {
     }
 
     fn configure_seek_smoothing(&mut self, transition: TransportTransitionKind) {
-        self.seek_smoother = None;
+        self.pending_seek_boundary_frames = None;
+        self.seek_boundary_smoother = None;
         self.fade_from_zero = None;
 
         match smoothing_mode_for_transition(transition) {
             SeekSmoothingMode::None => {}
-            SeekSmoothingMode::MicroSplice64 => {
-                self.seek_smoother = self
-                    .recent_output_tail
-                    .as_ref()
-                    .map(|tail| SeekSpliceSmoother::new(tail.clone(), 64));
-            }
-            SeekSmoothingMode::MicroSplice128 => {
-                self.seek_smoother = self
-                    .recent_output_tail
-                    .as_ref()
-                    .map(|tail| SeekSpliceSmoother::new(tail.clone(), 128));
-            }
+            SeekSmoothingMode::BoundarySmooth32 => self.pending_seek_boundary_frames = Some(32),
+            SeekSmoothingMode::BoundarySmooth64 => self.pending_seek_boundary_frames = Some(64),
             SeekSmoothingMode::FadeInFromZero => {
                 let fade_frames = ((PLAY_FROM_ZERO_FADE_MS / 1000.0)
                     * self.output_sample_rate as f32)
@@ -889,42 +895,57 @@ impl Mixer {
         }
     }
 
-    fn apply_seek_splice_crossfade(&mut self, mixed: &mut [f32], block_frames: usize) {
-        let Some(smoother) = self.seek_smoother.as_mut() else {
-            return;
-        };
-        if block_frames == 0 {
+    fn apply_seek_boundary_smoothing(&mut self, mixed: &mut [f32], block_frames: usize) {
+        if block_frames == 0 || mixed.is_empty() {
             return;
         }
 
         let output_channels = self.output_channels.max(1);
-        let old_tail_frames = smoother.old_tail.len() / output_channels;
-        let frames_to_process = smoother
-            .remaining_frames
-            .min(block_frames)
-            .min(old_tail_frames);
+        if mixed.len() < output_channels {
+            return;
+        }
+        if let Some(frames) = self.pending_seek_boundary_frames.take() {
+            self.start_seek_boundary_smoothing(&mixed[..output_channels], frames);
+        }
+        let Some(smoother) = self.seek_boundary_smoother.as_mut() else {
+            return;
+        };
+        let frames_to_process = smoother.remaining_frames.min(block_frames);
 
         for frame_idx in 0..frames_to_process {
             let completed_frames = smoother
                 .total_frames
                 .saturating_sub(smoother.remaining_frames)
                 .saturating_add(frame_idx);
-            let progress =
-                (completed_frames as f32 / smoother.total_frames.max(1) as f32).clamp(0.0, 1.0);
-            let fade_in = (progress * std::f32::consts::FRAC_PI_2).sin();
-            let fade_out = ((1.0 - progress) * std::f32::consts::FRAC_PI_2).sin();
+            let denominator = smoother.total_frames.saturating_sub(1).max(1);
+            let progress = (completed_frames as f32 / denominator as f32).clamp(0.0, 1.0);
+            let correction_gain = 0.5 * (1.0 + (std::f32::consts::PI * progress).cos());
             let base_idx = frame_idx * output_channels;
 
             for ch in 0..output_channels {
-                let old_sample = smoother.old_tail[base_idx + ch];
-                mixed[base_idx + ch] = old_sample * fade_out + mixed[base_idx + ch] * fade_in;
+                mixed[base_idx + ch] += smoother.correction[ch] * correction_gain;
             }
         }
 
         smoother.remaining_frames = smoother.remaining_frames.saturating_sub(frames_to_process);
         if smoother.remaining_frames == 0 {
-            self.seek_smoother = None;
+            self.seek_boundary_smoother = None;
         }
+    }
+
+    fn start_seek_boundary_smoothing(&mut self, first_new_frame: &[f32], frames: usize) {
+        let Some(last_frame) = self.last_output_frame.as_ref() else {
+            return;
+        };
+        let output_channels = self.output_channels.max(1);
+        if last_frame.len() < output_channels || first_new_frame.len() < output_channels {
+            return;
+        }
+        let mut correction = vec![0.0_f32; output_channels];
+        for ch in 0..output_channels {
+            correction[ch] = last_frame[ch] - first_new_frame[ch];
+        }
+        self.seek_boundary_smoother = Some(SeekBoundarySmoother::new(correction, frames));
     }
 
     fn apply_fade_from_zero(&mut self, mixed: &mut [f32], block_frames: usize) {
@@ -956,24 +977,22 @@ impl Mixer {
         }
     }
 
-    fn capture_recent_output_tail(&mut self, mixed: &[f32], block_frames: usize) {
+    fn capture_last_output_frame(&mut self, mixed: &[f32], block_frames: usize) {
         let output_channels = self.output_channels.max(1);
-        let tail_frames = DEFAULT_SEEK_SPLICE_FRAMES.min(block_frames);
-        if tail_frames == 0 || mixed.is_empty() {
+        if block_frames == 0 || mixed.len() < output_channels {
             return;
         }
-        let sample_count = tail_frames * output_channels;
-        let start = mixed.len().saturating_sub(sample_count);
-        let tail = self.recent_output_tail.get_or_insert_with(Vec::new);
-        tail.clear();
-        tail.extend_from_slice(&mixed[start..]);
+        let start = mixed.len() - output_channels;
+        let frame = self.last_output_frame.get_or_insert_with(Vec::new);
+        frame.clear();
+        frame.extend_from_slice(&mixed[start..]);
     }
 }
 
-impl SeekSpliceSmoother {
-    fn new(old_tail: Vec<f32>, total_frames: usize) -> Self {
+impl SeekBoundarySmoother {
+    fn new(correction: Vec<f32>, total_frames: usize) -> Self {
         Self {
-            old_tail,
+            correction,
             total_frames: total_frames.max(1),
             remaining_frames: total_frames.max(1),
         }
@@ -996,8 +1015,8 @@ pub(crate) fn smoothing_mode_for_transition(
         TransportTransitionKind::InitialPlay | TransportTransitionKind::ResumePlay => {
             SeekSmoothingMode::FadeInFromZero
         }
-        TransportTransitionKind::ManualTimelineSeek => SeekSmoothingMode::MicroSplice128,
-        TransportTransitionKind::MusicalJump => SeekSmoothingMode::MicroSplice64,
+        TransportTransitionKind::ManualTimelineSeek => SeekSmoothingMode::BoundarySmooth64,
+        TransportTransitionKind::MusicalJump => SeekSmoothingMode::BoundarySmooth32,
         TransportTransitionKind::DragPreview | TransportTransitionKind::Stop => {
             SeekSmoothingMode::None
         }
@@ -1134,6 +1153,12 @@ impl MixClipState {
         timeline_frame: u64,
         output_sample_rate: u32,
     ) {
+        if source::audio_safe_mode_enabled() || self.plan.transpose_semitones == 0 {
+            return;
+        }
+        if source::prepared_playback_disabled() || !source::prepared_pitch_render_enabled() {
+            return;
+        }
         if self.pending_swap.is_some() {
             return;
         }
@@ -1160,6 +1185,18 @@ impl MixClipState {
         let Some(exact_source) = cache.get_exact(key, source_frame) else {
             return;
         };
+        if exact_source.sample_rate() != current_source.sample_rate()
+            || exact_source.channels() != current_source.channels()
+            || !exact_source.alignment_valid()
+        {
+            if cfg!(debug_assertions) {
+                eprintln!(
+                    "[libretracks-audio] blocked unverified prepared source swap for {}",
+                    self.plan.file_path.display()
+                );
+            }
+            return;
+        }
         let new_kind = match cache.get_best_available(key, source_frame).kind() {
             source::SeekSourceKind::ExactDisk => source::SeekSourceKind::ExactDisk,
             _ => source::SeekSourceKind::ExactRam,
@@ -1259,9 +1296,9 @@ impl MixClipState {
                 let edge_gain = self.plan.edge_gain(clip_frame_position);
                 let final_gain = dynamic_gain * edge_gain;
                 let sample_base = frame_offset * source_channels;
-                let left_input = scratch.interleaved[sample_base];
+                let left_input = sanitize_mixed_sample(scratch.interleaved[sample_base]);
                 let right_input = if source_channels > 1 {
-                    scratch.interleaved[sample_base + 1]
+                    sanitize_mixed_sample(scratch.interleaved[sample_base + 1])
                 } else {
                     left_input
                 };
@@ -1424,6 +1461,10 @@ fn effective_transpose_for_track_at_position(
     track_id: &str,
     position_seconds: f64,
 ) -> i32 {
+    if source::audio_safe_mode_enabled() {
+        return 0;
+    }
+
     let Some(track) = song.tracks.iter().find(|track| track.id == track_id) else {
         return 0;
     };
@@ -1702,6 +1743,14 @@ fn is_master_route(audio_to: &str) -> bool {
         audio_to.trim().to_ascii_lowercase().as_str(),
         "" | "master" | "main"
     )
+}
+
+fn sanitize_mixed_sample(sample: f32) -> f32 {
+    if !sample.is_finite() || sample.abs() > 4.0 {
+        0.0
+    } else {
+        sample
+    }
 }
 
 fn write_frame_to_output(
@@ -2171,6 +2220,58 @@ mod tests {
     }
 
     #[test]
+    fn build_playback_plans_force_zero_transpose_in_safe_mode() {
+        source::with_env_var_for_test("LIBRETRACKS_AUDIO_SAFE_MODE", Some("1"), || {
+            let song = Song {
+                id: "song".into(),
+                title: "Safe Mode".into(),
+                artist: None,
+                key: None,
+                bpm: 120.0,
+                time_signature: "4/4".into(),
+                duration_seconds: 4.0,
+                tempo_markers: vec![],
+                time_signature_markers: vec![],
+                regions: vec![SongRegion {
+                    id: "region_a".into(),
+                    name: "A".into(),
+                    start_seconds: 0.0,
+                    end_seconds: 4.0,
+                    transpose_semitones: 7,
+                }],
+                tracks: vec![Track {
+                    id: "track".into(),
+                    name: "Track".into(),
+                    kind: TrackKind::Audio,
+                    parent_track_id: None,
+                    volume: 1.0,
+                    pan: 0.0,
+                    muted: false,
+                    solo: false,
+                    transpose_enabled: true,
+                    audio_to: "master".to_string(),
+                }],
+                clips: vec![Clip {
+                    id: "clip".into(),
+                    track_id: "track".into(),
+                    file_path: "audio/test.wav".into(),
+                    timeline_start_seconds: 0.0,
+                    source_start_seconds: 0.0,
+                    duration_seconds: 4.0,
+                    gain: 1.0,
+                    fade_in_seconds: None,
+                    fade_out_seconds: None,
+                }],
+                section_markers: vec![],
+            };
+
+            let plans = build_playback_plans(Path::new("song"), &song, 48_000);
+
+            assert!(plans.iter().all(|plan| plan.transpose_semitones == 0));
+        });
+    }
+
+    #[test]
     fn apply_song_update_refreshes_active_clip_transpose() {
         let song_dir = PathBuf::from("song");
         let clip_path = "audio/test.wav".to_string();
@@ -2250,6 +2351,288 @@ mod tests {
 
         assert_eq!(mixer.active_clips().len(), 1);
         assert_eq!(mixer.active_clips()[0].plan().transpose_semitones, 4);
+    }
+
+    #[test]
+    fn disable_prepared_playback_and_safe_mode_force_clean_reader_path() {
+        source::with_env_var_for_test("LIBRETRACKS_AUDIO_SAFE_MODE", Some("1"), || {
+            source::with_env_var_for_test(
+                "LIBRETRACKS_DISABLE_PREPARED_PLAYBACK",
+                Some("1"),
+                || {
+                    let song_dir = PathBuf::from("song");
+                    let clip_path = "audio/test.wav".to_string();
+                    let cache = AudioBufferCache::default();
+                    let resolved_path = song_dir.join(&clip_path);
+                    cache.insert_for_test(
+                        resolved_path.clone(),
+                        SharedAudioSource::from_preloaded(vec![0.25; 48_000 * 4], 48_000, 2, true),
+                    );
+                    cache.insert_prepared_ram_for_test(
+                        source::PreparedAudioKey {
+                            file_id: resolved_path.to_string_lossy().to_string(),
+                            file_hash: resolved_path.to_string_lossy().to_string(),
+                            sample_rate: 48_000,
+                            channels: 2,
+                            transpose_semitones: 0,
+                        },
+                        Arc::new(source::RawRamSource::new(vec![0.5; 48_000 * 8], 48_000, 2)),
+                    );
+
+                    let song = Song {
+                        id: "song".into(),
+                        title: "Prepared Off".into(),
+                        artist: None,
+                        key: None,
+                        bpm: 120.0,
+                        time_signature: "4/4".into(),
+                        duration_seconds: 4.0,
+                        tempo_markers: vec![],
+                        time_signature_markers: vec![],
+                        regions: vec![SongRegion {
+                            id: "region_a".into(),
+                            name: "A".into(),
+                            start_seconds: 0.0,
+                            end_seconds: 4.0,
+                            transpose_semitones: 5,
+                        }],
+                        tracks: vec![Track {
+                            id: "track".into(),
+                            name: "Track".into(),
+                            kind: TrackKind::Audio,
+                            parent_track_id: None,
+                            volume: 1.0,
+                            pan: 0.0,
+                            muted: false,
+                            solo: false,
+                            transpose_enabled: true,
+                            audio_to: "master".to_string(),
+                        }],
+                        clips: vec![Clip {
+                            id: "clip".into(),
+                            track_id: "track".into(),
+                            file_path: clip_path,
+                            timeline_start_seconds: 0.0,
+                            source_start_seconds: 0.0,
+                            duration_seconds: 4.0,
+                            gain: 1.0,
+                            fade_in_seconds: None,
+                            fade_out_seconds: None,
+                        }],
+                        section_markers: vec![],
+                    };
+
+                    let app_handle = Arc::new(RwLock::new(None));
+                    let remote_handle = Arc::new(RwLock::new(None));
+                    let live_mix_state = Arc::new(RwLock::new(HashMap::new()));
+                    let audio_settings = Arc::new(RwLock::new(AppSettings::default()));
+                    let mixer = Mixer::new(
+                        song_dir,
+                        song,
+                        0.0,
+                        48_000,
+                        2,
+                        app_handle,
+                        remote_handle,
+                        live_mix_state,
+                        audio_settings,
+                        telemetry::AudioDebugConfig::from_env(),
+                        cache,
+                    );
+
+                    assert_eq!(mixer.active_clips().len(), 1);
+                    let clip = &mixer.active_clips()[0];
+                    assert_eq!(clip.plan.transpose_semitones, 0);
+                    assert!(clip.reader.is_some());
+                    assert!(clip.prepared_source.is_none());
+                },
+            );
+        });
+    }
+
+    #[test]
+    fn transposed_clip_uses_clean_reader_when_prepared_pitch_render_is_disabled() {
+        let song_dir = PathBuf::from("song");
+        let clip_path = "audio/test.wav".to_string();
+        let cache = AudioBufferCache::default();
+        let resolved_path = song_dir.join(&clip_path);
+        cache.insert_for_test(
+            resolved_path.clone(),
+            SharedAudioSource::from_preloaded(vec![0.25; 48_000 * 4], 48_000, 2, true),
+        );
+        cache.insert_prepared_ram_for_test(
+            source::PreparedAudioKey {
+                file_id: resolved_path.to_string_lossy().to_string(),
+                file_hash: resolved_path.to_string_lossy().to_string(),
+                sample_rate: 48_000,
+                channels: 2,
+                transpose_semitones: 0,
+            },
+            Arc::new(source::RawRamSource::new(vec![0.5; 48_000 * 8], 48_000, 2)),
+        );
+
+        let song = Song {
+            id: "song".into(),
+            title: "Prepared Pitch Off".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 4.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![SongRegion {
+                id: "region_a".into(),
+                name: "A".into(),
+                start_seconds: 0.0,
+                end_seconds: 4.0,
+                transpose_semitones: 5,
+            }],
+            tracks: vec![Track {
+                id: "track".into(),
+                name: "Track".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: true,
+                audio_to: "master".to_string(),
+            }],
+            clips: vec![Clip {
+                id: "clip".into(),
+                track_id: "track".into(),
+                file_path: clip_path,
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 4.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            }],
+            section_markers: vec![],
+        };
+
+        let app_handle = Arc::new(RwLock::new(None));
+        let remote_handle = Arc::new(RwLock::new(None));
+        let live_mix_state = Arc::new(RwLock::new(HashMap::new()));
+        let audio_settings = Arc::new(RwLock::new(AppSettings::default()));
+        let mixer = Mixer::new(
+            song_dir,
+            song,
+            0.0,
+            48_000,
+            2,
+            app_handle,
+            remote_handle,
+            live_mix_state,
+            audio_settings,
+            telemetry::AudioDebugConfig::from_env(),
+            cache,
+        );
+
+        assert_eq!(mixer.active_clips().len(), 1);
+        let clip = &mixer.active_clips()[0];
+        assert_eq!(clip.plan.transpose_semitones, 5);
+        assert!(clip.reader.is_some());
+        assert!(clip.prepared_source.is_none());
+    }
+
+    #[test]
+    fn prepared_original_44100_mono_renders_at_48000_stereo_without_speedup() {
+        let root = tempfile::tempdir().expect("temp dir should exist");
+        let song_dir = root.path().join("song");
+        std::fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+        let audio_path = song_dir.join("audio/test.wav");
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 44_100,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut writer = hound::WavWriter::create(&audio_path, spec).expect("wav should open");
+        for frame in 0..44_100 {
+            let sample = if frame == 44_099 { 1.0_f32 } else { 0.0_f32 };
+            writer.write_sample(sample).expect("sample should write");
+        }
+        writer.finalize().expect("wav should finalize");
+
+        let song = Song {
+            id: "song".into(),
+            title: "Normalized".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 1.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![SongRegion {
+                id: "region".into(),
+                name: "Song".into(),
+                start_seconds: 0.0,
+                end_seconds: 1.0,
+                transpose_semitones: 0,
+            }],
+            tracks: vec![Track {
+                id: "track".into(),
+                name: "Track".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: true,
+                audio_to: "master".to_string(),
+            }],
+            clips: vec![Clip {
+                id: "clip".into(),
+                track_id: "track".into(),
+                file_path: "audio/test.wav".into(),
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 1.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            }],
+            section_markers: vec![],
+        };
+
+        let cache = AudioBufferCache::default();
+        cache
+            .replace_song_buffers(&song_dir, &song)
+            .expect("song buffers should prepare");
+
+        let app_handle = Arc::new(RwLock::new(None));
+        let remote_handle = Arc::new(RwLock::new(None));
+        let live_mix_state = Arc::new(RwLock::new(HashMap::new()));
+        let audio_settings = Arc::new(RwLock::new(AppSettings::default()));
+        let mut mixer = Mixer::new(
+            song_dir,
+            song,
+            0.0,
+            48_000,
+            2,
+            app_handle,
+            remote_handle,
+            live_mix_state,
+            audio_settings,
+            telemetry::AudioDebugConfig::from_env(),
+            cache,
+        );
+
+        assert!(mixer.active_clips()[0].prepared_source.is_some());
+
+        let rendered = mixer.render_next_block(48_000);
+        let early_index = 44_099 * 2;
+        let late_index = 47_999 * 2;
+
+        assert!(rendered[early_index].abs() < 0.25);
+        assert!(rendered[late_index].abs() > 0.25);
+        assert_eq!(rendered.len(), 48_000 * 2);
     }
     #[test]
     fn metronome_events_follow_base_bpm_grid() {

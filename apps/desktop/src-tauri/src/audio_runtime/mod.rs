@@ -317,6 +317,7 @@ impl AudioRuntime {
                 active_sinks: 0,
                 far_seek: FarSeekTelemetry {
                     cache_status: "Silence".to_string(),
+                    playback_path: "PreparedSource".to_string(),
                     exact_ready: false,
                     used_fallback: true,
                     prepare_requested: false,
@@ -533,6 +534,17 @@ impl AudioController {
         self.audio_buffers
             .replace_song_buffers(song_dir, song)
             .map_err(DesktopError::AudioCommand)
+    }
+
+    pub fn prepare_song_buffers_async(&self, song_dir: PathBuf, song: Song) {
+        let audio_buffers = self.audio_buffers.clone();
+        let _ = thread::Builder::new()
+            .name("libretracks-audio-prepare".into())
+            .spawn(move || {
+                if let Err(error) = audio_buffers.replace_song_buffers(&song_dir, &song) {
+                    eprintln!("[libretracks-audio] async prepare failed: {error}");
+                }
+            });
     }
 
     pub fn export_region_rendered_audio(
@@ -767,6 +779,7 @@ impl PlaybackSession {
             .saturating_add(1);
         let far_seek = FarSeekTelemetry {
             cache_status: format!("{decision_kind:?}"),
+            playback_path: playback_path_for_decision(decision_kind).to_string(),
             exact_ready: matches!(
                 decision_kind,
                 source::SeekSourceKind::ExactRam | source::SeekSourceKind::ExactDisk
@@ -1237,6 +1250,10 @@ fn transpose_for_song_position(song: &Song, position_seconds: f64) -> i32 {
         })
         .map(|region| region.transpose_semitones)
         .unwrap_or(0)
+}
+
+fn playback_path_for_decision(_kind: source::SeekSourceKind) -> &'static str {
+    "PreparedSource"
 }
 
 fn seconds_to_frames(seconds: f64, sample_rate: u32) -> u64 {
@@ -2592,7 +2609,7 @@ mod tests {
     }
 
     #[test]
-    fn musical_seek_splices_previous_tail_instead_of_fading_from_zero() {
+    fn musical_seek_smooths_boundary_instead_of_fading_from_zero() {
         let song = demo_song();
         let song_dir = PathBuf::from("song");
         let cache = AudioBufferCache::default();
