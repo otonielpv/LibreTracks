@@ -9,10 +9,10 @@
   ],
   "scripts": {
     "dev:desktop": "npm --prefix apps/desktop run dev --",
-    "dev:desktop:native": "powershell -ExecutionPolicy Bypass -File .\\scripts\\desktop-native.ps1 dev",
+    "dev:desktop:native": "node ./scripts/desktop-native.mjs dev",
     "build:desktop": "npm --prefix apps/desktop run build",
-    "check:desktop:native": "powershell -ExecutionPolicy Bypass -File .\\scripts\\desktop-native.ps1 check",
-    "build:desktop:native": "powershell -ExecutionPolicy Bypass -File .\\scripts\\desktop-native.ps1 build",
+    "check:desktop:native": "node ./scripts/desktop-native.mjs check",
+    "build:desktop:native": "node ./scripts/desktop-native.mjs build",
     "test:desktop": "npm --prefix apps/desktop run test",
     "dev:remote": "npm --prefix apps/remote run dev --",
     "build:remote": "npm --prefix apps/remote run build",
