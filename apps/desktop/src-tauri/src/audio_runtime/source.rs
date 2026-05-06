@@ -1639,11 +1639,6 @@ impl StreamingClipReader {
         let (command_sender, command_receiver) = mpsc::channel();
         let (ready_sender, ready_receiver) = mpsc::sync_channel(1);
         let worker_source = Arc::clone(&shared_source);
-        let transpose_semitones = if audio_safe_mode_enabled() {
-            0
-        } else {
-            plan.transpose_semitones
-        };
         let _worker_handle = thread::Builder::new()
             .name("libretracks-streaming-source".into())
             .spawn(move || {
@@ -1651,7 +1646,6 @@ impl StreamingClipReader {
                     worker_source,
                     output_sample_rate,
                     source_start_seconds,
-                    transpose_semitones,
                     producer,
                     command_receiver,
                     Some(ready_sender),
@@ -1731,6 +1725,37 @@ impl StreamingClipReader {
     #[cfg(test)]
     pub(crate) fn shared_source(&self) -> &StreamingAudioSource {
         &self.shared_source
+    }
+
+    pub(crate) fn source_channels(&self) -> usize {
+        self.shared_source.channels.max(1)
+    }
+
+    pub(crate) fn read_interleaved(&mut self, output: &mut [f32], max_frames: usize) -> usize {
+        if self.eof {
+            return 0;
+        }
+
+        let channels = self.shared_source.channels.max(1);
+        let frames_to_read = max_frames.min(output.len() / channels);
+        let mut frames_read = 0;
+        for frame_index in 0..frames_to_read {
+            let frame_base = frame_index * channels;
+            for channel in 0..channels {
+                let Some(sample) = self.pop_current_sample() else {
+                    self.eof = true;
+                    return frames_read;
+                };
+                output[frame_base + channel] = sample;
+            }
+            self.emitted_frames = self.emitted_frames.saturating_add(1);
+            frames_read += 1;
+            if self.emitted_frames >= self.total_output_frames {
+                self.eof = true;
+                break;
+            }
+        }
+        frames_read
     }
 
     pub(crate) fn next_stereo_frame(&mut self, gain: f32, pan: f32) -> Option<(f32, f32)> {
@@ -1856,18 +1881,12 @@ fn run_streaming_worker(
     source: Arc<StreamingAudioSource>,
     output_sample_rate: u32,
     initial_target_start_seconds: f64,
-    transpose_semitones: i32,
     mut producer: Producer<ClipSample>,
     command_receiver: Receiver<StreamingWorkerCommand>,
     mut ready_sender: Option<mpsc::SyncSender<WorkerReadyState>>,
 ) {
     let mut target_start_seconds = initial_target_start_seconds;
     let mut generation = 0;
-    let mut pitch_engine = pitch::create_pitch_shift_engine(
-        output_sample_rate,
-        source.channels.max(1),
-        transpose_semitones,
-    );
 
     loop {
         match stream_decode_from(
@@ -1877,7 +1896,6 @@ fn run_streaming_worker(
             generation,
             &mut producer,
             &command_receiver,
-            &mut pitch_engine,
             ready_sender.take(),
         ) {
             WorkerOutcome::Restart {
@@ -1918,47 +1936,15 @@ fn stream_decode_from(
     generation: u64,
     producer: &mut Producer<ClipSample>,
     command_receiver: &Receiver<StreamingWorkerCommand>,
-    pitch_engine: &mut Box<dyn pitch::PitchShiftEngine>,
     ready_sender: Option<mpsc::SyncSender<WorkerReadyState>>,
 ) -> WorkerOutcome {
-    let pitch_preroll_frames = pitch_engine
-        .latency_frames()
-        .saturating_sub(PITCH_ALIGNMENT_TRIM_FRAMES);
     let mut decoder = match StreamingDecoder::open(source, output_sample_rate, target_start_seconds)
     {
         Ok(decoder) => decoder,
         Err(_) => return WorkerOutcome::Finished,
     };
-    pitch_engine.reset();
     let channels = source.channels.max(1);
     let mut pending_samples = Vec::new();
-    if pitch_preroll_frames > 0 {
-        let mut remaining_priming = pitch_preroll_frames;
-        while remaining_priming > 0 {
-            let chunk_size = remaining_priming.min(STREAM_WORKER_CHUNK_FRAMES);
-            let mut samples = match take_decoder_samples(
-                &mut decoder,
-                &mut pending_samples,
-                chunk_size,
-                channels,
-                true,
-            ) {
-                Ok(samples) => samples,
-                Err(_) => return WorkerOutcome::Finished,
-            };
-            if samples.is_empty() {
-                samples.resize(chunk_size * channels, 0.0);
-            }
-            let mut discarded_output = vec![0.0_f32; samples.len()];
-            if pitch_engine
-                .process_realtime_block(&samples, &mut discarded_output)
-                .is_err()
-            {
-                return WorkerOutcome::Finished;
-            }
-            remaining_priming = remaining_priming.saturating_sub(chunk_size);
-        }
-    }
 
     let mut ready_sender = ready_sender;
 
@@ -1983,7 +1969,7 @@ fn stream_decode_from(
             continue;
         }
 
-        let samples = match take_decoder_samples(
+        let processed_samples = match take_decoder_samples(
             &mut decoder,
             &mut pending_samples,
             STREAM_WORKER_CHUNK_FRAMES,
@@ -2000,14 +1986,6 @@ fn stream_decode_from(
                 return WorkerOutcome::Finished;
             }
         };
-
-        let mut processed_samples = vec![0.0_f32; samples.len()];
-        if pitch_engine
-            .process_realtime_block(&samples, &mut processed_samples)
-            .is_err()
-        {
-            return WorkerOutcome::Finished;
-        }
 
         for frame in processed_samples.chunks_exact(channels) {
             // Wait until there is enough space for the WHOLE frame
@@ -2469,25 +2447,11 @@ fn sanitize_cache_name(path: &Path) -> String {
 }
 
 pub(crate) fn audio_safe_mode_enabled() -> bool {
-    std::env::var("LIBRETRACKS_AUDIO_SAFE_MODE")
-        .map(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    env_flag_value("LIBRETRACKS_AUDIO_SAFE_MODE")
 }
 
 pub(crate) fn prepared_playback_disabled() -> bool {
-    std::env::var("LIBRETRACKS_DISABLE_PREPARED_PLAYBACK")
-        .map(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+    env_flag_value("LIBRETRACKS_DISABLE_PREPARED_PLAYBACK")
 }
 
 pub(crate) fn prepared_pitch_render_enabled() -> bool {
@@ -2498,8 +2462,6 @@ fn validate_prepared_key_matches_source(
     key: &PreparedAudioKey,
     source: &dyn PreparedAudioSource,
 ) -> Result<(), String> {
-    debug_assert_eq!(key.sample_rate, source.sample_rate());
-    debug_assert_eq!(key.channels, source.channels());
     if key.sample_rate != source.sample_rate() || key.channels != source.channels() {
         return Err(format!(
             "prepared source format mismatch for {}: key={}Hz/{}ch source={}Hz/{}ch",
@@ -2511,6 +2473,28 @@ fn validate_prepared_key_matches_source(
         ));
     }
     Ok(())
+}
+
+fn env_flag_value(key: &str) -> bool {
+    env_override_for_current_thread(key)
+        .or_else(|| std::env::var(key).ok())
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+fn env_override_for_current_thread(key: &str) -> Option<String> {
+    TEST_ENV_OVERRIDES.with(|overrides| overrides.borrow().get(key).cloned().flatten())
+}
+
+#[cfg(not(test))]
+fn env_override_for_current_thread(_key: &str) -> Option<String> {
+    None
 }
 
 #[cfg(test)]
@@ -2685,19 +2669,30 @@ pub(crate) fn with_env_var_for_test<T>(
     value: Option<&str>,
     body: impl FnOnce() -> T,
 ) -> T {
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let _guard = ENV_LOCK.lock().expect("env lock should not poison");
-    let previous = std::env::var(key).ok();
-    match value {
-        Some(value) => std::env::set_var(key, value),
-        None => std::env::remove_var(key),
-    }
+    let previous = TEST_ENV_OVERRIDES.with(|overrides| {
+        overrides
+            .borrow_mut()
+            .insert(key.to_string(), value.map(str::to_string))
+    });
     let result = body();
-    match previous.as_deref() {
-        Some(previous) => std::env::set_var(key, previous),
-        None => std::env::remove_var(key),
-    }
+    TEST_ENV_OVERRIDES.with(|overrides| {
+        let mut overrides = overrides.borrow_mut();
+        match previous {
+            Some(previous) => {
+                overrides.insert(key.to_string(), previous);
+            }
+            None => {
+                overrides.remove(key);
+            }
+        }
+    });
     result
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_ENV_OVERRIDES: std::cell::RefCell<HashMap<String, Option<String>>> =
+        std::cell::RefCell::new(HashMap::new());
 }
 
 #[cfg(test)]
@@ -3048,6 +3043,9 @@ mod tests {
 
     #[test]
     fn render_transposed_to_cache_renders_when_prepared_pitch_is_enabled() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
         let temp_dir = tempfile::tempdir().expect("temp dir should exist");
         let output_path = temp_dir.path().join("audio-renders/transposed.ltaf");
         let raw: Arc<dyn PreparedAudioSource> =
@@ -3070,6 +3068,9 @@ mod tests {
 
     #[test]
     fn render_transposed_to_cache_rejects_mismatched_format() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
         let temp_dir = tempfile::tempdir().expect("temp dir should exist");
         let output_path = temp_dir.path().join("audio-renders/transposed.ltaf");
         let raw: Arc<dyn PreparedAudioSource> =
@@ -3115,6 +3116,9 @@ mod tests {
 
     #[test]
     fn prepare_window_now_renders_transposed_cache_when_prepared_pitch_is_enabled() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
         let root = tempfile::tempdir().expect("temp dir should exist");
         let song_dir = root.path().join("song");
         std::fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");

@@ -49,6 +49,10 @@ jobs:
 
       - name: Run frontend tests
         run: npm test
+      
+      - name: Setup RubberBand DLLs for Windows tests
+        shell: pwsh
+        run: echo "${{ github.workspace }}\vendor\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Run backend Rust tests
         run: cargo test --locked -p libretracks-core -p libretracks-project -p libretracks-audio
@@ -56,6 +60,7 @@ jobs:
       - name: Run desktop Rust tests
         env:
           LIBRETRACKS_DUMMY_AUDIO: "1"
+          RUBBERBAND_LIBRARY: "vendor/bin/rubberband-3.dll"
         run: cargo test --locked -p libretracks-desktop -- --test-threads=1
 
   release:

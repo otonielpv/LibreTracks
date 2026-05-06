@@ -74,6 +74,9 @@ pub(crate) struct MixClipState {
     source_kind: Option<source::SeekSourceKind>,
     source_key: Option<source::PreparedAudioKey>,
     pending_swap: Option<PendingSourceSwap>,
+    pitch_engine: Box<dyn pitch::PitchShiftEngine>,
+    declick_fade_frames: usize,
+    declick_frames_remaining: usize,
     current_gain: f32,
     current_pan: f32,
 }
@@ -103,6 +106,7 @@ struct FadeFromZeroSmoother {
 #[derive(Default)]
 struct MixScratchBuffers {
     interleaved: Vec<f32>,
+    pitched_interleaved: Vec<f32>,
     old_interleaved: Vec<f32>,
     new_interleaved: Vec<f32>,
 }
@@ -506,12 +510,23 @@ impl Mixer {
                     let current_pan =
                         resolve_track_runtime_pan(&self.cached_live_mix.tracks, &plan.track_id);
                     self.active_clips.push(MixClipState {
-                        plan,
+                        plan: plan.clone(),
                         reader: None,
                         prepared_source: Some(prepared_source),
                         source_kind: Some(source_kind),
                         source_key: Some(prepared_key),
                         pending_swap: None,
+                        pitch_engine: create_clip_pitch_engine(
+                            self.output_sample_rate,
+                            self.output_channels.max(1),
+                            plan.transpose_semitones,
+                        ),
+                        declick_fade_frames: declick_fade_frames(self.output_sample_rate),
+                        declick_frames_remaining: declick_frames_for_activation(
+                            &plan,
+                            activation_start_frame,
+                            self.output_sample_rate,
+                        ),
                         current_gain,
                         current_pan,
                     });
@@ -538,6 +553,7 @@ impl Mixer {
                 activation_start_frame,
             ) {
                 Ok(reader) => {
+                    let reader_channels = reader.source_channels().max(1);
                     let current_gain = resolve_clip_runtime_gain(
                         &self.cached_live_mix.tracks,
                         &plan.track_id,
@@ -547,12 +563,23 @@ impl Mixer {
                     let current_pan =
                         resolve_track_runtime_pan(&self.cached_live_mix.tracks, &plan.track_id);
                     self.active_clips.push(MixClipState {
-                        plan,
+                        plan: plan.clone(),
                         reader: Some(reader),
                         prepared_source: None,
                         source_kind: None,
                         source_key: None,
                         pending_swap: None,
+                        pitch_engine: create_clip_pitch_engine(
+                            self.output_sample_rate,
+                            reader_channels,
+                            plan.transpose_semitones,
+                        ),
+                        declick_fade_frames: declick_fade_frames(self.output_sample_rate),
+                        declick_frames_remaining: declick_frames_for_activation(
+                            &plan,
+                            activation_start_frame,
+                            self.output_sample_rate,
+                        ),
                         current_gain,
                         current_pan,
                     });
@@ -590,6 +617,8 @@ impl Mixer {
             let plan_changed = next_plan.transpose_semitones != clip_state.plan.transpose_semitones
                 || next_plan.source_start_seconds != clip_state.plan.source_start_seconds
                 || next_plan.duration_frames != clip_state.plan.duration_frames;
+            let pitch_changed =
+                next_plan.transpose_semitones != clip_state.plan.transpose_semitones;
             clip_state.plan = next_plan.clone();
 
             if plan_changed {
@@ -598,17 +627,14 @@ impl Mixer {
                     file_hash: next_plan.file_path.to_string_lossy().to_string(),
                     sample_rate: output_sample_rate,
                     channels: output_channels,
-                    transpose_semitones: next_plan.transpose_semitones,
+                    transpose_semitones: 0,
                 };
                 let source_frame = next_plan.source_frame_at_timeline_frame(
                     current_frame,
                     output_sample_rate,
                     output_sample_rate,
                 );
-                let decision = if prepared_playback_disabled
-                    || (prepared_key.transpose_semitones != 0
-                        && !source::prepared_pitch_render_enabled())
-                {
+                let decision = if prepared_playback_disabled {
                     source::SeekSourceDecision::Silence
                 } else {
                     prepared_cache.get_best_available(&prepared_key, source_frame)
@@ -630,12 +656,35 @@ impl Mixer {
                     &audio_buffers,
                     current_frame,
                 ) {
+                    let reader_channels = reader.source_channels().max(1);
                     clip_state.reader = Some(reader);
                     clip_state.prepared_source = None;
                     clip_state.source_kind = None;
                     clip_state.source_key = None;
                     clip_state.pending_swap = None;
+                    clip_state.pitch_engine = create_clip_pitch_engine(
+                        output_sample_rate,
+                        reader_channels,
+                        next_plan.transpose_semitones,
+                    );
                 }
+                if pitch_changed {
+                    let pitch_channels = clip_state
+                        .reader
+                        .as_ref()
+                        .map(source::MemoryClipReader::source_channels)
+                        .unwrap_or(output_channels);
+                    clip_state.pitch_engine = create_clip_pitch_engine(
+                        output_sample_rate,
+                        pitch_channels,
+                        next_plan.transpose_semitones,
+                    );
+                } else {
+                    clip_state.pitch_engine.reset();
+                }
+                clip_state.declick_fade_frames = declick_fade_frames(output_sample_rate);
+                clip_state.declick_frames_remaining =
+                    declick_frames_for_activation(&next_plan, current_frame, output_sample_rate);
                 clip_state.current_gain = resolve_clip_runtime_gain(
                     live_mix_state,
                     &clip_state.plan.track_id,
@@ -679,7 +728,7 @@ impl Mixer {
             file_hash: plan.file_path.to_string_lossy().to_string(),
             sample_rate: self.output_sample_rate,
             channels: self.output_channels.max(1),
-            transpose_semitones: plan.transpose_semitones,
+            transpose_semitones: 0,
         }
     }
 
@@ -689,9 +738,6 @@ impl Mixer {
         source_frame: u64,
         allow_silence: bool,
     ) -> Option<(Arc<dyn source::PreparedAudioSource>, source::SeekSourceKind)> {
-        if key.transpose_semitones != 0 && !source::prepared_pitch_render_enabled() {
-            return None;
-        }
         let prepared_cache = self.audio_buffers.prepared_audio();
         let decision = prepared_cache.get_best_available(key, source_frame);
         if matches!(decision, source::SeekSourceDecision::Silence) && !allow_silence {
@@ -974,6 +1020,32 @@ fn seek_crossfade_samples(output_sample_rate: u32) -> usize {
         .max(1.0) as usize
 }
 
+fn declick_fade_frames(output_sample_rate: u32) -> usize {
+    (0.015 * output_sample_rate.max(1) as f32).round().max(1.0) as usize
+}
+
+fn declick_frames_for_activation(
+    plan: &PlaybackClipPlan,
+    activation_start_frame: u64,
+    output_sample_rate: u32,
+) -> usize {
+    if activation_start_frame <= plan.timeline_start_frame
+        && plan.source_start_seconds <= f64::EPSILON
+    {
+        0
+    } else {
+        declick_fade_frames(output_sample_rate)
+    }
+}
+
+fn create_clip_pitch_engine(
+    sample_rate: u32,
+    channels: usize,
+    transpose_semitones: i32,
+) -> Box<dyn pitch::PitchShiftEngine> {
+    pitch::create_pitch_shift_engine(sample_rate, channels.max(1), transpose_semitones)
+}
+
 fn crossfade_progress(total_samples: usize, samples_remaining: usize, frame_offset: usize) -> f32 {
     let total_samples = total_samples.max(1);
     let remaining_at_frame = samples_remaining.saturating_sub(frame_offset);
@@ -1037,6 +1109,20 @@ impl MixClipState {
 
     pub(crate) fn has_prepared_source(&self) -> bool {
         self.prepared_source.is_some()
+    }
+
+    pub(crate) fn is_bypass_pitch_engine(&self) -> bool {
+        self.pitch_engine
+            .as_any()
+            .is::<pitch::BypassPitchShiftEngine>()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn rubberband_buffered_samples(&self) -> Option<usize> {
+        self.pitch_engine
+            .as_any()
+            .downcast_ref::<pitch::RubberBandPitchShiftEngine>()
+            .map(|engine| engine.buffered_samples_for_test())
     }
 }
 
@@ -1119,16 +1205,26 @@ impl MeterEmitterState {
 }
 
 impl MixClipState {
+    fn declick_gain_for_next_frame(&mut self) -> f32 {
+        if self.declick_frames_remaining == 0 {
+            return 1.0;
+        }
+        let fade_progress =
+            1.0 - (self.declick_frames_remaining as f32 / self.declick_fade_frames.max(1) as f32);
+        self.declick_frames_remaining = self.declick_frames_remaining.saturating_sub(1);
+        fade_progress.clamp(0.0, 1.0)
+    }
+
     fn prepare_exact_swap(
         &mut self,
         cache: &source::PreparedAudioCache,
         timeline_frame: u64,
         output_sample_rate: u32,
     ) {
-        if source::audio_safe_mode_enabled() || self.plan.transpose_semitones == 0 {
+        if source::audio_safe_mode_enabled() {
             return;
         }
-        if source::prepared_playback_disabled() || !source::prepared_pitch_render_enabled() {
+        if source::prepared_playback_disabled() {
             return;
         }
         if self.pending_swap.is_some() {
@@ -1258,6 +1354,19 @@ impl MixClipState {
                 self.source_kind = Some(new_kind);
                 self.pending_swap = None;
             }
+            let sample_count = frames_read * source_channels;
+            scratch.pitched_interleaved.resize(sample_count, 0.0);
+            if sample_count > 0
+                && self
+                    .pitch_engine
+                    .process_realtime_block(
+                        &scratch.interleaved[..sample_count],
+                        &mut scratch.pitched_interleaved[..sample_count],
+                    )
+                    .is_err()
+            {
+                scratch.pitched_interleaved[..sample_count].fill(0.0);
+            }
 
             for frame_offset in 0..frames_read {
                 let dynamic_gain =
@@ -1270,11 +1379,12 @@ impl MixClipState {
                 let transition_gain = crossfade_gain
                     .map(|gain| gain.gain_for_frame(offset_frames + frame_offset))
                     .unwrap_or(1.0);
-                let final_gain = dynamic_gain * edge_gain * transition_gain;
+                let declick_gain = self.declick_gain_for_next_frame();
+                let final_gain = dynamic_gain * edge_gain * transition_gain * declick_gain;
                 let sample_base = frame_offset * source_channels;
-                let left_input = sanitize_mixed_sample(scratch.interleaved[sample_base]);
+                let left_input = sanitize_mixed_sample(scratch.pitched_interleaved[sample_base]);
                 let right_input = if source_channels > 1 {
-                    sanitize_mixed_sample(scratch.interleaved[sample_base + 1])
+                    sanitize_mixed_sample(scratch.pitched_interleaved[sample_base + 1])
                 } else {
                     left_input
                 };
@@ -1303,7 +1413,26 @@ impl MixClipState {
             return (0.0, 0.0);
         };
 
-        for frame_offset in 0..frame_count {
+        let source_channels = reader.source_channels().max(1);
+        let sample_count = frame_count * source_channels;
+        scratch.interleaved.resize(sample_count, 0.0);
+        scratch.interleaved[..sample_count].fill(0.0);
+        let frames_read = reader.read_interleaved(&mut scratch.interleaved, frame_count);
+        let sample_count = frames_read * source_channels;
+        scratch.pitched_interleaved.resize(sample_count, 0.0);
+        if sample_count > 0
+            && self
+                .pitch_engine
+                .process_realtime_block(
+                    &scratch.interleaved[..sample_count],
+                    &mut scratch.pitched_interleaved[..sample_count],
+                )
+                .is_err()
+        {
+            scratch.pitched_interleaved[..sample_count].fill(0.0);
+        }
+
+        for frame_offset in 0..frames_read {
             let dynamic_gain =
                 interpolated_gain(start_gain, target_gain, frame_offset, frame_count);
             let dynamic_pan = interpolated_gain(start_pan, target_pan, frame_offset, frame_count);
@@ -1313,12 +1442,19 @@ impl MixClipState {
             let transition_gain = crossfade_gain
                 .map(|gain| gain.gain_for_frame(offset_frames + frame_offset))
                 .unwrap_or(1.0);
-
-            let Some((left_sample, right_sample)) =
-                reader.next_stereo_frame(dynamic_gain * edge_gain * transition_gain, dynamic_pan)
-            else {
-                break;
+            let final_gain =
+                dynamic_gain * edge_gain * transition_gain * self.declick_gain_for_next_frame();
+            let sample_base = frame_offset * source_channels;
+            let left_input = sanitize_mixed_sample(scratch.pitched_interleaved[sample_base]);
+            let right_input = if source_channels > 1 {
+                sanitize_mixed_sample(scratch.pitched_interleaved[sample_base + 1])
+            } else {
+                left_input
             };
+            let (left_sample, right_sample) =
+                apply_runtime_pan(left_input, right_input, dynamic_pan, source_channels);
+            let left_sample = left_sample * final_gain;
+            let right_sample = right_sample * final_gain;
             write_frame_to_output(
                 buffer,
                 offset_frames + frame_offset,
@@ -2330,6 +2466,50 @@ mod tests {
 
         assert_eq!(mixer.active_clips().len(), 1);
         assert_eq!(mixer.active_clips()[0].plan().transpose_semitones, 4);
+        assert!(!mixer.active_clips()[0].is_bypass_pitch_engine());
+    }
+
+    #[test]
+    fn mixer_uses_bypass_engine_for_zero_transpose() {
+        let song_dir = PathBuf::from("song");
+        let clip_path = "audio/test.wav".to_string();
+        let cache = AudioBufferCache::default();
+        cache.insert_for_test(
+            song_dir.join(&clip_path),
+            SharedAudioSource::from_preloaded(vec![0.25; 48_000 * 2], 48_000, 2, true),
+        );
+
+        let mut song = metronome_song();
+        song.duration_seconds = 1.0;
+        song.regions[0].end_seconds = 1.0;
+        song.clips = vec![Clip {
+            id: "clip".into(),
+            track_id: "track".into(),
+            file_path: clip_path,
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 1.0,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+        }];
+
+        let mixer = Mixer::new(
+            song_dir,
+            song,
+            0.0,
+            48_000,
+            2,
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(HashMap::new())),
+            Arc::new(RwLock::new(AppSettings::default())),
+            telemetry::AudioDebugConfig::from_env(),
+            cache,
+        );
+
+        assert_eq!(mixer.active_clips().len(), 1);
+        assert!(mixer.active_clips()[0].is_bypass_pitch_engine());
     }
 
     #[test]
@@ -2514,8 +2694,9 @@ mod tests {
         assert_eq!(mixer.active_clips().len(), 1);
         let clip = &mixer.active_clips()[0];
         assert_eq!(clip.plan.transpose_semitones, 5);
-        assert!(clip.reader.is_some());
-        assert!(clip.prepared_source.is_none());
+        assert!(clip.reader.is_none());
+        assert!(clip.prepared_source.is_some());
+        assert!(!clip.is_bypass_pitch_engine());
     }
 
     #[test]

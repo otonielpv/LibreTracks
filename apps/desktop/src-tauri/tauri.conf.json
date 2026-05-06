@@ -24,7 +24,8 @@
     "active": true,
     "targets": "all",
     "resources": {
-      "../../remote/dist": "remote-dist"
+      "../../remote/dist": "remote-dist",
+      "../../../vendor/bin/*": "vendor/bin"
     },
     "windows": {
       "nsis": {

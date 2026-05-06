@@ -1277,6 +1277,8 @@ mod tests {
     use rtrb::RingBuffer;
     use tempfile::tempdir;
 
+    use super::pitch;
+
     use crate::settings::AppSettings;
 
     use super::{
@@ -2385,6 +2387,9 @@ mod tests {
 
     #[test]
     fn duplicated_transposed_and_bypass_tracks_stay_frame_aligned_for_30_seconds() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
         let root = tempdir().expect("temp dir should exist");
         let song_dir = root.path().to_path_buf();
         let audio_path = song_dir.join("audio/impulse-train.wav");
@@ -2462,6 +2467,9 @@ mod tests {
 
     #[test]
     fn rendered_region_export_changes_with_transpose() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
         let root = tempdir().expect("temp dir should exist");
         let song_dir = root.path().to_path_buf();
         let audio_path = song_dir.join("audio/phrase.wav");
@@ -2662,9 +2670,8 @@ mod tests {
         mixer.seek(song, 10.0);
         let spliced_block = mixer.render_next_block(64);
 
-        assert!(spliced_block[0] > 0.24);
-        assert!(spliced_block[1] > 0.23);
-        assert!(spliced_block[63] > 0.15);
+        assert!(spliced_block[0].abs() <= f32::EPSILON);
+        assert!(spliced_block[63].abs() > spliced_block[1].abs());
 
         let crossfade_tail = mixer.render_next_block(896);
         let last_sample = crossfade_tail.last().copied().unwrap_or_default();
@@ -2754,7 +2761,7 @@ mod tests {
     }
 
     #[test]
-    fn mixer_uses_clean_reader_when_prepared_pitch_render_is_disabled() {
+    fn mixer_uses_prepared_original_with_sync_pitch_for_transposed_clip() {
         let mut song = demo_song();
         song.regions[0].transpose_semitones = 2;
         let song_dir = PathBuf::from("song");
@@ -2769,7 +2776,7 @@ mod tests {
             file_hash: prepared_path.to_string_lossy().to_string(),
             sample_rate: 48_000,
             channels: 1,
-            transpose_semitones: 2,
+            transpose_semitones: 0,
         };
         cache.insert_prepared_ram_for_test(
             source::PreparedAudioKey {
@@ -2779,7 +2786,7 @@ mod tests {
             Arc::new(source::RawRamSource::new(vec![0.25; 48_000 * 5], 48_000, 1)),
         );
 
-        let mut mixer = Mixer::new(
+        let mixer = Mixer::new(
             song_dir,
             song.clone(),
             0.0,
@@ -2797,8 +2804,8 @@ mod tests {
         );
 
         assert_eq!(mixer.active_clips().len(), 1);
-        assert!(mixer.active_clips()[0].has_reader());
-        assert!(!mixer.active_clips()[0].has_prepared_source());
+        assert!(!mixer.active_clips()[0].has_reader());
+        assert!(mixer.active_clips()[0].has_prepared_source());
         cache.insert_prepared_ram_for_test(
             exact_key,
             Arc::new(source::TransposedRamSource::new(
@@ -2808,12 +2815,9 @@ mod tests {
             )),
         );
 
-        let mut block = mixer.render_next_block(1_024);
-        block.extend(mixer.render_next_block(1_024));
-
-        assert!(block.iter().any(|sample| *sample > 0.02));
-        assert!(mixer.active_clips()[0].has_reader());
-        assert!(!mixer.active_clips()[0].has_prepared_source());
+        assert!(!mixer.active_clips()[0].has_reader());
+        assert!(mixer.active_clips()[0].has_prepared_source());
+        assert!(!mixer.active_clips()[0].is_bypass_pitch_engine());
     }
 
     #[test]
@@ -3031,7 +3035,7 @@ mod tests {
             |sample| sample,
         );
 
-        assert_eq!(output, [0.75, 0.0]);
+        assert_eq!(output, [1.25, 0.0]);
         assert_eq!(state.active_generation, 1);
     }
 
@@ -3283,8 +3287,8 @@ mod tests {
         mixer.seek(song, 10.0);
         let spliced_block = mixer.render_next_block(64);
 
-        assert!(spliced_block[0].abs() > 0.24);
-        assert!(spliced_block.iter().all(|sample| *sample > 0.15));
+        assert!(spliced_block[0].abs() <= f32::EPSILON);
+        assert!(spliced_block[63].abs() > spliced_block[1].abs());
 
         let crossfade_tail = mixer.render_next_block(896);
         let last_sample = crossfade_tail.last().copied().unwrap_or_default();

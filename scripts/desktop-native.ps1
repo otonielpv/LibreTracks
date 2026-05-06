@@ -12,6 +12,10 @@ $toolchainRoot = Join-Path $env:USERPROFILE ".rustup\toolchains"
 $toolchainBin = $null
 $scopeCppSdkRoot = Join-Path ${env:ProgramFiles} "Microsoft Visual Studio\2022\Community\SDK\ScopeCppSDK\vc15\VC"
 
+# Inyectar librería de RubberBand para el DSP
+
+# ... y además le decimos a Windows dónde buscar las otras DLLs (sleef, samplerate)
+
 function Add-EnvironmentSegment {
   param(
     [Parameter(Mandatory = $true)]
@@ -207,6 +211,12 @@ Set-Location $repoRoot
 # Use a repo-local target dir dedicated to the native desktop workflow.
 # This avoids Tauri reusing stale build artifacts from other workspaces.
 $env:CARGO_TARGET_DIR = $nativeTargetDir
+
+$vendorBin = Join-Path $repoRoot "vendor\bin"
+if (Test-Path $vendorBin) {
+  $env:PATH = "$vendorBin;" + $env:PATH
+  $env:RUBBERBAND_LIBRARY = Join-Path $vendorBin "rubberband-3.dll"
+}
 
 switch ($Mode) {
   "dev" {

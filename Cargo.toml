@@ -5,6 +5,7 @@ members = [
     "crates/libretracks-project",
     "crates/libretracks-audio",
     "crates/libretracks-remote",
+    "crates/rubberband",
 ]
 resolver = "2"
 
