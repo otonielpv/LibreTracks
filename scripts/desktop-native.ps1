@@ -208,6 +208,12 @@ Assert-NativeToolchainReady
 
 Set-Location $repoRoot
 
+# Tauri's desktop build script expects the bundled remote assets to exist.
+$remoteDistDir = Join-Path $repoRoot "apps\remote\dist"
+if (-not (Test-Path $remoteDistDir)) {
+  npm --prefix apps/remote run build
+}
+
 # Use a repo-local target dir dedicated to the native desktop workflow.
 # This avoids Tauri reusing stale build artifacts from other workspaces.
 $env:CARGO_TARGET_DIR = $nativeTargetDir
