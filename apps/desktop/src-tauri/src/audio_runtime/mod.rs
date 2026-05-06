@@ -17,10 +17,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, Stream, StreamConfig,
-};
+use cpal::{traits::{DeviceTrait, StreamTrait}, SampleFormat, Stream, StreamConfig};
 use libretracks_core::Song;
 use libretracks_remote::RemoteServerHandle;
 use rtrb::RingBuffer;
@@ -31,7 +28,13 @@ use crate::error::DesktopError;
 use crate::settings::AppSettings;
 
 use self::backend::{
-    build_output_stream, spawn_disk_reader, DiskReaderReport, DiskReaderState, OutputSample,
+    actual_buffer_size_frames, build_output_stream, enumerate_output_devices, resolve_output_device,
+    resolve_output_stream_config, sample_format_from_cpal, spawn_disk_reader,
+    stream_config_with_buffer_request, AudioDeviceDescriptor, AudioOutputRequest,
+    AudioRuntimeCounters, BackendPolicy, DiskReaderReport, DiskReaderState, OutputSample,
+};
+pub use self::backend::{
+    AudioBackendKind, AudioBufferSizeRequest, AudioSampleFormat, OutputChannelRequest,
 };
 #[cfg(test)]
 use self::backend::{drain_consumer_samples, CpalCrossfadeState};
@@ -48,11 +51,10 @@ pub use self::telemetry::AudioDebugSnapshot;
 #[cfg(test)]
 use self::telemetry::{command_kind_label, env_flag};
 use self::telemetry::{
-    playback_reason_label, AudioDebugConfig, AudioDebugState, FarSeekTelemetry, RestartReport,
-    StopReport, SyncReport,
+    playback_reason_label, AudioBackendCountersSummary, AudioDebugConfig, AudioDebugState,
+    FarSeekTelemetry, RestartReport, StopReport, SyncReport,
 };
 
-const PCM_RING_CAPACITY_FRAMES: usize = 4_096;
 const DISK_RENDER_BLOCK_FRAMES: usize = 512;
 const STOP_FADE_DURATION_SECONDS: f64 = 0.005;
 const GAIN_EPSILON: f32 = 0.000_001;
@@ -91,6 +93,8 @@ pub struct AudioOutputDevicesResponse {
     pub devices: Vec<String>,
     pub default_device: Option<String>,
     pub channel_counts: HashMap<String, usize>,
+    pub backends: Vec<AudioBackendKind>,
+    pub device_descriptors: Vec<AudioDeviceDescriptor>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -168,6 +172,7 @@ struct PlaybackSession {
     reader_sender: Option<Sender<ReaderCommand>>,
     reader_handle: Option<JoinHandle<DiskReaderReport>>,
     seek_generation: Arc<AtomicU64>,
+    counters: Arc<AudioRuntimeCounters>,
     audio_buffers: AudioBufferCache,
 }
 
@@ -340,6 +345,13 @@ impl AudioRuntime {
             .as_ref()
             .map(PlaybackSession::master_gain)
             .unwrap_or(1.0)
+    }
+
+    fn backend_counters_snapshot(&self) -> AudioBackendCountersSummary {
+        self.session
+            .as_ref()
+            .map(PlaybackSession::counters_snapshot)
+            .unwrap_or_default()
     }
 }
 
@@ -660,16 +672,43 @@ impl PlaybackSession {
         debug_config: AudioDebugConfig,
         audio_buffers: AudioBufferCache,
     ) -> Result<Self, String> {
-        let host = cpal::default_host();
-        let selected_device_name = audio_settings
+        let output_request = audio_settings
             .read()
             .ok()
-            .and_then(|settings| settings.selected_output_device.clone())
-            .and_then(|device_name| {
-                let trimmed = device_name.trim().to_string();
-                (!trimmed.is_empty()).then_some(trimmed)
+            .map(|settings| AudioOutputRequest {
+                backend: settings.selected_audio_backend,
+                device_id: settings
+                    .selected_output_device_id
+                    .clone()
+                    .and_then(|value| trimmed_nonempty(value)),
+                device_name: settings
+                    .selected_output_device_name
+                    .clone()
+                    .or_else(|| settings.selected_output_device.clone())
+                    .and_then(|value| trimmed_nonempty(value)),
+                sample_rate: settings.output_sample_rate,
+                buffer_size: settings.output_buffer_size.clone(),
+                output_channels: OutputChannelRequest {
+                    channels: settings.enabled_output_channels.clone(),
+                },
+                sample_format: settings.output_sample_format,
+                low_latency_mode: settings
+                    .selected_audio_backend
+                    .is_some_and(|backend| backend == AudioBackendKind::Asio),
+                safe_mode: settings.audio_safe_mode,
+            })
+            .unwrap_or_else(|| AudioOutputRequest {
+                backend: None,
+                device_id: None,
+                device_name: None,
+                sample_rate: None,
+                buffer_size: AudioBufferSizeRequest::Default,
+                output_channels: OutputChannelRequest::default(),
+                sample_format: None,
+                low_latency_mode: false,
+                safe_mode: false,
             });
-        let Some(device) = resolve_output_device(&host, selected_device_name.as_deref()) else {
+        let Some((host_id, _host, device)) = resolve_output_device(&output_request) else {
             eprintln!("[libretracks-audio] no default output device available, using null backend");
             return Ok(Self {
                 backend: PlaybackBackend::Null,
@@ -677,27 +716,29 @@ impl PlaybackSession {
                 reader_sender: None,
                 reader_handle: None,
                 seek_generation: Arc::new(AtomicU64::new(0)),
+                counters: Arc::new(AudioRuntimeCounters::default()),
                 audio_buffers,
             });
         };
 
-        let desired_output_channels = audio_settings
-            .read()
-            .ok()
-            .and_then(|settings| settings.enabled_output_channels.iter().max().copied())
-            .map(|channel| channel.saturating_add(1))
-            .unwrap_or(2)
-            .max(1);
-        let supported_config = resolve_output_stream_config(&device, desired_output_channels)
+        let device_name = device.name().unwrap_or_else(|_| "unknown".to_string());
+        let backend_kind = backend::backend_kind_from_host_id(host_id);
+        let supported_config = resolve_output_stream_config(&device, &output_request)
             .map_err(|error| error.to_string())?;
         let sample_format = supported_config.sample_format();
-        let config: StreamConfig = supported_config.into();
+        let config = stream_config_with_buffer_request(&supported_config, &output_request);
         let output_channels = usize::from(config.channels.max(1));
         let output_sample_rate = config.sample_rate.0.max(1);
-        let ring_capacity_samples = PCM_RING_CAPACITY_FRAMES.saturating_mul(output_channels.max(1));
+        let actual_buffer_size = actual_buffer_size_frames(&config, &supported_config).max(1);
+        let policy = BackendPolicy::for_backend(backend_kind, output_request.safe_mode);
+        let ring_capacity_frames = policy.ring_capacity_frames(actual_buffer_size);
+        let prefill_frames = policy.prefill_frames(actual_buffer_size, ring_capacity_frames);
+        let ring_capacity_samples = ring_capacity_frames.saturating_mul(output_channels.max(1));
+        let prefill_samples = prefill_frames.saturating_mul(output_channels.max(1));
         let (producer, consumer) = RingBuffer::<OutputSample>::new(ring_capacity_samples);
         let (reader_sender, reader_receiver) = mpsc::channel();
         let seek_generation = Arc::new(AtomicU64::new(0));
+        let counters = Arc::new(AudioRuntimeCounters::default());
 
         let reader_handle = spawn_disk_reader(DiskReaderState {
             mixer: Mixer::new(
@@ -720,13 +761,26 @@ impl PlaybackSession {
             stop_after_master_fade: false,
         });
 
+        wait_for_prefill(&consumer, prefill_samples, Duration::from_millis(250));
+
         let stream = build_output_stream(
             &device,
             &config,
             sample_format,
             consumer,
             seek_generation.clone(),
+            counters.clone(),
         )?;
+        log_stream_open(
+            &host_id.name(),
+            &device_name,
+            &config,
+            sample_format,
+            &output_request,
+            actual_buffer_size,
+            ring_capacity_frames,
+            prefill_frames,
+        );
         stream.play().map_err(|error| error.to_string())?;
 
         Ok(Self {
@@ -735,12 +789,27 @@ impl PlaybackSession {
             reader_sender: Some(reader_sender),
             reader_handle: Some(reader_handle),
             seek_generation,
+            counters,
             audio_buffers,
         })
     }
 
     fn cache_stats(&self) -> AudioBufferCacheStats {
         self.audio_buffers.stats()
+    }
+
+    fn counters_snapshot(&self) -> AudioBackendCountersSummary {
+        AudioBackendCountersSummary {
+            callback_count: self.counters.callback_count.load(Ordering::Relaxed),
+            callback_min_frames: self.counters.callback_min_frames.load(Ordering::Relaxed),
+            callback_max_frames: self.counters.callback_max_frames.load(Ordering::Relaxed),
+            valid_rendered_frames: self.counters.valid_rendered_frames.load(Ordering::Relaxed),
+            underrun_frames: self.counters.underrun_frames.load(Ordering::Relaxed),
+            xrun_count: self.counters.xrun_count.load(Ordering::Relaxed),
+            needs_resync: self.counters.needs_resync.load(Ordering::Acquire),
+            stale_drop_count: self.counters.stale_drop_count.load(Ordering::Relaxed),
+            resync_count: self.counters.resync_count.load(Ordering::Relaxed),
+        }
     }
 
     fn update_song(&mut self, song: Song) -> Result<bool, String> {
@@ -1048,6 +1117,7 @@ fn run_audio_thread(
                 let mut snapshot = debug_state.snapshot();
                 if let Some(active_runtime) = runtime.as_ref() {
                     snapshot.runtime_state.master_gain = active_runtime.master_gain();
+                    snapshot.backend_counters = active_runtime.backend_counters_snapshot();
                 }
                 let _ = respond_to.send(snapshot);
             }
@@ -1085,99 +1155,87 @@ fn ensure_runtime<'a>(
 
 #[tauri::command]
 pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> {
-    let host = cpal::default_host();
-    let default_device = host
-        .default_output_device()
-        .and_then(|device| device.name().ok());
-    let output_devices = host
-        .output_devices()
-        .map_err(|error| error.to_string())?
-        .collect::<Vec<_>>();
+    let descriptors = enumerate_output_devices();
     let mut channel_counts = HashMap::new();
-    for device in &output_devices {
-        let Ok(name) = device.name() else {
-            continue;
-        };
-        let channel_count = device
-            .default_output_config()
-            .ok()
-            .map(|config| usize::from(config.channels().max(1)))
-            .unwrap_or(2);
-        channel_counts.insert(name, channel_count);
+    for descriptor in &descriptors {
+        channel_counts.insert(
+            descriptor.name.clone(),
+            descriptor.max_output_channels.max(1),
+        );
+        channel_counts.insert(
+            descriptor.stable_id.clone(),
+            descriptor.max_output_channels.max(1),
+        );
     }
-    let mut devices = output_devices
-        .into_iter()
-        .filter_map(|device| device.name().ok())
+    let mut devices = descriptors
+        .iter()
+        .map(|descriptor| descriptor.name.clone())
         .collect::<Vec<_>>();
-
     devices.sort();
     devices.dedup();
+    let default_device = descriptors
+        .iter()
+        .find(|descriptor| descriptor.is_default)
+        .map(|descriptor| descriptor.name.clone());
+    let mut backends = descriptors
+        .iter()
+        .map(|descriptor| descriptor.backend)
+        .collect::<Vec<_>>();
+    backends.sort_by_key(|backend| format!("{backend:?}"));
+    backends.dedup();
 
     Ok(AudioOutputDevicesResponse {
         devices,
         default_device,
         channel_counts,
+        backends,
+        device_descriptors: descriptors,
     })
 }
 
-fn resolve_output_device(host: &cpal::Host, selected_device_name: Option<&str>) -> Option<Device> {
-    #[cfg(test)]
-    {
-        let _ = (host, selected_device_name);
-        None
+fn trimmed_nonempty(value: String) -> Option<String> {
+    let trimmed = value.trim().to_string();
+    (!trimmed.is_empty()).then_some(trimmed)
+}
+
+fn wait_for_prefill(
+    consumer: &rtrb::Consumer<OutputSample>,
+    prefill_samples: usize,
+    max_wait: Duration,
+) {
+    if prefill_samples == 0 {
+        return;
     }
-
-    #[cfg(not(test))]
-    {
-        if std::env::var("LIBRETRACKS_DUMMY_AUDIO")
-            .ok()
-            .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true"))
-        {
-            return None;
-        }
-
-        if let Some(selected_device_name) = selected_device_name {
-            let normalized_name = selected_device_name.trim();
-            if !normalized_name.is_empty() {
-                if let Ok(devices) = host.output_devices() {
-                    for device in devices {
-                        let Ok(device_name) = device.name() else {
-                            continue;
-                        };
-                        if device_name == normalized_name {
-                            return Some(device);
-                        }
-                    }
-                }
-            }
-        }
-
-        host.default_output_device()
+    let started_at = Instant::now();
+    while consumer.slots() < prefill_samples && started_at.elapsed() < max_wait {
+        thread::sleep(Duration::from_millis(1));
     }
 }
 
-fn resolve_output_stream_config(
-    device: &Device,
-    desired_channels: usize,
-) -> Result<cpal::SupportedStreamConfig, cpal::DefaultStreamConfigError> {
-    let default_config = device.default_output_config()?;
-    let desired_channels = desired_channels.clamp(1, u16::MAX as usize) as u16;
-    if default_config.channels() >= desired_channels {
-        return Ok(default_config);
-    }
-
-    let Ok(mut supported_configs) = device.supported_output_configs() else {
-        return Ok(default_config);
-    };
-
-    if let Some(config_range) = supported_configs.find(|config| {
-        config.channels() >= desired_channels
-            && config.sample_format() == default_config.sample_format()
-    }) {
-        return Ok(config_range.with_max_sample_rate());
-    }
-
-    Ok(default_config)
+#[allow(clippy::too_many_arguments)]
+fn log_stream_open(
+    host_id: &str,
+    device_name: &str,
+    config: &StreamConfig,
+    sample_format: SampleFormat,
+    request: &AudioOutputRequest,
+    actual_buffer_size: usize,
+    ring_capacity_frames: usize,
+    prefill_frames: usize,
+) {
+    eprintln!(
+        "[libretracks-audio] stream_open backend={:?} host_id={} device=\"{}\" sample_rate={} channels={} sample_format={:?} requested_buffer={:?} actual_buffer={} ring_capacity={} prefill_frames={}",
+        request.backend,
+        host_id,
+        device_name,
+        config.sample_rate.0,
+        config.channels,
+        sample_format_from_cpal(sample_format),
+        request.buffer_size,
+        actual_buffer_size,
+        ring_capacity_frames,
+        prefill_frames
+    );
 }
 
 fn next_audio_command(
@@ -1288,10 +1346,11 @@ mod tests {
         prepare_audio_source, probe_audio_file, resolve_track_runtime_pan, scheduled_clip_count,
         set_zero_latency_test_mode, source, update_shared_track_mix, AudioBufferCache,
         AudioBufferCacheStats, AudioCommand, AudioCommandKind, AudioController, AudioDebugConfig,
-        AudioDebugSnapshot, AudioDebugState, AudioMeterLevel, CpalCrossfadeState, DiskReaderState,
-        MemoryClipReader, Mixer, OutputSample, PlaybackBackend, PlaybackClipPlan, PlaybackSession,
-        PlaybackStartReason, ReaderCommand, RestartReport, SharedAudioSource, StopReport,
-        SyncReport, DISK_RENDER_BLOCK_FRAMES, GAIN_EPSILON, STOP_FADE_DURATION_SECONDS,
+        AudioDebugSnapshot, AudioDebugState, AudioMeterLevel, AudioRuntimeCounters,
+        CpalCrossfadeState, DiskReaderState, MemoryClipReader, Mixer, OutputSample,
+        PlaybackBackend, PlaybackClipPlan, PlaybackSession, PlaybackStartReason, ReaderCommand,
+        RestartReport, SharedAudioSource, StopReport, SyncReport, DISK_RENDER_BLOCK_FRAMES,
+        GAIN_EPSILON, STOP_FADE_DURATION_SECONDS,
     };
 
     fn demo_song() -> Song {
@@ -2981,7 +3040,12 @@ mod tests {
     fn ring_consumer_writes_silence_when_buffer_runs_empty() {
         let (mut producer, mut consumer) = RingBuffer::<OutputSample>::new(4);
         let seek_generation = Arc::new(AtomicU64::new(0));
-        let mut state = CpalCrossfadeState::new(0, 48_000, 1);
+        let mut state = CpalCrossfadeState::new(
+            0,
+            48_000,
+            1,
+            Arc::new(AudioRuntimeCounters::default()),
+        );
         producer
             .push(OutputSample {
                 generation: 0,
@@ -3011,7 +3075,12 @@ mod tests {
     fn ring_consumer_flushes_stale_generation_on_seek() {
         let (mut producer, mut consumer) = RingBuffer::<OutputSample>::new(4);
         let seek_generation = Arc::new(AtomicU64::new(0));
-        let mut state = CpalCrossfadeState::new(0, 48_000, 1);
+        let mut state = CpalCrossfadeState::new(
+            0,
+            48_000,
+            1,
+            Arc::new(AudioRuntimeCounters::default()),
+        );
 
         producer
             .push(OutputSample {
@@ -3050,6 +3119,7 @@ mod tests {
             reader_sender: None,
             reader_handle: None,
             seek_generation: seek_generation.clone(),
+            counters: Arc::new(AudioRuntimeCounters::default()),
             audio_buffers: AudioBufferCache::default(),
         };
 
@@ -3126,6 +3196,7 @@ mod tests {
             reader_sender: None,
             reader_handle: None,
             seek_generation,
+            counters: Arc::new(AudioRuntimeCounters::default()),
             audio_buffers: AudioBufferCache::default(),
         };
 

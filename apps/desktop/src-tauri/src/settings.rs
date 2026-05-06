@@ -3,6 +3,10 @@ use std::{collections::HashMap, fs, io, path::PathBuf, sync::Mutex};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+use crate::audio_runtime::{
+    AudioBackendKind, AudioBufferSizeRequest, AudioSampleFormat, OutputChannelRequest,
+};
+
 const SETTINGS_FILE_NAME: &str = "settings.json";
 
 fn default_metronome_volume() -> f64 {
@@ -59,6 +63,22 @@ pub struct AppSettings {
     #[serde(default)]
     pub selected_output_device: Option<String>,
     #[serde(default)]
+    pub selected_audio_backend: Option<AudioBackendKind>,
+    #[serde(default)]
+    pub selected_output_device_id: Option<String>,
+    #[serde(default)]
+    pub selected_output_device_name: Option<String>,
+    #[serde(default)]
+    pub output_sample_rate: Option<u32>,
+    #[serde(default)]
+    pub output_buffer_size: AudioBufferSizeRequest,
+    #[serde(default)]
+    pub output_channel_mapping: OutputChannelRequest,
+    #[serde(default)]
+    pub output_sample_format: Option<AudioSampleFormat>,
+    #[serde(default)]
+    pub audio_safe_mode: bool,
+    #[serde(default)]
     pub selected_midi_device: Option<String>,
     #[serde(default)]
     pub suppress_missing_midi_device_warning: bool,
@@ -94,6 +114,14 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             selected_output_device: None,
+            selected_audio_backend: None,
+            selected_output_device_id: None,
+            selected_output_device_name: None,
+            output_sample_rate: None,
+            output_buffer_size: AudioBufferSizeRequest::Default,
+            output_channel_mapping: OutputChannelRequest::default(),
+            output_sample_format: None,
+            audio_safe_mode: false,
             selected_midi_device: None,
             suppress_missing_midi_device_warning: false,
             enabled_output_channels: default_enabled_output_channels(),

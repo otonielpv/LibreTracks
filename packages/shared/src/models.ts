@@ -272,6 +272,14 @@ export type MidiBinding = {
 
 export type AppSettings = {
   selectedOutputDevice: string | null;
+  selectedAudioBackend: AudioBackendKind | null;
+  selectedOutputDeviceId: string | null;
+  selectedOutputDeviceName: string | null;
+  outputSampleRate: number | null;
+  outputBufferSize: AudioBufferSizeRequest;
+  outputChannelMapping: OutputChannelRequest;
+  outputSampleFormat: AudioSampleFormat | null;
+  audioSafeMode: boolean;
   selectedMidiDevice: string | null;
   suppressMissingMidiDeviceWarning: boolean;
   enabledOutputChannels: number[];
@@ -291,6 +299,14 @@ export type AppSettings = {
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   selectedOutputDevice: null,
+  selectedAudioBackend: null,
+  selectedOutputDeviceId: null,
+  selectedOutputDeviceName: null,
+  outputSampleRate: null,
+  outputBufferSize: "default",
+  outputChannelMapping: { channels: [0, 1] },
+  outputSampleFormat: null,
+  audioSafeMode: false,
   selectedMidiDevice: null,
   suppressMissingMidiDeviceWarning: false,
   enabledOutputChannels: [0, 1],
@@ -322,6 +338,16 @@ function normalizeMidiBinding(binding: MidiBinding): MidiBinding {
 
 export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const selectedOutputDevice = settings.selectedOutputDevice?.trim() || null;
+  const selectedAudioBackend = normalizeAudioBackendKind(settings.selectedAudioBackend);
+  const selectedOutputDeviceId = settings.selectedOutputDeviceId?.trim() || null;
+  const selectedOutputDeviceName =
+    settings.selectedOutputDeviceName?.trim() || selectedOutputDevice || null;
+  const outputSampleRate =
+    Number.isFinite(settings.outputSampleRate) && Number(settings.outputSampleRate) > 0
+      ? Math.floor(Number(settings.outputSampleRate))
+      : null;
+  const outputBufferSize = normalizeAudioBufferSizeRequest(settings.outputBufferSize);
+  const outputSampleFormat = normalizeAudioSampleFormat(settings.outputSampleFormat);
   const selectedMidiDevice = settings.selectedMidiDevice?.trim() || null;
   const locale = settings.locale?.trim().toLowerCase();
   const metronomeVolume = Number.isFinite(settings.metronomeVolume)
@@ -353,6 +379,14 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
 
   return {
     selectedOutputDevice,
+    selectedAudioBackend,
+    selectedOutputDeviceId,
+    selectedOutputDeviceName,
+    outputSampleRate,
+    outputBufferSize,
+    outputChannelMapping: { channels: enabledOutputChannels.length ? enabledOutputChannels : DEFAULT_APP_SETTINGS.enabledOutputChannels },
+    outputSampleFormat,
+    audioSafeMode: Boolean(settings.audioSafeMode),
     selectedMidiDevice,
     suppressMissingMidiDeviceWarning: Boolean(settings.suppressMissingMidiDeviceWarning),
     enabledOutputChannels: enabledOutputChannels.length ? enabledOutputChannels : DEFAULT_APP_SETTINGS.enabledOutputChannels,
@@ -375,7 +409,60 @@ export type AudioOutputDevices = {
   devices: string[];
   defaultDevice?: string | null;
   channelCounts?: Record<string, number>;
+  backends?: AudioBackendKind[];
+  deviceDescriptors?: AudioDeviceDescriptor[];
 };
+
+export type AudioBackendKind =
+  | "asio"
+  | "wasapi"
+  | "core_audio"
+  | "alsa"
+  | "jack"
+  | "direct_sound"
+  | "mme"
+  | "unknown";
+
+export type AudioSampleFormat = "f32" | "i16" | "u16" | "unknown";
+
+export type AudioBufferSizeRequest = "default" | { fixed: number };
+
+export type OutputChannelRequest = {
+  channels: number[];
+};
+
+export type AudioDeviceDescriptor = {
+  backend: AudioBackendKind;
+  backendId: string;
+  stableId: string;
+  name: string;
+  displayName: string;
+  isDefault: boolean;
+  maxOutputChannels: number;
+  defaultSampleRate?: number | null;
+  supportedSampleRates: number[];
+  supportedBufferSizes: number[];
+  supportedSampleFormats: AudioSampleFormat[];
+};
+
+function normalizeAudioBackendKind(value: unknown): AudioBackendKind | null {
+  return typeof value === "string" &&
+    ["asio", "wasapi", "core_audio", "alsa", "jack", "direct_sound", "mme", "unknown"].includes(value)
+    ? (value as AudioBackendKind)
+    : null;
+}
+
+function normalizeAudioSampleFormat(value: unknown): AudioSampleFormat | null {
+  return typeof value === "string" && ["f32", "i16", "u16"].includes(value) ? (value as AudioSampleFormat) : null;
+}
+
+function normalizeAudioBufferSizeRequest(value: unknown): AudioBufferSizeRequest {
+  if (value && typeof value === "object" && "fixed" in value) {
+    const fixed = Number((value as { fixed?: unknown }).fixed);
+    return Number.isFinite(fixed) && fixed > 0 ? { fixed: Math.floor(fixed) } : "default";
+  }
+  return "default";
+}
 
 export type MidiRawMessage = {
   status: number;

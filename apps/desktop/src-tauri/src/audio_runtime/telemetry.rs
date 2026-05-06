@@ -12,6 +12,7 @@ pub struct AudioDebugSnapshot {
     pub last_stop: Option<AudioStopSummary>,
     pub runtime_state: AudioRuntimeStateSummary,
     pub playhead: AudioPlayheadEstimate,
+    pub backend_counters: AudioBackendCountersSummary,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -71,6 +72,20 @@ pub(crate) struct AudioRuntimeStateSummary {
     pub silence_fallback_count: u64,
     pub last_silence_fallback_position: Option<f64>,
     pub last_silence_fallback_file: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AudioBackendCountersSummary {
+    pub callback_count: u64,
+    pub callback_min_frames: usize,
+    pub callback_max_frames: usize,
+    pub valid_rendered_frames: u64,
+    pub underrun_frames: u64,
+    pub xrun_count: u64,
+    pub needs_resync: bool,
+    pub stale_drop_count: u64,
+    pub resync_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -331,6 +346,7 @@ impl AudioDebugState {
                     .map(playback_reason_label)
                     .map(str::to_string),
             },
+            backend_counters: AudioBackendCountersSummary::default(),
         }
     }
 

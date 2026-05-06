@@ -21,6 +21,8 @@ import {
   getSongRegionAtPosition,
   normalizeAppSettings,
   type AppSettings,
+  type AudioBackendKind,
+  type AudioDeviceDescriptor,
   type AudioMeterLevel,
   type ClipSummary,
   type JumpTriggerLabel,
@@ -1001,7 +1003,7 @@ export function TransportPanelContent() {
   const [midiLearnFeedback, setMidiLearnFeedback] = useState<MidiLearnFeedback | null>(null);
   const [midiLearnView, setMidiLearnView] = useState<"core" | "markers" | "songs">("core");
   const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(DEFAULT_APP_SETTINGS.metronomeVolume);
-  const [audioOutputDevices, setAudioOutputDevices] = useState<string[]>([]);
+  const [audioDeviceDescriptors, setAudioDeviceDescriptors] = useState<AudioDeviceDescriptor[]>([]);
   const [audioOutputChannelCounts, setAudioOutputChannelCounts] = useState<Record<string, number>>({});
   const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<string | null>(null);
   const [midiInputDevices, setMidiInputDevices] = useState<string[]>([]);
@@ -1480,7 +1482,7 @@ export function TransportPanelContent() {
     const normalizedSettings = normalizeAppSettings(nextSettings);
     setAppSettings(normalizedSettings);
     await syncSettingsLanguage(normalizedSettings);
-    setAudioOutputDevices(nextAudioDevices.devices);
+    setAudioDeviceDescriptors(nextAudioDevices.deviceDescriptors ?? []);
     setAudioOutputChannelCounts(nextAudioDevices.channelCounts ?? {});
     setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
     setMidiInputDevices(nextMidiInputs);
@@ -2185,7 +2187,7 @@ export function TransportPanelContent() {
         if (!active) {
           return;
         }
-        setAudioOutputDevices(nextAudioDevices.devices);
+        setAudioDeviceDescriptors(nextAudioDevices.deviceDescriptors ?? []);
         setAudioOutputChannelCounts(nextAudioDevices.channelCounts ?? {});
         setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
         setMidiInputDevices(nextMidiInputs);
@@ -4811,14 +4813,62 @@ export function TransportPanelContent() {
   }
 
   function handleAudioOutputDeviceChange(nextValue: string) {
+    const descriptor = audioDeviceDescriptors.find((device) => device.stableId === nextValue);
     persistAudioSettings(
-      {
-        ...appSettings,
-        selectedOutputDevice: nextValue || null,
-      },
-      nextValue
-        ? t("transport.status.audioDeviceUpdated", { name: nextValue })
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        selectedOutputDevice: descriptor?.name ?? null,
+        selectedOutputDeviceId: descriptor?.stableId ?? null,
+        selectedOutputDeviceName: descriptor?.name ?? null,
+        outputSampleRate: descriptor?.defaultSampleRate ?? appSettingsRef.current.outputSampleRate,
+      }),
+      descriptor
+        ? t("transport.status.audioDeviceUpdated", { name: descriptor.name })
         : t("transport.status.audioDeviceSystemDefault"),
+    );
+  }
+
+  function handleAudioBackendChange(nextValue: string) {
+    const nextBackend = (nextValue || null) as AudioBackendKind | null;
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        selectedAudioBackend: nextBackend,
+        selectedOutputDevice: null,
+        selectedOutputDeviceId: null,
+        selectedOutputDeviceName: null,
+      }),
+      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
+    );
+  }
+
+  function handleOutputSampleRateChange(nextValue: string) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        outputSampleRate: nextValue ? Number(nextValue) : null,
+      }),
+      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
+    );
+  }
+
+  function handleOutputBufferSizeChange(nextValue: string) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        outputBufferSize: nextValue ? { fixed: Number(nextValue) } : "default",
+      }),
+      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
+    );
+  }
+
+  function handleAudioSafeModeChange(enabled: boolean) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        audioSafeMode: enabled,
+      }),
+      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
     );
   }
 
@@ -6480,7 +6530,31 @@ export function TransportPanelContent() {
     setExternalDropPreview(preview);
   }
 
-  const selectedAudioOutputDevice = appSettings.selectedOutputDevice ?? "";
+  const audioBackendOptions = useMemo(
+    () =>
+      Array.from(new Set(audioDeviceDescriptors.map((device) => device.backend))).sort((left, right) =>
+        left.localeCompare(right),
+      ),
+    [audioDeviceDescriptors],
+  );
+  const selectedAudioBackend =
+    appSettings.selectedAudioBackend ?? audioBackendOptions[0] ?? null;
+  const audioDevicesForSelectedBackend = useMemo(
+    () =>
+      audioDeviceDescriptors.filter(
+        (device) => selectedAudioBackend === null || device.backend === selectedAudioBackend,
+      ),
+    [audioDeviceDescriptors, selectedAudioBackend],
+  );
+  const selectedAudioOutputDevice = appSettings.selectedOutputDeviceId ?? "";
+  const selectedAudioOutputDescriptor =
+    audioDeviceDescriptors.find((device) => device.stableId === appSettings.selectedOutputDeviceId) ??
+    audioDeviceDescriptors.find(
+      (device) => device.backend === selectedAudioBackend && device.name === appSettings.selectedOutputDevice,
+    ) ??
+    audioDevicesForSelectedBackend.find((device) => device.isDefault) ??
+    audioDevicesForSelectedBackend[0] ??
+    null;
   const selectedMidiInputDevice = appSettings.selectedMidiDevice ?? "";
   const selectedLocale = appSettings.locale ?? "";
   const audioRoutingOptions = useMemo(
@@ -6491,14 +6565,18 @@ export function TransportPanelContent() {
     1,
     Math.min(
       64,
-      audioOutputChannelCounts[appSettings.selectedOutputDevice ?? ""] ??
+      (selectedAudioOutputDescriptor ? audioOutputChannelCounts[selectedAudioOutputDescriptor.stableId] : undefined) ??
+        audioOutputChannelCounts[appSettings.selectedOutputDevice ?? ""] ??
         (defaultAudioOutputDevice ? audioOutputChannelCounts[defaultAudioOutputDevice] : undefined) ??
         HARDWARE_OUTPUT_CHANNEL_COUNT,
     ),
   );
   const selectedAudioOutputDeviceMissing = Boolean(
-    appSettings.selectedOutputDevice && !audioOutputDevices.includes(appSettings.selectedOutputDevice),
+    appSettings.selectedOutputDeviceId &&
+      !audioDeviceDescriptors.some((device) => device.stableId === appSettings.selectedOutputDeviceId),
   );
+  const outputSampleRates = selectedAudioOutputDescriptor?.supportedSampleRates ?? [];
+  const outputBufferSizes = selectedAudioOutputDescriptor?.supportedBufferSizes ?? [];
   const selectedMidiInputDeviceMissing = Boolean(
     appSettings.selectedMidiDevice && !midiInputDevices.includes(appSettings.selectedMidiDevice),
   );
@@ -7265,6 +7343,26 @@ export function TransportPanelContent() {
                       >
                         <div className="lt-settings-section-grid">
                           <label className="lt-settings-field">
+                            <span className="lt-settings-field-label">
+                              {t("transport.settingsModal.audioBackend", { defaultValue: "Audio System" })}
+                            </span>
+                            <select
+                              value={appSettings.selectedAudioBackend ?? ""}
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onChange={(event) => handleAudioBackendChange(event.target.value)}
+                            >
+                              <option value="">
+                                {t("transport.settingsModal.audioBackendSystemDefault", { defaultValue: "System default" })}
+                              </option>
+                              {audioBackendOptions.map((backend) => (
+                                <option key={backend} value={backend}>
+                                  {backend.replaceAll("_", " ").toUpperCase()}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="lt-settings-field">
                             <span className="lt-settings-field-label">{t("transport.settingsModal.audioDevice")}</span>
                             <select
                               value={selectedAudioOutputDevice}
@@ -7278,12 +7376,12 @@ export function TransportPanelContent() {
                               </option>
                               {selectedAudioOutputDeviceMissing ? (
                                 <option value={selectedAudioOutputDevice}>
-                                  {t("transport.settingsModal.audioDeviceUnavailable", { name: selectedAudioOutputDevice })}
+                                  {t("transport.settingsModal.audioDeviceUnavailable", { name: appSettings.selectedOutputDeviceName ?? selectedAudioOutputDevice })}
                                 </option>
                               ) : null}
-                              {audioOutputDevices.map((deviceName) => (
-                                <option key={deviceName} value={deviceName}>
-                                  {deviceName}
+                              {audioDevicesForSelectedBackend.map((device) => (
+                                <option key={device.stableId} value={device.stableId}>
+                                  {device.name}
                                 </option>
                               ))}
                             </select>
@@ -7292,6 +7390,52 @@ export function TransportPanelContent() {
                                 ? t("transport.settingsModal.audioDeviceCurrentDefault", { name: defaultAudioOutputDevice })
                                 : t("transport.settingsModal.audioDeviceNoDefault")}
                             </small>
+                          </label>
+
+                          <label className="lt-settings-field">
+                            <span className="lt-settings-field-label">
+                              {t("transport.settingsModal.sampleRate", { defaultValue: "Sample Rate" })}
+                            </span>
+                            <select
+                              value={appSettings.outputSampleRate ?? ""}
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onChange={(event) => handleOutputSampleRateChange(event.target.value)}
+                            >
+                              <option value="">
+                                {selectedAudioOutputDescriptor?.defaultSampleRate
+                                  ? `${selectedAudioOutputDescriptor.defaultSampleRate} Hz`
+                                  : t("transport.settingsModal.audioDeviceSystemDefault")}
+                              </option>
+                              {outputSampleRates.map((sampleRate) => (
+                                <option key={sampleRate} value={sampleRate}>
+                                  {sampleRate} Hz
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="lt-settings-field">
+                            <span className="lt-settings-field-label">
+                              {t("transport.settingsModal.bufferSize", { defaultValue: "Buffer Size" })}
+                            </span>
+                            <select
+                              value={
+                                typeof appSettings.outputBufferSize === "object" && "fixed" in appSettings.outputBufferSize
+                                  ? String(appSettings.outputBufferSize.fixed)
+                                  : ""
+                              }
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onChange={(event) => handleOutputBufferSizeChange(event.target.value)}
+                            >
+                              <option value="">
+                                {t("transport.settingsModal.audioDeviceSystemDefault")}
+                              </option>
+                              {outputBufferSizes.map((bufferSize) => (
+                                <option key={bufferSize} value={bufferSize}>
+                                  {bufferSize}
+                                </option>
+                              ))}
+                            </select>
                           </label>
 
                           <div className="lt-settings-field">
@@ -7319,6 +7463,16 @@ export function TransportPanelContent() {
                               ))}
                             </div>
                           </div>
+
+                          <label className="lt-settings-toggle">
+                            <input
+                              type="checkbox"
+                              checked={appSettings.audioSafeMode}
+                              disabled={isSettingsLoading || isSettingsSaving}
+                              onChange={(event) => handleAudioSafeModeChange(event.target.checked)}
+                            />
+                            <span>{t("transport.settingsModal.audioSafeMode", { defaultValue: "Safe Mode" })}</span>
+                          </label>
                         </div>
                       </section>
                     ) : null}
