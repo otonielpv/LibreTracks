@@ -472,7 +472,6 @@ pub(crate) fn musical_position_summary(
 struct TimingRegion {
     start_seconds: f64,
     end_seconds: f64,
-    bpm: f64,
     beats_per_bar: u32,
     beat_duration_seconds: f64,
     cumulative_bars_end: f64,
@@ -525,7 +524,6 @@ fn build_timing_regions(song: &Song, horizon_seconds: f64) -> Vec<TimingRegion> 
         regions.push(TimingRegion {
             start_seconds,
             end_seconds: boundary_seconds,
-            bpm,
             beats_per_bar,
             beat_duration_seconds,
             cumulative_bars_end,
@@ -551,7 +549,6 @@ fn build_timing_regions(song: &Song, horizon_seconds: f64) -> Vec<TimingRegion> 
     regions.push(TimingRegion {
         start_seconds,
         end_seconds: horizon_seconds.max(start_seconds),
-        bpm,
         beats_per_bar,
         beat_duration_seconds,
         cumulative_bars_end,
@@ -594,10 +591,6 @@ pub(crate) fn empty_musical_position_summary() -> MusicalPositionSummary {
         sub_beat: 0,
         display: "1.1.00".to_string(),
     }
-}
-
-fn seconds_to_timebase_frames(seconds: f64, sample_rate: u32) -> u64 {
-    (seconds.max(0.0) * f64::from(sample_rate.max(1))).round() as u64
 }
 
 fn beat_frames_for_signature(bpm: f64, denominator: u32, sample_rate: u32) -> u64 {

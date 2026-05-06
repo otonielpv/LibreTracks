@@ -82,6 +82,7 @@ pub(crate) enum RegionReadiness {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) enum SeekTargetKind {
     CurrentPlayhead,
     RegionStart,
@@ -150,6 +151,7 @@ struct SilenceFallbackTelemetry {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct TransposedRamSource {
     inner: RawRamSource,
 }
@@ -178,6 +180,7 @@ pub(crate) struct PreparedWindowKey {
 }
 
 #[derive(Clone)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) enum PreparedState {
     ReadyRam(Arc<dyn PreparedAudioSource>),
     ReadyDisk(Arc<dyn PreparedAudioSource>),
@@ -206,6 +209,7 @@ pub(crate) enum SeekSourceKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) enum PreparePriority {
     RealtimeCritical,
     CurrentPlayback,
@@ -225,6 +229,7 @@ pub(crate) struct PrepareRequest {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct PrepareWindowConfig {
     pub current_ahead_seconds: f32,
     pub current_behind_seconds: f32,
@@ -246,6 +251,7 @@ impl Default for PrepareWindowConfig {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct RamCacheConfig {
     pub max_mb: usize,
     pub min_free_system_mb: usize,
@@ -263,6 +269,7 @@ impl Default for RamCacheConfig {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct RamWindowEntry {
     key: PreparedWindowKey,
     bytes: usize,
@@ -276,6 +283,7 @@ struct LegacyPreparedAudioKey {
     transpose_semitones: i32,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct StreamingClipReader {
     shared_source: Arc<StreamingAudioSource>,
     consumer: Consumer<ClipSample>,
@@ -296,6 +304,7 @@ struct ClipSample {
     value: f32,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 enum StreamingWorkerCommand {
     Seek {
         target_start_seconds: f64,
@@ -318,14 +327,17 @@ impl StreamingAudioSource {
         self.channels
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn preload_frame_count(&self) -> usize {
         self.frame_count
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn is_fully_cached(&self) -> bool {
         false
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn has_mapped_audio(&self) -> bool {
         false
     }
@@ -540,6 +552,7 @@ impl PreparedAudioSource for RawDiskSource {
 }
 
 impl TransposedRamSource {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn new(samples: Vec<f32>, sample_rate: u32, channels: usize) -> Self {
         Self {
             inner: RawRamSource::new(samples, sample_rate, channels),
@@ -629,6 +642,7 @@ impl SeekSourceDecision {
 }
 
 #[derive(Clone)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct PreparedAudioCache {
     states: Arc<RwLock<HashMap<PreparedAudioKey, PreparedState>>>,
     previous_pitch: Arc<RwLock<HashMap<String, Arc<dyn PreparedAudioSource>>>>,
@@ -732,6 +746,7 @@ impl PreparedAudioCache {
         SeekSourceDecision::Silence
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn mark_preparing(&self, key: PreparedAudioKey) {
         if let Ok(mut states) = self.states.write() {
             states.insert(key, PreparedState::Preparing);
@@ -772,18 +787,21 @@ impl PreparedAudioCache {
         Ok(())
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn insert_missing(&self, key: PreparedAudioKey) {
         if let Ok(mut states) = self.states.write() {
             states.insert(key, PreparedState::Missing);
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn insert_failed(&self, key: PreparedAudioKey, error: String) {
         if let Ok(mut states) = self.states.write() {
             states.insert(key, PreparedState::Failed(error));
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn request_prepare(&self, request: PrepareRequest) {
         if let Ok(mut queue) = self.prepare_queue.write() {
             queue.push(request);
@@ -802,6 +820,7 @@ impl PreparedAudioCache {
             .unwrap_or_default()
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn insert_ram_window(
         &self,
         key: PreparedWindowKey,
@@ -830,6 +849,7 @@ impl PreparedAudioCache {
             .unwrap_or_default()
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn evict_ram_windows_locked(&self, windows: &mut HashMap<PreparedWindowKey, RamWindowEntry>) {
         let max_bytes = self.ram_config.max_mb.saturating_mul(1024 * 1024);
         while windows.values().map(|entry| entry.bytes).sum::<usize>() > max_bytes {
@@ -878,12 +898,14 @@ impl PreparedAudioCache {
 }
 
 #[derive(Clone)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct AudioPrepareManager {
     cache: PreparedAudioCache,
     window_config: PrepareWindowConfig,
 }
 
 impl AudioPrepareManager {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn new(cache: PreparedAudioCache) -> Self {
         Self {
             cache,
@@ -891,6 +913,7 @@ impl AudioPrepareManager {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn request_urgent_window(
         &self,
         song_id: SongId,
@@ -906,6 +929,7 @@ impl AudioPrepareManager {
         });
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn request_current_playback_window(
         &self,
         song_id: SongId,
@@ -921,6 +945,7 @@ impl AudioPrepareManager {
         });
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn queue_len(&self) -> usize {
         self.cache.prepare_queue_len()
     }
@@ -1667,6 +1692,7 @@ impl StreamingClipReader {
         })
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn seek_to_internal(&mut self, target_frame: usize) -> Result<(), String> {
         self.current_generation = self.current_generation.saturating_add(1);
         let channels = self.shared_source.channels.max(1);
@@ -1780,6 +1806,7 @@ impl StreamingClipReader {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn mix_into_with_channel_gains(
         &mut self,
         buffer: &mut [f32],
@@ -1821,6 +1848,7 @@ impl Drop for StreamingClipReader {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) type SharedAudioSource = StreamingAudioSource;
 pub(crate) type MemoryClipReader = StreamingClipReader;
 

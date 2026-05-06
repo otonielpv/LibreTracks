@@ -93,8 +93,6 @@ pub(crate) enum TransportTransitionKind {
     ResumePlay,
     ManualTimelineSeek,
     MusicalJump,
-    DragPreview,
-    Stop,
 }
 
 struct FadeFromZeroSmoother {
@@ -297,6 +295,7 @@ impl Mixer {
         self.rebuild_track_meter_indices();
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn seek(&mut self, song: Song, position_seconds: f64) {
         self.seek_with_transition(song, position_seconds, TransportTransitionKind::MusicalJump);
     }

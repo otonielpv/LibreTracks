@@ -18,7 +18,7 @@ use libretracks_project::{
     import_song_package as import_song_package_into_project, import_wav_files_to_library,
     load_song_from_file, load_waveform_summary, read_audio_metadata, save_song_to_file,
     waveform_file_path, ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry,
-    ProjectError, ProjectImportRequest, WaveformSummary, SONG_FILE_NAME,
+    ProjectError, WaveformSummary, SONG_FILE_NAME,
 };
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
@@ -626,6 +626,7 @@ impl DesktopSession {
         Ok(Some(assets))
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn import_audio_files_into_current_song(
         &mut self,
         files: &[PathBuf],
@@ -693,6 +694,7 @@ impl DesktopSession {
         Ok(library_assets)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn import_audio_files_from_bytes(
         &mut self,
         files: &[AudioFileImportPayload],
@@ -701,6 +703,7 @@ impl DesktopSession {
         import_audio_files_from_bytes_to_library(&song_dir, self.engine.song(), files)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn import_audio_files_from_paths(
         &mut self,
         files: &[AudioFilePathImportPayload],
@@ -2180,6 +2183,7 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    #[allow(dead_code)]
     fn load_imported_song(
         &mut self,
         imported_song: ImportedSong,
@@ -2773,21 +2777,6 @@ enum AudioChangeImpact {
     StructureRebuild,
 }
 
-fn build_import_request(files: &[PathBuf]) -> ProjectImportRequest {
-    let title = infer_song_title(files);
-    let song_id = format!("song_{}", timestamp_suffix());
-
-    ProjectImportRequest {
-        song_id,
-        title,
-        artist: None,
-        bpm: None,
-        key: None,
-        time_signature: "4/4".into(),
-        wav_files: files.to_vec(),
-    }
-}
-
 fn build_empty_song(song_id: String, title: String) -> Song {
     Song {
         id: song_id,
@@ -3366,24 +3355,6 @@ fn list_library_assets(
     Ok(assets)
 }
 
-fn infer_song_title(files: &[PathBuf]) -> String {
-    let shared_parent = files
-        .first()
-        .and_then(|path| path.parent())
-        .and_then(|path| path.file_name())
-        .and_then(|name| name.to_str())
-        .map(humanize);
-
-    shared_parent.unwrap_or_else(|| {
-        files
-            .first()
-            .and_then(|path| path.file_stem())
-            .and_then(|name| name.to_str())
-            .map(humanize)
-            .unwrap_or_else(|| "Imported Song".to_string())
-    })
-}
-
 fn project_root(app: &AppHandle) -> PathBuf {
     app.path()
         .app_data_dir()
@@ -3897,31 +3868,6 @@ fn copy_project_audio_files(
     }
 
     Ok(())
-}
-
-fn humanize(value: &str) -> String {
-    let words: Vec<String> = value
-        .split(|character: char| !character.is_ascii_alphanumeric())
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(first) => {
-                    let mut word = String::new();
-                    word.push(first.to_ascii_uppercase());
-                    word.push_str(&chars.as_str().to_ascii_lowercase());
-                    word
-                }
-                None => String::new(),
-            }
-        })
-        .collect();
-
-    if words.is_empty() {
-        "Imported Song".to_string()
-    } else {
-        words.join(" ")
-    }
 }
 
 #[cfg(test)]
