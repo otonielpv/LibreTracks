@@ -34,11 +34,13 @@ El flujo desktop asume estas dependencias instaladas:
 
 - Node.js `>= 20`
 - Rust stable toolchain con `cargo` y `rustc`
+- En Linux (Debian/Ubuntu), instala los paquetes de sistema de Tauri:
+  `sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf`
 - Microsoft Visual C++ Build Tools en Windows
 - Windows 10/11 SDK en Windows para el enlazado MSVC
 - LLVM/Clang con `libclang.dll` en Windows para las crates que usan bindgen
 
-Para ejecutar el target nativo en Windows, `scripts/desktop-native.ps1` comprueba el linker de MSVC y las librerías del SDK. En la práctica, necesitas Visual Studio Build Tools con la carga `Desktop development with C++` antes de ejecutar la app Tauri nativa.
+Para ejecutar el target nativo en Windows, `scripts/desktop-native.ps1` comprueba el linker de MSVC y las librerías del SDK. En la práctica, necesitas Visual Studio Build Tools con la carga `Desktop development with C++` antes de ejecutar la app Tauri nativa. Los scripts raíz `npm run *:desktop:native` ahora enrutan automáticamente a ese helper en Windows y ejecutan directamente en Linux/macOS.
 
 Si `cargo check` despues avisa de que bindgen no puede encontrar `libclang`, instala LLVM y apunta `LIBCLANG_PATH` al directorio que contiene `libclang.dll` (por ejemplo `C:\Program Files\LLVM\bin`). Si `winget install -e --id LLVM.LLVM` no termina en tu equipo, instala LLVM manualmente con el instalador oficial o usa otro gestor de paquetes como Chocolatey.
 
@@ -69,7 +71,7 @@ cargo test
 Otros comandos útiles durante desarrollo:
 
 ```bash
-# Chequeo nativo de Rust mediante el script helper de Windows
+# Chequeo nativo de Rust mediante el lanzador nativo multiplataforma
 npm run check:desktop:native
 
 # Tests frontend y lint/typecheck
