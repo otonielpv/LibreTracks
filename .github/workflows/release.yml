@@ -111,6 +111,13 @@ jobs:
           "CPAL_ASIO_DIR=$asioDir" | Out-File -FilePath $env:GITHUB_ENV -Append
           "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Prepare Windows RubberBand resources
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path vendor\bin\native | Out-Null
+          Copy-Item -Path vendor\bin\win\* -Destination vendor\bin\native\ -Force
+
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
 
@@ -121,6 +128,9 @@ jobs:
           sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf librubberband-dev
           mkdir -p vendor/bin/linux
           cp /usr/lib/x86_64-linux-gnu/librubberband.so.2 vendor/bin/linux/
+          rm -rf vendor/bin/native
+          mkdir -p vendor/bin/native
+          cp vendor/bin/linux/* vendor/bin/native/
 
       - name: Install macOS system dependencies
         if: matrix.platform == 'macos'
@@ -128,6 +138,9 @@ jobs:
           brew install rubberband
           mkdir -p vendor/bin/mac
           cp $(brew --prefix)/lib/librubberband.dylib vendor/bin/mac/
+          rm -rf vendor/bin/native
+          mkdir -p vendor/bin/native
+          cp vendor/bin/mac/* vendor/bin/native/
 
       - name: Install dependencies
         run: npm install

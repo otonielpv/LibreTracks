@@ -212,10 +212,16 @@ Set-Location $repoRoot
 # This avoids Tauri reusing stale build artifacts from other workspaces.
 $env:CARGO_TARGET_DIR = $nativeTargetDir
 
-$vendorBin = Join-Path $repoRoot "vendor\bin"
-if (Test-Path $vendorBin) {
-  $env:PATH = "$vendorBin;" + $env:PATH
-  $env:RUBBERBAND_LIBRARY = Join-Path $vendorBin "rubberband-3.dll"
+$vendorBinRoot = Join-Path $repoRoot "vendor\bin"
+$windowsVendorBin = Join-Path $vendorBinRoot "win"
+$nativeVendorBin = Join-Path $vendorBinRoot "native"
+
+if (Test-Path $windowsVendorBin) {
+  New-Item -ItemType Directory -Force -Path $nativeVendorBin | Out-Null
+  Copy-Item -Path (Join-Path $windowsVendorBin "*") -Destination $nativeVendorBin -Force
+
+  $env:PATH = "$windowsVendorBin;$nativeVendorBin;" + $env:PATH
+  $env:RUBBERBAND_LIBRARY = Join-Path $windowsVendorBin "rubberband-3.dll"
 }
 
 switch ($Mode) {

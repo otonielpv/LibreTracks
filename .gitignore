@@ -7,6 +7,8 @@ coverage/
 target/
 target-desktop-native/
 target-desktop-check/
+vendor/bin/native/*
+!vendor/bin/native/.gitkeep
 
 *.log
 .DS_Store
