@@ -52,7 +52,7 @@ jobs:
       
       - name: Setup RubberBand DLLs for Windows tests
         shell: pwsh
-        run: echo "${{ github.workspace }}\vendor\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+        run: echo "${{ github.workspace }}\vendor\bin\win" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Run backend Rust tests
         run: cargo test --locked -p libretracks-core -p libretracks-project -p libretracks-audio
@@ -60,8 +60,10 @@ jobs:
       - name: Run desktop Rust tests
         env:
           LIBRETRACKS_DUMMY_AUDIO: "1"
-          RUBBERBAND_LIBRARY: "vendor/bin/rubberband-3.dll"
-        run: cargo test --locked -p libretracks-desktop -- --test-threads=1
+          RUBBERBAND_LIBRARY: "vendor/bin/win/rubberband-3.dll"
+        run: |
+          $env:PATH = "${{ github.workspace }}\vendor\bin\win;" + $env:PATH
+          cargo test --locked -p libretracks-desktop -- --test-threads=1
 
   release:
     needs: test
@@ -116,7 +118,16 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf librubberband-dev
+          mkdir -p vendor/bin/linux
+          cp /usr/lib/x86_64-linux-gnu/librubberband.so.2 vendor/bin/linux/
+
+      - name: Install macOS system dependencies
+        if: matrix.platform == 'macos'
+        run: |
+          brew install rubberband
+          mkdir -p vendor/bin/mac
+          cp $(brew --prefix)/lib/librubberband.dylib vendor/bin/mac/
 
       - name: Install dependencies
         run: npm install

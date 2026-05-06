@@ -25,7 +25,18 @@
     "targets": "all",
     "resources": {
       "../../remote/dist": "remote-dist",
-      "../../../vendor/bin/*": "vendor/bin"
+      "../../vendor/bin/win/*": {
+        "platforms": ["windows"],
+        "target": "."
+      },
+      "../../vendor/bin/mac/*": {
+        "platforms": ["macos"],
+        "target": "."
+      },
+      "../../vendor/bin/linux/*": {
+        "platforms": ["linux"],
+        "target": "."
+      }
     },
     "windows": {
       "nsis": {

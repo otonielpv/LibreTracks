@@ -197,19 +197,27 @@ fn library_candidates() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         vec![
+            PathBuf::from("rubberband-3.dll"),
             PathBuf::from("rubberband.dll"),
-            PathBuf::from("librubberband.dll"),
         ]
     }
     #[cfg(target_os = "macos")]
     {
-        vec![PathBuf::from("librubberband.dylib")]
+        vec![
+            PathBuf::from("librubberband.dylib"),
+            PathBuf::from("rubberband.dylib"),
+            PathBuf::from("rubberband-3.dylib"),
+        ]
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         vec![
             PathBuf::from("librubberband.so.2"),
             PathBuf::from("librubberband.so"),
+            PathBuf::from("rubberband.so.2"),
+            PathBuf::from("rubberband.so"),
+            PathBuf::from("rubberband-3.so.2"),
+            PathBuf::from("rubberband-3.so"),
         ]
     }
 }
