@@ -65,6 +65,7 @@ pub(crate) struct Mixer {
     master_gain: f32,
     master_fade: Option<MasterFadeState>,
     metronome_voice: MetronomeVoice,
+    playback_dump: Option<playback_dump::PlaybackDumpRecorder>,
 }
 
 pub(crate) struct MixClipState {
@@ -79,6 +80,8 @@ pub(crate) struct MixClipState {
     declick_frames_remaining: usize,
     current_gain: f32,
     current_pan: f32,
+    pitch_diagnostic_blocks_logged: usize,
+    silent_post_pitch_blocks: usize,
 }
 
 pub(crate) struct PendingSourceSwap {
@@ -109,6 +112,9 @@ struct MixScratchBuffers {
     pitched_interleaved: Vec<f32>,
     old_interleaved: Vec<f32>,
     new_interleaved: Vec<f32>,
+    dump_interleaved: Vec<f32>,
+    dump_pre_pitch: Vec<f32>,
+    dump_post_pitch: Vec<f32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -280,6 +286,10 @@ impl Mixer {
             master_gain: 1.0,
             master_fade: None,
             metronome_voice: MetronomeVoice::default(),
+            playback_dump: playback_dump::PlaybackDumpRecorder::from_env(
+                output_sample_rate,
+                output_channels,
+            ),
         };
         mixer.cached_live_mix = LiveMixSnapshot::from_song(&mixer.song);
         mixer.seek_with_transition(
@@ -347,6 +357,7 @@ impl Mixer {
         let should_capture_track_meters = self.meter_emitter.capture_enabled();
         let mut track_meters = should_capture_track_meters.then(|| self.empty_track_meters());
         let metronome_settings = self.read_metronome_settings();
+        let playback_dump = self.playback_dump.clone();
         self.prune_inactive_clips(block_start);
         self.activate_due_clips(block_end);
         {
@@ -403,6 +414,8 @@ impl Mixer {
                     &output_routing,
                     &mut self.mix_scratch,
                     active_crossfade_gain,
+                    playback_dump.as_ref(),
+                    block_start,
                 );
 
                 if let Some(index) = track_meters.as_ref().and_then(|_| {
@@ -442,20 +455,24 @@ impl Mixer {
             !clip_state.reader.as_ref().is_some_and(|reader| reader.eof)
                 && block_end < clip_state.plan.timeline_end_frame()
         });
+        let mut metronome_mixed = vec![0.0_f32; block_frames * self.output_channels.max(1)];
+        self.mix_metronome_into_output(
+            &mut metronome_mixed,
+            block_start,
+            block_frames,
+            &metronome_settings,
+        );
+        if let Some(recorder) = playback_dump.as_ref() {
+            recorder.record_metronome(block_start, &metronome_mixed);
+        }
         if is_master_route(&metronome_settings.audio_to) {
-            self.mix_metronome_into_output(
-                &mut master_mixed,
-                block_start,
-                block_frames,
-                &metronome_settings,
-            );
+            for (sample, metronome_sample) in master_mixed.iter_mut().zip(&metronome_mixed) {
+                *sample += *metronome_sample;
+            }
         } else {
-            self.mix_metronome_into_output(
-                &mut direct_mixed,
-                block_start,
-                block_frames,
-                &metronome_settings,
-            );
+            for (sample, metronome_sample) in direct_mixed.iter_mut().zip(&metronome_mixed) {
+                *sample += *metronome_sample;
+            }
         }
         self.apply_master_gain(&mut master_mixed, block_frames);
         let mut mixed = master_mixed;
@@ -465,6 +482,9 @@ impl Mixer {
         self.apply_fade_from_zero(&mut mixed, block_frames);
         self.advance_true_crossfade(block_frames);
         self.timeline_cursor_frame += block_frames as u64;
+        if let Some(recorder) = playback_dump.as_ref() {
+            recorder.record_mix(block_start, &mixed);
+        }
 
         mixed
     }
@@ -485,9 +505,9 @@ impl Mixer {
                 < window_end_frame.saturating_add(pre_roll_frames as u64)
         {
             let plan = self.plans[self.next_plan_index].clone();
-            self.next_plan_index += 1;
 
             if plan.timeline_end_frame() <= activation_start_frame {
+                self.next_plan_index += 1;
                 continue;
             }
 
@@ -516,10 +536,11 @@ impl Mixer {
                         source_kind: Some(source_kind),
                         source_key: Some(prepared_key),
                         pending_swap: None,
-                        pitch_engine: create_clip_pitch_engine(
+                        pitch_engine: create_clip_pitch_engine_for_source(
                             self.output_sample_rate,
                             self.output_channels.max(1),
                             plan.transpose_semitones,
+                            Some(source_kind),
                         ),
                         declick_fade_frames: declick_fade_frames(self.output_sample_rate),
                         declick_frames_remaining: declick_frames_for_activation(
@@ -529,7 +550,10 @@ impl Mixer {
                         ),
                         current_gain,
                         current_pan,
+                        pitch_diagnostic_blocks_logged: 0,
+                        silent_post_pitch_blocks: 0,
                     });
+                    self.next_plan_index += 1;
                     continue;
                 }
             }
@@ -539,6 +563,7 @@ impl Mixer {
                     activation_start_frame as f64 / f64::from(self.output_sample_rate.max(1)),
                     plan.file_path.to_string_lossy().to_string(),
                 );
+                self.next_plan_index += 1;
                 continue;
             }
 
@@ -546,14 +571,13 @@ impl Mixer {
                 !zero_latency_mode_enabled(),
                 "StreamingClipReader cannot be used in zero-latency playback mode"
             );
-            match source::StreamingClipReader::open(
+            match open_streaming_reader_and_pitch_engine(
                 &plan,
                 self.output_sample_rate,
                 &self.audio_buffers,
                 activation_start_frame,
             ) {
-                Ok(reader) => {
-                    let reader_channels = reader.source_channels().max(1);
+                Ok((reader, pitch_engine)) => {
                     let current_gain = resolve_clip_runtime_gain(
                         &self.cached_live_mix.tracks,
                         &plan.track_id,
@@ -569,11 +593,7 @@ impl Mixer {
                         source_kind: None,
                         source_key: None,
                         pending_swap: None,
-                        pitch_engine: create_clip_pitch_engine(
-                            self.output_sample_rate,
-                            reader_channels,
-                            plan.transpose_semitones,
-                        ),
+                        pitch_engine,
                         declick_fade_frames: declick_fade_frames(self.output_sample_rate),
                         declick_frames_remaining: declick_frames_for_activation(
                             &plan,
@@ -582,12 +602,72 @@ impl Mixer {
                         ),
                         current_gain,
                         current_pan,
+                        pitch_diagnostic_blocks_logged: 0,
+                        silent_post_pitch_blocks: 0,
                     });
+                    self.next_plan_index += 1;
                 }
                 Err(error) => {
                     if self.debug_config.enabled || self.debug_config.log_commands {
                         eprintln!("[libretracks-audio] failed to open clip reader: {error}");
                     }
+                    if plan.transpose_semitones != 0 {
+                        eprintln!(
+                            "[libretracks-audio] transposed streaming activation deferred: clip_id={}, timeline_frame={}, file={}, error={error}",
+                            plan.clip_id,
+                            activation_start_frame,
+                            plan.file_path.display()
+                        );
+                        if plan.timeline_end_frame() <= activation_start_frame {
+                            self.next_plan_index += 1;
+                            continue;
+                        }
+                        self.audio_buffers.record_silence_fallback(
+                            activation_start_frame as f64
+                                / f64::from(self.output_sample_rate.max(1)),
+                            plan.file_path.to_string_lossy().to_string(),
+                        );
+                        let current_gain = resolve_clip_runtime_gain(
+                            &self.cached_live_mix.tracks,
+                            &plan.track_id,
+                            plan.clip_gain,
+                            self.cached_live_mix.is_any_track_soloed,
+                        );
+                        let current_pan =
+                            resolve_track_runtime_pan(&self.cached_live_mix.tracks, &plan.track_id);
+                        let silence_decision = source::SeekSourceDecision::Silence;
+                        self.active_clips.push(MixClipState {
+                            plan: plan.clone(),
+                            reader: None,
+                            prepared_source: Some(
+                                self.audio_buffers
+                                    .prepared_audio()
+                                    .source_or_silence(&silence_decision),
+                            ),
+                            source_kind: Some(source::SeekSourceKind::Silence),
+                            source_key: Some(prepared_key),
+                            pending_swap: None,
+                            pitch_engine: create_clip_pitch_engine_for_source(
+                                self.output_sample_rate,
+                                self.output_channels.max(1),
+                                plan.transpose_semitones,
+                                Some(source::SeekSourceKind::Silence),
+                            ),
+                            declick_fade_frames: declick_fade_frames(self.output_sample_rate),
+                            declick_frames_remaining: declick_frames_for_activation(
+                                &plan,
+                                activation_start_frame,
+                                self.output_sample_rate,
+                            ),
+                            current_gain,
+                            current_pan,
+                            pitch_diagnostic_blocks_logged: 0,
+                            silent_post_pitch_blocks: 0,
+                        });
+                        self.next_plan_index += 1;
+                        continue;
+                    }
+                    self.next_plan_index += 1;
                 }
             }
         }
@@ -627,7 +707,7 @@ impl Mixer {
                     file_hash: next_plan.file_path.to_string_lossy().to_string(),
                     sample_rate: output_sample_rate,
                     channels: output_channels,
-                    transpose_semitones: 0,
+                    transpose_semitones: next_plan.transpose_semitones,
                 };
                 let source_frame = next_plan.source_frame_at_timeline_frame(
                     current_frame,
@@ -650,23 +730,18 @@ impl Mixer {
                         current_frame as f64 / f64::from(output_sample_rate.max(1)),
                         next_plan.file_path.to_string_lossy().to_string(),
                     );
-                } else if let Ok(reader) = source::StreamingClipReader::open(
+                } else if let Ok((reader, pitch_engine)) = open_streaming_reader_and_pitch_engine(
                     &next_plan,
                     output_sample_rate,
                     &audio_buffers,
                     current_frame,
                 ) {
-                    let reader_channels = reader.source_channels().max(1);
                     clip_state.reader = Some(reader);
                     clip_state.prepared_source = None;
                     clip_state.source_kind = None;
                     clip_state.source_key = None;
                     clip_state.pending_swap = None;
-                    clip_state.pitch_engine = create_clip_pitch_engine(
-                        output_sample_rate,
-                        reader_channels,
-                        next_plan.transpose_semitones,
-                    );
+                    clip_state.pitch_engine = pitch_engine;
                 }
                 if pitch_changed {
                     let pitch_channels = clip_state
@@ -674,13 +749,17 @@ impl Mixer {
                         .as_ref()
                         .map(source::MemoryClipReader::source_channels)
                         .unwrap_or(output_channels);
-                    clip_state.pitch_engine = create_clip_pitch_engine(
+                    clip_state.pitch_engine = create_clip_pitch_engine_for_source(
                         output_sample_rate,
                         pitch_channels,
                         next_plan.transpose_semitones,
+                        clip_state.source_kind,
                     );
+                    clip_state.pitch_diagnostic_blocks_logged = 0;
                 } else {
                     clip_state.pitch_engine.reset();
+                    let _ = clip_state.pitch_engine.prepare_for_aligned_output();
+                    clip_state.pitch_diagnostic_blocks_logged = 0;
                 }
                 clip_state.declick_fade_frames = declick_fade_frames(output_sample_rate);
                 clip_state.declick_frames_remaining =
@@ -728,7 +807,7 @@ impl Mixer {
             file_hash: plan.file_path.to_string_lossy().to_string(),
             sample_rate: self.output_sample_rate,
             channels: self.output_channels.max(1),
-            transpose_semitones: 0,
+            transpose_semitones: plan.transpose_semitones,
         }
     }
 
@@ -740,6 +819,23 @@ impl Mixer {
     ) -> Option<(Arc<dyn source::PreparedAudioSource>, source::SeekSourceKind)> {
         let prepared_cache = self.audio_buffers.prepared_audio();
         let decision = prepared_cache.get_best_available(key, source_frame);
+        if matches!(decision, source::SeekSourceDecision::Silence) && key.transpose_semitones != 0 {
+            let original_key = source::PreparedAudioKey {
+                transpose_semitones: 0,
+                ..key.clone()
+            };
+            let original_decision = prepared_cache.get_best_available(&original_key, source_frame);
+            if !matches!(original_decision, source::SeekSourceDecision::Silence) || allow_silence {
+                return Some((
+                    prepared_cache.source_or_silence(&original_decision),
+                    match original_decision.kind() {
+                        source::SeekSourceKind::ExactDisk => source::SeekSourceKind::OriginalDisk,
+                        source::SeekSourceKind::ExactRam => source::SeekSourceKind::OriginalRam,
+                        kind => kind,
+                    },
+                ));
+            }
+        }
         if matches!(decision, source::SeekSourceDecision::Silence) && !allow_silence {
             return None;
         }
@@ -1038,12 +1134,193 @@ fn declick_frames_for_activation(
     }
 }
 
-fn create_clip_pitch_engine(
+fn create_clip_pitch_engine_for_source(
     sample_rate: u32,
     channels: usize,
     transpose_semitones: i32,
+    source_kind: Option<source::SeekSourceKind>,
 ) -> Box<dyn pitch::PitchShiftEngine> {
-    pitch::create_pitch_shift_engine(sample_rate, channels.max(1), transpose_semitones)
+    let effective_transpose = if matches!(
+        source_kind,
+        Some(
+            source::SeekSourceKind::ExactRam
+                | source::SeekSourceKind::ExactDisk
+                | source::SeekSourceKind::Silence
+        )
+    ) {
+        0
+    } else {
+        transpose_semitones
+    };
+    let mut engine =
+        pitch::create_pitch_shift_engine(sample_rate, channels.max(1), effective_transpose);
+    let _ = engine.prepare_for_aligned_output();
+    engine
+}
+
+fn open_streaming_reader_and_pitch_engine(
+    plan: &PlaybackClipPlan,
+    output_sample_rate: u32,
+    audio_buffers: &source::AudioBufferCache,
+    timeline_frame: u64,
+) -> Result<
+    (
+        source::StreamingClipReader,
+        Box<dyn pitch::PitchShiftEngine>,
+    ),
+    String,
+> {
+    if plan.transpose_semitones == 0 {
+        let reader = source::StreamingClipReader::open(
+            plan,
+            output_sample_rate,
+            audio_buffers,
+            timeline_frame,
+        )?;
+        let pitch_engine = create_clip_pitch_engine_for_source(
+            output_sample_rate,
+            reader.source_channels().max(1),
+            0,
+            None,
+        );
+        return Ok((reader, pitch_engine));
+    }
+
+    if !rubberband_preroll_enabled() {
+        let reader = source::StreamingClipReader::open(
+            plan,
+            output_sample_rate,
+            audio_buffers,
+            timeline_frame,
+        )?;
+        let pitch_engine = create_clip_pitch_engine_for_source(
+            output_sample_rate,
+            reader.source_channels().max(1),
+            plan.transpose_semitones,
+            None,
+        );
+        return Ok((reader, pitch_engine));
+    }
+
+    let shared_source = audio_buffers.get(&plan.file_path)?;
+    let shared_source = shared_source
+        .ok_or_else(|| format!("audio source is not prepared: {}", plan.file_path.display()))?;
+    let source_sample_rate = shared_source.sample_rate();
+    let source_channels = shared_source.channels().max(1);
+
+    let mut pitch_engine = pitch::create_pitch_shift_engine(
+        output_sample_rate,
+        source_channels,
+        plan.transpose_semitones,
+    );
+    pitch_engine.reset();
+    let lookahead_frames = pitch_engine.realtime_lookahead_frames(DISK_RENDER_BLOCK_FRAMES);
+    let target_source_frame =
+        plan.source_frame_at_timeline_frame(timeline_frame, output_sample_rate, source_sample_rate)
+            as usize;
+    let context_before_frames = lookahead_frames;
+    let preroll_source_frames = context_before_frames
+        .saturating_mul(source_sample_rate as usize)
+        .div_ceil(output_sample_rate.max(1) as usize);
+    let preroll_start_frame = target_source_frame.saturating_sub(preroll_source_frames);
+    let mut reader = source::StreamingClipReader::open_with_preroll(
+        plan,
+        output_sample_rate,
+        audio_buffers,
+        timeline_frame,
+        preroll_start_frame,
+    )?;
+    let actual_context_output_frames = target_source_frame
+        .saturating_sub(preroll_start_frame)
+        .saturating_mul(output_sample_rate.max(1) as usize)
+        .div_ceil(source_sample_rate.max(1) as usize);
+    let preroll_frames_to_read = actual_context_output_frames.saturating_add(lookahead_frames);
+    let mut preroll_input = vec![0.0_f32; preroll_frames_to_read * source_channels];
+    let frames_read = reader.read_interleaved(&mut preroll_input, preroll_frames_to_read);
+    preroll_input.truncate(frames_read * source_channels);
+    if frames_read == 0 && plan.timeline_end_frame() > timeline_frame {
+        return Err(format!(
+            "rubberband preroll read no frames for audible transposed clip: clip_id={}, file={}",
+            plan.clip_id,
+            plan.file_path.display()
+        ));
+    }
+    if let Err(error) = pitch_engine.prepare_with_real_audio_preroll(
+        &preroll_input,
+        actual_context_output_frames.min(frames_read),
+        lookahead_frames.min(frames_read.saturating_sub(actual_context_output_frames)),
+    ) {
+        eprintln!(
+            "[libretracks-audio] RubberBand realtime preroll failed; falling back to previous non-preroll realtime path. error={error:?}"
+        );
+        let fallback_reader = source::StreamingClipReader::open(
+            plan,
+            output_sample_rate,
+            audio_buffers,
+            timeline_frame,
+        )?;
+        let fallback_engine = create_clip_pitch_engine_for_source(
+            output_sample_rate,
+            fallback_reader.source_channels().max(1),
+            plan.transpose_semitones,
+            None,
+        );
+        return Ok((fallback_reader, fallback_engine));
+    }
+
+    Ok((reader, pitch_engine))
+}
+
+fn rubberband_preroll_enabled() -> bool {
+    std::env::var("LIBRETRACKS_RUBBERBAND_PREROLL")
+        .map(|value| {
+            !matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "0" | "false" | "off" | "no"
+            )
+        })
+        .unwrap_or(true)
+}
+
+fn source_kind_label(kind: Option<source::SeekSourceKind>, has_reader: bool) -> &'static str {
+    match kind {
+        Some(source::SeekSourceKind::ExactRam) => "ExactRam",
+        Some(source::SeekSourceKind::ExactDisk) => "ExactDisk",
+        Some(source::SeekSourceKind::OriginalRam) => "OriginalRam",
+        Some(source::SeekSourceKind::OriginalDisk) => "OriginalDisk",
+        Some(source::SeekSourceKind::PreviousPitch) => "PreviousPitch",
+        Some(source::SeekSourceKind::Silence) => "Silence",
+        None if has_reader => "StreamingReader",
+        None => "Unknown",
+    }
+}
+
+fn fill_stage_dump_buffer(
+    output: &mut Vec<f32>,
+    offset_frames: usize,
+    block_frames: usize,
+    output_channels: usize,
+    source_channels: usize,
+    source_interleaved: &[f32],
+) {
+    let output_channels = output_channels.max(1);
+    let source_channels = source_channels.max(1);
+    let sample_count = (offset_frames + block_frames).saturating_mul(output_channels);
+    output.resize(sample_count, 0.0);
+    output[..sample_count].fill(0.0);
+    for (frame_index, source_frame) in source_interleaved.chunks_exact(source_channels).enumerate()
+    {
+        let output_base = (offset_frames + frame_index) * output_channels;
+        if source_channels == 1 {
+            for channel in 0..output_channels {
+                output[output_base + channel] = source_frame[0];
+            }
+            continue;
+        }
+        for channel in 0..output_channels.min(source_channels) {
+            output[output_base + channel] = source_frame[channel];
+        }
+    }
 }
 
 fn crossfade_progress(total_samples: usize, samples_remaining: usize, frame_offset: usize) -> f32 {
@@ -1205,6 +1482,44 @@ impl MeterEmitterState {
 }
 
 impl MixClipState {
+    fn log_pitch_diagnostics(&mut self, source_kind: &str) {
+        let Some(diagnostics) = self.pitch_engine.diagnostics() else {
+            return;
+        };
+        if self.plan.transpose_semitones == 0 {
+            return;
+        }
+        if self.pitch_diagnostic_blocks_logged >= 8
+            && diagnostics.total_output_frames_emitted % diagnostics.sample_rate.max(1) as usize
+                != 0
+        {
+            return;
+        }
+        self.pitch_diagnostic_blocks_logged = self.pitch_diagnostic_blocks_logged.saturating_add(1);
+        eprintln!(
+            "[libretracks-audio] pitch diagnostics: sample_rate={}, block_frames={}, transpose={}, source_kind={}, rubberband_latency_frames={}, effective_realtime_offset_frames={}, context_before_frames={}, lookahead_frames={}, discarded_preroll_output_frames={}, queued_output_frames_before_first_emit={}, prepare_discarded_latency_frames={}, alignment_trim_configured_frames={}, alignment_trim_consumed_frames={}, silence_frames_injected_by_ensure_internal_output_samples={}, zero_filled_frames={}, total_input_real_frames_processed={}, total_output_frames_emitted={}, first_non_silent_input_frame={:?}, first_non_silent_output_frame={:?}",
+            diagnostics.sample_rate,
+            diagnostics.block_frames,
+            diagnostics.transpose_semitones,
+            source_kind,
+            diagnostics.rubberband_latency_frames,
+            diagnostics.effective_realtime_offset_frames,
+            diagnostics.context_before_frames,
+            diagnostics.lookahead_frames,
+            diagnostics.discarded_preroll_output_frames,
+            diagnostics.queued_output_frames_before_first_emit,
+            diagnostics.prepare_discarded_latency_frames,
+            diagnostics.alignment_trim_configured_frames,
+            diagnostics.alignment_trim_consumed_frames,
+            diagnostics.silence_frames_injected_by_ensure_internal_output_samples,
+            diagnostics.zero_filled_frames,
+            diagnostics.total_input_real_frames_processed,
+            diagnostics.total_output_frames_emitted,
+            diagnostics.first_non_silent_input_frame,
+            diagnostics.first_non_silent_output_frame
+        );
+    }
+
     fn declick_gain_for_next_frame(&mut self) -> f32 {
         if self.declick_frames_remaining == 0 {
             return 1.0;
@@ -1294,11 +1609,19 @@ impl MixClipState {
         output_routing: &[usize],
         scratch: &mut MixScratchBuffers,
         crossfade_gain: Option<CrossfadeGain>,
+        dump_recorder: Option<&playback_dump::PlaybackDumpRecorder>,
+        dump_block_start_frame: u64,
     ) -> (f32, f32) {
         let start_gain = self.current_gain;
         let start_pan = self.current_pan;
         let mut left_peak = 0.0_f32;
         let mut right_peak = 0.0_f32;
+        let dump_sample_count = (offset_frames + frame_count) * output_channels.max(1);
+        let dump_enabled = dump_recorder.is_some_and(|recorder| recorder.clip_stems_enabled());
+        if dump_enabled {
+            scratch.dump_interleaved.resize(dump_sample_count, 0.0);
+            scratch.dump_interleaved[..dump_sample_count].fill(0.0);
+        }
 
         if let Some(source) = self.prepared_source.as_ref() {
             let source_channels = source.channels().max(1);
@@ -1353,22 +1676,51 @@ impl MixClipState {
                 self.prepared_source = Some(new_source);
                 self.source_kind = Some(new_kind);
                 self.pending_swap = None;
+                if matches!(
+                    new_kind,
+                    source::SeekSourceKind::ExactRam | source::SeekSourceKind::ExactDisk
+                ) {
+                    self.pitch_engine = create_clip_pitch_engine_for_source(
+                        output_sample_rate,
+                        source_channels,
+                        self.plan.transpose_semitones,
+                        Some(new_kind),
+                    );
+                }
             }
-            let sample_count = frames_read * source_channels;
-            scratch.pitched_interleaved.resize(sample_count, 0.0);
-            if sample_count > 0
-                && self
-                    .pitch_engine
-                    .process_realtime_block(
-                        &scratch.interleaved[..sample_count],
-                        &mut scratch.pitched_interleaved[..sample_count],
+            let input_sample_count = frames_read * source_channels;
+            let pitch_output_frames = frames_read.max(
+                self.pitch_engine
+                    .queued_output_frames()
+                    .min(frame_count.saturating_sub(frames_read)),
+            );
+            let pitch_sample_count = pitch_output_frames * source_channels;
+            scratch.pitched_interleaved.resize(pitch_sample_count, 0.0);
+            if pitch_sample_count > 0 {
+                let pitch_result = if input_sample_count > 0 {
+                    self.pitch_engine.process_realtime_block(
+                        &scratch.interleaved[..input_sample_count],
+                        &mut scratch.pitched_interleaved[..input_sample_count],
                     )
-                    .is_err()
-            {
-                scratch.pitched_interleaved[..sample_count].fill(0.0);
+                } else {
+                    self.pitch_engine
+                        .process_realtime_block(&[], &mut scratch.pitched_interleaved)
+                };
+                if pitch_result.is_err() {
+                    scratch.pitched_interleaved[..pitch_sample_count].fill(0.0);
+                } else if pitch_output_frames > frames_read {
+                    let tail_start = input_sample_count;
+                    if self
+                        .pitch_engine
+                        .process_realtime_block(&[], &mut scratch.pitched_interleaved[tail_start..])
+                        .is_err()
+                    {
+                        scratch.pitched_interleaved[tail_start..pitch_sample_count].fill(0.0);
+                    }
+                }
             }
 
-            for frame_offset in 0..frames_read {
+            for frame_offset in 0..pitch_output_frames {
                 let dynamic_gain =
                     interpolated_gain(start_gain, target_gain, frame_offset, frame_count);
                 let dynamic_pan =
@@ -1400,10 +1752,32 @@ impl MixClipState {
                     left_sample,
                     right_sample,
                 );
+                if dump_enabled {
+                    write_frame_to_output(
+                        &mut scratch.dump_interleaved,
+                        offset_frames + frame_offset,
+                        output_channels,
+                        output_routing,
+                        left_sample,
+                        right_sample,
+                    );
+                }
                 left_peak = left_peak.max(left_sample.abs());
                 right_peak = right_peak.max(right_sample.abs());
             }
 
+            if dump_enabled {
+                if let Some(recorder) = dump_recorder {
+                    recorder.record_clip_stem(
+                        dump_block_start_frame,
+                        &self.plan.track_id,
+                        &self.plan.clip_id,
+                        self.plan.transpose_semitones,
+                        source_kind_label(self.source_kind, self.reader.is_some()),
+                        &scratch.dump_interleaved[..dump_sample_count],
+                    );
+                }
+            }
             self.current_gain = target_gain;
             self.current_pan = target_pan;
             return (left_peak, right_peak);
@@ -1418,21 +1792,93 @@ impl MixClipState {
         scratch.interleaved.resize(sample_count, 0.0);
         scratch.interleaved[..sample_count].fill(0.0);
         let frames_read = reader.read_interleaved(&mut scratch.interleaved, frame_count);
-        let sample_count = frames_read * source_channels;
-        scratch.pitched_interleaved.resize(sample_count, 0.0);
-        if sample_count > 0
-            && self
-                .pitch_engine
-                .process_realtime_block(
-                    &scratch.interleaved[..sample_count],
-                    &mut scratch.pitched_interleaved[..sample_count],
+        let input_sample_count = frames_read * source_channels;
+        let input_max_abs = pitch::max_abs(&scratch.interleaved[..input_sample_count]);
+        if dump_enabled && input_sample_count > 0 {
+            fill_stage_dump_buffer(
+                &mut scratch.dump_pre_pitch,
+                offset_frames,
+                frame_count,
+                output_channels,
+                source_channels,
+                &scratch.interleaved[..input_sample_count],
+            );
+            if let Some(recorder) = dump_recorder {
+                recorder.record_pre_pitch(
+                    dump_block_start_frame,
+                    &self.plan.track_id,
+                    &self.plan.clip_id,
+                    self.plan.transpose_semitones,
+                    source_kind_label(self.source_kind, self.reader.is_some()),
+                    &scratch.dump_pre_pitch,
+                );
+            }
+        }
+        let queued_before_mix = self.pitch_engine.queued_output_frames();
+        let pitch_output_frames =
+            frames_read.max(queued_before_mix.min(frame_count.saturating_sub(frames_read)));
+        let pitch_sample_count = pitch_output_frames * source_channels;
+        scratch.pitched_interleaved.resize(pitch_sample_count, 0.0);
+        if pitch_sample_count > 0 {
+            let pitch_result = if input_sample_count > 0 {
+                self.pitch_engine.process_realtime_block(
+                    &scratch.interleaved[..input_sample_count],
+                    &mut scratch.pitched_interleaved[..input_sample_count],
                 )
-                .is_err()
-        {
-            scratch.pitched_interleaved[..sample_count].fill(0.0);
+            } else {
+                self.pitch_engine
+                    .process_realtime_block(&[], &mut scratch.pitched_interleaved)
+            };
+            if pitch_result.is_err() {
+                scratch.pitched_interleaved[..pitch_sample_count].fill(0.0);
+            } else if pitch_output_frames > frames_read {
+                let tail_start = input_sample_count;
+                if self
+                    .pitch_engine
+                    .process_realtime_block(&[], &mut scratch.pitched_interleaved[tail_start..])
+                    .is_err()
+                {
+                    scratch.pitched_interleaved[tail_start..pitch_sample_count].fill(0.0);
+                }
+            }
+        }
+        let post_pitch_max_abs = pitch::max_abs(&scratch.pitched_interleaved[..pitch_sample_count]);
+        if self.plan.transpose_semitones != 0 {
+            if input_max_abs > 0.000_001 && post_pitch_max_abs <= 0.000_001 {
+                self.silent_post_pitch_blocks = self.silent_post_pitch_blocks.saturating_add(1);
+                if self.silent_post_pitch_blocks >= 4 {
+                    eprintln!(
+                        "[libretracks-audio] FATAL: StreamingReader RubberBand post_pitch is silent while pre_pitch has signal for {} blocks; set LIBRETRACKS_RUBBERBAND_PREROLL=0 to use the previous non-preroll realtime path for debugging",
+                        self.silent_post_pitch_blocks
+                    );
+                }
+            } else if post_pitch_max_abs > 0.000_001 {
+                self.silent_post_pitch_blocks = 0;
+            }
+        }
+        if dump_enabled && pitch_sample_count > 0 {
+            fill_stage_dump_buffer(
+                &mut scratch.dump_post_pitch,
+                offset_frames,
+                frame_count,
+                output_channels,
+                source_channels,
+                &scratch.pitched_interleaved[..pitch_sample_count],
+            );
+            if let Some(recorder) = dump_recorder {
+                recorder.record_post_pitch(
+                    dump_block_start_frame,
+                    &self.plan.track_id,
+                    &self.plan.clip_id,
+                    self.plan.transpose_semitones,
+                    source_kind_label(self.source_kind, self.reader.is_some()),
+                    &scratch.dump_post_pitch,
+                );
+            }
+            self.log_pitch_diagnostics(source_kind_label(self.source_kind, true));
         }
 
-        for frame_offset in 0..frames_read {
+        for frame_offset in 0..pitch_output_frames {
             let dynamic_gain =
                 interpolated_gain(start_gain, target_gain, frame_offset, frame_count);
             let dynamic_pan = interpolated_gain(start_pan, target_pan, frame_offset, frame_count);
@@ -1463,10 +1909,32 @@ impl MixClipState {
                 left_sample,
                 right_sample,
             );
+            if dump_enabled {
+                write_frame_to_output(
+                    &mut scratch.dump_interleaved,
+                    offset_frames + frame_offset,
+                    output_channels,
+                    output_routing,
+                    left_sample,
+                    right_sample,
+                );
+            }
             left_peak = left_peak.max(left_sample.abs());
             right_peak = right_peak.max(right_sample.abs());
         }
 
+        if dump_enabled {
+            if let Some(recorder) = dump_recorder {
+                recorder.record_clip_stem(
+                    dump_block_start_frame,
+                    &self.plan.track_id,
+                    &self.plan.clip_id,
+                    self.plan.transpose_semitones,
+                    source_kind_label(self.source_kind, self.reader.is_some()),
+                    &scratch.dump_interleaved[..dump_sample_count],
+                );
+            }
+        }
         self.current_gain = target_gain;
         self.current_pan = target_pan;
 
@@ -2513,6 +2981,52 @@ mod tests {
     }
 
     #[test]
+    fn prepared_exact_sources_bypass_realtime_pitch_shift() {
+        let exact_ram = create_clip_pitch_engine_for_source(
+            48_000,
+            2,
+            7,
+            Some(source::SeekSourceKind::ExactRam),
+        );
+        let exact_disk = create_clip_pitch_engine_for_source(
+            48_000,
+            2,
+            7,
+            Some(source::SeekSourceKind::ExactDisk),
+        );
+
+        assert!(exact_ram.as_any().is::<pitch::BypassPitchShiftEngine>());
+        assert!(exact_disk.as_any().is::<pitch::BypassPitchShiftEngine>());
+    }
+
+    #[test]
+    fn prepared_original_sources_keep_realtime_pitch_shift_for_transpose() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
+
+        let original_ram = create_clip_pitch_engine_for_source(
+            48_000,
+            2,
+            7,
+            Some(source::SeekSourceKind::OriginalRam),
+        );
+        let original_disk = create_clip_pitch_engine_for_source(
+            48_000,
+            2,
+            7,
+            Some(source::SeekSourceKind::OriginalDisk),
+        );
+
+        assert!(original_ram
+            .as_any()
+            .is::<pitch::RubberBandPitchShiftEngine>());
+        assert!(original_disk
+            .as_any()
+            .is::<pitch::RubberBandPitchShiftEngine>());
+    }
+
+    #[test]
     fn disable_prepared_playback_and_safe_mode_force_clean_reader_path() {
         source::with_env_var_for_test("LIBRETRACKS_AUDIO_SAFE_MODE", Some("1"), || {
             source::with_env_var_for_test(
@@ -2794,6 +3308,289 @@ mod tests {
         assert!(rendered[late_index].abs() > 0.25);
         assert_eq!(rendered.len(), 48_000 * 2);
     }
+
+    #[test]
+    fn streaming_rubberband_preroll_keeps_start_and_seek_aligned() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
+
+        let start_bypass = render_streaming_click_song(0, 0.0);
+        let start_transposed = render_streaming_click_song(2, 0.0);
+        let start_offset =
+            best_envelope_alignment_offset(&start_bypass, &start_transposed, 0, 48_000, 128);
+        assert!(
+            start_offset.abs() <= 2,
+            "start offset too large after realtime preroll: {start_offset}"
+        );
+
+        let seek_bypass = render_streaming_click_song(0, 10.0);
+        let seek_transposed = render_streaming_click_song(2, 10.0);
+        let seek_offset =
+            best_envelope_alignment_offset(&seek_bypass, &seek_transposed, 0, 48_000, 128);
+        assert!(
+            seek_offset.abs() <= 2,
+            "seek offset too large after realtime preroll: {seek_offset}"
+        );
+    }
+
+    #[test]
+    fn streaming_rubberband_preroll_emits_short_transposed_clip() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
+
+        let rendered = render_streaming_click_song_with_frames(2, 0.0, 2_048, 2_048);
+        let peak = rendered
+            .iter()
+            .map(|sample| sample.abs())
+            .fold(0.0, f32::max);
+
+        assert!(peak > 0.01, "short transposed clip rendered silence");
+    }
+
+    #[test]
+    fn transposed_streaming_activation_retries_when_source_becomes_ready_after_initial_play() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
+
+        let sample_rate = 48_000;
+        let total_frames = sample_rate as usize * 2;
+        let samples = click_track_samples(sample_rate, total_frames);
+        let temp_dir = tempfile::tempdir().expect("temp dir should exist");
+        let file_path = temp_dir.path().join("retry-clicks.wav");
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut writer = hound::WavWriter::create(&file_path, spec).expect("wav should open");
+        for sample in samples {
+            writer.write_sample(sample).expect("sample should write");
+        }
+        writer.finalize().expect("wav should finalize");
+        let source = source::prepare_audio_source(&file_path).expect("source should prepare");
+        let cache = AudioBufferCache::default();
+        let song_dir = PathBuf::from("song");
+        let song = Song {
+            id: "song-retry".into(),
+            title: "Retry".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 2.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![SongRegion {
+                id: "region".into(),
+                name: "Song".into(),
+                start_seconds: 0.0,
+                end_seconds: 2.0,
+                transpose_semitones: 2,
+            }],
+            tracks: vec![Track {
+                id: "track".into(),
+                name: "Track".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: true,
+                audio_to: "master".to_string(),
+            }],
+            clips: vec![Clip {
+                id: "clip".into(),
+                track_id: "track".into(),
+                file_path: file_path.to_string_lossy().to_string(),
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 2.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            }],
+            section_markers: vec![],
+        };
+
+        let mut mixer = Mixer::new(
+            song_dir,
+            song,
+            0.0,
+            sample_rate,
+            1,
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(HashMap::new())),
+            Arc::new(RwLock::new(AppSettings::default())),
+            telemetry::AudioDebugConfig::from_env(),
+            cache.clone(),
+        );
+        assert!(mixer.active_clips().is_empty());
+
+        cache.insert_for_test(file_path, source);
+        let rendered = mixer.render_next_block(2_048);
+        let peak = rendered
+            .iter()
+            .map(|sample| sample.abs())
+            .fold(0.0, f32::max);
+
+        assert!(
+            peak > 0.01,
+            "retried transposed activation rendered silence"
+        );
+    }
+
+    fn render_streaming_click_song(transpose_semitones: i32, position_seconds: f64) -> Vec<f32> {
+        let sample_rate = 48_000;
+        let total_frames = sample_rate as usize * 16;
+        render_streaming_click_song_with_frames(
+            transpose_semitones,
+            position_seconds,
+            total_frames,
+            sample_rate as usize,
+        )
+    }
+
+    fn render_streaming_click_song_with_frames(
+        transpose_semitones: i32,
+        position_seconds: f64,
+        total_frames: usize,
+        render_frames: usize,
+    ) -> Vec<f32> {
+        let sample_rate = 48_000;
+        let samples = click_track_samples(sample_rate, total_frames);
+        let song_dir = PathBuf::from("song");
+        let clip_path = "audio/clicks.wav".to_string();
+        let cache = AudioBufferCache::default();
+        cache.insert_for_test(
+            song_dir.join(&clip_path),
+            SharedAudioSource::from_preloaded(samples, sample_rate, 1, false),
+        );
+        let song = Song {
+            id: format!("song-{transpose_semitones}"),
+            title: "Streaming Preroll".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: total_frames as f64 / sample_rate as f64,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![SongRegion {
+                id: "region".into(),
+                name: "Song".into(),
+                start_seconds: 0.0,
+                end_seconds: total_frames as f64 / sample_rate as f64,
+                transpose_semitones,
+            }],
+            tracks: vec![Track {
+                id: "track".into(),
+                name: "Track".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: true,
+                audio_to: "master".to_string(),
+            }],
+            clips: vec![Clip {
+                id: "clip".into(),
+                track_id: "track".into(),
+                file_path: clip_path,
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 0.0,
+                duration_seconds: total_frames as f64 / sample_rate as f64,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            }],
+            section_markers: vec![],
+        };
+
+        let mut mixer = Mixer::new(
+            song_dir,
+            song,
+            position_seconds,
+            sample_rate,
+            1,
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(HashMap::new())),
+            Arc::new(RwLock::new(AppSettings::default())),
+            telemetry::AudioDebugConfig::from_env(),
+            cache,
+        );
+
+        mixer.render_next_block(render_frames)
+    }
+
+    fn click_track_samples(sample_rate: u32, total_frames: usize) -> Vec<f32> {
+        let click_frames = ((sample_rate as f32) * 0.01).round() as usize;
+        (0..total_frames)
+            .map(|frame| {
+                let phase = frame % sample_rate as usize;
+                if phase >= click_frames {
+                    return 0.0;
+                }
+                let envelope = 1.0 - (phase as f32 / click_frames.max(1) as f32);
+                let radians =
+                    2.0 * std::f32::consts::PI * 1_000.0 * phase as f32 / sample_rate as f32;
+                radians.cos() * envelope
+            })
+            .collect()
+    }
+
+    fn best_envelope_alignment_offset(
+        reference: &[f32],
+        shifted: &[f32],
+        start_frame: usize,
+        window_frames: usize,
+        max_offset: i64,
+    ) -> i64 {
+        (-max_offset..=max_offset)
+            .min_by(|left, right| {
+                envelope_alignment_error(reference, shifted, start_frame, window_frames, *left)
+                    .total_cmp(&envelope_alignment_error(
+                        reference,
+                        shifted,
+                        start_frame,
+                        window_frames,
+                        *right,
+                    ))
+            })
+            .unwrap_or_default()
+    }
+
+    fn envelope_alignment_error(
+        reference: &[f32],
+        shifted: &[f32],
+        start_frame: usize,
+        window_frames: usize,
+        offset: i64,
+    ) -> f32 {
+        let mut error = 0.0_f32;
+        let mut count = 0_usize;
+        for frame in start_frame..start_frame.saturating_add(window_frames) {
+            let shifted_frame = frame as i64 + offset;
+            if shifted_frame < 0
+                || shifted_frame as usize >= shifted.len()
+                || frame >= reference.len()
+            {
+                continue;
+            }
+            error += (reference[frame].abs() - shifted[shifted_frame as usize].abs()).abs();
+            count += 1;
+        }
+        error / count.max(1) as f32
+    }
+
     #[test]
     fn metronome_events_follow_base_bpm_grid() {
         let song = metronome_song();

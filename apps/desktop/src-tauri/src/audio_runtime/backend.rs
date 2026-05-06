@@ -134,18 +134,21 @@ pub(crate) fn drain_consumer_samples<T>(
 
         let mut new_overflow =
             std::collections::VecDeque::with_capacity(state.overflow.len() + consumer.slots());
+
+        // 1. Process existing overflow: Drop stale, keep fading out the old active, stash the new.
         while let Some(sample) = state.overflow.pop_front() {
             if sample.generation == state.active_generation {
                 state.fading_buffer.push(sample.value);
-            } else {
+            } else if sample.generation == latest_generation {
                 new_overflow.push_back(sample);
             }
         }
 
+        // 2. Process current consumer items
         while let Ok(sample) = consumer.pop() {
             if sample.generation == state.active_generation {
                 state.fading_buffer.push(sample.value);
-            } else {
+            } else if sample.generation == latest_generation {
                 new_overflow.push_back(sample);
             }
         }
@@ -158,16 +161,31 @@ pub(crate) fn drain_consumer_samples<T>(
     }
 
     for output in data {
-        let sample = if let Some(sample) = state.overflow.pop_front() {
-            sample.value
-        } else {
-            match consumer.pop() {
-                Ok(sample) if sample.generation == state.active_generation => sample.value,
-                Ok(sample) => {
-                    state.overflow.push_back(sample);
-                    0.0
+        // 3. Strictly pull ONLY the active_generation, drop stales, and pause on futures.
+        let sample = loop {
+            if let Some(front) = state.overflow.front() {
+                if front.generation == state.active_generation {
+                    break state.overflow.pop_front().unwrap().value;
+                } else if front.generation > state.active_generation {
+                    break 0.0; // Wait for the main thread to catch up to this future generation
+                } else {
+                    state.overflow.pop_front(); // Drop stale
+                    continue;
                 }
-                Err(_) => 0.0,
+            }
+
+            match consumer.pop() {
+                Ok(popped) => {
+                    if popped.generation == state.active_generation {
+                        break popped.value;
+                    } else if popped.generation > state.active_generation {
+                        state.overflow.push_back(popped);
+                        break 0.0;
+                    } else {
+                        continue; // Drop stale
+                    }
+                }
+                Err(_) => break 0.0, // Buffer empty
             }
         };
 

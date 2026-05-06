@@ -2,6 +2,7 @@
 name = "libretracks-desktop"
 version = "0.0.5"
 edition = "2021"
+default-run = "libretracks-desktop"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

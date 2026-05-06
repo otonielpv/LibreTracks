@@ -1,6 +1,7 @@
 mod backend;
 mod mixer;
 mod pitch;
+mod playback_dump;
 mod source;
 mod telemetry;
 

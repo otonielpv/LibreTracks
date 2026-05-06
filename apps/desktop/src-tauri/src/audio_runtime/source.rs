@@ -3,12 +3,12 @@ use libretracks_project::load_waveform_summary;
 use memmap2::Mmap;
 use rayon::prelude::*;
 use rtrb::{Consumer, Producer, RingBuffer};
-#[cfg(test)]
 use std::time::Instant;
 use std::{
     collections::HashSet,
     fs::{self, File},
     io::{Read, Write},
+    sync::Mutex,
 };
 use symphonia::core::{
     audio::SampleBuffer,
@@ -24,7 +24,6 @@ use symphonia::core::{
 const STREAM_SECONDS_PER_CLIP: usize = 2;
 const STREAM_WORKER_CHUNK_FRAMES: usize = 512;
 const STREAM_WORKER_READY_TIMEOUT: Duration = Duration::from_millis(250);
-const PITCH_ALIGNMENT_TRIM_FRAMES: usize = 7;
 const LTAF_MAGIC: &[u8; 4] = b"LTAF";
 const LTAF_VERSION: u32 = 1;
 const LTAF_HEADER_LEN: u64 = 64;
@@ -647,6 +646,7 @@ pub(crate) struct PreparedAudioCache {
     states: Arc<RwLock<HashMap<PreparedAudioKey, PreparedState>>>,
     previous_pitch: Arc<RwLock<HashMap<String, Arc<dyn PreparedAudioSource>>>>,
     ram_windows: Arc<RwLock<HashMap<PreparedWindowKey, RamWindowEntry>>>,
+    active_renders: Arc<Mutex<HashSet<PreparedAudioKey>>>,
     prepare_queue: Arc<RwLock<Vec<PrepareRequest>>>,
     tick: Arc<AtomicU64>,
     ram_config: RamCacheConfig,
@@ -659,6 +659,7 @@ impl Default for PreparedAudioCache {
             states: Arc::new(RwLock::new(HashMap::new())),
             previous_pitch: Arc::new(RwLock::new(HashMap::new())),
             ram_windows: Arc::new(RwLock::new(HashMap::new())),
+            active_renders: Arc::new(Mutex::new(HashSet::new())),
             prepare_queue: Arc::new(RwLock::new(Vec::new())),
             tick: Arc::new(AtomicU64::new(0)),
             ram_config: RamCacheConfig::default(),
@@ -992,20 +993,13 @@ fn render_pitch_shift_offline_aligned(
     let mut pitch_engine =
         pitch::create_pitch_shift_engine(sample_rate, channels, transpose_semitones);
     let block_frames = STREAM_WORKER_CHUNK_FRAMES;
-    let latency_frames = pitch_engine
-        .latency_frames()
-        .saturating_sub(PITCH_ALIGNMENT_TRIM_FRAMES);
     let mut rendered = Vec::with_capacity(frame_count.saturating_mul(channels));
     let mut source_frame = 0_u64;
 
     pitch_engine.reset();
-    if latency_frames > 0 {
-        let silence = vec![0.0_f32; latency_frames * channels];
-        let mut primed = vec![0.0_f32; silence.len()];
-        pitch_engine
-            .process_realtime_block(&silence, &mut primed)
-            .map_err(|error| format!("pitch prime failed: {error:?}"))?;
-    }
+    pitch_engine
+        .prepare_for_aligned_output()
+        .map_err(|error| format!("pitch alignment failed: {error:?}"))?;
 
     while source_frame < raw_source.frame_count() {
         let frames = block_frames.min((raw_source.frame_count() - source_frame) as usize);
@@ -1021,15 +1015,6 @@ fn render_pitch_shift_offline_aligned(
             .map_err(|error| format!("pitch render failed: {error:?}"))?;
         rendered.extend_from_slice(&output);
         source_frame = source_frame.saturating_add(frames_read as u64);
-    }
-
-    if latency_frames > 0 {
-        let silence = vec![0.0_f32; latency_frames * channels];
-        let mut drained = vec![0.0_f32; silence.len()];
-        pitch_engine
-            .process_realtime_block(&silence, &mut drained)
-            .map_err(|error| format!("pitch drain failed: {error:?}"))?;
-        rendered.extend_from_slice(&drained);
     }
 
     let wanted_samples = frame_count.saturating_mul(channels);
@@ -1353,7 +1338,7 @@ impl AudioBufferCache {
         let cache = self.clone();
         let song_dir_clone = song_dir.to_path_buf();
         let song_clone = song.clone();
-        std::thread::spawn(move || {
+        rayon::spawn(move || {
             let _ = cache.prepare_window_now(&song_dir_clone, &song_clone, position, 0);
             if required_transpose != 0 {
                 let _ = cache.prepare_window_now(
@@ -1404,18 +1389,38 @@ impl AudioBufferCache {
         if self.prepared_audio.get_exact(&exact_key, 0).is_some() {
             return Ok(());
         }
-        let Some(original_source) = self.prepared_audio.get_original(&exact_key, 0) else {
+        let render_claimed = self
+            .prepared_audio
+            .active_renders
+            .lock()
+            .map(|mut active_renders| active_renders.insert(exact_key.clone()))
+            .unwrap_or(false);
+        if !render_claimed {
             return Ok(());
-        };
-        let output_path = std::env::temp_dir().join(format!(
-            "libretracks-runtime-render-{}-{}-{}.ltaf",
-            std::process::id(),
-            sanitize_cache_name(&plan.file_path),
-            transpose_semitones
-        ));
-        let rendered = render_transposed_to_cache(original_source, exact_key.clone(), output_path)?;
-        self.prepared_audio.insert_ready_disk(exact_key, rendered)?;
-        Ok(())
+        }
+        let render_result = (|| {
+            if self.prepared_audio.get_exact(&exact_key, 0).is_some() {
+                return Ok(());
+            }
+            let Some(original_source) = self.prepared_audio.get_original(&exact_key, 0) else {
+                return Ok(());
+            };
+            let output_path = std::env::temp_dir().join(format!(
+                "libretracks-runtime-render-{}-{}-{}.ltaf",
+                std::process::id(),
+                sanitize_cache_name(&plan.file_path),
+                transpose_semitones
+            ));
+            let rendered =
+                render_transposed_to_cache(original_source, exact_key.clone(), output_path)?;
+            self.prepared_audio
+                .insert_ready_disk(exact_key.clone(), rendered)?;
+            Ok(())
+        })();
+        if let Ok(mut active_renders) = self.prepared_audio.active_renders.lock() {
+            active_renders.remove(&exact_key);
+        }
+        render_result
     }
 
     pub(crate) fn record_silence_fallback(&self, position: TimelinePosition, file: String) {
@@ -1631,6 +1636,48 @@ impl StreamingClipReader {
             output_sample_rate,
             shared_source.sample_rate,
         );
+        Self::open_from_source_frame(
+            plan,
+            output_sample_rate,
+            shared_source,
+            timeline_frame,
+            source_start_frame,
+        )
+    }
+
+    pub(crate) fn open_with_preroll(
+        plan: &mixer::PlaybackClipPlan,
+        output_sample_rate: u32,
+        audio_buffers: &AudioBufferCache,
+        timeline_frame: u64,
+        preroll_source_frame: usize,
+    ) -> Result<Self, String> {
+        let shared_source = audio_buffers
+            .get(&plan.file_path)?
+            .ok_or_else(|| format!("audio source is not prepared: {}", plan.file_path.display()))?;
+        Self::open_from_source_frame(
+            plan,
+            output_sample_rate.max(1),
+            shared_source,
+            timeline_frame,
+            preroll_source_frame,
+        )
+    }
+
+    fn open_from_source_frame(
+        plan: &mixer::PlaybackClipPlan,
+        output_sample_rate: u32,
+        shared_source: Arc<StreamingAudioSource>,
+        timeline_frame: u64,
+        source_start_frame: usize,
+    ) -> Result<Self, String> {
+        let output_sample_rate = output_sample_rate.max(1);
+        let target_source_frame = source_frame_for_timeline_position(
+            plan,
+            timeline_frame,
+            output_sample_rate,
+            shared_source.sample_rate,
+        );
         let source_start_seconds =
             source_start_frame as f64 / f64::from(shared_source.sample_rate.max(1));
         let ring_capacity =
@@ -1664,9 +1711,16 @@ impl StreamingClipReader {
         }
 
         let elapsed_frames = timeline_frame.saturating_sub(plan.timeline_start_frame);
-        let remaining_frames = plan.duration_frames.saturating_sub(elapsed_frames) as usize;
+        let preroll_output_frames = target_source_frame
+            .saturating_sub(source_start_frame)
+            .saturating_mul(output_sample_rate as usize)
+            .div_ceil(shared_source.sample_rate.max(1) as usize);
+        let remaining_frames = (plan.duration_frames.saturating_sub(elapsed_frames) as usize)
+            .saturating_add(preroll_output_frames);
         let declick_fade_frames = (0.015 * output_sample_rate as f32).round() as usize;
-        let is_true_clip_start = elapsed_frames == 0 && plan.source_start_seconds <= f64::EPSILON;
+        let is_true_clip_start = elapsed_frames == 0
+            && preroll_output_frames == 0
+            && plan.source_start_seconds <= f64::EPSILON;
         Ok(Self {
             shared_source,
             consumer,
@@ -1804,30 +1858,17 @@ impl StreamingClipReader {
     }
 
     fn pop_current_sample(&mut self) -> Option<f32> {
-        #[cfg(test)]
-        {
-            let started_at = Instant::now();
-            loop {
-                match self.consumer.pop() {
-                    Ok(sample) if sample.generation < self.current_generation => continue,
-                    Ok(sample) => return Some(sample.value),
-                    Err(_) if started_at.elapsed() < STREAM_WORKER_READY_TIMEOUT => {
-                        thread::yield_now();
-                        continue;
-                    }
-                    Err(_) => return None,
-                }
-            }
-        }
-
-        #[cfg(not(test))]
+        let started_at = Instant::now();
         loop {
-            let sample = self.consumer.pop().ok()?;
-            if sample.generation < self.current_generation {
-                continue;
+            match self.consumer.pop() {
+                Ok(sample) if sample.generation < self.current_generation => continue,
+                Ok(sample) => return Some(sample.value),
+                Err(_) if started_at.elapsed() < STREAM_WORKER_READY_TIMEOUT => {
+                    thread::yield_now();
+                    continue;
+                }
+                Err(_) => return None,
             }
-
-            return Some(sample.value);
         }
     }
 
@@ -2561,35 +2602,13 @@ fn render_pitch_aligned_frames_for_test(
     pitch_engine: &mut dyn pitch::PitchShiftEngine,
 ) -> Result<Vec<f32>, String> {
     let channels = source.channels.max(1);
-    let pitch_preroll_frames = pitch_engine
-        .latency_frames()
-        .saturating_sub(PITCH_ALIGNMENT_TRIM_FRAMES);
     let mut decoder = StreamingDecoder::open(source, output_sample_rate, target_start_seconds)?;
     let mut pending_samples = Vec::new();
 
     pitch_engine.reset();
-
-    if pitch_preroll_frames > 0 {
-        let mut remaining_priming = pitch_preroll_frames;
-        while remaining_priming > 0 {
-            let chunk_frames = remaining_priming.min(STREAM_WORKER_CHUNK_FRAMES);
-            let mut input = take_decoder_samples(
-                &mut decoder,
-                &mut pending_samples,
-                chunk_frames,
-                channels,
-                true,
-            )?;
-            if input.is_empty() {
-                input.resize(chunk_frames * channels, 0.0);
-            }
-            let mut discarded_output = vec![0.0_f32; input.len()];
-            pitch_engine
-                .process_realtime_block(&input, &mut discarded_output)
-                .map_err(|error| format!("pitch priming failed: {error:?}"))?;
-            remaining_priming = remaining_priming.saturating_sub(chunk_frames);
-        }
-    }
+    pitch_engine
+        .prepare_for_aligned_output()
+        .map_err(|error| format!("pitch alignment failed: {error:?}"))?;
 
     let mut rendered = Vec::with_capacity(frame_count * channels);
     let wanted_samples = frame_count * channels;
