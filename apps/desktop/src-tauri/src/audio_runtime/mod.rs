@@ -659,6 +659,26 @@ impl AudioController {
             let block_frames = remaining_frames.min(DISK_RENDER_BLOCK_FRAMES);
             let block = mixer.render_next_block(block_frames);
             for sample in block {
+                let clamped = sample.clamp(-1.0, 1.0);
+                let pcm = (clamped * i16::MAX as f32) as i16;
+                writer
+                    .write_sample(pcm)
+                    .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+            }
+            remaining_frames -= block_frames;
+        }
+
+        writer
+            .finalize()
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+
+        Ok(())
+    }
+
+    fn request(
+        &self,
+        command: impl FnOnce(Sender<Result<(), String>>) -> AudioCommand,
+    ) -> Result<(), DesktopError> {
         let (respond_to, response) = mpsc::channel();
 
         self.sender
