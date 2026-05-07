@@ -22,7 +22,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "deb", "appimage", "app", "dmg"],
     "resources": {
       "../../remote/dist": "remote-dist",
       "../../../vendor/bin/native/*": "."
