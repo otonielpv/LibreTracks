@@ -233,7 +233,9 @@ async function emitNativeDropEvent(event: MockWebviewDragDropEvent) {
 
 function getExternalDropGuide(container: HTMLElement) {
   return Array.from(container.querySelectorAll('[aria-hidden="true"]')).find(
-    (element): element is HTMLElement => element instanceof HTMLElement && element.style.width === "2px",
+    (element): element is HTMLElement =>
+      element instanceof HTMLElement &&
+      (element.style.width === "1px" || element.style.width === "2px"),
   ) ?? null;
 }
 
@@ -706,13 +708,17 @@ describe("App", () => {
       fireEvent.mouseMove(window, { clientX: 420, clientY: 160 });
     });
 
-    expect(container.querySelectorAll(".lt-library-clip-ghost").length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(container.querySelectorAll(".lt-library-clip-ghost").length).toBeGreaterThan(0);
+    });
 
     await act(async () => {
       fireEvent.mouseUp(window, { clientX: 420, clientY: 160 });
     });
 
-    expect(container.querySelector(".lt-library-clip-ghost")).toBeNull();
+    await waitFor(() => {
+      expect(container.querySelector(".lt-library-clip-ghost")).toBeNull();
+    });
   });
 
   it("clears stale library clip ghosts after deleting a track", async () => {
@@ -739,7 +745,9 @@ describe("App", () => {
       fireEvent.mouseMove(window, { clientX: 420, clientY: 160 });
     });
 
-    expect(container.querySelectorAll(".lt-library-clip-ghost").length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(container.querySelectorAll(".lt-library-clip-ghost").length).toBeGreaterThan(0);
+    });
 
     const drumsHeader = getTrackHeader(container, "Drums");
     expect(drumsHeader).toBeTruthy();
@@ -754,7 +762,9 @@ describe("App", () => {
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(await screen.findByText(trackDeletedMatcher("Drums"))).toBeTruthy();
-    expect(container.querySelector(".lt-library-clip-ghost")).toBeNull();
+    await waitFor(() => {
+      expect(container.querySelector(".lt-library-clip-ghost")).toBeNull();
+    });
   });
 
   it("drops multiple library assets with the vertical modifier and creates stacked tracks and clips", async () => {

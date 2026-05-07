@@ -11,7 +11,10 @@ pub use validation::{
 
 #[cfg(test)]
 mod tests {
-    use crate::{validate_song, Clip, Marker, Song, SongRegion, Track, TrackKind};
+    use crate::{
+        validate_song, Clip, Marker, Song, SongRegion, Track, TrackKind,
+        MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
+    };
 
     fn valid_song() -> Song {
         Song {
@@ -91,6 +94,7 @@ mod tests {
             name: "Outro".into(),
             start_seconds: 240.0,
             end_seconds: 360.0,
+            transpose_semitones: 0,
         });
 
         assert!(validate_song(&song).is_ok());
