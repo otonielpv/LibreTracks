@@ -1051,17 +1051,18 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<AppSettings, DesktopError> {
         let previous_settings = audio.current_settings()?;
-        let device_changed =
-            previous_settings.selected_output_device != next_settings.selected_output_device
-                || previous_settings.selected_audio_backend != next_settings.selected_audio_backend
-                || previous_settings.selected_output_device_id
-                    != next_settings.selected_output_device_id
-                || previous_settings.selected_output_device_name
-                    != next_settings.selected_output_device_name
-                || previous_settings.output_sample_rate != next_settings.output_sample_rate
-                || previous_settings.output_buffer_size != next_settings.output_buffer_size
-                || previous_settings.output_sample_format != next_settings.output_sample_format
-                || previous_settings.audio_safe_mode != next_settings.audio_safe_mode;
+        let device_changed = previous_settings.selected_output_device
+            != next_settings.selected_output_device
+            || previous_settings.selected_audio_backend != next_settings.selected_audio_backend
+            || previous_settings.selected_output_device_id
+                != next_settings.selected_output_device_id
+            || previous_settings.selected_output_device_name
+                != next_settings.selected_output_device_name
+            || previous_settings.output_sample_rate != next_settings.output_sample_rate
+            || previous_settings.output_buffer_size != next_settings.output_buffer_size
+            || previous_settings.output_sample_format != next_settings.output_sample_format
+            || previous_settings.output_channel_mapping != next_settings.output_channel_mapping
+            || previous_settings.audio_safe_mode != next_settings.audio_safe_mode;
         let midi_changed =
             previous_settings.selected_midi_device != next_settings.selected_midi_device;
         let output_channels_changed =
@@ -1084,21 +1085,15 @@ impl DesktopSession {
             return Ok(next_settings);
         }
 
-        audio.apply_settings(next_settings.clone())?;
-
-        if (device_changed || output_channels_changed)
-            && self.engine.playback_state() == PlaybackState::Playing
-        {
-            self.restart_audio(audio, PlaybackStartReason::TransportResync)?;
+        let rebuild_audio_stream = device_changed || output_channels_changed;
+        if rebuild_audio_stream && self.engine.playback_state() == PlaybackState::Playing {
+            let _ = audio.stop();
+            self.engine.pause()?;
             self.transport_clock
-                .reanchor_playing(self.engine.position_seconds());
-            self.capture_transport_drift_sample(
-                audio,
-                "audio_settings",
-                self.current_position(),
-                self.engine.position_seconds(),
-            );
+                .pause_at(self.engine.position_seconds());
         }
+
+        audio.apply_settings_with_stream_rebuild(next_settings.clone(), rebuild_audio_stream)?;
 
         Ok(next_settings)
     }

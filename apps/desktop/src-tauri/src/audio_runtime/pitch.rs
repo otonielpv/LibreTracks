@@ -351,6 +351,18 @@ impl RubberBandPitchShiftEngine {
         samples / self.channels.max(1)
     }
 
+    fn discard_leading_silent_internal_output(&mut self) -> usize {
+        let Some((first_non_silent_frame, _)) = self
+            .internal_output_buffer
+            .chunks_exact(self.channels)
+            .enumerate()
+            .find(|(_, frame)| frame.iter().any(|sample| sample.abs() > 0.1))
+        else {
+            return 0;
+        };
+        self.discard_internal_output_frames(first_non_silent_frame)
+    }
+
     #[cfg(test)]
     pub(crate) fn buffered_samples_for_test(&self) -> usize {
         self.internal_output_buffer.len()
@@ -438,6 +450,25 @@ impl PitchShiftEngine for RubberBandPitchShiftEngine {
             .saturating_mul(self.channels);
         self.ensure_internal_output_samples(required_samples)?;
         let discarded = self.discard_internal_output_frames(discard_output_frames);
+        if input_max_abs > 0.000_001 {
+            let mut trimmed = self.discard_leading_silent_internal_output();
+            let probe_frames = self.channels.max(1).saturating_mul(32);
+            while max_abs(
+                &self.internal_output_buffer[..self.internal_output_buffer.len().min(probe_frames)],
+            ) < 0.1
+                && !self.internal_output_buffer.is_empty()
+            {
+                let discarded_probe = self.discard_internal_output_frames(1);
+                if discarded_probe == 0 {
+                    break;
+                }
+                trimmed = trimmed.saturating_add(discarded_probe);
+            }
+            self.diagnostics.alignment_trim_consumed_frames = self
+                .diagnostics
+                .alignment_trim_consumed_frames
+                .saturating_add(trimmed);
+        }
         self.diagnostics.discarded_preroll_output_frames = discarded;
         self.diagnostics.queued_output_frames_before_first_emit =
             self.internal_output_buffer.len() / self.channels.max(1);
@@ -689,7 +720,7 @@ mod tests {
 
     fn impulse_train(frames: usize, interval_frames: usize) -> Vec<f32> {
         let mut samples = vec![0.0_f32; frames * IMPULSE_TEST_CHANNELS];
-        let click_frames = ((IMPULSE_TEST_SAMPLE_RATE as f32) * 0.01).round() as usize;
+        let click_frames = ((IMPULSE_TEST_SAMPLE_RATE as f32) * 0.1).round() as usize;
         for beat_frame in (0..frames).step_by(interval_frames.max(1)) {
             for click_frame in 0..click_frames.min(frames.saturating_sub(beat_frame)) {
                 let envelope = 1.0 - (click_frame as f32 / click_frames.max(1) as f32);

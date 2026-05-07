@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isAudioDeviceVisibleForBackend,
   selectNativeDropCandidate,
   type NativeDropCandidateDebug,
   type NativeDropCoordinateMode,
@@ -117,6 +118,18 @@ describe("selectNativeDropCandidate", () => {
     ]);
 
     expect(selected?.label).toBe("raw/dpr");
+  });
+});
+
+describe("isAudioDeviceVisibleForBackend", () => {
+  it("does not show ASIO devices while audio system is System Default", () => {
+    expect(isAudioDeviceVisibleForBackend({ backend: "asio" }, null)).toBe(false);
+    expect(isAudioDeviceVisibleForBackend({ backend: "wasapi" }, null)).toBe(true);
+  });
+
+  it("shows ASIO devices only when ASIO is explicitly selected", () => {
+    expect(isAudioDeviceVisibleForBackend({ backend: "asio" }, "asio")).toBe(true);
+    expect(isAudioDeviceVisibleForBackend({ backend: "wasapi" }, "asio")).toBe(false);
   });
 });
 

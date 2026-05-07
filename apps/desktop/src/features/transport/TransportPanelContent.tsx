@@ -156,10 +156,7 @@ import {
   type TimelineClipSummary,
   type TimelineTrackSummary,
 } from "./pendingAudioImports";
-import {
-  TIMELINE_DEFAULT_TRACK_HEIGHT,
-  useTimelineUIStore,
-} from "./uiStore";
+import { TIMELINE_DEFAULT_TRACK_HEIGHT, useTimelineUIStore } from "./uiStore";
 import {
   buildTimelineDropPreviewGeometry,
   classifyDroppedPaths,
@@ -183,9 +180,14 @@ const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
 const SCROLL_COMMIT_DEBOUNCE_MS = 100;
 const LIVE_ZOOM_COMMIT_DEBOUNCE_MS = 150;
 const DOM_EXTERNAL_DROP_PREVIEW_TTL_MS = 250;
-const NATIVE_DND_DEBUG_ENABLED = import.meta.env.DEV && import.meta.env.VITE_NATIVE_DND_DEBUG === "true";
+const NATIVE_DND_DEBUG_ENABLED =
+  import.meta.env.DEV && import.meta.env.VITE_NATIVE_DND_DEBUG === "true";
 
-export type NativeDropCoordinateMode = "raw" | "raw/dpr" | "minus-webview" | "minus-webview/dpr";
+export type NativeDropCoordinateMode =
+  | "raw"
+  | "raw/dpr"
+  | "minus-webview"
+  | "minus-webview/dpr";
 
 type NativeClientPointCandidate = {
   label: NativeDropCoordinateMode;
@@ -243,7 +245,9 @@ export type NativeDropCandidateDebug = {
   targetTrackId: string | null;
 };
 
-export function getNativeCandidatePointerDelta(candidate: NativeDropCandidateDebug) {
+export function getNativeCandidatePointerDelta(
+  candidate: NativeDropCandidateDebug,
+) {
   return candidate.rawDeltaPx ?? Number.POSITIVE_INFINITY;
 }
 
@@ -252,7 +256,10 @@ export function selectNativeDropCandidate(
 ): NativeDropCandidateDebug | null {
   return (
     candidates
-      .filter((candidate) => candidate.isOverTimeline && candidate.dropSeconds != null)
+      .filter(
+        (candidate) =>
+          candidate.isOverTimeline && candidate.dropSeconds != null,
+      )
       .sort((a, b) => {
         const aDelta = getNativeCandidatePointerDelta(a);
         const bDelta = getNativeCandidatePointerDelta(b);
@@ -356,7 +363,20 @@ type MidiLearnFeedback = {
 
 const HARDWARE_OUTPUT_CHANNEL_COUNT = 8;
 
-function formatAudioRouteLabel(route: string, t: ReturnType<typeof useTranslation>["t"]) {
+export function isAudioDeviceVisibleForBackend(
+  device: Pick<AudioDeviceDescriptor, "backend">,
+  selectedBackend: AudioBackendKind | null,
+) {
+  return (
+    (selectedBackend === null && device.backend !== "asio") ||
+    device.backend === selectedBackend
+  );
+}
+
+function formatAudioRouteLabel(
+  route: string,
+  t: ReturnType<typeof useTranslation>["t"],
+) {
   if (route === "master") {
     return t("trackHeader.master", { defaultValue: "Master" });
   }
@@ -364,30 +384,52 @@ function formatAudioRouteLabel(route: string, t: ReturnType<typeof useTranslatio
   if (route.startsWith("ext:")) {
     const channelPart = route.slice(4);
     if (channelPart.includes("-")) {
-      const [left, right] = channelPart.split("-").map((value) => Number(value) + 1);
-      return t("trackHeader.extOutStereo", { left, right, defaultValue: `Ext. Out ${left}/${right}` });
+      const [left, right] = channelPart
+        .split("-")
+        .map((value) => Number(value) + 1);
+      return t("trackHeader.extOutStereo", {
+        left,
+        right,
+        defaultValue: `Ext. Out ${left}/${right}`,
+      });
     }
 
     const channel = Number(channelPart) + 1;
-    return t("trackHeader.extOutMono", { channel, defaultValue: `Ext. Out ${channel}` });
+    return t("trackHeader.extOutMono", {
+      channel,
+      defaultValue: `Ext. Out ${channel}`,
+    });
   }
 
   return route;
 }
 
-function buildAudioRoutingOptions(enabledChannels: number[], t: ReturnType<typeof useTranslation>["t"]) {
-  const channels = Array.from(new Set(enabledChannels)).sort((left, right) => left - right);
-  const options = [{ value: "master", label: formatAudioRouteLabel("master", t) }];
+function buildAudioRoutingOptions(
+  enabledChannels: number[],
+  t: ReturnType<typeof useTranslation>["t"],
+) {
+  const channels = Array.from(new Set(enabledChannels)).sort(
+    (left, right) => left - right,
+  );
+  const options = [
+    { value: "master", label: formatAudioRouteLabel("master", t) },
+  ];
 
   for (let index = 0; index < channels.length; index += 1) {
     const channel = channels[index];
     const nextChannel = channels[index + 1];
     if (nextChannel === channel + 1) {
       const stereoRoute = `ext:${channel}-${nextChannel}`;
-      options.push({ value: stereoRoute, label: formatAudioRouteLabel(stereoRoute, t) });
+      options.push({
+        value: stereoRoute,
+        label: formatAudioRouteLabel(stereoRoute, t),
+      });
     }
     const monoRoute = `ext:${channel}`;
-    options.push({ value: monoRoute, label: formatAudioRouteLabel(monoRoute, t) });
+    options.push({
+      value: monoRoute,
+      label: formatAudioRouteLabel(monoRoute, t),
+    });
   }
 
   return options;
@@ -410,10 +452,22 @@ const MIDI_NOTE_NAMES = [
   "B",
 ];
 const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
-  { key: "action:create_song", labelKey: "transport.settingsModal.midiLearnCreateSong" },
-  { key: "action:open_project", labelKey: "transport.settingsModal.midiLearnOpenProject" },
-  { key: "action:save_project", labelKey: "transport.settingsModal.midiLearnSaveProject" },
-  { key: "action:save_project_as", labelKey: "transport.settingsModal.midiLearnSaveProjectAs" },
+  {
+    key: "action:create_song",
+    labelKey: "transport.settingsModal.midiLearnCreateSong",
+  },
+  {
+    key: "action:open_project",
+    labelKey: "transport.settingsModal.midiLearnOpenProject",
+  },
+  {
+    key: "action:save_project",
+    labelKey: "transport.settingsModal.midiLearnSaveProject",
+  },
+  {
+    key: "action:save_project_as",
+    labelKey: "transport.settingsModal.midiLearnSaveProjectAs",
+  },
   { key: "action:undo", labelKey: "transport.settingsModal.midiLearnUndo" },
   { key: "action:redo", labelKey: "transport.settingsModal.midiLearnRedo" },
   { key: "action:play", labelKey: "timelineTopbar.play" },
@@ -423,31 +477,103 @@ const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
   { key: "action:toggle_metronome", labelKey: "timelineTopbar.metronome" },
   { key: "action:toggle_vamp", labelKey: "timelineToolbar.vampButton" },
   { key: "action:cancel_jump", labelKey: "timelineToolbar.cancelJump" },
-  { key: "action:create_marker", labelKey: "transport.settingsModal.midiLearnCreateMarker" },
-  { key: "action:set_global_jump_mode_immediate", labelKey: "transport.settingsModal.midiLearnGlobalJumpModeImmediate" },
-  { key: "action:set_global_jump_mode_after_bars", labelKey: "transport.settingsModal.midiLearnGlobalJumpModeAfterBars" },
-  { key: "action:set_global_jump_mode_next_marker", labelKey: "transport.settingsModal.midiLearnGlobalJumpModeNextMarker" },
-  { key: "action:increase_global_jump_bars", labelKey: "transport.settingsModal.midiLearnGlobalJumpBarsIncrease" },
-  { key: "action:decrease_global_jump_bars", labelKey: "transport.settingsModal.midiLearnGlobalJumpBarsDecrease" },
+  {
+    key: "action:create_marker",
+    labelKey: "transport.settingsModal.midiLearnCreateMarker",
+  },
+  {
+    key: "action:set_global_jump_mode_immediate",
+    labelKey: "transport.settingsModal.midiLearnGlobalJumpModeImmediate",
+  },
+  {
+    key: "action:set_global_jump_mode_after_bars",
+    labelKey: "transport.settingsModal.midiLearnGlobalJumpModeAfterBars",
+  },
+  {
+    key: "action:set_global_jump_mode_next_marker",
+    labelKey: "transport.settingsModal.midiLearnGlobalJumpModeNextMarker",
+  },
+  {
+    key: "action:increase_global_jump_bars",
+    labelKey: "transport.settingsModal.midiLearnGlobalJumpBarsIncrease",
+  },
+  {
+    key: "action:decrease_global_jump_bars",
+    labelKey: "transport.settingsModal.midiLearnGlobalJumpBarsDecrease",
+  },
   { key: "param:tempo", labelKey: "transport.settingsModal.midiLearnTempo" },
-  { key: "param:global_jump_mode", labelKey: "transport.settingsModal.midiLearnGlobalJumpMode" },
-  { key: "param:metronome_volume", labelKey: "transport.settingsModal.metronomeVolume" },
-  { key: "param:global_jump_bars", labelKey: "transport.settingsModal.globalJumpBars" },
-  { key: "action:set_song_jump_trigger_immediate", labelKey: "transport.settingsModal.midiLearnSongJumpTriggerImmediate" },
-  { key: "action:set_song_jump_trigger_after_bars", labelKey: "transport.settingsModal.midiLearnSongJumpTriggerAfterBars" },
-  { key: "action:set_song_jump_trigger_region_end", labelKey: "transport.settingsModal.midiLearnSongJumpTriggerRegionEnd" },
-  { key: "action:increase_song_jump_bars", labelKey: "transport.settingsModal.midiLearnSongJumpBarsIncrease" },
-  { key: "action:decrease_song_jump_bars", labelKey: "transport.settingsModal.midiLearnSongJumpBarsDecrease" },
-  { key: "param:song_jump_trigger", labelKey: "transport.settingsModal.midiLearnSongJumpTrigger" },
-  { key: "param:song_jump_bars", labelKey: "transport.settingsModal.songJumpBars" },
-  { key: "action:set_song_transition_instant", labelKey: "transport.settingsModal.midiLearnSongTransitionInstant" },
-  { key: "action:set_song_transition_fade_out", labelKey: "transport.settingsModal.midiLearnSongTransitionFadeOut" },
-  { key: "param:song_transition_mode", labelKey: "transport.settingsModal.midiLearnSongTransitionMode" },
-  { key: "action:set_vamp_mode_section", labelKey: "transport.settingsModal.midiLearnVampModeSection" },
-  { key: "action:set_vamp_mode_bars", labelKey: "transport.settingsModal.midiLearnVampModeBars" },
-  { key: "param:vamp_mode", labelKey: "transport.settingsModal.midiLearnVampMode" },
-  { key: "action:increase_vamp_bars", labelKey: "transport.settingsModal.midiLearnVampBarsIncrease" },
-  { key: "action:decrease_vamp_bars", labelKey: "transport.settingsModal.midiLearnVampBarsDecrease" },
+  {
+    key: "param:global_jump_mode",
+    labelKey: "transport.settingsModal.midiLearnGlobalJumpMode",
+  },
+  {
+    key: "param:metronome_volume",
+    labelKey: "transport.settingsModal.metronomeVolume",
+  },
+  {
+    key: "param:global_jump_bars",
+    labelKey: "transport.settingsModal.globalJumpBars",
+  },
+  {
+    key: "action:set_song_jump_trigger_immediate",
+    labelKey: "transport.settingsModal.midiLearnSongJumpTriggerImmediate",
+  },
+  {
+    key: "action:set_song_jump_trigger_after_bars",
+    labelKey: "transport.settingsModal.midiLearnSongJumpTriggerAfterBars",
+  },
+  {
+    key: "action:set_song_jump_trigger_region_end",
+    labelKey: "transport.settingsModal.midiLearnSongJumpTriggerRegionEnd",
+  },
+  {
+    key: "action:increase_song_jump_bars",
+    labelKey: "transport.settingsModal.midiLearnSongJumpBarsIncrease",
+  },
+  {
+    key: "action:decrease_song_jump_bars",
+    labelKey: "transport.settingsModal.midiLearnSongJumpBarsDecrease",
+  },
+  {
+    key: "param:song_jump_trigger",
+    labelKey: "transport.settingsModal.midiLearnSongJumpTrigger",
+  },
+  {
+    key: "param:song_jump_bars",
+    labelKey: "transport.settingsModal.songJumpBars",
+  },
+  {
+    key: "action:set_song_transition_instant",
+    labelKey: "transport.settingsModal.midiLearnSongTransitionInstant",
+  },
+  {
+    key: "action:set_song_transition_fade_out",
+    labelKey: "transport.settingsModal.midiLearnSongTransitionFadeOut",
+  },
+  {
+    key: "param:song_transition_mode",
+    labelKey: "transport.settingsModal.midiLearnSongTransitionMode",
+  },
+  {
+    key: "action:set_vamp_mode_section",
+    labelKey: "transport.settingsModal.midiLearnVampModeSection",
+  },
+  {
+    key: "action:set_vamp_mode_bars",
+    labelKey: "transport.settingsModal.midiLearnVampModeBars",
+  },
+  {
+    key: "param:vamp_mode",
+    labelKey: "transport.settingsModal.midiLearnVampMode",
+  },
+  {
+    key: "action:increase_vamp_bars",
+    labelKey: "transport.settingsModal.midiLearnVampBarsIncrease",
+  },
+  {
+    key: "action:decrease_vamp_bars",
+    labelKey: "transport.settingsModal.midiLearnVampBarsDecrease",
+  },
   { key: "param:vamp_bars", labelKey: "transport.settingsModal.vampBars" },
   { key: "param:jump_bars", labelKey: "transport.settingsModal.jumpBars" },
 ];
@@ -578,18 +704,26 @@ function resolveNativeAudioImportPayloads(files: File[]) {
         sourcePath,
       };
     })
-    .filter((payload): payload is { fileName: string; sourcePath: string } => payload !== null);
+    .filter(
+      (payload): payload is { fileName: string; sourcePath: string } =>
+        payload !== null,
+    );
 
   return payloads.length === files.length ? payloads : null;
 }
 
 function humanizeLibraryTrackName(filePath: string) {
-  return libraryAssetFileName(filePath)
-    .replace(/\.[^.]+$/, "")
-    .split(/[^a-zA-Z0-9]+/)
-    .filter(Boolean)
-    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1).toLowerCase()}`)
-    .join(" ") || "Audio";
+  return (
+    libraryAssetFileName(filePath)
+      .replace(/\.[^.]+$/, "")
+      .split(/[^a-zA-Z0-9]+/)
+      .filter(Boolean)
+      .map(
+        (part) =>
+          `${part.slice(0, 1).toUpperCase()}${part.slice(1).toLowerCase()}`,
+      )
+      .join(" ") || "Audio"
+  );
 }
 
 async function waitForUiPaint() {
@@ -613,12 +747,20 @@ function nativeClientPointCandidates(
   const scaleFactor = window.devicePixelRatio || 1;
   const candidates: NativeClientPointCandidate[] = [];
 
-  const addCandidate = (label: NativeDropCoordinateMode, clientX: number, clientY: number) => {
+  const addCandidate = (
+    label: NativeDropCoordinateMode,
+    clientX: number,
+    clientY: number,
+  ) => {
     candidates.push({ label, clientX, clientY });
   };
 
   if (webviewPosition) {
-    addCandidate("minus-webview", position.x - webviewPosition.x, position.y - webviewPosition.y);
+    addCandidate(
+      "minus-webview",
+      position.x - webviewPosition.x,
+      position.y - webviewPosition.y,
+    );
     addCandidate(
       "minus-webview/dpr",
       (position.x - webviewPosition.x) / scaleFactor,
@@ -637,11 +779,14 @@ function describeNativeDropElement(element: HTMLElement | null) {
     return null;
   }
 
-  const className = typeof element.className === "string" ? element.className.trim() : "";
+  const className =
+    typeof element.className === "string" ? element.className.trim() : "";
   return `${element.tagName.toLowerCase()}${className ? `.${className.replace(/\s+/g, ".")}` : ""}`;
 }
 
-function toNativeDropDebugRect(rect: DOMRect | null): NativeDropDebugRect | null {
+function toNativeDropDebugRect(
+  rect: DOMRect | null,
+): NativeDropDebugRect | null {
   if (!rect) {
     return null;
   }
@@ -656,7 +801,10 @@ function toNativeDropDebugRect(rect: DOMRect | null): NativeDropDebugRect | null
   };
 }
 
-function formatMusicalPosition(seconds: number, song: SongView | null | undefined) {
+function formatMusicalPosition(
+  seconds: number,
+  song: SongView | null | undefined,
+) {
   return getCumulativeMusicalPosition(
     seconds,
     buildSongTempoRegions(song),
@@ -706,15 +854,19 @@ function isTextEntryTarget(target: EventTarget | null) {
 }
 
 function resolveMarkerShortcut(markers: SectionMarkerSummary[], digit: number) {
-  return [...markers]
-    .sort((left, right) => left.startSeconds - right.startSeconds)
-    .at(digit) ?? null;
+  return (
+    [...markers]
+      .sort((left, right) => left.startSeconds - right.startSeconds)
+      .at(digit) ?? null
+  );
 }
 
 function resolveRegionShortcut(regions: SongRegionSummary[], digit: number) {
-  return [...regions]
-    .sort((left, right) => left.startSeconds - right.startSeconds)
-    .at(digit) ?? null;
+  return (
+    [...regions]
+      .sort((left, right) => left.startSeconds - right.startSeconds)
+      .at(digit) ?? null
+  );
 }
 
 function buildVisibleTracks(song: SongView, collapsedFolders: Set<string>) {
@@ -796,14 +948,17 @@ function buildMemoizedClipsByTrack(
   song: SongView,
   current: Record<string, ClipSummary[]>,
 ): Record<string, ClipSummary[]> {
-  const nextBuckets = Object.fromEntries(song.tracks.map((track) => [track.id, [] as ClipSummary[]]));
+  const nextBuckets = Object.fromEntries(
+    song.tracks.map((track) => [track.id, [] as ClipSummary[]]),
+  );
 
   for (const clip of song.clips) {
     nextBuckets[clip.trackId] ??= [];
     nextBuckets[clip.trackId].push(clip);
   }
 
-  let hasChanged = Object.keys(current).length !== Object.keys(nextBuckets).length;
+  let hasChanged =
+    Object.keys(current).length !== Object.keys(nextBuckets).length;
   const nextClipsByTrack: Record<string, ClipSummary[]> = {};
 
   for (const track of song.tracks) {
@@ -811,9 +966,13 @@ function buildMemoizedClipsByTrack(
     const currentTrackClips = current[track.id] ?? [];
     const canReuseTrackClips =
       nextTrackClips.length === currentTrackClips.length &&
-      nextTrackClips.every((clip, index) => isClipStructurallyEqual(clip, currentTrackClips[index]));
+      nextTrackClips.every((clip, index) =>
+        isClipStructurallyEqual(clip, currentTrackClips[index]),
+      );
 
-    nextClipsByTrack[track.id] = canReuseTrackClips ? currentTrackClips : nextTrackClips;
+    nextClipsByTrack[track.id] = canReuseTrackClips
+      ? currentTrackClips
+      : nextTrackClips;
     if (!canReuseTrackClips) {
       hasChanged = true;
     }
@@ -841,13 +1000,20 @@ function mergeOptimisticClipsByTrack(
   }
 
   const nextClipsByTrack: Record<string, ClipSummary[]> = Object.fromEntries(
-    Object.entries(clipsByTrack).map(([trackId, clips]) => [trackId, [...clips]]),
+    Object.entries(clipsByTrack).map(([trackId, clips]) => [
+      trackId,
+      [...clips],
+    ]),
   );
 
   for (const operation of operations) {
     for (const clip of operation.clips) {
       const currentTrackClips = nextClipsByTrack[clip.trackId] ?? [];
-      if (currentTrackClips.some((currentClip) => isSameClipPlacement(currentClip, clip))) {
+      if (
+        currentTrackClips.some((currentClip) =>
+          isSameClipPlacement(currentClip, clip),
+        )
+      ) {
         continue;
       }
 
@@ -860,7 +1026,11 @@ function mergeOptimisticClipsByTrack(
   return nextClipsByTrack;
 }
 
-function isTrackDescendant(song: SongView, candidateTrackId: string | null, trackId: string) {
+function isTrackDescendant(
+  song: SongView,
+  candidateTrackId: string | null,
+  trackId: string,
+) {
   let cursor = candidateTrackId;
 
   while (cursor) {
@@ -895,7 +1065,9 @@ function isTimelineZoomTarget(target: EventTarget | null) {
 }
 
 function isTrackInfoScrollTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement ? Boolean(target.closest(".lt-track-header")) : false;
+  return target instanceof HTMLElement
+    ? Boolean(target.closest(".lt-track-header"))
+    : false;
 }
 
 function resolveTrackDropState(
@@ -904,9 +1076,9 @@ function resolveTrackDropState(
   clientX: number,
   clientY: number,
 ): TrackDropState {
-  const hoveredRow = document.elementFromPoint(clientX, clientY)?.closest(".lt-track-lane-row, .lt-track-header-row") as
-    | HTMLElement
-    | null;
+  const hoveredRow = document
+    .elementFromPoint(clientX, clientY)
+    ?.closest(".lt-track-lane-row, .lt-track-header-row") as HTMLElement | null;
   const targetTrackId = hoveredRow?.dataset.trackId ?? null;
   if (!hoveredRow || !targetTrackId || targetTrackId === draggingTrackId) {
     return null;
@@ -918,9 +1090,12 @@ function resolveTrackDropState(
   }
 
   const bounds = hoveredRow.getBoundingClientRect();
-  const verticalRatio = bounds.height > 0 ? (clientY - bounds.top) / bounds.height : 0.5;
+  const verticalRatio =
+    bounds.height > 0 ? (clientY - bounds.top) / bounds.height : 0.5;
   const mode =
-    targetTrack.kind === "folder" && verticalRatio >= 0.3 && verticalRatio <= 0.7
+    targetTrack.kind === "folder" &&
+    verticalRatio >= 0.3 &&
+    verticalRatio <= 0.7
       ? "inside-folder"
       : verticalRatio < 0.5
         ? "before"
@@ -960,7 +1135,11 @@ function rulerClientXToSeconds(
 ) {
   const bounds = element.getBoundingClientRect();
   const viewportX = clamp(clientX - bounds.left, 0, bounds.width);
-  return clamp(screenXToSeconds(viewportX, cameraX, pixelsPerSecond), 0, Math.max(0, durationSeconds));
+  return clamp(
+    screenXToSeconds(viewportX, cameraX, pixelsPerSecond),
+    0,
+    Math.max(0, durationSeconds),
+  );
 }
 
 function lanePointerToClip(
@@ -975,7 +1154,11 @@ function lanePointerToClip(
 
   for (let index = clips.length - 1; index >= 0; index -= 1) {
     const clip = clips[index];
-    const clipLeft = secondsToScreenX(clip.timelineStartSeconds, cameraX, pixelsPerSecond);
+    const clipLeft = secondsToScreenX(
+      clip.timelineStartSeconds,
+      cameraX,
+      pixelsPerSecond,
+    );
     const clipWidth = Math.max(clip.durationSeconds * pixelsPerSecond, 28);
 
     if (pointerX >= clipLeft && pointerX <= clipLeft + clipWidth) {
@@ -989,52 +1172,94 @@ function lanePointerToClip(
 export function TransportPanelContent() {
   const { t, i18n } = useTranslation();
   const [song, setSong] = useState<SongView | null>(null);
-  const [waveformCache, setWaveformCache] = useState<Record<string, WaveformSummaryDto>>({});
-  const [clipsByTrack, setClipsByTrack] = useState<Record<string, ClipSummary[]>>({});
-  const [tracksById, setTracksById] = useState<Record<string, TrackSummary>>({});
-  const [status, setStatus] = useState(() => t("transport.status.loadingSession"));
+  const [waveformCache, setWaveformCache] = useState<
+    Record<string, WaveformSummaryDto>
+  >({});
+  const [clipsByTrack, setClipsByTrack] = useState<
+    Record<string, ClipSummary[]>
+  >({});
+  const [tracksById, setTracksById] = useState<Record<string, TrackSummary>>(
+    {},
+  );
+  const [status, setStatus] = useState(() =>
+    t("transport.status.loadingSession"),
+  );
   const [isBusy, setIsBusy] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isRemoteModalOpen, setIsRemoteModalOpen] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>("audio");
+  const [activeSettingsTab, setActiveSettingsTab] =
+    useState<SettingsTab>("audio");
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
-  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
-  const [midiLearnFeedback, setMidiLearnFeedback] = useState<MidiLearnFeedback | null>(null);
-  const [midiLearnView, setMidiLearnView] = useState<"core" | "markers" | "songs">("core");
-  const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(DEFAULT_APP_SETTINGS.metronomeVolume);
-  const [audioDeviceDescriptors, setAudioDeviceDescriptors] = useState<AudioDeviceDescriptor[]>([]);
-  const [audioOutputChannelCounts, setAudioOutputChannelCounts] = useState<Record<string, number>>({});
-  const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<string | null>(null);
+  const [appSettings, setAppSettings] =
+    useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [midiLearnFeedback, setMidiLearnFeedback] =
+    useState<MidiLearnFeedback | null>(null);
+  const [midiLearnView, setMidiLearnView] = useState<
+    "core" | "markers" | "songs"
+  >("core");
+  const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(
+    DEFAULT_APP_SETTINGS.metronomeVolume,
+  );
+  const [audioDeviceDescriptors, setAudioDeviceDescriptors] = useState<
+    AudioDeviceDescriptor[]
+  >([]);
+  const [audioOutputChannelCounts, setAudioOutputChannelCounts] = useState<
+    Record<string, number>
+  >({});
+  const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<
+    string | null
+  >(null);
   const [midiInputDevices, setMidiInputDevices] = useState<string[]>([]);
   const [isMidiInputRefreshing, setIsMidiInputRefreshing] = useState(false);
-  const [remoteServerInfo, setRemoteServerInfo] = useState<RemoteServerInfo | null>(null);
+  const [remoteServerInfo, setRemoteServerInfo] =
+    useState<RemoteServerInfo | null>(null);
   const [tempoDraft, setTempoDraft] = useState("120");
   const [timeSignatureDraft, setTimeSignatureDraft] = useState("4/4");
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
-  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>(null);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
+    new Set(),
+  );
+  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>(
+    null,
+  );
   const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
   const [libraryFolders, setLibraryFolders] = useState<string[]>([]);
-  const [libraryClipPreview, setLibraryClipPreview] = useState<LibraryClipPreviewState[]>([]);
+  const [libraryClipPreview, setLibraryClipPreview] = useState<
+    LibraryClipPreviewState[]
+  >([]);
   const [internalLibraryPointerDrag, setInternalLibraryPointerDrag] =
     useState<InternalLibraryPointerDrag | null>(null);
-  const [externalDropPreview, setExternalDropPreview] = useState<ExternalDropPreview | null>(null);
-  const [nativeDropDebugCandidates, setNativeDropDebugCandidates] = useState<NativeDropCandidateDebug[]>([]);
+  const [externalDropPreview, setExternalDropPreview] =
+    useState<ExternalDropPreview | null>(null);
+  const [nativeDropDebugCandidates, setNativeDropDebugCandidates] = useState<
+    NativeDropCandidateDebug[]
+  >([]);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const selectedRegion = useMemo(
-    () => song?.regions.find((region) => region.id === selectedRegionId) ?? null,
+    () =>
+      song?.regions.find((region) => region.id === selectedRegionId) ?? null,
     [selectedRegionId, song?.regions],
   );
-  const [selectedTimelineRange, setSelectedTimelineRange] = useState<TimelineRangeSelection | null>(null);
-  const [optimisticClipOperations, setOptimisticClipOperations] = useState<OptimisticClipOperation[]>([]);
+  const [selectedTimelineRange, setSelectedTimelineRange] =
+    useState<TimelineRangeSelection | null>(null);
+  const [optimisticClipOperations, setOptimisticClipOperations] = useState<
+    OptimisticClipOperation[]
+  >([]);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
   const [isImportingLibrary, setIsImportingLibrary] = useState(false);
-  const [libraryImportProgress, setLibraryImportProgress] = useState<LibraryImportProgressEvent | null>(null);
-  const [deletingLibraryFilePath, setDeletingLibraryFilePath] = useState<string | null>(null);
-  const [missingMidiDeviceWarning, setMissingMidiDeviceWarning] = useState<string | null>(null);
-  const [timelineViewportWidth, setTimelineViewportWidth] = useState(DEFAULT_TIMELINE_VIEWPORT_WIDTH);
+  const [libraryImportProgress, setLibraryImportProgress] =
+    useState<LibraryImportProgressEvent | null>(null);
+  const [deletingLibraryFilePath, setDeletingLibraryFilePath] = useState<
+    string | null
+  >(null);
+  const [missingMidiDeviceWarning, setMissingMidiDeviceWarning] = useState<
+    string | null
+  >(null);
+  const [timelineViewportWidth, setTimelineViewportWidth] = useState(
+    DEFAULT_TIMELINE_VIEWPORT_WIDTH,
+  );
   const appSettingsRef = useRef(appSettings);
   const hasShownMissingMidiDeviceWarningRef = useRef(false);
   const metronomeLiveRequestIdRef = useRef(0);
@@ -1043,35 +1268,47 @@ export function TransportPanelContent() {
       setActiveSettingsTab("audio");
     }
   }, [isSettingsModalOpen]);
-  const syncSettingsLanguage = useCallback(async (settings: AppSettings) => {
-    await i18n.changeLanguage(settings.locale || getSystemLanguage());
-  }, [i18n]);
-  const formatErrorStatus = useCallback((error: unknown) => {
-    return t("transport.status.error", { message: String(error) });
-  }, [t]);
-  const translateJumpTrigger = useCallback((trigger: JumpTriggerLabel) => {
-    if (trigger === "immediate") {
-      return t("transport.jumpMode.immediate");
-    }
+  const syncSettingsLanguage = useCallback(
+    async (settings: AppSettings) => {
+      await i18n.changeLanguage(settings.locale || getSystemLanguage());
+    },
+    [i18n],
+  );
+  const formatErrorStatus = useCallback(
+    (error: unknown) => {
+      return t("transport.status.error", { message: String(error) });
+    },
+    [t],
+  );
+  const translateJumpTrigger = useCallback(
+    (trigger: JumpTriggerLabel) => {
+      if (trigger === "immediate") {
+        return t("transport.jumpMode.immediate");
+      }
 
-    if (trigger === "next_marker") {
-      return t("transport.jumpMode.nextMarker");
-    }
+      if (trigger === "next_marker") {
+        return t("transport.jumpMode.nextMarker");
+      }
 
-    if (trigger === "region_end") {
-      return t("transport.jumpMode.regionEnd");
-    }
+      if (trigger === "region_end") {
+        return t("transport.jumpMode.regionEnd");
+      }
 
-    const bars = Number(trigger.split(":")[1]) || 1;
-    return t("transport.jumpMode.afterBars", { count: bars });
-  }, [t]);
-  const translateLanguageName = useCallback((language: "en" | "es") => {
-    return i18n.t(
-      language === "es"
-        ? "transport.settingsModal.languageSpanish"
-        : "transport.settingsModal.languageEnglish",
-    );
-  }, [i18n]);
+      const bars = Number(trigger.split(":")[1]) || 1;
+      return t("transport.jumpMode.afterBars", { count: bars });
+    },
+    [t],
+  );
+  const translateLanguageName = useCallback(
+    (language: "en" | "es") => {
+      return i18n.t(
+        language === "es"
+          ? "transport.settingsModal.languageSpanish"
+          : "transport.settingsModal.languageEnglish",
+      );
+    },
+    [i18n],
+  );
   const cameraX = useTimelineUIStore((state) => state.cameraX);
   const zoomLevel = useTimelineUIStore((state) => state.zoomLevel);
   const trackHeight = useTimelineUIStore((state) => state.trackHeight);
@@ -1111,13 +1348,20 @@ export function TransportPanelContent() {
             : null;
           return {
             key,
-            label: markerIndex !== null && Number.isInteger(markerIndex)
-              ? t("transport.settingsModal.midiLearnJumpMarker", { index: markerIndex })
-              : t("transport.settingsModal.midiLearnJumpSong", { index: songIndex }),
+            label:
+              markerIndex !== null && Number.isInteger(markerIndex)
+                ? t("transport.settingsModal.midiLearnJumpMarker", {
+                    index: markerIndex,
+                  })
+                : t("transport.settingsModal.midiLearnJumpSong", {
+                    index: songIndex,
+                  }),
             binding,
           };
         })
-        .sort((left, right) => left.key.localeCompare(right.key, undefined, { numeric: true })),
+        .sort((left, right) =>
+          left.key.localeCompare(right.key, undefined, { numeric: true }),
+        ),
     [appSettings.midiMappings, t],
   );
   const midiLearnRows = useMemo(
@@ -1125,11 +1369,17 @@ export function TransportPanelContent() {
     [dynamicMidiLearnJumpRows, midiLearnCommandRows],
   );
   const midiLearnMarkerRows = useMemo(
-    () => dynamicMidiLearnJumpRows.filter((command) => command.key.startsWith("action:jump_marker_")),
+    () =>
+      dynamicMidiLearnJumpRows.filter((command) =>
+        command.key.startsWith("action:jump_marker_"),
+      ),
     [dynamicMidiLearnJumpRows],
   );
   const midiLearnSongRows = useMemo(
-    () => dynamicMidiLearnJumpRows.filter((command) => command.key.startsWith("action:jump_song_")),
+    () =>
+      dynamicMidiLearnJumpRows.filter((command) =>
+        command.key.startsWith("action:jump_song_"),
+      ),
     [dynamicMidiLearnJumpRows],
   );
   const visibleMidiLearnRows = useMemo(() => {
@@ -1142,35 +1392,51 @@ export function TransportPanelContent() {
     }
 
     return midiLearnCommandRows;
-  }, [midiLearnCommandRows, midiLearnMarkerRows, midiLearnSongRows, midiLearnView]);
+  }, [
+    midiLearnCommandRows,
+    midiLearnMarkerRows,
+    midiLearnSongRows,
+    midiLearnView,
+  ]);
   const midiLearnFeedbackCommand = useMemo(
-    () => midiLearnRows.find((command) => command.key === midiLearnFeedback?.key) ?? null,
+    () =>
+      midiLearnRows.find((command) => command.key === midiLearnFeedback?.key) ??
+      null,
     [midiLearnRows, midiLearnFeedback],
   );
-  const formatMidiLearnCommandLabel = useCallback((key: string) => {
-    const learnedRow = midiLearnRows.find((command) => command.key === key);
-    if (learnedRow) {
-      return learnedRow.label;
-    }
-
-    if (key.startsWith("action:jump_marker_")) {
-      const index = Number(key.slice("action:jump_marker_".length));
-      if (Number.isInteger(index) && index >= 1 && index <= 100) {
-        return t("transport.settingsModal.midiLearnJumpMarker", { index });
+  const formatMidiLearnCommandLabel = useCallback(
+    (key: string) => {
+      const learnedRow = midiLearnRows.find((command) => command.key === key);
+      if (learnedRow) {
+        return learnedRow.label;
       }
-    }
 
-    if (key.startsWith("action:jump_song_")) {
-      const index = Number(key.slice("action:jump_song_".length));
-      if (Number.isInteger(index) && index >= 1 && index <= 20) {
-        return t("transport.settingsModal.midiLearnJumpSong", { index });
+      if (key.startsWith("action:jump_marker_")) {
+        const index = Number(key.slice("action:jump_marker_".length));
+        if (Number.isInteger(index) && index >= 1 && index <= 100) {
+          return t("transport.settingsModal.midiLearnJumpMarker", { index });
+        }
       }
-    }
 
-    return key;
-  }, [midiLearnRows, t]);
+      if (key.startsWith("action:jump_song_")) {
+        const index = Number(key.slice("action:jump_song_".length));
+        if (Number.isInteger(index) && index >= 1 && index <= 20) {
+          return t("transport.settingsModal.midiLearnJumpSong", { index });
+        }
+      }
+
+      return key;
+    },
+    [midiLearnRows, t],
+  );
   const activeMidiLearnCommand = useMemo(
-    () => midiLearnMode === null ? null : { key: midiLearnMode, label: formatMidiLearnCommandLabel(midiLearnMode) },
+    () =>
+      midiLearnMode === null
+        ? null
+        : {
+            key: midiLearnMode,
+            label: formatMidiLearnCommandLabel(midiLearnMode),
+          },
     [formatMidiLearnCommandLabel, midiLearnMode],
   );
 
@@ -1265,15 +1531,17 @@ export function TransportPanelContent() {
       }
 
       unlisten = dispose;
-    })()
-      .catch((error) => {
-        console.error("[native-dnd] failed to register drag/drop listener", error);
-        nativeExternalDropPathsRef.current = [];
-        nativeDropKindRef.current = null;
-        domExternalDropPreviewUntilRef.current = 0;
-        lastNativeTimelineDropRef.current = null;
-        setExternalDropPreview(null);
-      });
+    })().catch((error) => {
+      console.error(
+        "[native-dnd] failed to register drag/drop listener",
+        error,
+      );
+      nativeExternalDropPathsRef.current = [];
+      nativeDropKindRef.current = null;
+      domExternalDropPreviewUntilRef.current = 0;
+      lastNativeTimelineDropRef.current = null;
+      setExternalDropPreview(null);
+    });
 
     return () => {
       disposed = true;
@@ -1286,21 +1554,33 @@ export function TransportPanelContent() {
       stopInternalLibraryPointerDragListeners();
     };
   }, []);
-  const selectedTrackIds = useTimelineUIStore((state) => state.selectedTrackIds);
+  const selectedTrackIds = useTimelineUIStore(
+    (state) => state.selectedTrackIds,
+  );
   const selectedClipId = useTimelineUIStore((state) => state.selectedClipId);
-  const selectedSectionId = useTimelineUIStore((state) => state.selectedSectionId);
+  const selectedSectionId = useTimelineUIStore(
+    (state) => state.selectedSectionId,
+  );
   const setCameraX = useTimelineUIStore((state) => state.setCameraX);
   const setZoomLevel = useTimelineUIStore((state) => state.setZoomLevel);
   const setTrackHeight = useTimelineUIStore((state) => state.setTrackHeight);
   const setSnapEnabled = useTimelineUIStore((state) => state.setSnapEnabled);
-  const toggleSnapEnabled = useTimelineUIStore((state) => state.toggleSnapEnabled);
-  const setSelectedClipId = useTimelineUIStore((state) => state.setSelectedClipId);
-  const setSelectedSectionId = useTimelineUIStore((state) => state.setSelectedSectionId);
+  const toggleSnapEnabled = useTimelineUIStore(
+    (state) => state.toggleSnapEnabled,
+  );
+  const setSelectedClipId = useTimelineUIStore(
+    (state) => state.setSelectedClipId,
+  );
+  const setSelectedSectionId = useTimelineUIStore(
+    (state) => state.setSelectedSectionId,
+  );
   const clearSelection = useTimelineUIStore((state) => state.clearSelection);
   const selectTrack = useTimelineUIStore((state) => state.selectTrack);
   const selectClip = useTimelineUIStore((state) => state.selectClip);
   const selectSection = useTimelineUIStore((state) => state.selectSection);
-  const setMidiLearnMode = useTimelineUIStore((state) => state.setMidiLearnMode);
+  const setMidiLearnMode = useTimelineUIStore(
+    (state) => state.setMidiLearnMode,
+  );
   const panelRef = useRef<HTMLDivElement | null>(null);
   const menuBarRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
@@ -1321,7 +1601,9 @@ export function TransportPanelContent() {
   const nativeExternalDropPathsRef = useRef<string[]>([]);
   const nativeDropKindRef = useRef<ExternalDropKind | null>(null);
   const domExternalDropPreviewUntilRef = useRef(0);
-  const nativeDropCoordinateModeRef = useRef<NativeDropCoordinateMode | null>(null);
+  const nativeDropCoordinateModeRef = useRef<NativeDropCoordinateMode | null>(
+    null,
+  );
   const lastNativeTimelineDropRef = useRef<{
     seconds: number;
     rawSeconds: number;
@@ -1330,7 +1612,9 @@ export function TransportPanelContent() {
     snapApplied: boolean;
     coordinateMode: NativeDropCoordinateMode;
   } | null>(null);
-  const nativeWebviewPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const nativeWebviewPositionRef = useRef<{ x: number; y: number } | null>(
+    null,
+  );
   const transportReadoutTempoRef = useRef<HTMLElement | null>(null);
   const transportReadoutValueRef = useRef<HTMLElement | null>(null);
   const transportReadoutBarRef = useRef<HTMLElement | null>(null);
@@ -1345,13 +1629,17 @@ export function TransportPanelContent() {
     hadClips: false,
   });
   const cameraXRef = useRef(cameraX);
-  const snapshotRef = useRef<TransportSnapshot | null>(useTransportStore.getState().playback);
+  const snapshotRef = useRef<TransportSnapshot | null>(
+    useTransportStore.getState().playback,
+  );
   const songRef = useRef<SongView | null>(null);
   const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
   const clipDragRef = useRef<ClipDragState>(null);
   const clipMoveLiveStatesRef = useRef<Record<string, LiveClipMoveState>>({});
   const trackMixRequestIdsRef = useRef<Record<string, number>>({});
-  const trackMixLiveStatesRef = useRef<Record<string, LiveTrackMixRequestState>>({});
+  const trackMixLiveStatesRef = useRef<
+    Record<string, LiveTrackMixRequestState>
+  >({});
   const playheadDragRef = useRef<PlayheadDragState>(null);
   const trackDragRef = useRef<TrackDragState>(null);
   const timelinePanRef = useRef<TimelinePanState>(null);
@@ -1362,8 +1650,11 @@ export function TransportPanelContent() {
   const draggedTrackHeadersRef = useRef<HTMLElement[]>([]);
   const droppedTrackRowRef = useRef<HTMLDivElement | null>(null);
   const libraryDragHoverRef = useRef<LibraryDragHoverState | null>(null);
-  const activeLibraryDragPayloadRef = useRef<LibraryAssetDragPayload[] | null>(null);
-  const internalLibraryPointerDragRef = useRef<InternalLibraryPointerDrag | null>(null);
+  const activeLibraryDragPayloadRef = useRef<LibraryAssetDragPayload[] | null>(
+    null,
+  );
+  const internalLibraryPointerDragRef =
+    useRef<InternalLibraryPointerDrag | null>(null);
   const internalLibraryPointerDragListenersRef = useRef<{
     move: (event: PointerEvent) => void;
     up: (event: PointerEvent) => void;
@@ -1378,11 +1669,22 @@ export function TransportPanelContent() {
   });
   const scrollDebounceTimerRef = useRef<number | null>(null);
   const zoomDebounceTimerRef = useRef<number | null>(null);
-  const playbackState = useTransportStore((state) => state.playback?.playbackState ?? "empty");
-  const playbackProjectRevision = useTransportStore((state) => state.playback?.projectRevision ?? 0);
-  const playbackSongDir = useTransportStore((state) => state.playback?.songDir ?? null);
-  const pendingAudioImports = useTransportStore((state) => state.pendingAudioImports);
-  const projectIdentityRef = useRef<{ songDir: string | null; songId: string | null } | null>(null);
+  const playbackState = useTransportStore(
+    (state) => state.playback?.playbackState ?? "empty",
+  );
+  const playbackProjectRevision = useTransportStore(
+    (state) => state.playback?.projectRevision ?? 0,
+  );
+  const playbackSongDir = useTransportStore(
+    (state) => state.playback?.songDir ?? null,
+  );
+  const pendingAudioImports = useTransportStore(
+    (state) => state.pendingAudioImports,
+  );
+  const projectIdentityRef = useRef<{
+    songDir: string | null;
+    songId: string | null;
+  } | null>(null);
   const libraryStateRequestIdRef = useRef(0);
   const pendingMarkerJumpSignature = useTransportStore((state) => {
     const pendingJump = state.playback?.pendingMarkerJump;
@@ -1412,20 +1714,23 @@ export function TransportPanelContent() {
   songRef.current = song;
   tracksByIdRef.current = tracksById;
 
-  const runAction = useCallback(async (work: () => Promise<void>, options?: { busy?: boolean }) => {
-    try {
-      if (options?.busy) {
-        setIsBusy(true);
+  const runAction = useCallback(
+    async (work: () => Promise<void>, options?: { busy?: boolean }) => {
+      try {
+        if (options?.busy) {
+          setIsBusy(true);
+        }
+        await work();
+      } catch (error) {
+        setStatus(formatErrorStatus(error));
+      } finally {
+        if (options?.busy) {
+          setIsBusy(false);
+        }
       }
-      await work();
-    } catch (error) {
-      setStatus(formatErrorStatus(error));
-    } finally {
-      if (options?.busy) {
-        setIsBusy(false);
-      }
-    }
-  }, [formatErrorStatus]);
+    },
+    [formatErrorStatus],
+  );
 
   const loadLibraryState = useCallback(async () => {
     if (!playbackSongDir) {
@@ -1435,37 +1740,46 @@ export function TransportPanelContent() {
       };
     }
 
-    const [assets, folders] = await Promise.all([getLibraryAssets(), getLibraryFolders()]);
+    const [assets, folders] = await Promise.all([
+      getLibraryAssets(),
+      getLibraryFolders(),
+    ]);
     return { assets, folders };
   }, [playbackSongDir]);
 
-  const refreshLibraryState = useCallback(async (options?: { preserveAssets?: LibraryAssetSummary[] }) => {
-    const requestId = ++libraryStateRequestIdRef.current;
-    const { assets, folders } = await loadLibraryState();
-    if (requestId !== libraryStateRequestIdRef.current) {
-      return assets;
-    }
+  const refreshLibraryState = useCallback(
+    async (options?: { preserveAssets?: LibraryAssetSummary[] }) => {
+      const requestId = ++libraryStateRequestIdRef.current;
+      const { assets, folders } = await loadLibraryState();
+      if (requestId !== libraryStateRequestIdRef.current) {
+        return assets;
+      }
 
-    const nextAssets = options?.preserveAssets?.length
-      ? mergeLibraryAssetsByFilePath(assets, options.preserveAssets)
-      : assets;
+      const nextAssets = options?.preserveAssets?.length
+        ? mergeLibraryAssetsByFilePath(assets, options.preserveAssets)
+        : assets;
 
-    setLibraryAssets(nextAssets);
-    setLibraryFolders(folders);
-    return nextAssets;
-  }, [loadLibraryState]);
+      setLibraryAssets(nextAssets);
+      setLibraryFolders(folders);
+      return nextAssets;
+    },
+    [loadLibraryState],
+  );
 
-  const mergeLibraryAssets = useCallback((importedAssets: LibraryAssetSummary[]) => {
-    if (!importedAssets.length) {
-      return;
-    }
+  const mergeLibraryAssets = useCallback(
+    (importedAssets: LibraryAssetSummary[]) => {
+      if (!importedAssets.length) {
+        return;
+      }
 
-    libraryStateRequestIdRef.current += 1;
+      libraryStateRequestIdRef.current += 1;
 
-    setLibraryAssets((current) => {
-      return mergeLibraryAssetsByFilePath(current, importedAssets);
-    });
-  }, []);
+      setLibraryAssets((current) => {
+        return mergeLibraryAssetsByFilePath(current, importedAssets);
+      });
+    },
+    [],
+  );
 
   const refreshSongView = useCallback(async () => {
     const nextSong = await getSongView();
@@ -1529,7 +1843,7 @@ export function TransportPanelContent() {
       const nextBinding = {
         status: message.status,
         data1: message.data1,
-        isCc: (message.status & 0xF0) === 0xB0,
+        isCc: (message.status & 0xf0) === 0xb0,
       };
       const nextSettings = normalizeAppSettings({
         ...appSettingsRef.current,
@@ -1547,8 +1861,12 @@ export function TransportPanelContent() {
 
       void runAction(async () => {
         try {
-          const liveSettings = normalizeAppSettings(await updateAudioSettings(nextSettings));
-          const savedSettings = normalizeAppSettings(await saveSettings(liveSettings));
+          const liveSettings = normalizeAppSettings(
+            await updateAudioSettings(nextSettings),
+          );
+          const savedSettings = normalizeAppSettings(
+            await saveSettings(liveSettings),
+          );
           appSettingsRef.current = savedSettings;
           setAppSettings(savedSettings);
           setMidiLearnFeedback({ key: learnMode, binding: nextBinding });
@@ -1585,12 +1903,20 @@ export function TransportPanelContent() {
       setIsSettingsSaving(true);
 
       void runAction(async () => {
-      try {
-          const liveSettings = normalizeAppSettings(await updateAudioSettings(normalizedSettings));
-          const savedSettings = normalizeAppSettings(await saveSettings(liveSettings));
+        try {
+          const liveSettings = normalizeAppSettings(
+            await updateAudioSettings(normalizedSettings),
+          );
+          const savedSettings = normalizeAppSettings(
+            await saveSettings(liveSettings),
+          );
           setAppSettings(savedSettings);
           await syncSettingsLanguage(savedSettings);
-          setStatus(typeof successMessage === "function" ? successMessage(savedSettings) : successMessage);
+          setStatus(
+            typeof successMessage === "function"
+              ? successMessage(savedSettings)
+              : successMessage,
+          );
         } catch (error) {
           appSettingsRef.current = previousSettings;
           setAppSettings(previousSettings);
@@ -1603,10 +1929,13 @@ export function TransportPanelContent() {
     [appSettings, runAction, syncSettingsLanguage],
   );
 
-  const applyPlaybackSnapshot = useCallback((nextSnapshot: TransportSnapshot | null) => {
-    snapshotRef.current = nextSnapshot;
-    useTransportStore.getState().setPlaybackState(nextSnapshot);
-  }, []);
+  const applyPlaybackSnapshot = useCallback(
+    (nextSnapshot: TransportSnapshot | null) => {
+      snapshotRef.current = nextSnapshot;
+      useTransportStore.getState().setPlaybackState(nextSnapshot);
+    },
+    [],
+  );
 
   const missingFilePaths = useMemo(() => {
     const paths = new Set<string>();
@@ -1625,21 +1954,27 @@ export function TransportPanelContent() {
 
   const handleLocateMissingFile = useCallback(
     async (missingPath: string) => {
-      await runAction(async () => {
-        const selectedPath = await open({
-          multiple: false,
-          directory: false,
-          title: "Locate missing audio file",
-        });
-        if (typeof selectedPath !== "string") {
-          return;
-        }
+      await runAction(
+        async () => {
+          const selectedPath = await open({
+            multiple: false,
+            directory: false,
+            title: "Locate missing audio file",
+          });
+          if (typeof selectedPath !== "string") {
+            return;
+          }
 
-        const nextSnapshot = await resolveMissingFile(missingPath, selectedPath);
-        applyPlaybackSnapshot(nextSnapshot);
-        await Promise.all([refreshSongView(), refreshLibraryState()]);
-        setStatus(t("transport.status.projectSaved"));
-      }, { busy: true });
+          const nextSnapshot = await resolveMissingFile(
+            missingPath,
+            selectedPath,
+          );
+          applyPlaybackSnapshot(nextSnapshot);
+          await Promise.all([refreshSongView(), refreshLibraryState()]);
+          setStatus(t("transport.status.projectSaved"));
+        },
+        { busy: true },
+      );
     },
     [applyPlaybackSnapshot, refreshLibraryState, refreshSongView, runAction, t],
   );
@@ -1648,9 +1983,17 @@ export function TransportPanelContent() {
     return useTransportStore.getState().optimisticMix[trackId] ?? {};
   }, []);
 
-  const setTrackOptimisticMix = useCallback((trackId: string, nextMix: OptimisticMixState) => {
-    useTransportStore.getState().setOptimisticMix(trackId, Object.keys(nextMix).length ? nextMix : null);
-  }, []);
+  const setTrackOptimisticMix = useCallback(
+    (trackId: string, nextMix: OptimisticMixState) => {
+      useTransportStore
+        .getState()
+        .setOptimisticMix(
+          trackId,
+          Object.keys(nextMix).length ? nextMix : null,
+        );
+    },
+    [],
+  );
 
   const patchTrackOptimisticMix = useCallback(
     (trackId: string, mixPatch: OptimisticMixState) => {
@@ -1692,21 +2035,26 @@ export function TransportPanelContent() {
     return operationId;
   }, []);
 
-  const completeOptimisticClipOperation = useCallback((operationId: string, projectRevision: number) => {
-    setOptimisticClipOperations((current) =>
-      current.map((operation) =>
-        operation.id === operationId
-          ? {
-              ...operation,
-              clearAfterProjectRevision: projectRevision,
-            }
-          : operation,
-      ),
-    );
-  }, []);
+  const completeOptimisticClipOperation = useCallback(
+    (operationId: string, projectRevision: number) => {
+      setOptimisticClipOperations((current) =>
+        current.map((operation) =>
+          operation.id === operationId
+            ? {
+                ...operation,
+                clearAfterProjectRevision: projectRevision,
+              }
+            : operation,
+        ),
+      );
+    },
+    [],
+  );
 
   const discardOptimisticClipOperation = useCallback((operationId: string) => {
-    setOptimisticClipOperations((current) => current.filter((operation) => operation.id !== operationId));
+    setOptimisticClipOperations((current) =>
+      current.filter((operation) => operation.id !== operationId),
+    );
   }, []);
 
   const resolveTrackMix = useCallback(
@@ -1753,10 +2101,16 @@ export function TransportPanelContent() {
       if (keys.includes("solo") && resolvedMix.solo !== track.solo) {
         payload.solo = resolvedMix.solo;
       }
-      if (keys.includes("volume") && Math.abs(resolvedMix.volume - track.volume) >= 0.0001) {
+      if (
+        keys.includes("volume") &&
+        Math.abs(resolvedMix.volume - track.volume) >= 0.0001
+      ) {
         payload.volume = resolvedMix.volume;
       }
-      if (keys.includes("pan") && Math.abs(resolvedMix.pan - track.pan) >= 0.0001) {
+      if (
+        keys.includes("pan") &&
+        Math.abs(resolvedMix.pan - track.pan) >= 0.0001
+      ) {
         payload.pan = resolvedMix.pan;
       }
 
@@ -1779,7 +2133,12 @@ export function TransportPanelContent() {
         throw error;
       }
     },
-    [applyPlaybackSnapshot, clearTrackOptimisticMixKeys, nextTrackMixRequestId, resolveTrackMix],
+    [
+      applyPlaybackSnapshot,
+      clearTrackOptimisticMixKeys,
+      nextTrackMixRequestId,
+      resolveTrackMix,
+    ],
   );
 
   const flushTrackMixLiveUpdates = useCallback(
@@ -1795,7 +2154,8 @@ export function TransportPanelContent() {
       try {
         while (liveState.queuedKeys.size > 0) {
           const now = performance.now();
-          const remainingDelay = LIVE_TRACK_MIX_MIN_INTERVAL_MS - (now - liveState.lastSentAt);
+          const remainingDelay =
+            LIVE_TRACK_MIX_MIN_INTERVAL_MS - (now - liveState.lastSentAt);
           if (remainingDelay > 0) {
             await new Promise<void>((resolve) => {
               window.setTimeout(resolve, remainingDelay);
@@ -1866,7 +2226,12 @@ export function TransportPanelContent() {
       }
 
       void flushTrackMixLiveUpdates(trackId).catch((error) => {
-        clearTrackOptimisticMixKeys(trackId, ["muted", "solo", "volume", "pan"]);
+        clearTrackOptimisticMixKeys(trackId, [
+          "muted",
+          "solo",
+          "volume",
+          "pan",
+        ]);
         delete trackMixLiveStatesRef.current[trackId];
         setStatus(formatErrorStatus(error));
       });
@@ -1874,37 +2239,34 @@ export function TransportPanelContent() {
     [clearTrackOptimisticMixKeys, flushTrackMixLiveUpdates],
   );
 
-  const flushClipMoveLiveUpdates = useCallback(
-    async (clipId: string) => {
-      const liveStates = clipMoveLiveStatesRef.current;
-      const liveState = liveStates[clipId];
-      if (!liveState || liveState.inFlight) {
+  const flushClipMoveLiveUpdates = useCallback(async (clipId: string) => {
+    const liveStates = clipMoveLiveStatesRef.current;
+    const liveState = liveStates[clipId];
+    if (!liveState || liveState.inFlight) {
+      return;
+    }
+
+    liveState.inFlight = true;
+
+    try {
+      while (liveState.queuedSeconds !== null) {
+        const queuedSeconds = liveState.queuedSeconds;
+        liveState.queuedSeconds = null;
+        await moveClipLive(clipId, queuedSeconds);
+      }
+    } finally {
+      liveState.inFlight = false;
+      if (liveState.queuedSeconds !== null) {
+        void flushClipMoveLiveUpdates(clipId);
         return;
       }
 
-      liveState.inFlight = true;
-
-      try {
-        while (liveState.queuedSeconds !== null) {
-          const queuedSeconds = liveState.queuedSeconds;
-          liveState.queuedSeconds = null;
-          await moveClipLive(clipId, queuedSeconds);
-        }
-      } finally {
-        liveState.inFlight = false;
-        if (liveState.queuedSeconds !== null) {
-          void flushClipMoveLiveUpdates(clipId);
-          return;
-        }
-
-        delete liveStates[clipId];
-        if (clipDragRef.current?.clipId !== clipId) {
-          clipPreviewSecondsRef.current = {};
-        }
+      delete liveStates[clipId];
+      if (clipDragRef.current?.clipId !== clipId) {
+        clipPreviewSecondsRef.current = {};
       }
-    },
-    [],
-  );
+    }
+  }, []);
 
   const queueClipMoveLiveUpdate = useCallback(
     (clipId: string, previewSeconds: number) => {
@@ -1955,7 +2317,8 @@ export function TransportPanelContent() {
       header.classList.remove("is-dragging");
     });
 
-    const dropTargets = timelineShellRef.current?.querySelectorAll(".is-drop-target");
+    const dropTargets =
+      timelineShellRef.current?.querySelectorAll(".is-drop-target");
     dropTargets?.forEach((element) => {
       element.classList.remove(
         "is-drop-target",
@@ -1972,76 +2335,93 @@ export function TransportPanelContent() {
     trackDropStateRef.current = null;
   }, []);
 
-  const applyTrackDragVisuals = useCallback((dragState: NonNullable<TrackDragState>, dropState: TrackDropState) => {
-    const deltaY = dragState.currentClientY - dragState.startClientY;
+  const applyTrackDragVisuals = useCallback(
+    (dragState: NonNullable<TrackDragState>, dropState: TrackDropState) => {
+      const deltaY = dragState.currentClientY - dragState.startClientY;
 
-    if (draggedTrackRowRef.current !== dragState.rowElement) {
-      clearTrackDragVisuals();
-      draggedTrackRowRef.current = dragState.rowElement;
+      if (draggedTrackRowRef.current !== dragState.rowElement) {
+        clearTrackDragVisuals();
+        draggedTrackRowRef.current = dragState.rowElement;
 
-      const dragTrackIds =
-        selectedTrackIds.includes(dragState.trackId) && selectedTrackIds.length > 1
-          ? selectedTrackIds
-          : [dragState.trackId];
-      const draggedRows: HTMLDivElement[] = [];
-      const draggedHeaders: HTMLElement[] = [];
+        const dragTrackIds =
+          selectedTrackIds.includes(dragState.trackId) &&
+          selectedTrackIds.length > 1
+            ? selectedTrackIds
+            : [dragState.trackId];
+        const draggedRows: HTMLDivElement[] = [];
+        const draggedHeaders: HTMLElement[] = [];
 
-      dragTrackIds.forEach((trackId) => {
-        const matchingRows = timelineShellRef.current?.querySelectorAll(
-          `.lt-track-header-row[data-track-id="${trackId}"], .lt-track-lane-row[data-track-id="${trackId}"]`,
-        );
+        dragTrackIds.forEach((trackId) => {
+          const matchingRows = timelineShellRef.current?.querySelectorAll(
+            `.lt-track-header-row[data-track-id="${trackId}"], .lt-track-lane-row[data-track-id="${trackId}"]`,
+          );
 
-        matchingRows?.forEach((element) => {
-          if (!(element instanceof HTMLDivElement) || draggedRows.includes(element)) {
-            return;
-          }
+          matchingRows?.forEach((element) => {
+            if (
+              !(element instanceof HTMLDivElement) ||
+              draggedRows.includes(element)
+            ) {
+              return;
+            }
 
-          draggedRows.push(element);
+            draggedRows.push(element);
 
-          const header = element.querySelector(".lt-track-header");
-          if (header instanceof HTMLElement) {
-            draggedHeaders.push(header);
-          }
+            const header = element.querySelector(".lt-track-header");
+            if (header instanceof HTMLElement) {
+              draggedHeaders.push(header);
+            }
+          });
         });
-      });
 
-      draggedTrackRowsRef.current = draggedRows;
-      draggedTrackHeadersRef.current = draggedHeaders;
-    }
-
-    draggedTrackRowsRef.current.forEach((row) => {
-      row.style.transform = `translate3d(0, ${deltaY}px, 0)`;
-      row.style.zIndex = "8";
-      row.style.pointerEvents = "none";
-    });
-
-    draggedTrackHeadersRef.current.forEach((header) => {
-      header.classList.add("is-dragging");
-    });
-
-    const dropTargets = timelineShellRef.current?.querySelectorAll(".is-drop-target");
-    dropTargets?.forEach((element) => {
-      if (element instanceof HTMLElement && element.dataset.trackId !== dropState?.targetTrackId) {
-        element.classList.remove(
-          "is-drop-target",
-          "is-drop-before",
-          "is-drop-after",
-          "is-drop-inside-folder",
-        );
+        draggedTrackRowsRef.current = draggedRows;
+        draggedTrackHeadersRef.current = draggedHeaders;
       }
-    });
 
-    if (dropState?.targetTrackId) {
-      const nextDropRows = timelineShellRef.current?.querySelectorAll(`[data-track-id="${dropState.targetTrackId}"]`);
-      nextDropRows?.forEach((element) => {
-        element.classList.remove("is-drop-before", "is-drop-after", "is-drop-inside-folder");
-        element.classList.add("is-drop-target", `is-drop-${dropState.mode}`);
+      draggedTrackRowsRef.current.forEach((row) => {
+        row.style.transform = `translate3d(0, ${deltaY}px, 0)`;
+        row.style.zIndex = "8";
+        row.style.pointerEvents = "none";
       });
-    }
 
-    droppedTrackRowRef.current = null;
-    trackDropStateRef.current = dropState;
-  }, [clearTrackDragVisuals, selectedTrackIds]);
+      draggedTrackHeadersRef.current.forEach((header) => {
+        header.classList.add("is-dragging");
+      });
+
+      const dropTargets =
+        timelineShellRef.current?.querySelectorAll(".is-drop-target");
+      dropTargets?.forEach((element) => {
+        if (
+          element instanceof HTMLElement &&
+          element.dataset.trackId !== dropState?.targetTrackId
+        ) {
+          element.classList.remove(
+            "is-drop-target",
+            "is-drop-before",
+            "is-drop-after",
+            "is-drop-inside-folder",
+          );
+        }
+      });
+
+      if (dropState?.targetTrackId) {
+        const nextDropRows = timelineShellRef.current?.querySelectorAll(
+          `[data-track-id="${dropState.targetTrackId}"]`,
+        );
+        nextDropRows?.forEach((element) => {
+          element.classList.remove(
+            "is-drop-before",
+            "is-drop-after",
+            "is-drop-inside-folder",
+          );
+          element.classList.add("is-drop-target", `is-drop-${dropState.mode}`);
+        });
+      }
+
+      droppedTrackRowRef.current = null;
+      trackDropStateRef.current = dropState;
+    },
+    [clearTrackDragVisuals, selectedTrackIds],
+  );
 
   function transportSnapshotKey(nextSnapshot: TransportSnapshot) {
     return [
@@ -2058,21 +2438,25 @@ export function TransportPanelContent() {
     anchorMeta: TransportAnchorMeta | null = null,
   ) {
     const isRunning =
-      nextSnapshot.playbackState === "playing" && Boolean(nextSnapshot.transportClock?.running);
+      nextSnapshot.playbackState === "playing" &&
+      Boolean(nextSnapshot.transportClock?.running);
     const fallbackAnchorPositionSeconds = isRunning
-      ? nextSnapshot.transportClock?.anchorPositionSeconds ?? nextSnapshot.positionSeconds
+      ? (nextSnapshot.transportClock?.anchorPositionSeconds ??
+        nextSnapshot.positionSeconds)
       : nextSnapshot.positionSeconds;
-    const baseAnchorPositionSeconds = anchorMeta?.anchorPositionSeconds ?? fallbackAnchorPositionSeconds;
+    const baseAnchorPositionSeconds =
+      anchorMeta?.anchorPositionSeconds ?? fallbackAnchorPositionSeconds;
     const emittedLatencySeconds =
       isRunning && anchorMeta
         ? Math.max(0, (Date.now() - anchorMeta.emittedAtUnixMs) / 1000)
         : 0;
     const durationSeconds = songDurationSecondsRef.current;
-    const maxDuration = timelineDurationSecondsRef.current > 0
-      ? timelineDurationSecondsRef.current
-      : durationSeconds > 0
-        ? durationSeconds
-        : Number.MAX_SAFE_INTEGER;
+    const maxDuration =
+      timelineDurationSecondsRef.current > 0
+        ? timelineDurationSecondsRef.current
+        : durationSeconds > 0
+          ? durationSeconds
+          : Number.MAX_SAFE_INTEGER;
     const anchorPositionSeconds = clamp(
       baseAnchorPositionSeconds + emittedLatencySeconds,
       0,
@@ -2086,7 +2470,9 @@ export function TransportPanelContent() {
       running: isRunning,
     };
 
-    syncLivePosition(isRunning ? anchorPositionSeconds : nextSnapshot.positionSeconds);
+    syncLivePosition(
+      isRunning ? anchorPositionSeconds : nextSnapshot.positionSeconds,
+    );
   }
 
   function resolveCurrentVisualPosition() {
@@ -2094,7 +2480,10 @@ export function TransportPanelContent() {
     const elapsedSeconds = anchor.running
       ? (performance.now() - anchor.anchorReceivedAtMs) / 1000
       : 0;
-    const durationSeconds = anchor.durationSeconds || timelineDurationSecondsRef.current || songDurationSecondsRef.current;
+    const durationSeconds =
+      anchor.durationSeconds ||
+      timelineDurationSecondsRef.current ||
+      songDurationSecondsRef.current;
 
     return clamp(
       anchor.anchorPositionSeconds + elapsedSeconds,
@@ -2112,7 +2501,9 @@ export function TransportPanelContent() {
         playbackVisualAnchorRef.current = {
           anchorPositionSeconds: 0,
           anchorReceivedAtMs: performance.now(),
-          durationSeconds: timelineDurationSecondsRef.current || songDurationSecondsRef.current,
+          durationSeconds:
+            timelineDurationSecondsRef.current ||
+            songDurationSecondsRef.current,
           running: false,
         };
         syncLivePosition(0);
@@ -2139,10 +2530,15 @@ export function TransportPanelContent() {
 
       if (shouldPreserveVisualAnchor) {
         const polledAnchorPosition =
-          nextSnapshot.transportClock?.anchorPositionSeconds ?? nextSnapshot.positionSeconds;
-        const visualDriftSeconds = Math.abs(resolveCurrentVisualPosition() - polledAnchorPosition);
+          nextSnapshot.transportClock?.anchorPositionSeconds ??
+          nextSnapshot.positionSeconds;
+        const visualDriftSeconds = Math.abs(
+          resolveCurrentVisualPosition() - polledAnchorPosition,
+        );
 
-        if (visualDriftSeconds <= PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS) {
+        if (
+          visualDriftSeconds <= PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS
+        ) {
           return;
         }
       }
@@ -2152,7 +2548,10 @@ export function TransportPanelContent() {
 
     syncPlaybackSnapshot(useTransportStore.getState().playback);
 
-    return useTransportStore.subscribe((state) => state.playback, syncPlaybackSnapshot);
+    return useTransportStore.subscribe(
+      (state) => state.playback,
+      syncPlaybackSnapshot,
+    );
   }, []);
 
   useEffect(() => {
@@ -2272,7 +2671,8 @@ export function TransportPanelContent() {
     let active = true;
     let unlisten: (() => void) | undefined;
     let frameId: number | null = null;
-    let pendingMeters: ReturnType<typeof meterDictionaryFromLevels> | null = null;
+    let pendingMeters: ReturnType<typeof meterDictionaryFromLevels> | null =
+      null;
 
     const flushMeters = () => {
       frameId = null;
@@ -2325,7 +2725,10 @@ export function TransportPanelContent() {
         return;
       }
 
-      if (playbackSongDir && event.songDir !== playbackSongDir.replace(/\\/g, "/")) {
+      if (
+        playbackSongDir &&
+        event.songDir !== playbackSongDir.replace(/\\/g, "/")
+      ) {
         return;
       }
 
@@ -2414,11 +2817,15 @@ export function TransportPanelContent() {
     }
 
     const updateViewportWidth = () => {
-      const paneWidth = rulerTrackRef.current?.clientWidth ?? laneAreaRef.current?.clientWidth ?? null;
+      const paneWidth =
+        rulerTrackRef.current?.clientWidth ??
+        laneAreaRef.current?.clientWidth ??
+        null;
       const fallbackWidth = Math.max(
         320,
-        (timelineScrollViewportRef.current?.clientWidth ?? shell.clientWidth ?? DEFAULT_TIMELINE_VIEWPORT_WIDTH) -
-          HEADER_WIDTH,
+        (timelineScrollViewportRef.current?.clientWidth ??
+          shell.clientWidth ??
+          DEFAULT_TIMELINE_VIEWPORT_WIDTH) - HEADER_WIDTH,
       );
       setTimelineViewportWidth(Math.max(320, paneWidth ?? fallbackWidth));
     };
@@ -2548,7 +2955,9 @@ export function TransportPanelContent() {
 
       const missingWaveformKeys = libraryAssets
         .map((asset) => asset.filePath)
-        .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index)
+        .filter(
+          (waveformKey, index, keys) => keys.indexOf(waveformKey) === index,
+        )
         .filter((waveformKey) => {
           const summary = waveformCache[waveformKey];
           return !summary;
@@ -2565,7 +2974,9 @@ export function TransportPanelContent() {
 
       setWaveformCache((current) => ({
         ...current,
-        ...Object.fromEntries(summaries.map((summary) => [summary.waveformKey, summary])),
+        ...Object.fromEntries(
+          summaries.map((summary) => [summary.waveformKey, summary]),
+        ),
       }));
     }
 
@@ -2620,7 +3031,9 @@ export function TransportPanelContent() {
 
       const missingWaveformKeys = song.clips
         .map((clip) => clip.waveformKey)
-        .filter((waveformKey, index, keys) => keys.indexOf(waveformKey) === index)
+        .filter(
+          (waveformKey, index, keys) => keys.indexOf(waveformKey) === index,
+        )
         .filter((waveformKey) => {
           const summary = waveformCache[waveformKey];
           return !summary;
@@ -2640,7 +3053,9 @@ export function TransportPanelContent() {
 
       setWaveformCache((current) => ({
         ...current,
-        ...Object.fromEntries(summaries.map((summary) => [summary.waveformKey, summary])),
+        ...Object.fromEntries(
+          summaries.map((summary) => [summary.waveformKey, summary]),
+        ),
       }));
     }
 
@@ -2666,7 +3081,9 @@ export function TransportPanelContent() {
       return;
     }
 
-    const nextTracksById = Object.fromEntries(song.tracks.map((track) => [track.id, track]));
+    const nextTracksById = Object.fromEntries(
+      song.tracks.map((track) => [track.id, track]),
+    );
 
     setTracksById(nextTracksById);
     setClipsByTrack((current) => buildMemoizedClipsByTrack(song, current));
@@ -2695,7 +3112,9 @@ export function TransportPanelContent() {
   }, [song?.durationSeconds]);
 
   useEffect(() => {
-    const optimisticMixEntries = Object.entries(useTransportStore.getState().optimisticMix);
+    const optimisticMixEntries = Object.entries(
+      useTransportStore.getState().optimisticMix,
+    );
 
     if (!song) {
       for (const [trackId] of optimisticMixEntries) {
@@ -2706,7 +3125,9 @@ export function TransportPanelContent() {
       return;
     }
 
-    const nextTracksById = Object.fromEntries(song.tracks.map((track) => [track.id, track]));
+    const nextTracksById = Object.fromEntries(
+      song.tracks.map((track) => [track.id, track]),
+    );
     const validTrackIds = new Set(song.tracks.map((track) => track.id));
 
     for (const trackId of Object.keys(trackMixRequestIdsRef.current)) {
@@ -2733,16 +3154,28 @@ export function TransportPanelContent() {
       }
 
       const nextOptimisticMix: OptimisticMixState = {};
-      if (optimisticMix.muted !== undefined && optimisticMix.muted !== track.muted) {
+      if (
+        optimisticMix.muted !== undefined &&
+        optimisticMix.muted !== track.muted
+      ) {
         nextOptimisticMix.muted = optimisticMix.muted;
       }
-      if (optimisticMix.solo !== undefined && optimisticMix.solo !== track.solo) {
+      if (
+        optimisticMix.solo !== undefined &&
+        optimisticMix.solo !== track.solo
+      ) {
         nextOptimisticMix.solo = optimisticMix.solo;
       }
-      if (optimisticMix.volume !== undefined && Math.abs(optimisticMix.volume - track.volume) >= 0.0001) {
+      if (
+        optimisticMix.volume !== undefined &&
+        Math.abs(optimisticMix.volume - track.volume) >= 0.0001
+      ) {
         nextOptimisticMix.volume = optimisticMix.volume;
       }
-      if (optimisticMix.pan !== undefined && Math.abs(optimisticMix.pan - track.pan) >= 0.0001) {
+      if (
+        optimisticMix.pan !== undefined &&
+        Math.abs(optimisticMix.pan - track.pan) >= 0.0001
+      ) {
         nextOptimisticMix.pan = optimisticMix.pan;
       }
 
@@ -2829,7 +3262,10 @@ export function TransportPanelContent() {
       if (event.button !== 0) {
         return;
       }
-      if (event.target instanceof HTMLElement && event.target.closest(".lt-context-menu")) {
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest(".lt-context-menu")
+      ) {
         return;
       }
       setContextMenu(null);
@@ -2851,7 +3287,10 @@ export function TransportPanelContent() {
     }
 
     const closeTopMenu = (event: PointerEvent) => {
-      if (event.target instanceof Node && menuBarRef.current?.contains(event.target)) {
+      if (
+        event.target instanceof Node &&
+        menuBarRef.current?.contains(event.target)
+      ) {
         return;
       }
 
@@ -2892,7 +3331,8 @@ export function TransportPanelContent() {
       }
 
       const target = event.target as HTMLElement | null;
-      const isTypingTarget = isTextEntryTarget(event.target) || target?.tagName === "SELECT";
+      const isTypingTarget =
+        isTextEntryTarget(event.target) || target?.tagName === "SELECT";
 
       if (isTypingTarget) {
         return;
@@ -2913,9 +3353,15 @@ export function TransportPanelContent() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
         void runAction(async () => {
-          const nextSnapshot = event.shiftKey ? await redoAction() : await undoAction();
+          const nextSnapshot = event.shiftKey
+            ? await redoAction()
+            : await undoAction();
           applyPlaybackSnapshot(nextSnapshot);
-          setStatus(event.shiftKey ? t("transport.status.actionRedone") : t("transport.status.actionUndone"));
+          setStatus(
+            event.shiftKey
+              ? t("transport.status.actionRedone")
+              : t("transport.status.actionUndone"),
+          );
         });
         return;
       }
@@ -2935,9 +3381,13 @@ export function TransportPanelContent() {
         event.preventDefault();
 
         if (event.shiftKey) {
-          const region = song ? resolveRegionShortcut(song.regions, keyDigit) : null;
+          const region = song
+            ? resolveRegionShortcut(song.regions, keyDigit)
+            : null;
           if (!region) {
-            setStatus(t("transport.status.noSongForDigit", { digit: keyDigit }));
+            setStatus(
+              t("transport.status.noSongForDigit", { digit: keyDigit }),
+            );
             return;
           }
 
@@ -2947,9 +3397,13 @@ export function TransportPanelContent() {
           return;
         }
 
-        const marker = song ? resolveMarkerShortcut(song.sectionMarkers, keyDigit) : null;
+        const marker = song
+          ? resolveMarkerShortcut(song.sectionMarkers, keyDigit)
+          : null;
         if (!marker) {
-          setStatus(t("transport.status.noMarkerForDigit", { digit: keyDigit }));
+          setStatus(
+            t("transport.status.noMarkerForDigit", { digit: keyDigit }),
+          );
           return;
         }
 
@@ -2958,7 +3412,9 @@ export function TransportPanelContent() {
           if (pendingJump && pendingJump.targetMarkerId === marker.id) {
             const nextSnapshot = await cancelMarkerJump();
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.jumpCancelledDigit", { digit: keyDigit }));
+            setStatus(
+              t("transport.status.jumpCancelledDigit", { digit: keyDigit }),
+            );
             return;
           }
 
@@ -3013,7 +3469,11 @@ export function TransportPanelContent() {
               applyPlaybackSnapshot(lastSnapshot);
             }
             clearSelection();
-            setStatus(t("transport.status.tracksDeleted", { count: selectedTrackIds.length }));
+            setStatus(
+              t("transport.status.tracksDeleted", {
+                count: selectedTrackIds.length,
+              }),
+            );
           });
         }
       }
@@ -3043,13 +3503,17 @@ export function TransportPanelContent() {
       const effectSong = songRef.current;
       if (clipDrag && effectSong) {
         const effectPixelsPerSecond = livePixelsPerSecondRef.current;
-        const exceededThreshold = Math.abs(event.clientX - clipDrag.startClientX) > DRAG_THRESHOLD_PX;
+        const exceededThreshold =
+          Math.abs(event.clientX - clipDrag.startClientX) > DRAG_THRESHOLD_PX;
         if (!clipDrag.hasMoved && exceededThreshold) {
           restoreConfirmedTransportVisual();
         }
-        const deltaSeconds = (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
-        const timingRegion =
-          getSongTempoRegionAtPosition(effectSong, clipDrag.originSeconds + deltaSeconds);
+        const deltaSeconds =
+          (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
+        const timingRegion = getSongTempoRegionAtPosition(
+          effectSong,
+          clipDrag.originSeconds + deltaSeconds,
+        );
         const nextSeconds = snapEnabled
           ? snapToTimelineGrid(
               clipDrag.originSeconds + deltaSeconds,
@@ -3067,13 +3531,16 @@ export function TransportPanelContent() {
           previewSeconds: clamp(nextSeconds, 0, effectSong.durationSeconds),
         };
         clipDragRef.current = nextDrag;
-        clipPreviewSecondsRef.current = { [nextDrag.clipId]: nextDrag.previewSeconds };
+        clipPreviewSecondsRef.current = {
+          [nextDrag.clipId]: nextDrag.previewSeconds,
+        };
       }
 
       const trackDrag = trackDragRef.current;
       if (trackDrag && songRef.current) {
         const exceededThreshold =
-          Math.abs(event.clientX - trackDrag.startClientX) > DRAG_THRESHOLD_PX ||
+          Math.abs(event.clientX - trackDrag.startClientX) >
+            DRAG_THRESHOLD_PX ||
           Math.abs(event.clientY - trackDrag.startClientY) > DRAG_THRESHOLD_PX;
         const isDraggingNow = trackDrag.isDragging || exceededThreshold;
         const nextDrag = {
@@ -3107,15 +3574,26 @@ export function TransportPanelContent() {
       if (activeClipDrag) {
         const movedEnough =
           activeClipDrag.hasMoved ||
-          Math.abs(event.clientX - activeClipDrag.startClientX) > DRAG_THRESHOLD_PX;
+          Math.abs(event.clientX - activeClipDrag.startClientX) >
+            DRAG_THRESHOLD_PX;
         if (movedEnough) {
-          queueClipMoveLiveUpdate(activeClipDrag.clipId, activeClipDrag.previewSeconds);
+          queueClipMoveLiveUpdate(
+            activeClipDrag.clipId,
+            activeClipDrag.previewSeconds,
+          );
           void runAction(async () => {
             await waitForClipMoveLiveIdle(activeClipDrag.clipId);
-            const nextSnapshot = await moveClip(activeClipDrag.clipId, activeClipDrag.previewSeconds);
+            const nextSnapshot = await moveClip(
+              activeClipDrag.clipId,
+              activeClipDrag.previewSeconds,
+            );
             applyPlaybackSnapshot(nextSnapshot);
             const clip = findClip(songRef.current, activeClipDrag.clipId);
-            setStatus(t("transport.status.clipMoved", { name: clip?.trackName ?? activeClipDrag.clipId }));
+            setStatus(
+              t("transport.status.clipMoved", {
+                name: clip?.trackName ?? activeClipDrag.clipId,
+              }),
+            );
           });
         } else {
           clipPreviewSecondsRef.current = {};
@@ -3131,17 +3609,21 @@ export function TransportPanelContent() {
       if (activeTrackDrag) {
         const currentSong = songRef.current;
         const movedEnough =
-          Math.abs(event.clientX - activeTrackDrag.startClientX) > DRAG_THRESHOLD_PX ||
-          Math.abs(event.clientY - activeTrackDrag.startClientY) > DRAG_THRESHOLD_PX;
-        const shouldTreatAsDrag = Boolean(currentSong) && (activeTrackDrag.isDragging || movedEnough);
-        const dropState = shouldTreatAsDrag && currentSong
-          ? resolveTrackDropState(
-              currentSong,
-              activeTrackDrag.trackId,
-              event.clientX,
-              event.clientY,
-            )
-          : null;
+          Math.abs(event.clientX - activeTrackDrag.startClientX) >
+            DRAG_THRESHOLD_PX ||
+          Math.abs(event.clientY - activeTrackDrag.startClientY) >
+            DRAG_THRESHOLD_PX;
+        const shouldTreatAsDrag =
+          Boolean(currentSong) && (activeTrackDrag.isDragging || movedEnough);
+        const dropState =
+          shouldTreatAsDrag && currentSong
+            ? resolveTrackDropState(
+                currentSong,
+                activeTrackDrag.trackId,
+                event.clientX,
+                event.clientY,
+              )
+            : null;
 
         trackDragRef.current = null;
         suppressTrackClickRef.current = shouldTreatAsDrag;
@@ -3203,12 +3685,20 @@ export function TransportPanelContent() {
       viewportWidth?: number;
     },
   ) {
-    const durationSeconds = options?.durationSeconds
-      ?? timelineDurationSecondsRef.current
-      ?? songRef.current?.durationSeconds
-      ?? 0;
-    const clampedPosition = clamp(positionSeconds, 0, durationSeconds || Number.MAX_SAFE_INTEGER);
-    const timingRegion = getSongTempoRegionAtPosition(songRef.current, clampedPosition);
+    const durationSeconds =
+      options?.durationSeconds ??
+      timelineDurationSecondsRef.current ??
+      songRef.current?.durationSeconds ??
+      0;
+    const clampedPosition = clamp(
+      positionSeconds,
+      0,
+      durationSeconds || Number.MAX_SAFE_INTEGER,
+    );
+    const timingRegion = getSongTempoRegionAtPosition(
+      songRef.current,
+      clampedPosition,
+    );
     const displayedTempo = timingRegion?.bpm ?? getSongBaseBpm(songRef.current);
 
     displayPositionSecondsRef.current = clampedPosition;
@@ -3218,7 +3708,8 @@ export function TransportPanelContent() {
     }
 
     if (transportReadoutValueRef.current) {
-      transportReadoutValueRef.current.textContent = formatClock(clampedPosition);
+      transportReadoutValueRef.current.textContent =
+        formatClock(clampedPosition);
     }
 
     if (transportReadoutBarRef.current) {
@@ -3241,9 +3732,12 @@ export function TransportPanelContent() {
       debounceStoreCommit?: boolean;
     },
   ) {
-    const durationSeconds = options?.durationSeconds ?? songRef.current?.durationSeconds ?? 0;
-    const contentEndSeconds = options?.contentEndSeconds ?? timelineContentEndSeconds;
-    const effectivePixelsPerSecond = options?.pixelsPerSecond ?? livePixelsPerSecondRef.current;
+    const durationSeconds =
+      options?.durationSeconds ?? songRef.current?.durationSeconds ?? 0;
+    const contentEndSeconds =
+      options?.contentEndSeconds ?? timelineContentEndSeconds;
+    const effectivePixelsPerSecond =
+      options?.pixelsPerSecond ?? livePixelsPerSecondRef.current;
     const viewportWidth = options?.viewportWidth ?? laneViewportWidth;
     const clampedCameraX = clampCameraX(
       nextCameraX,
@@ -3286,17 +3780,25 @@ export function TransportPanelContent() {
     }
 
     const horizontalScrollbar = horizontalScrollbarRef.current;
-    if (horizontalScrollbar && Math.abs(horizontalScrollbar.scrollLeft - clampedCameraX) > 0.5) {
+    if (
+      horizontalScrollbar &&
+      Math.abs(horizontalScrollbar.scrollLeft - clampedCameraX) > 0.5
+    ) {
       horizontalScrollbar.scrollLeft = clampedCameraX;
     }
 
     if (options?.syncPlayhead !== false) {
-      syncLivePosition(playheadDragRef.current?.currentSeconds ?? displayPositionSecondsRef.current, {
-        cameraX: clampedCameraX,
-        durationSeconds: timelineDurationSecondsRef.current || durationSeconds,
-        pixelsPerSecond: effectivePixelsPerSecond,
-        viewportWidth,
-      });
+      syncLivePosition(
+        playheadDragRef.current?.currentSeconds ??
+          displayPositionSecondsRef.current,
+        {
+          cameraX: clampedCameraX,
+          durationSeconds:
+            timelineDurationSecondsRef.current || durationSeconds,
+          pixelsPerSecond: effectivePixelsPerSecond,
+          viewportWidth,
+        },
+      );
     }
 
     return clampedCameraX;
@@ -3309,8 +3811,13 @@ export function TransportPanelContent() {
   }
 
   function previewSeek(positionSeconds: number) {
-    const durationSeconds = timelineDurationSecondsRef.current || song?.durationSeconds || 0;
-    const clampedPosition = clamp(positionSeconds, 0, durationSeconds || Number.MAX_SAFE_INTEGER);
+    const durationSeconds =
+      timelineDurationSecondsRef.current || song?.durationSeconds || 0;
+    const clampedPosition = clamp(
+      positionSeconds,
+      0,
+      durationSeconds || Number.MAX_SAFE_INTEGER,
+    );
 
     playbackVisualAnchorRef.current = {
       anchorPositionSeconds: clampedPosition,
@@ -3330,7 +3837,8 @@ export function TransportPanelContent() {
     playbackVisualAnchorRef.current = {
       anchorPositionSeconds: 0,
       anchorReceivedAtMs: performance.now(),
-      durationSeconds: timelineDurationSecondsRef.current || songDurationSecondsRef.current,
+      durationSeconds:
+        timelineDurationSecondsRef.current || songDurationSecondsRef.current,
       running: false,
     };
     syncLivePosition(0);
@@ -3342,7 +3850,11 @@ export function TransportPanelContent() {
     try {
       const nextSnapshot = await seekTransport(positionSeconds);
       applyPlaybackSnapshot(nextSnapshot);
-      setStatus(t("transport.status.cursorMoved", { time: formatClock(nextSnapshot.positionSeconds) }));
+      setStatus(
+        t("transport.status.cursorMoved", {
+          time: formatClock(nextSnapshot.positionSeconds),
+        }),
+      );
     } catch (error) {
       restoreConfirmedTransportVisual();
       throw error;
@@ -3355,9 +3867,15 @@ export function TransportPanelContent() {
 
   function normalizeTimelineSeekSeconds(
     positionSeconds: number,
-    durationSeconds = timelineDurationSecondsRef.current || song?.durationSeconds || 0,
+    durationSeconds = timelineDurationSecondsRef.current ||
+      song?.durationSeconds ||
+      0,
   ) {
-    const clampedPosition = clamp(positionSeconds, 0, Math.max(0, durationSeconds));
+    const clampedPosition = clamp(
+      positionSeconds,
+      0,
+      Math.max(0, durationSeconds),
+    );
     const timingRegion = getSongTempoRegionAtPosition(song, clampedPosition);
 
     return snapEnabled
@@ -3380,7 +3898,10 @@ export function TransportPanelContent() {
     return horizontalScrollbarRef.current ?? timelineShellRef.current;
   }
 
-  function snappedRulerSeconds(event: MouseEvent | ReactMouseEvent, durationSeconds: number) {
+  function snappedRulerSeconds(
+    event: MouseEvent | ReactMouseEvent,
+    durationSeconds: number,
+  ) {
     return normalizeTimelineSeekSeconds(
       rulerPointerToSeconds(
         event,
@@ -3393,7 +3914,10 @@ export function TransportPanelContent() {
     );
   }
 
-  function snappedRulerSecondsAtClientX(clientX: number, durationSeconds: number) {
+  function snappedRulerSecondsAtClientX(
+    clientX: number,
+    durationSeconds: number,
+  ) {
     const rulerTrack = rulerTrackRef.current;
     if (!rulerTrack) {
       return 0;
@@ -3414,7 +3938,8 @@ export function TransportPanelContent() {
   const laneViewportWidth = Math.max(320, timelineViewportWidth);
   const timelineFitViewportWidth = Math.max(
     320,
-    laneViewportWidth - Math.min(TIMELINE_FIT_RIGHT_GUTTER_PX, laneViewportWidth * 0.16),
+    laneViewportWidth -
+      Math.min(TIMELINE_FIT_RIGHT_GUTTER_PX, laneViewportWidth * 0.16),
   );
   const timelineContentEndSeconds = useMemo(() => {
     if (!song && pendingAudioImports.length === 0) {
@@ -3429,10 +3954,16 @@ export function TransportPanelContent() {
       );
     }
     for (const marker of song?.sectionMarkers ?? []) {
-      furthestContentSeconds = Math.max(furthestContentSeconds, marker.startSeconds);
+      furthestContentSeconds = Math.max(
+        furthestContentSeconds,
+        marker.startSeconds,
+      );
     }
     for (const pendingImport of pendingAudioImports) {
-      furthestContentSeconds = Math.max(furthestContentSeconds, pendingImport.dropSeconds + 8);
+      furthestContentSeconds = Math.max(
+        furthestContentSeconds,
+        pendingImport.dropSeconds + 8,
+      );
     }
 
     return furthestContentSeconds;
@@ -3443,7 +3974,8 @@ export function TransportPanelContent() {
   );
   const fitAllZoomLevel = timelineContentEndSeconds
     ? clamp(
-        timelineFitViewportWidth / (Math.max(timelineContentEndSeconds, 1) * BASE_PIXELS_PER_SECOND),
+        timelineFitViewportWidth /
+          (Math.max(timelineContentEndSeconds, 1) * BASE_PIXELS_PER_SECOND),
         ZOOM_MIN,
         ZOOM_MAX,
       )
@@ -3459,9 +3991,11 @@ export function TransportPanelContent() {
     timelineContentEndSeconds,
   );
   const pendingMarkerJump = pendingMarkerJumpSignature
-    ? snapshotRef.current?.pendingMarkerJump ?? null
+    ? (snapshotRef.current?.pendingMarkerJump ?? null)
     : null;
-  const activeVamp = activeVampSignature ? snapshotRef.current?.activeVamp ?? null : null;
+  const activeVamp = activeVampSignature
+    ? (snapshotRef.current?.activeVamp ?? null)
+    : null;
   const renderedClipsByTrack = useMemo<Record<string, TimelineClipSummary[]>>(
     () =>
       mergePendingClipsByTrack(
@@ -3471,16 +4005,22 @@ export function TransportPanelContent() {
     [clipsByTrack, optimisticClipOperations, pendingAudioImports],
   );
   const readoutPositionSeconds = displayPositionSecondsRef.current;
-  const readoutTempoRegion = getSongTempoRegionAtPosition(song, readoutPositionSeconds);
+  const readoutTempoRegion = getSongTempoRegionAtPosition(
+    song,
+    readoutPositionSeconds,
+  );
   const songBaseBpm = getSongBaseBpm(song);
   const songBaseTimeSignature = getSongBaseTimeSignature(song);
   const displayedBpm = readoutTempoRegion?.bpm ?? songBaseBpm;
-  const displayedTimeSignature = readoutTempoRegion?.timeSignature ?? songBaseTimeSignature;
+  const displayedTimeSignature =
+    readoutTempoRegion?.timeSignature ?? songBaseTimeSignature;
   const musicalPositionLabel = song
     ? formatMusicalPosition(readoutPositionSeconds, song)
     : "1.1.00";
   const tempoSourceLabel = readoutTempoRegion
-    ? t("transport.tempoSource.at", { time: formatClock(readoutTempoRegion.startSeconds) })
+    ? t("transport.tempoSource.at", {
+        time: formatClock(readoutTempoRegion.startSeconds),
+      })
     : t("transport.tempoSource.base");
   const canPersistProject = Boolean(song);
   const isProjectEmpty = !song;
@@ -3495,7 +4035,9 @@ export function TransportPanelContent() {
     () => [...libraryAssets, ...pendingAudioImports.map(toPendingLibraryAsset)],
     [libraryAssets, pendingAudioImports],
   );
-  const shouldShowEmptyArrangementHint = Boolean(song && visibleTracks.length === 0);
+  const shouldShowEmptyArrangementHint = Boolean(
+    song && visibleTracks.length === 0,
+  );
   const previewTrackDensityClass =
     trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
   const libraryPreviewRows = useMemo(() => {
@@ -3528,7 +4070,9 @@ export function TransportPanelContent() {
         meta:
           previews.length === 1
             ? t("transport.preview.dropToCreateTrack")
-            : t("transport.preview.clipsOnNewTrack", { count: previews.length }),
+            : t("transport.preview.clipsOnNewTrack", {
+                count: previews.length,
+              }),
       }));
   }, [libraryClipPreview, t]);
 
@@ -3547,7 +4091,10 @@ export function TransportPanelContent() {
     viewportEndSeconds: workspaceDurationSeconds,
   });
 
-  async function scheduleMarkerJumpWithGlobalMode(markerId: string, markerName: string) {
+  async function scheduleMarkerJumpWithGlobalMode(
+    markerId: string,
+    markerName: string,
+  ) {
     const trigger = appSettings.globalJumpMode;
     const bars = Math.max(1, Math.floor(appSettings.globalJumpBars));
     const nextSnapshot = await scheduleMarkerJump(markerId);
@@ -3563,13 +4110,19 @@ export function TransportPanelContent() {
         ? t("transport.status.jumpImmediate", { name: markerName })
         : trigger === "next_marker"
           ? t("transport.status.jumpNextMarker", { name: markerName })
-          : t("transport.status.jumpAfterBars", { count: bars, name: markerName }),
+          : t("transport.status.jumpAfterBars", {
+              count: bars,
+              name: markerName,
+            }),
     );
 
     return nextSnapshot;
   }
 
-  async function scheduleRegionJumpWithOptions(regionId: string, regionName: string) {
+  async function scheduleRegionJumpWithOptions(
+    regionId: string,
+    regionName: string,
+  ) {
     const trigger = appSettings.songJumpTrigger;
     const bars = Math.max(1, Math.floor(appSettings.songJumpBars));
     const transition = appSettings.songTransitionMode;
@@ -3592,11 +4145,13 @@ export function TransportPanelContent() {
         ? t("timelineToolbar.songTransitionFadeOut")
         : t("timelineToolbar.songTransitionInstant");
 
-    setStatus(t("transport.status.songJumpScheduled", {
-      name: regionName,
-      when: whenLabel,
-      how: howLabel,
-    }));
+    setStatus(
+      t("transport.status.songJumpScheduled", {
+        name: regionName,
+        when: whenLabel,
+        how: howLabel,
+      }),
+    );
 
     return nextSnapshot;
   }
@@ -3606,9 +4161,12 @@ export function TransportPanelContent() {
       return;
     }
 
-    const currentPosition = snapshotRef.current?.positionSeconds ?? displayPositionSecondsRef.current;
-    const nextRegion = song.regions.find((region) => region.startSeconds > currentPosition + Number.EPSILON)
-      ?? song.regions[0];
+    const currentPosition =
+      snapshotRef.current?.positionSeconds ?? displayPositionSecondsRef.current;
+    const nextRegion =
+      song.regions.find(
+        (region) => region.startSeconds > currentPosition + Number.EPSILON,
+      ) ?? song.regions[0];
 
     if (!nextRegion) {
       return;
@@ -3619,13 +4177,18 @@ export function TransportPanelContent() {
 
   async function toggleTimelineVamp() {
     const mode = appSettings.vampMode;
-    const nextSnapshot = await toggleVamp(mode, mode === "bars" ? appSettings.vampBars : undefined);
+    const nextSnapshot = await toggleVamp(
+      mode,
+      mode === "bars" ? appSettings.vampBars : undefined,
+    );
     applyPlaybackSnapshot(nextSnapshot);
 
     setStatus(
       nextSnapshot.activeVamp
         ? mode === "bars"
-          ? t("transport.status.vampBarsEnabled", { count: appSettings.vampBars })
+          ? t("transport.status.vampBarsEnabled", {
+              count: appSettings.vampBars,
+            })
           : t("transport.status.vampSectionEnabled")
         : t("transport.status.vampDisabled"),
     );
@@ -3641,7 +4204,9 @@ export function TransportPanelContent() {
     if (snapshotRef.current?.pendingMarkerJump?.targetMarkerId === section.id) {
       const nextSnapshot = await cancelMarkerJump();
       applyPlaybackSnapshot(nextSnapshot);
-      setStatus(t("transport.status.jumpCancelledSection", { name: section.name }));
+      setStatus(
+        t("transport.status.jumpCancelledSection", { name: section.name }),
+      );
       return;
     }
 
@@ -3649,7 +4214,9 @@ export function TransportPanelContent() {
   }
 
   useEffect(() => {
-    setZoomLevel((current) => (current < effectiveZoomMin ? effectiveZoomMin : current));
+    setZoomLevel((current) =>
+      current < effectiveZoomMin ? effectiveZoomMin : current,
+    );
   }, [effectiveZoomMin]);
 
   useEffect(() => {
@@ -3661,13 +4228,18 @@ export function TransportPanelContent() {
       return;
     }
 
-    const projectIdentity = playbackSongDir ? `${playbackSongDir}::${song.id}` : song.id;
-    const hadClips = viewportFitStateRef.current.projectIdentity === projectIdentity
-      ? viewportFitStateRef.current.hadClips
-      : false;
+    const projectIdentity = playbackSongDir
+      ? `${playbackSongDir}::${song.id}`
+      : song.id;
+    const hadClips =
+      viewportFitStateRef.current.projectIdentity === projectIdentity
+        ? viewportFitStateRef.current.hadClips
+        : false;
     const hasClips = song.clips.length > 0;
     const shouldFitViewport =
-      laneViewportWidth > 0 && (viewportFitStateRef.current.projectIdentity !== projectIdentity || (!hadClips && hasClips));
+      laneViewportWidth > 0 &&
+      (viewportFitStateRef.current.projectIdentity !== projectIdentity ||
+        (!hadClips && hasClips));
 
     viewportFitStateRef.current = {
       projectIdentity,
@@ -3689,7 +4261,14 @@ export function TransportPanelContent() {
       pixelsPerSecond: fittedPixelsPerSecond,
       viewportWidth: laneViewportWidth,
     });
-  }, [fitAllZoomLevel, laneViewportWidth, playbackSongDir, setZoomLevel, song, timelineContentEndSeconds]);
+  }, [
+    fitAllZoomLevel,
+    laneViewportWidth,
+    playbackSongDir,
+    setZoomLevel,
+    song,
+    timelineContentEndSeconds,
+  ]);
 
   useEffect(() => {
     liveZoomLevelRef.current = zoomLevel;
@@ -3697,7 +4276,10 @@ export function TransportPanelContent() {
   }, [pixelsPerSecond, zoomLevel]);
 
   useEffect(() => {
-    if (zoomDebounceTimerRef.current === null || Math.abs(cameraXRef.current - cameraX) <= 0.5) {
+    if (
+      zoomDebounceTimerRef.current === null ||
+      Math.abs(cameraXRef.current - cameraX) <= 0.5
+    ) {
       cameraXRef.current = cameraX;
     }
   }, [cameraX]);
@@ -3720,10 +4302,18 @@ export function TransportPanelContent() {
       pixelsPerSecond,
       viewportWidth: laneViewportWidth,
     });
-  }, [laneViewportWidth, pixelsPerSecond, song?.durationSeconds, timelineContentEndSeconds]);
+  }, [
+    laneViewportWidth,
+    pixelsPerSecond,
+    song?.durationSeconds,
+    timelineContentEndSeconds,
+  ]);
 
   useEffect(() => {
-    syncLivePosition(playheadDragRef.current?.currentSeconds ?? displayPositionSecondsRef.current);
+    syncLivePosition(
+      playheadDragRef.current?.currentSeconds ??
+        displayPositionSecondsRef.current,
+    );
   }, [
     pixelsPerSecond,
     song?.projectRevision,
@@ -3746,11 +4336,16 @@ export function TransportPanelContent() {
   ): ContextMenuAction[] {
     return [
       {
-        label: timelineRange ? t("transport.menu.createSongRegionFromSelection") : t("transport.menu.createMarker"),
+        label: timelineRange
+          ? t("transport.menu.createSongRegionFromSelection")
+          : t("transport.menu.createMarker"),
         onSelect: async () => {
           await runAction(async () => {
             const nextSnapshot = timelineRange
-              ? await createSongRegion(timelineRange.startSeconds, timelineRange.endSeconds)
+              ? await createSongRegion(
+                  timelineRange.startSeconds,
+                  timelineRange.endSeconds,
+                )
               : await createSectionMarker(positionSeconds);
             applyPlaybackSnapshot(nextSnapshot);
             clearSelection();
@@ -3762,7 +4357,9 @@ export function TransportPanelContent() {
                     start: formatClock(timelineRange.startSeconds),
                     end: formatClock(timelineRange.endSeconds),
                   })
-                : t("transport.status.markerCreatedAt", { time: formatClock(positionSeconds) }),
+                : t("transport.status.markerCreatedAt", {
+                    time: formatClock(positionSeconds),
+                  }),
             );
           });
         },
@@ -3771,20 +4368,28 @@ export function TransportPanelContent() {
         label: t("transport.menu.changeTimelineBpm"),
         disabled: !song,
         onSelect: async () => {
-          const nextBpm = Number(window.prompt(t("transport.prompt.timelineBpm"), songBaseBpm.toFixed(2)));
+          const nextBpm = Number(
+            window.prompt(
+              t("transport.prompt.timelineBpm"),
+              songBaseBpm.toFixed(2),
+            ),
+          );
           if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
             return;
           }
 
           await runAction(async () => {
-            const nextSnapshot = positionSeconds <= 0.0001
-              ? await updateSongTempo(nextBpm)
-              : await upsertSongTempoMarker(positionSeconds, nextBpm);
+            const nextSnapshot =
+              positionSeconds <= 0.0001
+                ? await updateSongTempo(nextBpm)
+                : await upsertSongTempoMarker(positionSeconds, nextBpm);
             applyPlaybackSnapshot(nextSnapshot);
             setTempoDraft(String(nextBpm));
             setStatus(
               positionSeconds <= 0.0001
-                ? t("transport.status.baseTimelineBpmUpdated", { bpm: nextBpm.toFixed(2) })
+                ? t("transport.status.baseTimelineBpmUpdated", {
+                    bpm: nextBpm.toFixed(2),
+                  })
                 : t("transport.status.tempoMarkerCreated", {
                     time: formatClock(positionSeconds),
                     bpm: nextBpm.toFixed(2),
@@ -3797,18 +4402,26 @@ export function TransportPanelContent() {
         label: "Crear marca de metrica",
         disabled: !song,
         onSelect: async () => {
-          const nextSignature = window.prompt("Compas", displayedTimeSignature)?.trim();
+          const nextSignature = window
+            .prompt("Compas", displayedTimeSignature)
+            ?.trim();
           if (!nextSignature) {
             return;
           }
 
           await runAction(async () => {
-            const nextSnapshot = positionSeconds <= 0.0001
-              ? await updateSongTimeSignature(nextSignature)
-              : await upsertSongTimeSignatureMarker(positionSeconds, nextSignature);
+            const nextSnapshot =
+              positionSeconds <= 0.0001
+                ? await updateSongTimeSignature(nextSignature)
+                : await upsertSongTimeSignatureMarker(
+                    positionSeconds,
+                    nextSignature,
+                  );
             applyPlaybackSnapshot(nextSnapshot);
             setTimeSignatureDraft(nextSignature);
-            setStatus(`Compas ${nextSignature} en ${formatClock(positionSeconds)}`);
+            setStatus(
+              `Compas ${nextSignature} en ${formatClock(positionSeconds)}`,
+            );
           });
         },
       },
@@ -3828,7 +4441,9 @@ export function TransportPanelContent() {
       {
         label: t("transport.menu.renameSong"),
         onSelect: async () => {
-          const nextName = window.prompt(t("transport.prompt.songRename"), region.name)?.trim();
+          const nextName = window
+            .prompt(t("transport.prompt.songRename"), region.name)
+            ?.trim();
           if (!nextName) {
             return;
           }
@@ -3853,10 +4468,13 @@ export function TransportPanelContent() {
       {
         label: "Exportar Cancion",
         onSelect: async () => {
-          await runAction(async () => {
-            await exportRegionAsPackage(region.id);
-            setStatus(`Paquete exportado para ${region.name}`);
-          }, { busy: true });
+          await runAction(
+            async () => {
+              await exportRegionAsPackage(region.id);
+              setStatus(`Paquete exportado para ${region.name}`);
+            },
+            { busy: true },
+          );
         },
       },
       {
@@ -3878,16 +4496,28 @@ export function TransportPanelContent() {
       {
         label: t("transport.menu.changeBpm"),
         onSelect: async () => {
-          const nextBpm = Number(window.prompt(t("transport.prompt.tempoMarkerBpm"), marker.bpm.toFixed(2)));
+          const nextBpm = Number(
+            window.prompt(
+              t("transport.prompt.tempoMarkerBpm"),
+              marker.bpm.toFixed(2),
+            ),
+          );
           if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
             return;
           }
 
           await runAction(async () => {
-            const nextSnapshot = await upsertSongTempoMarker(marker.startSeconds, nextBpm);
+            const nextSnapshot = await upsertSongTempoMarker(
+              marker.startSeconds,
+              nextBpm,
+            );
             applyPlaybackSnapshot(nextSnapshot);
             setTempoDraft(String(nextBpm));
-            setStatus(t("transport.status.tempoMarkerUpdated", { bpm: nextBpm.toFixed(2) }));
+            setStatus(
+              t("transport.status.tempoMarkerUpdated", {
+                bpm: nextBpm.toFixed(2),
+              }),
+            );
           });
         },
       },
@@ -3897,7 +4527,11 @@ export function TransportPanelContent() {
           await runAction(async () => {
             const nextSnapshot = await deleteSongTempoMarker(marker.id);
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.tempoMarkerDeleted", { time: formatClock(marker.startSeconds) }));
+            setStatus(
+              t("transport.status.tempoMarkerDeleted", {
+                time: formatClock(marker.startSeconds),
+              }),
+            );
           });
         },
       },
@@ -3956,20 +4590,27 @@ export function TransportPanelContent() {
     return nextView;
   }
 
-  function applyZoom(nextZoomLevel: number, anchorViewportX = laneViewportWidth / 2) {
+  function applyZoom(
+    nextZoomLevel: number,
+    anchorViewportX = laneViewportWidth / 2,
+  ) {
     previewZoom(nextZoomLevel, anchorViewportX, {
       scheduleCommit: true,
     });
   }
 
-  function commitZoomViewToStore(nextView: { cameraX: number; zoomLevel: number }) {
+  function commitZoomViewToStore(nextView: {
+    cameraX: number;
+    zoomLevel: number;
+  }) {
     if (zoomDebounceTimerRef.current !== null) {
       window.clearTimeout(zoomDebounceTimerRef.current);
       zoomDebounceTimerRef.current = null;
     }
 
     liveZoomLevelRef.current = nextView.zoomLevel;
-    livePixelsPerSecondRef.current = nextView.zoomLevel * BASE_PIXELS_PER_SECOND;
+    livePixelsPerSecondRef.current =
+      nextView.zoomLevel * BASE_PIXELS_PER_SECOND;
     setZoomLevel(nextView.zoomLevel);
     updateCameraX(nextView.cameraX, {
       pixelsPerSecond: livePixelsPerSecondRef.current,
@@ -3978,7 +4619,9 @@ export function TransportPanelContent() {
   }
 
   function applyTrackHeight(nextTrackHeight: number) {
-    setTrackHeight(clamp(Math.round(nextTrackHeight), TRACK_HEIGHT_MIN, TRACK_HEIGHT_MAX));
+    setTrackHeight(
+      clamp(Math.round(nextTrackHeight), TRACK_HEIGHT_MIN, TRACK_HEIGHT_MAX),
+    );
   }
 
   function handleTrackHeadersWheel(event: ReactWheelEvent<HTMLDivElement>) {
@@ -3988,22 +4631,32 @@ export function TransportPanelContent() {
 
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
-      applyTrackHeight(trackHeight + (event.deltaY < 0 ? TRACK_HEIGHT_STEP : -TRACK_HEIGHT_STEP));
+      applyTrackHeight(
+        trackHeight +
+          (event.deltaY < 0 ? TRACK_HEIGHT_STEP : -TRACK_HEIGHT_STEP),
+      );
       return;
     }
 
-    const shouldScrollHorizontally = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    const shouldScrollHorizontally =
+      event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
     if (!shouldScrollHorizontally) {
       return;
     }
 
     event.preventDefault();
-    updateCameraX(cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0), {
-      commitToStore: false,
-    });
+    updateCameraX(
+      cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0),
+      {
+        commitToStore: false,
+      },
+    );
   }
 
-  async function handleTrackDrop(draggedTrackId: string, dropState: NonNullable<TrackDropState>) {
+  async function handleTrackDrop(
+    draggedTrackId: string,
+    dropState: NonNullable<TrackDropState>,
+  ) {
     const targetTrack = tracksById[dropState.targetTrackId] ?? null;
     if (!song || !targetTrack || draggedTrackId === targetTrack.id) {
       return;
@@ -4050,7 +4703,9 @@ export function TransportPanelContent() {
         applyPlaybackSnapshot(lastSnapshot);
       }
       await refreshSongView();
-      setStatus(t("transport.status.tracksReordered", { count: tracksToMove.length }));
+      setStatus(
+        t("transport.status.tracksReordered", { count: tracksToMove.length }),
+      );
     });
   }
 
@@ -4069,11 +4724,18 @@ export function TransportPanelContent() {
     });
   }
 
-  async function handleCreateTrack(kind: TrackKind, anchorTrack: TrackSummary | null, parentTrackId?: string | null) {
-    const defaultName = kind === "folder"
-      ? t("transport.defaults.folderTrackName")
-      : t("transport.defaults.audioTrackName");
-    const name = window.prompt(t("transport.prompt.trackName"), defaultName)?.trim();
+  async function handleCreateTrack(
+    kind: TrackKind,
+    anchorTrack: TrackSummary | null,
+    parentTrackId?: string | null,
+  ) {
+    const defaultName =
+      kind === "folder"
+        ? t("transport.defaults.folderTrackName")
+        : t("transport.defaults.audioTrackName");
+    const name = window
+      .prompt(t("transport.prompt.trackName"), defaultName)
+      ?.trim();
     if (!name) {
       return;
     }
@@ -4104,21 +4766,28 @@ export function TransportPanelContent() {
     return [
       {
         label: t("transport.menu.insertTrack"),
-        onSelect: () => handleCreateTrack("audio", track, track.parentTrackId ?? null),
+        onSelect: () =>
+          handleCreateTrack("audio", track, track.parentTrackId ?? null),
       },
       {
         label: t("transport.menu.insertFolderTrack"),
-        onSelect: () => handleCreateTrack("folder", track, track.parentTrackId ?? null),
+        onSelect: () =>
+          handleCreateTrack("folder", track, track.parentTrackId ?? null),
       },
       {
         label: t("common.rename"),
         onSelect: async () => {
-          const nextName = window.prompt(t("transport.prompt.trackRename"), track.name)?.trim();
+          const nextName = window
+            .prompt(t("transport.prompt.trackRename"), track.name)
+            ?.trim();
           if (!nextName) {
             return;
           }
           await runAction(async () => {
-            const nextSnapshot = await updateTrack({ trackId: track.id, name: nextName });
+            const nextSnapshot = await updateTrack({
+              trackId: track.id,
+              name: nextName,
+            });
             applyPlaybackSnapshot(nextSnapshot);
             setStatus(t("transport.status.trackRenamed", { name: nextName }));
           });
@@ -4127,7 +4796,9 @@ export function TransportPanelContent() {
       {
         label: t("common.delete"),
         onSelect: async () => {
-          const clipCount = currentSong.clips.filter((clip) => clip.trackId === track.id).length;
+          const clipCount = currentSong.clips.filter(
+            (clip) => clip.trackId === track.id,
+          ).length;
           if (
             track.kind === "audio" &&
             clipCount > 0 &&
@@ -4159,7 +4830,11 @@ export function TransportPanelContent() {
             });
             applyPlaybackSnapshot(nextSnapshot);
             await refreshSongView();
-            setStatus(t("transport.status.trackMovedIntoFolder", { name: previousFolder.name }));
+            setStatus(
+              t("transport.status.trackMovedIntoFolder", {
+                name: previousFolder.name,
+              }),
+            );
           });
         },
       },
@@ -4175,7 +4850,11 @@ export function TransportPanelContent() {
             });
             applyPlaybackSnapshot(nextSnapshot);
             await refreshSongView();
-            setStatus(t("transport.status.trackRemovedFromFolder", { name: track.name }));
+            setStatus(
+              t("transport.status.trackRemovedFromFolder", {
+                name: track.name,
+              }),
+            );
           });
         },
       },
@@ -4195,45 +4874,55 @@ export function TransportPanelContent() {
     ];
   }
 
-  const handleTrackHeaderSelect = useCallback((
-    trackId: string,
-    trackName: string,
-    event: ReactMouseEvent<HTMLDivElement>,
-  ) => {
-    if (suppressTrackClickRef.current) {
-      suppressTrackClickRef.current = false;
-      return;
-    }
-
-    const currentSelection = useTimelineUIStore.getState().selectedTrackIds;
-    let nextSelection = [trackId];
-
-    if (event.ctrlKey || event.metaKey) {
-      nextSelection = currentSelection.includes(trackId)
-        ? currentSelection.filter((id) => id !== trackId)
-        : [...currentSelection, trackId];
-    } else if (event.shiftKey && currentSelection.length > 0) {
-      const visibleTrackIds = visibleTracks.map((track) => track.id);
-      const lastSelectedIdx = visibleTrackIds.indexOf(currentSelection[currentSelection.length - 1]);
-      const currentIdx = visibleTrackIds.indexOf(trackId);
-
-      if (lastSelectedIdx !== -1 && currentIdx !== -1) {
-        const start = Math.min(lastSelectedIdx, currentIdx);
-        const end = Math.max(lastSelectedIdx, currentIdx);
-        const range = visibleTrackIds.slice(start, end + 1);
-        nextSelection = [...new Set([...currentSelection, ...range])];
+  const handleTrackHeaderSelect = useCallback(
+    (
+      trackId: string,
+      trackName: string,
+      event: ReactMouseEvent<HTMLDivElement>,
+    ) => {
+      if (suppressTrackClickRef.current) {
+        suppressTrackClickRef.current = false;
+        return;
       }
-    }
 
-    selectTrack(nextSelection);
-    setStatus(
-      nextSelection.length > 1
-        ? t("transport.status.tracksSelected", { count: nextSelection.length })
-        : t("transport.status.trackSelected", { name: trackName }),
-    );
-  }, [selectTrack, t, visibleTracks]);
+      const currentSelection = useTimelineUIStore.getState().selectedTrackIds;
+      let nextSelection = [trackId];
 
-  function handleTrackHeaderContextMenu(event: ReactMouseEvent<HTMLDivElement>, trackId: string) {
+      if (event.ctrlKey || event.metaKey) {
+        nextSelection = currentSelection.includes(trackId)
+          ? currentSelection.filter((id) => id !== trackId)
+          : [...currentSelection, trackId];
+      } else if (event.shiftKey && currentSelection.length > 0) {
+        const visibleTrackIds = visibleTracks.map((track) => track.id);
+        const lastSelectedIdx = visibleTrackIds.indexOf(
+          currentSelection[currentSelection.length - 1],
+        );
+        const currentIdx = visibleTrackIds.indexOf(trackId);
+
+        if (lastSelectedIdx !== -1 && currentIdx !== -1) {
+          const start = Math.min(lastSelectedIdx, currentIdx);
+          const end = Math.max(lastSelectedIdx, currentIdx);
+          const range = visibleTrackIds.slice(start, end + 1);
+          nextSelection = [...new Set([...currentSelection, ...range])];
+        }
+      }
+
+      selectTrack(nextSelection);
+      setStatus(
+        nextSelection.length > 1
+          ? t("transport.status.tracksSelected", {
+              count: nextSelection.length,
+            })
+          : t("transport.status.trackSelected", { name: trackName }),
+      );
+    },
+    [selectTrack, t, visibleTracks],
+  );
+
+  function handleTrackHeaderContextMenu(
+    event: ReactMouseEvent<HTMLDivElement>,
+    trackId: string,
+  ) {
     const track = findTrack(songRef.current, trackId);
     if (!track) {
       return;
@@ -4251,7 +4940,9 @@ export function TransportPanelContent() {
 
       event.stopPropagation();
       setContextMenu(null);
-      const headerElement = event.currentTarget.closest(".lt-track-header") as HTMLDivElement | null;
+      const headerElement = event.currentTarget.closest(
+        ".lt-track-header",
+      ) as HTMLDivElement | null;
       trackDragRef.current = {
         trackId,
         pointerId: 1,
@@ -4259,7 +4950,9 @@ export function TransportPanelContent() {
         startClientY: event.clientY,
         currentClientY: event.clientY,
         isDragging: false,
-        rowElement: event.currentTarget.closest(".lt-track-header-row") as HTMLDivElement | null,
+        rowElement: event.currentTarget.closest(
+          ".lt-track-header-row",
+        ) as HTMLDivElement | null,
         headerElement,
       };
     },
@@ -4278,99 +4971,145 @@ export function TransportPanelContent() {
     });
   }, []);
 
-  const handleTrackHeaderMuteToggle = useCallback((trackId: string) => {
-    const track = findTrack(songRef.current, trackId);
-    if (!track) {
-      return;
-    }
+  const handleTrackHeaderMuteToggle = useCallback(
+    (trackId: string) => {
+      const track = findTrack(songRef.current, trackId);
+      if (!track) {
+        return;
+      }
 
-    patchTrackOptimisticMix(trackId, {
-      muted: !resolveTrackMix(track, trackId).muted,
-    });
-    queueTrackMixLiveUpdate(trackId, ["muted"]);
-
-    void runAction(async () => {
-      await persistTrackMix(trackId, ["muted"]);
-    });
-  }, [patchTrackOptimisticMix, persistTrackMix, queueTrackMixLiveUpdate, resolveTrackMix, runAction]);
-
-  const handleTrackHeaderSoloToggle = useCallback((trackId: string) => {
-    const track = findTrack(songRef.current, trackId);
-    if (!track) {
-      return;
-    }
-
-    patchTrackOptimisticMix(trackId, {
-      solo: !resolveTrackMix(track, trackId).solo,
-    });
-    queueTrackMixLiveUpdate(trackId, ["solo"]);
-
-    void runAction(async () => {
-      await persistTrackMix(trackId, ["solo"]);
-    });
-  }, [patchTrackOptimisticMix, persistTrackMix, queueTrackMixLiveUpdate, resolveTrackMix, runAction]);
-
-  const handleTrackHeaderVolumeChange = useCallback((trackId: string, nextVolume: number) => {
-    patchTrackOptimisticMix(trackId, {
-      volume: clamp(nextVolume, 0, 1),
-    });
-    queueTrackMixLiveUpdate(trackId, ["volume"]);
-  }, [patchTrackOptimisticMix, queueTrackMixLiveUpdate]);
-
-  const handleTrackHeaderVolumeCommit = useCallback((trackId: string) => {
-    void runAction(async () => {
-      await persistTrackMix(trackId, ["volume"]);
-    });
-  }, [persistTrackMix, runAction]);
-
-  const handleTrackHeaderPanChange = useCallback((trackId: string, nextPan: number) => {
-    patchTrackOptimisticMix(trackId, {
-      pan: clamp(nextPan, -1, 1),
-    });
-    queueTrackMixLiveUpdate(trackId, ["pan"]);
-  }, [patchTrackOptimisticMix, queueTrackMixLiveUpdate]);
-
-  const handleTrackHeaderPanCommit = useCallback((trackId: string) => {
-    void runAction(async () => {
-      await persistTrackMix(trackId, ["pan"]);
-    });
-  }, [persistTrackMix, runAction]);
-
-  const handleTrackHeaderTransposeToggle = useCallback((trackId: string) => {
-    const track = findTrack(songRef.current, trackId);
-    if (!track) {
-      return;
-    }
-
-    void runAction(async () => {
-      const nextSnapshot = await updateTrackTransposeEnabled({
-        trackId,
-        transposeEnabled: !track.transposeEnabled,
+      patchTrackOptimisticMix(trackId, {
+        muted: !resolveTrackMix(track, trackId).muted,
       });
-      applyPlaybackSnapshot(nextSnapshot);
-      setStatus(t("transport.status.trackTransposeUpdated", { name: track.name }));
-    });
-  }, [applyPlaybackSnapshot, runAction, setStatus, t]);
+      queueTrackMixLiveUpdate(trackId, ["muted"]);
 
-  const handleSelectedRegionTransposeChange = useCallback((nextTransposeSemitones: number) => {
-    if (!selectedRegion) {
-      return;
-    }
+      void runAction(async () => {
+        await persistTrackMix(trackId, ["muted"]);
+      });
+    },
+    [
+      patchTrackOptimisticMix,
+      persistTrackMix,
+      queueTrackMixLiveUpdate,
+      resolveTrackMix,
+      runAction,
+    ],
+  );
 
-    const clampedTransposeSemitones = Math.max(-12, Math.min(12, Math.round(nextTransposeSemitones)));
-    if (clampedTransposeSemitones === selectedRegion.transposeSemitones) {
-      return;
-    }
+  const handleTrackHeaderSoloToggle = useCallback(
+    (trackId: string) => {
+      const track = findTrack(songRef.current, trackId);
+      if (!track) {
+        return;
+      }
 
-    void runAction(async () => {
-      const nextSnapshot = await updateSongRegionTranspose(selectedRegion.id, clampedTransposeSemitones);
-      applyPlaybackSnapshot(nextSnapshot);
-      setStatus(t("transport.status.regionTransposeUpdated", {
-        name: selectedRegion.name,
-        transpose: formatTransposeSemitones(clampedTransposeSemitones),
-      }));
-    });
-  }, [applyPlaybackSnapshot, runAction, selectedRegion, setStatus, t]);
+      patchTrackOptimisticMix(trackId, {
+        solo: !resolveTrackMix(track, trackId).solo,
+      });
+      queueTrackMixLiveUpdate(trackId, ["solo"]);
+
+      void runAction(async () => {
+        await persistTrackMix(trackId, ["solo"]);
+      });
+    },
+    [
+      patchTrackOptimisticMix,
+      persistTrackMix,
+      queueTrackMixLiveUpdate,
+      resolveTrackMix,
+      runAction,
+    ],
+  );
+
+  const handleTrackHeaderVolumeChange = useCallback(
+    (trackId: string, nextVolume: number) => {
+      patchTrackOptimisticMix(trackId, {
+        volume: clamp(nextVolume, 0, 1),
+      });
+      queueTrackMixLiveUpdate(trackId, ["volume"]);
+    },
+    [patchTrackOptimisticMix, queueTrackMixLiveUpdate],
+  );
+
+  const handleTrackHeaderVolumeCommit = useCallback(
+    (trackId: string) => {
+      void runAction(async () => {
+        await persistTrackMix(trackId, ["volume"]);
+      });
+    },
+    [persistTrackMix, runAction],
+  );
+
+  const handleTrackHeaderPanChange = useCallback(
+    (trackId: string, nextPan: number) => {
+      patchTrackOptimisticMix(trackId, {
+        pan: clamp(nextPan, -1, 1),
+      });
+      queueTrackMixLiveUpdate(trackId, ["pan"]);
+    },
+    [patchTrackOptimisticMix, queueTrackMixLiveUpdate],
+  );
+
+  const handleTrackHeaderPanCommit = useCallback(
+    (trackId: string) => {
+      void runAction(async () => {
+        await persistTrackMix(trackId, ["pan"]);
+      });
+    },
+    [persistTrackMix, runAction],
+  );
+
+  const handleTrackHeaderTransposeToggle = useCallback(
+    (trackId: string) => {
+      const track = findTrack(songRef.current, trackId);
+      if (!track) {
+        return;
+      }
+
+      void runAction(async () => {
+        const nextSnapshot = await updateTrackTransposeEnabled({
+          trackId,
+          transposeEnabled: !track.transposeEnabled,
+        });
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(
+          t("transport.status.trackTransposeUpdated", { name: track.name }),
+        );
+      });
+    },
+    [applyPlaybackSnapshot, runAction, setStatus, t],
+  );
+
+  const handleSelectedRegionTransposeChange = useCallback(
+    (nextTransposeSemitones: number) => {
+      if (!selectedRegion) {
+        return;
+      }
+
+      const clampedTransposeSemitones = Math.max(
+        -12,
+        Math.min(12, Math.round(nextTransposeSemitones)),
+      );
+      if (clampedTransposeSemitones === selectedRegion.transposeSemitones) {
+        return;
+      }
+
+      void runAction(async () => {
+        const nextSnapshot = await updateSongRegionTranspose(
+          selectedRegion.id,
+          clampedTransposeSemitones,
+        );
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(
+          t("transport.status.regionTransposeUpdated", {
+            name: selectedRegion.name,
+            transpose: formatTransposeSemitones(clampedTransposeSemitones),
+          }),
+        );
+      });
+    },
+    [applyPlaybackSnapshot, runAction, selectedRegion, setStatus, t],
+  );
 
   function clipContextMenu(clip: ClipSummary) {
     const currentCursorSeconds = displayPositionSecondsRef.current;
@@ -4386,7 +5125,11 @@ export function TransportPanelContent() {
           await runAction(async () => {
             const nextSnapshot = await splitClip(clip.id, currentCursorSeconds);
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.clipSplitAt", { time: formatClock(currentCursorSeconds) }));
+            setStatus(
+              t("transport.status.clipSplitAt", {
+                time: formatClock(currentCursorSeconds),
+              }),
+            );
           });
         },
       },
@@ -4399,7 +5142,9 @@ export function TransportPanelContent() {
               clip.timelineStartSeconds + clip.durationSeconds + 1,
             );
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.clipDuplicated", { name: clip.trackName }));
+            setStatus(
+              t("transport.status.clipDuplicated", { name: clip.trackName }),
+            );
           });
         },
       },
@@ -4410,7 +5155,9 @@ export function TransportPanelContent() {
             const nextSnapshot = await deleteClip(clip.id);
             applyPlaybackSnapshot(nextSnapshot);
             setSelectedClipId(null);
-            setStatus(t("transport.status.clipDeleted", { name: clip.trackName }));
+            setStatus(
+              t("transport.status.clipDeleted", { name: clip.trackName }),
+            );
           });
         },
       },
@@ -4458,7 +5205,9 @@ export function TransportPanelContent() {
         startClientX: event.clientX,
         hasMoved: false,
       };
-      clipPreviewSecondsRef.current = { [hitClip.id]: hitClip.timelineStartSeconds };
+      clipPreviewSecondsRef.current = {
+        [hitClip.id]: hitClip.timelineStartSeconds,
+      };
       return;
     }
 
@@ -4571,7 +5320,9 @@ export function TransportPanelContent() {
           await runAction(async () => {
             const nextSnapshot = await scheduleMarkerJump(section.id);
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.markerCursorSent", { name: section.name }));
+            setStatus(
+              t("transport.status.markerCursorSent", { name: section.name }),
+            );
           });
         },
       },
@@ -4579,12 +5330,18 @@ export function TransportPanelContent() {
         label: t("common.rename"),
         disabled: !canEditMarker,
         onSelect: async () => {
-          const nextName = window.prompt(t("transport.prompt.markerRename"), section.name)?.trim();
+          const nextName = window
+            .prompt(t("transport.prompt.markerRename"), section.name)
+            ?.trim();
           if (!nextName) {
             return;
           }
           await runAction(async () => {
-            const nextSnapshot = await updateSectionMarker(section.id, nextName, section.startSeconds);
+            const nextSnapshot = await updateSectionMarker(
+              section.id,
+              nextName,
+              section.startSeconds,
+            );
             applyPlaybackSnapshot(nextSnapshot);
             setStatus(t("transport.status.markerRenamed", { name: nextName }));
           });
@@ -4598,7 +5355,9 @@ export function TransportPanelContent() {
             const nextSnapshot = await deleteSectionMarker(section.id);
             applyPlaybackSnapshot(nextSnapshot);
             setSelectedSectionId(null);
-            setStatus(t("transport.status.markerDeleted", { name: section.name }));
+            setStatus(
+              t("transport.status.markerDeleted", { name: section.name }),
+            );
           });
         },
       },
@@ -4633,7 +5392,9 @@ export function TransportPanelContent() {
         setActiveSidebarTab(null);
         setStatus(
           nextSnapshot.songFilePath
-            ? t("transport.status.projectCreatedAt", { path: nextSnapshot.songFilePath })
+            ? t("transport.status.projectCreatedAt", {
+                path: nextSnapshot.songFilePath,
+              })
             : t("transport.status.projectCreated"),
         );
       },
@@ -4685,7 +5446,9 @@ export function TransportPanelContent() {
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath
-            ? t("transport.status.projectSavedAt", { path: nextSnapshot.songFilePath })
+            ? t("transport.status.projectSavedAt", {
+                path: nextSnapshot.songFilePath,
+              })
             : t("transport.status.projectSaved"),
         );
       },
@@ -4704,7 +5467,9 @@ export function TransportPanelContent() {
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           nextSnapshot.songFilePath
-            ? t("transport.status.projectSavedAt", { path: nextSnapshot.songFilePath })
+            ? t("transport.status.projectSavedAt", {
+                path: nextSnapshot.songFilePath,
+              })
             : t("transport.status.projectSavedNewLocation"),
         );
       },
@@ -4731,13 +5496,18 @@ export function TransportPanelContent() {
       {
         label: "Cambiar compas",
         onSelect: async () => {
-          const nextSignature = window.prompt("Compas", marker.signature)?.trim();
+          const nextSignature = window
+            .prompt("Compas", marker.signature)
+            ?.trim();
           if (!nextSignature) {
             return;
           }
 
           await runAction(async () => {
-            const nextSnapshot = await upsertSongTimeSignatureMarker(marker.startSeconds, nextSignature);
+            const nextSnapshot = await upsertSongTimeSignatureMarker(
+              marker.startSeconds,
+              nextSignature,
+            );
             applyPlaybackSnapshot(nextSnapshot);
             setTimeSignatureDraft(nextSignature);
             setStatus(`Compas actualizado a ${nextSignature}`);
@@ -4750,7 +5520,9 @@ export function TransportPanelContent() {
           await runAction(async () => {
             const nextSnapshot = await deleteSongTimeSignatureMarker(marker.id);
             applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Marca de compas eliminada en ${formatClock(marker.startSeconds)}`);
+            setStatus(
+              `Marca de compas eliminada en ${formatClock(marker.startSeconds)}`,
+            );
           });
         },
       },
@@ -4766,7 +5538,10 @@ export function TransportPanelContent() {
     setMidiLearnMode(midiLearnMode === null ? "" : null);
   }
 
-  function handleMidiLearnTarget(controlKey: string, options?: { arm?: boolean }) {
+  function handleMidiLearnTarget(
+    controlKey: string,
+    options?: { arm?: boolean },
+  ) {
     if (midiLearnMode === null && !options?.arm) {
       return false;
     }
@@ -4796,7 +5571,9 @@ export function TransportPanelContent() {
     }
 
     handleMidiLearnTarget(
-      kind === "marker" ? `action:jump_marker_${index}` : `action:jump_song_${index}`,
+      kind === "marker"
+        ? `action:jump_marker_${index}`
+        : `action:jump_song_${index}`,
       { arm: true },
     );
   }
@@ -4813,18 +5590,31 @@ export function TransportPanelContent() {
   }
 
   function handleAudioOutputDeviceChange(nextValue: string) {
-    const descriptor = audioDeviceDescriptors.find((device) => device.stableId === nextValue);
+    const descriptor = audioDeviceDescriptors.find(
+      (device) => device.stableId === nextValue,
+    );
+    const currentSampleRate = appSettingsRef.current.outputSampleRate;
+    const sampleRateSupported =
+      currentSampleRate === null ||
+      Boolean(descriptor?.supportedSampleRates.includes(currentSampleRate));
+    const nextOutputSampleRate = sampleRateSupported ? currentSampleRate : null;
     persistAudioSettings(
       normalizeAppSettings({
         ...appSettingsRef.current,
         selectedOutputDevice: descriptor?.name ?? null,
         selectedOutputDeviceId: descriptor?.stableId ?? null,
         selectedOutputDeviceName: descriptor?.name ?? null,
-        outputSampleRate: descriptor?.defaultSampleRate ?? appSettingsRef.current.outputSampleRate,
+        outputSampleRate: nextOutputSampleRate,
       }),
-      descriptor
-        ? t("transport.status.audioDeviceUpdated", { name: descriptor.name })
-        : t("transport.status.audioDeviceSystemDefault"),
+      !sampleRateSupported && currentSampleRate !== null
+        ? t("transport.status.outputSampleRateResetUnsupported", {
+            sampleRate: currentSampleRate,
+            defaultValue:
+              "The selected device does not support {{sampleRate}} Hz. Output sample rate was changed to Auto.",
+          })
+        : descriptor
+          ? t("transport.status.audioDeviceUpdated", { name: descriptor.name })
+          : t("transport.status.audioDeviceSystemDefault"),
     );
   }
 
@@ -4838,7 +5628,9 @@ export function TransportPanelContent() {
         selectedOutputDeviceId: null,
         selectedOutputDeviceName: null,
       }),
-      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
+      t("transport.status.audioRoutingUpdated", {
+        defaultValue: "Audio routing updated.",
+      }),
     );
   }
 
@@ -4848,7 +5640,9 @@ export function TransportPanelContent() {
         ...appSettingsRef.current,
         outputSampleRate: nextValue ? Number(nextValue) : null,
       }),
-      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
+      t("transport.status.audioRoutingUpdated", {
+        defaultValue: "Audio routing updated.",
+      }),
     );
   }
 
@@ -4858,7 +5652,9 @@ export function TransportPanelContent() {
         ...appSettingsRef.current,
         outputBufferSize: nextValue ? { fixed: Number(nextValue) } : "default",
       }),
-      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
+      t("transport.status.audioRoutingUpdated", {
+        defaultValue: "Audio routing updated.",
+      }),
     );
   }
 
@@ -4868,25 +5664,55 @@ export function TransportPanelContent() {
         ...appSettingsRef.current,
         audioSafeMode: enabled,
       }),
-      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
+      t("transport.status.audioRoutingUpdated", {
+        defaultValue: "Audio routing updated.",
+      }),
     );
   }
 
-  function handleEnabledOutputChannelChange(channelIndex: number, enabled: boolean) {
-    const currentChannels = new Set(appSettingsRef.current.enabledOutputChannels);
+  function handleRefreshAudioDevices() {
+    setIsSettingsLoading(true);
+    void runAction(async () => {
+      try {
+        const nextAudioDevices = await getAudioOutputDevices();
+        setAudioDeviceDescriptors(nextAudioDevices.deviceDescriptors ?? []);
+        setAudioOutputChannelCounts(nextAudioDevices.channelCounts ?? {});
+        setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
+        setStatus(
+          t("transport.status.audioDevicesRefreshed", {
+            defaultValue: "Audio device list refreshed.",
+          }),
+        );
+      } finally {
+        setIsSettingsLoading(false);
+      }
+    });
+  }
+
+  function handleEnabledOutputChannelChange(
+    channelIndex: number,
+    enabled: boolean,
+  ) {
+    const currentChannels = new Set(
+      appSettingsRef.current.enabledOutputChannels,
+    );
     if (enabled) {
       currentChannels.add(channelIndex);
     } else {
       currentChannels.delete(channelIndex);
     }
 
-    const nextChannels = Array.from(currentChannels).sort((left, right) => left - right);
+    const nextChannels = Array.from(currentChannels).sort(
+      (left, right) => left - right,
+    );
     persistAudioSettings(
       normalizeAppSettings({
         ...appSettingsRef.current,
         enabledOutputChannels: nextChannels.length ? nextChannels : [0, 1],
       }),
-      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
+      t("transport.status.audioRoutingUpdated", {
+        defaultValue: "Audio routing updated.",
+      }),
     );
   }
 
@@ -4896,7 +5722,9 @@ export function TransportPanelContent() {
         ...appSettingsRef.current,
         metronomeOutput: nextValue,
       }),
-      t("transport.status.audioRoutingUpdated", { defaultValue: "Audio routing updated." }),
+      t("transport.status.audioRoutingUpdated", {
+        defaultValue: "Audio routing updated.",
+      }),
     );
   }
 
@@ -4904,7 +5732,11 @@ export function TransportPanelContent() {
     void runAction(async () => {
       const nextSnapshot = await updateTrack({ trackId, audioTo: nextAudioTo });
       applyPlaybackSnapshot(nextSnapshot);
-      setStatus(t("transport.status.trackRoutingUpdated", { defaultValue: "Track routing updated." }));
+      setStatus(
+        t("transport.status.trackRoutingUpdated", {
+          defaultValue: "Track routing updated.",
+        }),
+      );
     });
   }
 
@@ -4918,7 +5750,9 @@ export function TransportPanelContent() {
     setAppSettings(nextSettings);
 
     void runAction(async () => {
-      const liveSettings = normalizeAppSettings(await updateAudioSettings(nextSettings));
+      const liveSettings = normalizeAppSettings(
+        await updateAudioSettings(nextSettings),
+      );
       appSettingsRef.current = liveSettings;
       setAppSettings(liveSettings);
       setStatus(
@@ -4974,19 +5808,25 @@ export function TransportPanelContent() {
 
     void runAction(async () => {
       try {
-        const liveSettings = normalizeAppSettings(await updateAudioSettings(nextSettings));
+        const liveSettings = normalizeAppSettings(
+          await updateAudioSettings(nextSettings),
+        );
         appSettingsRef.current = liveSettings;
         setAppSettings(liveSettings);
-        setStatus(t("transport.status.metronomeVolumeUpdated", {
-          volume: Math.round(liveSettings.metronomeVolume * 100),
-        }));
+        setStatus(
+          t("transport.status.metronomeVolumeUpdated", {
+            volume: Math.round(liveSettings.metronomeVolume * 100),
+          }),
+        );
       } catch (error) {
         setStatus(formatErrorStatus(error));
       }
     });
   }
 
-  function handleGlobalJumpModeChange(nextValue: AppSettings["globalJumpMode"]) {
+  function handleGlobalJumpModeChange(
+    nextValue: AppSettings["globalJumpMode"],
+  ) {
     persistAudioSettings(
       normalizeAppSettings({
         ...appSettingsRef.current,
@@ -5006,7 +5846,9 @@ export function TransportPanelContent() {
     );
   }
 
-  function handleSongJumpTriggerChange(nextValue: AppSettings["songJumpTrigger"]) {
+  function handleSongJumpTriggerChange(
+    nextValue: AppSettings["songJumpTrigger"],
+  ) {
     persistAudioSettings(
       normalizeAppSettings({
         ...appSettingsRef.current,
@@ -5026,7 +5868,9 @@ export function TransportPanelContent() {
     );
   }
 
-  function handleSongTransitionModeChange(nextValue: AppSettings["songTransitionMode"]) {
+  function handleSongTransitionModeChange(
+    nextValue: AppSettings["songTransitionMode"],
+  ) {
     persistAudioSettings(
       normalizeAppSettings({
         ...appSettingsRef.current,
@@ -5106,11 +5950,14 @@ export function TransportPanelContent() {
         ...appSettings,
         locale: nextValue || null,
       },
-      (savedSettings) => savedSettings.locale
-        ? i18n.t("transport.status.settingsLanguageUpdated", {
-            name: translateLanguageName(savedSettings.locale === "es" ? "es" : "en"),
-          })
-        : i18n.t("transport.status.settingsLanguageSystem"),
+      (savedSettings) =>
+        savedSettings.locale
+          ? i18n.t("transport.status.settingsLanguageUpdated", {
+              name: translateLanguageName(
+                savedSettings.locale === "es" ? "es" : "en",
+              ),
+            })
+          : i18n.t("transport.status.settingsLanguageSystem"),
     );
   }
 
@@ -5139,16 +5986,26 @@ export function TransportPanelContent() {
     setLibraryImportProgress(null);
   }
 
-  async function handleDeleteLibraryAssets(assetsToDelete: LibraryAssetSummary[]) {
-    const uniqueAssets = [...new Map(assetsToDelete.map((asset) => [asset.filePath, asset])).values()];
+  async function handleDeleteLibraryAssets(
+    assetsToDelete: LibraryAssetSummary[],
+  ) {
+    const uniqueAssets = [
+      ...new Map(
+        assetsToDelete.map((asset) => [asset.filePath, asset]),
+      ).values(),
+    ];
     if (!uniqueAssets.length) {
       return;
     }
 
     const confirmationMessage =
       uniqueAssets.length === 1
-        ? t("transport.confirm.deleteLibraryAsset", { name: uniqueAssets[0].fileName })
-        : t("transport.confirm.deleteLibraryAssets", { count: uniqueAssets.length });
+        ? t("transport.confirm.deleteLibraryAsset", {
+            name: uniqueAssets[0].fileName,
+          })
+        : t("transport.confirm.deleteLibraryAssets", {
+            count: uniqueAssets.length,
+          });
     if (!window.confirm(confirmationMessage)) {
       return;
     }
@@ -5156,7 +6013,9 @@ export function TransportPanelContent() {
     try {
       await runAction(async () => {
         let nextAssets = libraryAssets;
-        const deletedFilePaths = new Set(uniqueAssets.map((asset) => asset.filePath));
+        const deletedFilePaths = new Set(
+          uniqueAssets.map((asset) => asset.filePath),
+        );
 
         for (const asset of uniqueAssets) {
           setDeletingLibraryFilePath(asset.filePath);
@@ -5166,11 +6025,17 @@ export function TransportPanelContent() {
         const { folders } = await loadLibraryState();
         setLibraryAssets(nextAssets);
         setLibraryFolders(folders);
-        setLibraryClipPreview((current) => current.filter((preview) => !deletedFilePaths.has(preview.filePath)));
+        setLibraryClipPreview((current) =>
+          current.filter((preview) => !deletedFilePaths.has(preview.filePath)),
+        );
         setStatus(
           uniqueAssets.length === 1
-            ? t("transport.status.libraryAssetDeleted", { name: uniqueAssets[0].fileName })
-            : t("transport.status.libraryAssetsDeleted", { count: uniqueAssets.length }),
+            ? t("transport.status.libraryAssetDeleted", {
+                name: uniqueAssets[0].fileName,
+              })
+            : t("transport.status.libraryAssetsDeleted", {
+                count: uniqueAssets.length,
+              }),
         );
       });
     } finally {
@@ -5195,13 +6060,18 @@ export function TransportPanelContent() {
     await runAction(async () => {
       const folders = await createLibraryFolder(folderPath);
       setLibraryFolders(folders);
-      setStatus(t("transport.status.virtualFolderCreated", {
-        name: folderPath.trim() || t("transport.defaults.unnamedFolder"),
-      }));
+      setStatus(
+        t("transport.status.virtualFolderCreated", {
+          name: folderPath.trim() || t("transport.defaults.unnamedFolder"),
+        }),
+      );
     });
   }
 
-  async function handleMoveLibraryAssets(filePaths: string[], newFolderPath: string | null) {
+  async function handleMoveLibraryAssets(
+    filePaths: string[],
+    newFolderPath: string | null,
+  ) {
     const uniqueFilePaths = [...new Set(filePaths)];
     if (!uniqueFilePaths.length) {
       return;
@@ -5219,8 +6089,13 @@ export function TransportPanelContent() {
       setLibraryFolders(folders);
       setStatus(
         newFolderPath
-          ? t("transport.status.libraryAssetsMoved", { count: uniqueFilePaths.length, name: newFolderPath })
-          : t("transport.status.libraryAssetsMovedRoot", { count: uniqueFilePaths.length }),
+          ? t("transport.status.libraryAssetsMoved", {
+              count: uniqueFilePaths.length,
+              name: newFolderPath,
+            })
+          : t("transport.status.libraryAssetsMovedRoot", {
+              count: uniqueFilePaths.length,
+            }),
       );
     });
   }
@@ -5231,7 +6106,10 @@ export function TransportPanelContent() {
       return;
     }
 
-    const nextFolderPath = window.prompt(t("transport.prompt.virtualFolderRename"), folderPath);
+    const nextFolderPath = window.prompt(
+      t("transport.prompt.virtualFolderRename"),
+      folderPath,
+    );
     if (nextFolderPath === null) {
       return;
     }
@@ -5241,12 +6119,21 @@ export function TransportPanelContent() {
       const { folders } = await loadLibraryState();
       setLibraryAssets(assets);
       setLibraryFolders(folders);
-      setStatus(t("transport.status.virtualFolderRenamed", { from: folderPath, to: nextFolderPath.trim() }));
+      setStatus(
+        t("transport.status.virtualFolderRenamed", {
+          from: folderPath,
+          to: nextFolderPath.trim(),
+        }),
+      );
     });
   }
 
   async function handleDeleteLibraryFolder(folderPath: string) {
-    if (!window.confirm(t("transport.confirm.deleteLibraryFolder", { name: folderPath }))) {
+    if (
+      !window.confirm(
+        t("transport.confirm.deleteLibraryFolder", { name: folderPath }),
+      )
+    ) {
       return;
     }
 
@@ -5255,11 +6142,16 @@ export function TransportPanelContent() {
       const { folders } = await loadLibraryState();
       setLibraryAssets(assets);
       setLibraryFolders(folders);
-      setStatus(t("transport.status.virtualFolderDeleted", { name: folderPath }));
+      setStatus(
+        t("transport.status.virtualFolderDeleted", { name: folderPath }),
+      );
     });
   }
 
-  function resolveDraggedLibraryAsset(filePath: string, durationSeconds: number): LibraryAssetSummary {
+  function resolveDraggedLibraryAsset(
+    filePath: string,
+    durationSeconds: number,
+  ): LibraryAssetSummary {
     return (
       libraryAssets.find((asset) => asset.filePath === filePath) ?? {
         fileName: libraryAssetFileName(filePath),
@@ -5288,12 +6180,18 @@ export function TransportPanelContent() {
     return ctrlKey || metaKey ? "vertical" : "horizontal";
   }
 
-  function resolveLibraryPreviewTrackId(targetTrackId: string | null, layout: LibraryDropLayout, index: number) {
+  function resolveLibraryPreviewTrackId(
+    targetTrackId: string | null,
+    layout: LibraryDropLayout,
+    index: number,
+  ) {
     if (layout === "horizontal" || !targetTrackId) {
       return targetTrackId;
     }
 
-    const baseIndex = visibleTracks.findIndex((track) => track.id === targetTrackId);
+    const baseIndex = visibleTracks.findIndex(
+      (track) => track.id === targetTrackId,
+    );
     if (baseIndex < 0) {
       return index === 0 ? targetTrackId : null;
     }
@@ -5310,7 +6208,10 @@ export function TransportPanelContent() {
     let accumulatedDurationSeconds = 0;
 
     return args.payload.map((item, index) => {
-      const asset = resolveDraggedLibraryAsset(item.file_path, item.durationSeconds);
+      const asset = resolveDraggedLibraryAsset(
+        item.file_path,
+        item.durationSeconds,
+      );
       const timelineStartSeconds =
         args.layout === "horizontal"
           ? args.timelineStartSeconds + accumulatedDurationSeconds
@@ -5319,7 +6220,11 @@ export function TransportPanelContent() {
       accumulatedDurationSeconds += asset.durationSeconds;
 
       return {
-        trackId: resolveLibraryPreviewTrackId(args.targetTrackId, args.layout, index),
+        trackId: resolveLibraryPreviewTrackId(
+          args.targetTrackId,
+          args.layout,
+          index,
+        ),
         filePath: asset.filePath,
         label: asset.fileName,
         timelineStartSeconds,
@@ -5334,7 +6239,10 @@ export function TransportPanelContent() {
       return element.getBoundingClientRect();
     }
 
-    return rulerTrackRef.current?.getBoundingClientRect() ?? element.getBoundingClientRect();
+    return (
+      rulerTrackRef.current?.getBoundingClientRect() ??
+      element.getBoundingClientRect()
+    );
   }
 
   function snapTimelineDropSeconds(rawSeconds: number) {
@@ -5343,9 +6251,13 @@ export function TransportPanelContent() {
       .filter((seconds) => Number.isFinite(seconds));
 
     if (candidates.length > 0) {
-      return candidates.reduce((nearest, seconds) => (
-        Math.abs(seconds - rawSeconds) < Math.abs(nearest - rawSeconds) ? seconds : nearest
-      ), candidates[0]);
+      return candidates.reduce(
+        (nearest, seconds) =>
+          Math.abs(seconds - rawSeconds) < Math.abs(nearest - rawSeconds)
+            ? seconds
+            : nearest,
+        candidates[0],
+      );
     }
 
     const timingRegion = getSongTempoRegionAtPosition(song, rawSeconds);
@@ -5359,10 +6271,17 @@ export function TransportPanelContent() {
     );
   }
 
-  function resolveLibraryDropSecondsAtClientX(clientX: number, element: HTMLElement) {
+  function resolveLibraryDropSecondsAtClientX(
+    clientX: number,
+    element: HTMLElement,
+  ) {
     const bounds = getLibraryDragViewportBounds(element);
     const viewportX = clamp(clientX - bounds.left, 0, bounds.width);
-    const rawSeconds = screenXToSeconds(viewportX, getCameraX(), livePixelsPerSecondRef.current);
+    const rawSeconds = screenXToSeconds(
+      viewportX,
+      getCameraX(),
+      livePixelsPerSecondRef.current,
+    );
 
     return snapEnabled ? snapTimelineDropSeconds(rawSeconds) : rawSeconds;
   }
@@ -5371,14 +6290,25 @@ export function TransportPanelContent() {
     clientX: number,
     clientY: number,
   ): TimelineDropGeometry | null {
-    const targetElement = resolveTimelineDropTargetAtClientPoint(clientX, clientY);
+    const targetElement = resolveTimelineDropTargetAtClientPoint(
+      clientX,
+      clientY,
+    );
     if (!targetElement) {
       return null;
     }
 
     const viewportBounds = getLibraryDragViewportBounds(targetElement);
-    const viewportX = clamp(clientX - viewportBounds.left, 0, viewportBounds.width);
-    const rawSeconds = screenXToSeconds(viewportX, getCameraX(), livePixelsPerSecondRef.current);
+    const viewportX = clamp(
+      clientX - viewportBounds.left,
+      0,
+      viewportBounds.width,
+    );
+    const rawSeconds = screenXToSeconds(
+      viewportX,
+      getCameraX(),
+      livePixelsPerSecondRef.current,
+    );
     const snappedSeconds = snapTimelineDropSeconds(rawSeconds);
     const previewGeometry = buildTimelineDropPreviewGeometry({
       clientX,
@@ -5392,7 +6322,10 @@ export function TransportPanelContent() {
 
     return {
       targetElement,
-      targetTrackId: targetElement.closest("[data-track-id]")?.getAttribute("data-track-id") ?? null,
+      targetTrackId:
+        targetElement
+          .closest("[data-track-id]")
+          ?.getAttribute("data-track-id") ?? null,
       viewportBounds,
       viewportX: previewGeometry.viewportX,
       rawSeconds: previewGeometry.rawSeconds,
@@ -5409,17 +6342,27 @@ export function TransportPanelContent() {
   }
 
   function resolveLibraryGhostLeft(timelineStartSeconds: number) {
-    return secondsToScreenX(timelineStartSeconds, getCameraX(), livePixelsPerSecondRef.current);
+    return secondsToScreenX(
+      timelineStartSeconds,
+      getCameraX(),
+      livePixelsPerSecondRef.current,
+    );
   }
 
-  function updateLibraryClipPreview(hoverState: LibraryDragHoverState, element: HTMLElement) {
+  function updateLibraryClipPreview(
+    hoverState: LibraryDragHoverState,
+    element: HTMLElement,
+  ) {
     const layout = resolveLibraryDropLayout(
       hoverState.payload,
       hoverState.targetTrackId,
       hoverState.ctrlKey,
       hoverState.metaKey,
     );
-    const timelineStartSeconds = resolveLibraryDropSecondsAtClientX(hoverState.clientX, element);
+    const timelineStartSeconds = resolveLibraryDropSecondsAtClientX(
+      hoverState.clientX,
+      element,
+    );
 
     setLibraryClipPreview(
       buildLibraryClipPreview({
@@ -5461,7 +6404,10 @@ export function TransportPanelContent() {
     return target instanceof HTMLElement ? target : null;
   }
 
-  function resolveTimelineDropTargetAtClientPoint(clientX: number, clientY: number) {
+  function resolveTimelineDropTargetAtClientPoint(
+    clientX: number,
+    clientY: number,
+  ) {
     const target = getClientElementAtPoint(clientX, clientY);
     if (!(target instanceof HTMLElement)) {
       return null;
@@ -5476,8 +6422,14 @@ export function TransportPanelContent() {
     ) as HTMLDivElement | null;
   }
 
-  function resolveTimelineDropFromClientPoint(clientX: number, clientY: number) {
-    const geometry = resolveTimelineDropGeometryFromClientPoint(clientX, clientY);
+  function resolveTimelineDropFromClientPoint(
+    clientX: number,
+    clientY: number,
+  ) {
+    const geometry = resolveTimelineDropGeometryFromClientPoint(
+      clientX,
+      clientY,
+    );
     if (!geometry) {
       return {
         isOverTimeline: false,
@@ -5551,14 +6503,21 @@ export function TransportPanelContent() {
     return score;
   }
 
-  function resolveNativeDropCandidate(candidate: NativeClientPointCandidate): NativeDropCandidateDebug {
-    const rawElement = getClientElementAtPoint(candidate.clientX, candidate.clientY);
-    const geometry = resolveTimelineDropGeometryFromClientPoint(candidate.clientX, candidate.clientY);
+  function resolveNativeDropCandidate(
+    candidate: NativeClientPointCandidate,
+  ): NativeDropCandidateDebug {
+    const rawElement = getClientElementAtPoint(
+      candidate.clientX,
+      candidate.clientY,
+    );
+    const geometry = resolveTimelineDropGeometryFromClientPoint(
+      candidate.clientX,
+      candidate.clientY,
+    );
     const targetElement = geometry?.targetElement ?? null;
-    const laneElement =
-      targetElement?.classList.contains("lt-track-lane")
-        ? targetElement
-        : (targetElement?.closest(".lt-track-lane") as HTMLElement | null);
+    const laneElement = targetElement?.classList.contains("lt-track-lane")
+      ? targetElement
+      : (targetElement?.closest(".lt-track-lane") as HTMLElement | null);
     const laneBounds = laneElement?.getBoundingClientRect() ?? null;
     const rulerBounds = rulerTrackRef.current?.getBoundingClientRect() ?? null;
 
@@ -5617,10 +6576,14 @@ export function TransportPanelContent() {
     return debugCandidate;
   }
 
-  function resolveTimelineDropFromNativePosition(position: { x: number; y: number }) {
-    const candidates = nativeClientPointCandidates(position, nativeWebviewPositionRef.current).map(
-      resolveNativeDropCandidate,
-    );
+  function resolveTimelineDropFromNativePosition(position: {
+    x: number;
+    y: number;
+  }) {
+    const candidates = nativeClientPointCandidates(
+      position,
+      nativeWebviewPositionRef.current,
+    ).map(resolveNativeDropCandidate);
 
     if (NATIVE_DND_DEBUG_ENABLED) {
       console.debug("[native-dnd] candidates", {
@@ -5664,7 +6627,10 @@ export function TransportPanelContent() {
     };
   }
 
-  function resolveLibraryFolderDropFromClientPoint(clientX: number, clientY: number) {
+  function resolveLibraryFolderDropFromClientPoint(
+    clientX: number,
+    clientY: number,
+  ) {
     if (typeof document.elementFromPoint !== "function") {
       return null;
     }
@@ -5674,7 +6640,9 @@ export function TransportPanelContent() {
       return null;
     }
 
-    const folderSummary = target.closest('[data-library-folder-drop-target="true"]');
+    const folderSummary = target.closest(
+      '[data-library-folder-drop-target="true"]',
+    );
     if (!(folderSummary instanceof HTMLElement)) {
       return null;
     }
@@ -5690,8 +6658,13 @@ export function TransportPanelContent() {
       return 0;
     }
 
-    const intensity = (LIBRARY_DRAG_EDGE_BUFFER_PX - Math.max(0, distancePx)) / LIBRARY_DRAG_EDGE_BUFFER_PX;
-    return Math.max(1, Math.round(intensity * intensity * LIBRARY_DRAG_MAX_SCROLL_SPEED_PX));
+    const intensity =
+      (LIBRARY_DRAG_EDGE_BUFFER_PX - Math.max(0, distancePx)) /
+      LIBRARY_DRAG_EDGE_BUFFER_PX;
+    return Math.max(
+      1,
+      Math.round(intensity * intensity * LIBRARY_DRAG_MAX_SCROLL_SPEED_PX),
+    );
   }
 
   function tickLibraryDragAutoScroll() {
@@ -5700,7 +6673,10 @@ export function TransportPanelContent() {
     const verticalScrollViewport = timelineScrollViewportRef.current;
     const hoverState = libraryDragHoverRef.current;
 
-    if (!hoverState || (!autoScrollState.horizontalVelocity && !autoScrollState.verticalVelocity)) {
+    if (
+      !hoverState ||
+      (!autoScrollState.horizontalVelocity && !autoScrollState.verticalVelocity)
+    ) {
       autoScrollState.frameId = null;
       return;
     }
@@ -5715,19 +6691,29 @@ export function TransportPanelContent() {
 
     const hoverElement =
       hoverState.targetTrackId != null
-        ? (laneArea?.querySelector(`[data-track-id="${hoverState.targetTrackId}"] .lt-track-lane`) as HTMLDivElement | null)
+        ? (laneArea?.querySelector(
+            `[data-track-id="${hoverState.targetTrackId}"] .lt-track-lane`,
+          ) as HTMLDivElement | null)
         : laneArea;
     if (hoverElement) {
       updateLibraryClipPreview(hoverState, hoverElement);
     }
 
-    autoScrollState.frameId = window.requestAnimationFrame(tickLibraryDragAutoScroll);
+    autoScrollState.frameId = window.requestAnimationFrame(
+      tickLibraryDragAutoScroll,
+    );
   }
 
-  function updateLibraryDragAutoScrollAtClientPoint(clientX: number, clientY: number) {
+  function updateLibraryDragAutoScrollAtClientPoint(
+    clientX: number,
+    clientY: number,
+  ) {
     const autoScrollState = libraryDragAutoScrollRef.current;
-    const horizontalBounds = rulerTrackRef.current?.getBoundingClientRect() ?? timelineShellRef.current?.getBoundingClientRect();
-    const verticalBounds = timelineScrollViewportRef.current?.getBoundingClientRect();
+    const horizontalBounds =
+      rulerTrackRef.current?.getBoundingClientRect() ??
+      timelineShellRef.current?.getBoundingClientRect();
+    const verticalBounds =
+      timelineScrollViewportRef.current?.getBoundingClientRect();
 
     let horizontalVelocity = 0;
     if (horizontalBounds) {
@@ -5762,11 +6748,15 @@ export function TransportPanelContent() {
     }
 
     if (autoScrollState.frameId === null) {
-      autoScrollState.frameId = window.requestAnimationFrame(tickLibraryDragAutoScroll);
+      autoScrollState.frameId = window.requestAnimationFrame(
+        tickLibraryDragAutoScroll,
+      );
     }
   }
 
-  function setInternalLibraryPointerDragState(next: InternalLibraryPointerDrag | null) {
+  function setInternalLibraryPointerDragState(
+    next: InternalLibraryPointerDrag | null,
+  ) {
     internalLibraryPointerDragRef.current = next;
     setInternalLibraryPointerDrag(next);
   }
@@ -5799,7 +6789,10 @@ export function TransportPanelContent() {
     ctrlKey: boolean;
     metaKey: boolean;
   }): InternalLibraryPointerDrag {
-    const libraryFolderTarget = resolveLibraryFolderDropFromClientPoint(args.clientX, args.clientY);
+    const libraryFolderTarget = resolveLibraryFolderDropFromClientPoint(
+      args.clientX,
+      args.clientY,
+    );
     if (libraryFolderTarget) {
       clearLibraryDragPreview();
       return {
@@ -5820,7 +6813,10 @@ export function TransportPanelContent() {
       };
     }
 
-    const targetElement = resolveTimelineDropTargetAtClientPoint(args.clientX, args.clientY);
+    const targetElement = resolveTimelineDropTargetAtClientPoint(
+      args.clientX,
+      args.clientY,
+    );
     if (!targetElement) {
       clearLibraryDragPreview();
       return {
@@ -5862,7 +6858,11 @@ export function TransportPanelContent() {
       return;
     }
 
-    const hasMoved = Math.hypot(event.clientX - drag.origin.x, event.clientY - drag.origin.y) >= DRAG_THRESHOLD_PX;
+    const hasMoved =
+      Math.hypot(
+        event.clientX - drag.origin.x,
+        event.clientY - drag.origin.y,
+      ) >= DRAG_THRESHOLD_PX;
     let nextDrag: InternalLibraryPointerDrag = {
       ...drag,
       current: {
@@ -6022,7 +7022,8 @@ export function TransportPanelContent() {
         id: `optimistic-clip-${Date.now()}-${index}`,
         trackId: placement.trackId,
         trackName:
-          tracksByIdRef.current[placement.trackId]?.name ?? humanizeLibraryTrackName(placement.asset.filePath),
+          tracksByIdRef.current[placement.trackId]?.name ??
+          humanizeLibraryTrackName(placement.asset.filePath),
         filePath: placement.asset.filePath,
         waveformKey: placement.asset.filePath,
         isMissing: placement.asset.isMissing,
@@ -6042,7 +7043,10 @@ export function TransportPanelContent() {
           timelineStartSeconds: placement.timelineStartSeconds,
         })),
       );
-      completeOptimisticClipOperation(optimisticOperationId, clipSnapshot.projectRevision);
+      completeOptimisticClipOperation(
+        optimisticOperationId,
+        clipSnapshot.projectRevision,
+      );
       applyPlaybackSnapshot(clipSnapshot);
     } catch (error) {
       discardOptimisticClipOperation(optimisticOperationId);
@@ -6056,7 +7060,9 @@ export function TransportPanelContent() {
     targetTrackId: string | null;
     layout: LibraryDropLayout;
   }) {
-    const assets = args.payload.map((item) => resolveDraggedLibraryAsset(item.file_path, item.durationSeconds));
+    const assets = args.payload.map((item) =>
+      resolveDraggedLibraryAsset(item.file_path, item.durationSeconds),
+    );
     if (!assets.length) {
       return;
     }
@@ -6105,7 +7111,9 @@ export function TransportPanelContent() {
 
       for (const [index, asset] of assets.entries()) {
         const createdTrack =
-          index === 0 && args.targetTrackId ? null : await createLibraryTrackForAsset(asset);
+          index === 0 && args.targetTrackId
+            ? null
+            : await createLibraryTrackForAsset(asset);
         const targetTrackId = createdTrack?.trackId ?? args.targetTrackId;
         if (!targetTrackId) {
           if (createdTrack?.snapshot) {
@@ -6144,13 +7152,20 @@ export function TransportPanelContent() {
     );
   }
 
-  async function handleDroppedSongPackagePath(packagePath: string, dropSeconds: number) {
+  async function handleDroppedSongPackagePath(
+    packagePath: string,
+    dropSeconds: number,
+  ) {
     const result = await importSongPackage(packagePath, dropSeconds);
     applyPlaybackSnapshot(result.snapshot);
     mergeLibraryAssets(result.libraryAssets);
     await refreshLibraryState({ preserveAssets: result.libraryAssets });
     await refreshSongView();
-    setStatus(t("transport.status.packageImportedAt", { time: formatClock(dropSeconds) }));
+    setStatus(
+      t("transport.status.packageImportedAt", {
+        time: formatClock(dropSeconds),
+      }),
+    );
   }
 
   async function createRealTracksAndClipsForImportedAssets(args: {
@@ -6206,14 +7221,20 @@ export function TransportPanelContent() {
     await nextPaint();
 
     try {
-      const nativePayloads = isTauriApp ? resolveNativeAudioImportPayloads(files) : null;
+      const nativePayloads = isTauriApp
+        ? resolveNativeAudioImportPayloads(files)
+        : null;
 
       let importedAssets: LibraryAssetSummary[];
       if (nativePayloads) {
-        useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "importing");
+        useTransportStore
+          .getState()
+          .updatePendingAudioImportStatus(pendingIds, "importing");
         importedAssets = await importAudioFilesFromPaths(nativePayloads);
       } else {
-        useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "reading");
+        useTransportStore
+          .getState()
+          .updatePendingAudioImportStatus(pendingIds, "reading");
 
         const payloads = await Promise.all(
           files.map(async (file) => ({
@@ -6222,15 +7243,21 @@ export function TransportPanelContent() {
           })),
         );
 
-        useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "importing");
+        useTransportStore
+          .getState()
+          .updatePendingAudioImportStatus(pendingIds, "importing");
         importedAssets = await importAudioFilesFromBytes(payloads);
       }
 
-      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "metadata");
+      useTransportStore
+        .getState()
+        .updatePendingAudioImportStatus(pendingIds, "metadata");
       mergeLibraryAssets(importedAssets);
       await refreshLibraryState({ preserveAssets: importedAssets });
 
-      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "analyzing");
+      useTransportStore
+        .getState()
+        .updatePendingAudioImportStatus(pendingIds, "analyzing");
       await createRealTracksAndClipsForImportedAssets({
         importedAssets,
         dropSeconds,
@@ -6239,7 +7266,9 @@ export function TransportPanelContent() {
       useTransportStore.getState().removePendingAudioImports(pendingIds);
       setStatus(
         importedAssets.length === 1
-          ? t("transport.status.clipAdded", { name: importedAssets[0].fileName })
+          ? t("transport.status.clipAdded", {
+              name: importedAssets[0].fileName,
+            })
           : t("transport.status.clipsAdded", { count: importedAssets.length }),
       );
     } catch (error) {
@@ -6248,7 +7277,9 @@ export function TransportPanelContent() {
           ? error.message
           : "Could not import audio files. Please check the files and try again.";
 
-      useTransportStore.getState().markPendingAudioImportsFailed(pendingIds, message);
+      useTransportStore
+        .getState()
+        .markPendingAudioImportsFailed(pendingIds, message);
       setStatus(message);
     }
   }
@@ -6280,7 +7311,9 @@ export function TransportPanelContent() {
     await nextPaint();
 
     try {
-      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "importing");
+      useTransportStore
+        .getState()
+        .updatePendingAudioImportStatus(pendingIds, "importing");
 
       const importedAssets = await importAudioFilesFromPaths(
         args.paths.map((path) => ({
@@ -6289,11 +7322,15 @@ export function TransportPanelContent() {
         })),
       );
 
-      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "metadata");
+      useTransportStore
+        .getState()
+        .updatePendingAudioImportStatus(pendingIds, "metadata");
       mergeLibraryAssets(importedAssets);
       await refreshLibraryState({ preserveAssets: importedAssets });
 
-      useTransportStore.getState().updatePendingAudioImportStatus(pendingIds, "analyzing");
+      useTransportStore
+        .getState()
+        .updatePendingAudioImportStatus(pendingIds, "analyzing");
       await createRealTracksAndClipsForImportedAssets({
         importedAssets,
         dropSeconds: args.dropSeconds,
@@ -6302,7 +7339,9 @@ export function TransportPanelContent() {
       useTransportStore.getState().removePendingAudioImports(pendingIds);
       setStatus(
         importedAssets.length === 1
-          ? t("transport.status.clipAdded", { name: importedAssets[0].fileName })
+          ? t("transport.status.clipAdded", {
+              name: importedAssets[0].fileName,
+            })
           : t("transport.status.clipsAdded", { count: importedAssets.length }),
       );
     } catch (error) {
@@ -6311,13 +7350,18 @@ export function TransportPanelContent() {
           ? error.message
           : "Could not import audio files. Please check the files and try again.";
 
-      useTransportStore.getState().markPendingAudioImportsFailed(pendingIds, message);
+      useTransportStore
+        .getState()
+        .markPendingAudioImportsFailed(pendingIds, message);
       setStatus(message);
     }
   }
 
   function handleDroppedAudioPaths(paths: string[], dropSeconds: number) {
-    const pendingImports = createPendingAudioImportsFromPaths(paths, dropSeconds);
+    const pendingImports = createPendingAudioImportsFromPaths(
+      paths,
+      dropSeconds,
+    );
     useTransportStore.getState().addPendingAudioImports(pendingImports);
 
     setStatus(
@@ -6341,27 +7385,38 @@ export function TransportPanelContent() {
     );
   }
 
-  function handleExternalTimelineDrop(classification: DroppedFileClassification, dropSeconds: number) {
+  function handleExternalTimelineDrop(
+    classification: DroppedFileClassification,
+    dropSeconds: number,
+  ) {
     setExternalDropPreview(null);
     nativeDropKindRef.current = null;
     domExternalDropPreviewUntilRef.current = 0;
     lastNativeTimelineDropRef.current = null;
 
-    if (classification.kind === "mixed" || classification.kind === "unsupported") {
+    if (
+      classification.kind === "mixed" ||
+      classification.kind === "unsupported"
+    ) {
       rejectExternalDrop(classification.kind);
       return;
     }
 
     if (classification.kind === "package") {
-      void runAction(async () => {
-        const packagePath = (classification.packageFile as NativeDroppedFile | null)?.path?.trim();
-        if (!packagePath) {
-          rejectExternalDrop("unsupported");
-          return;
-        }
+      void runAction(
+        async () => {
+          const packagePath = (
+            classification.packageFile as NativeDroppedFile | null
+          )?.path?.trim();
+          if (!packagePath) {
+            rejectExternalDrop("unsupported");
+            return;
+          }
 
-        await handleDroppedSongPackagePath(packagePath, dropSeconds);
-      }, { busy: true });
+          await handleDroppedSongPackagePath(packagePath, dropSeconds);
+        },
+        { busy: true },
+      );
       return;
     }
 
@@ -6382,22 +7437,34 @@ export function TransportPanelContent() {
       setNativeDropDebugCandidates([]);
     }
 
-    if (classification.kind === "mixed" || classification.kind === "unsupported") {
+    if (
+      classification.kind === "mixed" ||
+      classification.kind === "unsupported"
+    ) {
       rejectExternalDrop(classification.kind);
       return;
     }
 
     if (classification.kind === "package") {
-      void runAction(async () => {
-        await handleDroppedSongPackagePath(classification.packagePath, dropSeconds);
-      }, { busy: true });
+      void runAction(
+        async () => {
+          await handleDroppedSongPackagePath(
+            classification.packagePath,
+            dropSeconds,
+          );
+        },
+        { busy: true },
+      );
       return;
     }
 
     handleDroppedAudioPaths(classification.audioPaths, dropSeconds);
   }
 
-  function handleNativeFileDragOver(args: { paths?: string[]; position: { x: number; y: number } }) {
+  function handleNativeFileDragOver(args: {
+    paths?: string[];
+    position: { x: number; y: number };
+  }) {
     if (NATIVE_DND_DEBUG_ENABLED) {
       console.debug("[native-dnd] over", args);
     }
@@ -6406,7 +7473,9 @@ export function TransportPanelContent() {
       nativeExternalDropPathsRef.current = args.paths;
     }
 
-    const paths = args.paths?.length ? args.paths : nativeExternalDropPathsRef.current;
+    const paths = args.paths?.length
+      ? args.paths
+      : nativeExternalDropPathsRef.current;
     const kind = paths.length ? classifyDroppedPaths(paths).kind : "unknown";
     nativeDropKindRef.current = kind;
 
@@ -6471,7 +7540,10 @@ export function TransportPanelContent() {
     });
   }
 
-  function handleNativeFileDrop(args: { paths: string[]; position: { x: number; y: number } }) {
+  function handleNativeFileDrop(args: {
+    paths: string[];
+    position: { x: number; y: number };
+  }) {
     if (NATIVE_DND_DEBUG_ENABLED) {
       console.debug("[native-dnd] drop", args);
     }
@@ -6494,7 +7566,11 @@ export function TransportPanelContent() {
     if (NATIVE_DND_DEBUG_ENABLED) {
       console.debug("[native-dnd] drop hit", hit);
     }
-    if (!hit.isOverTimeline && externalDropPreview === null && lastNativeTimelineDropRef.current === null) {
+    if (
+      !hit.isOverTimeline &&
+      externalDropPreview === null &&
+      lastNativeTimelineDropRef.current === null
+    ) {
       lastNativeTimelineDropRef.current = null;
       nativeDropCoordinateModeRef.current = null;
       setExternalDropPreview(null);
@@ -6509,10 +7585,15 @@ export function TransportPanelContent() {
       externalDropPreview?.seconds ??
       hit.dropSeconds;
 
-    handleNativeExternalTimelineDrop(classifyDroppedPaths(args.paths), dropSeconds);
+    handleNativeExternalTimelineDrop(
+      classifyDroppedPaths(args.paths),
+      dropSeconds,
+    );
   }
 
-  function handleDomExternalDropPreviewChange(preview: ExternalDropPreview | null) {
+  function handleDomExternalDropPreviewChange(
+    preview: ExternalDropPreview | null,
+  ) {
     domExternalDropPreviewUntilRef.current =
       preview === null ? 0 : Date.now() + DOM_EXTERNAL_DROP_PREVIEW_TTL_MS;
 
@@ -6532,26 +7613,32 @@ export function TransportPanelContent() {
 
   const audioBackendOptions = useMemo(
     () =>
-      Array.from(new Set(audioDeviceDescriptors.map((device) => device.backend))).sort((left, right) =>
-        left.localeCompare(right),
-      ),
+      Array.from(
+        new Set(audioDeviceDescriptors.map((device) => device.backend)),
+      ).sort((left, right) => left.localeCompare(right)),
     [audioDeviceDescriptors],
   );
-  const selectedAudioBackend =
-    appSettings.selectedAudioBackend ?? audioBackendOptions[0] ?? null;
+  const selectedAudioBackend = appSettings.selectedAudioBackend ?? null;
   const audioDevicesForSelectedBackend = useMemo(
     () =>
       audioDeviceDescriptors.filter(
-        (device) => selectedAudioBackend === null || device.backend === selectedAudioBackend,
+        (device) => isAudioDeviceVisibleForBackend(device, selectedAudioBackend),
       ),
     [audioDeviceDescriptors, selectedAudioBackend],
   );
   const selectedAudioOutputDevice = appSettings.selectedOutputDeviceId ?? "";
   const selectedAudioOutputDescriptor =
-    audioDeviceDescriptors.find((device) => device.stableId === appSettings.selectedOutputDeviceId) ??
     audioDeviceDescriptors.find(
-      (device) => device.backend === selectedAudioBackend && device.name === appSettings.selectedOutputDevice,
+      (device) => device.stableId === appSettings.selectedOutputDeviceId,
     ) ??
+    audioDeviceDescriptors.find(
+      (device) =>
+        device.backend === selectedAudioBackend &&
+        device.name === appSettings.selectedOutputDevice,
+    ) ??
+    null;
+  const previewAudioOutputDescriptor =
+    selectedAudioOutputDescriptor ??
     audioDevicesForSelectedBackend.find((device) => device.isDefault) ??
     audioDevicesForSelectedBackend[0] ??
     null;
@@ -6565,27 +7652,68 @@ export function TransportPanelContent() {
     1,
     Math.min(
       64,
-      (selectedAudioOutputDescriptor ? audioOutputChannelCounts[selectedAudioOutputDescriptor.stableId] : undefined) ??
+      (previewAudioOutputDescriptor
+        ? audioOutputChannelCounts[previewAudioOutputDescriptor.stableId]
+        : undefined) ??
         audioOutputChannelCounts[appSettings.selectedOutputDevice ?? ""] ??
-        (defaultAudioOutputDevice ? audioOutputChannelCounts[defaultAudioOutputDevice] : undefined) ??
+        (defaultAudioOutputDevice
+          ? audioOutputChannelCounts[defaultAudioOutputDevice]
+          : undefined) ??
         HARDWARE_OUTPUT_CHANNEL_COUNT,
     ),
   );
   const selectedAudioOutputDeviceMissing = Boolean(
     appSettings.selectedOutputDeviceId &&
-      !audioDeviceDescriptors.some((device) => device.stableId === appSettings.selectedOutputDeviceId),
+    !audioDeviceDescriptors.some(
+      (device) => device.stableId === appSettings.selectedOutputDeviceId,
+    ),
   );
-  const outputSampleRates = selectedAudioOutputDescriptor?.supportedSampleRates ?? [];
-  const outputBufferSizes = selectedAudioOutputDescriptor?.supportedBufferSizes ?? [];
+  const outputSampleRates =
+    previewAudioOutputDescriptor?.supportedSampleRates ?? [];
+  const outputSampleRateOptions = outputSampleRates.filter(
+    (sampleRate, index, values) => values.indexOf(sampleRate) === index,
+  );
+  const autoOutputSampleRateLabel = previewAudioOutputDescriptor?.defaultSampleRate
+    ? t("transport.settingsModal.sampleRateAutoWithDefault", {
+        sampleRate: previewAudioOutputDescriptor.defaultSampleRate,
+        defaultValue: "Auto - device default: {{sampleRate}} Hz",
+      })
+    : t("transport.settingsModal.sampleRateAuto", {
+        defaultValue: "Auto - device default",
+      });
+  const outputBufferSizes =
+    previewAudioOutputDescriptor?.supportedBufferSizes ?? [];
   const selectedMidiInputDeviceMissing = Boolean(
-    appSettings.selectedMidiDevice && !midiInputDevices.includes(appSettings.selectedMidiDevice),
+    appSettings.selectedMidiDevice &&
+    !midiInputDevices.includes(appSettings.selectedMidiDevice),
   );
   const settingsTabs: Array<{ id: SettingsTab; label: string }> = [
-    { id: "audio", label: t("transport.settingsModal.tabAudio", { defaultValue: "Audio" }) },
-    { id: "metronome", label: t("transport.settingsModal.tabMetronome", { defaultValue: "Metronome" }) },
-    { id: "general", label: t("transport.settingsModal.tabGeneral", { defaultValue: "General" }) },
-    { id: "midi", label: t("transport.settingsModal.tabMidi", { defaultValue: "MIDI" }) },
-    { id: "midiLearn", label: t("transport.settingsModal.tabMidiLearn", { defaultValue: "MIDI Learn" }) },
+    {
+      id: "audio",
+      label: t("transport.settingsModal.tabAudio", { defaultValue: "Audio" }),
+    },
+    {
+      id: "metronome",
+      label: t("transport.settingsModal.tabMetronome", {
+        defaultValue: "Metronome",
+      }),
+    },
+    {
+      id: "general",
+      label: t("transport.settingsModal.tabGeneral", {
+        defaultValue: "General",
+      }),
+    },
+    {
+      id: "midi",
+      label: t("transport.settingsModal.tabMidi", { defaultValue: "MIDI" }),
+    },
+    {
+      id: "midiLearn",
+      label: t("transport.settingsModal.tabMidiLearn", {
+        defaultValue: "MIDI Learn",
+      }),
+    },
   ];
 
   return (
@@ -6595,1273 +7723,1821 @@ export function TransportPanelContent() {
         ref={panelRef}
         onContextMenu={(event) => event.preventDefault()}
       >
-      {isBusy ? (
-        <div className="busy-overlay" aria-live="polite">
-          <div className="busy-overlay-card">
-            <strong>{t("transport.shell.busyTitle")}</strong>
-            <p>{t("transport.shell.busyDescription")}</p>
-          </div>
-        </div>
-      ) : null}
-
-      {missingMidiDeviceWarning ? (
-        <div className="lt-modal-backdrop">
-          <section
-            className="lt-settings-modal lt-settings-modal--compact"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="lt-missing-midi-warning-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="lt-settings-modal-header">
-              <div>
-                <span className="lt-settings-modal-eyebrow">{t("transport.midiWarning.eyebrow")}</span>
-                <h2 id="lt-missing-midi-warning-title">{t("transport.midiWarning.title")}</h2>
-                <p>{t("transport.midiWarning.description")}</p>
-                <p>{t("transport.midiWarning.detail", { name: missingMidiDeviceWarning })}</p>
-              </div>
-            </header>
-            <div className="lt-settings-modal-body">
-              <div className="lt-inline-actions">
-                <button type="button" onClick={handleDismissMissingMidiDeviceWarning}>
-                  {t("transport.midiWarning.dismiss")}
-                </button>
-                <button type="button" className="is-primary" onClick={handleHideMissingMidiDeviceWarning}>
-                  {t("transport.midiWarning.dontShowAgain")}
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      <TimelineTopbar
-        openTopMenu={openTopMenu}
-        menuBarRef={menuBarRef}
-        canPersistProject={canPersistProject}
-        isProjectEmpty={isProjectEmpty}
-        tempoDraft={tempoDraft}
-        timeSignatureDraft={timeSignatureDraft}
-        tempoSourceLabel={tempoSourceLabel}
-        displayedBpm={displayedBpm}
-        displayedTimeSignature={displayedTimeSignature}
-        song={song}
-        musicalPositionLabel={musicalPositionLabel}
-        readoutPositionSecondsLabel={formatClock(readoutPositionSeconds)}
-        playbackState={playbackState}
-        transportReadoutTempoRef={transportReadoutTempoRef}
-        transportReadoutBarRef={transportReadoutBarRef}
-        transportReadoutValueRef={transportReadoutValueRef}
-        onToggleTopMenu={handleToggleTopMenu}
-        onTopMenuAction={handleTopMenuAction}
-        onCreateSong={handleCreateSongClick}
-        onOpenProject={handleOpenProjectClick}
-        onImportSong={handleImportSongClick}
-        onSaveProject={handleSaveProjectClick}
-        onSaveProjectAs={handleSaveProjectAsClick}
-        onStopTransport={() =>
-          void runAction(async () => {
-            const nextSnapshot = await stopTransport();
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.playbackStopped"));
-          })
-        }
-        onPlayTransport={() =>
-          void runAction(async () => {
-            const nextSnapshot = await playTransport();
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.playbackStarted"));
-          })
-        }
-        onNextSong={() =>
-          void runAction(async () => {
-            await handleNextSongClick();
-          })
-        }
-        onPauseTransport={() =>
-          void runAction(async () => {
-            const nextSnapshot = await pauseTransport();
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.playbackPaused"));
-          })
-        }
-        metronomeEnabled={appSettings.metronomeEnabled}
-        onToggleMetronome={() => handleMetronomeEnabledChange(!appSettings.metronomeEnabled)}
-        onTempoDraftChange={setTempoDraft}
-        onTempoCommit={() => {
-          const nextBpm = Number(tempoDraft);
-          const currentBpm = songBaseBpm;
-          const clampedBpm = Math.max(20, Math.min(300, nextBpm));
-
-          if (!song || !Number.isFinite(clampedBpm) || clampedBpm === currentBpm) {
-            setTempoDraft(String(currentBpm));
-            return;
-          }
-
-          void runAction(async () => {
-            const nextSnapshot = await updateSongTempo(clampedBpm);
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.tempoUpdated", { bpm: clampedBpm.toFixed(1) }));
-          });
-        }}
-        onTimeSignatureDraftChange={setTimeSignatureDraft}
-        onTimeSignatureCommit={() => {
-          const nextSignature = timeSignatureDraft.trim();
-          const currentSignature = songBaseTimeSignature;
-
-          if (!song || !nextSignature || nextSignature === currentSignature) {
-            setTimeSignatureDraft(currentSignature);
-            return;
-          }
-
-          void runAction(async () => {
-            const positionSeconds = readoutPositionSeconds;
-            const nextSnapshot = positionSeconds <= 0.0001
-              ? await updateSongTimeSignature(nextSignature)
-              : await upsertSongTimeSignatureMarker(positionSeconds, nextSignature);
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(`Compas actualizado a ${nextSignature}`);
-          });
-        }}
-        midiLearnMode={midiLearnMode}
-        onMidiLearnTarget={handleMidiLearnTarget}
-      />
-
-      <div className={`lt-shell-body ${isBusy ? "is-hidden" : ""}`}>
-        <aside className="lt-side-nav" aria-label={t("transport.shell.navigation")}>
-          <button
-            type="button"
-            className={activeSidebarTab === "library" ? "is-active" : ""}
-            aria-label={t("transport.shell.library")}
-            onClick={() => handleSidebarTabToggle("library")}
-          >
-            <span className="material-symbols-outlined">library_music</span>
-            {t("transport.shell.library")}
-          </button>
-          <button
-            type="button"
-            className={isRemoteModalOpen ? "is-active" : ""}
-            aria-label={t("transport.shell.remote")}
-            onClick={handleRemoteButtonClick}
-          >
-            <span className="material-symbols-outlined">phonelink</span>
-            {t("transport.shell.remote")}
-          </button>
-          <button
-            type="button"
-            className={isSettingsModalOpen ? "is-active" : ""}
-            aria-label={t("transport.shell.settings")}
-            onClick={handleSettingsButtonClick}
-          >
-            <span className="material-symbols-outlined">settings</span>
-            {t("transport.shell.settings")}
-          </button>
-        </aside>
-
-        <div className="lt-workspace">
-      <div className="lt-workspace-body">
-      {activeSidebarTab === "library" ? (
-        <LibrarySidebarPanel
-          assets={visibleLibraryAssets}
-          folders={libraryFolders}
-          isLoading={isLibraryLoading}
-          isImporting={isImportingLibrary}
-          importProgress={libraryImportProgress}
-          deletingFilePath={deletingLibraryFilePath}
-          canImport={Boolean(playbackSongDir)}
-          dragTargetFolderPath={
-            internalLibraryPointerDrag?.hover?.kind === "library-folder"
-              ? internalLibraryPointerDrag.hover.folderPath
-              : undefined
-          }
-          onLocateAsset={handleLocateMissingFile}
-          onPointerDragStart={startInternalLibraryPointerDrag}
-          onImport={() => {
-            void handleImportLibraryAssetsClick();
-          }}
-          onCreateFolder={() => {
-            void handleCreateLibraryFolder();
-          }}
-          onMoveAssetsToFolder={(filePaths, folderPath) => {
-            void handleMoveLibraryAssets(filePaths, folderPath);
-          }}
-          onRenameFolder={(folderPath) => {
-            void handleRenameLibraryFolder(folderPath);
-          }}
-          onDeleteFolder={(folderPath) => {
-            void handleDeleteLibraryFolder(folderPath);
-          }}
-          onDeleteRequested={(assets) => {
-            void handleDeleteLibraryAssets(assets);
-          }}
-        />
-      ) : null}
-      {internalLibraryPointerDrag?.isDragging ? (
-        <div
-          aria-hidden="true"
-          style={{
-            position: "fixed",
-            left: internalLibraryPointerDrag.current.x + 18,
-            top: internalLibraryPointerDrag.current.y + 18,
-            zIndex: 9999,
-            pointerEvents: "none",
-            padding: "10px 12px",
-            borderRadius: 12,
-            background: "rgba(14, 18, 28, 0.92)",
-            border: "1px solid rgba(138, 161, 255, 0.35)",
-            boxShadow: "0 16px 40px rgba(0, 0, 0, 0.28)",
-            color: "#f5f7ff",
-            minWidth: 160,
-          }}
-        >
-          <strong style={{ display: "block", fontSize: 12, marginBottom: 4 }}>
-            {internalLibraryPointerDrag.payload.length === 1
-              ? libraryAssetFileName(internalLibraryPointerDrag.payload[0].file_path)
-              : `${internalLibraryPointerDrag.payload.length} assets`}
-          </strong>
-          <span style={{ display: "block", fontSize: 11, opacity: 0.76 }}>
-            Drop on timeline to place clip{internalLibraryPointerDrag.payload.length === 1 ? "" : "s"}
-          </span>
-        </div>
-      ) : null}
-      {shouldShowEmptyState ? (
-        <div className="lt-empty-state">
-          <div className="lt-empty-state-card">
-            <span className="lt-empty-state-eyebrow">{t("transport.shell.emptyEyebrow")}</span>
-            <h1>{t("transport.shell.emptyTitle")}</h1>
-            <p>{t("transport.shell.emptyDescription")}</p>
-            <div className="lt-empty-state-actions">
-              <button type="button" className="is-primary" onClick={handleCreateSongClick}>{t("common.create")}</button>
-              <button type="button" onClick={handleOpenProjectClick}>{t("common.open")}</button>
+        {isBusy ? (
+          <div className="busy-overlay" aria-live="polite">
+            <div className="busy-overlay-card">
+              <strong>{t("transport.shell.busyTitle")}</strong>
+              <p>{t("transport.shell.busyDescription")}</p>
             </div>
           </div>
-        </div>
-      ) : (
-      <section className="lt-main-stage">
-        <TimelineToolbar
-          snapEnabled={snapEnabled}
-          subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
-          selectedRegion={selectedRegion}
-          globalJumpMode={appSettings.globalJumpMode}
-          globalJumpBars={appSettings.globalJumpBars}
-          songJumpTrigger={appSettings.songJumpTrigger}
-          songJumpBars={appSettings.songJumpBars}
-          songTransitionMode={appSettings.songTransitionMode}
-          vampMode={appSettings.vampMode}
-          vampBars={appSettings.vampBars}
-          isVampActive={Boolean(activeVamp)}
-          pendingMarkerJumpLabel={
-            pendingMarkerJump
-              ? t("transport.shell.pendingJump", {
-                  markerName: pendingMarkerJump.targetMarkerName,
-                  trigger: translateJumpTrigger(pendingMarkerJump.trigger),
-                })
-              : null
-          }
+        ) : null}
+
+        {missingMidiDeviceWarning ? (
+          <div className="lt-modal-backdrop">
+            <section
+              className="lt-settings-modal lt-settings-modal--compact"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="lt-missing-midi-warning-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <header className="lt-settings-modal-header">
+                <div>
+                  <span className="lt-settings-modal-eyebrow">
+                    {t("transport.midiWarning.eyebrow")}
+                  </span>
+                  <h2 id="lt-missing-midi-warning-title">
+                    {t("transport.midiWarning.title")}
+                  </h2>
+                  <p>{t("transport.midiWarning.description")}</p>
+                  <p>
+                    {t("transport.midiWarning.detail", {
+                      name: missingMidiDeviceWarning,
+                    })}
+                  </p>
+                </div>
+              </header>
+              <div className="lt-settings-modal-body">
+                <div className="lt-inline-actions">
+                  <button
+                    type="button"
+                    onClick={handleDismissMissingMidiDeviceWarning}
+                  >
+                    {t("transport.midiWarning.dismiss")}
+                  </button>
+                  <button
+                    type="button"
+                    className="is-primary"
+                    onClick={handleHideMissingMidiDeviceWarning}
+                  >
+                    {t("transport.midiWarning.dontShowAgain")}
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : null}
+
+        <TimelineTopbar
+          openTopMenu={openTopMenu}
+          menuBarRef={menuBarRef}
+          canPersistProject={canPersistProject}
           isProjectEmpty={isProjectEmpty}
-          trackCount={song?.tracks.length ?? 0}
-          clipCount={song?.clips.length ?? 0}
-          markerCount={song?.sectionMarkers.length ?? 0}
-          onToggleSnap={toggleSnapEnabled}
-          onGlobalJumpModeChange={handleGlobalJumpModeChange}
-          onGlobalJumpBarsChange={handleGlobalJumpBarsChange}
-          onSongJumpTriggerChange={handleSongJumpTriggerChange}
-          onSongJumpBarsChange={handleSongJumpBarsChange}
-          onSongTransitionModeChange={handleSongTransitionModeChange}
-          onVampModeChange={handleVampModeChange}
-          onVampBarsChange={handleVampBarsChange}
-          onToggleVamp={() =>
+          tempoDraft={tempoDraft}
+          timeSignatureDraft={timeSignatureDraft}
+          tempoSourceLabel={tempoSourceLabel}
+          displayedBpm={displayedBpm}
+          displayedTimeSignature={displayedTimeSignature}
+          song={song}
+          musicalPositionLabel={musicalPositionLabel}
+          readoutPositionSecondsLabel={formatClock(readoutPositionSeconds)}
+          playbackState={playbackState}
+          transportReadoutTempoRef={transportReadoutTempoRef}
+          transportReadoutBarRef={transportReadoutBarRef}
+          transportReadoutValueRef={transportReadoutValueRef}
+          onToggleTopMenu={handleToggleTopMenu}
+          onTopMenuAction={handleTopMenuAction}
+          onCreateSong={handleCreateSongClick}
+          onOpenProject={handleOpenProjectClick}
+          onImportSong={handleImportSongClick}
+          onSaveProject={handleSaveProjectClick}
+          onSaveProjectAs={handleSaveProjectAsClick}
+          onStopTransport={() =>
             void runAction(async () => {
-              await toggleTimelineVamp();
-            })
-          }
-          onCancelPendingJump={() =>
-            void runAction(async () => {
-              const nextSnapshot = await cancelMarkerJump();
+              const nextSnapshot = await stopTransport();
               applyPlaybackSnapshot(nextSnapshot);
-              setStatus(t("transport.status.jumpCancelled"));
+              setStatus(t("transport.status.playbackStopped"));
             })
           }
-          onSelectedRegionTransposeChange={handleSelectedRegionTransposeChange}
+          onPlayTransport={() =>
+            void runAction(async () => {
+              const nextSnapshot = await playTransport();
+              applyPlaybackSnapshot(nextSnapshot);
+              setStatus(t("transport.status.playbackStarted"));
+            })
+          }
+          onNextSong={() =>
+            void runAction(async () => {
+              await handleNextSongClick();
+            })
+          }
+          onPauseTransport={() =>
+            void runAction(async () => {
+              const nextSnapshot = await pauseTransport();
+              applyPlaybackSnapshot(nextSnapshot);
+              setStatus(t("transport.status.playbackPaused"));
+            })
+          }
+          metronomeEnabled={appSettings.metronomeEnabled}
+          onToggleMetronome={() =>
+            handleMetronomeEnabledChange(!appSettings.metronomeEnabled)
+          }
+          onTempoDraftChange={setTempoDraft}
+          onTempoCommit={() => {
+            const nextBpm = Number(tempoDraft);
+            const currentBpm = songBaseBpm;
+            const clampedBpm = Math.max(20, Math.min(300, nextBpm));
+
+            if (
+              !song ||
+              !Number.isFinite(clampedBpm) ||
+              clampedBpm === currentBpm
+            ) {
+              setTempoDraft(String(currentBpm));
+              return;
+            }
+
+            void runAction(async () => {
+              const nextSnapshot = await updateSongTempo(clampedBpm);
+              applyPlaybackSnapshot(nextSnapshot);
+              setStatus(
+                t("transport.status.tempoUpdated", {
+                  bpm: clampedBpm.toFixed(1),
+                }),
+              );
+            });
+          }}
+          onTimeSignatureDraftChange={setTimeSignatureDraft}
+          onTimeSignatureCommit={() => {
+            const nextSignature = timeSignatureDraft.trim();
+            const currentSignature = songBaseTimeSignature;
+
+            if (!song || !nextSignature || nextSignature === currentSignature) {
+              setTimeSignatureDraft(currentSignature);
+              return;
+            }
+
+            void runAction(async () => {
+              const positionSeconds = readoutPositionSeconds;
+              const nextSnapshot =
+                positionSeconds <= 0.0001
+                  ? await updateSongTimeSignature(nextSignature)
+                  : await upsertSongTimeSignatureMarker(
+                      positionSeconds,
+                      nextSignature,
+                    );
+              applyPlaybackSnapshot(nextSnapshot);
+              setStatus(`Compas actualizado a ${nextSignature}`);
+            });
+          }}
           midiLearnMode={midiLearnMode}
           onMidiLearnTarget={handleMidiLearnTarget}
         />
 
-        <div className="lt-timeline-shell" ref={timelineShellRef} style={{ position: "relative" }}>
-          {NATIVE_DND_DEBUG_ENABLED && nativeDropDebugCandidates.length > 0 ? (
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                inset: 0,
-                pointerEvents: "none",
-                zIndex: 30,
-                overflow: "hidden",
-              }}
+        <div className={`lt-shell-body ${isBusy ? "is-hidden" : ""}`}>
+          <aside
+            className="lt-side-nav"
+            aria-label={t("transport.shell.navigation")}
+          >
+            <button
+              type="button"
+              className={activeSidebarTab === "library" ? "is-active" : ""}
+              aria-label={t("transport.shell.library")}
+              onClick={() => handleSidebarTabToggle("library")}
             >
-              {nativeDropDebugCandidates.map((candidate) => {
-                const shellBounds = timelineShellRef.current?.getBoundingClientRect();
-                if (!shellBounds) {
-                  return null;
-                }
+              <span className="material-symbols-outlined">library_music</span>
+              {t("transport.shell.library")}
+            </button>
+            <button
+              type="button"
+              className={isRemoteModalOpen ? "is-active" : ""}
+              aria-label={t("transport.shell.remote")}
+              onClick={handleRemoteButtonClick}
+            >
+              <span className="material-symbols-outlined">phonelink</span>
+              {t("transport.shell.remote")}
+            </button>
+            <button
+              type="button"
+              className={isSettingsModalOpen ? "is-active" : ""}
+              aria-label={t("transport.shell.settings")}
+              onClick={handleSettingsButtonClick}
+            >
+              <span className="material-symbols-outlined">settings</span>
+              {t("transport.shell.settings")}
+            </button>
+          </aside>
 
-                const left = candidate.clientX - shellBounds.left;
-                const color =
-                  nativeDropCoordinateModeRef.current === candidate.label
-                    ? "#ff5d5d"
-                    : candidate.isOverTimeline
-                      ? "#19c37d"
-                      : "#8a8f98";
-
-                return (
-                  <div
-                    key={candidate.label}
-                    style={{
-                      position: "absolute",
-                      left,
-                      top: 0,
-                      bottom: 0,
-                      width: 0,
-                      borderLeft: `1px dashed ${color}`,
-                    }}
+          <div className="lt-workspace">
+            <div className="lt-workspace-body">
+              {activeSidebarTab === "library" ? (
+                <LibrarySidebarPanel
+                  assets={visibleLibraryAssets}
+                  folders={libraryFolders}
+                  isLoading={isLibraryLoading}
+                  isImporting={isImportingLibrary}
+                  importProgress={libraryImportProgress}
+                  deletingFilePath={deletingLibraryFilePath}
+                  canImport={Boolean(playbackSongDir)}
+                  dragTargetFolderPath={
+                    internalLibraryPointerDrag?.hover?.kind === "library-folder"
+                      ? internalLibraryPointerDrag.hover.folderPath
+                      : undefined
+                  }
+                  onLocateAsset={handleLocateMissingFile}
+                  onPointerDragStart={startInternalLibraryPointerDrag}
+                  onImport={() => {
+                    void handleImportLibraryAssetsClick();
+                  }}
+                  onCreateFolder={() => {
+                    void handleCreateLibraryFolder();
+                  }}
+                  onMoveAssetsToFolder={(filePaths, folderPath) => {
+                    void handleMoveLibraryAssets(filePaths, folderPath);
+                  }}
+                  onRenameFolder={(folderPath) => {
+                    void handleRenameLibraryFolder(folderPath);
+                  }}
+                  onDeleteFolder={(folderPath) => {
+                    void handleDeleteLibraryFolder(folderPath);
+                  }}
+                  onDeleteRequested={(assets) => {
+                    void handleDeleteLibraryAssets(assets);
+                  }}
+                />
+              ) : null}
+              {internalLibraryPointerDrag?.isDragging ? (
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: "fixed",
+                    left: internalLibraryPointerDrag.current.x + 18,
+                    top: internalLibraryPointerDrag.current.y + 18,
+                    zIndex: 9999,
+                    pointerEvents: "none",
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background: "rgba(14, 18, 28, 0.92)",
+                    border: "1px solid rgba(138, 161, 255, 0.35)",
+                    boxShadow: "0 16px 40px rgba(0, 0, 0, 0.28)",
+                    color: "#f5f7ff",
+                    minWidth: 160,
+                  }}
+                >
+                  <strong
+                    style={{ display: "block", fontSize: 12, marginBottom: 4 }}
                   >
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 6,
-                        left: 4,
-                        padding: "2px 6px",
-                        borderRadius: 999,
-                        background: "rgba(12, 18, 28, 0.85)",
-                        color,
-                        fontSize: 11,
-                        lineHeight: 1.2,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {`${candidate.label} score=${candidate.score.toFixed(0)} raw\u0394=${
-                        candidate.rawDeltaPx?.toFixed(1) ?? "n/a"
-                      } snap\u0394=${candidate.snapDeltaPx?.toFixed(1) ?? "n/a"} raw=${
-                        candidate.rawSeconds?.toFixed(2) ?? "n/a"
-                      } snap=${candidate.snappedSeconds?.toFixed(2) ?? "n/a"} drop=${
-                        candidate.dropSeconds?.toFixed(2) ?? "n/a"
-                      } snap=${candidate.snapApplied ? "on" : "off"}`}
+                    {internalLibraryPointerDrag.payload.length === 1
+                      ? libraryAssetFileName(
+                          internalLibraryPointerDrag.payload[0].file_path,
+                        )
+                      : `${internalLibraryPointerDrag.payload.length} assets`}
+                  </strong>
+                  <span
+                    style={{ display: "block", fontSize: 11, opacity: 0.76 }}
+                  >
+                    Drop on timeline to place clip
+                    {internalLibraryPointerDrag.payload.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+              ) : null}
+              {shouldShowEmptyState ? (
+                <div className="lt-empty-state">
+                  <div className="lt-empty-state-card">
+                    <span className="lt-empty-state-eyebrow">
+                      {t("transport.shell.emptyEyebrow")}
+                    </span>
+                    <h1>{t("transport.shell.emptyTitle")}</h1>
+                    <p>{t("transport.shell.emptyDescription")}</p>
+                    <div className="lt-empty-state-actions">
+                      <button
+                        type="button"
+                        className="is-primary"
+                        onClick={handleCreateSongClick}
+                      >
+                        {t("common.create")}
+                      </button>
+                      <button type="button" onClick={handleOpenProjectClick}>
+                        {t("common.open")}
+                      </button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          ) : null}
-          <div className="lt-timeline-scroll-viewport" ref={timelineScrollViewportRef}>
-            <div className="lt-timeline-main-grid">
-              <TrackHeadersPane
-                song={song}
-                visibleTracks={visibleTracks}
-                selectedTrackIds={selectedTrackIds}
-                trackHeight={trackHeight}
-                collapsedFolders={collapsedFolders}
-                previewTrackDensityClass={previewTrackDensityClass}
-                libraryPreviewRows={libraryPreviewRows}
-                shouldShowEmptyArrangementHint={shouldShowEmptyArrangementHint}
-                onHeadersWheel={handleTrackHeadersWheel}
-                getTrackChildCount={(trackId) => (song ? trackChildrenCount(song, trackId) : 0)}
-                onSelectTrack={handleTrackHeaderSelect}
-                onOpenContextMenu={handleTrackHeaderContextMenu}
-                onStartTrackDrag={handleTrackHeaderDragStart}
-                onToggleFolder={handleTrackHeaderFolderToggle}
-                onToggleMute={handleTrackHeaderMuteToggle}
-                onToggleSolo={handleTrackHeaderSoloToggle}
-                onToggleTranspose={handleTrackHeaderTransposeToggle}
-                onVolumeChange={handleTrackHeaderVolumeChange}
-                onCommitVolume={handleTrackHeaderVolumeCommit}
-                onPanChange={handleTrackHeaderPanChange}
-                onCommitPan={handleTrackHeaderPanCommit}
-                audioRoutingOptions={audioRoutingOptions}
-                onAudioToChange={handleTrackAudioToChange}
-              />
-
-              <TimelineCanvasPane
-                laneViewportWidth={laneViewportWidth}
-                trackHeight={trackHeight}
-                song={song}
-                visibleTracks={visibleTracks}
-                renderedClipsByTrack={renderedClipsByTrack}
-                clipsByTrack={clipsByTrack}
-                waveformCache={waveformCache}
-                cameraXRef={cameraXRef}
-                pixelsPerSecond={pixelsPerSecond}
-                livePixelsPerSecondRef={livePixelsPerSecondRef}
-                timelineGrid={timelineGrid}
-                selectedTimelineRange={selectedTimelineRange}
-                selectedClipId={selectedClipId}
-                selectedRegionId={selectedRegionId}
-                onSelectRegion={(regionId) => {
-                  setSelectedRegionId(regionId);
-                  setSelectedTimelineRange(null);
-                }}
-                selectedSectionId={selectedSectionId}
-                pendingMarkerJump={pendingMarkerJump}
-                activeVamp={activeVamp}
-                midiLearnMode={midiLearnMode}
-                onMidiLearnTarget={handleMidiLearnTarget}
-                displayPositionSecondsRef={displayPositionSecondsRef}
-                playheadDragRef={playheadDragRef}
-                clipPreviewSecondsRef={clipPreviewSecondsRef}
-                playheadDurationSeconds={workspaceDurationSeconds}
-                rulerTrackRef={rulerTrackRef}
-                horizontalScrollbarRef={horizontalScrollbarRef}
-                laneAreaRef={laneAreaRef}
-                scrollViewportRef={timelineScrollViewportRef}
-                libraryClipPreview={libraryClipPreview}
-                libraryPreviewRows={libraryPreviewRows}
-                externalDropPreview={externalDropPreview}
-                shouldShowEmptyArrangementHint={shouldShowEmptyArrangementHint}
-                normalizePositionSeconds={(positionSeconds) =>
-                  normalizeTimelineSeekSeconds(positionSeconds, workspaceDurationSeconds)}
-                resolveLibraryGhostLeft={resolveLibraryGhostLeft}
-                onSeekIntent={prewarmTimelinePosition}
-                onRulerMouseDown={(event) => {
-                  if (!song || event.button !== 0 || !rulerTrackRef.current) {
-                    return;
-                  }
-
-                  event.preventDefault();
-                  const seekStartSeconds = snappedRulerSeconds(event, workspaceDurationSeconds);
-                  prewarmTimelinePosition(seekStartSeconds);
-                  const startSeconds = snappedRulerSeconds(event, workspaceDurationSeconds);
-                  clearSelection();
-                  setSelectedRegionId(null);
-                  setContextMenu(null);
-                  setSelectedTimelineRange({
-                    startSeconds,
-                    endSeconds: startSeconds,
-                  });
-
-                  const startClientX = event.clientX;
-                  let hasMoved = false;
-                  let autoScrollFrameId: number | null = null;
-                  let autoScrollVelocity = 0;
-                  let latestClientX = startClientX;
-
-                  const stopRangeAutoScroll = () => {
-                    autoScrollVelocity = 0;
-                    if (autoScrollFrameId !== null) {
-                      window.cancelAnimationFrame(autoScrollFrameId);
-                      autoScrollFrameId = null;
+                </div>
+              ) : (
+                <section className="lt-main-stage">
+                  <TimelineToolbar
+                    snapEnabled={snapEnabled}
+                    subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
+                    selectedRegion={selectedRegion}
+                    globalJumpMode={appSettings.globalJumpMode}
+                    globalJumpBars={appSettings.globalJumpBars}
+                    songJumpTrigger={appSettings.songJumpTrigger}
+                    songJumpBars={appSettings.songJumpBars}
+                    songTransitionMode={appSettings.songTransitionMode}
+                    vampMode={appSettings.vampMode}
+                    vampBars={appSettings.vampBars}
+                    isVampActive={Boolean(activeVamp)}
+                    pendingMarkerJumpLabel={
+                      pendingMarkerJump
+                        ? t("transport.shell.pendingJump", {
+                            markerName: pendingMarkerJump.targetMarkerName,
+                            trigger: translateJumpTrigger(
+                              pendingMarkerJump.trigger,
+                            ),
+                          })
+                        : null
                     }
-                  };
-
-                  const updateRangeSelection = (clientX: number) => {
-                    const currentSeconds = snappedRulerSecondsAtClientX(clientX, workspaceDurationSeconds);
-                    setSelectedTimelineRange({
-                      startSeconds: Math.min(startSeconds, currentSeconds),
-                      endSeconds: Math.max(startSeconds, currentSeconds),
-                    });
-                  };
-
-                  const tickRangeAutoScroll = () => {
-                    if (!autoScrollVelocity) {
-                      autoScrollFrameId = null;
-                      return;
-                    }
-
-                    updateCameraX(cameraXRef.current + autoScrollVelocity, {
-                      commitToStore: false,
-                    });
-                    updateRangeSelection(latestClientX);
-                    autoScrollFrameId = window.requestAnimationFrame(tickRangeAutoScroll);
-                  };
-
-                  const updateRangeAutoScroll = (clientX: number) => {
-                    const bounds = rulerTrackRef.current?.getBoundingClientRect();
-                    if (!bounds) {
-                      stopRangeAutoScroll();
-                      return;
-                    }
-
-                    const distanceToLeft = clientX - bounds.left;
-                    const distanceToRight = bounds.right - clientX;
-                    if (distanceToLeft < LIBRARY_DRAG_EDGE_BUFFER_PX) {
-                      autoScrollVelocity = -resolveLibraryAutoScrollVelocity(distanceToLeft);
-                    } else if (distanceToRight < LIBRARY_DRAG_EDGE_BUFFER_PX) {
-                      autoScrollVelocity = resolveLibraryAutoScrollVelocity(distanceToRight);
-                    } else {
-                      autoScrollVelocity = 0;
-                    }
-
-                    if (!autoScrollVelocity) {
-                      stopRangeAutoScroll();
-                      return;
-                    }
-
-                    if (autoScrollFrameId === null) {
-                      autoScrollFrameId = window.requestAnimationFrame(tickRangeAutoScroll);
-                    }
-                  };
-
-                  const onMouseMove = (windowEvent: MouseEvent) => {
-                    const exceededThreshold = Math.abs(windowEvent.clientX - startClientX) > DRAG_THRESHOLD_PX;
-                    if (!hasMoved && !exceededThreshold) {
-                      return;
-                    }
-
-                    hasMoved = true;
-                    latestClientX = windowEvent.clientX;
-                    prewarmTimelinePosition(snappedRulerSecondsAtClientX(windowEvent.clientX, workspaceDurationSeconds));
-                    updateRangeSelection(windowEvent.clientX);
-                    updateRangeAutoScroll(windowEvent.clientX);
-                  };
-
-                  const onMouseUp = (windowEvent: MouseEvent) => {
-                    if (windowEvent.button !== 0) {
-                      return;
-                    }
-
-                    window.removeEventListener("mousemove", onMouseMove);
-                    window.removeEventListener("mouseup", onMouseUp);
-                    stopRangeAutoScroll();
-
-                    if (!hasMoved) {
-                      setSelectedTimelineRange(null);
+                    isProjectEmpty={isProjectEmpty}
+                    trackCount={song?.tracks.length ?? 0}
+                    clipCount={song?.clips.length ?? 0}
+                    markerCount={song?.sectionMarkers.length ?? 0}
+                    onToggleSnap={toggleSnapEnabled}
+                    onGlobalJumpModeChange={handleGlobalJumpModeChange}
+                    onGlobalJumpBarsChange={handleGlobalJumpBarsChange}
+                    onSongJumpTriggerChange={handleSongJumpTriggerChange}
+                    onSongJumpBarsChange={handleSongJumpBarsChange}
+                    onSongTransitionModeChange={handleSongTransitionModeChange}
+                    onVampModeChange={handleVampModeChange}
+                    onVampBarsChange={handleVampBarsChange}
+                    onToggleVamp={() =>
                       void runAction(async () => {
-                        await performSeek(seekStartSeconds);
-                      });
-                      return;
+                        await toggleTimelineVamp();
+                      })
                     }
+                    onCancelPendingJump={() =>
+                      void runAction(async () => {
+                        const nextSnapshot = await cancelMarkerJump();
+                        applyPlaybackSnapshot(nextSnapshot);
+                        setStatus(t("transport.status.jumpCancelled"));
+                      })
+                    }
+                    onSelectedRegionTransposeChange={
+                      handleSelectedRegionTransposeChange
+                    }
+                    midiLearnMode={midiLearnMode}
+                    onMidiLearnTarget={handleMidiLearnTarget}
+                  />
 
-                    const endSeconds = snappedRulerSeconds(windowEvent, workspaceDurationSeconds);
-                    const normalizedStartSeconds = Math.min(startSeconds, endSeconds);
-                    const normalizedEndSeconds = Math.max(startSeconds, endSeconds);
-                    setSelectedTimelineRange({
-                      startSeconds: normalizedStartSeconds,
-                      endSeconds: normalizedEndSeconds,
-                    });
-                    setStatus(
-                      t("transport.status.rangeSelected", {
-                        start: formatClock(normalizedStartSeconds),
-                        end: formatClock(normalizedEndSeconds),
-                      }),
-                    );
-                  };
-
-                  window.addEventListener("mousemove", onMouseMove);
-                  window.addEventListener("mouseup", onMouseUp);
-                }}
-                onRulerContextMenu={(event) => {
-                  if (!song || !rulerTrackRef.current) {
-                    return;
-                  }
-
-                  const positionSeconds = snappedRulerSeconds(event, workspaceDurationSeconds);
-                  clearSelection();
-                  setSelectedRegionId(null);
-                  const activeTimelineRange =
-                    selectedTimelineRange &&
-                    positionSeconds >= selectedTimelineRange.startSeconds &&
-                    positionSeconds <= selectedTimelineRange.endSeconds
-                      ? selectedTimelineRange
-                      : null;
-                  if (!activeTimelineRange) {
-                    setSelectedTimelineRange(null);
-                  }
-                  openMenu(
-                    event,
-                    activeTimelineRange
-                      ? t("transport.shell.contextSelectionTitle", {
-                          start: formatClock(activeTimelineRange.startSeconds),
-                          end: formatClock(activeTimelineRange.endSeconds),
-                        })
-                      : t("transport.shell.contextTimelineTitle", { time: formatClock(positionSeconds) }),
-                    rulerContextMenu(positionSeconds, activeTimelineRange),
-                  );
-                }}
-                onMarkerPrimaryAction={(sectionId) => {
-                  const section = song?.sectionMarkers.find((candidate) => candidate.id === sectionId);
-                  if (!section) {
-                    return;
-                  }
-
-                  void runAction(async () => {
-                    await handleMarkerPrimaryAction(section);
-                  });
-                }}
-                onMarkerContextMenu={(event, sectionId) => {
-                  const section = song?.sectionMarkers.find((candidate) => candidate.id === sectionId);
-                  if (!section) {
-                    return;
-                  }
-
-                  setSelectedRegionId(null);
-                  selectSection(section.id);
-                  openMenu(event, section.name, sectionContextMenu(section));
-                }}
-                onTempoMarkerContextMenu={(event, markerId) => {
-                  const marker = song?.tempoMarkers.find((candidate) => candidate.id === markerId);
-                  if (!marker) {
-                    return;
-                  }
-
-                  clearSelection();
-                  setSelectedTimelineRange(null);
-                  setSelectedRegionId(null);
-                  openMenu(event, `${t("timelineTopbar.tempoReadout")} ${marker.bpm.toFixed(2)} BPM`, tempoMarkerContextMenu(marker));
-                }}
-                onTimeSignatureMarkerContextMenu={(event, markerId) => {
-                  const marker = song?.timeSignatureMarkers.find((candidate) => candidate.id === markerId);
-                  if (!marker) {
-                    return;
-                  }
-
-                  clearSelection();
-                  setSelectedTimelineRange(null);
-                  setSelectedRegionId(null);
-                  openMenu(event, `Compas ${marker.signature}`, timeSignatureMarkerContextMenu(marker));
-                }}
-                onRegionContextMenu={(event, regionId) => {
-                  const region = song?.regions.find((candidate) => candidate.id === regionId);
-                  if (!region) {
-                    return;
-                  }
-
-                  clearSelection();
-                  setSelectedTimelineRange(null);
-                  setSelectedRegionId(region.id);
-                  openMenu(event, region.name, songRegionContextMenu(region));
-                }}
-                canNativeZoom={Boolean(song)}
-                onNativeCameraXPreview={(nextCameraX) =>
-                  updateCameraX(nextCameraX, {
-                    commitToStore: false,
-                    debounceStoreCommit: false,
-                  })}
-                onNativeCameraXCommit={commitCameraXToStore}
-                onNativeZoomPreview={(nextZoomLevel, anchorViewportX) =>
-                  previewZoom(nextZoomLevel, anchorViewportX, {
-                    scheduleCommit: false,
-                  })}
-                onNativeZoomCommit={commitZoomViewToStore}
-                onNativeTrackHeightChange={applyTrackHeight}
-                onPreviewPositionChange={syncLivePosition}
-                onPlayheadSeekCommit={(positionSeconds) => {
-                  setContextMenu(null);
-                  void runAction(async () => {
-                    await performSeek(positionSeconds);
-                  });
-                }}
-                onTrackListContextMenu={handleTrackListContextMenu}
-                onTrackLaneMouseDown={handleTrackLaneMouseDown}
-                onTrackLaneContextMenu={handleTrackLaneContextMenu}
-                onResolveTimelineDropFromClientPoint={resolveTimelineDropFromClientPoint}
-                nativeDropKindRef={nativeDropKindRef}
-                onExternalDropPreviewChange={handleDomExternalDropPreviewChange}
-                onExternalDrop={handleExternalTimelineDrop}
-              />
-            </div>
-          </div>
-          <div className="lt-timeline-bottom-grid" aria-hidden={!song}>
-            <div className="lt-horizontal-scrollbar-spacer" />
-            <div className="lt-horizontal-scrollbar">
-              <div
-                ref={horizontalScrollbarRef}
-                className="lt-horizontal-scrollbar-rail"
-                aria-label={t("transport.shell.horizontalScroll")}
-                onScroll={(event) => {
-                  const scrollLeft = event.currentTarget.scrollLeft;
-                  updateCameraX(scrollLeft, {
-                    commitToStore: false,
-                  });
-                }}
-              >
-                <div
-                  className="lt-horizontal-scrollbar-content"
-                  style={{ width: laneViewportWidth + maxTimelineCameraX }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-  </section>
-  )}
-  </div>
-
-        {isSettingsModalOpen ? (
-          <div className="lt-modal-backdrop">
-            <section
-              className="lt-settings-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="lt-settings-modal-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="lt-settings-modal-header">
-                <div>
-                  <span className="lt-settings-modal-eyebrow">{t("transport.settingsModal.eyebrow")}</span>
-                  <h2 id="lt-settings-modal-title">{t("transport.settingsModal.title")}</h2>
-                  <p>{t("transport.settingsModal.description")}</p>
-                </div>
-                <button type="button" className="lt-settings-modal-close" onClick={() => setIsSettingsModalOpen(false)}>
-                  <span className="material-symbols-outlined">close</span>
-                  {t("transport.settingsModal.close")}
-                </button>
-              </header>
-
-              <div className="lt-settings-modal-body">
-                <div className="lt-settings-tabs">
                   <div
-                    className="lt-settings-tablist"
-                    role="tablist"
-                    aria-label={t("transport.settingsModal.tabListLabel", { defaultValue: "Settings sections" })}
+                    className="lt-timeline-shell"
+                    ref={timelineShellRef}
+                    style={{ position: "relative" }}
                   >
-                    {settingsTabs.map((tab) => {
-                      const isActive = activeSettingsTab === tab.id;
-
-                      return (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          role="tab"
-                          id={`lt-settings-tab-${tab.id}`}
-                          className={`lt-settings-tab-button ${isActive ? "is-active" : ""}`}
-                          aria-selected={isActive}
-                          aria-controls={`lt-settings-panel-${tab.id}`}
-                          onClick={() => setActiveSettingsTab(tab.id)}
-                        >
-                          {tab.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="lt-settings-tab-panels">
-                    {activeSettingsTab === "audio" ? (
-                      <section
-                        className="lt-settings-tab-panel"
-                        role="tabpanel"
-                        id="lt-settings-panel-audio"
-                        aria-labelledby="lt-settings-tab-audio"
+                    {NATIVE_DND_DEBUG_ENABLED &&
+                    nativeDropDebugCandidates.length > 0 ? (
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          pointerEvents: "none",
+                          zIndex: 30,
+                          overflow: "hidden",
+                        }}
                       >
-                        <div className="lt-settings-section-grid">
-                          <label className="lt-settings-field">
-                            <span className="lt-settings-field-label">
-                              {t("transport.settingsModal.audioBackend", { defaultValue: "Audio System" })}
-                            </span>
-                            <select
-                              value={appSettings.selectedAudioBackend ?? ""}
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onChange={(event) => handleAudioBackendChange(event.target.value)}
-                            >
-                              <option value="">
-                                {t("transport.settingsModal.audioBackendSystemDefault", { defaultValue: "System default" })}
-                              </option>
-                              {audioBackendOptions.map((backend) => (
-                                <option key={backend} value={backend}>
-                                  {backend.replaceAll("_", " ").toUpperCase()}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                        {nativeDropDebugCandidates.map((candidate) => {
+                          const shellBounds =
+                            timelineShellRef.current?.getBoundingClientRect();
+                          if (!shellBounds) {
+                            return null;
+                          }
 
-                          <label className="lt-settings-field">
-                            <span className="lt-settings-field-label">{t("transport.settingsModal.audioDevice")}</span>
-                            <select
-                              value={selectedAudioOutputDevice}
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onChange={(event) => handleAudioOutputDeviceChange(event.target.value)}
-                            >
-                              <option value="">
-                                {defaultAudioOutputDevice
-                                  ? t("transport.settingsModal.audioDeviceSystemDefaultNamed", { name: defaultAudioOutputDevice })
-                                  : t("transport.settingsModal.audioDeviceSystemDefault")}
-                              </option>
-                              {selectedAudioOutputDeviceMissing ? (
-                                <option value={selectedAudioOutputDevice}>
-                                  {t("transport.settingsModal.audioDeviceUnavailable", { name: appSettings.selectedOutputDeviceName ?? selectedAudioOutputDevice })}
-                                </option>
-                              ) : null}
-                              {audioDevicesForSelectedBackend.map((device) => (
-                                <option key={device.stableId} value={device.stableId}>
-                                  {device.name}
-                                </option>
-                              ))}
-                            </select>
-                            <small>
-                              {defaultAudioOutputDevice
-                                ? t("transport.settingsModal.audioDeviceCurrentDefault", { name: defaultAudioOutputDevice })
-                                : t("transport.settingsModal.audioDeviceNoDefault")}
-                            </small>
-                          </label>
+                          const left = candidate.clientX - shellBounds.left;
+                          const color =
+                            nativeDropCoordinateModeRef.current ===
+                            candidate.label
+                              ? "#ff5d5d"
+                              : candidate.isOverTimeline
+                                ? "#19c37d"
+                                : "#8a8f98";
 
-                          <label className="lt-settings-field">
-                            <span className="lt-settings-field-label">
-                              {t("transport.settingsModal.sampleRate", { defaultValue: "Sample Rate" })}
-                            </span>
-                            <select
-                              value={appSettings.outputSampleRate ?? ""}
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onChange={(event) => handleOutputSampleRateChange(event.target.value)}
+                          return (
+                            <div
+                              key={candidate.label}
+                              style={{
+                                position: "absolute",
+                                left,
+                                top: 0,
+                                bottom: 0,
+                                width: 0,
+                                borderLeft: `1px dashed ${color}`,
+                              }}
                             >
-                              <option value="">
-                                {selectedAudioOutputDescriptor?.defaultSampleRate
-                                  ? `${selectedAudioOutputDescriptor.defaultSampleRate} Hz`
-                                  : t("transport.settingsModal.audioDeviceSystemDefault")}
-                              </option>
-                              {outputSampleRates.map((sampleRate) => (
-                                <option key={sampleRate} value={sampleRate}>
-                                  {sampleRate} Hz
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: 6,
+                                  left: 4,
+                                  padding: "2px 6px",
+                                  borderRadius: 999,
+                                  background: "rgba(12, 18, 28, 0.85)",
+                                  color,
+                                  fontSize: 11,
+                                  lineHeight: 1.2,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {`${candidate.label} score=${candidate.score.toFixed(0)} raw\u0394=${
+                                  candidate.rawDeltaPx?.toFixed(1) ?? "n/a"
+                                } snap\u0394=${candidate.snapDeltaPx?.toFixed(1) ?? "n/a"} raw=${
+                                  candidate.rawSeconds?.toFixed(2) ?? "n/a"
+                                } snap=${candidate.snappedSeconds?.toFixed(2) ?? "n/a"} drop=${
+                                  candidate.dropSeconds?.toFixed(2) ?? "n/a"
+                                } snap=${candidate.snapApplied ? "on" : "off"}`}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                    <div
+                      className="lt-timeline-scroll-viewport"
+                      ref={timelineScrollViewportRef}
+                    >
+                      <div className="lt-timeline-main-grid">
+                        <TrackHeadersPane
+                          song={song}
+                          visibleTracks={visibleTracks}
+                          selectedTrackIds={selectedTrackIds}
+                          trackHeight={trackHeight}
+                          collapsedFolders={collapsedFolders}
+                          previewTrackDensityClass={previewTrackDensityClass}
+                          libraryPreviewRows={libraryPreviewRows}
+                          shouldShowEmptyArrangementHint={
+                            shouldShowEmptyArrangementHint
+                          }
+                          onHeadersWheel={handleTrackHeadersWheel}
+                          getTrackChildCount={(trackId) =>
+                            song ? trackChildrenCount(song, trackId) : 0
+                          }
+                          onSelectTrack={handleTrackHeaderSelect}
+                          onOpenContextMenu={handleTrackHeaderContextMenu}
+                          onStartTrackDrag={handleTrackHeaderDragStart}
+                          onToggleFolder={handleTrackHeaderFolderToggle}
+                          onToggleMute={handleTrackHeaderMuteToggle}
+                          onToggleSolo={handleTrackHeaderSoloToggle}
+                          onToggleTranspose={handleTrackHeaderTransposeToggle}
+                          onVolumeChange={handleTrackHeaderVolumeChange}
+                          onCommitVolume={handleTrackHeaderVolumeCommit}
+                          onPanChange={handleTrackHeaderPanChange}
+                          onCommitPan={handleTrackHeaderPanCommit}
+                          audioRoutingOptions={audioRoutingOptions}
+                          onAudioToChange={handleTrackAudioToChange}
+                        />
 
-                          <label className="lt-settings-field">
-                            <span className="lt-settings-field-label">
-                              {t("transport.settingsModal.bufferSize", { defaultValue: "Buffer Size" })}
-                            </span>
-                            <select
-                              value={
-                                typeof appSettings.outputBufferSize === "object" && "fixed" in appSettings.outputBufferSize
-                                  ? String(appSettings.outputBufferSize.fixed)
-                                  : ""
+                        <TimelineCanvasPane
+                          laneViewportWidth={laneViewportWidth}
+                          trackHeight={trackHeight}
+                          song={song}
+                          visibleTracks={visibleTracks}
+                          renderedClipsByTrack={renderedClipsByTrack}
+                          clipsByTrack={clipsByTrack}
+                          waveformCache={waveformCache}
+                          cameraXRef={cameraXRef}
+                          pixelsPerSecond={pixelsPerSecond}
+                          livePixelsPerSecondRef={livePixelsPerSecondRef}
+                          timelineGrid={timelineGrid}
+                          selectedTimelineRange={selectedTimelineRange}
+                          selectedClipId={selectedClipId}
+                          selectedRegionId={selectedRegionId}
+                          onSelectRegion={(regionId) => {
+                            setSelectedRegionId(regionId);
+                            setSelectedTimelineRange(null);
+                          }}
+                          selectedSectionId={selectedSectionId}
+                          pendingMarkerJump={pendingMarkerJump}
+                          activeVamp={activeVamp}
+                          midiLearnMode={midiLearnMode}
+                          onMidiLearnTarget={handleMidiLearnTarget}
+                          displayPositionSecondsRef={displayPositionSecondsRef}
+                          playheadDragRef={playheadDragRef}
+                          clipPreviewSecondsRef={clipPreviewSecondsRef}
+                          playheadDurationSeconds={workspaceDurationSeconds}
+                          rulerTrackRef={rulerTrackRef}
+                          horizontalScrollbarRef={horizontalScrollbarRef}
+                          laneAreaRef={laneAreaRef}
+                          scrollViewportRef={timelineScrollViewportRef}
+                          libraryClipPreview={libraryClipPreview}
+                          libraryPreviewRows={libraryPreviewRows}
+                          externalDropPreview={externalDropPreview}
+                          shouldShowEmptyArrangementHint={
+                            shouldShowEmptyArrangementHint
+                          }
+                          normalizePositionSeconds={(positionSeconds) =>
+                            normalizeTimelineSeekSeconds(
+                              positionSeconds,
+                              workspaceDurationSeconds,
+                            )
+                          }
+                          resolveLibraryGhostLeft={resolveLibraryGhostLeft}
+                          onSeekIntent={prewarmTimelinePosition}
+                          onRulerMouseDown={(event) => {
+                            if (
+                              !song ||
+                              event.button !== 0 ||
+                              !rulerTrackRef.current
+                            ) {
+                              return;
+                            }
+
+                            event.preventDefault();
+                            const seekStartSeconds = snappedRulerSeconds(
+                              event,
+                              workspaceDurationSeconds,
+                            );
+                            prewarmTimelinePosition(seekStartSeconds);
+                            const startSeconds = snappedRulerSeconds(
+                              event,
+                              workspaceDurationSeconds,
+                            );
+                            clearSelection();
+                            setSelectedRegionId(null);
+                            setContextMenu(null);
+                            setSelectedTimelineRange({
+                              startSeconds,
+                              endSeconds: startSeconds,
+                            });
+
+                            const startClientX = event.clientX;
+                            let hasMoved = false;
+                            let autoScrollFrameId: number | null = null;
+                            let autoScrollVelocity = 0;
+                            let latestClientX = startClientX;
+
+                            const stopRangeAutoScroll = () => {
+                              autoScrollVelocity = 0;
+                              if (autoScrollFrameId !== null) {
+                                window.cancelAnimationFrame(autoScrollFrameId);
+                                autoScrollFrameId = null;
                               }
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onChange={(event) => handleOutputBufferSizeChange(event.target.value)}
-                            >
-                              <option value="">
-                                {t("transport.settingsModal.audioDeviceSystemDefault")}
-                              </option>
-                              {outputBufferSizes.map((bufferSize) => (
-                                <option key={bufferSize} value={bufferSize}>
-                                  {bufferSize}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                            };
 
-                          <div className="lt-settings-field">
-                            <span className="lt-settings-field-label">
-                              {t("transport.settingsModal.hardwareOutputs", { defaultValue: "Hardware Outputs" })}
-                            </span>
-                            <div className="lt-output-channel-grid">
-                              {Array.from({ length: selectedOutputChannelCount }, (_, channelIndex) => (
-                                <label key={channelIndex} className="lt-settings-checkbox">
-                                  <input
-                                    type="checkbox"
-                                    checked={appSettings.enabledOutputChannels.includes(channelIndex)}
-                                    disabled={isSettingsLoading || isSettingsSaving}
-                                    onChange={(event) =>
-                                      handleEnabledOutputChannelChange(channelIndex, event.target.checked)
-                                    }
-                                  />
-                                  <span>
-                                    {t("transport.settingsModal.hardwareOutputChannel", {
-                                      channel: channelIndex + 1,
-                                      defaultValue: `Channel ${channelIndex + 1}`,
-                                    })}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
+                            const updateRangeSelection = (clientX: number) => {
+                              const currentSeconds =
+                                snappedRulerSecondsAtClientX(
+                                  clientX,
+                                  workspaceDurationSeconds,
+                                );
+                              setSelectedTimelineRange({
+                                startSeconds: Math.min(
+                                  startSeconds,
+                                  currentSeconds,
+                                ),
+                                endSeconds: Math.max(
+                                  startSeconds,
+                                  currentSeconds,
+                                ),
+                              });
+                            };
 
-                          <label className="lt-settings-toggle">
-                            <input
-                              type="checkbox"
-                              checked={appSettings.audioSafeMode}
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onChange={(event) => handleAudioSafeModeChange(event.target.checked)}
-                            />
-                            <span>{t("transport.settingsModal.audioSafeMode", { defaultValue: "Safe Mode" })}</span>
-                          </label>
-                        </div>
-                      </section>
-                    ) : null}
+                            const tickRangeAutoScroll = () => {
+                              if (!autoScrollVelocity) {
+                                autoScrollFrameId = null;
+                                return;
+                              }
 
-                    {activeSettingsTab === "metronome" ? (
-                      <section
-                        className="lt-settings-tab-panel"
-                        role="tabpanel"
-                        id="lt-settings-panel-metronome"
-                        aria-labelledby="lt-settings-tab-metronome"
-                      >
-                        <div className="lt-settings-section-grid">
-                          <label className="lt-settings-toggle">
-                            <input
-                              type="checkbox"
-                              checked={appSettings.metronomeEnabled}
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onPointerDown={(event) => {
-                                if (midiLearnMode === null) {
-                                  return;
-                                }
+                              updateCameraX(
+                                cameraXRef.current + autoScrollVelocity,
+                                {
+                                  commitToStore: false,
+                                },
+                              );
+                              updateRangeSelection(latestClientX);
+                              autoScrollFrameId =
+                                window.requestAnimationFrame(
+                                  tickRangeAutoScroll,
+                                );
+                            };
 
-                                event.preventDefault();
-                                event.stopPropagation();
-                                handleMidiLearnTarget("action:toggle_metronome");
-                              }}
-                              onChange={(event) => handleMetronomeEnabledChange(event.target.checked)}
-                            />
-                            <div className="lt-settings-toggle-copy">
-                              <strong>{t("transport.shell.metronome")}</strong>
-                              <small>{t("transport.settingsModal.metronomeStatusDescription", { defaultValue: "Toggle the metronome playback." })}</small>
-                            </div>
-                          </label>
+                            const updateRangeAutoScroll = (clientX: number) => {
+                              const bounds =
+                                rulerTrackRef.current?.getBoundingClientRect();
+                              if (!bounds) {
+                                stopRangeAutoScroll();
+                                return;
+                              }
 
-                          <label className="lt-settings-field">
-                            <span className="lt-settings-field-label">
-                              {t("transport.settingsModal.metronomeOutput", { defaultValue: "Metronome Output" })}
-                            </span>
-                            <select
-                              value={appSettings.metronomeOutput}
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onChange={(event) => handleMetronomeOutputChange(event.target.value)}
-                            >
-                              {audioRoutingOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <label className="lt-settings-field">
-                            <span className="lt-settings-field-label">{t("transport.settingsModal.metronomeVolume")}</span>
-                            <input
-                              className="lt-range-input"
-                              type="range"
-                              min={0}
-                              max={1}
-                              step={0.01}
-                              value={metronomeVolumeDraft}
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onPointerDown={(event) => {
-                                if (midiLearnMode === null) {
-                                  return;
-                                }
-
-                                event.preventDefault();
-                                event.stopPropagation();
-                                handleMidiLearnTarget("param:metronome_volume");
-                              }}
-                              onChange={(event) => handleMetronomeVolumeDraftChange(Number(event.target.value))}
-                              onPointerUp={(event) => commitMetronomeVolumeDraft(Number(event.currentTarget.value))}
-                              onBlur={(event) => commitMetronomeVolumeDraft(Number(event.currentTarget.value))}
-                            />
-                            <small>
-                              {t("transport.settingsModal.metronomeVolumeValue", {
-                                value: Math.round(metronomeVolumeDraft * 100),
-                              })}
-                            </small>
-                          </label>
-                        </div>
-                      </section>
-                    ) : null}
-
-                    {activeSettingsTab === "midi" ? (
-                      <section
-                        className="lt-settings-tab-panel"
-                        role="tabpanel"
-                        id="lt-settings-panel-midi"
-                        aria-labelledby="lt-settings-tab-midi"
-                      >
-                        <div className="lt-settings-section-grid">
-                          <div className="lt-settings-field">
-                            <label className="lt-settings-field-label" htmlFor="lt-midi-input-device">
-                              {t("transport.settingsModal.midiDevice")}
-                            </label>
-                            <div className="lt-settings-field-control-row">
-                              <select
-                                id="lt-midi-input-device"
-                                value={selectedMidiInputDevice}
-                                disabled={isSettingsLoading || isSettingsSaving || isMidiInputRefreshing}
-                                onChange={(event) => handleMidiInputDeviceChange(event.target.value)}
-                              >
-                                <option value="">{t("transport.settingsModal.midiDeviceNone")}</option>
-                                {selectedMidiInputDeviceMissing ? (
-                                  <option value={selectedMidiInputDevice}>
-                                    {t("transport.settingsModal.midiDeviceUnavailable", { name: selectedMidiInputDevice })}
-                                  </option>
-                                ) : null}
-                                {midiInputDevices.map((deviceName) => (
-                                  <option key={deviceName} value={deviceName}>
-                                    {deviceName}
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                type="button"
-                                className="lt-settings-icon-button"
-                                aria-label={t("transport.settingsModal.midiDeviceRefresh")}
-                                title={t("transport.settingsModal.midiDeviceRefresh")}
-                                disabled={isSettingsLoading || isSettingsSaving || isMidiInputRefreshing}
-                                onClick={handleRefreshMidiInputDevices}
-                              >
-                                <span className="material-symbols-outlined">refresh</span>
-                              </button>
-                            </div>
-                            <small>{t("transport.settingsModal.midiDeviceHelp")}</small>
-                          </div>
-                        </div>
-                      </section>
-                    ) : null}
-
-                    {activeSettingsTab === "general" ? (
-                      <section
-                        className="lt-settings-tab-panel"
-                        role="tabpanel"
-                        id="lt-settings-panel-general"
-                        aria-labelledby="lt-settings-tab-general"
-                      >
-                        <div className="lt-settings-section-grid">
-                          <label className="lt-settings-field">
-                            <span className="lt-settings-field-label">{t("transport.settingsModal.language")}</span>
-                            <select
-                              value={selectedLocale}
-                              disabled={isSettingsLoading || isSettingsSaving}
-                              onChange={(event) => handleLocaleChange(event.target.value)}
-                            >
-                              <option value="">{t("transport.settingsModal.languageSystemDefault")}</option>
-                              <option value="en">{t("transport.settingsModal.languageEnglish")}</option>
-                              <option value="es">{t("transport.settingsModal.languageSpanish")}</option>
-                            </select>
-                          </label>
-                        </div>
-                      </section>
-                    ) : null}
-
-                    {activeSettingsTab === "midiLearn" ? (
-                      <section
-                        className="lt-settings-tab-panel"
-                        role="tabpanel"
-                        id="lt-settings-panel-midiLearn"
-                        aria-labelledby="lt-settings-tab-midiLearn"
-                      >
-                        <section className="lt-midi-learn-panel" aria-labelledby="lt-midi-learn-panel-title">
-                          <div className="lt-midi-learn-panel-header">
-                            <div>
-                              <span id="lt-midi-learn-panel-title" className="lt-settings-field-label">
-                                {t("transport.settingsModal.midiLearnSectionTitle")}
-                              </span>
-                              <p>{t("transport.settingsModal.midiLearnSectionDescription")}</p>
-                            </div>
-                            <div className="lt-midi-learn-actions">
-                              <button
-                                type="button"
-                                className={`lt-midi-learn-activate ${midiLearnMode !== null ? "is-active" : ""}`}
-                                disabled={isSettingsLoading || isSettingsSaving}
-                                onClick={() => handleMidiLearnToggle({ closePanels: false })}
-                              >
-                                <span className="material-symbols-outlined">graphic_eq</span>
-                                {t("transport.shell.midiLearn")}
-                              </button>
-                              <button
-                                type="button"
-                                className="lt-midi-learn-reset"
-                                disabled={isSettingsLoading || isSettingsSaving || Object.keys(appSettings.midiMappings).length === 0}
-                                onClick={handleResetMidiMappings}
-                              >
-                                {t("transport.settingsModal.midiLearnReset")}
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="lt-midi-learn-feedback">
-                            <strong>{t("transport.settingsModal.midiLearnLatest")}</strong>
-                            {midiLearnFeedback ? (
-                              <p>
-                                {midiLearnFeedbackCommand?.label ?? midiLearnFeedback.key}: {formatMidiBinding(midiLearnFeedback.binding)}
-                              </p>
-                            ) : (
-                              <p>{t("transport.settingsModal.midiLearnEmpty")}</p>
-                            )}
-                          </div>
-
-                          {midiLearnMode !== null ? (
-                            <div className="lt-midi-learn-live">
-                              <strong>{t("transport.settingsModal.midiLearnListening")}</strong>
-                              <p>
-                                {midiLearnMode === ""
-                                  ? t("transport.settingsModal.midiLearnArmed")
-                                  : t("transport.settingsModal.midiLearnTargeting", {
-                                      key: activeMidiLearnCommand?.label ?? midiLearnMode,
-                                    })}
-                              </p>
-                            </div>
-                          ) : null}
-
-                          <div className="lt-segmented-control lt-midi-learn-view-tabs">
-                            <button
-                              type="button"
-                              className={midiLearnView === "core" ? "is-active" : ""}
-                              onClick={() => setMidiLearnView("core")}
-                            >
-                              {t("transport.settingsModal.midiLearnViewCore")}
-                            </button>
-                            <button
-                              type="button"
-                              className={midiLearnView === "markers" ? "is-active" : ""}
-                              onClick={() => setMidiLearnView("markers")}
-                            >
-                              {t("transport.settingsModal.midiLearnViewMarkers", {
-                                count: midiLearnMarkerRows.length,
-                              })}
-                            </button>
-                            <button
-                              type="button"
-                              className={midiLearnView === "songs" ? "is-active" : ""}
-                              onClick={() => setMidiLearnView("songs")}
-                            >
-                              {t("transport.settingsModal.midiLearnViewSongs", {
-                                count: midiLearnSongRows.length,
-                              })}
-                            </button>
-                          </div>
-
-                          <div className="lt-midi-learn-table-wrap">
-                            <table className="lt-midi-learn-table">
-                              <thead>
-                                <tr>
-                                  <th scope="col">{t("transport.settingsModal.midiLearnTableCommand")}</th>
-                                  <th scope="col">{t("transport.settingsModal.midiLearnTableBinding")}</th>
-                                  <th scope="col">{t("transport.settingsModal.midiLearnTableAction")}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {visibleMidiLearnRows.map((command) => {
-                                  const hasBinding = Boolean(command.binding);
-                                  const isTarget = midiLearnMode === command.key;
-
-                                  return (
-                                    <tr key={command.key} className={isTarget ? "is-midi-target" : undefined}>
-                                      <td>
-                                        <strong>{command.label}</strong>
-                                        <code>{command.key}</code>
-                                      </td>
-                                      <td>
-                                        {hasBinding && command.binding ? (
-                                          <span className="lt-midi-binding-pill">{formatMidiBinding(command.binding)}</span>
-                                        ) : (
-                                          <span className="lt-midi-binding-empty">{t("transport.settingsModal.midiLearnUnassigned")}</span>
-                                        )}
-                                      </td>
-                                      <td>
-                                        <button
-                                          type="button"
-                                          className={`lt-midi-learn-relearn ${isTarget ? "is-active" : ""}`}
-                                          disabled={isSettingsLoading || isSettingsSaving}
-                                          onClick={() => handleMidiLearnCommandRelearn(command.key)}
-                                        >
-                                          {isTarget
-                                            ? t("transport.settingsModal.midiLearnListeningShort")
-                                            : t("transport.settingsModal.midiLearnRelearn")}
-                                        </button>
-                                      </td>
-                                    </tr>
+                              const distanceToLeft = clientX - bounds.left;
+                              const distanceToRight = bounds.right - clientX;
+                              if (
+                                distanceToLeft < LIBRARY_DRAG_EDGE_BUFFER_PX
+                              ) {
+                                autoScrollVelocity =
+                                  -resolveLibraryAutoScrollVelocity(
+                                    distanceToLeft,
                                   );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                          <div className="lt-midi-learn-dynamic-actions">
-                            {midiLearnView === "markers" ? (
-                              <button
-                                type="button"
-                                className="lt-midi-learn-map-jump"
-                                disabled={isSettingsLoading || isSettingsSaving}
-                                onClick={() => handleDynamicMidiLearnJump("marker")}
-                              >
-                                {t("transport.settingsModal.midiLearnMapMarkerJump")}
-                              </button>
-                            ) : null}
-                            {midiLearnView === "songs" ? (
-                              <button
-                                type="button"
-                                className="lt-midi-learn-map-jump"
-                                disabled={isSettingsLoading || isSettingsSaving}
-                                onClick={() => handleDynamicMidiLearnJump("song")}
-                              >
-                                {t("transport.settingsModal.midiLearnMapSongJump")}
-                              </button>
-                            ) : null}
-                          </div>
-                        </section>
-                      </section>
-                    ) : null}
+                              } else if (
+                                distanceToRight < LIBRARY_DRAG_EDGE_BUFFER_PX
+                              ) {
+                                autoScrollVelocity =
+                                  resolveLibraryAutoScrollVelocity(
+                                    distanceToRight,
+                                  );
+                              } else {
+                                autoScrollVelocity = 0;
+                              }
+
+                              if (!autoScrollVelocity) {
+                                stopRangeAutoScroll();
+                                return;
+                              }
+
+                              if (autoScrollFrameId === null) {
+                                autoScrollFrameId =
+                                  window.requestAnimationFrame(
+                                    tickRangeAutoScroll,
+                                  );
+                              }
+                            };
+
+                            const onMouseMove = (windowEvent: MouseEvent) => {
+                              const exceededThreshold =
+                                Math.abs(windowEvent.clientX - startClientX) >
+                                DRAG_THRESHOLD_PX;
+                              if (!hasMoved && !exceededThreshold) {
+                                return;
+                              }
+
+                              hasMoved = true;
+                              latestClientX = windowEvent.clientX;
+                              prewarmTimelinePosition(
+                                snappedRulerSecondsAtClientX(
+                                  windowEvent.clientX,
+                                  workspaceDurationSeconds,
+                                ),
+                              );
+                              updateRangeSelection(windowEvent.clientX);
+                              updateRangeAutoScroll(windowEvent.clientX);
+                            };
+
+                            const onMouseUp = (windowEvent: MouseEvent) => {
+                              if (windowEvent.button !== 0) {
+                                return;
+                              }
+
+                              window.removeEventListener(
+                                "mousemove",
+                                onMouseMove,
+                              );
+                              window.removeEventListener("mouseup", onMouseUp);
+                              stopRangeAutoScroll();
+
+                              if (!hasMoved) {
+                                setSelectedTimelineRange(null);
+                                void runAction(async () => {
+                                  await performSeek(seekStartSeconds);
+                                });
+                                return;
+                              }
+
+                              const endSeconds = snappedRulerSeconds(
+                                windowEvent,
+                                workspaceDurationSeconds,
+                              );
+                              const normalizedStartSeconds = Math.min(
+                                startSeconds,
+                                endSeconds,
+                              );
+                              const normalizedEndSeconds = Math.max(
+                                startSeconds,
+                                endSeconds,
+                              );
+                              setSelectedTimelineRange({
+                                startSeconds: normalizedStartSeconds,
+                                endSeconds: normalizedEndSeconds,
+                              });
+                              setStatus(
+                                t("transport.status.rangeSelected", {
+                                  start: formatClock(normalizedStartSeconds),
+                                  end: formatClock(normalizedEndSeconds),
+                                }),
+                              );
+                            };
+
+                            window.addEventListener("mousemove", onMouseMove);
+                            window.addEventListener("mouseup", onMouseUp);
+                          }}
+                          onRulerContextMenu={(event) => {
+                            if (!song || !rulerTrackRef.current) {
+                              return;
+                            }
+
+                            const positionSeconds = snappedRulerSeconds(
+                              event,
+                              workspaceDurationSeconds,
+                            );
+                            clearSelection();
+                            setSelectedRegionId(null);
+                            const activeTimelineRange =
+                              selectedTimelineRange &&
+                              positionSeconds >=
+                                selectedTimelineRange.startSeconds &&
+                              positionSeconds <=
+                                selectedTimelineRange.endSeconds
+                                ? selectedTimelineRange
+                                : null;
+                            if (!activeTimelineRange) {
+                              setSelectedTimelineRange(null);
+                            }
+                            openMenu(
+                              event,
+                              activeTimelineRange
+                                ? t("transport.shell.contextSelectionTitle", {
+                                    start: formatClock(
+                                      activeTimelineRange.startSeconds,
+                                    ),
+                                    end: formatClock(
+                                      activeTimelineRange.endSeconds,
+                                    ),
+                                  })
+                                : t("transport.shell.contextTimelineTitle", {
+                                    time: formatClock(positionSeconds),
+                                  }),
+                              rulerContextMenu(
+                                positionSeconds,
+                                activeTimelineRange,
+                              ),
+                            );
+                          }}
+                          onMarkerPrimaryAction={(sectionId) => {
+                            const section = song?.sectionMarkers.find(
+                              (candidate) => candidate.id === sectionId,
+                            );
+                            if (!section) {
+                              return;
+                            }
+
+                            void runAction(async () => {
+                              await handleMarkerPrimaryAction(section);
+                            });
+                          }}
+                          onMarkerContextMenu={(event, sectionId) => {
+                            const section = song?.sectionMarkers.find(
+                              (candidate) => candidate.id === sectionId,
+                            );
+                            if (!section) {
+                              return;
+                            }
+
+                            setSelectedRegionId(null);
+                            selectSection(section.id);
+                            openMenu(
+                              event,
+                              section.name,
+                              sectionContextMenu(section),
+                            );
+                          }}
+                          onTempoMarkerContextMenu={(event, markerId) => {
+                            const marker = song?.tempoMarkers.find(
+                              (candidate) => candidate.id === markerId,
+                            );
+                            if (!marker) {
+                              return;
+                            }
+
+                            clearSelection();
+                            setSelectedTimelineRange(null);
+                            setSelectedRegionId(null);
+                            openMenu(
+                              event,
+                              `${t("timelineTopbar.tempoReadout")} ${marker.bpm.toFixed(2)} BPM`,
+                              tempoMarkerContextMenu(marker),
+                            );
+                          }}
+                          onTimeSignatureMarkerContextMenu={(
+                            event,
+                            markerId,
+                          ) => {
+                            const marker = song?.timeSignatureMarkers.find(
+                              (candidate) => candidate.id === markerId,
+                            );
+                            if (!marker) {
+                              return;
+                            }
+
+                            clearSelection();
+                            setSelectedTimelineRange(null);
+                            setSelectedRegionId(null);
+                            openMenu(
+                              event,
+                              `Compas ${marker.signature}`,
+                              timeSignatureMarkerContextMenu(marker),
+                            );
+                          }}
+                          onRegionContextMenu={(event, regionId) => {
+                            const region = song?.regions.find(
+                              (candidate) => candidate.id === regionId,
+                            );
+                            if (!region) {
+                              return;
+                            }
+
+                            clearSelection();
+                            setSelectedTimelineRange(null);
+                            setSelectedRegionId(region.id);
+                            openMenu(
+                              event,
+                              region.name,
+                              songRegionContextMenu(region),
+                            );
+                          }}
+                          canNativeZoom={Boolean(song)}
+                          onNativeCameraXPreview={(nextCameraX) =>
+                            updateCameraX(nextCameraX, {
+                              commitToStore: false,
+                              debounceStoreCommit: false,
+                            })
+                          }
+                          onNativeCameraXCommit={commitCameraXToStore}
+                          onNativeZoomPreview={(
+                            nextZoomLevel,
+                            anchorViewportX,
+                          ) =>
+                            previewZoom(nextZoomLevel, anchorViewportX, {
+                              scheduleCommit: false,
+                            })
+                          }
+                          onNativeZoomCommit={commitZoomViewToStore}
+                          onNativeTrackHeightChange={applyTrackHeight}
+                          onPreviewPositionChange={syncLivePosition}
+                          onPlayheadSeekCommit={(positionSeconds) => {
+                            setContextMenu(null);
+                            void runAction(async () => {
+                              await performSeek(positionSeconds);
+                            });
+                          }}
+                          onTrackListContextMenu={handleTrackListContextMenu}
+                          onTrackLaneMouseDown={handleTrackLaneMouseDown}
+                          onTrackLaneContextMenu={handleTrackLaneContextMenu}
+                          onResolveTimelineDropFromClientPoint={
+                            resolveTimelineDropFromClientPoint
+                          }
+                          nativeDropKindRef={nativeDropKindRef}
+                          onExternalDropPreviewChange={
+                            handleDomExternalDropPreviewChange
+                          }
+                          onExternalDrop={handleExternalTimelineDrop}
+                        />
+                      </div>
+                    </div>
+                    <div
+                      className="lt-timeline-bottom-grid"
+                      aria-hidden={!song}
+                    >
+                      <div className="lt-horizontal-scrollbar-spacer" />
+                      <div className="lt-horizontal-scrollbar">
+                        <div
+                          ref={horizontalScrollbarRef}
+                          className="lt-horizontal-scrollbar-rail"
+                          aria-label={t("transport.shell.horizontalScroll")}
+                          onScroll={(event) => {
+                            const scrollLeft = event.currentTarget.scrollLeft;
+                            updateCameraX(scrollLeft, {
+                              commitToStore: false,
+                            });
+                          }}
+                        >
+                          <div
+                            className="lt-horizontal-scrollbar-content"
+                            style={{
+                              width: laneViewportWidth + maxTimelineCameraX,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </section>
+              )}
+            </div>
 
+            {isSettingsModalOpen ? (
+              <div className="lt-modal-backdrop">
+                <section
+                  className="lt-settings-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="lt-settings-modal-title"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <header className="lt-settings-modal-header">
+                    <div>
+                      <span className="lt-settings-modal-eyebrow">
+                        {t("transport.settingsModal.eyebrow")}
+                      </span>
+                      <h2 id="lt-settings-modal-title">
+                        {t("transport.settingsModal.title")}
+                      </h2>
+                      <p>{t("transport.settingsModal.description")}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="lt-settings-modal-close"
+                      onClick={() => setIsSettingsModalOpen(false)}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                      {t("transport.settingsModal.close")}
+                    </button>
+                  </header>
+
+                  <div className="lt-settings-modal-body">
+                    <div className="lt-settings-tabs">
+                      <div
+                        className="lt-settings-tablist"
+                        role="tablist"
+                        aria-label={t("transport.settingsModal.tabListLabel", {
+                          defaultValue: "Settings sections",
+                        })}
+                      >
+                        {settingsTabs.map((tab) => {
+                          const isActive = activeSettingsTab === tab.id;
+
+                          return (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              role="tab"
+                              id={`lt-settings-tab-${tab.id}`}
+                              className={`lt-settings-tab-button ${isActive ? "is-active" : ""}`}
+                              aria-selected={isActive}
+                              aria-controls={`lt-settings-panel-${tab.id}`}
+                              onClick={() => setActiveSettingsTab(tab.id)}
+                            >
+                              {tab.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="lt-settings-tab-panels">
+                        {activeSettingsTab === "audio" ? (
+                          <section
+                            className="lt-settings-tab-panel"
+                            role="tabpanel"
+                            id="lt-settings-panel-audio"
+                            aria-labelledby="lt-settings-tab-audio"
+                          >
+                            <div className="lt-settings-section-grid">
+                              <label className="lt-settings-field">
+                                <span className="lt-settings-field-label">
+                                  {t("transport.settingsModal.audioBackend", {
+                                    defaultValue: "Audio System",
+                                  })}
+                                </span>
+                                <select
+                                  value={appSettings.selectedAudioBackend ?? ""}
+                                  disabled={
+                                    isSettingsLoading || isSettingsSaving
+                                  }
+                                  onChange={(event) =>
+                                    handleAudioBackendChange(event.target.value)
+                                  }
+                                >
+                                  <option value="">
+                                    {t(
+                                      "transport.settingsModal.audioBackendSystemDefault",
+                                      { defaultValue: "System default" },
+                                    )}
+                                  </option>
+                                  {audioBackendOptions.map((backend) => (
+                                    <option key={backend} value={backend}>
+                                      {backend
+                                        .replaceAll("_", " ")
+                                        .toUpperCase()}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="lt-settings-field">
+                                <span className="lt-settings-field-label">
+                                  {t("transport.settingsModal.audioDevice")}
+                                </span>
+                                <select
+                                  value={selectedAudioOutputDevice}
+                                  disabled={
+                                    isSettingsLoading || isSettingsSaving
+                                  }
+                                  onChange={(event) =>
+                                    handleAudioOutputDeviceChange(
+                                      event.target.value,
+                                    )
+                                  }
+                                >
+                                  <option value="">
+                                    {defaultAudioOutputDevice
+                                      ? t(
+                                          "transport.settingsModal.audioDeviceSystemDefaultNamed",
+                                          { name: defaultAudioOutputDevice },
+                                        )
+                                      : t(
+                                          "transport.settingsModal.audioDeviceSystemDefault",
+                                        )}
+                                  </option>
+                                  {selectedAudioOutputDeviceMissing ? (
+                                    <option value={selectedAudioOutputDevice}>
+                                      {t(
+                                        "transport.settingsModal.audioDeviceUnavailable",
+                                        {
+                                          name:
+                                            appSettings.selectedOutputDeviceName ??
+                                            selectedAudioOutputDevice,
+                                        },
+                                      )}
+                                    </option>
+                                  ) : null}
+                                  {audioDevicesForSelectedBackend.map(
+                                    (device) => (
+                                      <option
+                                        key={device.stableId}
+                                        value={device.stableId}
+                                      >
+                                        {device.name}
+                                      </option>
+                                    ),
+                                  )}
+                                </select>
+                                <small>
+                                  {appSettings.selectedOutputDeviceId
+                                    ? t(
+                                        "transport.settingsModal.audioDeviceExplicitHelp",
+                                        {
+                                          defaultValue:
+                                            "Explicit selections open this device directly; the Windows default is ignored.",
+                                        },
+                                      )
+                                    : defaultAudioOutputDevice
+                                      ? t(
+                                          "transport.settingsModal.audioDeviceCurrentDefault",
+                                          { name: defaultAudioOutputDevice },
+                                        )
+                                      : t(
+                                          "transport.settingsModal.audioDeviceNoDefault",
+                                        )}
+                                </small>
+                              </label>
+
+                              <div className="lt-settings-field">
+                                <span className="lt-settings-field-label">
+                                  {t(
+                                    "transport.settingsModal.audioDeviceRefreshLabel",
+                                    { defaultValue: "Device list" },
+                                  )}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="lt-secondary-button"
+                                  disabled={
+                                    isSettingsLoading || isSettingsSaving
+                                  }
+                                  onClick={handleRefreshAudioDevices}
+                                >
+                                  {t(
+                                    "transport.settingsModal.audioDeviceRefresh",
+                                    { defaultValue: "Refresh audio devices" },
+                                  )}
+                                </button>
+                              </div>
+
+                              <label className="lt-settings-field">
+                                <span className="lt-settings-field-label">
+                                  {t("transport.settingsModal.sampleRate", {
+                                    defaultValue: "Sample Rate",
+                                  })}
+                                </span>
+                                <select
+                                  value={appSettings.outputSampleRate ?? ""}
+                                  disabled={
+                                    isSettingsLoading || isSettingsSaving
+                                  }
+                                  onChange={(event) =>
+                                    handleOutputSampleRateChange(
+                                      event.target.value,
+                                    )
+                                  }
+                                >
+                                  <option value="">{autoOutputSampleRateLabel}</option>
+                                  {outputSampleRateOptions.map((sampleRate) => (
+                                    <option key={sampleRate} value={sampleRate}>
+                                      {sampleRate} Hz
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="lt-settings-field">
+                                <span className="lt-settings-field-label">
+                                  {t("transport.settingsModal.bufferSize", {
+                                    defaultValue: "Buffer Size",
+                                  })}
+                                </span>
+                                <select
+                                  value={
+                                    typeof appSettings.outputBufferSize ===
+                                      "object" &&
+                                    "fixed" in appSettings.outputBufferSize
+                                      ? String(
+                                          appSettings.outputBufferSize.fixed,
+                                        )
+                                      : ""
+                                  }
+                                  disabled={
+                                    isSettingsLoading || isSettingsSaving
+                                  }
+                                  onChange={(event) =>
+                                    handleOutputBufferSizeChange(
+                                      event.target.value,
+                                    )
+                                  }
+                                >
+                                  <option value="">
+                                    {t(
+                                      "transport.settingsModal.audioDeviceSystemDefault",
+                                    )}
+                                  </option>
+                                  {outputBufferSizes.map((bufferSize) => (
+                                    <option key={bufferSize} value={bufferSize}>
+                                      {bufferSize}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <div className="lt-settings-field">
+                                <span className="lt-settings-field-label">
+                                  {t(
+                                    "transport.settingsModal.hardwareOutputs",
+                                    { defaultValue: "Hardware Outputs" },
+                                  )}
+                                </span>
+                                <div className="lt-output-channel-grid">
+                                  {Array.from(
+                                    { length: selectedOutputChannelCount },
+                                    (_, channelIndex) => (
+                                      <label
+                                        key={channelIndex}
+                                        className="lt-settings-checkbox"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={appSettings.enabledOutputChannels.includes(
+                                            channelIndex,
+                                          )}
+                                          disabled={
+                                            isSettingsLoading ||
+                                            isSettingsSaving
+                                          }
+                                          onChange={(event) =>
+                                            handleEnabledOutputChannelChange(
+                                              channelIndex,
+                                              event.target.checked,
+                                            )
+                                          }
+                                        />
+                                        <span>
+                                          {t(
+                                            "transport.settingsModal.hardwareOutputChannel",
+                                            {
+                                              channel: channelIndex + 1,
+                                              defaultValue: `Channel ${channelIndex + 1}`,
+                                            },
+                                          )}
+                                        </span>
+                                      </label>
+                                    ),
+                                  )}
+                                </div>
+                              </div>
+
+                              <label className="lt-settings-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={appSettings.audioSafeMode}
+                                  disabled={
+                                    isSettingsLoading || isSettingsSaving
+                                  }
+                                  onChange={(event) =>
+                                    handleAudioSafeModeChange(
+                                      event.target.checked,
+                                    )
+                                  }
+                                />
+                                <span>
+                                  {t("transport.settingsModal.audioSafeMode", {
+                                    defaultValue: "Safe Mode",
+                                  })}
+                                </span>
+                              </label>
+                            </div>
+                          </section>
+                        ) : null}
+
+                        {activeSettingsTab === "metronome" ? (
+                          <section
+                            className="lt-settings-tab-panel"
+                            role="tabpanel"
+                            id="lt-settings-panel-metronome"
+                            aria-labelledby="lt-settings-tab-metronome"
+                          >
+                            <div className="lt-settings-section-grid">
+                              <label className="lt-settings-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={appSettings.metronomeEnabled}
+                                  disabled={
+                                    isSettingsLoading || isSettingsSaving
+                                  }
+                                  onPointerDown={(event) => {
+                                    if (midiLearnMode === null) {
+                                      return;
+                                    }
+
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    handleMidiLearnTarget(
+                                      "action:toggle_metronome",
+                                    );
+                                  }}
+                                  onChange={(event) =>
+                                    handleMetronomeEnabledChange(
+                                      event.target.checked,
+                                    )
+                                  }
+                                />
+                                <div className="lt-settings-toggle-copy">
+                                  <strong>
+                                    {t("transport.shell.metronome")}
+                                  </strong>
+                                  <small>
+                                    {t(
+                                      "transport.settingsModal.metronomeStatusDescription",
+                                      {
+                                        defaultValue:
+                                          "Toggle the metronome playback.",
+                                      },
+                                    )}
+                                  </small>
+                                </div>
+                              </label>
+
+                              <label className="lt-settings-field">
+                                <span className="lt-settings-field-label">
+                                  {t(
+                                    "transport.settingsModal.metronomeOutput",
+                                    { defaultValue: "Metronome Output" },
+                                  )}
+                                </span>
+                                <select
+                                  value={appSettings.metronomeOutput}
+                                  disabled={
+                                    isSettingsLoading || isSettingsSaving
+                                  }
+                                  onChange={(event) =>
+                                    handleMetronomeOutputChange(
+                                      event.target.value,
+                                    )
+                                  }
+                                >
+                                  {audioRoutingOptions.map((option) => (
+                                    <option
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="lt-settings-field">
+                                <span className="lt-settings-field-label">
+                                  {t("transport.settingsModal.metronomeVolume")}
+                                </span>
+                                <input
+                                  className="lt-range-input"
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.01}
+                                  value={metronomeVolumeDraft}
+                                  disabled={
+                                    isSettingsLoading || isSettingsSaving
+                                  }
+                                  onPointerDown={(event) => {
+                                    if (midiLearnMode === null) {
+                                      return;
+                                    }
+
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    handleMidiLearnTarget(
+                                      "param:metronome_volume",
+                                    );
+                                  }}
+                                  onChange={(event) =>
+                                    handleMetronomeVolumeDraftChange(
+                                      Number(event.target.value),
+                                    )
+                                  }
+                                  onPointerUp={(event) =>
+                                    commitMetronomeVolumeDraft(
+                                      Number(event.currentTarget.value),
+                                    )
+                                  }
+                                  onBlur={(event) =>
+                                    commitMetronomeVolumeDraft(
+                                      Number(event.currentTarget.value),
+                                    )
+                                  }
+                                />
+                                <small>
+                                  {t(
+                                    "transport.settingsModal.metronomeVolumeValue",
+                                    {
+                                      value: Math.round(
+                                        metronomeVolumeDraft * 100,
+                                      ),
+                                    },
+                                  )}
+                                </small>
+                              </label>
+                            </div>
+                          </section>
+                        ) : null}
+
+                        {activeSettingsTab === "midi" ? (
+                          <section
+                            className="lt-settings-tab-panel"
+                            role="tabpanel"
+                            id="lt-settings-panel-midi"
+                            aria-labelledby="lt-settings-tab-midi"
+                          >
+                            <div className="lt-settings-section-grid">
+                              <div className="lt-settings-field">
+                                <label
+                                  className="lt-settings-field-label"
+                                  htmlFor="lt-midi-input-device"
+                                >
+                                  {t("transport.settingsModal.midiDevice")}
+                                </label>
+                                <div className="lt-settings-field-control-row">
+                                  <select
+                                    id="lt-midi-input-device"
+                                    value={selectedMidiInputDevice}
+                                    disabled={
+                                      isSettingsLoading ||
+                                      isSettingsSaving ||
+                                      isMidiInputRefreshing
+                                    }
+                                    onChange={(event) =>
+                                      handleMidiInputDeviceChange(
+                                        event.target.value,
+                                      )
+                                    }
+                                  >
+                                    <option value="">
+                                      {t(
+                                        "transport.settingsModal.midiDeviceNone",
+                                      )}
+                                    </option>
+                                    {selectedMidiInputDeviceMissing ? (
+                                      <option value={selectedMidiInputDevice}>
+                                        {t(
+                                          "transport.settingsModal.midiDeviceUnavailable",
+                                          { name: selectedMidiInputDevice },
+                                        )}
+                                      </option>
+                                    ) : null}
+                                    {midiInputDevices.map((deviceName) => (
+                                      <option
+                                        key={deviceName}
+                                        value={deviceName}
+                                      >
+                                        {deviceName}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    className="lt-settings-icon-button"
+                                    aria-label={t(
+                                      "transport.settingsModal.midiDeviceRefresh",
+                                    )}
+                                    title={t(
+                                      "transport.settingsModal.midiDeviceRefresh",
+                                    )}
+                                    disabled={
+                                      isSettingsLoading ||
+                                      isSettingsSaving ||
+                                      isMidiInputRefreshing
+                                    }
+                                    onClick={handleRefreshMidiInputDevices}
+                                  >
+                                    <span className="material-symbols-outlined">
+                                      refresh
+                                    </span>
+                                  </button>
+                                </div>
+                                <small>
+                                  {t("transport.settingsModal.midiDeviceHelp")}
+                                </small>
+                              </div>
+                            </div>
+                          </section>
+                        ) : null}
+
+                        {activeSettingsTab === "general" ? (
+                          <section
+                            className="lt-settings-tab-panel"
+                            role="tabpanel"
+                            id="lt-settings-panel-general"
+                            aria-labelledby="lt-settings-tab-general"
+                          >
+                            <div className="lt-settings-section-grid">
+                              <label className="lt-settings-field">
+                                <span className="lt-settings-field-label">
+                                  {t("transport.settingsModal.language")}
+                                </span>
+                                <select
+                                  value={selectedLocale}
+                                  disabled={
+                                    isSettingsLoading || isSettingsSaving
+                                  }
+                                  onChange={(event) =>
+                                    handleLocaleChange(event.target.value)
+                                  }
+                                >
+                                  <option value="">
+                                    {t(
+                                      "transport.settingsModal.languageSystemDefault",
+                                    )}
+                                  </option>
+                                  <option value="en">
+                                    {t(
+                                      "transport.settingsModal.languageEnglish",
+                                    )}
+                                  </option>
+                                  <option value="es">
+                                    {t(
+                                      "transport.settingsModal.languageSpanish",
+                                    )}
+                                  </option>
+                                </select>
+                              </label>
+                            </div>
+                          </section>
+                        ) : null}
+
+                        {activeSettingsTab === "midiLearn" ? (
+                          <section
+                            className="lt-settings-tab-panel"
+                            role="tabpanel"
+                            id="lt-settings-panel-midiLearn"
+                            aria-labelledby="lt-settings-tab-midiLearn"
+                          >
+                            <section
+                              className="lt-midi-learn-panel"
+                              aria-labelledby="lt-midi-learn-panel-title"
+                            >
+                              <div className="lt-midi-learn-panel-header">
+                                <div>
+                                  <span
+                                    id="lt-midi-learn-panel-title"
+                                    className="lt-settings-field-label"
+                                  >
+                                    {t(
+                                      "transport.settingsModal.midiLearnSectionTitle",
+                                    )}
+                                  </span>
+                                  <p>
+                                    {t(
+                                      "transport.settingsModal.midiLearnSectionDescription",
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="lt-midi-learn-actions">
+                                  <button
+                                    type="button"
+                                    className={`lt-midi-learn-activate ${midiLearnMode !== null ? "is-active" : ""}`}
+                                    disabled={
+                                      isSettingsLoading || isSettingsSaving
+                                    }
+                                    onClick={() =>
+                                      handleMidiLearnToggle({
+                                        closePanels: false,
+                                      })
+                                    }
+                                  >
+                                    <span className="material-symbols-outlined">
+                                      graphic_eq
+                                    </span>
+                                    {t("transport.shell.midiLearn")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="lt-midi-learn-reset"
+                                    disabled={
+                                      isSettingsLoading ||
+                                      isSettingsSaving ||
+                                      Object.keys(appSettings.midiMappings)
+                                        .length === 0
+                                    }
+                                    onClick={handleResetMidiMappings}
+                                  >
+                                    {t(
+                                      "transport.settingsModal.midiLearnReset",
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="lt-midi-learn-feedback">
+                                <strong>
+                                  {t("transport.settingsModal.midiLearnLatest")}
+                                </strong>
+                                {midiLearnFeedback ? (
+                                  <p>
+                                    {midiLearnFeedbackCommand?.label ??
+                                      midiLearnFeedback.key}
+                                    :{" "}
+                                    {formatMidiBinding(
+                                      midiLearnFeedback.binding,
+                                    )}
+                                  </p>
+                                ) : (
+                                  <p>
+                                    {t(
+                                      "transport.settingsModal.midiLearnEmpty",
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+
+                              {midiLearnMode !== null ? (
+                                <div className="lt-midi-learn-live">
+                                  <strong>
+                                    {t(
+                                      "transport.settingsModal.midiLearnListening",
+                                    )}
+                                  </strong>
+                                  <p>
+                                    {midiLearnMode === ""
+                                      ? t(
+                                          "transport.settingsModal.midiLearnArmed",
+                                        )
+                                      : t(
+                                          "transport.settingsModal.midiLearnTargeting",
+                                          {
+                                            key:
+                                              activeMidiLearnCommand?.label ??
+                                              midiLearnMode,
+                                          },
+                                        )}
+                                  </p>
+                                </div>
+                              ) : null}
+
+                              <div className="lt-segmented-control lt-midi-learn-view-tabs">
+                                <button
+                                  type="button"
+                                  className={
+                                    midiLearnView === "core" ? "is-active" : ""
+                                  }
+                                  onClick={() => setMidiLearnView("core")}
+                                >
+                                  {t(
+                                    "transport.settingsModal.midiLearnViewCore",
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={
+                                    midiLearnView === "markers"
+                                      ? "is-active"
+                                      : ""
+                                  }
+                                  onClick={() => setMidiLearnView("markers")}
+                                >
+                                  {t(
+                                    "transport.settingsModal.midiLearnViewMarkers",
+                                    {
+                                      count: midiLearnMarkerRows.length,
+                                    },
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={
+                                    midiLearnView === "songs" ? "is-active" : ""
+                                  }
+                                  onClick={() => setMidiLearnView("songs")}
+                                >
+                                  {t(
+                                    "transport.settingsModal.midiLearnViewSongs",
+                                    {
+                                      count: midiLearnSongRows.length,
+                                    },
+                                  )}
+                                </button>
+                              </div>
+
+                              <div className="lt-midi-learn-table-wrap">
+                                <table className="lt-midi-learn-table">
+                                  <thead>
+                                    <tr>
+                                      <th scope="col">
+                                        {t(
+                                          "transport.settingsModal.midiLearnTableCommand",
+                                        )}
+                                      </th>
+                                      <th scope="col">
+                                        {t(
+                                          "transport.settingsModal.midiLearnTableBinding",
+                                        )}
+                                      </th>
+                                      <th scope="col">
+                                        {t(
+                                          "transport.settingsModal.midiLearnTableAction",
+                                        )}
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {visibleMidiLearnRows.map((command) => {
+                                      const hasBinding = Boolean(
+                                        command.binding,
+                                      );
+                                      const isTarget =
+                                        midiLearnMode === command.key;
+
+                                      return (
+                                        <tr
+                                          key={command.key}
+                                          className={
+                                            isTarget
+                                              ? "is-midi-target"
+                                              : undefined
+                                          }
+                                        >
+                                          <td>
+                                            <strong>{command.label}</strong>
+                                            <code>{command.key}</code>
+                                          </td>
+                                          <td>
+                                            {hasBinding && command.binding ? (
+                                              <span className="lt-midi-binding-pill">
+                                                {formatMidiBinding(
+                                                  command.binding,
+                                                )}
+                                              </span>
+                                            ) : (
+                                              <span className="lt-midi-binding-empty">
+                                                {t(
+                                                  "transport.settingsModal.midiLearnUnassigned",
+                                                )}
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td>
+                                            <button
+                                              type="button"
+                                              className={`lt-midi-learn-relearn ${isTarget ? "is-active" : ""}`}
+                                              disabled={
+                                                isSettingsLoading ||
+                                                isSettingsSaving
+                                              }
+                                              onClick={() =>
+                                                handleMidiLearnCommandRelearn(
+                                                  command.key,
+                                                )
+                                              }
+                                            >
+                                              {isTarget
+                                                ? t(
+                                                    "transport.settingsModal.midiLearnListeningShort",
+                                                  )
+                                                : t(
+                                                    "transport.settingsModal.midiLearnRelearn",
+                                                  )}
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <div className="lt-midi-learn-dynamic-actions">
+                                {midiLearnView === "markers" ? (
+                                  <button
+                                    type="button"
+                                    className="lt-midi-learn-map-jump"
+                                    disabled={
+                                      isSettingsLoading || isSettingsSaving
+                                    }
+                                    onClick={() =>
+                                      handleDynamicMidiLearnJump("marker")
+                                    }
+                                  >
+                                    {t(
+                                      "transport.settingsModal.midiLearnMapMarkerJump",
+                                    )}
+                                  </button>
+                                ) : null}
+                                {midiLearnView === "songs" ? (
+                                  <button
+                                    type="button"
+                                    className="lt-midi-learn-map-jump"
+                                    disabled={
+                                      isSettingsLoading || isSettingsSaving
+                                    }
+                                    onClick={() =>
+                                      handleDynamicMidiLearnJump("song")
+                                    }
+                                  >
+                                    {t(
+                                      "transport.settingsModal.midiLearnMapSongJump",
+                                    )}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </section>
+                          </section>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </section>
               </div>
-            </section>
-          </div>
-        ) : null}
+            ) : null}
 
-        {isRemoteModalOpen ? (
-          <div className="lt-modal-backdrop">
-            <section
-              className="lt-settings-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="lt-remote-modal-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="lt-settings-modal-header">
-                <div>
-                  <span className="lt-settings-modal-eyebrow">{t("remoteAccess.eyebrow")}</span>
-                  <h2 id="lt-remote-modal-title">{t("remoteAccess.title")}</h2>
-                  <p>{t("remoteAccess.description")}</p>
-                </div>
-                <button type="button" className="lt-settings-modal-close" onClick={() => setIsRemoteModalOpen(false)}>
-                  <span className="material-symbols-outlined">close</span>
-                  {t("common.close")}
-                </button>
-              </header>
+            {isRemoteModalOpen ? (
+              <div className="lt-modal-backdrop">
+                <section
+                  className="lt-settings-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="lt-remote-modal-title"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <header className="lt-settings-modal-header">
+                    <div>
+                      <span className="lt-settings-modal-eyebrow">
+                        {t("remoteAccess.eyebrow")}
+                      </span>
+                      <h2 id="lt-remote-modal-title">
+                        {t("remoteAccess.title")}
+                      </h2>
+                      <p>{t("remoteAccess.description")}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="lt-settings-modal-close"
+                      onClick={() => setIsRemoteModalOpen(false)}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                      {t("common.close")}
+                    </button>
+                  </header>
 
-              <div className="lt-settings-modal-body">
-                <RemoteAccessCard remoteServerInfo={remoteServerInfo} />
+                  <div className="lt-settings-modal-body">
+                    <RemoteAccessCard remoteServerInfo={remoteServerInfo} />
+                  </div>
+                </section>
               </div>
-            </section>
+            ) : null}
+
+            {contextMenu ? (
+              <div
+                className="lt-context-menu"
+                style={{ left: contextMenu.x, top: contextMenu.y }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <strong>{contextMenu.title}</strong>
+                {contextMenu.actions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    disabled={action.disabled}
+                    onClick={() => {
+                      setContextMenu(null);
+                      void action.onSelect();
+                    }}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {missingFilePaths.length > 0 ? (
+              <button
+                type="button"
+                className="lt-missing-files-indicator"
+                onClick={() => setActiveSidebarTab("library")}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  warning
+                </span>
+                Faltan archivos multimedia
+              </button>
+            ) : null}
+
+            <div className="lt-status-overlay" aria-live="polite">
+              <span>{status}</span>
+            </div>
           </div>
-        ) : null}
-
-        {contextMenu ? (
-        <div
-          className="lt-context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <strong>{contextMenu.title}</strong>
-          {contextMenu.actions.map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              disabled={action.disabled}
-              onClick={() => {
-                setContextMenu(null);
-                void action.onSelect();
-              }}
-            >
-              {action.label}
-            </button>
-          ))}
         </div>
-      ) : null}
-
-        {missingFilePaths.length > 0 ? (
-          <button
-            type="button"
-            className="lt-missing-files-indicator"
-            onClick={() => setActiveSidebarTab("library")}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">warning</span>
-            Faltan archivos multimedia
-          </button>
-        ) : null}
-
-        <div className="lt-status-overlay" aria-live="polite">
-          <span>{status}</span>
-        </div>
-        </div>
-      </div>
       </div>
     </Profiler>
   );

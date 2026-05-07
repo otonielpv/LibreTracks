@@ -47,10 +47,13 @@ const en = {
       busyDescription: "Syncing project and timeline state.",
       emptyEyebrow: "LibreTracks DAW",
       emptyTitle: "Create or open a session",
-      emptyDescription: "Start a new session or open an existing one. Import WAV assets later from the Library panel and drag them onto the timeline only when you want to arrange them.",
+      emptyDescription:
+        "Start a new session or open an existing one. Import WAV assets later from the Library panel and drag them onto the timeline only when you want to arrange them.",
       emptyArrangementDropzone: "Empty arrangement dropzone",
-      emptyArrangementTitle: "Drop audio from the Library to create the first track",
-      emptyArrangementDescription: "LibreTracks will create an audio track automatically and place the clip at the snapped timeline position.",
+      emptyArrangementTitle:
+        "Drop audio from the Library to create the first track",
+      emptyArrangementDescription:
+        "LibreTracks will create an audio track automatically and place the clip at the snapped timeline position.",
       pendingJump: "Armed: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Selection {{start}} - {{end}}",
       contextTimelineTitle: "Timeline {{time}}",
@@ -59,25 +62,37 @@ const en = {
     settingsModal: {
       eyebrow: "Audio",
       title: "Settings",
-      description: "Configure the global audio output, hardware channels, and MIDI input device for live use.",
+      description:
+        "Configure the global audio output, hardware channels, and MIDI input device for live use.",
       close: "Close",
       audioDevice: "Audio device",
       audioDeviceSystemDefault: "System Default",
       audioDeviceSystemDefaultNamed: "System Default ({{name}})",
       audioDeviceUnavailable: "{{name}} (currently unavailable)",
       audioDeviceCurrentDefault: "Current system default: {{name}}.",
-      audioDeviceNoDefault: "No default device was detected in the operating system.",
+      audioDeviceNoDefault:
+        "No default device was detected in the operating system.",
+      audioDeviceExplicitHelp:
+        "Explicit selections open this device directly; the Windows default is ignored.",
+      audioDeviceRefreshLabel: "Device list",
+      audioDeviceRefresh: "Refresh audio devices",
+      sampleRate: "Output sample rate",
+      sampleRateAuto: "Auto - device default",
+      sampleRateAutoWithDefault: "Auto - device default: {{sampleRate}} Hz",
+      bufferSize: "Buffer size",
       midiDevice: "MIDI input device",
       midiDeviceNone: "Disabled",
       midiDeviceUnavailable: "{{name}} (currently unavailable)",
       midiDeviceRefresh: "Refresh MIDI devices",
-      midiDeviceHelp: "Select a pedal or pad controller to trigger Play, Stop, Vamp, and Next Song.",
+      midiDeviceHelp:
+        "Select a pedal or pad controller to trigger Play, Stop, Vamp, and Next Song.",
       language: "Language",
       languageSystemDefault: "Sistema / System Default",
       languageEnglish: "English",
       languageSpanish: "Español",
       metronomeTitle: "Metronome",
-      metronomeDescription: "Adds a synthesized click and keeps it sample-locked to the transport timeline.",
+      metronomeDescription:
+        "Adds a synthesized click and keeps it sample-locked to the transport timeline.",
       metronomeVolume: "Metronome volume",
       metronomeVolumeValue: "{{value}}%",
       metronomeOutput: "Metronome output",
@@ -128,11 +143,13 @@ const en = {
       vampBars: "Vamp bars",
       jumpBars: "Jump bars",
       midiLearnSectionTitle: "MIDI Learn mappings",
-      midiLearnSectionDescription: "Capture hardware notes or CC messages and assign them to transport actions or live parameters.",
+      midiLearnSectionDescription:
+        "Capture hardware notes or CC messages and assign them to transport actions or live parameters.",
       midiLearnLatest: "Latest learned binding",
       midiLearnEmpty: "No MIDI binding has been learned yet.",
       midiLearnListening: "Learn mode",
-      midiLearnArmed: "MIDI Learn is armed. Click a control below or press Relearn on a row, then move your hardware.",
+      midiLearnArmed:
+        "MIDI Learn is armed. Click a control below or press Relearn on a row, then move your hardware.",
       midiLearnTargeting: "Learning {{key}}. Move the hardware control now.",
       midiLearnTableCommand: "Command",
       midiLearnTableBinding: "Current MIDI binding",
@@ -171,17 +188,22 @@ const en = {
       virtualFolderRename: "New virtual folder name",
     },
     confirm: {
-      deleteTrackWithClips: "This audio track contains clips. Delete it together with its clips?",
+      deleteTrackWithClips:
+        "This audio track contains clips. Delete it together with its clips?",
       deleteLibraryAsset: "Delete {{name}} from this session library?",
-      deleteLibraryAssets: "Delete {{count}} selected assets from this session library?",
-      deleteLibraryFolder: "Delete virtual folder {{name}}? Assets inside it will move back to the library root.",
-      adjustProjectTempo: "Detected BPM: {{bpm}}. Do you want to adjust the project tempo?",
+      deleteLibraryAssets:
+        "Delete {{count}} selected assets from this session library?",
+      deleteLibraryFolder:
+        "Delete virtual folder {{name}}? Assets inside it will move back to the library root.",
+      adjustProjectTempo:
+        "Detected BPM: {{bpm}}. Do you want to adjust the project tempo?",
     },
     status: {
       loadingSession: "Loading session...",
       error: "Error: {{message}}",
       readyDesktop: "Desktop session ready for editing.",
-      readyDemo: "Web demo mode active. Contextual actions already use the new DAW flow.",
+      readyDemo:
+        "Web demo mode active. Contextual actions already use the new DAW flow.",
       playbackPaused: "Playback paused.",
       playbackStarted: "Playback started.",
       playbackStopped: "Playback stopped.",
@@ -196,11 +218,13 @@ const en = {
       tracksDeleted: "{{count}} track(s) deleted.",
       clipMoved: "Clip moved: {{name}}",
       cursorMoved: "Cursor moved to {{time}}",
-      noMarkersAhead: "Warning: there are no markers ahead; jump at next marker was ignored.",
+      noMarkersAhead:
+        "Warning: there are no markers ahead; jump at next marker was ignored.",
       jumpImmediate: "Immediate jump to {{name}}.",
       jumpNextMarker: "Jump armed at the next marker to {{name}}.",
       jumpAfterBars: "Jump armed in {{count}} bars to {{name}}.",
-      noSongRegionAtCursor: "Warning: no current song region was found for this position.",
+      noSongRegionAtCursor:
+        "Warning: no current song region was found for this position.",
       vampSectionEnabled: "Vamp enabled for the current section.",
       vampBarsEnabled: "Vamp enabled for {{count}} bars.",
       vampDisabled: "Vamp disabled.",
@@ -212,7 +236,8 @@ const en = {
       tempoMarkerCreated: "BPM marker created at {{time}} with {{bpm}} BPM.",
       timelineSelectionCleared: "Timeline selection cleared.",
       songRenamed: "Song renamed: {{name}}.",
-      regionTransposeUpdated: "Region transpose updated for {{name}} to {{transpose}} st.",
+      regionTransposeUpdated:
+        "Region transpose updated for {{name}} to {{transpose}} st.",
       songDeleted: "Song deleted: {{name}}.",
       tempoMarkerUpdated: "BPM marker updated to {{bpm}} BPM.",
       tempoMarkerDeleted: "BPM marker deleted at {{time}}.",
@@ -239,6 +264,9 @@ const en = {
       projectSavedNewLocation: "Project saved to a new location.",
       audioDeviceUpdated: "Audio device updated to {{name}}.",
       audioDeviceSystemDefault: "Audio device switched to the system default.",
+      outputSampleRateResetUnsupported:
+        "The selected device does not support {{sampleRate}} Hz. Output sample rate was changed to Auto.",
+      audioDevicesRefreshed: "Audio device list refreshed.",
       midiDeviceUpdated: "MIDI input updated to {{name}}.",
       midiDeviceDisabled: "MIDI input disabled.",
       midiDevicesRefreshed: "MIDI device list refreshed.",
@@ -249,15 +277,18 @@ const en = {
       midiMappingsReset: "MIDI mappings reset.",
       audioRoutingUpdated: "Audio routing updated.",
       trackRoutingUpdated: "Track routing updated.",
-      importRequiresSession: "Create or open a session before importing audio to the library.",
+      importRequiresSession:
+        "Create or open a session before importing audio to the library.",
       libraryUpdated: "Library updated with {{count}} assets.",
       libraryAssetDeleted: "Asset deleted: {{name}}",
       libraryAssetsDeleted: "{{count}} assets deleted from the library.",
-      createFolderRequiresSession: "Create or open a session before creating virtual folders.",
+      createFolderRequiresSession:
+        "Create or open a session before creating virtual folders.",
       virtualFolderCreated: "Virtual folder created: {{name}}",
       libraryAssetsMoved: "{{count}} asset(s) moved to {{name}}.",
       libraryAssetsMovedRoot: "{{count}} asset(s) moved to the library root.",
-      renameFolderRequiresSession: "Create or open a session before renaming virtual folders.",
+      renameFolderRequiresSession:
+        "Create or open a session before renaming virtual folders.",
       virtualFolderRenamed: "Virtual folder renamed: {{from}} -> {{to}}",
       virtualFolderDeleted: "Virtual folder deleted: {{name}}",
       rangeSelected: "Range selected: {{start}} - {{end}}.",
@@ -268,13 +299,16 @@ const en = {
       songImported: "Song imported into the current session.",
       packageImportedAt: "Package imported at {{time}}.",
       externalDropMixed: "Drop either a song package or audio files, not both.",
-      externalDropUnsupported: "Unsupported file type. Drop audio files or a .ltpkg package.",
-      midiWarningHidden: "The missing MIDI device warning will not be shown again.",
+      externalDropUnsupported:
+        "Unsupported file type. Drop audio files or a .ltpkg package.",
+      midiWarningHidden:
+        "The missing MIDI device warning will not be shown again.",
     },
     midiWarning: {
       eyebrow: "MIDI unavailable",
       title: "The saved MIDI device was not found",
-      description: "LibreTracks started without that device so the session could continue.",
+      description:
+        "LibreTracks started without that device so the session could continue.",
       detail: "Configured device: {{name}}",
       dismiss: "Close",
       dontShowAgain: "Don't show again",
@@ -347,7 +381,8 @@ const en = {
   },
   library: {
     assetListAria: "Library assets",
-    emptyFolder: "Drop assets here to keep this folder ready for the next song.",
+    emptyFolder:
+      "Drop assets here to keep this folder ready for the next song.",
     panelAria: "Library panel",
     eyebrow: "Session Assets",
     title: "Library",
@@ -360,7 +395,8 @@ const en = {
     deleteHint: "Delete removes selection",
     openSessionHint: "Open or create a session",
     loading: "Loading library assets...",
-    empty: "Import WAV files to build the library before arranging them on the timeline.",
+    empty:
+      "Import WAV files to build the library before arranging them on the timeline.",
     rootFolder: "Unfiled",
     createFolder: "Create virtual folder",
     renameFolder: "Rename folder",
@@ -389,15 +425,18 @@ const en = {
   importAudio: {
     title: "Import Audio",
     pickTitle: "Select WAV files from your computer",
-    pickHint: "The system file browser will open. You can select one or more WAV files.",
+    pickHint:
+      "The system file browser will open. You can select one or more WAV files.",
     selectingFiles: "Select files...",
     importing: "Importing...",
   },
   remoteAccess: {
     eyebrow: "Remote Control",
     title: "Connect mobile remote",
-    description: "Scan the QR code or open one of the URLs below from your phone or tablet.",
-    sameNetwork: "Make sure the desktop and the mobile or tablet are connected to the same network.",
+    description:
+      "Scan the QR code or open one of the URLs below from your phone or tablet.",
+    sameNetwork:
+      "Make sure the desktop and the mobile or tablet are connected to the same network.",
     ipUrl: "IP URL",
     hostnameUrl: "Hostname URL (.local)",
     qrAlt: "QR code for LibreTracks Remote",

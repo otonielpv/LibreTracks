@@ -47,10 +47,13 @@ const es = {
       busyDescription: "Sincronizando el estado del proyecto y del timeline.",
       emptyEyebrow: "LibreTracks DAW",
       emptyTitle: "Crea o abre una sesion",
-      emptyDescription: "Inicia una sesion nueva o abre una existente. Importa assets WAV despues desde el panel Libreria y arrastralos al timeline solo cuando quieras organizarlos.",
+      emptyDescription:
+        "Inicia una sesion nueva o abre una existente. Importa assets WAV despues desde el panel Libreria y arrastralos al timeline solo cuando quieras organizarlos.",
       emptyArrangementDropzone: "Zona vacia de arreglo",
-      emptyArrangementTitle: "Suelta audio desde la libreria  para crear la primera pista",
-      emptyArrangementDescription: "LibreTracks creara una pista de audio automaticamente y colocara el clip en la posicion ajustada del timeline.",
+      emptyArrangementTitle:
+        "Suelta audio desde la libreria  para crear la primera pista",
+      emptyArrangementDescription:
+        "LibreTracks creara una pista de audio automaticamente y colocara el clip en la posicion ajustada del timeline.",
       pendingJump: "Armado: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Seleccion {{start}} - {{end}}",
       contextTimelineTitle: "Timeline {{time}}",
@@ -59,25 +62,38 @@ const es = {
     settingsModal: {
       eyebrow: "Audio",
       title: "Configuracion",
-      description: "Configura la salida global del motor, los canales de hardware y el dispositivo de entrada MIDI para directo.",
+      description:
+        "Configura la salida global del motor, los canales de hardware y el dispositivo de entrada MIDI para directo.",
       close: "Cerrar",
       audioDevice: "Dispositivo de audio",
       audioDeviceSystemDefault: "Predeterminado del sistema",
       audioDeviceSystemDefaultNamed: "Predeterminado del sistema ({{name}})",
       audioDeviceUnavailable: "{{name}} (no disponible actualmente)",
       audioDeviceCurrentDefault: "Predeterminado actual del sistema: {{name}}.",
-      audioDeviceNoDefault: "No se detecto un dispositivo predeterminado en el sistema operativo.",
+      audioDeviceNoDefault:
+        "No se detecto un dispositivo predeterminado en el sistema operativo.",
+      audioDeviceExplicitHelp:
+        "Las selecciones explicitas abren este dispositivo directamente; el predeterminado de Windows se ignora.",
+      audioDeviceRefreshLabel: "Lista de dispositivos",
+      audioDeviceRefresh: "Refrescar dispositivos de audio",
+      sampleRate: "Frecuencia de muestreo de salida",
+      sampleRateAuto: "Auto - predeterminado del dispositivo",
+      sampleRateAutoWithDefault:
+        "Auto - predeterminado del dispositivo: {{sampleRate}} Hz",
+      bufferSize: "Tamano de buffer",
       midiDevice: "Dispositivo de entrada MIDI",
       midiDeviceNone: "Desactivado",
       midiDeviceUnavailable: "{{name}} (no disponible actualmente)",
       midiDeviceRefresh: "Refrescar dispositivos MIDI",
-      midiDeviceHelp: "Selecciona un pedal o pad para disparar Reproducir, Detener, Vamp y Siguiente Cancion.",
+      midiDeviceHelp:
+        "Selecciona un pedal o pad para disparar Reproducir, Detener, Vamp y Siguiente Cancion.",
       language: "Idioma",
       languageSystemDefault: "Sistema / System Default",
       languageEnglish: "English",
       languageSpanish: "Español",
       metronomeTitle: "Metronomo",
-      metronomeDescription: "Añade una claqueta sintetizada y la mantiene bloqueada muestra a muestra con el timeline del transporte.",
+      metronomeDescription:
+        "Añade una claqueta sintetizada y la mantiene bloqueada muestra a muestra con el timeline del transporte.",
       metronomeVolume: "Volumen del metronomo",
       metronomeVolumeValue: "{{value}}%",
       metronomeOutput: "Salida del metronomo",
@@ -94,11 +110,15 @@ const es = {
       midiLearnGlobalJumpMode: "Modo de salto global",
       midiLearnGlobalJumpModeImmediate: "Modo de salto global: Inmediato",
       midiLearnGlobalJumpModeAfterBars: "Modo de salto global: Tras compases",
-      midiLearnGlobalJumpModeNextMarker: "Modo de salto global: Siguiente marca",
+      midiLearnGlobalJumpModeNextMarker:
+        "Modo de salto global: Siguiente marca",
       midiLearnSongJumpTrigger: "Disparador de salto de cancion",
-      midiLearnSongJumpTriggerImmediate: "Disparador de salto de cancion: Inmediato",
-      midiLearnSongJumpTriggerAfterBars: "Disparador de salto de cancion: Tras compases",
-      midiLearnSongJumpTriggerRegionEnd: "Disparador de salto de cancion: Final de region",
+      midiLearnSongJumpTriggerImmediate:
+        "Disparador de salto de cancion: Inmediato",
+      midiLearnSongJumpTriggerAfterBars:
+        "Disparador de salto de cancion: Tras compases",
+      midiLearnSongJumpTriggerRegionEnd:
+        "Disparador de salto de cancion: Final de region",
       midiLearnSongTransitionMode: "Modo de transicion de cancion",
       midiLearnSongTransitionInstant: "Transicion de cancion: Inmediata",
       midiLearnSongTransitionFadeOut: "Transicion de cancion: Fade out",
@@ -128,12 +148,15 @@ const es = {
       vampBars: "Compases de vamp",
       jumpBars: "Compases de salto",
       midiLearnSectionTitle: "Mapeos de MIDI Learn",
-      midiLearnSectionDescription: "Captura notas o mensajes CC del hardware y asignalos a acciones de transporte o parametros en vivo.",
+      midiLearnSectionDescription:
+        "Captura notas o mensajes CC del hardware y asignalos a acciones de transporte o parametros en vivo.",
       midiLearnLatest: "Ultima asignacion aprendida",
       midiLearnEmpty: "Aun no se ha aprendido ninguna asignacion MIDI.",
       midiLearnListening: "Modo aprendizaje",
-      midiLearnArmed: "MIDI Learn esta armado. Haz clic en un control de abajo o pulsa Relearn en una fila y despues mueve tu hardware.",
-      midiLearnTargeting: "Aprendiendo {{key}}. Mueve ahora el control del hardware.",
+      midiLearnArmed:
+        "MIDI Learn esta armado. Haz clic en un control de abajo o pulsa Relearn en una fila y despues mueve tu hardware.",
+      midiLearnTargeting:
+        "Aprendiendo {{key}}. Mueve ahora el control del hardware.",
       midiLearnTableCommand: "Comando",
       midiLearnTableBinding: "Asignacion MIDI actual",
       midiLearnTableAction: "Accion",
@@ -171,17 +194,22 @@ const es = {
       virtualFolderRename: "Nuevo nombre de la carpeta virtual",
     },
     confirm: {
-      deleteTrackWithClips: "Este audio track tiene clips. ¿Quieres borrarlo junto con sus clips?",
+      deleteTrackWithClips:
+        "Este audio track tiene clips. ¿Quieres borrarlo junto con sus clips?",
       deleteLibraryAsset: "Borrar {{name}} de la biblioteca de esta sesion?",
-      deleteLibraryAssets: "Borrar {{count}} assets seleccionados de la biblioteca de esta sesion?",
-      deleteLibraryFolder: "Delete virtual folder {{name}}? Assets inside it will move back to the library root.",
-      adjustProjectTempo: "Detected BPM: {{bpm}}. Do you want to adjust the project tempo?",
+      deleteLibraryAssets:
+        "Borrar {{count}} assets seleccionados de la biblioteca de esta sesion?",
+      deleteLibraryFolder:
+        "Delete virtual folder {{name}}? Assets inside it will move back to the library root.",
+      adjustProjectTempo:
+        "Detected BPM: {{bpm}}. Do you want to adjust the project tempo?",
     },
     status: {
       loadingSession: "Cargando sesion...",
       error: "Error: {{message}}",
       readyDesktop: "Sesion desktop lista para edicion.",
-      readyDemo: "Modo demo web activo. Las acciones contextuales ya usan el nuevo flujo DAW.",
+      readyDemo:
+        "Modo demo web activo. Las acciones contextuales ya usan el nuevo flujo DAW.",
       playbackPaused: "Reproduccion pausada.",
       playbackStarted: "Reproduccion iniciada.",
       playbackStopped: "Reproduccion detenida.",
@@ -196,15 +224,18 @@ const es = {
       tracksDeleted: "{{count}} track(s) eliminado(s).",
       clipMoved: "Clip movido: {{name}}",
       cursorMoved: "Cursor movido a {{time}}",
-      noMarkersAhead: "Aviso: no quedan marcas por delante; salto en la siguiente marca ignorado.",
+      noMarkersAhead:
+        "Aviso: no quedan marcas por delante; salto en la siguiente marca ignorado.",
       jumpImmediate: "Salto inmediato a {{name}}.",
       jumpNextMarker: "Salto armado en la siguiente marca hacia {{name}}.",
       jumpAfterBars: "Salto armado en {{count}} compases hacia {{name}}.",
-      noSongRegionAtCursor: "Aviso: no se encontro una cancion actual para esta posicion.",
+      noSongRegionAtCursor:
+        "Aviso: no se encontro una cancion actual para esta posicion.",
       vampSectionEnabled: "Vamp activado para la seccion actual.",
       vampBarsEnabled: "Vamp activado para {{count}} compases.",
       vampDisabled: "Vamp desactivado.",
-      songJumpScheduled: "Salto de cancion armado a {{name}} | {{when}} | {{how}}.",
+      songJumpScheduled:
+        "Salto de cancion armado a {{name}} | {{when}} | {{how}}.",
       jumpCancelledSection: "Salto cancelado para {{name}}.",
       songCreatedInRange: "Cancion creada entre {{start}} y {{end}}.",
       markerCreatedAt: "Marca creada en {{time}}.",
@@ -212,7 +243,8 @@ const es = {
       tempoMarkerCreated: "Marca de BPM creada en {{time}} a {{bpm}} BPM.",
       timelineSelectionCleared: "Seleccion del timeline limpiada.",
       songRenamed: "Cancion renombrada: {{name}}.",
-      regionTransposeUpdated: "Transposicion de la region actualizada para {{name}} a {{transpose}} st.",
+      regionTransposeUpdated:
+        "Transposicion de la region actualizada para {{name}} a {{transpose}} st.",
       songDeleted: "Cancion eliminada: {{name}}.",
       tempoMarkerUpdated: "Marca de BPM actualizada a {{bpm}} BPM.",
       tempoMarkerDeleted: "Marca de BPM borrada en {{time}}.",
@@ -220,7 +252,8 @@ const es = {
       trackCreated: "Track creado: {{name}}",
       trackRenamed: "Track renombrado: {{name}}",
       trackDeleted: "Track borrado: {{name}}",
-      trackTransposeUpdated: "Preferencia de transposicion del track actualizada para {{name}}.",
+      trackTransposeUpdated:
+        "Preferencia de transposicion del track actualizada para {{name}}.",
       trackMovedIntoFolder: "Track movido dentro de {{name}}",
       trackRemovedFromFolder: "Track sacado del folder: {{name}}",
       trackSelected: "Track seleccionado: {{name}}",
@@ -238,26 +271,35 @@ const es = {
       projectSavedAt: "Proyecto guardado en {{path}}.",
       projectSavedNewLocation: "Proyecto guardado en nueva ubicacion.",
       audioDeviceUpdated: "Dispositivo de audio actualizado a {{name}}.",
-      audioDeviceSystemDefault: "Dispositivo de audio ajustado al predeterminado del sistema.",
+      audioDeviceSystemDefault:
+        "Dispositivo de audio ajustado al predeterminado del sistema.",
+      outputSampleRateResetUnsupported:
+        "El dispositivo seleccionado no soporta {{sampleRate}} Hz. La frecuencia de salida se cambio a Auto.",
+      audioDevicesRefreshed: "Lista de dispositivos de audio refrescada.",
       midiDeviceUpdated: "Dispositivo MIDI actualizado a {{name}}.",
       midiDeviceDisabled: "Entrada MIDI desactivada.",
       midiDevicesRefreshed: "Lista de dispositivos MIDI actualizada.",
       metronomeEnabled: "Metronomo activado.",
       metronomeDisabled: "Metronomo desactivado.",
       metronomeVolumeUpdated: "Volumen del metronomo ajustado a {{volume}}%.",
-      midiBindingLearned: "Asignacion MIDI aprendida para {{key}}: {{binding}}.",
+      midiBindingLearned:
+        "Asignacion MIDI aprendida para {{key}}: {{binding}}.",
       midiMappingsReset: "Mapeos MIDI reseteados.",
       audioRoutingUpdated: "Ruteo de audio actualizado.",
       trackRoutingUpdated: "Ruteo de pista actualizado.",
-      importRequiresSession: "Crea o abre una sesion antes de importar audio a la libreria.",
+      importRequiresSession:
+        "Crea o abre una sesion antes de importar audio a la libreria.",
       libraryUpdated: "Libreria actualizada con {{count}} assets.",
       libraryAssetDeleted: "Asset eliminado: {{name}}",
       libraryAssetsDeleted: "{{count}} assets eliminados de la libreria.",
-      createFolderRequiresSession: "Crea o abre una sesion antes de crear carpetas virtuales.",
+      createFolderRequiresSession:
+        "Crea o abre una sesion antes de crear carpetas virtuales.",
       virtualFolderCreated: "Carpeta virtual creada: {{name}}",
       libraryAssetsMoved: "{{count}} asset(s) movidos a {{name}}.",
-      libraryAssetsMovedRoot: "{{count}} asset(s) movidos a la raiz de la libreria.",
-      renameFolderRequiresSession: "Crea o abre una sesion antes de renombrar carpetas virtuales.",
+      libraryAssetsMovedRoot:
+        "{{count}} asset(s) movidos a la raiz de la libreria.",
+      renameFolderRequiresSession:
+        "Crea o abre una sesion antes de renombrar carpetas virtuales.",
       virtualFolderRenamed: "Carpeta virtual renombrada: {{from}} -> {{to}}",
       virtualFolderDeleted: "Carpeta virtual eliminada: {{name}}",
       rangeSelected: "Rango seleccionado: {{start}} - {{end}}.",
@@ -267,14 +309,18 @@ const es = {
       libraryImportStarting: "Preparando importacion de assets...",
       songImported: "Cancion importada en la sesion actual.",
       packageImportedAt: "Paquete importado en {{time}}.",
-      externalDropMixed: "Suelta un paquete de cancion o archivos de audio, no ambos.",
-      externalDropUnsupported: "Tipo de archivo no compatible. Suelta archivos de audio o un paquete .ltpkg.",
-      midiWarningHidden: "El aviso de dispositivo MIDI ausente no se mostrara de nuevo.",
+      externalDropMixed:
+        "Suelta un paquete de cancion o archivos de audio, no ambos.",
+      externalDropUnsupported:
+        "Tipo de archivo no compatible. Suelta archivos de audio o un paquete .ltpkg.",
+      midiWarningHidden:
+        "El aviso de dispositivo MIDI ausente no se mostrara de nuevo.",
     },
     midiWarning: {
       eyebrow: "MIDI no disponible",
       title: "No se encontro el dispositivo MIDI guardado",
-      description: "LibreTracks ha arrancado sin ese dispositivo para no bloquear la sesion.",
+      description:
+        "LibreTracks ha arrancado sin ese dispositivo para no bloquear la sesion.",
       detail: "Dispositivo configurado: {{name}}",
       dismiss: "Cerrar",
       dontShowAgain: "No mostrar mas",
@@ -347,7 +393,8 @@ const es = {
   },
   library: {
     assetListAria: "Library assets",
-    emptyFolder: "Suelta assets aqui para dejar esta carpeta lista para la siguiente cancion.",
+    emptyFolder:
+      "Suelta assets aqui para dejar esta carpeta lista para la siguiente cancion.",
     panelAria: "Library panel",
     eyebrow: "Assets de la Sesion",
     title: "Biblioteca",
@@ -360,7 +407,8 @@ const es = {
     deleteHint: "Delete removes selection",
     openSessionHint: "Abre o crea una sesion",
     loading: "Cargando assets de la biblioteca...",
-    empty: "Importa archivos WAV para construir la biblioteca antes de organizarlos en el timeline.",
+    empty:
+      "Importa archivos WAV para construir la biblioteca antes de organizarlos en el timeline.",
     rootFolder: "Sin carpeta",
     createFolder: "Crear carpeta virtual",
     renameFolder: "Renombrar carpeta",
@@ -389,15 +437,18 @@ const es = {
   importAudio: {
     title: "Importar Audio",
     pickTitle: "Selecciona archivos WAV desde tu ordenador",
-    pickHint: "Se abrira el explorador de archivos del sistema. Puedes seleccionar uno o varios archivos WAV.",
+    pickHint:
+      "Se abrira el explorador de archivos del sistema. Puedes seleccionar uno o varios archivos WAV.",
     selectingFiles: "Seleccionar archivos...",
     importing: "Importando...",
   },
   remoteAccess: {
     eyebrow: "Control remoto",
     title: "Conectar remote movil",
-    description: "Escanea el codigo QR o abre una de las URLs desde tu movil o tablet.",
-    sameNetwork: "Asegurate de que el desktop y el movil o tablet esten conectados a la misma red.",
+    description:
+      "Escanea el codigo QR o abre una de las URLs desde tu movil o tablet.",
+    sameNetwork:
+      "Asegurate de que el desktop y el movil o tablet esten conectados a la misma red.",
     ipUrl: "URL por IP",
     hostnameUrl: "URL por hostname (.local)",
     qrAlt: "Codigo QR para LibreTracks Remote",

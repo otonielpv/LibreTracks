@@ -47,7 +47,9 @@ fn main() {
                         .and_then(|settings| settings.selected_midi_device),
                 )
                 .unwrap_or_else(|error| {
-                    eprintln!("[libretracks-midi] startup warning: {error}");
+                    if audio_runtime::audio_debug_logging_enabled() {
+                        eprintln!("[libretracks-midi] startup warning: {error}");
+                    }
                 });
             remote::initialize_remote(app)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;

@@ -77,6 +77,14 @@ pub(crate) struct AudioRuntimeStateSummary {
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AudioBackendCountersSummary {
+    pub backend: Option<String>,
+    pub device: Option<String>,
+    pub sample_rate: u32,
+    pub actual_buffer_size: usize,
+    pub ring_capacity_frames: usize,
+    pub prefill_frames: usize,
+    pub prefill_completed: bool,
+    pub prefill_available_frames: usize,
     pub callback_count: u64,
     pub callback_min_frames: usize,
     pub callback_max_frames: usize,
@@ -86,6 +94,9 @@ pub(crate) struct AudioBackendCountersSummary {
     pub needs_resync: bool,
     pub stale_drop_count: u64,
     pub resync_count: u64,
+    pub realtime_pitch_clip_count: usize,
+    pub min_queued_pitch_output_frames: usize,
+    pub clip_diagnostics: Vec<mixer::ClipPlaybackDiagnostics>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -389,6 +400,7 @@ pub(crate) fn command_kind_label(kind: AudioCommandKind) -> &'static str {
         AudioCommandKind::Play => "play",
         AudioCommandKind::Seek => "seek",
         AudioCommandKind::SyncSong => "sync_song",
+        AudioCommandKind::ApplySettings => "apply_settings",
         AudioCommandKind::Stop => "stop",
         AudioCommandKind::StartMasterFade => "start_master_fade",
         AudioCommandKind::DebugSnapshot => "debug_snapshot",

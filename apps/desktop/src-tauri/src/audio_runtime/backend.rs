@@ -86,6 +86,61 @@ pub struct AudioOutputRequest {
     pub safe_mode: bool,
 }
 
+impl AudioOutputRequest {
+    pub fn has_explicit_device_selection(&self) -> bool {
+        self.backend.is_some() && (self.device_id.is_some() || self.device_name.is_some())
+    }
+
+    pub fn requested_device_label(&self) -> String {
+        self.device_id
+            .as_deref()
+            .or(self.device_name.as_deref())
+            .unwrap_or("System default")
+            .to_string()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AudioDeviceResolveError {
+    BackendNotAvailable {
+        backend: AudioBackendKind,
+        device: String,
+    },
+    DeviceNotFound {
+        backend: AudioBackendKind,
+        device: String,
+    },
+    NoDefaultOutputDevice,
+}
+
+impl AudioDeviceResolveError {
+    pub fn failure_stage(&self) -> &'static str {
+        match self {
+            Self::BackendNotAvailable { .. } => "backend_not_available",
+            Self::DeviceNotFound { .. } => "device_not_found",
+            Self::NoDefaultOutputDevice => "device_not_found",
+        }
+    }
+}
+
+impl std::fmt::Display for AudioDeviceResolveError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BackendNotAvailable { backend, device } => write!(
+                formatter,
+                "Selected output device is unavailable: backend={backend:?}, device={device}"
+            ),
+            Self::DeviceNotFound { backend, device } => write!(
+                formatter,
+                "Selected output device is unavailable: backend={backend:?}, device={device}"
+            ),
+            Self::NoDefaultOutputDevice => {
+                write!(formatter, "No default output device is available")
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
@@ -167,6 +222,25 @@ pub struct AudioRuntimeCounters {
     pub needs_resync: AtomicBool,
     pub stale_drop_count: AtomicU64,
     pub resync_count: AtomicU64,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PrefillResult {
+    pub requested_frames: usize,
+    pub requested_samples: usize,
+    pub available_frames: usize,
+    pub available_samples: usize,
+    pub elapsed_ms: f64,
+    pub completed: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedOutputStreamConfig {
+    pub supported_config: SupportedStreamConfig,
+    pub requested_sample_rate: Option<u32>,
+    pub resolved_sample_rate: u32,
+    pub used_fallback: bool,
+    pub fallback_reason: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -345,7 +419,10 @@ pub(crate) fn drain_consumer_samples<T>(
                     break None; // Wait for the main thread to catch up to this future generation
                 } else {
                     state.overflow.pop_front(); // Drop stale
-                    state.counters.stale_drop_count.fetch_add(1, Ordering::Relaxed);
+                    state
+                        .counters
+                        .stale_drop_count
+                        .fetch_add(1, Ordering::Relaxed);
                     continue;
                 }
             }
@@ -358,7 +435,10 @@ pub(crate) fn drain_consumer_samples<T>(
                         state.overflow.push_back(popped);
                         break None;
                     } else {
-                        state.counters.stale_drop_count.fetch_add(1, Ordering::Relaxed);
+                        state
+                            .counters
+                            .stale_drop_count
+                            .fetch_add(1, Ordering::Relaxed);
                         continue; // Drop stale
                     }
                 }
@@ -470,19 +550,82 @@ pub fn host_id_for_backend(kind: AudioBackendKind) -> Option<HostId> {
         .find(|host_id| backend_kind_from_host_id(*host_id) == kind)
 }
 
+fn platform_system_default_backend_priority() -> &'static [AudioBackendKind] {
+    #[cfg(target_os = "windows")]
+    {
+        &[AudioBackendKind::Wasapi]
+    }
+    #[cfg(target_os = "macos")]
+    {
+        &[AudioBackendKind::CoreAudio]
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        &[AudioBackendKind::Alsa, AudioBackendKind::Jack]
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", unix)))]
+    {
+        &[AudioBackendKind::Unknown]
+    }
+}
+
+fn system_default_host_ids() -> Vec<HostId> {
+    let available_hosts = cpal::available_hosts();
+    platform_system_default_backend_priority()
+        .iter()
+        .filter_map(|backend| {
+            available_hosts
+                .iter()
+                .copied()
+                .find(|host_id| backend_kind_from_host_id(*host_id) == *backend)
+        })
+        .collect()
+}
+
+pub fn is_system_default_backend_candidate(backend: AudioBackendKind) -> bool {
+    platform_system_default_backend_priority().contains(&backend)
+}
+
+#[cfg(test)]
+pub fn system_default_backend_from_available_for_test(
+    available_backends: &[AudioBackendKind],
+) -> Option<AudioBackendKind> {
+    platform_system_default_backend_priority()
+        .iter()
+        .copied()
+        .find(|backend| available_backends.contains(backend))
+}
+
 pub fn enumerate_output_devices() -> Vec<AudioDeviceDescriptor> {
     let mut descriptors = Vec::new();
+    let debug_logging_enabled = super::telemetry::env_flag("LIBRETRACKS_AUDIO_DEBUG");
     for host_id in cpal::available_hosts() {
         let Ok(host) = cpal::host_from_id(host_id) else {
             continue;
         };
         let backend = backend_kind_from_host_id(host_id);
-        let default_name = host.default_output_device().and_then(|device| device.name().ok());
+        let default_name = host
+            .default_output_device()
+            .and_then(|device| device.name().ok());
         let Ok(devices) = host.output_devices() else {
             continue;
         };
         for device in devices {
-            if let Some(descriptor) = describe_output_device(host_id, backend, default_name.as_deref(), device) {
+            if let Some(descriptor) =
+                describe_output_device(host_id, backend, default_name.as_deref(), device)
+            {
+                if debug_logging_enabled && backend == AudioBackendKind::Asio {
+                    eprintln!("[asio_candidate_seen] device=\"{}\"", descriptor.name);
+                }
+                if debug_logging_enabled
+                    && backend == AudioBackendKind::Asio
+                    && descriptor.is_default
+                {
+                    eprintln!(
+                        "[default_device_candidate_rejected] candidate_backend=\"ASIO\" candidate_device=\"{}\" reason=\"ASIO is opt-in only\"",
+                        descriptor.name
+                    );
+                }
                 descriptors.push(descriptor);
             }
         }
@@ -513,13 +656,18 @@ pub fn describe_output_device(
     let max_output_channels = supported_ranges
         .iter()
         .map(|range| usize::from(range.channels()))
-        .chain(default_config.as_ref().map(|config| usize::from(config.channels())))
+        .chain(
+            default_config
+                .as_ref()
+                .map(|config| usize::from(config.channels())),
+        )
         .max()
         .unwrap_or(2);
     let default_sample_rate = default_config.as_ref().map(|config| config.sample_rate().0);
     let supported_sample_rates = collect_sample_rates(&supported_ranges, default_sample_rate);
     let supported_buffer_sizes = collect_buffer_sizes(&supported_ranges);
-    let supported_sample_formats = collect_sample_formats(&supported_ranges, default_config.as_ref());
+    let supported_sample_formats =
+        collect_sample_formats(&supported_ranges, default_config.as_ref());
 
     Some(AudioDeviceDescriptor {
         backend,
@@ -536,11 +684,13 @@ pub fn describe_output_device(
     })
 }
 
-pub fn resolve_output_device(request: &AudioOutputRequest) -> Option<(HostId, Host, Device)> {
+pub fn resolve_output_device(
+    request: &AudioOutputRequest,
+) -> Result<(HostId, Host, Device), AudioDeviceResolveError> {
     #[cfg(test)]
     {
         let _ = request;
-        return None;
+        return Err(AudioDeviceResolveError::NoDefaultOutputDevice);
     }
 
     #[cfg(not(test))]
@@ -549,29 +699,107 @@ pub fn resolve_output_device(request: &AudioOutputRequest) -> Option<(HostId, Ho
             .ok()
             .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true"))
         {
-            return None;
+            return Err(AudioDeviceResolveError::NoDefaultOutputDevice);
         }
 
-        let requested_hosts = requested_host_ids(request);
-        for host_id in requested_hosts {
+        if super::telemetry::env_flag("LIBRETRACKS_AUDIO_DEBUG") {
+            eprintln!(
+                "[audio_backend_resolution] selected_backend_setting={:?} effective_backend={:?} reason=\"{}\"",
+                request.backend,
+                request.backend.unwrap_or_else(|| {
+                    platform_system_default_backend_priority()
+                        .first()
+                        .copied()
+                        .unwrap_or(AudioBackendKind::Unknown)
+                }),
+                if request.backend.is_some() {
+                    "explicit backend selected"
+                } else {
+                    "system default uses platform-native backend; ASIO is opt-in only"
+                }
+            );
+        }
+
+        if request.has_explicit_device_selection() {
+            let backend = request
+                .backend
+                .expect("explicit device selection has backend");
+            let Some(host_id) = host_id_for_backend(backend) else {
+                return Err(AudioDeviceResolveError::BackendNotAvailable {
+                    backend,
+                    device: request.requested_device_label(),
+                });
+            };
+            let Ok(host) = cpal::host_from_id(host_id) else {
+                return Err(AudioDeviceResolveError::BackendNotAvailable {
+                    backend,
+                    device: request.requested_device_label(),
+                });
+            };
+            let Some(device) = resolve_device_on_host(&host, host_id, request, false) else {
+                return Err(AudioDeviceResolveError::DeviceNotFound {
+                    backend,
+                    device: request.requested_device_label(),
+                });
+            };
+            log_effective_device_resolution(request, host_id, &device, "explicit device selection");
+            return Ok((host_id, host, device));
+        }
+
+        for host_id in requested_host_ids(request) {
             let Ok(host) = cpal::host_from_id(host_id) else {
                 continue;
             };
-            if let Some(device) = resolve_device_on_host(&host, host_id, request) {
-                return Some((host_id, host, device));
+            if let Some(device) = resolve_device_on_host(&host, host_id, request, true) {
+                log_effective_device_resolution(
+                    request,
+                    host_id,
+                    &device,
+                    if request.backend.is_some() {
+                        "backend default device"
+                    } else {
+                        "real OS default output device"
+                    },
+                );
+                return Ok((host_id, host, device));
             }
         }
 
         let host = cpal::default_host();
         let host_id = cpal::default_host().id();
-        host.default_output_device().map(|device| (host_id, host, device))
+        if request.backend.is_none() && backend_kind_from_host_id(host_id) == AudioBackendKind::Asio
+        {
+            if let Some(device_name) = host
+                .default_output_device()
+                .and_then(|device| device.name().ok())
+            {
+                if super::telemetry::env_flag("LIBRETRACKS_AUDIO_DEBUG") {
+                    eprintln!(
+                        "[default_device_candidate_rejected] candidate_backend=\"ASIO\" candidate_device=\"{}\" reason=\"ASIO is opt-in only\"",
+                        device_name
+                    );
+                }
+            }
+            return Err(AudioDeviceResolveError::NoDefaultOutputDevice);
+        }
+        host.default_output_device()
+            .map(|device| {
+                log_effective_device_resolution(
+                    request,
+                    host_id,
+                    &device,
+                    "cpal default host fallback",
+                );
+                (host_id, host, device)
+            })
+            .ok_or(AudioDeviceResolveError::NoDefaultOutputDevice)
     }
 }
 
 pub fn resolve_output_stream_config(
     device: &Device,
     request: &AudioOutputRequest,
-) -> Result<SupportedStreamConfig, cpal::DefaultStreamConfigError> {
+) -> Result<ResolvedOutputStreamConfig, cpal::DefaultStreamConfigError> {
     let default_config = device.default_output_config()?;
     let desired_channels = request
         .output_channels
@@ -583,18 +811,76 @@ pub fn resolve_output_stream_config(
         .unwrap_or(2)
         .max(1)
         .clamp(1, u16::MAX as usize) as u16;
-    let Some(config_range) = best_supported_config(device, request, desired_channels, &default_config) else {
-        return Ok(default_config);
+    let Some(config_range) =
+        best_supported_config(device, request, desired_channels, &default_config)
+    else {
+        let resolved_sample_rate = default_config.sample_rate().0;
+        return Ok(ResolvedOutputStreamConfig {
+            supported_config: default_config,
+            requested_sample_rate: request.sample_rate,
+            resolved_sample_rate,
+            used_fallback: request
+                .sample_rate
+                .is_some_and(|requested| requested != resolved_sample_rate),
+            fallback_reason: request.sample_rate.and(Some(
+                "no supported output stream range matched the request; using device default"
+                    .to_string(),
+            )),
+        });
     };
-    let sample_rate = request
-        .sample_rate
-        .map(SampleRate)
-        .filter(|sample_rate| {
-            sample_rate.0 >= config_range.min_sample_rate().0
-                && sample_rate.0 <= config_range.max_sample_rate().0
-        })
-        .unwrap_or_else(|| default_config.sample_rate().min(config_range.max_sample_rate()));
-    Ok(config_range.with_sample_rate(sample_rate))
+    let requested_supported = request.sample_rate.map(SampleRate).filter(|sample_rate| {
+        sample_rate.0 >= config_range.min_sample_rate().0
+            && sample_rate.0 <= config_range.max_sample_rate().0
+    });
+    let fallback_reason = if request.sample_rate.is_some() && requested_supported.is_none() {
+        Some("requested sample rate not supported".to_string())
+    } else {
+        None
+    };
+    let sample_rate = requested_supported.unwrap_or_else(|| {
+        default_config
+            .sample_rate()
+            .min(config_range.max_sample_rate())
+    });
+    let supported_config = config_range.with_sample_rate(sample_rate);
+    Ok(ResolvedOutputStreamConfig {
+        supported_config,
+        requested_sample_rate: request.sample_rate,
+        resolved_sample_rate: sample_rate.0,
+        used_fallback: fallback_reason.is_some(),
+        fallback_reason,
+    })
+}
+
+#[cfg(test)]
+pub fn resolve_output_stream_config_for_test(
+    requested_sample_rate: Option<u32>,
+    default_sample_rate: u32,
+    min_sample_rate: u32,
+    max_sample_rate: u32,
+) -> (Option<u32>, u32, bool, Option<String>) {
+    let requested_supported = requested_sample_rate
+        .filter(|requested| *requested >= min_sample_rate && *requested <= max_sample_rate);
+    let fallback_reason = if requested_sample_rate.is_some() && requested_supported.is_none() {
+        Some("requested sample rate not supported".to_string())
+    } else {
+        None
+    };
+    let resolved_sample_rate =
+        requested_supported.unwrap_or_else(|| default_sample_rate.min(max_sample_rate));
+    (
+        requested_sample_rate,
+        resolved_sample_rate,
+        fallback_reason.is_some(),
+        fallback_reason,
+    )
+}
+
+pub fn resolve_output_supported_stream_config(
+    device: &Device,
+    request: &AudioOutputRequest,
+) -> Result<SupportedStreamConfig, cpal::DefaultStreamConfigError> {
+    resolve_output_stream_config(device, request).map(|diagnostic| diagnostic.supported_config)
 }
 
 pub fn stream_config_with_buffer_request(
@@ -615,7 +901,10 @@ pub fn stream_config_with_buffer_request(
     config
 }
 
-pub fn actual_buffer_size_frames(config: &StreamConfig, supported_config: &SupportedStreamConfig) -> usize {
+pub fn actual_buffer_size_frames(
+    config: &StreamConfig,
+    supported_config: &SupportedStreamConfig,
+) -> usize {
     match config.buffer_size {
         BufferSize::Fixed(frames) => frames as usize,
         BufferSize::Default => match supported_config.buffer_size() {
@@ -638,12 +927,19 @@ fn requested_host_ids(request: &AudioOutputRequest) -> Vec<HostId> {
     if let Some(backend) = request.backend.and_then(host_id_for_backend) {
         return vec![backend];
     }
-    cpal::available_hosts()
+    system_default_host_ids()
 }
 
-fn resolve_device_on_host(host: &Host, host_id: HostId, request: &AudioOutputRequest) -> Option<Device> {
+fn resolve_device_on_host(
+    host: &Host,
+    host_id: HostId,
+    request: &AudioOutputRequest,
+    allow_default: bool,
+) -> Option<Device> {
     if request.device_id.is_none() && request.device_name.is_none() {
-        return host.default_output_device();
+        return allow_default
+            .then(|| host.default_output_device())
+            .flatten();
     }
     let devices = host.output_devices().ok()?;
     for device in devices {
@@ -651,13 +947,42 @@ fn resolve_device_on_host(host: &Host, host_id: HostId, request: &AudioOutputReq
             continue;
         };
         let stable_id = format!("{}::{}", host_id.name(), name);
-        if request.device_id.as_deref().is_some_and(|id| id == stable_id)
-            || request.device_name.as_deref().is_some_and(|selected| selected == name)
+        if request
+            .device_id
+            .as_deref()
+            .is_some_and(|id| id == stable_id)
+            || request
+                .device_name
+                .as_deref()
+                .is_some_and(|selected| selected == name)
         {
             return Some(device);
         }
     }
-    host.default_output_device()
+    allow_default
+        .then(|| host.default_output_device())
+        .flatten()
+}
+
+#[cfg(not(test))]
+fn log_effective_device_resolution(
+    request: &AudioOutputRequest,
+    host_id: HostId,
+    device: &Device,
+    reason: &str,
+) {
+    if !super::telemetry::env_flag("LIBRETRACKS_AUDIO_DEBUG") {
+        return;
+    }
+    let effective_device_name = device.name().unwrap_or_else(|_| "unknown".to_string());
+    let effective_device_id = format!("{}::{}", host_id.name(), effective_device_name);
+    eprintln!(
+        "[audio_device_resolution] selected_device_id={:?} effective_device_name=\"{}\" effective_device_id=\"{}\" reason=\"{}\"",
+        request.device_id,
+        effective_device_name,
+        effective_device_id,
+        reason
+    );
 }
 
 fn best_supported_config(
@@ -671,10 +996,12 @@ fn best_supported_config(
     configs
         .filter(|config| config.channels() >= desired_channels)
         .filter(|config| {
-            requested_format.is_none_or(|format| sample_format_from_cpal(config.sample_format()) == format)
+            requested_format
+                .is_none_or(|format| sample_format_from_cpal(config.sample_format()) == format)
         })
         .max_by_key(|config| {
-            let format_match = usize::from(config.sample_format() == default_config.sample_format());
+            let format_match =
+                usize::from(config.sample_format() == default_config.sample_format());
             let default_rate_in_range = usize::from(
                 default_config.sample_rate().0 >= config.min_sample_rate().0
                     && default_config.sample_rate().0 <= config.max_sample_rate().0,

@@ -7,6 +7,8 @@ mod telemetry;
 
 use std::{
     collections::HashMap,
+    fs::{self, OpenOptions},
+    io::Write,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -14,30 +16,35 @@ use std::{
         Arc, RwLock,
     },
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use cpal::{traits::{DeviceTrait, StreamTrait}, SampleFormat, Stream, StreamConfig};
+use cpal::{
+    traits::{DeviceTrait, StreamTrait},
+    SampleFormat, Stream, StreamConfig,
+};
 use libretracks_core::Song;
 use libretracks_remote::RemoteServerHandle;
 use rtrb::RingBuffer;
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::error::DesktopError;
 use crate::settings::AppSettings;
 
 use self::backend::{
-    actual_buffer_size_frames, build_output_stream, enumerate_output_devices, resolve_output_device,
-    resolve_output_stream_config, sample_format_from_cpal, spawn_disk_reader,
-    stream_config_with_buffer_request, AudioDeviceDescriptor, AudioOutputRequest,
-    AudioRuntimeCounters, BackendPolicy, DiskReaderReport, DiskReaderState, OutputSample,
-};
-pub use self::backend::{
-    AudioBackendKind, AudioBufferSizeRequest, AudioSampleFormat, OutputChannelRequest,
+    actual_buffer_size_frames, build_output_stream, enumerate_output_devices,
+    is_system_default_backend_candidate, resolve_output_device, resolve_output_stream_config,
+    sample_format_from_cpal, spawn_disk_reader, stream_config_with_buffer_request,
+    AudioDeviceDescriptor, AudioDeviceResolveError, AudioOutputRequest, AudioRuntimeCounters,
+    BackendPolicy, DiskReaderReport, DiskReaderState, OutputSample, PrefillResult,
+    ResolvedOutputStreamConfig,
 };
 #[cfg(test)]
 use self::backend::{drain_consumer_samples, CpalCrossfadeState};
+pub use self::backend::{
+    AudioBackendKind, AudioBufferSizeRequest, AudioSampleFormat, OutputChannelRequest,
+};
 #[cfg(test)]
 use self::mixer::{
     apply_runtime_pan, build_live_mix_map, build_playback_plans, interpolated_gain,
@@ -60,7 +67,8 @@ const STOP_FADE_DURATION_SECONDS: f64 = 0.005;
 const GAIN_EPSILON: f32 = 0.000_001;
 const AUDIO_METER_EVENT: &str = "audio:meters";
 const AUDIO_METER_EMIT_INTERVAL: Duration = Duration::from_millis(16);
-const AUDIO_COMMAND_RESPONSE_TIMEOUT: Duration = Duration::from_millis(250);
+const AUDIO_SHORT_COMMAND_RESPONSE_TIMEOUT: Duration = Duration::from_millis(250);
+const AUDIO_LONG_COMMAND_RESPONSE_TIMEOUT: Duration = Duration::from_millis(5_000);
 const MAX_HIERARCHY_DEPTH: usize = 16;
 
 type SharedAppHandle = Arc<RwLock<Option<AppHandle>>>;
@@ -122,6 +130,7 @@ enum AudioCommandKind {
     Play,
     Seek,
     SyncSong,
+    ApplySettings,
     Stop,
     StartMasterFade,
     DebugSnapshot,
@@ -152,6 +161,11 @@ pub(crate) enum AudioCommand {
         song: Song,
         respond_to: Sender<Result<(), String>>,
     },
+    ApplySettings {
+        settings: AppSettings,
+        rebuild_stream: bool,
+        respond_to: Sender<Result<(), String>>,
+    },
     Stop {
         respond_to: Sender<Result<(), String>>,
     },
@@ -173,6 +187,14 @@ struct PlaybackSession {
     reader_handle: Option<JoinHandle<DiskReaderReport>>,
     seek_generation: Arc<AtomicU64>,
     counters: Arc<AudioRuntimeCounters>,
+    backend_kind: Option<AudioBackendKind>,
+    device_name: Option<String>,
+    output_sample_rate: u32,
+    actual_buffer_size: usize,
+    ring_capacity_frames: usize,
+    prefill_frames: usize,
+    prefill_result: PrefillResult,
+    startup_readiness: mixer::MixerStartupReadiness,
     audio_buffers: AudioBufferCache,
 }
 
@@ -231,6 +253,18 @@ impl AudioRuntime {
             let _ = session.stop_playback();
         }
 
+        StopReport {
+            elapsed: started_at.elapsed(),
+            stopped_sinks,
+        }
+    }
+
+    fn close_stream(&mut self) -> StopReport {
+        let started_at = Instant::now();
+        let stopped_sinks = usize::from(self.session.is_some());
+        if let Some(session) = self.session.take() {
+            let _ = session.shutdown();
+        }
         StopReport {
             elapsed: started_at.elapsed(),
             stopped_sinks,
@@ -420,7 +454,7 @@ impl AudioController {
         reason: PlaybackStartReason,
     ) -> Result<(), DesktopError> {
         self.sync_live_mix(&song)?;
-        self.request(|respond_to| AudioCommand::Play {
+        self.request_long(|respond_to| AudioCommand::Play {
             song_dir,
             song,
             position_seconds,
@@ -509,16 +543,23 @@ impl AudioController {
     }
 
     pub fn apply_settings(&self, settings: AppSettings) -> Result<(), DesktopError> {
-        let mut current_settings = self
-            .audio_settings
-            .write()
-            .map_err(|_| DesktopError::AudioCommand("audio settings lock poisoned".into()))?;
-        *current_settings = settings;
-        Ok(())
+        self.apply_settings_with_stream_rebuild(settings, false)
+    }
+
+    pub fn apply_settings_with_stream_rebuild(
+        &self,
+        settings: AppSettings,
+        rebuild_stream: bool,
+    ) -> Result<(), DesktopError> {
+        self.request_long(|respond_to| AudioCommand::ApplySettings {
+            settings,
+            rebuild_stream,
+            respond_to,
+        })
     }
 
     pub fn stop(&self) -> Result<(), DesktopError> {
-        self.request(|respond_to| AudioCommand::Stop { respond_to })
+        self.request_long(|respond_to| AudioCommand::Stop { respond_to })
     }
 
     pub fn start_master_fade(
@@ -540,7 +581,7 @@ impl AudioController {
             .send(AudioCommand::DebugSnapshot { respond_to })
             .map_err(|_| DesktopError::AudioThreadUnavailable)?;
 
-        recv_audio_response(response)
+        recv_audio_response(response, AUDIO_SHORT_COMMAND_RESPONSE_TIMEOUT)
     }
 
     pub fn replace_song_buffers(&self, song_dir: &Path, song: &Song) -> Result<(), DesktopError> {
@@ -641,7 +682,22 @@ impl AudioController {
             .send(command(respond_to))
             .map_err(|_| DesktopError::AudioThreadUnavailable)?;
 
-        recv_audio_response(response)?.map_err(DesktopError::AudioCommand)
+        recv_audio_response(response, AUDIO_SHORT_COMMAND_RESPONSE_TIMEOUT)?
+            .map_err(DesktopError::AudioCommand)
+    }
+
+    fn request_long(
+        &self,
+        command: impl FnOnce(Sender<Result<(), String>>) -> AudioCommand,
+    ) -> Result<(), DesktopError> {
+        let (respond_to, response) = mpsc::channel();
+
+        self.sender
+            .send(command(respond_to))
+            .map_err(|_| DesktopError::AudioThreadUnavailable)?;
+
+        recv_audio_response(response, AUDIO_LONG_COMMAND_RESPONSE_TIMEOUT)?
+            .map_err(DesktopError::AudioCommand)
     }
 }
 
@@ -689,7 +745,11 @@ impl PlaybackSession {
                 sample_rate: settings.output_sample_rate,
                 buffer_size: settings.output_buffer_size.clone(),
                 output_channels: OutputChannelRequest {
-                    channels: settings.enabled_output_channels.clone(),
+                    channels: if settings.output_channel_mapping.channels.is_empty() {
+                        settings.enabled_output_channels.clone()
+                    } else {
+                        settings.output_channel_mapping.channels.clone()
+                    },
                 },
                 sample_format: settings.output_sample_format,
                 low_latency_mode: settings
@@ -708,23 +768,49 @@ impl PlaybackSession {
                 low_latency_mode: false,
                 safe_mode: false,
             });
-        let Some((host_id, _host, device)) = resolve_output_device(&output_request) else {
-            eprintln!("[libretracks-audio] no default output device available, using null backend");
-            return Ok(Self {
-                backend: PlaybackBackend::Null,
-                song_dir,
-                reader_sender: None,
-                reader_handle: None,
-                seek_generation: Arc::new(AtomicU64::new(0)),
-                counters: Arc::new(AudioRuntimeCounters::default()),
-                audio_buffers,
-            });
+        log_requested_output_device(&output_request);
+        let (host_id, _host, device) = match resolve_output_device(&output_request) {
+            Ok(resolved) => resolved,
+            Err(AudioDeviceResolveError::NoDefaultOutputDevice)
+                if !output_request.has_explicit_device_selection() =>
+            {
+                eprintln!(
+                    "[libretracks-audio] no default output device available, using null backend"
+                );
+                return Ok(Self {
+                    backend: PlaybackBackend::Null,
+                    song_dir,
+                    reader_sender: None,
+                    reader_handle: None,
+                    seek_generation: Arc::new(AtomicU64::new(0)),
+                    counters: Arc::new(AudioRuntimeCounters::default()),
+                    backend_kind: None,
+                    device_name: None,
+                    output_sample_rate: 0,
+                    actual_buffer_size: 0,
+                    ring_capacity_frames: 0,
+                    prefill_frames: 0,
+                    prefill_result: PrefillResult::default(),
+                    startup_readiness: mixer::MixerStartupReadiness::default(),
+                    audio_buffers,
+                });
+            }
+            Err(error) => {
+                log_stream_open_failure(&output_request, error.failure_stage(), &error.to_string());
+                return Err(error.to_string());
+            }
         };
 
         let device_name = device.name().unwrap_or_else(|_| "unknown".to_string());
         let backend_kind = backend::backend_kind_from_host_id(host_id);
-        let supported_config = resolve_output_stream_config(&device, &output_request)
-            .map_err(|error| error.to_string())?;
+        let resolved_config =
+            resolve_output_stream_config(&device, &output_request).map_err(|error| {
+                let message = error.to_string();
+                log_stream_open_failure(&output_request, "config_not_supported", &message);
+                message
+            })?;
+        log_resolved_output_config(&device_name, &resolved_config);
+        let supported_config = resolved_config.supported_config;
         let sample_format = supported_config.sample_format();
         let config = stream_config_with_buffer_request(&supported_config, &output_request);
         let output_channels = usize::from(config.channels.max(1));
@@ -734,26 +820,34 @@ impl PlaybackSession {
         let ring_capacity_frames = policy.ring_capacity_frames(actual_buffer_size);
         let prefill_frames = policy.prefill_frames(actual_buffer_size, ring_capacity_frames);
         let ring_capacity_samples = ring_capacity_frames.saturating_mul(output_channels.max(1));
-        let prefill_samples = prefill_frames.saturating_mul(output_channels.max(1));
         let (producer, consumer) = RingBuffer::<OutputSample>::new(ring_capacity_samples);
         let (reader_sender, reader_receiver) = mpsc::channel();
         let seek_generation = Arc::new(AtomicU64::new(0));
         let counters = Arc::new(AudioRuntimeCounters::default());
 
+        let mixer = Mixer::new(
+            song_dir.clone(),
+            song.clone(),
+            position_seconds,
+            output_sample_rate,
+            output_channels,
+            app_handle.clone(),
+            remote_handle,
+            live_mix_state,
+            audio_settings,
+            debug_config,
+            audio_buffers.clone(),
+        );
+        let startup_readiness = mixer.startup_readiness();
+        log_startup_readiness(
+            backend_kind,
+            &device_name,
+            output_sample_rate,
+            &startup_readiness,
+        );
+
         let reader_handle = spawn_disk_reader(DiskReaderState {
-            mixer: Mixer::new(
-                song_dir.clone(),
-                song.clone(),
-                position_seconds,
-                output_sample_rate,
-                output_channels,
-                app_handle,
-                remote_handle,
-                live_mix_state,
-                audio_settings,
-                debug_config,
-                audio_buffers.clone(),
-            ),
+            mixer,
             producer,
             command_receiver: reader_receiver,
             current_generation: 0,
@@ -761,7 +855,37 @@ impl PlaybackSession {
             stop_after_master_fade: false,
         });
 
-        wait_for_prefill(&consumer, prefill_samples, Duration::from_millis(250));
+        let mut prefill_result = wait_for_prefill(
+            &consumer,
+            prefill_frames,
+            output_channels,
+            Duration::from_millis(250),
+        );
+        if backend_kind == AudioBackendKind::Asio && !prefill_result.completed {
+            prefill_result = wait_for_prefill(
+                &consumer,
+                prefill_frames,
+                output_channels,
+                Duration::from_millis(1_500),
+            );
+        }
+        log_prefill_result(backend_kind, prefill_result);
+        if backend_kind == AudioBackendKind::Asio
+            && (!prefill_result.completed || !startup_readiness.all_realtime_pitch_engines_ready)
+        {
+            #[cfg(debug_assertions)]
+            {
+                return Err(format!(
+                    "ASIO startup preflight failed: prefill_completed={}, realtime_ready={}, requested_frames={}, available_frames={}, realtime_pitch_clip_count={}, min_queued_pitch_output_frames={}",
+                    prefill_result.completed,
+                    startup_readiness.all_realtime_pitch_engines_ready,
+                    prefill_result.requested_frames,
+                    prefill_result.available_frames,
+                    startup_readiness.realtime_pitch_clip_count,
+                    startup_readiness.min_queued_pitch_output_frames
+                ));
+            }
+        }
 
         let stream = build_output_stream(
             &device,
@@ -770,8 +894,13 @@ impl PlaybackSession {
             consumer,
             seek_generation.clone(),
             counters.clone(),
-        )?;
+        )
+        .map_err(|error| {
+            log_stream_open_failure(&output_request, "stream_build_failed", &error);
+            error
+        })?;
         log_stream_open(
+            backend_kind,
             &host_id.name(),
             &device_name,
             &config,
@@ -781,7 +910,22 @@ impl PlaybackSession {
             ring_capacity_frames,
             prefill_frames,
         );
-        stream.play().map_err(|error| error.to_string())?;
+        log_audio_startup_to_file(
+            &app_handle,
+            backend_kind,
+            &device_name,
+            output_sample_rate,
+            actual_buffer_size,
+            ring_capacity_frames,
+            prefill_frames,
+            prefill_result,
+            &startup_readiness,
+        );
+        stream.play().map_err(|error| {
+            let message = error.to_string();
+            log_stream_open_failure(&output_request, "stream_play_failed", &message);
+            message
+        })?;
 
         Ok(Self {
             backend: PlaybackBackend::Cpal { _stream: stream },
@@ -790,6 +934,14 @@ impl PlaybackSession {
             reader_handle: Some(reader_handle),
             seek_generation,
             counters,
+            backend_kind: Some(backend_kind),
+            device_name: Some(device_name),
+            output_sample_rate,
+            actual_buffer_size,
+            ring_capacity_frames,
+            prefill_frames,
+            prefill_result,
+            startup_readiness,
             audio_buffers,
         })
     }
@@ -800,6 +952,14 @@ impl PlaybackSession {
 
     fn counters_snapshot(&self) -> AudioBackendCountersSummary {
         AudioBackendCountersSummary {
+            backend: self.backend_kind.map(|backend| format!("{backend:?}")),
+            device: self.device_name.clone(),
+            sample_rate: self.output_sample_rate,
+            actual_buffer_size: self.actual_buffer_size,
+            ring_capacity_frames: self.ring_capacity_frames,
+            prefill_frames: self.prefill_frames,
+            prefill_completed: self.prefill_result.completed,
+            prefill_available_frames: self.prefill_result.available_frames,
             callback_count: self.counters.callback_count.load(Ordering::Relaxed),
             callback_min_frames: self.counters.callback_min_frames.load(Ordering::Relaxed),
             callback_max_frames: self.counters.callback_max_frames.load(Ordering::Relaxed),
@@ -809,6 +969,9 @@ impl PlaybackSession {
             needs_resync: self.counters.needs_resync.load(Ordering::Acquire),
             stale_drop_count: self.counters.stale_drop_count.load(Ordering::Relaxed),
             resync_count: self.counters.resync_count.load(Ordering::Relaxed),
+            realtime_pitch_clip_count: self.startup_readiness.realtime_pitch_clip_count,
+            min_queued_pitch_output_frames: self.startup_readiness.min_queued_pitch_output_frames,
+            clip_diagnostics: self.startup_readiness.clip_diagnostics.clone(),
         }
     }
 
@@ -1077,6 +1240,33 @@ fn run_audio_thread(
                     let _ = respond_to.send(result.clone());
                 }
             }
+            AudioCommand::ApplySettings {
+                settings,
+                rebuild_stream,
+                respond_to,
+            } => {
+                debug_state.record_command(
+                    AudioCommandKind::ApplySettings,
+                    rebuild_stream.then(|| "rebuild_stream".to_string()),
+                );
+
+                let result = (|| {
+                    if rebuild_stream {
+                        if let Some(runtime) = runtime.as_mut() {
+                            let report = runtime.close_stream();
+                            debug_state.record_stop(&report, 0);
+                        }
+                    }
+
+                    let mut current_settings = audio_settings
+                        .write()
+                        .map_err(|_| "audio settings lock poisoned".to_string())?;
+                    *current_settings = settings;
+                    Ok(())
+                })();
+
+                let _ = respond_to.send(result);
+            }
             AudioCommand::Stop { respond_to } => {
                 debug_state.record_command(AudioCommandKind::Stop, None);
 
@@ -1118,6 +1308,7 @@ fn run_audio_thread(
                 if let Some(active_runtime) = runtime.as_ref() {
                     snapshot.runtime_state.master_gain = active_runtime.master_gain();
                     snapshot.backend_counters = active_runtime.backend_counters_snapshot();
+                    log_audio_snapshot_to_file(&active_runtime.app_handle, &snapshot);
                 }
                 let _ = respond_to.send(snapshot);
             }
@@ -1175,7 +1366,10 @@ pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> 
     devices.dedup();
     let default_device = descriptors
         .iter()
-        .find(|descriptor| descriptor.is_default)
+        .find(|descriptor| {
+            descriptor.is_default && is_system_default_backend_candidate(descriptor.backend)
+        })
+        .or_else(|| descriptors.iter().find(|descriptor| descriptor.is_default))
         .map(|descriptor| descriptor.name.clone());
     let mut backends = descriptors
         .iter()
@@ -1193,6 +1387,10 @@ pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> 
     })
 }
 
+pub(crate) fn audio_debug_logging_enabled() -> bool {
+    AudioDebugConfig::from_env().enabled
+}
+
 fn trimmed_nonempty(value: String) -> Option<String> {
     let trimmed = value.trim().to_string();
     (!trimmed.is_empty()).then_some(trimmed)
@@ -1200,20 +1398,266 @@ fn trimmed_nonempty(value: String) -> Option<String> {
 
 fn wait_for_prefill(
     consumer: &rtrb::Consumer<OutputSample>,
-    prefill_samples: usize,
+    requested_frames: usize,
+    output_channels: usize,
     max_wait: Duration,
+) -> PrefillResult {
+    let requested_samples = requested_frames.saturating_mul(output_channels.max(1));
+    let started_at = Instant::now();
+    while consumer.slots() < requested_samples && started_at.elapsed() < max_wait {
+        thread::sleep(Duration::from_millis(1));
+    }
+    let available_samples = consumer.slots();
+    let available_frames = available_samples / output_channels.max(1);
+    PrefillResult {
+        requested_frames,
+        requested_samples,
+        available_frames,
+        available_samples,
+        elapsed_ms: started_at.elapsed().as_secs_f64() * 1000.0,
+        completed: available_frames >= requested_frames && available_samples >= requested_samples,
+    }
+}
+
+fn log_prefill_result(backend: AudioBackendKind, result: PrefillResult) {
+    eprintln!(
+        "[libretracks-audio] prefill backend={backend:?} requested_frames={} requested_samples={} available_frames={} available_samples={} elapsed_ms={:.2} completed={}",
+        result.requested_frames,
+        result.requested_samples,
+        result.available_frames,
+        result.available_samples,
+        result.elapsed_ms,
+        result.completed
+    );
+}
+
+fn log_startup_readiness(
+    backend: AudioBackendKind,
+    device: &str,
+    sample_rate: u32,
+    readiness: &mixer::MixerStartupReadiness,
 ) {
-    if prefill_samples == 0 {
+    if !audio_debug_logging_enabled() {
         return;
     }
-    let started_at = Instant::now();
-    while consumer.slots() < prefill_samples && started_at.elapsed() < max_wait {
-        thread::sleep(Duration::from_millis(1));
+    eprintln!(
+        "[playback_source_policy] policy=\"{}\" backend=\"{backend:?}\" device=\"{}\" resolved_sample_rate={}",
+        readiness.playback_source_policy.label(),
+        escape_log_value(device),
+        sample_rate
+    );
+    eprintln!(
+        "[libretracks-audio] startup_readiness backend={backend:?} active_clip_count={} active_transposed_clip_count={} realtime_pitch_clip_count={} all_realtime_pitch_engines_ready={} min_queued_pitch_output_frames={}",
+        readiness.active_clip_count,
+        readiness.active_transposed_clip_count,
+        readiness.realtime_pitch_clip_count,
+        readiness.all_realtime_pitch_engines_ready,
+        readiness.min_queued_pitch_output_frames
+    );
+    for clip in &readiness.clip_diagnostics {
+        eprintln!(
+            "[playback_route_selected] backend=\"{backend:?}\" device=\"{}\" resolved_sample_rate={} clip_id=\"{}\" track_id=\"{}\" source_kind=\"{}\" uses_realtime_pitch={}",
+            escape_log_value(device),
+            sample_rate,
+            escape_log_value(&clip.clip_id),
+            escape_log_value(&clip.track_id),
+            escape_log_value(&clip.source_kind),
+            clip.uses_realtime_pitch
+        );
+        eprintln!(
+            "[libretracks-audio] clip_playback_path backend={backend:?} clip_id={} track_id={} transpose_semitones={} source_kind={} uses_exact_prepared_transposed={} uses_original_plus_realtime_pitch={} uses_streaming_reader={} uses_realtime_pitch={} pitch_latency_frames={} queued_output_frames_before_first_emit={} first_non_silent_input_frame={:?} first_non_silent_output_frame={:?}",
+            clip.clip_id,
+            clip.track_id,
+            clip.transpose_semitones,
+            clip.source_kind,
+            clip.uses_exact_prepared_transposed,
+            clip.uses_original_plus_realtime_pitch,
+            clip.uses_streaming_reader,
+            clip.uses_realtime_pitch,
+            clip.pitch_latency_frames,
+            clip.queued_output_frames_before_first_emit,
+            clip.first_non_silent_input_frame,
+            clip.first_non_silent_output_frame
+        );
     }
 }
 
 #[allow(clippy::too_many_arguments)]
+fn log_audio_startup_to_file(
+    app_handle: &SharedAppHandle,
+    backend: AudioBackendKind,
+    device: &str,
+    sample_rate: u32,
+    actual_buffer_size: usize,
+    ring_capacity_frames: usize,
+    prefill_frames: usize,
+    prefill_result: PrefillResult,
+    readiness: &mixer::MixerStartupReadiness,
+) {
+    append_audio_runtime_log(
+        app_handle,
+        &format!(
+            "audio_startup backend={backend:?} device=\"{}\" sample_rate={} actual_buffer_size={} ring_capacity_frames={} prefill_frames={} prefill_completed={} prefill_available_frames={} xrun_count=0 underrun_frames=0 stale_drop_count=0 resync_count=0 callback_frame_min=0 callback_frame_max=0 realtime_pitch_clip_count={} min_queued_pitch_output_frames={}",
+            escape_log_value(device),
+            sample_rate,
+            actual_buffer_size,
+            ring_capacity_frames,
+            prefill_frames,
+            prefill_result.completed,
+            prefill_result.available_frames,
+            readiness.realtime_pitch_clip_count,
+            readiness.min_queued_pitch_output_frames
+        ),
+    );
+    append_audio_runtime_log(
+        app_handle,
+        &format!(
+            "playback_source_policy policy=\"{}\" backend={backend:?} device=\"{}\" resolved_sample_rate={}",
+            readiness.playback_source_policy.label(),
+            escape_log_value(device),
+            sample_rate
+        ),
+    );
+    for clip in &readiness.clip_diagnostics {
+        append_audio_runtime_log(
+            app_handle,
+            &format!(
+                "playback_route_selected backend={backend:?} device=\"{}\" resolved_sample_rate={} clip_id={} track_id={} source_kind=\"{}\" uses_realtime_pitch={}",
+                escape_log_value(device),
+                sample_rate,
+                escape_log_value(&clip.clip_id),
+                escape_log_value(&clip.track_id),
+                escape_log_value(&clip.source_kind),
+                clip.uses_realtime_pitch
+            ),
+        );
+        append_audio_runtime_log(
+            app_handle,
+            &format!(
+                "audio_clip_startup backend={backend:?} device=\"{}\" clip_id={} track_id={} source_kind={} uses_realtime_pitch={}",
+                escape_log_value(device),
+                escape_log_value(&clip.clip_id),
+                escape_log_value(&clip.track_id),
+                escape_log_value(&clip.source_kind),
+                clip.uses_realtime_pitch
+            ),
+        );
+    }
+}
+
+fn log_audio_snapshot_to_file(app_handle: &SharedAppHandle, snapshot: &AudioDebugSnapshot) {
+    let counters = &snapshot.backend_counters;
+    append_audio_runtime_log(
+        app_handle,
+        &format!(
+            "audio_snapshot backend={} device=\"{}\" sample_rate={} actual_buffer_size={} ring_capacity_frames={} prefill_frames={} prefill_completed={} prefill_available_frames={} xrun_count={} underrun_frames={} stale_drop_count={} resync_count={} callback_frame_min={} callback_frame_max={} realtime_pitch_clip_count={} min_queued_pitch_output_frames={}",
+            counters.backend.as_deref().unwrap_or("None"),
+            escape_log_value(counters.device.as_deref().unwrap_or("")),
+            counters.sample_rate,
+            counters.actual_buffer_size,
+            counters.ring_capacity_frames,
+            counters.prefill_frames,
+            counters.prefill_completed,
+            counters.prefill_available_frames,
+            counters.xrun_count,
+            counters.underrun_frames,
+            counters.stale_drop_count,
+            counters.resync_count,
+            counters.callback_min_frames,
+            counters.callback_max_frames,
+            counters.realtime_pitch_clip_count,
+            counters.min_queued_pitch_output_frames
+        ),
+    );
+    for clip in &counters.clip_diagnostics {
+        append_audio_runtime_log(
+            app_handle,
+            &format!(
+                "audio_clip_snapshot backend={} device=\"{}\" clip_id={} track_id={} source_kind={} uses_realtime_pitch={}",
+                counters.backend.as_deref().unwrap_or("None"),
+                escape_log_value(counters.device.as_deref().unwrap_or("")),
+                escape_log_value(&clip.clip_id),
+                escape_log_value(&clip.track_id),
+                escape_log_value(&clip.source_kind),
+                clip.uses_realtime_pitch
+            ),
+        );
+    }
+}
+
+fn append_audio_runtime_log(app_handle: &SharedAppHandle, line: &str) {
+    let Some(app_handle) = app_handle.read().ok().and_then(|handle| handle.clone()) else {
+        eprintln!("[libretracks-audio] audio-runtime.log unavailable before app handle: {line}");
+        return;
+    };
+    let result = (|| -> Result<(), String> {
+        let log_dir = app_handle
+            .path()
+            .app_data_dir()
+            .map_err(|error| error.to_string())?;
+        fs::create_dir_all(&log_dir).map_err(|error| error.to_string())?;
+        let log_path = log_dir.join("audio-runtime.log");
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_path)
+            .map_err(|error| error.to_string())?;
+        let timestamp_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis())
+            .unwrap_or(0);
+        writeln!(file, "[{timestamp_ms}] {line}").map_err(|error| error.to_string())
+    })();
+    if let Err(error) = result {
+        eprintln!("[libretracks-audio] failed to write audio-runtime.log: {error}");
+    }
+}
+
+fn escape_log_value(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn log_requested_output_device(request: &AudioOutputRequest) {
+    eprintln!(
+        "[audio_config_requested] requested_backend={:?} requested_device_id={:?} requested_device_name={:?} requested_sample_rate={:?} requested_buffer_size={:?} requested_channel_mapping={:?} requested_sample_format={:?}",
+        request.backend,
+        request.device_id,
+        request.device_name,
+        request.sample_rate,
+        request.buffer_size,
+        request.output_channels.channels,
+        request.sample_format,
+    );
+}
+
+fn log_stream_open_failure(
+    request: &AudioOutputRequest,
+    failure_stage: &'static str,
+    message: &str,
+) {
+    eprintln!(
+        "[libretracks-audio] stream_open_failure stream_open_success=false requested_backend={:?} requested_device=\"{}\" failure_stage={} error=\"{}\"",
+        request.backend,
+        request.requested_device_label(),
+        failure_stage,
+        escape_log_value(message),
+    );
+}
+
+fn log_resolved_output_config(device_name: &str, config: &ResolvedOutputStreamConfig) {
+    eprintln!(
+        "[audio_config_resolved] device=\"{}\" requested_sample_rate={:?} resolved_sample_rate={} used_fallback={} fallback_reason={:?}",
+        escape_log_value(device_name),
+        config.requested_sample_rate,
+        config.resolved_sample_rate,
+        config.used_fallback,
+        config.fallback_reason,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
 fn log_stream_open(
+    backend_kind: AudioBackendKind,
     host_id: &str,
     device_name: &str,
     config: &StreamConfig,
@@ -1224,7 +1668,10 @@ fn log_stream_open(
     prefill_frames: usize,
 ) {
     eprintln!(
-        "[libretracks-audio] stream_open backend={:?} host_id={} device=\"{}\" sample_rate={} channels={} sample_format={:?} requested_buffer={:?} actual_buffer={} ring_capacity={} prefill_frames={}",
+        "[libretracks-audio] stream_open stream_open_success=true requested_backend={:?} requested_device_id={:?} requested_device_name={:?} actual_backend={:?} actual_host_id={} actual_device_name=\"{}\" actual_sample_rate={} actual_channels={} actual_sample_format={:?} requested_buffer={:?} actual_buffer_size={} ring_capacity={} prefill_frames={}",
+        backend_kind,
+        request.device_id,
+        request.device_name,
         request.backend,
         host_id,
         device_name,
@@ -1272,17 +1719,17 @@ fn coalesce_sync_song_commands(
     (latest_song, respond_tos, deferred_command)
 }
 
-fn recv_audio_response<T>(response: Receiver<T>) -> Result<T, DesktopError> {
+fn recv_audio_response<T>(response: Receiver<T>, timeout: Duration) -> Result<T, DesktopError> {
     response
-        .recv_timeout(AUDIO_COMMAND_RESPONSE_TIMEOUT)
-        .map_err(map_audio_response_error)
+        .recv_timeout(timeout)
+        .map_err(|error| map_audio_response_error(error, timeout))
 }
 
-fn map_audio_response_error(error: RecvTimeoutError) -> DesktopError {
+fn map_audio_response_error(error: RecvTimeoutError, timeout: Duration) -> DesktopError {
     match error {
         RecvTimeoutError::Timeout => DesktopError::AudioCommand(format!(
             "audio thread did not respond within {} ms",
-            AUDIO_COMMAND_RESPONSE_TIMEOUT.as_millis()
+            timeout.as_millis()
         )),
         RecvTimeoutError::Disconnected => DesktopError::AudioThreadUnavailable,
     }
@@ -1340,17 +1787,26 @@ mod tests {
 
     use crate::settings::AppSettings;
 
+    use super::backend::{
+        resolve_output_stream_config_for_test, system_default_backend_from_available_for_test,
+    };
+    use super::mixer::MixerStartupReadiness;
     use super::{
         apply_runtime_pan, build_live_mix_map, build_playback_plans, coalesce_sync_song_commands,
         drain_consumer_samples, env_flag, interpolated_gain, playback_reason_label,
         prepare_audio_source, probe_audio_file, resolve_track_runtime_pan, scheduled_clip_count,
-        set_zero_latency_test_mode, source, update_shared_track_mix, AudioBufferCache,
-        AudioBufferCacheStats, AudioCommand, AudioCommandKind, AudioController, AudioDebugConfig,
-        AudioDebugSnapshot, AudioDebugState, AudioMeterLevel, AudioRuntimeCounters,
-        CpalCrossfadeState, DiskReaderState, MemoryClipReader, Mixer, OutputSample,
-        PlaybackBackend, PlaybackClipPlan, PlaybackSession, PlaybackStartReason, ReaderCommand,
-        RestartReport, SharedAudioSource, StopReport, SyncReport, DISK_RENDER_BLOCK_FRAMES,
-        GAIN_EPSILON, STOP_FADE_DURATION_SECONDS,
+        set_zero_latency_test_mode, source, update_shared_track_mix,
+    };
+    use super::{
+        AudioBackendKind, AudioBufferCache, AudioBufferCacheStats, AudioBufferSizeRequest,
+        AudioCommand, AudioCommandKind, AudioController, AudioDebugConfig, AudioDebugSnapshot,
+        AudioDebugState, AudioMeterLevel, AudioOutputRequest, AudioRuntimeCounters,
+        AudioSampleFormat, CpalCrossfadeState, DiskReaderState, MemoryClipReader, Mixer,
+        OutputChannelRequest, OutputSample, PlaybackBackend, PlaybackClipPlan, PlaybackSession,
+        PlaybackStartReason, PrefillResult, ReaderCommand, RestartReport, SharedAudioSource,
+        StopReport, SyncReport, AUDIO_LONG_COMMAND_RESPONSE_TIMEOUT,
+        AUDIO_SHORT_COMMAND_RESPONSE_TIMEOUT, DISK_RENDER_BLOCK_FRAMES, GAIN_EPSILON,
+        STOP_FADE_DURATION_SECONDS,
     };
 
     fn demo_song() -> Song {
@@ -1423,6 +1879,105 @@ mod tests {
             ],
             section_markers: vec![],
         }
+    }
+
+    #[test]
+    fn explicit_output_request_is_not_system_default() {
+        let request = AudioOutputRequest {
+            backend: Some(AudioBackendKind::Wasapi),
+            device_id: Some("WASAPI::Device B".into()),
+            device_name: Some("Device B".into()),
+            sample_rate: Some(48_000),
+            buffer_size: AudioBufferSizeRequest::Fixed(256),
+            output_channels: OutputChannelRequest {
+                channels: vec![0, 1],
+            },
+            sample_format: Some(AudioSampleFormat::F32),
+            low_latency_mode: false,
+            safe_mode: false,
+        };
+
+        assert!(request.has_explicit_device_selection());
+        assert_eq!(request.requested_device_label(), "WASAPI::Device B");
+    }
+
+    #[test]
+    fn system_default_request_allows_default_fallback() {
+        let request = AudioOutputRequest {
+            backend: None,
+            device_id: None,
+            device_name: None,
+            sample_rate: None,
+            buffer_size: AudioBufferSizeRequest::Default,
+            output_channels: OutputChannelRequest::default(),
+            sample_format: None,
+            low_latency_mode: false,
+            safe_mode: false,
+        };
+
+        assert!(!request.has_explicit_device_selection());
+        assert_eq!(request.requested_device_label(), "System default");
+    }
+
+    #[test]
+    fn system_default_backend_candidates_exclude_asio() {
+        assert!(!super::is_system_default_backend_candidate(
+            AudioBackendKind::Asio
+        ));
+
+        #[cfg(target_os = "windows")]
+        assert!(super::is_system_default_backend_candidate(
+            AudioBackendKind::Wasapi
+        ));
+    }
+
+    #[test]
+    fn windows_system_default_prefers_wasapi_over_asio() {
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(
+                system_default_backend_from_available_for_test(&[
+                    AudioBackendKind::Asio,
+                    AudioBackendKind::Wasapi,
+                ]),
+                Some(AudioBackendKind::Wasapi)
+            );
+            assert_eq!(
+                system_default_backend_from_available_for_test(&[AudioBackendKind::Asio]),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn device_switching_commands_use_long_timeout() {
+        assert!(AUDIO_LONG_COMMAND_RESPONSE_TIMEOUT >= Duration::from_millis(3_000));
+        assert!(AUDIO_SHORT_COMMAND_RESPONSE_TIMEOUT <= Duration::from_millis(250));
+    }
+
+    #[test]
+    fn requested_supported_sample_rate_is_resolved_without_fallback() {
+        let (requested, resolved, used_fallback, fallback_reason) =
+            resolve_output_stream_config_for_test(Some(44_100), 48_000, 44_100, 96_000);
+
+        assert_eq!(requested, Some(44_100));
+        assert_eq!(resolved, 44_100);
+        assert!(!used_fallback);
+        assert_eq!(fallback_reason, None);
+    }
+
+    #[test]
+    fn requested_unsupported_sample_rate_reports_fallback_reason() {
+        let (requested, resolved, used_fallback, fallback_reason) =
+            resolve_output_stream_config_for_test(Some(44_100), 48_000, 48_000, 96_000);
+
+        assert_eq!(requested, Some(44_100));
+        assert_eq!(resolved, 48_000);
+        assert!(used_fallback);
+        assert_eq!(
+            fallback_reason.as_deref(),
+            Some("requested sample rate not supported")
+        );
     }
 
     fn transposed_far_seek_song() -> Song {
@@ -3040,12 +3595,8 @@ mod tests {
     fn ring_consumer_writes_silence_when_buffer_runs_empty() {
         let (mut producer, mut consumer) = RingBuffer::<OutputSample>::new(4);
         let seek_generation = Arc::new(AtomicU64::new(0));
-        let mut state = CpalCrossfadeState::new(
-            0,
-            48_000,
-            1,
-            Arc::new(AudioRuntimeCounters::default()),
-        );
+        let mut state =
+            CpalCrossfadeState::new(0, 48_000, 1, Arc::new(AudioRuntimeCounters::default()));
         producer
             .push(OutputSample {
                 generation: 0,
@@ -3075,12 +3626,8 @@ mod tests {
     fn ring_consumer_flushes_stale_generation_on_seek() {
         let (mut producer, mut consumer) = RingBuffer::<OutputSample>::new(4);
         let seek_generation = Arc::new(AtomicU64::new(0));
-        let mut state = CpalCrossfadeState::new(
-            0,
-            48_000,
-            1,
-            Arc::new(AudioRuntimeCounters::default()),
-        );
+        let mut state =
+            CpalCrossfadeState::new(0, 48_000, 1, Arc::new(AudioRuntimeCounters::default()));
 
         producer
             .push(OutputSample {
@@ -3120,6 +3667,14 @@ mod tests {
             reader_handle: None,
             seek_generation: seek_generation.clone(),
             counters: Arc::new(AudioRuntimeCounters::default()),
+            backend_kind: None,
+            device_name: None,
+            output_sample_rate: 0,
+            actual_buffer_size: 0,
+            ring_capacity_frames: 0,
+            prefill_frames: 0,
+            prefill_result: PrefillResult::default(),
+            startup_readiness: MixerStartupReadiness::default(),
             audio_buffers: AudioBufferCache::default(),
         };
 
@@ -3197,6 +3752,14 @@ mod tests {
             reader_handle: None,
             seek_generation,
             counters: Arc::new(AudioRuntimeCounters::default()),
+            backend_kind: None,
+            device_name: None,
+            output_sample_rate: 0,
+            actual_buffer_size: 0,
+            ring_capacity_frames: 0,
+            prefill_frames: 0,
+            prefill_result: PrefillResult::default(),
+            startup_readiness: MixerStartupReadiness::default(),
             audio_buffers: AudioBufferCache::default(),
         };
 
@@ -3216,6 +3779,106 @@ mod tests {
         assert!(requests
             .iter()
             .any(|request| request.transpose_semitones == 0));
+    }
+
+    #[test]
+    fn simulated_asio_start_does_not_emit_original_before_realtime_pitch_is_ready() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
+        let song_dir = PathBuf::from("song");
+        let file_path = song_dir.join("audio/dup.wav");
+        let mut song = demo_song();
+        song.regions[0].transpose_semitones = -3;
+        song.tracks = vec![
+            Track {
+                id: "track_original".into(),
+                name: "Original".into(),
+                kind: libretracks_core::TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: -1.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: false,
+                audio_to: "master".to_string(),
+            },
+            Track {
+                id: "track_transposed".into(),
+                name: "Transposed".into(),
+                kind: libretracks_core::TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 1.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: true,
+                audio_to: "master".to_string(),
+            },
+        ];
+        song.clips = vec![
+            Clip {
+                id: "clip_original".into(),
+                track_id: "track_original".into(),
+                file_path: "audio/dup.wav".into(),
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 2.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            },
+            Clip {
+                id: "clip_transposed".into(),
+                track_id: "track_transposed".into(),
+                file_path: "audio/dup.wav".into(),
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 2.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            },
+        ];
+        let cache = AudioBufferCache::default();
+        cache.insert_prepared_ram_for_test(
+            source::PreparedAudioKey {
+                file_id: file_path.to_string_lossy().to_string(),
+                file_hash: file_path.to_string_lossy().to_string(),
+                sample_rate: 48_000,
+                channels: 2,
+                transpose_semitones: 0,
+            },
+            Arc::new(source::RawRamSource::new(
+                vec![0.5; 48_000 * 2 * 2],
+                48_000,
+                2,
+            )),
+        );
+
+        let mixer = Mixer::new(
+            song_dir,
+            song.clone(),
+            0.0,
+            48_000,
+            2,
+            Arc::new(RwLock::new(None)),
+            Arc::new(RwLock::new(None)),
+            shared_mix_state(&song),
+            Arc::new(RwLock::new(AppSettings::default())),
+            AudioDebugConfig {
+                enabled: false,
+                log_commands: false,
+            },
+            cache,
+        );
+        let readiness = mixer.startup_readiness();
+        assert_eq!(readiness.active_clip_count, 0);
+        assert_eq!(readiness.realtime_pitch_clip_count, 0);
+        assert!(
+            readiness.all_realtime_pitch_engines_ready,
+            "unsafe exact + realtime pitch route should be blocked until exact cache or homogeneous streaming is available"
+        );
     }
 
     #[test]
