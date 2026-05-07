@@ -7,6 +7,8 @@ description: Audio device selection, external outputs, track routes, metronome, 
 
 Open `Settings`, choose the correct `Audio device`, and verify the output before rehearsal and before the show. `System Default` follows the operating system output, but a dedicated interface is usually safer for live use.
 
+The audio settings page can also refresh the detected device list and lets you choose an explicit output sample rate or leave it on `Auto`, plus adjust the playback buffer size when you need a safer or tighter response.
+
 ![Audio settings](/screenshots/Configuracion-Audio.gif)
 
 ## Hardware Outputs
@@ -42,6 +44,6 @@ LibreTracks includes a built-in metronome, so a separate click audio file is not
 
 Choose a `MIDI input device` in `Settings`. Use `Refresh MIDI devices` if the controller was connected after the app opened.
 
-`MIDI Learn` maps notes or CC messages to live controls such as `Play`, `Stop`, `Vamp`, marker jump modes, song jump triggers, song transition mode, and bar-count controls.
+`MIDI Learn` maps notes or CC messages to live controls such as `Play`, `Stop`, `Vamp`, marker jump modes, song jump triggers, song transition mode, region selection, transpose actions, and bar-count controls.
 
 ![MIDI configuration](/screenshots/Midi-Config.gif)

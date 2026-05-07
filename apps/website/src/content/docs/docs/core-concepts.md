@@ -5,7 +5,7 @@ description: Library, tracks, clips, markers, meter changes, and song regions.
 
 ## Library And Assets
 
-`Library` is the preparation area for show audio. Import one or more audio files, then drag them onto the timeline when you are ready to arrange.
+`Library` is the preparation area for show audio. Import one or more audio files, then drag them onto the timeline when you are ready to arrange. You can also keep assets grouped in virtual folders and bring in prepared song packages when building a larger session.
 
 ![Import assets into the library](/screenshots/Library-Assets-Import.gif)
 
@@ -24,7 +24,7 @@ Use folder tracks for related stems such as drums, band tracks, choirs, backing 
 
 ## Clips And Timeline Editing
 
-Clips are non-destructive timeline references to source audio. You can drag assets from the Library, move clips, duplicate repeated sections, and split clips at the cursor without rewriting the original WAV.
+Clips are non-destructive timeline references to source audio. You can drag assets from the Library, drop external audio directly onto the timeline, move clips, duplicate repeated sections, and split clips at the cursor without rewriting the original WAV.
 
 ![Duplicate a clip](/screenshots/DuplicateTrack.png)
 
@@ -36,7 +36,9 @@ Clips are non-destructive timeline references to source audio. You can drag asse
 
 Song regions define named ranges on the timeline. They let one session hold several songs or show cues and are used by song jump controls.
 
-Create a song region by selecting a region on the timeline, right-clicking it, and choosing `Create song from selection`.
+Each region also carries its own transpose value, so the same arrangement can move up or down in semitones without duplicating tracks or clips.
+
+Create a song region by selecting a region on the timeline, right-clicking it, and choosing `Create song from selection`. After that, adjust `Region Transpose` from the transport view when the song needs a different key.
 
 ![Create a song region](/screenshots/Create-Region.png)
 

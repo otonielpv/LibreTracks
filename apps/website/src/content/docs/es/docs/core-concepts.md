@@ -5,7 +5,7 @@ description: Biblioteca, pistas, clips, marcas, cambios de compas y regiones de 
 
 ## Biblioteca Y Assets
 
-`Biblioteca` es el area de preparacion de audio del show. Importa uno o varios archivos y arrastralos al timeline cuando quieras empezar a organizar.
+`Biblioteca` es el area de preparacion de audio del show. Importa uno o varios archivos y arrastralos al timeline cuando quieras empezar a organizar. Tambien puedes agrupar assets en carpetas virtuales y traer paquetes de cancion ya preparados al construir una sesion mas grande.
 
 ![Importar assets en Biblioteca](/screenshots/Library-Assets-Import.gif)
 
@@ -24,7 +24,7 @@ Usa folder tracks para stems relacionados como bateria, tracks de banda, coros, 
 
 ## Clips Y Edicion De Timeline
 
-Los clips son referencias no destructivas a archivos de audio. Puedes arrastrar assets desde Biblioteca, mover clips, duplicar secciones repetidas y cortar en el cursor sin reescribir el WAV original.
+Los clips son referencias no destructivas a archivos de audio. Puedes arrastrar assets desde Biblioteca, soltar audio externo directamente en el timeline, mover clips, duplicar secciones repetidas y cortar en el cursor sin reescribir el WAV original.
 
 ![Duplicar un clip](/screenshots/DuplicateTrack.png)
 
@@ -36,7 +36,9 @@ Los clips son referencias no destructivas a archivos de audio. Puedes arrastrar 
 
 Las regiones de cancion definen rangos con nombre en el timeline. Permiten que una sesion contenga varias canciones o cues de show y se usan en los controles de salto de cancion.
 
-Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`.
+Cada region tambien guarda su propia transposicion, de modo que el mismo arreglo puede subir o bajar por semitonos sin duplicar pistas ni clips.
+
+Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`. Despues puedes ajustar `Region Transpose` desde la vista de transporte cuando la cancion necesite otra tonalidad.
 
 ![Crear region de cancion](/screenshots/Create-Region.png)
 

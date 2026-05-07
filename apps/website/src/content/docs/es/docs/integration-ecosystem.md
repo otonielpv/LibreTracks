@@ -15,7 +15,9 @@ Despues de crear una region de cancion, exportala cuando quieras reutilizar la c
 
 ## Importar Canciones Y Paquetes
 
-Usa `Import song` desde la seccion superior `Archivo` cuando quieras traer otra cancion o paquete de sesion de LibreTracks a la sesion actual. Es util para construir un show completo desde canciones preparadas sin rehacer pistas, clips, routing y marcas a mano.
+Usa `Import song` desde la seccion superior `Archivo` cuando quieras traer otra cancion o paquete de sesion de LibreTracks a la sesion actual. Es util para construir un show completo desde canciones preparadas sin rehacer pistas, clips, routing, marcas y configuracion de regiones a mano.
+
+Para la preparacion diaria, la sesion tambien admite drops externos de forma mas directa: los archivos de audio pueden entrar en el flujo de arreglo y las carpetas de Biblioteca ayudan a mantener los assets ordenados por cancion o bloque del show.
 
 ## Arquitectura Del Remote Movil
 
@@ -27,4 +29,4 @@ Los comandos remotos se envian al backend desktop y se resuelven mediante la mis
 
 ## Flujo Recomendado
 
-Prepara audio en una DAW de produccion, exporta stems, importalos en LibreTracks, organiza Biblioteca, construye el timeline, configura routing de salidas, crea regiones y marcas, ensaya saltos, conecta MIDI y usa el remote movil para transporte o mixer durante ensayo y show.
+Prepara audio en una DAW de produccion, exporta stems, importalos en LibreTracks, organiza Biblioteca, construye el timeline, configura routing de salidas, crea regiones y marcas, define la transposicion donde haga falta, ensaya saltos, conecta MIDI y usa el remote movil para transporte o mixer durante ensayo y show.

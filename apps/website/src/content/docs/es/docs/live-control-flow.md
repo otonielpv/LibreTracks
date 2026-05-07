@@ -43,12 +43,21 @@ El disparador puede ser inmediato, tras un numero de compases o al final de la c
 
 Si armas el destino equivocado, pulsa `Esc` inmediatamente.
 
+## Transposicion En Uso En Vivo
+
+LibreTracks puede cambiar el tono en dos niveles durante el ensayo o la preparacion del show:
+
+- `Region Transpose` cambia la tonalidad de la region de cancion seleccionada.
+- La activacion de transposicion por pista te deja decidir que pistas deben seguir ese cambio y cuales deben quedarse intactas.
+
+Esto es util cuando guias, material de click o referencias fijas deben permanecer en su sitio mientras los stems musicales cambian con la cancion.
+
 ## Remote Movil
 
 Abre `Remote` en la app desktop y escanea el codigo QR o abre la URL mostrada desde un movil o tablet en la misma red local.
 
 ![Panel de conexion remote](/screenshots/Remote.png)
 
-El remote incluye transporte, saltos de marca, saltos de cancion, Vamp, modo de transicion y una vista de mixer para volumen, paneo, mute y solo.
+El remote incluye transporte, saltos de marca, saltos de cancion, Vamp, modo de transicion, navegacion entre regiones, controles de transposicion y una vista de mixer para volumen, paneo, mute y solo.
 
 ![Mixer remote](/screenshots/Remote_Mixer.png)

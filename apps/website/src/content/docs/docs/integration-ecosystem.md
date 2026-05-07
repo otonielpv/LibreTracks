@@ -15,7 +15,9 @@ After creating a song region, export it when you want to reuse the configuration
 
 ## Import Songs And Packages
 
-Use `Import song` from the top `File` section when you want to bring another LibreTracks song or session package into the current session. This is useful for building a full show from prepared songs without recreating tracks, clips, routing, and markers by hand.
+Use `Import song` from the top `File` section when you want to bring another LibreTracks song or session package into the current session. This is useful for building a full show from prepared songs without recreating tracks, clips, routing, markers, and song-region setup by hand.
+
+For day-to-day prep, the session can also accept external drops more directly: audio files can be imported into the arrangement flow, while library folders help keep assets organized by song or show block.
 
 ## Mobile Remote Architecture
 
@@ -27,4 +29,4 @@ Remote commands are sent to the desktop backend and resolved through the same se
 
 ## Recommended Live Workflow
 
-Prepare audio in a production DAW, export stems, import them into LibreTracks, organize the Library, build the timeline, configure output routing, add song regions and markers, rehearse jumps, connect MIDI, and use the mobile remote for transport or mixer control during rehearsal and show.
+Prepare audio in a production DAW, export stems, import them into LibreTracks, organize the Library, build the timeline, configure output routing, add song regions and markers, set transpose behavior where needed, rehearse jumps, connect MIDI, and use the mobile remote for transport or mixer control during rehearsal and show.

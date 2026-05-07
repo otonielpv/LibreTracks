@@ -43,12 +43,21 @@ The trigger can be immediate, after a configured number of bars, or at the end o
 
 If you arm the wrong destination, press `Esc` immediately.
 
+## Transpose In Live Use
+
+LibreTracks can change pitch at two levels during rehearsal or show prep:
+
+- `Region Transpose` changes the key for the selected song region.
+- Track transpose enable lets you decide which tracks should follow that pitch change and which ones should stay untouched.
+
+This is useful when guide tracks, click-related material, or fixed references should remain in place while musical stems move with the song.
+
 ## Mobile Remote
 
 Open `Remote` in the desktop app, then scan the QR code or open the displayed URL from a phone or tablet on the same local network.
 
 ![Remote connection panel](/screenshots/Remote.png)
 
-The remote exposes transport, marker jumps, song jumps, Vamp controls, song transition mode, and a mixer view for volume, pan, mute, and solo.
+The remote exposes transport, marker jumps, song jumps, Vamp controls, song transition mode, region navigation, transpose controls, and a mixer view for volume, pan, mute, and solo.
 
 ![Remote mixer](/screenshots/Remote_Mixer.png)

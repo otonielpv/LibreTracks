@@ -3,7 +3,7 @@ title: LibreTracks Documentation
 description: User and technical documentation for LibreTracks.
 ---
 
-LibreTracks is a desktop multitrack playback workstation for live musicians, music directors, and playback engineers. It is built for preparing a show in advance, saving the session, and performing with predictable audio routing, markers, jumps, MIDI, and a mobile remote.
+LibreTracks is a desktop multitrack playback workstation for live musicians, music directors, and playback engineers. It is built for preparing a show in advance, saving the session, and performing with predictable audio routing, markers, jumps, transposition controls, MIDI, and a mobile remote.
 
 ![LibreTracks project timeline](/screenshots/Proyecto.png)
 
@@ -17,10 +17,10 @@ LibreTracks is not a production DAW. Produce and mix stems in Reaper, Ableton Li
 
 1. Import audio into `Library`.
 2. Organize assets with virtual folders.
-3. Drag assets to the timeline and create audio or folder tracks.
-4. Configure the audio device, hardware outputs, track routes, metronome, and MIDI input.
-5. Create song regions, markers, and optional meter changes.
-6. Rehearse marker jumps, Vamp, song jumps, transitions, keyboard shortcuts, MIDI mappings, and the mobile remote.
+3. Drag audio files or song packages into the session, then organize assets with the Library and timeline.
+4. Configure the audio device, sample rate, buffer size, hardware outputs, track routes, metronome, and MIDI input.
+5. Create song regions, markers, optional meter changes, and region-based transpose changes.
+6. Rehearse marker jumps, Vamp, song jumps, transitions, keyboard shortcuts, MIDI mappings, track transpose enable states, and the mobile remote.
 7. Export prepared songs or packages when you want to reuse them in future sessions.
 
 ![Library import workflow](/screenshots/Library-Assets-Import.gif)
@@ -33,8 +33,8 @@ Transport behavior is also explicit. Marker jumps, song jumps, Vamp loops, metro
 
 ## Main Areas
 
-- `Settings`: audio device, hardware outputs, metronome, and MIDI Learn.
+- `Settings`: audio device, sample rate, buffer size, hardware outputs, metronome, and MIDI Learn.
 - `Library`: imported audio assets and virtual folders.
-- `Timeline`: audio tracks, folder tracks, clips, song regions, markers, time signatures, and grid editing.
-- `Remote`: local web control surface for transport, jumps, Vamp, and mixer.
+- `Timeline`: audio tracks, folder tracks, clips, song regions, per-region transpose, markers, time signatures, and grid editing.
+- `Remote`: local web control surface for transport, jumps, Vamp, transpose, and mixer.
 - `File`: import songs/packages and export prepared songs.

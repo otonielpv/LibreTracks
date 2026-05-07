@@ -7,6 +7,8 @@ description: Dispositivo de audio, salidas externas, rutas por pista, metronomo 
 
 Abre `Configuracion`, elige el `Dispositivo de audio` correcto y verifica la salida antes del ensayo y antes del show. `Predeterminado del sistema` sigue la salida del sistema operativo, pero una interfaz dedicada suele ser mas segura para directo.
 
+La pagina de audio tambien puede refrescar la lista de dispositivos detectados y te deja elegir una frecuencia de muestreo de salida explicita o dejarla en `Auto`, ademas de ajustar el tamano del buffer cuando necesitas una respuesta mas segura o mas rapida.
+
 ![Configuracion de audio](/screenshots/Configuracion-Audio.gif)
 
 ## Salidas Hardware
@@ -42,6 +44,6 @@ LibreTracks incluye metronomo integrado, asi que no hace falta importar un archi
 
 Elige un `Dispositivo de entrada MIDI` en `Configuracion`. Usa `Refrescar dispositivos MIDI` si conectaste el controlador despues de abrir la app.
 
-`MIDI Learn` asigna notas o mensajes CC a controles de directo como `Play`, `Stop`, `Vamp`, modos de salto de marca, disparadores de salto de cancion, modo de transicion y controles de numero de compases.
+`MIDI Learn` asigna notas o mensajes CC a controles de directo como `Play`, `Stop`, `Vamp`, modos de salto de marca, disparadores de salto de cancion, modo de transicion, selección de regiones, acciones de transposicion y controles de numero de compases.
 
 ![Configuracion MIDI](/screenshots/Midi-Config.gif)
