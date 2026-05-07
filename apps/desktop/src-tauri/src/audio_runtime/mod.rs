@@ -1718,7 +1718,7 @@ mod tests {
     use super::backend::{
         resolve_output_stream_config_for_test, system_default_backend_from_available_for_test,
     };
-    use super::mixer::MixerStartupReadiness;
+    use super::mixer::{MixerStartupReadiness, PlaybackSourcePolicy};
     use super::{
         apply_runtime_pan, build_live_mix_map, build_playback_plans, coalesce_sync_song_commands,
         drain_consumer_samples, env_flag, interpolated_gain, playback_reason_label,
@@ -3294,7 +3294,7 @@ mod tests {
             Arc::new(source::RawRamSource::new(vec![0.5; 48_000 * 5], 48_000, 1)),
         );
 
-        let mut mixer = Mixer::new(
+        let mut mixer = Mixer::new_with_playback_source_policy(
             song_dir,
             song.clone(),
             10.0,
@@ -3309,6 +3309,7 @@ mod tests {
                 log_commands: false,
             },
             cache,
+            PlaybackSourcePolicy::PreferPreparedExact,
         );
 
         assert_eq!(
