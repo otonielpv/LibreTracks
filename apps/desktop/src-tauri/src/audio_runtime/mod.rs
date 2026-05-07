@@ -1411,16 +1411,7 @@ fn wait_for_prefill(
     }
 }
 
-fn log_prefill_result(backend: AudioBackendKind, result: PrefillResult) {
-    eprintln!(
-        "[libretracks-audio] prefill backend={backend:?} requested_frames={} requested_samples={} available_frames={} available_samples={} elapsed_ms={:.2} completed={}",
-        result.requested_frames,
-        result.requested_samples,
-        result.available_frames,
-        result.available_samples,
-        result.elapsed_ms,
-        result.completed
-    );
+fn log_prefill_result(_backend: AudioBackendKind, _result: PrefillResult) {
 }
 
 fn log_startup_readiness(
@@ -1609,42 +1600,17 @@ fn escape_log_value(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn log_requested_output_device(request: &AudioOutputRequest) {
-    eprintln!(
-        "[audio_config_requested] requested_backend={:?} requested_device_id={:?} requested_device_name={:?} requested_sample_rate={:?} requested_buffer_size={:?} requested_channel_mapping={:?} requested_sample_format={:?}",
-        request.backend,
-        request.device_id,
-        request.device_name,
-        request.sample_rate,
-        request.buffer_size,
-        request.output_channels.channels,
-        request.sample_format,
-    );
+fn log_requested_output_device(_request: &AudioOutputRequest) {
 }
 
 fn log_stream_open_failure(
-    request: &AudioOutputRequest,
-    failure_stage: &'static str,
-    message: &str,
+    _request: &AudioOutputRequest,
+    _failure_stage: &'static str,
+    _message: &str,
 ) {
-    eprintln!(
-        "[libretracks-audio] stream_open_failure stream_open_success=false requested_backend={:?} requested_device=\"{}\" failure_stage={} error=\"{}\"",
-        request.backend,
-        request.requested_device_label(),
-        failure_stage,
-        escape_log_value(message),
-    );
 }
 
-fn log_resolved_output_config(device_name: &str, config: &ResolvedOutputStreamConfig) {
-    eprintln!(
-        "[audio_config_resolved] device=\"{}\" requested_sample_rate={:?} resolved_sample_rate={} used_fallback={} fallback_reason={:?}",
-        escape_log_value(device_name),
-        config.requested_sample_rate,
-        config.resolved_sample_rate,
-        config.used_fallback,
-        config.fallback_reason,
-    );
+fn log_resolved_output_config(_device_name: &str, _config: &ResolvedOutputStreamConfig) {
 }
 
 fn next_audio_command(
