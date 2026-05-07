@@ -474,6 +474,26 @@ const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
   { key: "action:pause", labelKey: "timelineTopbar.pause" },
   { key: "action:stop", labelKey: "timelineTopbar.stop" },
   { key: "action:next_song", labelKey: "timelineTopbar.next" },
+  {
+    key: "action:select_previous_region",
+    labelKey: "transport.settingsModal.midiLearnSelectPrevRegion",
+  },
+  {
+    key: "action:select_next_region",
+    labelKey: "transport.settingsModal.midiLearnSelectNextRegion",
+  },
+  {
+    key: "action:region_transpose_up",
+    labelKey: "transport.settingsModal.midiLearnTransposeUp",
+  },
+  {
+    key: "action:region_transpose_down",
+    labelKey: "transport.settingsModal.midiLearnTransposeDown",
+  },
+  {
+    key: "action:region_transpose_reset",
+    labelKey: "transport.settingsModal.midiLearnTransposeReset",
+  },
   { key: "action:toggle_metronome", labelKey: "timelineTopbar.metronome" },
   { key: "action:toggle_vamp", labelKey: "timelineToolbar.vampButton" },
   { key: "action:cancel_jump", labelKey: "timelineToolbar.cancelJump" },
@@ -596,6 +616,18 @@ function formatMidiBinding(binding: MidiBinding) {
   }
 
   return `Status 0x${binding.status.toString(16).toUpperCase().padStart(2, "0")} / Data1 ${binding.data1} (Ch ${channel})`;
+}
+
+function findMidiMappingKeyForMessage(
+  midiMappings: AppSettings["midiMappings"],
+  message: { status: number; data1: number },
+) {
+  return (
+    Object.entries(midiMappings).find(
+      ([, binding]) =>
+        binding.status === message.status && binding.data1 === message.data1,
+    )?.[0] ?? null
+  );
 }
 
 type LibraryAssetDragPayload = {
@@ -1832,7 +1864,24 @@ export function TransportPanelContent() {
     let unlisten: (() => void) | null = null;
     void listenToMidiRawMessage((message) => {
       const learnMode = useTimelineUIStore.getState().midiLearnMode;
-      if (!learnMode) {
+      if (learnMode === null) {
+        const mappedKey = findMidiMappingKeyForMessage(
+          appSettingsRef.current.midiMappings,
+          message,
+        );
+
+        if (mappedKey === "action:select_previous_region") {
+          handleSelectRegionFromMidi(-1);
+        } else if (mappedKey === "action:select_next_region") {
+          handleSelectRegionFromMidi(1);
+        } else if (
+          mappedKey === "action:region_transpose_up" ||
+          mappedKey === "action:region_transpose_down" ||
+          mappedKey === "action:region_transpose_reset"
+        ) {
+          handleRegionTransposeFromMidi(mappedKey);
+        }
+
         return;
       }
 
@@ -1890,7 +1939,12 @@ export function TransportPanelContent() {
     return () => {
       unlisten?.();
     };
-  }, [formatMidiLearnCommandLabel, runAction, setMidiLearnMode, t]);
+  }, [
+    formatMidiLearnCommandLabel,
+    runAction,
+    setMidiLearnMode,
+    t,
+  ]);
 
   const persistAudioSettings = useCallback(
     (
@@ -4194,6 +4248,62 @@ export function TransportPanelContent() {
     );
 
     return nextSnapshot;
+  }
+
+  function handleSelectRegionFromMidi(direction: -1 | 1) {
+    const effectSong = songRef.current;
+    if (!effectSong || effectSong.regions.length === 0) {
+      return;
+    }
+
+    const orderedRegions = [...effectSong.regions].sort(
+      (left, right) => left.startSeconds - right.startSeconds,
+    );
+    const currentIndex = orderedRegions.findIndex(
+      (region) => region.id === selectedRegionId,
+    );
+    const nextIndex =
+      currentIndex === -1
+        ? 0
+        : Math.max(
+            0,
+            Math.min(orderedRegions.length - 1, currentIndex + direction),
+          );
+    const nextRegion = orderedRegions[nextIndex] ?? null;
+
+    if (!nextRegion) {
+      return;
+    }
+
+    setSelectedRegionId(nextRegion.id);
+    setStatus(t("transport.status.regionSelected", { name: nextRegion.name }));
+  }
+
+  function handleRegionTransposeFromMidi(
+    commandKey:
+      | "action:region_transpose_up"
+      | "action:region_transpose_down"
+      | "action:region_transpose_reset",
+  ) {
+    const effectSong = songRef.current;
+    if (!effectSong || !selectedRegionId) {
+      return;
+    }
+
+    const currentRegion =
+      effectSong.regions.find((region) => region.id === selectedRegionId) ??
+      null;
+    if (!currentRegion) {
+      return;
+    }
+
+    const nextTransposeSemitones =
+      commandKey === "action:region_transpose_reset"
+        ? 0
+        : currentRegion.transposeSemitones +
+          (commandKey === "action:region_transpose_up" ? 1 : -1);
+
+    handleSelectedRegionTransposeChange(nextTransposeSemitones);
   }
 
   async function handleMarkerPrimaryAction(section: SectionMarkerSummary) {

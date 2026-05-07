@@ -1300,7 +1300,7 @@ button {
 
 .toggle-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   flex: 0 0 auto;
   gap: 0.55rem;
 }
@@ -1322,6 +1322,11 @@ button {
 .toggle-row button.is-active.is-solo {
   background: rgb(255 226 171 / 0.8);
   color: #402d00;
+}
+
+.toggle-row button.is-active.is-transpose {
+  color: #003731;
+  background: #57f1db;
 }
 
 .bottom-nav {

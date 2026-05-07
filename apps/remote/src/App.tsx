@@ -943,7 +943,7 @@ function TransportView() {
     }
 
     sendCommand({
-      cmd: "updateSongRegionTranspose",
+      cmd: "updateRegionTranspose",
       regionId: selectedRegion.id,
       transposeSemitones: nextTransposeSemitones,
     });
@@ -1414,13 +1414,6 @@ function MixerStrip({
       <header className="mixer-strip-header">
         <small>{track.kind === "folder" ? STRINGS.folder : STRINGS.audio}</small>
         <strong>{track.name}</strong>
-        <button
-          type="button"
-          className={`mini-action transpose-toggle ${effectiveTrack.transposeEnabled ? "is-active" : ""}`}
-          onClick={toggleTranspose}
-        >
-          {STRINGS.transposeTrack} {effectiveTrack.transposeEnabled ? STRINGS.transposeOn : STRINGS.transposeOff}
-        </button>
       </header>
 
       <div className="pan-section">
@@ -1464,6 +1457,16 @@ function MixerStrip({
           onClick={() => commitTrackUpdate({ solo: !effectiveTrack.solo })}
         >
           S
+        </button>
+        <button
+          type="button"
+          aria-label={`${STRINGS.transposeTrack} ${
+            effectiveTrack.transposeEnabled ? STRINGS.transposeOn : STRINGS.transposeOff
+          }`}
+          className={effectiveTrack.transposeEnabled ? "is-active is-transpose" : "is-transpose"}
+          onClick={toggleTranspose}
+        >
+          T
         </button>
       </div>
     </article>
