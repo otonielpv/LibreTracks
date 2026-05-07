@@ -3372,23 +3372,33 @@ mod tests {
     fn safe_realtime_streaming_selects_streaming_reader_for_all_active_clips() {
         let mixer = synchronized_safe_policy_mixer(48_000);
         let readiness = mixer.startup_readiness();
+        let rubberband_available = pitch::rubberband_backend_available_for_test();
 
         assert_eq!(
             readiness.playback_source_policy,
             PlaybackSourcePolicy::SafeRealtimeStreaming
         );
-        assert_eq!(readiness.active_clip_count, 2);
+        assert_eq!(
+            readiness.active_clip_count,
+            if rubberband_available { 2 } else { 1 }
+        );
         for clip in mixer.active_clips() {
             assert!(clip.has_reader());
             assert!(!clip.has_prepared_source());
             assert_ne!(clip.source_kind(), Some(source::SeekSourceKind::ExactRam));
             assert_ne!(clip.source_kind(), Some(source::SeekSourceKind::ExactDisk));
         }
-        assert!(readiness
+        let transpose_clip = readiness
             .clip_diagnostics
             .iter()
-            .find(|clip| clip.clip_id == "transpose_clip")
-            .is_some_and(|clip| clip.source_kind == "StreamingReader" && clip.uses_realtime_pitch));
+            .find(|clip| clip.clip_id == "transpose_clip");
+        if rubberband_available {
+            assert!(transpose_clip.is_some_and(|clip| {
+                clip.source_kind == "StreamingReader" && clip.uses_realtime_pitch
+            }));
+        } else {
+            assert!(transpose_clip.is_none());
+        }
         assert!(
             readiness
                 .clip_diagnostics
@@ -3422,6 +3432,7 @@ mod tests {
     fn safe_realtime_streaming_keeps_musical_jump_timing_behavior() {
         let mut mixer = synchronized_safe_policy_mixer(48_000);
         let song = mixer.song.clone();
+        let rubberband_available = pitch::rubberband_backend_available_for_test();
 
         mixer.seek_with_transition(song, 1.0, TransportTransitionKind::MusicalJump);
 
@@ -3437,7 +3448,11 @@ mod tests {
                 .iter()
                 .map(|clip| (clip.plan().clip_id.as_str(), clip.has_reader()))
                 .collect::<Vec<_>>(),
-            vec![("normal_clip", true), ("transpose_clip", true)]
+            if rubberband_available {
+                vec![("normal_clip", true), ("transpose_clip", true)]
+            } else {
+                vec![("normal_clip", true)]
+            }
         );
     }
 

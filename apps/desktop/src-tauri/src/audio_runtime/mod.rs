@@ -3166,6 +3166,14 @@ mod tests {
         let cache = AudioBufferCache::default();
         let intro_path = song_dir.join("audio/intro.wav");
         let late_path = song_dir.join("audio/late.wav");
+        cache.insert_for_test(
+            intro_path.clone(),
+            SharedAudioSource::from_preloaded(vec![0.75; 48_000 * 5], 48_000, 1, true),
+        );
+        cache.insert_for_test(
+            late_path.clone(),
+            SharedAudioSource::from_preloaded(vec![-0.25; 48_000 * 5], 48_000, 1, true),
+        );
         cache.insert_prepared_ram_for_test(
             source::PreparedAudioKey {
                 file_id: intro_path.to_string_lossy().to_string(),
@@ -3227,6 +3235,10 @@ mod tests {
         let song_dir = PathBuf::from("song");
         let cache = AudioBufferCache::default();
         let intro_path = song_dir.join("audio/intro.wav");
+        cache.insert_for_test(
+            intro_path.clone(),
+            SharedAudioSource::from_preloaded(vec![0.75; 48_000 * 5], 48_000, 1, true),
+        );
         cache.insert_prepared_ram_for_test(
             source::PreparedAudioKey {
                 file_id: intro_path.to_string_lossy().to_string(),
@@ -3267,6 +3279,10 @@ mod tests {
         let song_dir = PathBuf::from("song");
         let prepared_path = song_dir.join("audio/late.wav");
         let cache = AudioBufferCache::default();
+        cache.insert_for_test(
+            prepared_path.clone(),
+            SharedAudioSource::from_preloaded(vec![0.5; 48_000 * 5], 48_000, 1, true),
+        );
         cache.insert_prepared_ram_for_test(
             source::PreparedAudioKey {
                 file_id: prepared_path.to_string_lossy().to_string(),
@@ -3305,6 +3321,9 @@ mod tests {
 
     #[test]
     fn mixer_uses_prepared_original_with_sync_pitch_for_transposed_clip() {
+        if !pitch::rubberband_backend_available_for_test() {
+            return;
+        }
         let mut song = demo_song();
         song.regions[0].transpose_semitones = 2;
         let song_dir = PathBuf::from("song");
@@ -3904,6 +3923,14 @@ mod tests {
         let cache = AudioBufferCache::default();
         let intro_path = song_dir.join("audio/intro.wav");
         let late_path = song_dir.join("audio/late.wav");
+        cache.insert_for_test(
+            intro_path.clone(),
+            SharedAudioSource::from_preloaded(vec![0.75; 48_000 * 5], 48_000, 1, true),
+        );
+        cache.insert_for_test(
+            late_path.clone(),
+            SharedAudioSource::from_preloaded(vec![-0.25; 48_000 * 5], 48_000, 1, true),
+        );
         cache.insert_prepared_ram_for_test(
             source::PreparedAudioKey {
                 file_id: intro_path.to_string_lossy().to_string(),
