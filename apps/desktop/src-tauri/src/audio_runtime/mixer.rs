@@ -2176,12 +2176,6 @@ impl MixClipState {
         if self.plan.transpose_semitones != 0 {
             if input_max_abs > 0.000_001 && post_pitch_max_abs <= 0.000_001 {
                 self.silent_post_pitch_blocks = self.silent_post_pitch_blocks.saturating_add(1);
-                if self.silent_post_pitch_blocks >= 4 {
-                    eprintln!(
-                        "[libretracks-audio] FATAL: StreamingReader RubberBand post_pitch is silent while pre_pitch has signal for {} blocks; set LIBRETRACKS_RUBBERBAND_PREROLL=0 to use the previous non-preroll realtime path for debugging",
-                        self.silent_post_pitch_blocks
-                    );
-                }
             } else if post_pitch_max_abs > 0.000_001 {
                 self.silent_post_pitch_blocks = 0;
             }

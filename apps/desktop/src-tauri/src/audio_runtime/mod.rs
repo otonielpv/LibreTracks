@@ -659,23 +659,6 @@ impl AudioController {
             let block_frames = remaining_frames.min(DISK_RENDER_BLOCK_FRAMES);
             let block = mixer.render_next_block(block_frames);
             for sample in block {
-                writer
-                    .write_sample((sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)
-                    .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
-            }
-            remaining_frames -= block_frames;
-        }
-
-        writer
-            .finalize()
-            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
-        Ok(())
-    }
-
-    fn request(
-        &self,
-        command: impl FnOnce(Sender<Result<(), String>>) -> AudioCommand,
-    ) -> Result<(), DesktopError> {
         let (respond_to, response) = mpsc::channel();
 
         self.sender
@@ -899,17 +882,6 @@ impl PlaybackSession {
             log_stream_open_failure(&output_request, "stream_build_failed", &error);
             error
         })?;
-        log_stream_open(
-            backend_kind,
-            &host_id.name(),
-            &device_name,
-            &config,
-            sample_format,
-            &output_request,
-            actual_buffer_size,
-            ring_capacity_frames,
-            prefill_frames,
-        );
         log_audio_startup_to_file(
             &app_handle,
             backend_kind,
@@ -1652,36 +1624,6 @@ fn log_resolved_output_config(device_name: &str, config: &ResolvedOutputStreamCo
         config.resolved_sample_rate,
         config.used_fallback,
         config.fallback_reason,
-    );
-}
-
-#[allow(clippy::too_many_arguments)]
-fn log_stream_open(
-    backend_kind: AudioBackendKind,
-    host_id: &str,
-    device_name: &str,
-    config: &StreamConfig,
-    sample_format: SampleFormat,
-    request: &AudioOutputRequest,
-    actual_buffer_size: usize,
-    ring_capacity_frames: usize,
-    prefill_frames: usize,
-) {
-    eprintln!(
-        "[libretracks-audio] stream_open stream_open_success=true requested_backend={:?} requested_device_id={:?} requested_device_name={:?} actual_backend={:?} actual_host_id={} actual_device_name=\"{}\" actual_sample_rate={} actual_channels={} actual_sample_format={:?} requested_buffer={:?} actual_buffer_size={} ring_capacity={} prefill_frames={}",
-        backend_kind,
-        request.device_id,
-        request.device_name,
-        request.backend,
-        host_id,
-        device_name,
-        config.sample_rate.0,
-        config.channels,
-        sample_format_from_cpal(sample_format),
-        request.buffer_size,
-        actual_buffer_size,
-        ring_capacity_frames,
-        prefill_frames
     );
 }
 
