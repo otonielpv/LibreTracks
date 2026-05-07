@@ -1459,23 +1459,11 @@ fn open_streaming_reader_and_pitch_engine(
     ),
     String,
 > {
-    if plan.transpose_semitones == 0 {
-        let reader = source::StreamingClipReader::open(
-            plan,
-            output_sample_rate,
-            audio_buffers,
-            timeline_frame,
-        )?;
-        let pitch_engine = create_clip_pitch_engine_for_source(
-            output_sample_rate,
-            reader.source_channels().max(1),
-            0,
-            None,
-        );
-        return Ok((reader, pitch_engine));
-    }
+    let raw_preroll_env = rubberband_preroll_env_value();
+    let preroll_enabled = parse_rubberband_preroll_enabled(raw_preroll_env.as_deref());
+    let use_preroll = plan.transpose_semitones != 0 && preroll_enabled;
 
-    if !rubberband_preroll_enabled() {
+    if !use_preroll {
         let reader = source::StreamingClipReader::open(
             plan,
             output_sample_rate,
@@ -1487,6 +1475,12 @@ fn open_streaming_reader_and_pitch_engine(
             reader.source_channels().max(1),
             plan.transpose_semitones,
             None,
+        );
+        log_streaming_reader_preroll_selection(
+            plan,
+            raw_preroll_env.as_deref(),
+            preroll_enabled,
+            "non-preroll",
         );
         return Ok((reader, pitch_engine));
     }
@@ -1554,21 +1548,54 @@ fn open_streaming_reader_and_pitch_engine(
             plan.transpose_semitones,
             None,
         );
+        log_streaming_reader_preroll_selection(
+            plan,
+            raw_preroll_env.as_deref(),
+            preroll_enabled,
+            "non-preroll",
+        );
         return Ok((fallback_reader, fallback_engine));
     }
 
+    log_streaming_reader_preroll_selection(
+        plan,
+        raw_preroll_env.as_deref(),
+        preroll_enabled,
+        "preroll",
+    );
     Ok((reader, pitch_engine))
 }
 
+fn rubberband_preroll_env_value() -> Option<String> {
+    std::env::var("LIBRETRACKS_RUBBERBAND_PREROLL").ok()
+}
+
+fn parse_rubberband_preroll_enabled(raw: Option<&str>) -> bool {
+    raw.map(|value| {
+        !matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        )
+    })
+    .unwrap_or(true)
+}
+
+fn log_streaming_reader_preroll_selection(
+    plan: &PlaybackClipPlan,
+    raw_preroll_env: Option<&str>,
+    preroll_enabled: bool,
+    selected_path: &str,
+) {
+    eprintln!(
+        "[libretracks-audio] StreamingReader RubberBand preroll selection: clip_id={}, transpose_semitones={}, raw_env={raw_preroll_env:?}, preroll_enabled={}, selected_path={selected_path}",
+        plan.clip_id,
+        plan.transpose_semitones,
+        preroll_enabled
+    );
+}
+
 fn rubberband_preroll_enabled() -> bool {
-    std::env::var("LIBRETRACKS_RUBBERBAND_PREROLL")
-        .map(|value| {
-            !matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "0" | "false" | "off" | "no"
-            )
-        })
-        .unwrap_or(true)
+    parse_rubberband_preroll_enabled(rubberband_preroll_env_value().as_deref())
 }
 
 fn source_kind_label(kind: Option<source::SeekSourceKind>, has_reader: bool) -> &'static str {
@@ -2177,9 +2204,16 @@ impl MixClipState {
             if input_max_abs > 0.000_001 && post_pitch_max_abs <= 0.000_001 {
                 self.silent_post_pitch_blocks = self.silent_post_pitch_blocks.saturating_add(1);
                 if self.silent_post_pitch_blocks >= 4 {
+                    let raw_preroll_env = rubberband_preroll_env_value();
+                    let preroll_enabled =
+                        parse_rubberband_preroll_enabled(raw_preroll_env.as_deref());
                     eprintln!(
-                        "[libretracks-audio] FATAL: StreamingReader RubberBand post_pitch is silent while pre_pitch has signal for {} blocks; set LIBRETRACKS_RUBBERBAND_PREROLL=0 to use the previous non-preroll realtime path for debugging",
-                        self.silent_post_pitch_blocks
+                        "[libretracks-audio] FATAL: StreamingReader RubberBand post_pitch is silent while pre_pitch has signal for {} blocks; clip_id={}, transpose_semitones={}, source_kind={}, raw_env={raw_preroll_env:?}, preroll_enabled={}; set LIBRETRACKS_RUBBERBAND_PREROLL=0 to use the previous non-preroll realtime path for debugging",
+                        self.silent_post_pitch_blocks,
+                        self.plan.clip_id,
+                        self.plan.transpose_semitones,
+                        source_kind_label(self.source_kind, self.reader.is_some()),
+                        preroll_enabled
                     );
                 }
             } else if post_pitch_max_abs > 0.000_001 {
@@ -3534,6 +3568,27 @@ mod tests {
         assert!(original_disk
             .as_any()
             .is::<pitch::RubberBandPitchShiftEngine>());
+    }
+
+    #[test]
+    fn parse_rubberband_preroll_enabled_handles_expected_values() {
+        let cases = [
+            (None, true),
+            (Some("0"), false),
+            (Some("false"), false),
+            (Some("off"), false),
+            (Some("no"), false),
+            (Some("1"), true),
+            (Some("true"), true),
+        ];
+
+        for (raw, expected) in cases {
+            assert_eq!(
+                parse_rubberband_preroll_enabled(raw),
+                expected,
+                "unexpected parse result for {raw:?}"
+            );
+        }
     }
 
     #[test]
