@@ -36,7 +36,6 @@ import {
   type TempoMarkerSummary,
   type TimeSignatureMarkerSummary,
   type TrackKind,
-  type TransportLifecycleEvent,
   type TrackSummary,
   type TransportSnapshot,
   type WaveformSummaryDto,
@@ -47,7 +46,6 @@ import {
   createClipsBatch,
   createLibraryFolder,
   createSectionMarker,
-  createSong,
   createSongRegion,
   createTrack,
   deleteClip,
@@ -68,42 +66,30 @@ import {
   getRemoteServerInfo,
   getSettings,
   getSongView,
-  getTransportSnapshot,
   getWaveformSummaries,
   importLibraryAssetsFromDialog,
   importAudioFilesFromBytes,
   importAudioFilesFromPaths,
   importSongPackage,
   isTauriApp,
-  listenToAudioMeters,
-  listenToLibraryImportProgress,
   listenToMidiRawMessage,
   listenToSettingsUpdated,
-  listenToTransportLifecycle,
   listenToWaveformReady,
   moveClip,
   moveClipLive,
   moveLibraryAsset,
   moveTrack,
-  openProject,
   pauseTransport,
-  pickAndImportSong,
   playTransport,
   prewarmTimelineSeek,
-  redoAction,
   renameLibraryFolder,
   reportUiRenderMetric,
   resolveMissingFile,
-  saveProject,
-  saveProjectAs,
   saveSettings,
   scheduleMarkerJump,
-  scheduleRegionJump,
   seekTransport,
   splitClip,
   stopTransport,
-  toggleVamp,
-  undoAction,
   updateAudioSettings,
   updateSectionMarker,
   updateSongRegion,
@@ -118,8 +104,6 @@ import {
   formatTransposeSemitones,
 } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
-import { LibrarySidebarPanel } from "./LibrarySidebarPanel";
-import { RemoteAccessCard } from "./RemoteAccessCard";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
 import { TimelineToolbar } from "./TimelineToolbar";
 import { TimelineTopbar } from "./TimelineTopbar";
@@ -139,7 +123,6 @@ import {
   zoomCameraAtViewportX,
 } from "./timelineMath";
 import {
-  meterDictionaryFromLevels,
   useTransportStore,
   type OptimisticMixState,
 } from "./store";
@@ -157,6 +140,18 @@ import {
   type TimelineTrackSummary,
 } from "./pendingAudioImports";
 import { TIMELINE_DEFAULT_TRACK_HEIGHT, useTimelineUIStore } from "./uiStore";
+import { SideNav } from "./shell/SideNav";
+import { SettingsPanel } from "./panels/SettingsPanel";
+import { RemotePanel } from "./panels/RemotePanel";
+import { LibraryPanel } from "./panels/LibraryPanel";
+import { useAudioMeters } from "./hooks/useAudioMeters";
+import { useLibraryActions } from "./hooks/useLibraryActions";
+import { useTransportLifecycle } from "./hooks/useTransportLifecycle";
+import { useTransportPolling } from "./hooks/useTransportPolling";
+import { useProjectActions } from "./hooks/useProjectActions";
+import { TimelineContextMenus } from "./timeline/TimelineContextMenus";
+import { useTimelineActions } from "./timeline/useTimelineActions";
+import { useTimelineKeyboardShortcuts } from "./timeline/TimelineKeyboardShortcuts";
 import {
   buildTimelineDropPreviewGeometry,
   classifyDroppedPaths,
@@ -165,1041 +160,103 @@ import {
   type ExternalDropPreview,
   type NativeDroppedPathClassification,
 } from "./dragDrop";
+import type {
+  ClipDragState,
+  ContextMenuAction,
+  ContextMenuState,
+  InternalLibraryPointerDrag,
+  LibraryAssetDragPayload,
+  LibraryClipPreviewState,
+  LibraryDragAutoScrollState,
+  LibraryDragHoverState,
+  LibraryDropLayout,
+  LiveClipMoveState,
+  LiveTrackMixRequestState,
+  MidiLearnCommand,
+  MidiLearnCommandRow,
+  MidiLearnFeedback,
+  NativeClientPointCandidate,
+  NativeDropCandidateDebug,
+  NativeDropCoordinateMode,
+  NativeDropDebugRect,
+  NativeDroppedFile,
+  OptimisticClipOperation,
+  PlayheadDragState,
+  SettingsTab,
+  SidebarTab,
+  TimelineDropGeometry,
+  TimelinePanState,
+  TimelineRangeSelection,
+  TrackDragState,
+  TrackDropState,
+  TransportAnchorMeta,
+} from "./types";
+import {
+  DEFAULT_TIMELINE_VIEWPORT_WIDTH,
+  DRAG_THRESHOLD_PX,
+  DOM_EXTERNAL_DROP_PREVIEW_TTL_MS,
+  HARDWARE_OUTPUT_CHANNEL_COUNT,
+  HEADER_WIDTH,
+  LIBRARY_DRAG_EDGE_BUFFER_PX,
+  LIBRARY_DRAG_MAX_SCROLL_SPEED_PX,
+  LIVE_TRACK_MIX_MIN_INTERVAL_MS,
+  LIVE_ZOOM_COMMIT_DEBOUNCE_MS,
+  MIDI_LEARN_COMMANDS,
+  NATIVE_DND_DEBUG_ENABLED,
+  PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS,
+  RULER_HEIGHT,
+  SCROLL_COMMIT_DEBOUNCE_MS,
+  TIMELINE_FIT_RIGHT_GUTTER_PX,
+  TRACK_HEIGHT_MAX,
+  TRACK_HEIGHT_MIN,
+  TRACK_HEIGHT_STEP,
+  ZOOM_MAX,
+  ZOOM_MIN,
+} from "./constants";
+import {
+  buildAudioRoutingOptions,
+  buildMemoizedClipsByTrack,
+  buildVisibleTracks,
+  clamp,
+  describeNativeDropElement,
+  findClip,
+  findMidiMappingKeyForMessage,
+  findPreviousFolderTrack,
+  findSection,
+  findTrack,
+  formatClock,
+  formatMidiBinding,
+  formatMusicalPosition,
+  getNativeCandidatePointerDelta,
+  humanizeLibraryTrackName,
+  isAudioDeviceVisibleForBackend,
+  isInteractiveTimelineTarget,
+  isTimelineZoomTarget,
+  isTrackDescendant,
+  isTrackInfoScrollTarget,
+  lanePointerToClip,
+  libraryAssetFileName,
+  mergeOptimisticClipsByTrack,
+  nativeClientPointCandidates,
+  resolveNativeAudioImportPayloads,
+  resolveTrackDropState,
+  rulerClientXToSeconds,
+  rulerPointerToSeconds,
+  selectNativeDropCandidate,
+  toClientPointFromNativePosition,
+  toNativeDropDebugRect,
+  trackChildrenCount,
+  waitForUiPaint,
+} from "./helpers";
+
+// Backward-compatible re-exports (TransportPanelContent.test.ts imports these)
+export {
+  isAudioDeviceVisibleForBackend,
+  selectNativeDropCandidate,
+  getNativeCandidatePointerDelta,
+} from "./helpers";
+export type { NativeDropCandidateDebug, NativeDropCoordinateMode } from "./types";
 
-const HEADER_WIDTH = 260;
-const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
-const TIMELINE_FIT_RIGHT_GUTTER_PX = 140;
-const TRACK_HEIGHT_MIN = 68;
-const TRACK_HEIGHT_MAX = 148;
-const TRACK_HEIGHT_STEP = 8;
-const RULER_HEIGHT = 132;
-const ZOOM_MIN = 0.0625;
-const ZOOM_MAX = 64;
-const DRAG_THRESHOLD_PX = 6;
-const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
-const SCROLL_COMMIT_DEBOUNCE_MS = 100;
-const LIVE_ZOOM_COMMIT_DEBOUNCE_MS = 150;
-const DOM_EXTERNAL_DROP_PREVIEW_TTL_MS = 250;
-const NATIVE_DND_DEBUG_ENABLED =
-  import.meta.env.DEV && import.meta.env.VITE_NATIVE_DND_DEBUG === "true";
-
-export type NativeDropCoordinateMode =
-  | "raw"
-  | "raw/dpr"
-  | "minus-webview"
-  | "minus-webview/dpr";
-
-type NativeClientPointCandidate = {
-  label: NativeDropCoordinateMode;
-  clientX: number;
-  clientY: number;
-};
-
-type NativeDropDebugRect = {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-  width: number;
-  height: number;
-};
-
-type TimelineDropGeometry = {
-  targetElement: HTMLElement;
-  targetTrackId: string | null;
-  viewportBounds: DOMRect;
-  viewportX: number;
-  rawSeconds: number;
-  snappedSeconds: number;
-  dropSeconds: number;
-  rawLeftPx: number;
-  rawClientX: number;
-  snappedLeftPx: number;
-  snappedClientX: number;
-  previewLeftPx: number;
-  previewClientX: number;
-  snapApplied: boolean;
-};
-
-export type NativeDropCandidateDebug = {
-  label: NativeDropCoordinateMode;
-  clientX: number;
-  clientY: number;
-  elementFromPoint: string | null;
-  laneBounds: NativeDropDebugRect | null;
-  rulerBounds: NativeDropDebugRect | null;
-  dropSeconds: number | null;
-  rawSeconds: number | null;
-  snappedSeconds: number | null;
-  rawLeftPx: number | null;
-  rawClientX: number | null;
-  snappedLeftPx: number | null;
-  snappedClientX: number | null;
-  previewLeftPx: number | null;
-  previewClientX: number | null;
-  rawDeltaPx: number | null;
-  snapDeltaPx: number | null;
-  snapApplied: boolean;
-  score: number;
-  isOverTimeline: boolean;
-  targetTrackId: string | null;
-};
-
-export function getNativeCandidatePointerDelta(
-  candidate: NativeDropCandidateDebug,
-) {
-  return candidate.rawDeltaPx ?? Number.POSITIVE_INFINITY;
-}
-
-export function selectNativeDropCandidate(
-  candidates: NativeDropCandidateDebug[],
-): NativeDropCandidateDebug | null {
-  return (
-    candidates
-      .filter(
-        (candidate) =>
-          candidate.isOverTimeline && candidate.dropSeconds != null,
-      )
-      .sort((a, b) => {
-        const aDelta = getNativeCandidatePointerDelta(a);
-        const bDelta = getNativeCandidatePointerDelta(b);
-
-        if (aDelta !== bDelta) {
-          return aDelta - bDelta;
-        }
-
-        return b.score - a.score;
-      })[0] ?? null
-  );
-}
-
-type ContextMenuAction = {
-  label: string;
-  disabled?: boolean;
-  onSelect: () => void | Promise<void>;
-};
-
-type ContextMenuState = {
-  x: number;
-  y: number;
-  title: string;
-  actions: ContextMenuAction[];
-} | null;
-
-type ClipDragState = {
-  clipId: string;
-  pointerId: number;
-  originSeconds: number;
-  previewSeconds: number;
-  clickSeekSeconds: number;
-  startClientX: number;
-  hasMoved: boolean;
-} | null;
-
-type PlayheadDragState = {
-  pointerId: number;
-  currentSeconds: number;
-} | null;
-
-type SettingsTab = "audio" | "metronome" | "midi" | "general" | "midiLearn";
-
-type TrackDropState = {
-  targetTrackId: string;
-  mode: "before" | "after" | "inside-folder";
-} | null;
-
-type TrackDragState = {
-  trackId: string;
-  pointerId: number;
-  startClientX: number;
-  startClientY: number;
-  currentClientY: number;
-  isDragging: boolean;
-  rowElement: HTMLDivElement | null;
-  headerElement: HTMLDivElement | null;
-} | null;
-
-type TimelinePanState = {
-  pointerId: number;
-  startClientX: number;
-  originCameraX: number;
-  previewSeconds: number;
-  hasMoved: boolean;
-} | null;
-
-type TimelineRangeSelection = {
-  startSeconds: number;
-  endSeconds: number;
-};
-
-type LiveClipMoveState = {
-  inFlight: boolean;
-  queuedSeconds: number | null;
-};
-
-type LiveTrackMixRequestState = {
-  inFlight: boolean;
-  queuedKeys: Set<keyof OptimisticMixState>;
-  lastSentAt: number;
-};
-
-type SidebarTab = "library";
-
-type MidiLearnCommand = {
-  key: string;
-  labelKey: string;
-};
-
-type MidiLearnCommandRow = {
-  key: string;
-  label: string;
-  binding: MidiBinding | null;
-};
-
-type MidiLearnFeedback = {
-  key: string;
-  binding: MidiBinding;
-};
-
-const HARDWARE_OUTPUT_CHANNEL_COUNT = 8;
-
-export function isAudioDeviceVisibleForBackend(
-  device: Pick<AudioDeviceDescriptor, "backend">,
-  selectedBackend: AudioBackendKind | null,
-) {
-  return (
-    (selectedBackend === null && device.backend !== "asio") ||
-    device.backend === selectedBackend
-  );
-}
-
-function formatAudioRouteLabel(
-  route: string,
-  t: ReturnType<typeof useTranslation>["t"],
-) {
-  if (route === "master") {
-    return t("trackHeader.master", { defaultValue: "Master" });
-  }
-
-  if (route.startsWith("ext:")) {
-    const channelPart = route.slice(4);
-    if (channelPart.includes("-")) {
-      const [left, right] = channelPart
-        .split("-")
-        .map((value) => Number(value) + 1);
-      return t("trackHeader.extOutStereo", {
-        left,
-        right,
-        defaultValue: `Ext. Out ${left}/${right}`,
-      });
-    }
-
-    const channel = Number(channelPart) + 1;
-    return t("trackHeader.extOutMono", {
-      channel,
-      defaultValue: `Ext. Out ${channel}`,
-    });
-  }
-
-  return route;
-}
-
-function buildAudioRoutingOptions(
-  enabledChannels: number[],
-  t: ReturnType<typeof useTranslation>["t"],
-) {
-  const channels = Array.from(new Set(enabledChannels)).sort(
-    (left, right) => left - right,
-  );
-  const options = [
-    { value: "master", label: formatAudioRouteLabel("master", t) },
-  ];
-
-  for (let index = 0; index < channels.length; index += 1) {
-    const channel = channels[index];
-    const nextChannel = channels[index + 1];
-    if (nextChannel === channel + 1) {
-      const stereoRoute = `ext:${channel}-${nextChannel}`;
-      options.push({
-        value: stereoRoute,
-        label: formatAudioRouteLabel(stereoRoute, t),
-      });
-    }
-    const monoRoute = `ext:${channel}`;
-    options.push({
-      value: monoRoute,
-      label: formatAudioRouteLabel(monoRoute, t),
-    });
-  }
-
-  return options;
-}
-
-const LIBRARY_DRAG_EDGE_BUFFER_PX = 50;
-const LIBRARY_DRAG_MAX_SCROLL_SPEED_PX = 22;
-const MIDI_NOTE_NAMES = [
-  "C",
-  "C#",
-  "D",
-  "D#",
-  "E",
-  "F",
-  "F#",
-  "G",
-  "G#",
-  "A",
-  "A#",
-  "B",
-];
-const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
-  {
-    key: "action:create_song",
-    labelKey: "transport.settingsModal.midiLearnCreateSong",
-  },
-  {
-    key: "action:open_project",
-    labelKey: "transport.settingsModal.midiLearnOpenProject",
-  },
-  {
-    key: "action:save_project",
-    labelKey: "transport.settingsModal.midiLearnSaveProject",
-  },
-  {
-    key: "action:save_project_as",
-    labelKey: "transport.settingsModal.midiLearnSaveProjectAs",
-  },
-  { key: "action:undo", labelKey: "transport.settingsModal.midiLearnUndo" },
-  { key: "action:redo", labelKey: "transport.settingsModal.midiLearnRedo" },
-  { key: "action:play", labelKey: "timelineTopbar.play" },
-  { key: "action:pause", labelKey: "timelineTopbar.pause" },
-  { key: "action:stop", labelKey: "timelineTopbar.stop" },
-  { key: "action:next_song", labelKey: "timelineTopbar.next" },
-  {
-    key: "action:select_previous_region",
-    labelKey: "transport.settingsModal.midiLearnSelectPrevRegion",
-  },
-  {
-    key: "action:select_next_region",
-    labelKey: "transport.settingsModal.midiLearnSelectNextRegion",
-  },
-  {
-    key: "action:region_transpose_up",
-    labelKey: "transport.settingsModal.midiLearnTransposeUp",
-  },
-  {
-    key: "action:region_transpose_down",
-    labelKey: "transport.settingsModal.midiLearnTransposeDown",
-  },
-  {
-    key: "action:region_transpose_reset",
-    labelKey: "transport.settingsModal.midiLearnTransposeReset",
-  },
-  { key: "action:toggle_metronome", labelKey: "timelineTopbar.metronome" },
-  { key: "action:toggle_vamp", labelKey: "timelineToolbar.vampButton" },
-  { key: "action:cancel_jump", labelKey: "timelineToolbar.cancelJump" },
-  {
-    key: "action:create_marker",
-    labelKey: "transport.settingsModal.midiLearnCreateMarker",
-  },
-  {
-    key: "action:set_global_jump_mode_immediate",
-    labelKey: "transport.settingsModal.midiLearnGlobalJumpModeImmediate",
-  },
-  {
-    key: "action:set_global_jump_mode_after_bars",
-    labelKey: "transport.settingsModal.midiLearnGlobalJumpModeAfterBars",
-  },
-  {
-    key: "action:set_global_jump_mode_next_marker",
-    labelKey: "transport.settingsModal.midiLearnGlobalJumpModeNextMarker",
-  },
-  {
-    key: "action:increase_global_jump_bars",
-    labelKey: "transport.settingsModal.midiLearnGlobalJumpBarsIncrease",
-  },
-  {
-    key: "action:decrease_global_jump_bars",
-    labelKey: "transport.settingsModal.midiLearnGlobalJumpBarsDecrease",
-  },
-  { key: "param:tempo", labelKey: "transport.settingsModal.midiLearnTempo" },
-  {
-    key: "param:global_jump_mode",
-    labelKey: "transport.settingsModal.midiLearnGlobalJumpMode",
-  },
-  {
-    key: "param:metronome_volume",
-    labelKey: "transport.settingsModal.metronomeVolume",
-  },
-  {
-    key: "param:global_jump_bars",
-    labelKey: "transport.settingsModal.globalJumpBars",
-  },
-  {
-    key: "action:set_song_jump_trigger_immediate",
-    labelKey: "transport.settingsModal.midiLearnSongJumpTriggerImmediate",
-  },
-  {
-    key: "action:set_song_jump_trigger_after_bars",
-    labelKey: "transport.settingsModal.midiLearnSongJumpTriggerAfterBars",
-  },
-  {
-    key: "action:set_song_jump_trigger_region_end",
-    labelKey: "transport.settingsModal.midiLearnSongJumpTriggerRegionEnd",
-  },
-  {
-    key: "action:increase_song_jump_bars",
-    labelKey: "transport.settingsModal.midiLearnSongJumpBarsIncrease",
-  },
-  {
-    key: "action:decrease_song_jump_bars",
-    labelKey: "transport.settingsModal.midiLearnSongJumpBarsDecrease",
-  },
-  {
-    key: "param:song_jump_trigger",
-    labelKey: "transport.settingsModal.midiLearnSongJumpTrigger",
-  },
-  {
-    key: "param:song_jump_bars",
-    labelKey: "transport.settingsModal.songJumpBars",
-  },
-  {
-    key: "action:set_song_transition_instant",
-    labelKey: "transport.settingsModal.midiLearnSongTransitionInstant",
-  },
-  {
-    key: "action:set_song_transition_fade_out",
-    labelKey: "transport.settingsModal.midiLearnSongTransitionFadeOut",
-  },
-  {
-    key: "param:song_transition_mode",
-    labelKey: "transport.settingsModal.midiLearnSongTransitionMode",
-  },
-  {
-    key: "action:set_vamp_mode_section",
-    labelKey: "transport.settingsModal.midiLearnVampModeSection",
-  },
-  {
-    key: "action:set_vamp_mode_bars",
-    labelKey: "transport.settingsModal.midiLearnVampModeBars",
-  },
-  {
-    key: "param:vamp_mode",
-    labelKey: "transport.settingsModal.midiLearnVampMode",
-  },
-  {
-    key: "action:increase_vamp_bars",
-    labelKey: "transport.settingsModal.midiLearnVampBarsIncrease",
-  },
-  {
-    key: "action:decrease_vamp_bars",
-    labelKey: "transport.settingsModal.midiLearnVampBarsDecrease",
-  },
-  { key: "param:vamp_bars", labelKey: "transport.settingsModal.vampBars" },
-  { key: "param:jump_bars", labelKey: "transport.settingsModal.jumpBars" },
-];
-
-function formatMidiBinding(binding: MidiBinding) {
-  const channel = (binding.status & 0x0f) + 1;
-  const statusType = binding.status & 0xf0;
-
-  if (binding.isCc || statusType === 0xb0) {
-    return `CC ${binding.data1} (Ch ${channel})`;
-  }
-
-  if (statusType === 0x90 || statusType === 0x80) {
-    const noteIndex = binding.data1 % 12;
-    const octave = Math.floor(binding.data1 / 12) - 1;
-    const noteName = MIDI_NOTE_NAMES[noteIndex] ?? `Note ${binding.data1}`;
-    const noteLabel = `${noteName}${octave}`;
-    const prefix = statusType === 0x80 ? "Note Off" : "Note On";
-    return `${prefix} ${binding.data1} (${noteLabel}) (Ch ${channel})`;
-  }
-
-  return `Status 0x${binding.status.toString(16).toUpperCase().padStart(2, "0")} / Data1 ${binding.data1} (Ch ${channel})`;
-}
-
-function findMidiMappingKeyForMessage(
-  midiMappings: AppSettings["midiMappings"],
-  message: { status: number; data1: number },
-) {
-  return (
-    Object.entries(midiMappings).find(
-      ([, binding]) =>
-        binding.status === message.status && binding.data1 === message.data1,
-    )?.[0] ?? null
-  );
-}
-
-type LibraryAssetDragPayload = {
-  file_path: string;
-  durationSeconds: number;
-};
-
-type LibraryDropLayout = "horizontal" | "vertical";
-
-type LibraryClipPreviewState = {
-  trackId: string | null;
-  filePath: string;
-  label: string;
-  timelineStartSeconds: number;
-  durationSeconds: number;
-  rowOffset: number;
-};
-
-type LibraryDragHoverState = {
-  clientX: number;
-  clientY: number;
-  ctrlKey: boolean;
-  metaKey: boolean;
-  payload: LibraryAssetDragPayload[];
-  targetTrackId: string | null;
-};
-
-type InternalLibraryPointerDrag = {
-  id: string;
-  payload: LibraryAssetDragPayload[];
-  origin: {
-    x: number;
-    y: number;
-  };
-  current: {
-    x: number;
-    y: number;
-  };
-  isDragging: boolean;
-  hover:
-    | {
-        kind: "timeline";
-        dropSeconds: number;
-        targetTrackId: string | null;
-        layout: LibraryDropLayout;
-      }
-    | {
-        kind: "library-folder";
-        folderPath: string | null;
-      }
-    | null;
-};
-
-type LibraryDragAutoScrollState = {
-  frameId: number | null;
-  horizontalVelocity: number;
-  verticalVelocity: number;
-};
-
-type OptimisticClipOperation = {
-  id: string;
-  clearAfterProjectRevision: number | null;
-  clips: ClipSummary[];
-};
-
-type TransportAnchorMeta = {
-  snapshotKey: string;
-  anchorPositionSeconds: number;
-  emittedAtUnixMs: number;
-};
-
-const PLAYBACK_SNAPSHOT_REANCHOR_TOLERANCE_SECONDS = 0.08;
-
-function formatClock(seconds: number) {
-  const safeSeconds = Math.max(0, seconds);
-  const minutes = Math.floor(safeSeconds / 60);
-  const secondsRemainder = safeSeconds - minutes * 60;
-  return `${String(minutes).padStart(2, "0")}:${secondsRemainder.toFixed(3).padStart(6, "0")}`;
-}
-
-function formatCompactTime(seconds: number) {
-  const safeSeconds = Math.max(0, seconds);
-  const minutes = Math.floor(safeSeconds / 60);
-  const remainder = Math.floor(safeSeconds % 60);
-  return `${minutes}:${String(remainder).padStart(2, "0")}`;
-}
-
-function libraryAssetFileName(filePath: string) {
-  return filePath.split(/[\\/]/).at(-1) ?? filePath;
-}
-
-type NativeDroppedFile = File & {
-  path?: string;
-};
-
-function resolveNativeAudioImportPayloads(files: File[]) {
-  const payloads = files
-    .map((file) => {
-      const sourcePath = (file as NativeDroppedFile).path?.trim();
-      if (!sourcePath) {
-        return null;
-      }
-
-      return {
-        fileName: file.name,
-        sourcePath,
-      };
-    })
-    .filter(
-      (payload): payload is { fileName: string; sourcePath: string } =>
-        payload !== null,
-    );
-
-  return payloads.length === files.length ? payloads : null;
-}
-
-function humanizeLibraryTrackName(filePath: string) {
-  return (
-    libraryAssetFileName(filePath)
-      .replace(/\.[^.]+$/, "")
-      .split(/[^a-zA-Z0-9]+/)
-      .filter(Boolean)
-      .map(
-        (part) =>
-          `${part.slice(0, 1).toUpperCase()}${part.slice(1).toLowerCase()}`,
-      )
-      .join(" ") || "Audio"
-  );
-}
-
-async function waitForUiPaint() {
-  await new Promise<void>((resolve) => {
-    window.requestAnimationFrame(() => resolve());
-  });
-}
-
-function toClientPointFromNativePosition(position: { x: number; y: number }) {
-  const scaleFactor = window.devicePixelRatio || 1;
-  return {
-    clientX: position.x / scaleFactor,
-    clientY: position.y / scaleFactor,
-  };
-}
-
-function nativeClientPointCandidates(
-  position: { x: number; y: number },
-  webviewPosition: { x: number; y: number } | null,
-) {
-  const scaleFactor = window.devicePixelRatio || 1;
-  const candidates: NativeClientPointCandidate[] = [];
-
-  const addCandidate = (
-    label: NativeDropCoordinateMode,
-    clientX: number,
-    clientY: number,
-  ) => {
-    candidates.push({ label, clientX, clientY });
-  };
-
-  if (webviewPosition) {
-    addCandidate(
-      "minus-webview",
-      position.x - webviewPosition.x,
-      position.y - webviewPosition.y,
-    );
-    addCandidate(
-      "minus-webview/dpr",
-      (position.x - webviewPosition.x) / scaleFactor,
-      (position.y - webviewPosition.y) / scaleFactor,
-    );
-  }
-
-  addCandidate("raw", position.x, position.y);
-  addCandidate("raw/dpr", position.x / scaleFactor, position.y / scaleFactor);
-
-  return candidates;
-}
-
-function describeNativeDropElement(element: HTMLElement | null) {
-  if (!element) {
-    return null;
-  }
-
-  const className =
-    typeof element.className === "string" ? element.className.trim() : "";
-  return `${element.tagName.toLowerCase()}${className ? `.${className.replace(/\s+/g, ".")}` : ""}`;
-}
-
-function toNativeDropDebugRect(
-  rect: DOMRect | null,
-): NativeDropDebugRect | null {
-  if (!rect) {
-    return null;
-  }
-
-  return {
-    left: rect.left,
-    right: rect.right,
-    top: rect.top,
-    bottom: rect.bottom,
-    width: rect.width,
-    height: rect.height,
-  };
-}
-
-function formatMusicalPosition(
-  seconds: number,
-  song: SongView | null | undefined,
-) {
-  return getCumulativeMusicalPosition(
-    seconds,
-    buildSongTempoRegions(song),
-    getSongBaseBpm(song),
-    getSongBaseTimeSignature(song),
-  ).display;
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function keyboardDigit(eventCode: string) {
-  const match = eventCode.match(/^(?:Digit|Numpad)(\d)$/);
-  if (match) {
-    return Number(match[1]);
-  }
-
-  return null;
-}
-
-function isTextEntryTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  if (target.isContentEditable || target.tagName === "TEXTAREA") {
-    return true;
-  }
-
-  if (target.tagName !== "INPUT") {
-    return false;
-  }
-
-  const textEntryTypes = new Set([
-    "",
-    "email",
-    "password",
-    "search",
-    "number",
-    "tel",
-    "text",
-    "url",
-  ]);
-
-  return textEntryTypes.has((target as HTMLInputElement).type.toLowerCase());
-}
-
-function resolveMarkerShortcut(markers: SectionMarkerSummary[], digit: number) {
-  return (
-    [...markers]
-      .sort((left, right) => left.startSeconds - right.startSeconds)
-      .at(digit) ?? null
-  );
-}
-
-function resolveRegionShortcut(regions: SongRegionSummary[], digit: number) {
-  return (
-    [...regions]
-      .sort((left, right) => left.startSeconds - right.startSeconds)
-      .at(digit) ?? null
-  );
-}
-
-function buildVisibleTracks(song: SongView, collapsedFolders: Set<string>) {
-  const visibility = new Map<string, boolean>();
-
-  for (const track of song.tracks) {
-    const parentId = track.parentTrackId ?? null;
-    if (!parentId) {
-      visibility.set(track.id, true);
-      continue;
-    }
-
-    const parentVisible = visibility.get(parentId) ?? true;
-    const isParentCollapsed = collapsedFolders.has(parentId);
-    visibility.set(track.id, parentVisible && !isParentCollapsed);
-  }
-
-  return song.tracks.filter((track) => visibility.get(track.id));
-}
-
-function findPreviousFolderTrack(song: SongView, trackId: string) {
-  const index = song.tracks.findIndex((track) => track.id === trackId);
-  if (index <= 0) {
-    return null;
-  }
-
-  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
-    const track = song.tracks[cursor];
-    if (track.kind === "folder") {
-      return track;
-    }
-  }
-
-  return null;
-}
-
-function findTrack(song: SongView | null, trackId: string | null) {
-  if (!song || !trackId) {
-    return null;
-  }
-
-  return song.tracks.find((track) => track.id === trackId) ?? null;
-}
-
-function findClip(song: SongView | null, clipId: string | null) {
-  if (!song || !clipId) {
-    return null;
-  }
-
-  return song.clips.find((clip) => clip.id === clipId) ?? null;
-}
-
-function findSection(song: SongView | null, sectionId: string | null) {
-  if (!song || !sectionId) {
-    return null;
-  }
-
-  return song.sectionMarkers.find((marker) => marker.id === sectionId) ?? null;
-}
-
-function trackChildrenCount(song: SongView, trackId: string) {
-  return song.tracks.filter((track) => track.parentTrackId === trackId).length;
-}
-
-function isClipStructurallyEqual(left: ClipSummary, right: ClipSummary) {
-  return (
-    left.id === right.id &&
-    left.trackId === right.trackId &&
-    left.waveformKey === right.waveformKey &&
-    left.isMissing === right.isMissing &&
-    left.timelineStartSeconds === right.timelineStartSeconds &&
-    left.sourceStartSeconds === right.sourceStartSeconds &&
-    left.sourceDurationSeconds === right.sourceDurationSeconds &&
-    left.durationSeconds === right.durationSeconds
-  );
-}
-
-function buildMemoizedClipsByTrack(
-  song: SongView,
-  current: Record<string, ClipSummary[]>,
-): Record<string, ClipSummary[]> {
-  const nextBuckets = Object.fromEntries(
-    song.tracks.map((track) => [track.id, [] as ClipSummary[]]),
-  );
-
-  for (const clip of song.clips) {
-    nextBuckets[clip.trackId] ??= [];
-    nextBuckets[clip.trackId].push(clip);
-  }
-
-  let hasChanged =
-    Object.keys(current).length !== Object.keys(nextBuckets).length;
-  const nextClipsByTrack: Record<string, ClipSummary[]> = {};
-
-  for (const track of song.tracks) {
-    const nextTrackClips = nextBuckets[track.id] ?? [];
-    const currentTrackClips = current[track.id] ?? [];
-    const canReuseTrackClips =
-      nextTrackClips.length === currentTrackClips.length &&
-      nextTrackClips.every((clip, index) =>
-        isClipStructurallyEqual(clip, currentTrackClips[index]),
-      );
-
-    nextClipsByTrack[track.id] = canReuseTrackClips
-      ? currentTrackClips
-      : nextTrackClips;
-    if (!canReuseTrackClips) {
-      hasChanged = true;
-    }
-  }
-
-  return hasChanged ? nextClipsByTrack : current;
-}
-
-function isSameClipPlacement(left: ClipSummary, right: ClipSummary) {
-  return (
-    left.trackId === right.trackId &&
-    left.filePath === right.filePath &&
-    Math.abs(left.timelineStartSeconds - right.timelineStartSeconds) < 0.0001 &&
-    Math.abs(left.sourceStartSeconds - right.sourceStartSeconds) < 0.0001 &&
-    Math.abs(left.durationSeconds - right.durationSeconds) < 0.0001
-  );
-}
-
-function mergeOptimisticClipsByTrack(
-  clipsByTrack: Record<string, ClipSummary[]>,
-  operations: OptimisticClipOperation[],
-) {
-  if (!operations.length) {
-    return clipsByTrack;
-  }
-
-  const nextClipsByTrack: Record<string, ClipSummary[]> = Object.fromEntries(
-    Object.entries(clipsByTrack).map(([trackId, clips]) => [
-      trackId,
-      [...clips],
-    ]),
-  );
-
-  for (const operation of operations) {
-    for (const clip of operation.clips) {
-      const currentTrackClips = nextClipsByTrack[clip.trackId] ?? [];
-      if (
-        currentTrackClips.some((currentClip) =>
-          isSameClipPlacement(currentClip, clip),
-        )
-      ) {
-        continue;
-      }
-
-      nextClipsByTrack[clip.trackId] = [...currentTrackClips, clip].sort(
-        (left, right) => left.timelineStartSeconds - right.timelineStartSeconds,
-      );
-    }
-  }
-
-  return nextClipsByTrack;
-}
-
-function isTrackDescendant(
-  song: SongView,
-  candidateTrackId: string | null,
-  trackId: string,
-) {
-  let cursor = candidateTrackId;
-
-  while (cursor) {
-    if (cursor === trackId) {
-      return true;
-    }
-
-    cursor = findTrack(song, cursor)?.parentTrackId ?? null;
-  }
-
-  return false;
-}
-
-function isInteractiveTimelineTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement
-    ? Boolean(
-        target.closest(
-          ".lt-marker-hotspot, .lt-track-header, .lt-inline-menu, .lt-context-menu, button, input, select, textarea, label",
-        ),
-      )
-    : false;
-}
-
-function isTimelineZoomTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement
-    ? Boolean(
-        target.closest(
-          ".lt-ruler-track, .lt-ruler-content, .lt-ruler-canvas, .lt-ruler-canvas-overlay, .lt-track-list, .lt-track-list-dropzone, .lt-track-lane-row, .lt-track-header-row, .lt-track-lane, .lt-track-canvas-layer, .lt-track-canvas-background, .lt-track-canvas, .lt-track-canvas-overlay",
-        ),
-      )
-    : false;
-}
-
-function isTrackInfoScrollTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement
-    ? Boolean(target.closest(".lt-track-header"))
-    : false;
-}
-
-function resolveTrackDropState(
-  song: SongView,
-  draggingTrackId: string,
-  clientX: number,
-  clientY: number,
-): TrackDropState {
-  const hoveredRow = document
-    .elementFromPoint(clientX, clientY)
-    ?.closest(".lt-track-lane-row, .lt-track-header-row") as HTMLElement | null;
-  const targetTrackId = hoveredRow?.dataset.trackId ?? null;
-  if (!hoveredRow || !targetTrackId || targetTrackId === draggingTrackId) {
-    return null;
-  }
-
-  const targetTrack = findTrack(song, targetTrackId);
-  if (!targetTrack || isTrackDescendant(song, targetTrackId, draggingTrackId)) {
-    return null;
-  }
-
-  const bounds = hoveredRow.getBoundingClientRect();
-  const verticalRatio =
-    bounds.height > 0 ? (clientY - bounds.top) / bounds.height : 0.5;
-  const mode =
-    targetTrack.kind === "folder" &&
-    verticalRatio >= 0.3 &&
-    verticalRatio <= 0.7
-      ? "inside-folder"
-      : verticalRatio < 0.5
-        ? "before"
-        : "after";
-
-  return {
-    targetTrackId,
-    mode,
-  };
-}
-
-function rulerPointerToSeconds(
-  event: MouseEvent | ReactMouseEvent,
-  element: HTMLElement,
-  scrollContainerElement: HTMLElement | null,
-  durationSeconds: number,
-  pixelsPerSecond: number,
-) {
-  return clamp(
-    clientXToTimelineSeconds(
-      event.clientX,
-      element,
-      scrollContainerElement,
-      pixelsPerSecond,
-    ),
-    0,
-    Math.max(0, durationSeconds),
-  );
-}
-
-function rulerClientXToSeconds(
-  clientX: number,
-  element: HTMLElement,
-  cameraX: number,
-  durationSeconds: number,
-  pixelsPerSecond: number,
-) {
-  const bounds = element.getBoundingClientRect();
-  const viewportX = clamp(clientX - bounds.left, 0, bounds.width);
-  return clamp(
-    screenXToSeconds(viewportX, cameraX, pixelsPerSecond),
-    0,
-    Math.max(0, durationSeconds),
-  );
-}
-
-function lanePointerToClip(
-  clips: ClipSummary[],
-  element: HTMLElement,
-  clientX: number,
-  cameraX: number,
-  pixelsPerSecond: number,
-) {
-  const bounds = element.getBoundingClientRect();
-  const pointerX = clamp(clientX - bounds.left, 0, bounds.width);
-
-  for (let index = clips.length - 1; index >= 0; index -= 1) {
-    const clip = clips[index];
-    const clipLeft = secondsToScreenX(
-      clip.timelineStartSeconds,
-      cameraX,
-      pixelsPerSecond,
-    );
-    const clipWidth = Math.max(clip.durationSeconds * pixelsPerSecond, 28);
-
-    if (pointerX >= clipLeft && pointerX <= clipLeft + clipWidth) {
-      return clip;
-    }
-  }
-
-  return null;
-}
 
 export function TransportPanelContent() {
   const { t, i18n } = useTranslation();
@@ -1256,8 +313,6 @@ export function TransportPanelContent() {
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>(
     null,
   );
-  const [libraryAssets, setLibraryAssets] = useState<LibraryAssetSummary[]>([]);
-  const [libraryFolders, setLibraryFolders] = useState<string[]>([]);
   const [libraryClipPreview, setLibraryClipPreview] = useState<
     LibraryClipPreviewState[]
   >([]);
@@ -1279,13 +334,6 @@ export function TransportPanelContent() {
   const [optimisticClipOperations, setOptimisticClipOperations] = useState<
     OptimisticClipOperation[]
   >([]);
-  const [isLibraryLoading, setIsLibraryLoading] = useState(false);
-  const [isImportingLibrary, setIsImportingLibrary] = useState(false);
-  const [libraryImportProgress, setLibraryImportProgress] =
-    useState<LibraryImportProgressEvent | null>(null);
-  const [deletingLibraryFilePath, setDeletingLibraryFilePath] = useState<
-    string | null
-  >(null);
   const [missingMidiDeviceWarning, setMissingMidiDeviceWarning] = useState<
     string | null
   >(null);
@@ -1468,8 +516,9 @@ export function TransportPanelContent() {
         : {
             key: midiLearnMode,
             label: formatMidiLearnCommandLabel(midiLearnMode),
+            binding: appSettings.midiMappings[midiLearnMode] ?? null,
           },
-    [formatMidiLearnCommandLabel, midiLearnMode],
+    [formatMidiLearnCommandLabel, midiLearnMode, appSettings.midiMappings],
   );
 
   useEffect(() => {
@@ -1710,6 +759,24 @@ export function TransportPanelContent() {
   const playbackSongDir = useTransportStore(
     (state) => state.playback?.songDir ?? null,
   );
+  const {
+    libraryAssets,
+    libraryFolders,
+    isLibraryLoading,
+    isImportingLibrary,
+    libraryImportProgress,
+    deletingLibraryFilePath,
+    libraryStateRequestIdRef,
+    loadLibraryState,
+    refreshLibraryState,
+    mergeLibraryAssets,
+    setLibraryAssets,
+    setLibraryFolders,
+    setIsLibraryLoading,
+    setIsImportingLibrary,
+    setLibraryImportProgress,
+    setDeletingLibraryFilePath,
+  } = useLibraryActions({ playbackSongDir });
   const pendingAudioImports = useTransportStore(
     (state) => state.pendingAudioImports,
   );
@@ -1717,7 +784,6 @@ export function TransportPanelContent() {
     songDir: string | null;
     songId: string | null;
   } | null>(null);
-  const libraryStateRequestIdRef = useRef(0);
   const pendingMarkerJumpSignature = useTransportStore((state) => {
     const pendingJump = state.playback?.pendingMarkerJump;
     if (!pendingJump) {
@@ -1762,55 +828,6 @@ export function TransportPanelContent() {
       }
     },
     [formatErrorStatus],
-  );
-
-  const loadLibraryState = useCallback(async () => {
-    if (!playbackSongDir) {
-      return {
-        assets: [] as LibraryAssetSummary[],
-        folders: [] as string[],
-      };
-    }
-
-    const [assets, folders] = await Promise.all([
-      getLibraryAssets(),
-      getLibraryFolders(),
-    ]);
-    return { assets, folders };
-  }, [playbackSongDir]);
-
-  const refreshLibraryState = useCallback(
-    async (options?: { preserveAssets?: LibraryAssetSummary[] }) => {
-      const requestId = ++libraryStateRequestIdRef.current;
-      const { assets, folders } = await loadLibraryState();
-      if (requestId !== libraryStateRequestIdRef.current) {
-        return assets;
-      }
-
-      const nextAssets = options?.preserveAssets?.length
-        ? mergeLibraryAssetsByFilePath(assets, options.preserveAssets)
-        : assets;
-
-      setLibraryAssets(nextAssets);
-      setLibraryFolders(folders);
-      return nextAssets;
-    },
-    [loadLibraryState],
-  );
-
-  const mergeLibraryAssets = useCallback(
-    (importedAssets: LibraryAssetSummary[]) => {
-      if (!importedAssets.length) {
-        return;
-      }
-
-      libraryStateRequestIdRef.current += 1;
-
-      setLibraryAssets((current) => {
-        return mergeLibraryAssetsByFilePath(current, importedAssets);
-      });
-    },
-    [],
   );
 
   const refreshSongView = useCallback(async () => {
@@ -2665,106 +1682,9 @@ export function TransportPanelContent() {
     };
   }, [isRemoteModalOpen, isSettingsModalOpen]);
 
-  useEffect(() => {
-    let active = true;
-    let unlisten: (() => void) | null = null;
+  useTransportLifecycle({ applyPlaybackSnapshot, transportAnchorMetaRef, setStatus, t });
 
-    async function loadSnapshot() {
-      const nextSnapshot = await getTransportSnapshot();
-      if (!active) {
-        return;
-      }
-
-      applyPlaybackSnapshot(nextSnapshot);
-      setStatus(
-        nextSnapshot.isNativeRuntime
-          ? t("transport.status.readyDesktop")
-          : t("transport.status.readyDemo"),
-      );
-    }
-
-    void loadSnapshot();
-
-    if (!isTauriApp) {
-      return () => {
-        active = false;
-      };
-    }
-
-    void listenToTransportLifecycle((event: TransportLifecycleEvent) => {
-      if (!active) {
-        return;
-      }
-
-      transportAnchorMetaRef.current = {
-        snapshotKey: transportSnapshotKey(event.snapshot),
-        anchorPositionSeconds: event.anchorPositionSeconds,
-        emittedAtUnixMs: event.emittedAtUnixMs,
-      };
-      applyPlaybackSnapshot(event.snapshot);
-    }).then((nextUnlisten) => {
-      if (!active) {
-        nextUnlisten();
-        return;
-      }
-
-      unlisten = nextUnlisten;
-    });
-
-    return () => {
-      active = false;
-      unlisten?.();
-    };
-  }, [applyPlaybackSnapshot]);
-
-  useEffect(() => {
-    if (!isTauriApp) {
-      return () => {};
-    }
-
-    let active = true;
-    let unlisten: (() => void) | undefined;
-    let frameId: number | null = null;
-    let pendingMeters: ReturnType<typeof meterDictionaryFromLevels> | null =
-      null;
-
-    const flushMeters = () => {
-      frameId = null;
-      if (!active || pendingMeters === null) {
-        return;
-      }
-
-      useTransportStore.getState().setMeters(pendingMeters);
-      pendingMeters = null;
-    };
-
-    void listenToAudioMeters((levels) => {
-      if (!active) {
-        return;
-      }
-
-      pendingMeters = meterDictionaryFromLevels(levels);
-      if (frameId === null) {
-        frameId = window.requestAnimationFrame(flushMeters);
-      }
-    }).then((nextUnlisten) => {
-      if (!active) {
-        nextUnlisten();
-        return;
-      }
-
-      unlisten = nextUnlisten;
-    });
-
-    return () => {
-      active = false;
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
-      }
-      pendingMeters = null;
-      unlisten?.();
-    };
-  }, []);
+  useAudioMeters();
 
   useEffect(() => {
     if (!isTauriApp) {
@@ -2805,34 +1725,70 @@ export function TransportPanelContent() {
     };
   }, [playbackSongDir]);
 
-  useEffect(() => {
-    if (!isTauriApp) {
-      return () => {};
-    }
-
-    let active = true;
-    let unlisten: (() => void) | undefined;
-
-    void listenToLibraryImportProgress((event) => {
-      if (!active) {
+  const handleSelectedRegionTransposeChange = useCallback(
+    (nextTransposeSemitones: number) => {
+      if (!selectedRegion) {
         return;
       }
 
-      setLibraryImportProgress(event);
-    }).then((nextUnlisten) => {
-      if (!active) {
-        nextUnlisten();
+      const clampedTransposeSemitones = Math.max(
+        -12,
+        Math.min(12, Math.round(nextTransposeSemitones)),
+      );
+      if (clampedTransposeSemitones === selectedRegion.transposeSemitones) {
         return;
       }
 
-      unlisten = nextUnlisten;
-    });
+      void runAction(async () => {
+        const nextSnapshot = await updateSongRegionTranspose(
+          selectedRegion.id,
+          clampedTransposeSemitones,
+        );
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(
+          t("transport.status.regionTransposeUpdated", {
+            name: selectedRegion.name,
+            transpose: formatTransposeSemitones(clampedTransposeSemitones),
+          }),
+        );
+      });
+    },
+    [applyPlaybackSnapshot, runAction, selectedRegion, setStatus, t],
+  );
 
-    return () => {
-      active = false;
-      unlisten?.();
-    };
-  }, []);
+  const {
+    handleSaveProjectClick,
+    handleSaveProjectAsClick,
+    handleCreateSongClick,
+    handleOpenProjectClick,
+    handleImportSongClick,
+  } = useProjectActions({
+    runAction,
+    applyPlaybackSnapshot,
+    refreshLibraryState,
+    t,
+    setStatus,
+    setActiveSidebarTab,
+    snapshotRef,
+  });
+
+  const {
+    scheduleMarkerJumpWithGlobalMode,
+    scheduleRegionJumpWithOptions,
+    handleNextSongClick,
+    toggleTimelineVamp,
+  } = useTimelineActions({
+    appSettings,
+    song,
+    snapshotRef,
+    displayPositionSecondsRef,
+    selectedRegionId,
+    setSelectedRegionId,
+    applyPlaybackSnapshot,
+    setStatus,
+    t,
+    handleSelectedRegionTransposeChange,
+  });
 
   useEffect(() => {
     const selectedMidiDevice = appSettings.selectedMidiDevice;
@@ -3275,41 +2231,7 @@ export function TransportPanelContent() {
     };
   }, [applyPlaybackSnapshot, playbackState]);
 
-  useEffect(() => {
-    if (!isTauriApp || playbackState !== "playing") {
-      return;
-    }
-
-    let active = true;
-    let inFlight = false;
-
-    const refreshSnapshot = async () => {
-      if (!active || inFlight) {
-        return;
-      }
-
-      inFlight = true;
-      try {
-        const nextSnapshot = await getTransportSnapshot();
-        if (!active) {
-          return;
-        }
-
-        applyPlaybackSnapshot(nextSnapshot);
-      } finally {
-        inFlight = false;
-      }
-    };
-
-    const intervalId = window.setInterval(() => {
-      void refreshSnapshot();
-    }, 120);
-
-    return () => {
-      active = false;
-      window.clearInterval(intervalId);
-    };
-  }, [applyPlaybackSnapshot, playbackState]);
+  useTransportPolling({ playbackState, applyPlaybackSnapshot });
 
   useEffect(() => {
     const closeMenu = (event: PointerEvent) => {
@@ -3361,195 +2283,25 @@ export function TransportPanelContent() {
     };
   }, [openTopMenu]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Space") {
-        if (isTextEntryTarget(event.target)) {
-          return;
-        }
-
-        event.preventDefault();
-        void runAction(async () => {
-          if (snapshotRef.current?.playbackState === "playing") {
-            const nextSnapshot = await pauseTransport();
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.playbackPaused"));
-            return;
-          }
-
-          const nextSnapshot = await playTransport();
-          applyPlaybackSnapshot(nextSnapshot);
-          setStatus(t("transport.status.playbackStarted"));
-        });
-        return;
-      }
-
-      const target = event.target as HTMLElement | null;
-      const isTypingTarget =
-        isTextEntryTarget(event.target) || target?.tagName === "SELECT";
-
-      if (isTypingTarget) {
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-
-        if (event.shiftKey) {
-          handleSaveProjectAsClick();
-          return;
-        }
-
-        handleSaveProjectClick();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
-        event.preventDefault();
-        void runAction(async () => {
-          const nextSnapshot = event.shiftKey
-            ? await redoAction()
-            : await undoAction();
-          applyPlaybackSnapshot(nextSnapshot);
-          setStatus(
-            event.shiftKey
-              ? t("transport.status.actionRedone")
-              : t("transport.status.actionUndone"),
-          );
-        });
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
-        event.preventDefault();
-        void runAction(async () => {
-          const nextSnapshot = await redoAction();
-          applyPlaybackSnapshot(nextSnapshot);
-          setStatus(t("transport.status.actionRedone"));
-        });
-        return;
-      }
-
-      const keyDigit = keyboardDigit(event.code);
-      if (keyDigit !== null) {
-        event.preventDefault();
-
-        if (event.shiftKey) {
-          const region = song
-            ? resolveRegionShortcut(song.regions, keyDigit)
-            : null;
-          if (!region) {
-            setStatus(
-              t("transport.status.noSongForDigit", { digit: keyDigit }),
-            );
-            return;
-          }
-
-          void runAction(async () => {
-            await scheduleRegionJumpWithOptions(region.id, region.name);
-          });
-          return;
-        }
-
-        const marker = song
-          ? resolveMarkerShortcut(song.sectionMarkers, keyDigit)
-          : null;
-        if (!marker) {
-          setStatus(
-            t("transport.status.noMarkerForDigit", { digit: keyDigit }),
-          );
-          return;
-        }
-
-        void runAction(async () => {
-          const pendingJump = snapshotRef.current?.pendingMarkerJump;
-          if (pendingJump && pendingJump.targetMarkerId === marker.id) {
-            const nextSnapshot = await cancelMarkerJump();
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(
-              t("transport.status.jumpCancelledDigit", { digit: keyDigit }),
-            );
-            return;
-          }
-
-          await scheduleMarkerJumpWithGlobalMode(marker.id, marker.name);
-        });
-
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-
-        if (openTopMenu) {
-          setOpenTopMenu(null);
-          return;
-        }
-
-        if (snapshotRef.current?.pendingMarkerJump) {
-          void runAction(async () => {
-            const nextSnapshot = await cancelMarkerJump();
-            applyPlaybackSnapshot(nextSnapshot);
-            setStatus(t("transport.status.jumpCancelled"));
-          });
-          return;
-        }
-
-        clearSelections(t("transport.status.selectionsCleared"));
-        return;
-      }
-
-      if (event.key === "Delete" || event.key === "Backspace") {
-        if (isTextEntryTarget(event.target)) {
-          return;
-        }
-
-        event.preventDefault();
-
-        if (selectedClipId) {
-          void runAction(async () => {
-            const nextSnapshot = await deleteClip(selectedClipId);
-            applyPlaybackSnapshot(nextSnapshot);
-            setSelectedClipId(null);
-            setStatus(t("transport.status.clipDeleted"));
-          });
-        } else if (selectedTrackIds.length > 0) {
-          void runAction(async () => {
-            let lastSnapshot: TransportSnapshot | null = null;
-            for (const trackId of selectedTrackIds) {
-              lastSnapshot = await deleteTrack(trackId);
-            }
-            if (lastSnapshot) {
-              applyPlaybackSnapshot(lastSnapshot);
-            }
-            clearSelection();
-            setStatus(
-              t("transport.status.tracksDeleted", {
-                count: selectedTrackIds.length,
-              }),
-            );
-          });
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [
-    applyPlaybackSnapshot,
-    clearSelections,
-    handleSaveProjectAsClick,
-    handleSaveProjectClick,
-    openTopMenu,
+  useTimelineKeyboardShortcuts({
     runAction,
-    scheduleMarkerJumpWithGlobalMode,
-    scheduleRegionJumpWithOptions,
+    applyPlaybackSnapshot,
+    snapshotRef,
+    song,
     selectedClipId,
     selectedTrackIds,
-    song,
-  ]);
+    openTopMenu,
+    setOpenTopMenu,
+    setSelectedClipId,
+    clearSelection,
+    clearSelections,
+    handleSaveProjectClick,
+    handleSaveProjectAsClick,
+    scheduleMarkerJumpWithGlobalMode,
+    scheduleRegionJumpWithOptions,
+    setStatus,
+    t,
+  });
 
   useEffect(() => {
     const onMouseMove = (event: MouseEvent) => {
@@ -4144,111 +2896,6 @@ export function TransportPanelContent() {
     viewportStartSeconds: 0,
     viewportEndSeconds: workspaceDurationSeconds,
   });
-
-  async function scheduleMarkerJumpWithGlobalMode(
-    markerId: string,
-    markerName: string,
-  ) {
-    const trigger = appSettings.globalJumpMode;
-    const bars = Math.max(1, Math.floor(appSettings.globalJumpBars));
-    const nextSnapshot = await scheduleMarkerJump(markerId);
-    applyPlaybackSnapshot(nextSnapshot);
-
-    if (trigger === "next_marker" && !nextSnapshot.pendingMarkerJump) {
-      setStatus(t("transport.status.noMarkersAhead"));
-      return nextSnapshot;
-    }
-
-    setStatus(
-      trigger === "immediate"
-        ? t("transport.status.jumpImmediate", { name: markerName })
-        : trigger === "next_marker"
-          ? t("transport.status.jumpNextMarker", { name: markerName })
-          : t("transport.status.jumpAfterBars", {
-              count: bars,
-              name: markerName,
-            }),
-    );
-
-    return nextSnapshot;
-  }
-
-  async function scheduleRegionJumpWithOptions(
-    regionId: string,
-    regionName: string,
-  ) {
-    const trigger = appSettings.songJumpTrigger;
-    const bars = Math.max(1, Math.floor(appSettings.songJumpBars));
-    const transition = appSettings.songTransitionMode;
-    const nextSnapshot = await scheduleRegionJump(regionId);
-    applyPlaybackSnapshot(nextSnapshot);
-
-    if (trigger === "region_end" && !nextSnapshot.pendingMarkerJump) {
-      setStatus(t("transport.status.noSongRegionAtCursor"));
-      return nextSnapshot;
-    }
-
-    const whenLabel =
-      trigger === "immediate"
-        ? t("transport.jumpMode.immediate")
-        : trigger === "region_end"
-          ? t("transport.jumpMode.regionEnd")
-          : t("transport.jumpMode.afterBars", { count: bars });
-    const howLabel =
-      transition === "fade_out"
-        ? t("timelineToolbar.songTransitionFadeOut")
-        : t("timelineToolbar.songTransitionInstant");
-
-    setStatus(
-      t("transport.status.songJumpScheduled", {
-        name: regionName,
-        when: whenLabel,
-        how: howLabel,
-      }),
-    );
-
-    return nextSnapshot;
-  }
-
-  async function handleNextSongClick() {
-    if (!song || song.regions.length === 0) {
-      return;
-    }
-
-    const currentPosition =
-      snapshotRef.current?.positionSeconds ?? displayPositionSecondsRef.current;
-    const nextRegion =
-      song.regions.find(
-        (region) => region.startSeconds > currentPosition + Number.EPSILON,
-      ) ?? song.regions[0];
-
-    if (!nextRegion) {
-      return;
-    }
-
-    await scheduleRegionJumpWithOptions(nextRegion.id, nextRegion.name);
-  }
-
-  async function toggleTimelineVamp() {
-    const mode = appSettings.vampMode;
-    const nextSnapshot = await toggleVamp(
-      mode,
-      mode === "bars" ? appSettings.vampBars : undefined,
-    );
-    applyPlaybackSnapshot(nextSnapshot);
-
-    setStatus(
-      nextSnapshot.activeVamp
-        ? mode === "bars"
-          ? t("transport.status.vampBarsEnabled", {
-              count: appSettings.vampBars,
-            })
-          : t("transport.status.vampSectionEnabled")
-        : t("transport.status.vampDisabled"),
-    );
-
-    return nextSnapshot;
-  }
 
   function handleSelectRegionFromMidi(direction: -1 | 1) {
     const effectSong = songRef.current;
@@ -5190,37 +3837,6 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, runAction, setStatus, t],
   );
 
-  const handleSelectedRegionTransposeChange = useCallback(
-    (nextTransposeSemitones: number) => {
-      if (!selectedRegion) {
-        return;
-      }
-
-      const clampedTransposeSemitones = Math.max(
-        -12,
-        Math.min(12, Math.round(nextTransposeSemitones)),
-      );
-      if (clampedTransposeSemitones === selectedRegion.transposeSemitones) {
-        return;
-      }
-
-      void runAction(async () => {
-        const nextSnapshot = await updateSongRegionTranspose(
-          selectedRegion.id,
-          clampedTransposeSemitones,
-        );
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(
-          t("transport.status.regionTransposeUpdated", {
-            name: selectedRegion.name,
-            transpose: formatTransposeSemitones(clampedTransposeSemitones),
-          }),
-        );
-      });
-    },
-    [applyPlaybackSnapshot, runAction, selectedRegion, setStatus, t],
-  );
-
   function clipContextMenu(clip: ClipSummary) {
     const currentCursorSeconds = displayPositionSecondsRef.current;
     const canSplit =
@@ -5490,56 +4106,6 @@ export function TransportPanelContent() {
     }, 250);
   }
 
-  function handleCreateSongClick() {
-    void runAction(
-      async () => {
-        const nextSnapshot = await createSong();
-        if (!nextSnapshot) {
-          return;
-        }
-
-        applyPlaybackSnapshot(nextSnapshot);
-        setActiveSidebarTab(null);
-        setStatus(
-          nextSnapshot.songFilePath
-            ? t("transport.status.projectCreatedAt", {
-                path: nextSnapshot.songFilePath,
-              })
-            : t("transport.status.projectCreated"),
-        );
-      },
-      { busy: true },
-    );
-  }
-
-  function handleOpenProjectClick() {
-    void runAction(
-      async () => {
-        const nextSnapshot = (await openProject()) ?? snapshotRef.current;
-        applyPlaybackSnapshot(nextSnapshot);
-        setActiveSidebarTab(null);
-      },
-      { busy: true },
-    );
-  }
-
-  function handleImportSongClick() {
-    void runAction(
-      async () => {
-        const nextSnapshot = await pickAndImportSong();
-        if (!nextSnapshot) {
-          return;
-        }
-
-        applyPlaybackSnapshot(nextSnapshot);
-        await refreshLibraryState();
-        setActiveSidebarTab(null);
-        setStatus(t("transport.status.songImported"));
-      },
-      { busy: true },
-    );
-  }
-
   function handleToggleTopMenu(menuKey: "file") {
     setOpenTopMenu((currentMenu) => (currentMenu === menuKey ? null : menuKey));
   }
@@ -5547,44 +4113,6 @@ export function TransportPanelContent() {
   function handleTopMenuAction(action: () => void) {
     setOpenTopMenu(null);
     action();
-  }
-
-  function handleSaveProjectClick() {
-    void runAction(
-      async () => {
-        const nextSnapshot = await saveProject();
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(
-          nextSnapshot.songFilePath
-            ? t("transport.status.projectSavedAt", {
-                path: nextSnapshot.songFilePath,
-              })
-            : t("transport.status.projectSaved"),
-        );
-      },
-      { busy: true },
-    );
-  }
-
-  function handleSaveProjectAsClick() {
-    void runAction(
-      async () => {
-        const nextSnapshot = await saveProjectAs();
-        if (!nextSnapshot) {
-          return;
-        }
-
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(
-          nextSnapshot.songFilePath
-            ? t("transport.status.projectSavedAt", {
-                path: nextSnapshot.songFilePath,
-              })
-            : t("transport.status.projectSavedNewLocation"),
-        );
-      },
-      { busy: true },
-    );
   }
 
   function handleSidebarTabToggle(tab: SidebarTab) {
@@ -7995,112 +6523,36 @@ export function TransportPanelContent() {
         />
 
         <div className={`lt-shell-body ${isBusy ? "is-hidden" : ""}`}>
-          <aside
-            className="lt-side-nav"
-            aria-label={t("transport.shell.navigation")}
-          >
-            <button
-              type="button"
-              className={activeSidebarTab === "library" ? "is-active" : ""}
-              aria-label={t("transport.shell.library")}
-              onClick={() => handleSidebarTabToggle("library")}
-            >
-              <span className="material-symbols-outlined">library_music</span>
-              {t("transport.shell.library")}
-            </button>
-            <button
-              type="button"
-              className={isRemoteModalOpen ? "is-active" : ""}
-              aria-label={t("transport.shell.remote")}
-              onClick={handleRemoteButtonClick}
-            >
-              <span className="material-symbols-outlined">phonelink</span>
-              {t("transport.shell.remote")}
-            </button>
-            <button
-              type="button"
-              className={isSettingsModalOpen ? "is-active" : ""}
-              aria-label={t("transport.shell.settings")}
-              onClick={handleSettingsButtonClick}
-            >
-              <span className="material-symbols-outlined">settings</span>
-              {t("transport.shell.settings")}
-            </button>
-          </aside>
+          <SideNav
+            activeSidebarTab={activeSidebarTab}
+            isRemoteModalOpen={isRemoteModalOpen}
+            isSettingsModalOpen={isSettingsModalOpen}
+            onLibraryToggle={() => handleSidebarTabToggle("library")}
+            onRemoteClick={handleRemoteButtonClick}
+            onSettingsClick={handleSettingsButtonClick}
+          />
 
           <div className="lt-workspace">
             <div className="lt-workspace-body">
-              {activeSidebarTab === "library" ? (
-                <LibrarySidebarPanel
-                  assets={visibleLibraryAssets}
-                  folders={libraryFolders}
-                  isLoading={isLibraryLoading}
-                  isImporting={isImportingLibrary}
-                  importProgress={libraryImportProgress}
-                  deletingFilePath={deletingLibraryFilePath}
-                  canImport={Boolean(playbackSongDir)}
-                  dragTargetFolderPath={
-                    internalLibraryPointerDrag?.hover?.kind === "library-folder"
-                      ? internalLibraryPointerDrag.hover.folderPath
-                      : undefined
-                  }
-                  onLocateAsset={handleLocateMissingFile}
-                  onPointerDragStart={startInternalLibraryPointerDrag}
-                  onImport={() => {
-                    void handleImportLibraryAssetsClick();
-                  }}
-                  onCreateFolder={() => {
-                    void handleCreateLibraryFolder();
-                  }}
-                  onMoveAssetsToFolder={(filePaths, folderPath) => {
-                    void handleMoveLibraryAssets(filePaths, folderPath);
-                  }}
-                  onRenameFolder={(folderPath) => {
-                    void handleRenameLibraryFolder(folderPath);
-                  }}
-                  onDeleteFolder={(folderPath) => {
-                    void handleDeleteLibraryFolder(folderPath);
-                  }}
-                  onDeleteRequested={(assets) => {
-                    void handleDeleteLibraryAssets(assets);
-                  }}
-                />
-              ) : null}
-              {internalLibraryPointerDrag?.isDragging ? (
-                <div
-                  aria-hidden="true"
-                  style={{
-                    position: "fixed",
-                    left: internalLibraryPointerDrag.current.x + 18,
-                    top: internalLibraryPointerDrag.current.y + 18,
-                    zIndex: 9999,
-                    pointerEvents: "none",
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    background: "rgba(14, 18, 28, 0.92)",
-                    border: "1px solid rgba(138, 161, 255, 0.35)",
-                    boxShadow: "0 16px 40px rgba(0, 0, 0, 0.28)",
-                    color: "#f5f7ff",
-                    minWidth: 160,
-                  }}
-                >
-                  <strong
-                    style={{ display: "block", fontSize: 12, marginBottom: 4 }}
-                  >
-                    {internalLibraryPointerDrag.payload.length === 1
-                      ? libraryAssetFileName(
-                          internalLibraryPointerDrag.payload[0].file_path,
-                        )
-                      : `${internalLibraryPointerDrag.payload.length} assets`}
-                  </strong>
-                  <span
-                    style={{ display: "block", fontSize: 11, opacity: 0.76 }}
-                  >
-                    Drop on timeline to place clip
-                    {internalLibraryPointerDrag.payload.length === 1 ? "" : "s"}
-                  </span>
-                </div>
-              ) : null}
+              <LibraryPanel
+                activeSidebarTab={activeSidebarTab}
+                assets={visibleLibraryAssets}
+                folders={libraryFolders}
+                isLoading={isLibraryLoading}
+                isImporting={isImportingLibrary}
+                importProgress={libraryImportProgress}
+                deletingFilePath={deletingLibraryFilePath}
+                canImport={Boolean(playbackSongDir)}
+                internalLibraryPointerDrag={internalLibraryPointerDrag}
+                onLocateAsset={handleLocateMissingFile}
+                onPointerDragStart={startInternalLibraryPointerDrag}
+                onImport={() => { void handleImportLibraryAssetsClick(); }}
+                onCreateFolder={() => { void handleCreateLibraryFolder(); }}
+                onMoveAssetsToFolder={(filePaths, folderPath) => { void handleMoveLibraryAssets(filePaths, folderPath); }}
+                onRenameFolder={(folderPath) => { void handleRenameLibraryFolder(folderPath); }}
+                onDeleteFolder={(folderPath) => { void handleDeleteLibraryFolder(folderPath); }}
+                onDeleteRequested={(assets) => { void handleDeleteLibraryAssets(assets); }}
+              />
               {shouldShowEmptyState ? (
                 <div className="lt-empty-state">
                   <div className="lt-empty-state-card">
@@ -8711,924 +7163,71 @@ export function TransportPanelContent() {
               )}
             </div>
 
-            {isSettingsModalOpen ? (
-              <div className="lt-modal-backdrop">
-                <section
-                  className="lt-settings-modal"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="lt-settings-modal-title"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <header className="lt-settings-modal-header">
-                    <div>
-                      <span className="lt-settings-modal-eyebrow">
-                        {t("transport.settingsModal.eyebrow")}
-                      </span>
-                      <h2 id="lt-settings-modal-title">
-                        {t("transport.settingsModal.title")}
-                      </h2>
-                      <p>{t("transport.settingsModal.description")}</p>
-                    </div>
-                    <button
-                      type="button"
-                      className="lt-settings-modal-close"
-                      onClick={() => setIsSettingsModalOpen(false)}
-                    >
-                      <span className="material-symbols-outlined">close</span>
-                      {t("transport.settingsModal.close")}
-                    </button>
-                  </header>
+            <SettingsPanel
+              isOpen={isSettingsModalOpen}
+              onClose={() => setIsSettingsModalOpen(false)}
+              activeTab={activeSettingsTab}
+              onTabChange={setActiveSettingsTab}
+              settingsTabs={settingsTabs}
+              isLoading={isSettingsLoading}
+              isSaving={isSettingsSaving}
+              appSettings={appSettings}
+              audioBackendOptions={audioBackendOptions}
+              audioDevicesForSelectedBackend={audioDevicesForSelectedBackend}
+              defaultAudioOutputDevice={defaultAudioOutputDevice}
+              selectedAudioOutputDevice={selectedAudioOutputDevice}
+              selectedAudioOutputDeviceMissing={selectedAudioOutputDeviceMissing}
+              selectedOutputChannelCount={selectedOutputChannelCount}
+              outputSampleRateOptions={outputSampleRateOptions}
+              autoOutputSampleRateLabel={autoOutputSampleRateLabel}
+              outputBufferSizes={outputBufferSizes}
+              audioRoutingOptions={audioRoutingOptions}
+              onAudioBackendChange={handleAudioBackendChange}
+              onAudioOutputDeviceChange={handleAudioOutputDeviceChange}
+              onRefreshAudioDevices={handleRefreshAudioDevices}
+              onOutputSampleRateChange={handleOutputSampleRateChange}
+              onOutputBufferSizeChange={handleOutputBufferSizeChange}
+              onEnabledOutputChannelChange={handleEnabledOutputChannelChange}
+              onAudioSafeModeChange={handleAudioSafeModeChange}
+              metronomeVolumeDraft={metronomeVolumeDraft}
+              onMetronomeEnabledChange={handleMetronomeEnabledChange}
+              onMetronomeOutputChange={handleMetronomeOutputChange}
+              onMetronomeVolumeDraftChange={handleMetronomeVolumeDraftChange}
+              onCommitMetronomeVolume={commitMetronomeVolumeDraft}
+              midiInputDevices={midiInputDevices}
+              isMidiInputRefreshing={isMidiInputRefreshing}
+              selectedMidiInputDevice={selectedMidiInputDevice}
+              selectedMidiInputDeviceMissing={selectedMidiInputDeviceMissing}
+              onMidiInputDeviceChange={handleMidiInputDeviceChange}
+              onRefreshMidiInputDevices={handleRefreshMidiInputDevices}
+              selectedLocale={selectedLocale}
+              onLocaleChange={handleLocaleChange}
+              midiLearnMode={midiLearnMode}
+              midiLearnFeedback={midiLearnFeedback}
+              midiLearnFeedbackCommand={midiLearnFeedbackCommand}
+              midiLearnView={midiLearnView}
+              onMidiLearnViewChange={setMidiLearnView}
+              midiLearnMarkerRows={midiLearnMarkerRows}
+              midiLearnSongRows={midiLearnSongRows}
+              visibleMidiLearnRows={visibleMidiLearnRows}
+              activeMidiLearnCommand={activeMidiLearnCommand}
+              onMidiLearnToggle={handleMidiLearnToggle}
+              onResetMidiMappings={handleResetMidiMappings}
+              onMidiLearnCommandRelearn={handleMidiLearnCommandRelearn}
+              onDynamicMidiLearnJump={handleDynamicMidiLearnJump}
+              onMidiLearnTarget={handleMidiLearnTarget}
+            />
 
-                  <div className="lt-settings-modal-body">
-                    <div className="lt-settings-tabs">
-                      <div
-                        className="lt-settings-tablist"
-                        role="tablist"
-                        aria-label={t("transport.settingsModal.tabListLabel", {
-                          defaultValue: "Settings sections",
-                        })}
-                      >
-                        {settingsTabs.map((tab) => {
-                          const isActive = activeSettingsTab === tab.id;
+            <RemotePanel
+              isOpen={isRemoteModalOpen}
+              onClose={() => setIsRemoteModalOpen(false)}
+              remoteServerInfo={remoteServerInfo}
+            />
 
-                          return (
-                            <button
-                              key={tab.id}
-                              type="button"
-                              role="tab"
-                              id={`lt-settings-tab-${tab.id}`}
-                              className={`lt-settings-tab-button ${isActive ? "is-active" : ""}`}
-                              aria-selected={isActive}
-                              aria-controls={`lt-settings-panel-${tab.id}`}
-                              onClick={() => setActiveSettingsTab(tab.id)}
-                            >
-                              {tab.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="lt-settings-tab-panels">
-                        {activeSettingsTab === "audio" ? (
-                          <section
-                            className="lt-settings-tab-panel"
-                            role="tabpanel"
-                            id="lt-settings-panel-audio"
-                            aria-labelledby="lt-settings-tab-audio"
-                          >
-                            <div className="lt-settings-section-grid">
-                              <label className="lt-settings-field">
-                                <span className="lt-settings-field-label">
-                                  {t("transport.settingsModal.audioBackend", {
-                                    defaultValue: "Audio System",
-                                  })}
-                                </span>
-                                <select
-                                  value={appSettings.selectedAudioBackend ?? ""}
-                                  disabled={
-                                    isSettingsLoading || isSettingsSaving
-                                  }
-                                  onChange={(event) =>
-                                    handleAudioBackendChange(event.target.value)
-                                  }
-                                >
-                                  <option value="">
-                                    {t(
-                                      "transport.settingsModal.audioBackendSystemDefault",
-                                      { defaultValue: "System default" },
-                                    )}
-                                  </option>
-                                  {audioBackendOptions.map((backend) => (
-                                    <option key={backend} value={backend}>
-                                      {backend
-                                        .replaceAll("_", " ")
-                                        .toUpperCase()}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-
-                              <label className="lt-settings-field">
-                                <span className="lt-settings-field-label">
-                                  {t("transport.settingsModal.audioDevice")}
-                                </span>
-                                <select
-                                  value={selectedAudioOutputDevice}
-                                  disabled={
-                                    isSettingsLoading || isSettingsSaving
-                                  }
-                                  onChange={(event) =>
-                                    handleAudioOutputDeviceChange(
-                                      event.target.value,
-                                    )
-                                  }
-                                >
-                                  <option value="">
-                                    {defaultAudioOutputDevice
-                                      ? t(
-                                          "transport.settingsModal.audioDeviceSystemDefaultNamed",
-                                          { name: defaultAudioOutputDevice },
-                                        )
-                                      : t(
-                                          "transport.settingsModal.audioDeviceSystemDefault",
-                                        )}
-                                  </option>
-                                  {selectedAudioOutputDeviceMissing ? (
-                                    <option value={selectedAudioOutputDevice}>
-                                      {t(
-                                        "transport.settingsModal.audioDeviceUnavailable",
-                                        {
-                                          name:
-                                            appSettings.selectedOutputDeviceName ??
-                                            selectedAudioOutputDevice,
-                                        },
-                                      )}
-                                    </option>
-                                  ) : null}
-                                  {audioDevicesForSelectedBackend.map(
-                                    (device) => (
-                                      <option
-                                        key={device.stableId}
-                                        value={device.stableId}
-                                      >
-                                        {device.name}
-                                      </option>
-                                    ),
-                                  )}
-                                </select>
-                                <small>
-                                  {appSettings.selectedOutputDeviceId
-                                    ? t(
-                                        "transport.settingsModal.audioDeviceExplicitHelp",
-                                        {
-                                          defaultValue:
-                                            "Explicit selections open this device directly; the Windows default is ignored.",
-                                        },
-                                      )
-                                    : defaultAudioOutputDevice
-                                      ? t(
-                                          "transport.settingsModal.audioDeviceCurrentDefault",
-                                          { name: defaultAudioOutputDevice },
-                                        )
-                                      : t(
-                                          "transport.settingsModal.audioDeviceNoDefault",
-                                        )}
-                                </small>
-                              </label>
-
-                              <div className="lt-settings-field">
-                                <span className="lt-settings-field-label">
-                                  {t(
-                                    "transport.settingsModal.audioDeviceRefreshLabel",
-                                    { defaultValue: "Device list" },
-                                  )}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="lt-secondary-button"
-                                  disabled={
-                                    isSettingsLoading || isSettingsSaving
-                                  }
-                                  onClick={handleRefreshAudioDevices}
-                                >
-                                  {t(
-                                    "transport.settingsModal.audioDeviceRefresh",
-                                    { defaultValue: "Refresh audio devices" },
-                                  )}
-                                </button>
-                              </div>
-
-                              <label className="lt-settings-field">
-                                <span className="lt-settings-field-label">
-                                  {t("transport.settingsModal.sampleRate", {
-                                    defaultValue: "Sample Rate",
-                                  })}
-                                </span>
-                                <select
-                                  value={appSettings.outputSampleRate ?? ""}
-                                  disabled={
-                                    isSettingsLoading || isSettingsSaving
-                                  }
-                                  onChange={(event) =>
-                                    handleOutputSampleRateChange(
-                                      event.target.value,
-                                    )
-                                  }
-                                >
-                                  <option value="">{autoOutputSampleRateLabel}</option>
-                                  {outputSampleRateOptions.map((sampleRate) => (
-                                    <option key={sampleRate} value={sampleRate}>
-                                      {sampleRate} Hz
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-
-                              <label className="lt-settings-field">
-                                <span className="lt-settings-field-label">
-                                  {t("transport.settingsModal.bufferSize", {
-                                    defaultValue: "Buffer Size",
-                                  })}
-                                </span>
-                                <select
-                                  value={
-                                    typeof appSettings.outputBufferSize ===
-                                      "object" &&
-                                    "fixed" in appSettings.outputBufferSize
-                                      ? String(
-                                          appSettings.outputBufferSize.fixed,
-                                        )
-                                      : ""
-                                  }
-                                  disabled={
-                                    isSettingsLoading || isSettingsSaving
-                                  }
-                                  onChange={(event) =>
-                                    handleOutputBufferSizeChange(
-                                      event.target.value,
-                                    )
-                                  }
-                                >
-                                  <option value="">
-                                    {t(
-                                      "transport.settingsModal.audioDeviceSystemDefault",
-                                    )}
-                                  </option>
-                                  {outputBufferSizes.map((bufferSize) => (
-                                    <option key={bufferSize} value={bufferSize}>
-                                      {bufferSize}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-
-                              <div className="lt-settings-field">
-                                <span className="lt-settings-field-label">
-                                  {t(
-                                    "transport.settingsModal.hardwareOutputs",
-                                    { defaultValue: "Hardware Outputs" },
-                                  )}
-                                </span>
-                                <div className="lt-output-channel-grid">
-                                  {Array.from(
-                                    { length: selectedOutputChannelCount },
-                                    (_, channelIndex) => (
-                                      <label
-                                        key={channelIndex}
-                                        className="lt-settings-checkbox"
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={appSettings.enabledOutputChannels.includes(
-                                            channelIndex,
-                                          )}
-                                          disabled={
-                                            isSettingsLoading ||
-                                            isSettingsSaving
-                                          }
-                                          onChange={(event) =>
-                                            handleEnabledOutputChannelChange(
-                                              channelIndex,
-                                              event.target.checked,
-                                            )
-                                          }
-                                        />
-                                        <span>
-                                          {t(
-                                            "transport.settingsModal.hardwareOutputChannel",
-                                            {
-                                              channel: channelIndex + 1,
-                                              defaultValue: `Channel ${channelIndex + 1}`,
-                                            },
-                                          )}
-                                        </span>
-                                      </label>
-                                    ),
-                                  )}
-                                </div>
-                              </div>
-
-                              <label className="lt-settings-toggle">
-                                <input
-                                  type="checkbox"
-                                  checked={appSettings.audioSafeMode}
-                                  disabled={
-                                    isSettingsLoading || isSettingsSaving
-                                  }
-                                  onChange={(event) =>
-                                    handleAudioSafeModeChange(
-                                      event.target.checked,
-                                    )
-                                  }
-                                />
-                                <span>
-                                  {t("transport.settingsModal.audioSafeMode", {
-                                    defaultValue: "Safe Mode",
-                                  })}
-                                </span>
-                              </label>
-                            </div>
-                          </section>
-                        ) : null}
-
-                        {activeSettingsTab === "metronome" ? (
-                          <section
-                            className="lt-settings-tab-panel"
-                            role="tabpanel"
-                            id="lt-settings-panel-metronome"
-                            aria-labelledby="lt-settings-tab-metronome"
-                          >
-                            <div className="lt-settings-section-grid">
-                              <label className="lt-settings-toggle">
-                                <input
-                                  type="checkbox"
-                                  checked={appSettings.metronomeEnabled}
-                                  disabled={
-                                    isSettingsLoading || isSettingsSaving
-                                  }
-                                  onPointerDown={(event) => {
-                                    if (midiLearnMode === null) {
-                                      return;
-                                    }
-
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    handleMidiLearnTarget(
-                                      "action:toggle_metronome",
-                                    );
-                                  }}
-                                  onChange={(event) =>
-                                    handleMetronomeEnabledChange(
-                                      event.target.checked,
-                                    )
-                                  }
-                                />
-                                <div className="lt-settings-toggle-copy">
-                                  <strong>
-                                    {t("transport.shell.metronome")}
-                                  </strong>
-                                  <small>
-                                    {t(
-                                      "transport.settingsModal.metronomeStatusDescription",
-                                      {
-                                        defaultValue:
-                                          "Toggle the metronome playback.",
-                                      },
-                                    )}
-                                  </small>
-                                </div>
-                              </label>
-
-                              <label className="lt-settings-field">
-                                <span className="lt-settings-field-label">
-                                  {t(
-                                    "transport.settingsModal.metronomeOutput",
-                                    { defaultValue: "Metronome Output" },
-                                  )}
-                                </span>
-                                <select
-                                  value={appSettings.metronomeOutput}
-                                  disabled={
-                                    isSettingsLoading || isSettingsSaving
-                                  }
-                                  onChange={(event) =>
-                                    handleMetronomeOutputChange(
-                                      event.target.value,
-                                    )
-                                  }
-                                >
-                                  {audioRoutingOptions.map((option) => (
-                                    <option
-                                      key={option.value}
-                                      value={option.value}
-                                    >
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-
-                              <label className="lt-settings-field">
-                                <span className="lt-settings-field-label">
-                                  {t("transport.settingsModal.metronomeVolume")}
-                                </span>
-                                <input
-                                  className="lt-range-input"
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.01}
-                                  value={metronomeVolumeDraft}
-                                  disabled={
-                                    isSettingsLoading || isSettingsSaving
-                                  }
-                                  onPointerDown={(event) => {
-                                    if (midiLearnMode === null) {
-                                      return;
-                                    }
-
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    handleMidiLearnTarget(
-                                      "param:metronome_volume",
-                                    );
-                                  }}
-                                  onChange={(event) =>
-                                    handleMetronomeVolumeDraftChange(
-                                      Number(event.target.value),
-                                    )
-                                  }
-                                  onPointerUp={(event) =>
-                                    commitMetronomeVolumeDraft(
-                                      Number(event.currentTarget.value),
-                                    )
-                                  }
-                                  onBlur={(event) =>
-                                    commitMetronomeVolumeDraft(
-                                      Number(event.currentTarget.value),
-                                    )
-                                  }
-                                />
-                                <small>
-                                  {t(
-                                    "transport.settingsModal.metronomeVolumeValue",
-                                    {
-                                      value: Math.round(
-                                        metronomeVolumeDraft * 100,
-                                      ),
-                                    },
-                                  )}
-                                </small>
-                              </label>
-                            </div>
-                          </section>
-                        ) : null}
-
-                        {activeSettingsTab === "midi" ? (
-                          <section
-                            className="lt-settings-tab-panel"
-                            role="tabpanel"
-                            id="lt-settings-panel-midi"
-                            aria-labelledby="lt-settings-tab-midi"
-                          >
-                            <div className="lt-settings-section-grid">
-                              <div className="lt-settings-field">
-                                <label
-                                  className="lt-settings-field-label"
-                                  htmlFor="lt-midi-input-device"
-                                >
-                                  {t("transport.settingsModal.midiDevice")}
-                                </label>
-                                <div className="lt-settings-field-control-row">
-                                  <select
-                                    id="lt-midi-input-device"
-                                    value={selectedMidiInputDevice}
-                                    disabled={
-                                      isSettingsLoading ||
-                                      isSettingsSaving ||
-                                      isMidiInputRefreshing
-                                    }
-                                    onChange={(event) =>
-                                      handleMidiInputDeviceChange(
-                                        event.target.value,
-                                      )
-                                    }
-                                  >
-                                    <option value="">
-                                      {t(
-                                        "transport.settingsModal.midiDeviceNone",
-                                      )}
-                                    </option>
-                                    {selectedMidiInputDeviceMissing ? (
-                                      <option value={selectedMidiInputDevice}>
-                                        {t(
-                                          "transport.settingsModal.midiDeviceUnavailable",
-                                          { name: selectedMidiInputDevice },
-                                        )}
-                                      </option>
-                                    ) : null}
-                                    {midiInputDevices.map((deviceName) => (
-                                      <option
-                                        key={deviceName}
-                                        value={deviceName}
-                                      >
-                                        {deviceName}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    className="lt-settings-icon-button"
-                                    aria-label={t(
-                                      "transport.settingsModal.midiDeviceRefresh",
-                                    )}
-                                    title={t(
-                                      "transport.settingsModal.midiDeviceRefresh",
-                                    )}
-                                    disabled={
-                                      isSettingsLoading ||
-                                      isSettingsSaving ||
-                                      isMidiInputRefreshing
-                                    }
-                                    onClick={handleRefreshMidiInputDevices}
-                                  >
-                                    <span className="material-symbols-outlined">
-                                      refresh
-                                    </span>
-                                  </button>
-                                </div>
-                                <small>
-                                  {t("transport.settingsModal.midiDeviceHelp")}
-                                </small>
-                              </div>
-                            </div>
-                          </section>
-                        ) : null}
-
-                        {activeSettingsTab === "general" ? (
-                          <section
-                            className="lt-settings-tab-panel"
-                            role="tabpanel"
-                            id="lt-settings-panel-general"
-                            aria-labelledby="lt-settings-tab-general"
-                          >
-                            <div className="lt-settings-section-grid">
-                              <label className="lt-settings-field">
-                                <span className="lt-settings-field-label">
-                                  {t("transport.settingsModal.language")}
-                                </span>
-                                <select
-                                  value={selectedLocale}
-                                  disabled={
-                                    isSettingsLoading || isSettingsSaving
-                                  }
-                                  onChange={(event) =>
-                                    handleLocaleChange(event.target.value)
-                                  }
-                                >
-                                  <option value="">
-                                    {t(
-                                      "transport.settingsModal.languageSystemDefault",
-                                    )}
-                                  </option>
-                                  <option value="en">
-                                    {t(
-                                      "transport.settingsModal.languageEnglish",
-                                    )}
-                                  </option>
-                                  <option value="es">
-                                    {t(
-                                      "transport.settingsModal.languageSpanish",
-                                    )}
-                                  </option>
-                                </select>
-                              </label>
-                            </div>
-                          </section>
-                        ) : null}
-
-                        {activeSettingsTab === "midiLearn" ? (
-                          <section
-                            className="lt-settings-tab-panel"
-                            role="tabpanel"
-                            id="lt-settings-panel-midiLearn"
-                            aria-labelledby="lt-settings-tab-midiLearn"
-                          >
-                            <section
-                              className="lt-midi-learn-panel"
-                              aria-labelledby="lt-midi-learn-panel-title"
-                            >
-                              <div className="lt-midi-learn-panel-header">
-                                <div>
-                                  <span
-                                    id="lt-midi-learn-panel-title"
-                                    className="lt-settings-field-label"
-                                  >
-                                    {t(
-                                      "transport.settingsModal.midiLearnSectionTitle",
-                                    )}
-                                  </span>
-                                  <p>
-                                    {t(
-                                      "transport.settingsModal.midiLearnSectionDescription",
-                                    )}
-                                  </p>
-                                </div>
-                                <div className="lt-midi-learn-actions">
-                                  <button
-                                    type="button"
-                                    className={`lt-midi-learn-activate ${midiLearnMode !== null ? "is-active" : ""}`}
-                                    disabled={
-                                      isSettingsLoading || isSettingsSaving
-                                    }
-                                    onClick={() =>
-                                      handleMidiLearnToggle({
-                                        closePanels: false,
-                                      })
-                                    }
-                                  >
-                                    <span className="material-symbols-outlined">
-                                      graphic_eq
-                                    </span>
-                                    {t("transport.shell.midiLearn")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="lt-midi-learn-reset"
-                                    disabled={
-                                      isSettingsLoading ||
-                                      isSettingsSaving ||
-                                      Object.keys(appSettings.midiMappings)
-                                        .length === 0
-                                    }
-                                    onClick={handleResetMidiMappings}
-                                  >
-                                    {t(
-                                      "transport.settingsModal.midiLearnReset",
-                                    )}
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div className="lt-midi-learn-feedback">
-                                <strong>
-                                  {t("transport.settingsModal.midiLearnLatest")}
-                                </strong>
-                                {midiLearnFeedback ? (
-                                  <p>
-                                    {midiLearnFeedbackCommand?.label ??
-                                      midiLearnFeedback.key}
-                                    :{" "}
-                                    {formatMidiBinding(
-                                      midiLearnFeedback.binding,
-                                    )}
-                                  </p>
-                                ) : (
-                                  <p>
-                                    {t(
-                                      "transport.settingsModal.midiLearnEmpty",
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-
-                              {midiLearnMode !== null ? (
-                                <div className="lt-midi-learn-live">
-                                  <strong>
-                                    {t(
-                                      "transport.settingsModal.midiLearnListening",
-                                    )}
-                                  </strong>
-                                  <p>
-                                    {midiLearnMode === ""
-                                      ? t(
-                                          "transport.settingsModal.midiLearnArmed",
-                                        )
-                                      : t(
-                                          "transport.settingsModal.midiLearnTargeting",
-                                          {
-                                            key:
-                                              activeMidiLearnCommand?.label ??
-                                              midiLearnMode,
-                                          },
-                                        )}
-                                  </p>
-                                </div>
-                              ) : null}
-
-                              <div className="lt-segmented-control lt-midi-learn-view-tabs">
-                                <button
-                                  type="button"
-                                  className={
-                                    midiLearnView === "core" ? "is-active" : ""
-                                  }
-                                  onClick={() => setMidiLearnView("core")}
-                                >
-                                  {t(
-                                    "transport.settingsModal.midiLearnViewCore",
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  className={
-                                    midiLearnView === "markers"
-                                      ? "is-active"
-                                      : ""
-                                  }
-                                  onClick={() => setMidiLearnView("markers")}
-                                >
-                                  {t(
-                                    "transport.settingsModal.midiLearnViewMarkers",
-                                    {
-                                      count: midiLearnMarkerRows.length,
-                                    },
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  className={
-                                    midiLearnView === "songs" ? "is-active" : ""
-                                  }
-                                  onClick={() => setMidiLearnView("songs")}
-                                >
-                                  {t(
-                                    "transport.settingsModal.midiLearnViewSongs",
-                                    {
-                                      count: midiLearnSongRows.length,
-                                    },
-                                  )}
-                                </button>
-                              </div>
-
-                              <div className="lt-midi-learn-table-wrap">
-                                <table className="lt-midi-learn-table">
-                                  <thead>
-                                    <tr>
-                                      <th scope="col">
-                                        {t(
-                                          "transport.settingsModal.midiLearnTableCommand",
-                                        )}
-                                      </th>
-                                      <th scope="col">
-                                        {t(
-                                          "transport.settingsModal.midiLearnTableBinding",
-                                        )}
-                                      </th>
-                                      <th scope="col">
-                                        {t(
-                                          "transport.settingsModal.midiLearnTableAction",
-                                        )}
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {visibleMidiLearnRows.map((command) => {
-                                      const hasBinding = Boolean(
-                                        command.binding,
-                                      );
-                                      const isTarget =
-                                        midiLearnMode === command.key;
-
-                                      return (
-                                        <tr
-                                          key={command.key}
-                                          className={
-                                            isTarget
-                                              ? "is-midi-target"
-                                              : undefined
-                                          }
-                                        >
-                                          <td>
-                                            <strong>{command.label}</strong>
-                                            <code>{command.key}</code>
-                                          </td>
-                                          <td>
-                                            {hasBinding && command.binding ? (
-                                              <span className="lt-midi-binding-pill">
-                                                {formatMidiBinding(
-                                                  command.binding,
-                                                )}
-                                              </span>
-                                            ) : (
-                                              <span className="lt-midi-binding-empty">
-                                                {t(
-                                                  "transport.settingsModal.midiLearnUnassigned",
-                                                )}
-                                              </span>
-                                            )}
-                                          </td>
-                                          <td>
-                                            <button
-                                              type="button"
-                                              className={`lt-midi-learn-relearn ${isTarget ? "is-active" : ""}`}
-                                              disabled={
-                                                isSettingsLoading ||
-                                                isSettingsSaving
-                                              }
-                                              onClick={() =>
-                                                handleMidiLearnCommandRelearn(
-                                                  command.key,
-                                                )
-                                              }
-                                            >
-                                              {isTarget
-                                                ? t(
-                                                    "transport.settingsModal.midiLearnListeningShort",
-                                                  )
-                                                : t(
-                                                    "transport.settingsModal.midiLearnRelearn",
-                                                  )}
-                                            </button>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                              <div className="lt-midi-learn-dynamic-actions">
-                                {midiLearnView === "markers" ? (
-                                  <button
-                                    type="button"
-                                    className="lt-midi-learn-map-jump"
-                                    disabled={
-                                      isSettingsLoading || isSettingsSaving
-                                    }
-                                    onClick={() =>
-                                      handleDynamicMidiLearnJump("marker")
-                                    }
-                                  >
-                                    {t(
-                                      "transport.settingsModal.midiLearnMapMarkerJump",
-                                    )}
-                                  </button>
-                                ) : null}
-                                {midiLearnView === "songs" ? (
-                                  <button
-                                    type="button"
-                                    className="lt-midi-learn-map-jump"
-                                    disabled={
-                                      isSettingsLoading || isSettingsSaving
-                                    }
-                                    onClick={() =>
-                                      handleDynamicMidiLearnJump("song")
-                                    }
-                                  >
-                                    {t(
-                                      "transport.settingsModal.midiLearnMapSongJump",
-                                    )}
-                                  </button>
-                                ) : null}
-                              </div>
-                            </section>
-                          </section>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            ) : null}
-
-            {isRemoteModalOpen ? (
-              <div className="lt-modal-backdrop">
-                <section
-                  className="lt-settings-modal"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="lt-remote-modal-title"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <header className="lt-settings-modal-header">
-                    <div>
-                      <span className="lt-settings-modal-eyebrow">
-                        {t("remoteAccess.eyebrow")}
-                      </span>
-                      <h2 id="lt-remote-modal-title">
-                        {t("remoteAccess.title")}
-                      </h2>
-                      <p>{t("remoteAccess.description")}</p>
-                    </div>
-                    <button
-                      type="button"
-                      className="lt-settings-modal-close"
-                      onClick={() => setIsRemoteModalOpen(false)}
-                    >
-                      <span className="material-symbols-outlined">close</span>
-                      {t("common.close")}
-                    </button>
-                  </header>
-
-                  <div className="lt-settings-modal-body">
-                    <RemoteAccessCard remoteServerInfo={remoteServerInfo} />
-                  </div>
-                </section>
-              </div>
-            ) : null}
-
-            {contextMenu ? (
-              <div
-                className="lt-context-menu"
-                style={{ left: contextMenu.x, top: contextMenu.y }}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <strong>{contextMenu.title}</strong>
-                {contextMenu.actions.map((action) => (
-                  <button
-                    key={action.label}
-                    type="button"
-                    disabled={action.disabled}
-                    onClick={() => {
-                      setContextMenu(null);
-                      void action.onSelect();
-                    }}
-                  >
-                    {action.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+            <TimelineContextMenus
+              contextMenu={contextMenu}
+              onDismiss={() => setContextMenu(null)}
+            />
 
             {missingFilePaths.length > 0 ? (
               <button
