@@ -1,0 +1,885 @@
+import { useTranslation } from "react-i18next";
+import type { AppSettings, AudioDeviceDescriptor } from "@libretracks/shared/models";
+import type {
+  MidiLearnCommandRow,
+  MidiLearnFeedback,
+  SettingsTab,
+} from "../types";
+import { formatMidiBinding } from "../helpers";
+
+type AudioRoutingOption = { value: string; label: string };
+
+type SettingsPanelProps = {
+  isOpen: boolean;
+  onClose: () => void;
+
+  activeTab: SettingsTab;
+  onTabChange: (tab: SettingsTab) => void;
+  settingsTabs: Array<{ id: SettingsTab; label: string }>;
+
+  isLoading: boolean;
+  isSaving: boolean;
+
+  appSettings: AppSettings;
+
+  audioBackendOptions: string[];
+  audioDevicesForSelectedBackend: AudioDeviceDescriptor[];
+  defaultAudioOutputDevice: string | null;
+  selectedAudioOutputDevice: string;
+  selectedAudioOutputDeviceMissing: boolean;
+  selectedOutputChannelCount: number;
+  outputSampleRateOptions: number[];
+  autoOutputSampleRateLabel: string;
+  outputBufferSizes: number[];
+  audioRoutingOptions: AudioRoutingOption[];
+  onAudioBackendChange: (value: string) => void;
+  onAudioOutputDeviceChange: (value: string) => void;
+  onRefreshAudioDevices: () => void;
+  onOutputSampleRateChange: (value: string) => void;
+  onOutputBufferSizeChange: (value: string) => void;
+  onEnabledOutputChannelChange: (channelIndex: number, checked: boolean) => void;
+  onAudioSafeModeChange: (checked: boolean) => void;
+
+  metronomeVolumeDraft: number;
+  onMetronomeEnabledChange: (checked: boolean) => void;
+  onMetronomeOutputChange: (value: string) => void;
+  onMetronomeVolumeDraftChange: (value: number) => void;
+  onCommitMetronomeVolume: (value: number) => void;
+
+  midiInputDevices: string[];
+  isMidiInputRefreshing: boolean;
+  selectedMidiInputDevice: string;
+  selectedMidiInputDeviceMissing: boolean;
+  onMidiInputDeviceChange: (value: string) => void;
+  onRefreshMidiInputDevices: () => void;
+
+  selectedLocale: string;
+  onLocaleChange: (value: string) => void;
+
+  midiLearnMode: string | null;
+  midiLearnFeedback: MidiLearnFeedback | null;
+  midiLearnFeedbackCommand: MidiLearnCommandRow | null;
+  midiLearnView: "core" | "markers" | "songs";
+  onMidiLearnViewChange: (view: "core" | "markers" | "songs") => void;
+  midiLearnMarkerRows: MidiLearnCommandRow[];
+  midiLearnSongRows: MidiLearnCommandRow[];
+  visibleMidiLearnRows: MidiLearnCommandRow[];
+  activeMidiLearnCommand: MidiLearnCommandRow | null;
+  onMidiLearnToggle: (options?: { closePanels?: boolean }) => void;
+  onResetMidiMappings: () => void;
+  onMidiLearnCommandRelearn: (key: string) => void;
+  onDynamicMidiLearnJump: (type: "marker" | "song") => void;
+  onMidiLearnTarget: (key: string) => void;
+};
+
+export function SettingsPanel({
+  isOpen,
+  onClose,
+  activeTab,
+  onTabChange,
+  settingsTabs,
+  isLoading,
+  isSaving,
+  appSettings,
+  audioBackendOptions,
+  audioDevicesForSelectedBackend,
+  defaultAudioOutputDevice,
+  selectedAudioOutputDevice,
+  selectedAudioOutputDeviceMissing,
+  selectedOutputChannelCount,
+  outputSampleRateOptions,
+  autoOutputSampleRateLabel,
+  outputBufferSizes,
+  audioRoutingOptions,
+  onAudioBackendChange,
+  onAudioOutputDeviceChange,
+  onRefreshAudioDevices,
+  onOutputSampleRateChange,
+  onOutputBufferSizeChange,
+  onEnabledOutputChannelChange,
+  onAudioSafeModeChange,
+  metronomeVolumeDraft,
+  onMetronomeEnabledChange,
+  onMetronomeOutputChange,
+  onMetronomeVolumeDraftChange,
+  onCommitMetronomeVolume,
+  midiInputDevices,
+  isMidiInputRefreshing,
+  selectedMidiInputDevice,
+  selectedMidiInputDeviceMissing,
+  onMidiInputDeviceChange,
+  onRefreshMidiInputDevices,
+  selectedLocale,
+  onLocaleChange,
+  midiLearnMode,
+  midiLearnFeedback,
+  midiLearnFeedbackCommand,
+  midiLearnView,
+  onMidiLearnViewChange,
+  midiLearnMarkerRows,
+  midiLearnSongRows,
+  visibleMidiLearnRows,
+  activeMidiLearnCommand,
+  onMidiLearnToggle,
+  onResetMidiMappings,
+  onMidiLearnCommandRelearn,
+  onDynamicMidiLearnJump,
+  onMidiLearnTarget,
+}: SettingsPanelProps) {
+  const { t } = useTranslation();
+
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div className="lt-modal-backdrop">
+      <section
+        className="lt-settings-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lt-settings-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="lt-settings-modal-header">
+          <div>
+            <span className="lt-settings-modal-eyebrow">
+              {t("transport.settingsModal.eyebrow")}
+            </span>
+            <h2 id="lt-settings-modal-title">
+              {t("transport.settingsModal.title")}
+            </h2>
+            <p>{t("transport.settingsModal.description")}</p>
+          </div>
+          <button
+            type="button"
+            className="lt-settings-modal-close"
+            onClick={onClose}
+          >
+            <span className="material-symbols-outlined">close</span>
+            {t("transport.settingsModal.close")}
+          </button>
+        </header>
+
+        <div className="lt-settings-modal-body">
+          <div className="lt-settings-tabs">
+            <div
+              className="lt-settings-tablist"
+              role="tablist"
+              aria-label={t("transport.settingsModal.tabListLabel", {
+                defaultValue: "Settings sections",
+              })}
+            >
+              {settingsTabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    id={`lt-settings-tab-${tab.id}`}
+                    className={`lt-settings-tab-button ${isActive ? "is-active" : ""}`}
+                    aria-selected={isActive}
+                    aria-controls={`lt-settings-panel-${tab.id}`}
+                    onClick={() => onTabChange(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="lt-settings-tab-panels">
+              {activeTab === "audio" ? (
+                <section
+                  className="lt-settings-tab-panel"
+                  role="tabpanel"
+                  id="lt-settings-panel-audio"
+                  aria-labelledby="lt-settings-tab-audio"
+                >
+                  <div className="lt-settings-section-grid">
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.audioBackend", {
+                          defaultValue: "Audio System",
+                        })}
+                      </span>
+                      <select
+                        value={appSettings.selectedAudioBackend ?? ""}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onAudioBackendChange(event.target.value)
+                        }
+                      >
+                        <option value="">
+                          {t(
+                            "transport.settingsModal.audioBackendSystemDefault",
+                            { defaultValue: "System default" },
+                          )}
+                        </option>
+                        {audioBackendOptions.map((backend) => (
+                          <option key={backend} value={backend}>
+                            {backend.replaceAll("_", " ").toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.audioDevice")}
+                      </span>
+                      <select
+                        value={selectedAudioOutputDevice}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onAudioOutputDeviceChange(event.target.value)
+                        }
+                      >
+                        <option value="">
+                          {defaultAudioOutputDevice
+                            ? t(
+                                "transport.settingsModal.audioDeviceSystemDefaultNamed",
+                                { name: defaultAudioOutputDevice },
+                              )
+                            : t(
+                                "transport.settingsModal.audioDeviceSystemDefault",
+                              )}
+                        </option>
+                        {selectedAudioOutputDeviceMissing ? (
+                          <option value={selectedAudioOutputDevice}>
+                            {t(
+                              "transport.settingsModal.audioDeviceUnavailable",
+                              {
+                                name:
+                                  appSettings.selectedOutputDeviceName ??
+                                  selectedAudioOutputDevice,
+                              },
+                            )}
+                          </option>
+                        ) : null}
+                        {audioDevicesForSelectedBackend.map((device) => (
+                          <option key={device.stableId} value={device.stableId}>
+                            {device.name}
+                          </option>
+                        ))}
+                      </select>
+                      <small>
+                        {appSettings.selectedOutputDeviceId
+                          ? t(
+                              "transport.settingsModal.audioDeviceExplicitHelp",
+                              {
+                                defaultValue:
+                                  "Explicit selections open this device directly; the Windows default is ignored.",
+                              },
+                            )
+                          : defaultAudioOutputDevice
+                            ? t(
+                                "transport.settingsModal.audioDeviceCurrentDefault",
+                                { name: defaultAudioOutputDevice },
+                              )
+                            : t(
+                                "transport.settingsModal.audioDeviceNoDefault",
+                              )}
+                      </small>
+                    </label>
+
+                    <div className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t(
+                          "transport.settingsModal.audioDeviceRefreshLabel",
+                          { defaultValue: "Device list" },
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        className="lt-secondary-button"
+                        disabled={isLoading || isSaving}
+                        onClick={onRefreshAudioDevices}
+                      >
+                        {t(
+                          "transport.settingsModal.audioDeviceRefresh",
+                          { defaultValue: "Refresh audio devices" },
+                        )}
+                      </button>
+                    </div>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.sampleRate", {
+                          defaultValue: "Sample Rate",
+                        })}
+                      </span>
+                      <select
+                        value={appSettings.outputSampleRate ?? ""}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onOutputSampleRateChange(event.target.value)
+                        }
+                      >
+                        <option value="">{autoOutputSampleRateLabel}</option>
+                        {outputSampleRateOptions.map((sampleRate) => (
+                          <option key={sampleRate} value={sampleRate}>
+                            {sampleRate} Hz
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.bufferSize", {
+                          defaultValue: "Buffer Size",
+                        })}
+                      </span>
+                      <select
+                        value={
+                          typeof appSettings.outputBufferSize === "object" &&
+                          "fixed" in appSettings.outputBufferSize
+                            ? String(appSettings.outputBufferSize.fixed)
+                            : ""
+                        }
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onOutputBufferSizeChange(event.target.value)
+                        }
+                      >
+                        <option value="">
+                          {t(
+                            "transport.settingsModal.audioDeviceSystemDefault",
+                          )}
+                        </option>
+                        {outputBufferSizes.map((bufferSize) => (
+                          <option key={bufferSize} value={bufferSize}>
+                            {bufferSize}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <div className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t(
+                          "transport.settingsModal.hardwareOutputs",
+                          { defaultValue: "Hardware Outputs" },
+                        )}
+                      </span>
+                      <div className="lt-output-channel-grid">
+                        {Array.from(
+                          { length: selectedOutputChannelCount },
+                          (_, channelIndex) => (
+                            <label
+                              key={channelIndex}
+                              className="lt-settings-checkbox"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={appSettings.enabledOutputChannels.includes(
+                                  channelIndex,
+                                )}
+                                disabled={isLoading || isSaving}
+                                onChange={(event) =>
+                                  onEnabledOutputChannelChange(
+                                    channelIndex,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              <span>
+                                {t(
+                                  "transport.settingsModal.hardwareOutputChannel",
+                                  {
+                                    channel: channelIndex + 1,
+                                    defaultValue: `Channel ${channelIndex + 1}`,
+                                  },
+                                )}
+                              </span>
+                            </label>
+                          ),
+                        )}
+                      </div>
+                    </div>
+
+                    <label className="lt-settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={appSettings.audioSafeMode}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onAudioSafeModeChange(event.target.checked)
+                        }
+                      />
+                      <span>
+                        {t("transport.settingsModal.audioSafeMode", {
+                          defaultValue: "Safe Mode",
+                        })}
+                      </span>
+                    </label>
+                  </div>
+                </section>
+              ) : null}
+
+              {activeTab === "metronome" ? (
+                <section
+                  className="lt-settings-tab-panel"
+                  role="tabpanel"
+                  id="lt-settings-panel-metronome"
+                  aria-labelledby="lt-settings-tab-metronome"
+                >
+                  <div className="lt-settings-section-grid">
+                    <label className="lt-settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={appSettings.metronomeEnabled}
+                        disabled={isLoading || isSaving}
+                        onPointerDown={(event) => {
+                          if (midiLearnMode === null) {
+                            return;
+                          }
+
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onMidiLearnTarget("action:toggle_metronome");
+                        }}
+                        onChange={(event) =>
+                          onMetronomeEnabledChange(event.target.checked)
+                        }
+                      />
+                      <div className="lt-settings-toggle-copy">
+                        <strong>{t("transport.shell.metronome")}</strong>
+                        <small>
+                          {t(
+                            "transport.settingsModal.metronomeStatusDescription",
+                            {
+                              defaultValue: "Toggle the metronome playback.",
+                            },
+                          )}
+                        </small>
+                      </div>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t(
+                          "transport.settingsModal.metronomeOutput",
+                          { defaultValue: "Metronome Output" },
+                        )}
+                      </span>
+                      <select
+                        value={appSettings.metronomeOutput}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onMetronomeOutputChange(event.target.value)
+                        }
+                      >
+                        {audioRoutingOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.metronomeVolume")}
+                      </span>
+                      <input
+                        className="lt-range-input"
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={metronomeVolumeDraft}
+                        disabled={isLoading || isSaving}
+                        onPointerDown={(event) => {
+                          if (midiLearnMode === null) {
+                            return;
+                          }
+
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onMidiLearnTarget("param:metronome_volume");
+                        }}
+                        onChange={(event) =>
+                          onMetronomeVolumeDraftChange(
+                            Number(event.target.value),
+                          )
+                        }
+                        onPointerUp={(event) =>
+                          onCommitMetronomeVolume(
+                            Number(event.currentTarget.value),
+                          )
+                        }
+                        onBlur={(event) =>
+                          onCommitMetronomeVolume(
+                            Number(event.currentTarget.value),
+                          )
+                        }
+                      />
+                      <small>
+                        {t(
+                          "transport.settingsModal.metronomeVolumeValue",
+                          {
+                            value: Math.round(metronomeVolumeDraft * 100),
+                          },
+                        )}
+                      </small>
+                    </label>
+                  </div>
+                </section>
+              ) : null}
+
+              {activeTab === "midi" ? (
+                <section
+                  className="lt-settings-tab-panel"
+                  role="tabpanel"
+                  id="lt-settings-panel-midi"
+                  aria-labelledby="lt-settings-tab-midi"
+                >
+                  <div className="lt-settings-section-grid">
+                    <div className="lt-settings-field">
+                      <label
+                        className="lt-settings-field-label"
+                        htmlFor="lt-midi-input-device"
+                      >
+                        {t("transport.settingsModal.midiDevice")}
+                      </label>
+                      <div className="lt-settings-field-control-row">
+                        <select
+                          id="lt-midi-input-device"
+                          value={selectedMidiInputDevice}
+                          disabled={
+                            isLoading || isSaving || isMidiInputRefreshing
+                          }
+                          onChange={(event) =>
+                            onMidiInputDeviceChange(event.target.value)
+                          }
+                        >
+                          <option value="">
+                            {t("transport.settingsModal.midiDeviceNone")}
+                          </option>
+                          {selectedMidiInputDeviceMissing ? (
+                            <option value={selectedMidiInputDevice}>
+                              {t(
+                                "transport.settingsModal.midiDeviceUnavailable",
+                                { name: selectedMidiInputDevice },
+                              )}
+                            </option>
+                          ) : null}
+                          {midiInputDevices.map((deviceName) => (
+                            <option key={deviceName} value={deviceName}>
+                              {deviceName}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="lt-settings-icon-button"
+                          aria-label={t(
+                            "transport.settingsModal.midiDeviceRefresh",
+                          )}
+                          title={t(
+                            "transport.settingsModal.midiDeviceRefresh",
+                          )}
+                          disabled={
+                            isLoading || isSaving || isMidiInputRefreshing
+                          }
+                          onClick={onRefreshMidiInputDevices}
+                        >
+                          <span className="material-symbols-outlined">
+                            refresh
+                          </span>
+                        </button>
+                      </div>
+                      <small>
+                        {t("transport.settingsModal.midiDeviceHelp")}
+                      </small>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
+              {activeTab === "general" ? (
+                <section
+                  className="lt-settings-tab-panel"
+                  role="tabpanel"
+                  id="lt-settings-panel-general"
+                  aria-labelledby="lt-settings-tab-general"
+                >
+                  <div className="lt-settings-section-grid">
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.language")}
+                      </span>
+                      <select
+                        value={selectedLocale}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onLocaleChange(event.target.value)
+                        }
+                      >
+                        <option value="">
+                          {t(
+                            "transport.settingsModal.languageSystemDefault",
+                          )}
+                        </option>
+                        <option value="en">
+                          {t("transport.settingsModal.languageEnglish")}
+                        </option>
+                        <option value="es">
+                          {t("transport.settingsModal.languageSpanish")}
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+              ) : null}
+
+              {activeTab === "midiLearn" ? (
+                <section
+                  className="lt-settings-tab-panel"
+                  role="tabpanel"
+                  id="lt-settings-panel-midiLearn"
+                  aria-labelledby="lt-settings-tab-midiLearn"
+                >
+                  <section
+                    className="lt-midi-learn-panel"
+                    aria-labelledby="lt-midi-learn-panel-title"
+                  >
+                    <div className="lt-midi-learn-panel-header">
+                      <div>
+                        <span
+                          id="lt-midi-learn-panel-title"
+                          className="lt-settings-field-label"
+                        >
+                          {t(
+                            "transport.settingsModal.midiLearnSectionTitle",
+                          )}
+                        </span>
+                        <p>
+                          {t(
+                            "transport.settingsModal.midiLearnSectionDescription",
+                          )}
+                        </p>
+                      </div>
+                      <div className="lt-midi-learn-actions">
+                        <button
+                          type="button"
+                          className={`lt-midi-learn-activate ${midiLearnMode !== null ? "is-active" : ""}`}
+                          disabled={isLoading || isSaving}
+                          onClick={() =>
+                            onMidiLearnToggle({ closePanels: false })
+                          }
+                        >
+                          <span className="material-symbols-outlined">
+                            graphic_eq
+                          </span>
+                          {t("transport.shell.midiLearn")}
+                        </button>
+                        <button
+                          type="button"
+                          className="lt-midi-learn-reset"
+                          disabled={
+                            isLoading ||
+                            isSaving ||
+                            Object.keys(appSettings.midiMappings).length === 0
+                          }
+                          onClick={onResetMidiMappings}
+                        >
+                          {t("transport.settingsModal.midiLearnReset")}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="lt-midi-learn-feedback">
+                      <strong>
+                        {t("transport.settingsModal.midiLearnLatest")}
+                      </strong>
+                      {midiLearnFeedback ? (
+                        <p>
+                          {midiLearnFeedbackCommand?.label ??
+                            midiLearnFeedback.key}
+                          :{" "}
+                          {formatMidiBinding(midiLearnFeedback.binding)}
+                        </p>
+                      ) : (
+                        <p>
+                          {t("transport.settingsModal.midiLearnEmpty")}
+                        </p>
+                      )}
+                    </div>
+
+                    {midiLearnMode !== null ? (
+                      <div className="lt-midi-learn-live">
+                        <strong>
+                          {t(
+                            "transport.settingsModal.midiLearnListening",
+                          )}
+                        </strong>
+                        <p>
+                          {midiLearnMode === ""
+                            ? t("transport.settingsModal.midiLearnArmed")
+                            : t(
+                                "transport.settingsModal.midiLearnTargeting",
+                                {
+                                  key:
+                                    activeMidiLearnCommand?.label ??
+                                    midiLearnMode,
+                                },
+                              )}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <div className="lt-segmented-control lt-midi-learn-view-tabs">
+                      <button
+                        type="button"
+                        className={
+                          midiLearnView === "core" ? "is-active" : ""
+                        }
+                        onClick={() => onMidiLearnViewChange("core")}
+                      >
+                        {t("transport.settingsModal.midiLearnViewCore")}
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          midiLearnView === "markers" ? "is-active" : ""
+                        }
+                        onClick={() => onMidiLearnViewChange("markers")}
+                      >
+                        {t(
+                          "transport.settingsModal.midiLearnViewMarkers",
+                          {
+                            count: midiLearnMarkerRows.length,
+                          },
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          midiLearnView === "songs" ? "is-active" : ""
+                        }
+                        onClick={() => onMidiLearnViewChange("songs")}
+                      >
+                        {t(
+                          "transport.settingsModal.midiLearnViewSongs",
+                          {
+                            count: midiLearnSongRows.length,
+                          },
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="lt-midi-learn-table-wrap">
+                      <table className="lt-midi-learn-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">
+                              {t(
+                                "transport.settingsModal.midiLearnTableCommand",
+                              )}
+                            </th>
+                            <th scope="col">
+                              {t(
+                                "transport.settingsModal.midiLearnTableBinding",
+                              )}
+                            </th>
+                            <th scope="col">
+                              {t(
+                                "transport.settingsModal.midiLearnTableAction",
+                              )}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleMidiLearnRows.map((command) => {
+                            const hasBinding = Boolean(command.binding);
+                            const isTarget = midiLearnMode === command.key;
+
+                            return (
+                              <tr
+                                key={command.key}
+                                className={
+                                  isTarget ? "is-midi-target" : undefined
+                                }
+                              >
+                                <td>
+                                  <strong>{command.label}</strong>
+                                  <code>{command.key}</code>
+                                </td>
+                                <td>
+                                  {hasBinding && command.binding ? (
+                                    <span className="lt-midi-binding-pill">
+                                      {formatMidiBinding(command.binding)}
+                                    </span>
+                                  ) : (
+                                    <span className="lt-midi-binding-empty">
+                                      {t(
+                                        "transport.settingsModal.midiLearnUnassigned",
+                                      )}
+                                    </span>
+                                  )}
+                                </td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className={`lt-midi-learn-relearn ${isTarget ? "is-active" : ""}`}
+                                    disabled={isLoading || isSaving}
+                                    onClick={() =>
+                                      onMidiLearnCommandRelearn(command.key)
+                                    }
+                                  >
+                                    {isTarget
+                                      ? t(
+                                          "transport.settingsModal.midiLearnListeningShort",
+                                        )
+                                      : t(
+                                          "transport.settingsModal.midiLearnRelearn",
+                                        )}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="lt-midi-learn-dynamic-actions">
+                      {midiLearnView === "markers" ? (
+                        <button
+                          type="button"
+                          className="lt-midi-learn-map-jump"
+                          disabled={isLoading || isSaving}
+                          onClick={() => onDynamicMidiLearnJump("marker")}
+                        >
+                          {t(
+                            "transport.settingsModal.midiLearnMapMarkerJump",
+                          )}
+                        </button>
+                      ) : null}
+                      {midiLearnView === "songs" ? (
+                        <button
+                          type="button"
+                          className="lt-midi-learn-map-jump"
+                          disabled={isLoading || isSaving}
+                          onClick={() => onDynamicMidiLearnJump("song")}
+                        >
+                          {t(
+                            "transport.settingsModal.midiLearnMapSongJump",
+                          )}
+                        </button>
+                      ) : null}
+                    </div>
+                  </section>
+                </section>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}

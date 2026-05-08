@@ -15,3 +15,4 @@ vendor/bin/native/*
 Thumbs.db
 repomix-output.xml
 graphify-out/
+.claude/settings.local.json
