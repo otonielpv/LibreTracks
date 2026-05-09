@@ -11,6 +11,7 @@
 #include <lt_engine/core/types.h>
 #include <optional>
 #include <string>
+#include <variant>
 
 namespace lt {
 

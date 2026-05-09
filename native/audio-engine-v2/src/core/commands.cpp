@@ -1,6 +1,7 @@
 #include <lt_engine/core/commands.h>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <type_traits>
 
 namespace lt {
 

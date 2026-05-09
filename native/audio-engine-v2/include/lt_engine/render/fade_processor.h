@@ -8,6 +8,7 @@
 // that occurs when audio resumes mid-waveform.
 // ---------------------------------------------------------------------------
 
+#include <atomic>
 #include <lt_engine/core/types.h>
 
 namespace lt {

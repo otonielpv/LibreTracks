@@ -39,7 +39,7 @@ add_library(lt_deps_resampler  INTERFACE)
 
 # ── JUCE ──────────────────────────────────────────────────────────────────
 if(LT_ENGINE_USE_JUCE)
-    FetchContent_Declare(juce
+    FetchContent_Declare(JUCE
         GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
         GIT_TAG        8.0.4
         GIT_SHALLOW    TRUE
@@ -55,14 +55,7 @@ if(LT_ENGINE_USE_JUCE)
         set(JUCE_ASIO_SDK_DIR "${LT_ASIO_SDK_DIR}" CACHE PATH "" FORCE)
     endif()
 
-    FetchContent_MakeAvailable(juce)
-
-    # We only need the audio-device and core modules for now.
-    juce_add_modules(
-        juce_core
-        juce_audio_basics
-        juce_audio_devices
-    )
+    FetchContent_MakeAvailable(JUCE)
 
     target_link_libraries(lt_deps_juce INTERFACE
         juce::juce_core
@@ -80,20 +73,11 @@ if(LT_ENGINE_USE_JUCE)
 endif()
 
 # ── RUBBER BAND ───────────────────────────────────────────────────────────
+# RubberBand integration is not fully wired up yet. Keep the placeholder
+# interface target for now so the engine can compile without requiring the
+# upstream library target.
 if(LT_ENGINE_USE_RUBBERBAND)
-    # Prefer a system install so packagers can override.
-    find_package(rubberband QUIET)
-    if(rubberband_FOUND)
-        target_link_libraries(lt_deps_rubberband INTERFACE rubberband::rubberband)
-    else()
-        FetchContent_Declare(rubberband
-            GIT_REPOSITORY https://github.com/breakfastquay/rubberband.git
-            GIT_TAG        v3.3.0
-            GIT_SHALLOW    TRUE
-        )
-        FetchContent_MakeAvailable(rubberband)
-        target_link_libraries(lt_deps_rubberband INTERFACE rubberband)
-    endif()
+    message(STATUS "LT_ENGINE_USE_RUBBERBAND enabled; using placeholder lt_deps_rubberband until RubberBand integration is completed.")
 endif()
 
 # ── DECODER ───────────────────────────────────────────────────────────────
@@ -116,18 +100,21 @@ if(LT_ENGINE_USE_LIBSNDFILE)
     endif()
 
     # dr_libs headers for MP3 and supplemental format support.
-    # These are bundled as single-file headers in vendor/dr_libs/.
-    target_include_directories(lt_deps_decoder INTERFACE
-        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/dr_libs
-    )
-    # dr_libs single-file headers — fetched into vendor/dr_libs/ if not present.
-    FetchContent_Declare(dr_libs
-        GIT_REPOSITORY https://github.com/mackron/dr_libs.git
-        GIT_TAG        master
-        GIT_SHALLOW    TRUE
-    )
-    FetchContent_MakeAvailable(dr_libs)
-    target_include_directories(lt_deps_decoder INTERFACE ${dr_libs_SOURCE_DIR})
+    # Prefer the bundled vendor copy if present.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/dr_libs")
+        target_include_directories(lt_deps_decoder INTERFACE
+            ${CMAKE_CURRENT_SOURCE_DIR}/vendor/dr_libs
+        )
+    else()
+        # dr_libs single-file headers — fetched if the local vendor copy is absent.
+        FetchContent_Declare(dr_libs
+            GIT_REPOSITORY https://github.com/mackron/dr_libs.git
+            GIT_TAG        master
+            GIT_SHALLOW    TRUE
+        )
+        FetchContent_MakeAvailable(dr_libs)
+        target_include_directories(lt_deps_decoder INTERFACE ${dr_libs_SOURCE_DIR})
+    endif()
 
 elseif(LT_ENGINE_USE_FFMPEG)
     # FFmpeg is expected to be provided by the system, vcpkg, or conan.
@@ -154,8 +141,6 @@ FetchContent_MakeAvailable(nlohmann_json)
 # Expose nlohmann to all engine modules via a shared interface target.
 add_library(lt_deps_json INTERFACE)
 target_link_libraries(lt_deps_json INTERFACE nlohmann_json::nlohmann_json)
-
-target_link_libraries(lt_audio_engine_v2 PRIVATE lt_deps_json)
 
 # ── RESAMPLER ─────────────────────────────────────────────────────────────
 if(LT_ENGINE_USE_R8BRAIN)

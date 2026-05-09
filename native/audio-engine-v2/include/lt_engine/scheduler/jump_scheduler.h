@@ -12,7 +12,9 @@
 // ---------------------------------------------------------------------------
 
 #include <lt_engine/core/types.h>
+#include <lt_engine/core/commands.h>
 #include <lt_engine/core/events.h>
+#include <lt_engine/core/result.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/session/session.h>
 #include <functional>
@@ -50,6 +52,7 @@ using JumpExecutedCallback = std::function<void(const ScheduledJump&, Frame /*fr
 class JumpScheduler {
 public:
     JumpScheduler();
+    ~JumpScheduler();
 
     // ── Command thread ────────────────────────────────────────────────────
 

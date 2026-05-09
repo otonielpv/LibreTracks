@@ -10,6 +10,7 @@
 #include <lt_engine/core/types.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace lt {
 

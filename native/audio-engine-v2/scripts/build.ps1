@@ -14,7 +14,8 @@
 param(
     [string]$Config      = "Release",
     [string]$Generator   = "Visual Studio 17 2022",
-    [string]$AsioSdkDir  = ""
+    [string]$AsioSdkDir  = "",
+    [switch]$BuildTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,13 +23,14 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $EngineDir = Join-Path $ScriptDir ".."
 $BuildDir  = Join-Path $EngineDir "build"
 
+$buildTestsArg = if ($BuildTests) { "ON" } else { "OFF" }
 $cmakeArgs = @(
     "-S", $EngineDir,
     "-B", $BuildDir,
     "-G", $Generator,
     "-A", "x64",
     "-DCMAKE_BUILD_TYPE=$Config",
-    "-DLT_ENGINE_BUILD_TESTS=ON"
+    "-DLT_ENGINE_BUILD_TESTS=$buildTestsArg"
 )
 
 if ($AsioSdkDir) {
@@ -37,8 +39,16 @@ if ($AsioSdkDir) {
 
 Write-Host "Configuring..." -ForegroundColor Cyan
 cmake @cmakeArgs
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "CMake configure failed."
+    exit $LASTEXITCODE
+}
 
 Write-Host "Building ($Config)..." -ForegroundColor Cyan
 cmake --build $BuildDir --config $Config --parallel
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Build failed."
+    exit $LASTEXITCODE
+}
 
 Write-Host "Done. Output in: $BuildDir\$Config\" -ForegroundColor Green

@@ -57,23 +57,5 @@ if(NOT LT_ENGINE_USE_R8BRAIN AND NOT LT_ENGINE_USE_LIBSAMPLERATE)
         "No resampler backend selected. Enable LT_ENGINE_USE_R8BRAIN or LT_ENGINE_USE_LIBSAMPLERATE.")
 endif()
 
-# Propagate defines so C++ code can key on them.
-if(LT_ENGINE_USE_JUCE)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_USE_JUCE)
-endif()
-
-if(LT_ENGINE_USE_RUBBERBAND)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_USE_RUBBERBAND)
-endif()
-
-if(LT_ENGINE_USE_FFMPEG)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_USE_FFMPEG)
-elseif(LT_ENGINE_USE_LIBSNDFILE)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_USE_LIBSNDFILE)
-endif()
-
-if(LT_ENGINE_USE_R8BRAIN)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_USE_R8BRAIN)
-elseif(LT_ENGINE_USE_LIBSAMPLERATE)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_USE_LIBSAMPLERATE)
-endif()
+# No target-specific commands should appear here.
+# This file only declares options and validates mutual exclusion.

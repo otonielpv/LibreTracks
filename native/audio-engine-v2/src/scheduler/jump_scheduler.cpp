@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <mutex>
 #include <queue>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 namespace lt {
