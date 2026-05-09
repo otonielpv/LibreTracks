@@ -10,6 +10,11 @@ serde_json  = "1"
 thiserror   = "2"
 libloading  = "0.8"
 
+[features]
+# Disable C++ linking entirely so `cargo test` works without a CMake build.
+# Usage: cargo test -p lt-audio-engine-v2 --features no-link
+no-link = []
+
 [build-dependencies]
 # build.rs links the compiled C++ shared library.
 # No bindgen is used: the ABI is a stable hand-written C ABI.

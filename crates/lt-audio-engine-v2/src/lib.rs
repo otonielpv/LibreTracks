@@ -9,6 +9,9 @@ mod commands;
 mod events;
 mod snapshot;
 
+#[cfg(test)]
+mod tests;
+
 pub use commands::*;
 pub use events::*;
 pub use snapshot::*;

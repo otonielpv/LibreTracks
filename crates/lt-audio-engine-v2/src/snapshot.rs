@@ -33,7 +33,7 @@ pub struct EngineSnapshot {
     pub source_states: Vec<SourcePreparationInfo>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct PendingJumpInfo {
     pub jump_id:             String,
     pub target_description:  String,
