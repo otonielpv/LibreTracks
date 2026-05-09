@@ -1,3 +1,4 @@
+pub mod engine_v2;
 pub mod events;
 pub mod library;
 pub mod project;

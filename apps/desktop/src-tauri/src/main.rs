@@ -17,11 +17,24 @@ use tauri::Manager;
 use settings::{load_app_settings, AppSettingsStore};
 use state::DesktopState;
 
+#[cfg(feature = "audio-engine-v2")]
+use commands::engine_v2::EngineV2State;
+
 fn main() {
-    tauri::Builder::default()
+    // Check env flag to confirm v2 engine intent (informational; actual
+    // activation is the Cargo feature flag `audio-engine-v2`).
+    let _engine_v2_requested = std::env::var("LIBRETRACKS_AUDIO_ENGINE")
+        .map(|v| v == "cpp-v2")
+        .unwrap_or(false);
+
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(DesktopState::default())
-        .setup(|app| {
+        .manage(DesktopState::default());
+
+    #[cfg(feature = "audio-engine-v2")]
+    let builder = builder.manage(EngineV2State::new());
+
+    builder.setup(|app| {
             let initial_settings = load_app_settings(&app.handle()).unwrap_or_else(|error| {
                 eprintln!("[libretracks-settings] failed to load settings: {error}");
                 settings::AppSettings::default()
@@ -128,7 +141,26 @@ fn main() {
             commands::timeline::update_track_mix_live,
             commands::timeline::update_track,
             commands::timeline::update_track_transpose_enabled,
-            commands::timeline::delete_track
+            commands::timeline::delete_track,
+            // ── Engine v2 commands (only available with `audio-engine-v2` feature) ──
+            #[cfg(feature = "audio-engine-v2")]
+            commands::engine_v2::engine_v2_initialize,
+            #[cfg(feature = "audio-engine-v2")]
+            commands::engine_v2::engine_v2_shutdown,
+            #[cfg(feature = "audio-engine-v2")]
+            commands::engine_v2::engine_v2_get_version,
+            #[cfg(feature = "audio-engine-v2")]
+            commands::engine_v2::engine_v2_get_snapshot,
+            #[cfg(feature = "audio-engine-v2")]
+            commands::engine_v2::engine_v2_send_command,
+            #[cfg(feature = "audio-engine-v2")]
+            commands::engine_v2::engine_v2_poll_events,
+            #[cfg(feature = "audio-engine-v2")]
+            commands::engine_v2::engine_v2_list_devices,
+            #[cfg(feature = "audio-engine-v2")]
+            commands::engine_v2::engine_v2_get_diagnostics,
+            #[cfg(feature = "audio-engine-v2")]
+            commands::engine_v2::engine_v2_load_session
         ])
         .run(tauri::generate_context!())
         .expect("failed to run LibreTracks desktop application");

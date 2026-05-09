@@ -1,0 +1,76 @@
+#include <lt_engine/core/snapshot.h>
+#include <nlohmann/json.hpp>
+
+namespace lt {
+
+using json = nlohmann::json;
+
+static std::string playback_state_str(PlaybackState s) {
+    switch (s) {
+        case PlaybackState::Stopped: return "Stopped";
+        case PlaybackState::Playing: return "Playing";
+        case PlaybackState::Paused:  return "Paused";
+    }
+    return "Unknown";
+}
+
+std::string snapshot_to_json(const EngineSnapshot& snap) {
+    json j;
+
+    j["current_frame"]   = snap.current_frame;
+    j["current_seconds"] = snap.current_seconds;
+    j["playback_state"]  = playback_state_str(snap.playback_state);
+
+    j["current_song_id"]   = snap.current_song_id.value_or("");
+    j["current_region_id"] = snap.current_region_id.value_or("");
+    j["current_marker_id"] = snap.current_marker_id.value_or("");
+
+    json jumps = json::array();
+    for (const auto& jmp : snap.pending_jumps) {
+        jumps.push_back({
+            {"jump_id",            jmp.jump_id},
+            {"target_description", jmp.target_description},
+            {"trigger_description",jmp.trigger_description},
+            {"status",             jmp.status},
+            {"created_frame",      jmp.created_frame},
+        });
+    }
+    j["pending_jumps"] = jumps;
+
+    j["device"] = {
+        {"device_id",   snap.device.device_id},
+        {"device_name", snap.device.device_name},
+        {"backend",     snap.device.backend},
+        {"sample_rate", snap.device.sample_rate},
+        {"buffer_size", snap.device.buffer_size},
+        {"last_error",  snap.device.last_error},
+    };
+
+    j["cpu"] = {
+        {"callback_duration_ms",  snap.cpu.callback_duration_ms},
+        {"callback_load_percent", snap.cpu.callback_load_percent},
+        {"underrun_count",        snap.cpu.underrun_count},
+        {"callback_count",        snap.cpu.callback_count},
+    };
+
+    j["meters"] = {
+        {"left_peak",  snap.meters.left_peak},
+        {"right_peak", snap.meters.right_peak},
+        {"left_rms",   snap.meters.left_rms},
+        {"right_rms",  snap.meters.right_rms},
+    };
+
+    json sources = json::array();
+    for (const auto& s : snap.source_states) {
+        sources.push_back({
+            {"source_id",        s.source_id},
+            {"status",           s.status},
+            {"progress_percent", s.progress_percent},
+        });
+    }
+    j["source_states"] = sources;
+
+    return j.dump();
+}
+
+} // namespace lt

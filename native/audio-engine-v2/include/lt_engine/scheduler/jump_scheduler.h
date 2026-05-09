@@ -1,0 +1,99 @@
+#pragma once
+
+// ---------------------------------------------------------------------------
+// JumpScheduler — manages pending and armed jumps.
+//
+// Concurrency model:
+//   - schedule/cancel/replace: called from the COMMAND thread.
+//   - check_due / execute_due:  called from the AUDIO thread.
+//
+// Lock-free design: the command thread appends to a SPSC queue; the audio
+// thread drains it at the start of each block.  No mutex in the hot path.
+// ---------------------------------------------------------------------------
+
+#include <lt_engine/core/types.h>
+#include <lt_engine/core/events.h>
+#include <lt_engine/transport/transport_clock.h>
+#include <lt_engine/session/session.h>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace lt {
+
+// ---------------------------------------------------------------------------
+// Jump status lifecycle:
+//   Pending → Armed (trigger condition met) → Executed
+//                                           ↘ Failed
+//          ↘ Cancelled (explicit cancel)
+// ---------------------------------------------------------------------------
+enum class JumpStatus { Pending, Armed, Cancelled, Executed, Failed };
+
+struct ScheduledJump {
+    Id          jump_id;
+    JumpTarget  target;
+    JumpTrigger trigger;
+    JumpStatus  status          = JumpStatus::Pending;
+
+    Frame       created_frame   = 0;
+    Frame       executed_frame  = 0;
+    Frame       cancelled_frame = 0;
+    std::string failure_reason;
+};
+
+// Callback fired by audio thread when a jump executes.
+// Must be realtime-safe (no alloc, no lock, no I/O).
+using JumpExecutedCallback = std::function<void(const ScheduledJump&, Frame /*from*/, Frame /*to*/)>;
+
+class JumpScheduler {
+public:
+    JumpScheduler();
+
+    // ── Command thread ────────────────────────────────────────────────────
+
+    // Immediate jump: resolves a JumpTarget to a frame and posts it to the
+    // audio thread.  Returns the resolved target frame or error.
+    Result<Frame> schedule_immediate(const Id& jump_id,
+                                     const JumpTarget& target,
+                                     const Session& session,
+                                     const TransportClock& clock);
+
+    Result<void>  schedule(const ScheduledJump& jump);
+    Result<void>  cancel(const Id& jump_id);
+    void          cancel_all();
+    Result<void>  replace(const Id& jump_id,
+                          const JumpTarget& new_target,
+                          JumpTrigger new_trigger);
+
+    // ── Audio thread ──────────────────────────────────────────────────────
+
+    // Drain pending command-thread operations into the live jump list.
+    // Call at the top of each audio callback block.
+    void drain_pending();
+
+    // Check whether any armed jump should fire this block.
+    // Returns the target frame if a jump should execute now, else nullopt.
+    std::optional<Frame> check_due(const TransportClock& clock,
+                                   const Session& session);
+
+    // Mark the last due jump as executed.
+    void mark_executed(Frame from_frame, Frame to_frame);
+
+    // Read-only copy of the current jump list for snapshot.
+    std::vector<ScheduledJump> jump_list() const;
+
+    void set_jump_executed_callback(JumpExecutedCallback cb);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+// Resolve a JumpTarget to an absolute frame given the current session and clock.
+Result<Frame> resolve_jump_target(const JumpTarget& target,
+                                   const Session& session,
+                                   const TransportClock& clock);
+
+} // namespace lt

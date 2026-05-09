@@ -1,0 +1,75 @@
+//! Rust mirror of the C++ EngineCommand types.
+//! Serializes to the same JSON schema the C++ layer expects.
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum EngineCommand {
+    LoadSession { project_json: String },
+
+    Play,
+    Pause,
+    Stop,
+
+    SeekAbsolute { frame: i64 },
+    SeekRelative { delta_frames: i64 },
+
+    JumpToMarker       { marker_id: String },
+    JumpToRegion       { region_id: String },
+    JumpToSong         { song_id: String },
+    JumpToNextSong,
+    JumpToPreviousSong,
+
+    ScheduleJump {
+        jump_id: String,
+        target:  JumpTarget,
+        trigger: JumpTrigger,
+    },
+    CancelScheduledJump    { jump_id: String },
+    CancelAllScheduledJumps,
+    ReplaceScheduledJump {
+        jump_id:     String,
+        new_target:  JumpTarget,
+        new_trigger: JumpTrigger,
+    },
+
+    SetTrackGain             { track_id: String, gain: f32 },
+    SetTrackMute             { track_id: String, mute: bool },
+    SetTrackSolo             { track_id: String, solo: bool },
+    SetTrackTransposeEnabled { track_id: String, enabled: bool },
+
+    SetSongTranspose   { song_id: String,   semitones: i32 },
+    SetRegionTranspose { region_id: String, semitones: i32 },
+
+    SetOutputDevice { device_id: String },
+    SetSampleRate   { sample_rate: i32 },
+    SetBufferSize   { buffer_size: i32 },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JumpTarget {
+    pub kind:  JumpTargetKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id:    Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum JumpTargetKind {
+    Marker,
+    Region,
+    Song,
+    NextSong,
+    PreviousSong,
+    Frame,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum JumpTrigger {
+    Immediate,
+    AtRegionEnd,
+    AtSongEnd,
+    AtFrame,
+}

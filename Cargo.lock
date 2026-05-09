@@ -2505,6 +2505,7 @@ dependencies = [
  "libretracks-core",
  "libretracks-project",
  "libretracks-remote",
+ "lt-audio-engine-v2",
  "memmap2",
  "midir",
  "rayon",
@@ -2579,6 +2580,16 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+
+[[package]]
+name = "lt-audio-engine-v2"
+version = "0.1.0"
+dependencies = [
+ "libloading 0.8.9",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "lzma-rs"

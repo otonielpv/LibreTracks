@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 base64 = "0.22"
 libretracks-audio = { path = "../../../crates/libretracks-audio" }
+lt-audio-engine-v2 = { path = "../../../crates/lt-audio-engine-v2", optional = true }
 libretracks-project = { path = "../../../crates/libretracks-project" }
 libretracks-remote = { path = "../../../crates/libretracks-remote" }
 midir = "0.9"
@@ -42,6 +43,9 @@ cpal = { version = "0.15", features = ["asio"] }
 
 [target.'cfg(not(windows))'.dependencies]
 cpal = "0.15"
+
+[features]
+audio-engine-v2 = ["lt-audio-engine-v2"]
 
 [dev-dependencies]
 tempfile = "3"
