@@ -7,11 +7,11 @@ using json = nlohmann::json;
 
 static std::string playback_state_str(PlaybackState s) {
     switch (s) {
-        case PlaybackState::Stopped: return "Stopped";
-        case PlaybackState::Playing: return "Playing";
-        case PlaybackState::Paused:  return "Paused";
+        case PlaybackState::Stopped: return "stopped";
+        case PlaybackState::Playing: return "playing";
+        case PlaybackState::Paused:  return "paused";
     }
-    return "Unknown";
+    return "stopped";
 }
 
 std::string snapshot_to_json(const EngineSnapshot& snap) {

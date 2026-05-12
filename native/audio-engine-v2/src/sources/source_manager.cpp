@@ -35,9 +35,26 @@ Result<void> SourceManager::load_source(const Id& source_id,
         return Result<void>::err(result.error());
     }
 
-    entry.source = std::make_unique<DecodedSource>(
+    entry.source = std::make_shared<DecodedSource>(
         result.take(), channel_count, engine_sample_rate, duration_frames);
     entry.status = "ready";
+    return Result<void>::ok();
+}
+
+Result<void> SourceManager::store_decoded_source(const Id& source_id,
+                                                 std::vector<float> samples,
+                                                 int channel_count,
+                                                 int sample_rate,
+                                                 Frame duration_frames) {
+    auto it = entries_.find(source_id);
+    if (it == entries_.end())
+        return Result<void>::err("Source not registered: " + source_id);
+
+    auto& entry = it->second;
+    entry.source = std::make_shared<DecodedSource>(
+        std::move(samples), channel_count, sample_rate, duration_frames);
+    entry.status = "ready";
+    entry.error_message.clear();
     return Result<void>::ok();
 }
 

@@ -1,3 +1,4 @@
 target_sources(lt_audio_engine_v2 PRIVATE
-    pitch_stub.cpp
+    rubberband_pitch_processor.cpp
+    pitch_cache.cpp
 )

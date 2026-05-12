@@ -9,7 +9,6 @@
 #![cfg(feature = "audio-engine-v2")]
 
 use lt_audio_engine_v2::{Engine, EngineCommand, EngineError, EngineSnapshot};
-use serde::Serialize;
 use std::sync::Mutex;
 use tauri::State;
 

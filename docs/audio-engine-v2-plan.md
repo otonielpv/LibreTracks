@@ -425,3 +425,21 @@ EngineImpl (C++)
 | dr_mp3/dr_flac | latest | bundled headers | ✅ placeholder |
 | r8brain | latest | FetchContent | ✅ CMake ready |
 | nlohmann/json | 3.11.3 | FetchContent | ✅ CMake ready |
+
+---
+
+## Phase 10-16 implementation audit (2026-05-12)
+
+Phase 10 is implemented for the C++ route: `DecodeWorkerPool` and `SourcePreparationQueue` move decode/resample work off the UI and audio threads, expose queued/running/completed/failed/cancelled states, update EngineSnapshot source preparation state, and install prepared sources asynchronously when worker jobs complete.
+
+Phase 11 is structurally in place: `AudioSource`, `PreparedSource`, `StreamingSource`, `SilentSource`, `BlockCache`, and `PrebufferWorker` exist, cache misses return silence, and cache hit/miss diagnostics are available. Remaining route item: make SourceManager choose streaming for long files by policy and wire scheduled-jump/selected-marker prebuffer priorities into the active mixer path.
+
+Phase 12 is scaffolded but guarded: `PitchProcessor`, `BypassPitchProcessor`, `RubberBandPitchProcessor`, and `PitchCache` compile. Mixer playback still keeps pitch disabled until Phase 13 alignment coverage is added, so the route is ready but not accepted as active production pitch.
+
+Phase 13 remains pending. The current code has no automated audio dump / A-B alignment suite yet.
+
+Phase 14 is partially implemented: device switches now reopen using the active mixer callback when loaded, preserve transport state, emit device diagnostics/errors, and avoid hardcoded device names. WASAPI/ASIO alignment still needs hardware validation.
+
+Phase 15 is partially implemented: EngineCommand dispatch now covers transport, jumps, schedule/cancel/replace, gain/mute/solo, transpose, and device/sample-rate/buffer-size commands, and EngineSnapshot exposes pending jumps/meters/device/source state. The existing remote bridge still targets the legacy DesktopState path until the app is switched to the v2 command surface.
+
+Phase 16 is partially implemented: v2 Tauri commands expose EngineCommand/EngineSnapshot and the project adapter maps transpose, track role, transpose behavior, markers, regions, clips, and sources into Session V2. The React transport store still uses the legacy transport commands by default, so full UI replacement is still on the route.

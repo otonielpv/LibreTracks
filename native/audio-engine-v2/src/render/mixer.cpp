@@ -82,7 +82,8 @@ void Mixer::render(float** output_channels,
                 patched.mute  = false;  // already handled above
 
                 renderers_[ti].render(patched, timeline_frame, num_frames,
-                                       mix_, 2, *sources_);
+                                       mix_, 2, *sources_, nullptr,
+                                       clock_->sample_rate());
 
                 // Accumulate into stereo output.
                 for (int f = 0; f < num_frames; ++f) {

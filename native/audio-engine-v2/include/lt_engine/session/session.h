@@ -46,6 +46,7 @@ struct Clip {
     Gain  gain          = 1.0f;
     Frame fade_in_frames  = 0;
     Frame fade_out_frames = 0;
+    Semitones semitones = 0;
 };
 
 // ---------------------------------------------------------------------------

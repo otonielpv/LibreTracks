@@ -66,6 +66,7 @@ Result<void> EngineImpl::initialize() {
     clock_          = std::make_unique<TransportClock>(48000);
     scheduler_      = std::make_unique<JumpScheduler>();
     source_manager_ = std::make_unique<SourceManager>();
+    worker_pool_    = std::make_unique<DecodeWorkerPool>();
 
     // Open the default audio device with the silent callback.
     DeviceOpenRequest req;  // empty = default device, default sample rate
@@ -97,6 +98,8 @@ Result<void> EngineImpl::shutdown() {
 
     device_manager_->close_device();
     mixer_.reset();
+    if (prep_queue_) { prep_queue_->cancel_all(); prep_queue_.reset(); }
+    if (worker_pool_) { worker_pool_->shutdown(); }
     source_manager_->clear();
     clock_.reset();
     scheduler_.reset();
@@ -171,7 +174,9 @@ std::string EngineImpl::get_snapshot() const {
         snap.cpu.callback_count       = mixer_->callback_count();
     }
 
-    if (source_manager_) {
+    if (prep_queue_) {
+        snap.source_states = prep_queue_->preparation_states();
+    } else if (source_manager_) {
         for (const auto& d : source_manager_->diagnostics()) {
             SourcePreparationInfo info;
             info.source_id = d.source_id;
@@ -214,22 +219,17 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
 
             session_ = result.take();
 
-            // Register all sources.
+            // Register all sources, then hand off to the async worker pool.
             source_manager_->clear();
-            for (const auto& src : session_->sources)
-                source_manager_->register_source(src.id, src.file_path);
 
-            // Synchronously load all sources (Phase 10 will make this async).
-            for (const auto& src : session_->sources) {
-                auto load = source_manager_->load_source(src.id, sr);
-                if (load.is_err()) {
-                    push_event(EvDiagnosticWarning{
-                        "Source load failed [" + src.id + "]: " + load.error()
-                    });
-                } else {
-                    push_event(EvSourcePrepared{ src.id });
-                }
-            }
+            prep_queue_ = std::make_unique<SourcePreparationQueue>(
+                source_manager_.get(),
+                worker_pool_.get(),
+                [this](EngineEvent ev){ push_event(std::move(ev)); },
+                sr
+            );
+            prep_queue_->enqueue_session(session_->sources,
+                                          clock_->position().frame);
 
             // Build the Mixer and replace the device callback.
             mixer_ = std::make_unique<Mixer>(
@@ -283,14 +283,122 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             scheduler_->cancel_all();
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdSetTrackGain>) {
+            if (mixer_) mixer_->set_track_gain(c.track_id, c.gain);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetTrackMute>) {
+            if (mixer_) mixer_->set_track_mute(c.track_id, c.mute);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetTrackSolo>) {
+            if (mixer_) mixer_->set_track_solo(c.track_id, c.solo);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdJumpToMarker>) {
+            if (!session_) return Result<void>::err("No session loaded");
+            JumpTarget target{ JumpTarget::Kind::Marker, c.marker_id, std::nullopt };
+            Id jump_id = "jump-marker-" + c.marker_id;
+            auto r = scheduler_->schedule_immediate(jump_id, target, *session_, *clock_);
+            if (r.is_err()) return Result<void>::err(r.error());
+            push_event(EvJumpScheduled{ jump_id, c.marker_id });
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdJumpToRegion>) {
+            if (!session_) return Result<void>::err("No session loaded");
+            JumpTarget target{ JumpTarget::Kind::Region, c.region_id, std::nullopt };
+            Id jump_id = "jump-region-" + c.region_id;
+            auto r = scheduler_->schedule_immediate(jump_id, target, *session_, *clock_);
+            if (r.is_err()) return Result<void>::err(r.error());
+            push_event(EvJumpScheduled{ jump_id, c.region_id });
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdJumpToSong>) {
+            if (!session_) return Result<void>::err("No session loaded");
+            JumpTarget target{ JumpTarget::Kind::Song, c.song_id, std::nullopt };
+            Id jump_id = "jump-song-" + c.song_id;
+            auto r = scheduler_->schedule_immediate(jump_id, target, *session_, *clock_);
+            if (r.is_err()) return Result<void>::err(r.error());
+            push_event(EvJumpScheduled{ jump_id, c.song_id });
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdJumpToNextSong>) {
+            if (!session_) return Result<void>::err("No session loaded");
+            JumpTarget target{ JumpTarget::Kind::NextSong, std::nullopt, std::nullopt };
+            auto r = scheduler_->schedule_immediate("jump-next-song", target, *session_, *clock_);
+            if (r.is_err()) return Result<void>::err(r.error());
+            push_event(EvJumpScheduled{ "jump-next-song", "next-song" });
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdJumpToPreviousSong>) {
+            if (!session_) return Result<void>::err("No session loaded");
+            JumpTarget target{ JumpTarget::Kind::PreviousSong, std::nullopt, std::nullopt };
+            auto r = scheduler_->schedule_immediate("jump-previous-song", target, *session_, *clock_);
+            if (r.is_err()) return Result<void>::err(r.error());
+            push_event(EvJumpScheduled{ "jump-previous-song", "previous-song" });
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdScheduleJump>) {
+            if (!session_) return Result<void>::err("No session loaded");
+            if (c.trigger == JumpTrigger::Immediate) {
+                auto r = scheduler_->schedule_immediate(c.jump_id, c.target, *session_, *clock_);
+                if (r.is_err()) return Result<void>::err(r.error());
+            } else {
+                ScheduledJump jump;
+                jump.jump_id = c.jump_id;
+                jump.target = c.target;
+                jump.trigger = c.trigger;
+                jump.created_frame = clock_->position().frame;
+                auto r = scheduler_->schedule(jump);
+                if (r.is_err()) return r;
+            }
+            push_event(EvJumpScheduled{ c.jump_id, c.jump_id });
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdReplaceScheduledJump>) {
+            return scheduler_->replace(c.jump_id, c.new_target, c.new_trigger);
+        }
+        else if constexpr (std::is_same_v<T, CmdSetTrackTransposeEnabled>) {
+            if (session_) {
+                for (auto& song : session_->songs)
+                    for (auto& track : song.tracks)
+                        if (track.id == c.track_id)
+                            track.transpose_behavior = c.enabled
+                                ? TransposeBehavior::FollowsSongOrRegion
+                                : TransposeBehavior::NeverTranspose;
+            }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetSongTranspose>) {
+            if (session_) {
+                for (auto& song : session_->songs)
+                    if (song.id == c.song_id)
+                        song.transpose_semitones = c.semitones;
+            }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetRegionTranspose>) {
+            if (session_) {
+                for (auto& song : session_->songs)
+                    for (auto& region : song.regions)
+                        if (region.id == c.region_id)
+                            region.transpose_semitones = c.semitones;
+            }
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdSetOutputDevice>) {
             DeviceOpenRequest req;
             req.device_id = c.device_id;
-            auto r = device_manager_->open_device(req, silent_callback_.get());
+            bool was_playing = clock_ && clock_->position().state == TransportState::Playing;
+            auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
+                                    : static_cast<AudioRenderCallback*>(silent_callback_.get());
+            auto r = device_manager_->open_device(req, callback);
             if (r.is_err()) {
                 push_event(EvDeviceError{ r.error() });
+                if (was_playing && clock_) clock_->play();
                 return r;
             }
+            if (was_playing && clock_) clock_->play();
             push_event(EvDeviceChanged{
                 device_manager_->actual_device_name(),
                 device_manager_->actual_device_name(),
@@ -298,6 +406,20 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 device_manager_->actual_buffer_size(),
             });
             return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetSampleRate>) {
+            DeviceOpenRequest req;
+            req.sample_rate = c.sample_rate;
+            auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
+                                    : static_cast<AudioRenderCallback*>(silent_callback_.get());
+            return device_manager_->open_device(req, callback);
+        }
+        else if constexpr (std::is_same_v<T, CmdSetBufferSize>) {
+            DeviceOpenRequest req;
+            req.buffer_size = c.buffer_size;
+            auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
+                                    : static_cast<AudioRenderCallback*>(silent_callback_.get());
+            return device_manager_->open_device(req, callback);
         }
         else {
             // Track gain/mute/solo, pitch, scheduler jumps — handled in later phases.

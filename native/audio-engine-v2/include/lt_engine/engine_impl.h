@@ -15,6 +15,8 @@
 #include <lt_engine/session/session.h>
 #include <lt_engine/session/session_adapter.h>
 #include <lt_engine/sources/source_manager.h>
+#include <lt_engine/sources/worker_pool.h>
+#include <lt_engine/sources/preparation_queue.h>
 #include <lt_engine/render/mixer.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
@@ -50,6 +52,8 @@ private:
     std::unique_ptr<TransportClock>     clock_;
     std::unique_ptr<JumpScheduler>      scheduler_;
     std::unique_ptr<SourceManager>      source_manager_;
+    std::unique_ptr<DecodeWorkerPool>   worker_pool_;
+    std::unique_ptr<SourcePreparationQueue> prep_queue_;
     std::unique_ptr<Mixer>              mixer_;
     std::optional<Session>              session_;
 

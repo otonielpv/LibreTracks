@@ -94,6 +94,7 @@ Result<Session> session_from_project_json(const std::string& project_json,
                                 clip.gain                 = jclip.value("gain", 1.0f);
                                 clip.fade_in_frames       = jclip.value("fade_in_frames", 0LL);
                                 clip.fade_out_frames      = jclip.value("fade_out_frames", 0LL);
+                                clip.semitones            = jclip.value("semitones", song.transpose_semitones);
                                 track.clips.push_back(std::move(clip));
                             }
                         }

@@ -1,6 +1,6 @@
 #include <lt_engine/devices/audio_device_manager.h>
 
-#ifdef LT_USE_JUCE
+#if LT_ENGINE_USE_JUCE
 
 // JUCE headers — must come after lt_engine headers to avoid name collisions.
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -196,7 +196,7 @@ DeviceInfo AudioDeviceManager::device_info() const {
 
 } // namespace lt
 
-#else // LT_USE_JUCE not defined — stub implementation
+#else // LT_ENGINE_USE_JUCE=0 - stub implementation
 
 namespace lt {
 
@@ -222,4 +222,4 @@ DeviceInfo  AudioDeviceManager::device_info()         const { return {}; }
 
 } // namespace lt
 
-#endif // LT_USE_JUCE
+#endif // LT_ENGINE_USE_JUCE

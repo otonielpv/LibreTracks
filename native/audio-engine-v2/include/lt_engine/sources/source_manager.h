@@ -38,6 +38,13 @@ public:
     // Called from command thread only.
     Result<void> load_source(const Id& source_id, int engine_sample_rate);
 
+    // Install a source that was decoded on a worker thread.
+    Result<void> store_decoded_source(const Id& source_id,
+                                      std::vector<float> samples,
+                                      int channel_count,
+                                      int sample_rate,
+                                      Frame duration_frames);
+
     // Get a loaded source.  Returns nullptr if not loaded.
     // Safe to call from audio thread (read-only once loaded).
     const DecodedSource* get(const Id& source_id) const noexcept;
@@ -51,7 +58,7 @@ public:
 private:
     struct Entry {
         std::string              file_path;
-        std::unique_ptr<DecodedSource> source;
+        std::shared_ptr<DecodedSource> source;
         std::string              status;
         std::string              error_message;
     };
