@@ -44,6 +44,7 @@ add_subdirectory(src/ffi)
 
 target_compile_definitions(lt_audio_engine_v2 PRIVATE
     LT_ENGINE_V2_BUILD=1
+    _SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING
 )
 
 if(LT_ENGINE_USE_JUCE)
@@ -85,6 +86,7 @@ endif()
 # On Windows, export symbols from the shared library.
 if(WIN32)
     target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_EXPORT)
+    set_target_properties(lt_audio_engine_v2 PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
 
 target_link_libraries(lt_audio_engine_v2
@@ -100,6 +102,7 @@ target_link_libraries(lt_audio_engine_v2
 # Optional: standalone test executable used during development
 # ---------------------------------------------------------------------------
 if(LT_ENGINE_BUILD_TESTS)
+    enable_testing()
     add_subdirectory(tests)
 endif()
 

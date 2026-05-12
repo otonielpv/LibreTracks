@@ -128,7 +128,7 @@ TEST_CASE("snapshot has required top-level keys") {
     auto json = snapshot_to_json(snap);
     CHECK(json.find("\"current_frame\"")  != std::string::npos);
     CHECK(json.find("\"playback_state\"") != std::string::npos);
-    CHECK(json.find("\"Playing\"")        != std::string::npos);
+    CHECK(json.find("\"playing\"")        != std::string::npos);
     CHECK(json.find("\"WASAPI\"")         != std::string::npos);
     CHECK(json.find("\"pending_jumps\"")  != std::string::npos);
     CHECK(json.find("\"meters\"")         != std::string::npos);

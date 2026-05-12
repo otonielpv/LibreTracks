@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include <lt_engine/session/session.h>
+#include <lt_engine/session/session_adapter.h>
 
 using namespace lt;
 
@@ -162,4 +163,39 @@ TEST_CASE("multiple songs with unique IDs passes") {
     song2.tracks.push_back(make_track("track-2"));
     sess.songs.push_back(std::move(song2));
     CHECK(validate_session(sess).is_ok());
+}
+
+TEST_CASE("session adapter maps LibreTracks camelCase song JSON") {
+    const char* raw = R"json({
+      "id": "song-1",
+      "title": "Adapter Song",
+      "durationSeconds": 10.0,
+      "regions": [
+        { "id": "region-1", "name": "Verse", "startSeconds": 1.0, "endSeconds": 4.0, "transposeSemitones": 2 }
+      ],
+      "sectionMarkers": [
+        { "id": "marker-1", "name": "Intro", "startSeconds": 2.0 }
+      ],
+      "tracks": [
+        { "id": "track-1", "name": "Stem", "kind": "audio", "volume": 0.75, "muted": false, "solo": false, "transposeEnabled": false }
+      ],
+      "clips": [
+        { "id": "clip-1", "trackId": "track-1", "filePath": "audio/stem.wav", "timelineStartSeconds": 0.5, "sourceStartSeconds": 0.25, "durationSeconds": 3.0, "gain": 0.8 }
+      ]
+    })json";
+
+    auto result = session_from_project_json(raw, 48000);
+    REQUIRE(result.is_ok());
+    auto session = result.take();
+
+    REQUIRE(session.songs.size() == 1);
+    CHECK(session.songs[0].end_frame == 480000);
+    REQUIRE(session.songs[0].tracks.size() == 1);
+    CHECK(session.songs[0].tracks[0].transpose_behavior == TransposeBehavior::NeverTranspose);
+    REQUIRE(session.songs[0].tracks[0].clips.size() == 1);
+    CHECK(session.songs[0].tracks[0].clips[0].source_id == "audio/stem.wav");
+    CHECK(session.songs[0].tracks[0].clips[0].timeline_start_frame == 24000);
+    CHECK(session.songs[0].tracks[0].clips[0].source_start_frame == 12000);
+    CHECK(session.songs[0].regions[0].transpose_semitones == 2);
+    CHECK(session.songs[0].markers[0].frame == 96000);
 }

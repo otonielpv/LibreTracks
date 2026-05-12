@@ -35,8 +35,8 @@ Result<void> SourceManager::load_source(const Id& source_id,
         return Result<void>::err(result.error());
     }
 
-    entry.source = std::make_shared<DecodedSource>(
-        result.take(), channel_count, engine_sample_rate, duration_frames);
+    std::atomic_store(&entry.source, std::make_shared<DecodedSource>(
+        result.take(), channel_count, engine_sample_rate, duration_frames));
     entry.status = "ready";
     return Result<void>::ok();
 }
@@ -51,8 +51,8 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         return Result<void>::err("Source not registered: " + source_id);
 
     auto& entry = it->second;
-    entry.source = std::make_shared<DecodedSource>(
-        std::move(samples), channel_count, sample_rate, duration_frames);
+    std::atomic_store(&entry.source, std::make_shared<DecodedSource>(
+        std::move(samples), channel_count, sample_rate, duration_frames));
     entry.status = "ready";
     entry.error_message.clear();
     return Result<void>::ok();
@@ -60,8 +60,9 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
 
 const DecodedSource* SourceManager::get(const Id& source_id) const noexcept {
     auto it = entries_.find(source_id);
-    if (it == entries_.end() || !it->second.source) return nullptr;
-    return it->second.source.get();
+    if (it == entries_.end()) return nullptr;
+    auto source = std::atomic_load(&it->second.source);
+    return source ? source.get() : nullptr;
 }
 
 std::vector<SourceDiagnostics> SourceManager::diagnostics() const {
@@ -73,12 +74,13 @@ std::vector<SourceDiagnostics> SourceManager::diagnostics() const {
         d.file_path     = entry.file_path;
         d.status        = entry.status;
         d.error_message = entry.error_message;
-        if (entry.source) {
-            d.channel_count   = entry.source->channel_count();
-            d.sample_rate     = entry.source->sample_rate();
-            d.duration_frames = entry.source->duration_frames();
-            d.memory_bytes    = entry.source->duration_frames()
-                              * entry.source->channel_count()
+        auto source = std::atomic_load(&entry.source);
+        if (source) {
+            d.channel_count   = source->channel_count();
+            d.sample_rate     = source->sample_rate();
+            d.duration_frames = source->duration_frames();
+            d.memory_bytes    = source->duration_frames()
+                              * source->channel_count()
                               * sizeof(float);
         }
         out.push_back(std::move(d));
