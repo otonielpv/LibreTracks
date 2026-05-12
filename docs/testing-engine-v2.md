@@ -72,14 +72,8 @@ Or run the executable directly for more detail:
 After the C++ build succeeds:
 
 ```powershell
-# Point Rust to the compiled library
-$env:LT_ENGINE_V2_LIB_DIR = "native\audio-engine-v2\build\Release"
-
-# Enable the v2 engine feature
-$env:LIBRETRACKS_AUDIO_ENGINE = "cpp-v2"
-
-# Start the Tauri dev server
-cargo tauri dev --features audio-engine-v2
+# From the repo root, build/load C++ v2 and start Tauri
+npm run dev:desktop:native
 ```
 
 At this point the engine will:
@@ -108,7 +102,7 @@ await __TAURI__.core.invoke("engine_v2_list_devices")
 |------|---------|-----------------|
 | Rust JSON tests | `cargo test -p lt-audio-engine-v2 --features no-link` | No |
 | Rust type check | `cargo check -p lt-audio-engine-v2` | No |
-| Desktop type check | `cargo check -p libretracks-desktop` | No |
+| Desktop type check | `npm run check:desktop:native` | Yes |
 | C++ build | `cd native\audio-engine-v2 && .\scripts\build.ps1` | — |
 | C++ tests | `cd native\audio-engine-v2\build && ctest -C Release` | Yes |
-| Tauri dev (v2) | `cargo tauri dev --features audio-engine-v2` | Yes |
+| Tauri dev (v2) | `npm run dev:desktop:native` | Yes |

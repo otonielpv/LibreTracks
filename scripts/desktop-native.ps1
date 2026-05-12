@@ -210,23 +210,22 @@ Assert-NativeToolchainReady
 
 Set-Location $repoRoot
 
-if ($env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp-v2" -or $env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp_v2") {
-  if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
-    throw "CMake is required to build Audio Engine v2. Install CMake or build native/audio-engine-v2 manually."
-  }
-
-  cmake -S native/audio-engine-v2 -B native/audio-engine-v2/build `
-    -DLT_ENGINE_BUILD_TESTS=OFF `
-    -DLT_ENGINE_USE_JUCE=OFF `
-    -DLT_ENGINE_USE_RUBBERBAND=OFF `
-    -DLT_ENGINE_USE_LIBSNDFILE=ON `
-    -DLT_ENGINE_USE_R8BRAIN=ON
-
-  cmake --build native/audio-engine-v2/build --config Debug --target lt_audio_engine_v2
-
-  $env:LT_ENGINE_V2_LIB_DIR = $engineV2LibDir
-  $env:PATH = "$engineV2LibDir;" + $env:PATH
+if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+  throw "CMake is required to build Audio Engine v2. Install CMake or build native/audio-engine-v2 manually."
 }
+
+cmake -S native/audio-engine-v2 -B native/audio-engine-v2/build `
+  -DLT_ENGINE_BUILD_TESTS=OFF `
+  -DLT_ENGINE_USE_JUCE=OFF `
+  -DLT_ENGINE_USE_RUBBERBAND=OFF `
+  -DLT_ENGINE_USE_LIBSNDFILE=ON `
+  -DLT_ENGINE_USE_R8BRAIN=ON
+
+cmake --build native/audio-engine-v2/build --config Debug --target lt_audio_engine_v2
+
+$env:LIBRETRACKS_AUDIO_ENGINE = "cpp-v2"
+$env:LT_ENGINE_V2_LIB_DIR = $engineV2LibDir
+$env:PATH = "$engineV2LibDir;" + $env:PATH
 
 # Tauri's desktop build script expects the bundled remote assets to exist.
 $remoteDistDir = Join-Path $repoRoot "apps\remote\dist"
@@ -247,29 +246,16 @@ if (Test-Path $windowsVendorBin) {
   Copy-Item -Path (Join-Path $windowsVendorBin "*") -Destination $nativeVendorBin -Force
 
   $env:PATH = "$windowsVendorBin;$nativeVendorBin;" + $env:PATH
-  $env:RUBBERBAND_LIBRARY = Join-Path $windowsVendorBin "rubberband-3.dll"
 }
 
 switch ($Mode) {
   "dev" {
-    if ($env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp-v2" -or $env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp_v2") {
-      npm --prefix apps/desktop run tauri:dev -- --features audio-engine-v2
-    } else {
-      npm --prefix apps/desktop run tauri:dev
-    }
+    npm --prefix apps/desktop run tauri:dev
   }
   "check" {
-    if ($env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp-v2" -or $env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp_v2") {
-      cargo check -p libretracks-desktop --features audio-engine-v2
-    } else {
-      cargo check -p libretracks-desktop
-    }
+    cargo check -p libretracks-desktop
   }
   "build" {
-    if ($env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp-v2" -or $env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp_v2") {
-      npm --prefix apps/desktop run tauri:build -- --features audio-engine-v2
-    } else {
-      npm --prefix apps/desktop run tauri:build
-    }
+    npm --prefix apps/desktop run tauri:build
   }
 }

@@ -7,8 +7,6 @@ pub enum DesktopError {
     StatePoisoned,
     #[error("no song is loaded")]
     NoSongLoaded,
-    #[error("audio thread is unavailable")]
-    AudioThreadUnavailable,
     #[error("audio command failed: {0}")]
     AudioCommand(String),
     #[error("io error: {0}")]

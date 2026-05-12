@@ -200,25 +200,49 @@ DeviceInfo AudioDeviceManager::device_info() const {
 
 namespace lt {
 
-struct AudioDeviceManager::Impl {};
+struct AudioDeviceManager::Impl {
+    DeviceOpenRequest request;
+    bool open = false;
+};
 
 AudioDeviceManager::AudioDeviceManager()  : impl_(std::make_unique<Impl>()) {}
 AudioDeviceManager::~AudioDeviceManager() = default;
 
-std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const { return {}; }
-
-Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest&, AudioRenderCallback*) {
-    return Result<void>::err("JUCE not enabled in this build (LT_ENGINE_USE_JUCE=OFF)");
+std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
+    DeviceDescriptor descriptor;
+    descriptor.id = "stub-default";
+    descriptor.name = "C++ v2 stub output";
+    descriptor.backend = "stub";
+    descriptor.supported_sample_rates = { 44100, 48000 };
+    descriptor.supported_buffer_sizes = { 128, 256, 512, 1024 };
+    return { descriptor };
 }
-Result<void> AudioDeviceManager::close_device() { return Result<void>::ok(); }
+
+Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request, AudioRenderCallback*) {
+    impl_->request = request;
+    impl_->open = true;
+    return Result<void>::ok();
+}
+Result<void> AudioDeviceManager::close_device() {
+    impl_->open = false;
+    return Result<void>::ok();
+}
 Result<void> AudioDeviceManager::start()        { return Result<void>::ok(); }
 Result<void> AudioDeviceManager::stop()         { return Result<void>::ok(); }
 
-int         AudioDeviceManager::actual_sample_rate()  const { return 0; }
-int         AudioDeviceManager::actual_buffer_size()  const { return 0; }
-std::string AudioDeviceManager::actual_device_name()  const { return ""; }
+int         AudioDeviceManager::actual_sample_rate()  const { return impl_->request.sample_rate > 0 ? impl_->request.sample_rate : 48000; }
+int         AudioDeviceManager::actual_buffer_size()  const { return impl_->request.buffer_size > 0 ? impl_->request.buffer_size : 512; }
+std::string AudioDeviceManager::actual_device_name()  const { return impl_->request.device_id.empty() ? "C++ v2 stub output" : impl_->request.device_id; }
 std::string AudioDeviceManager::actual_backend()      const { return "stub"; }
-DeviceInfo  AudioDeviceManager::device_info()         const { return {}; }
+DeviceInfo AudioDeviceManager::device_info() const {
+    DeviceInfo info;
+    info.device_id = impl_->request.device_id.empty() ? "stub-default" : impl_->request.device_id;
+    info.device_name = actual_device_name();
+    info.backend = actual_backend();
+    info.sample_rate = actual_sample_rate();
+    info.buffer_size = actual_buffer_size();
+    return info;
+}
 
 } // namespace lt
 

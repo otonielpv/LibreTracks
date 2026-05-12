@@ -793,7 +793,7 @@ Implementar pitch-shift real sin acoplar el runtime a una librería concreta.
 ## Crear módulo
 
 ```text
-apps/desktop/src-tauri/src/audio_runtime/pitch.rs
+native/audio-engine-v2/include/lt_engine/pitch/pitch_processor.h
 ```
 
 ## Trait

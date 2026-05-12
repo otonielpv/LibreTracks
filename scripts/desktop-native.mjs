@@ -5,10 +5,6 @@ import { fileURLToPath } from "node:url";
 
 const allowedModes = new Set(["dev", "check", "build"]);
 const mode = process.argv[2] ?? "dev";
-const scriptName = process.env.npm_lifecycle_event ?? "";
-if (scriptName === "dev:desktop:engine-v2" && !process.env.LIBRETRACKS_AUDIO_ENGINE) {
-  process.env.LIBRETRACKS_AUDIO_ENGINE = "cpp-v2";
-}
 
 if (!allowedModes.has(mode)) {
   console.error(`Unsupported mode "${mode}". Use: dev | check | build.`);
@@ -54,18 +50,11 @@ if (process.platform === "win32") {
 
 const env = {
   ...process.env,
+  LIBRETRACKS_AUDIO_ENGINE: "cpp-v2",
   CARGO_TARGET_DIR: path.join(repoRoot, "target-desktop-native"),
 };
 
-const engineV2Requested =
-  process.env.LIBRETRACKS_AUDIO_ENGINE === "cpp-v2" ||
-  process.env.LIBRETRACKS_AUDIO_ENGINE === "cpp_v2";
-
 const ensureEngineV2 = () => {
-  if (!engineV2Requested) {
-    return env;
-  }
-
   const buildDir = path.join(repoRoot, "native", "audio-engine-v2", "build");
   const libDir = path.join(buildDir, "Debug");
 
@@ -104,27 +93,21 @@ switch (mode) {
   case "dev":
     run(
       "npm",
-      engineV2Requested
-        ? ["--prefix", "apps/desktop", "run", "tauri:dev", "--", "--features", "audio-engine-v2"]
-        : ["--prefix", "apps/desktop", "run", "tauri:dev"],
+      ["--prefix", "apps/desktop", "run", "tauri:dev"],
       { env: runEnv },
     );
     break;
   case "check":
     run(
       "cargo",
-      engineV2Requested
-        ? ["check", "-p", "libretracks-desktop", "--features", "audio-engine-v2"]
-        : ["check", "-p", "libretracks-desktop"],
+      ["check", "-p", "libretracks-desktop"],
       { env: runEnv },
     );
     break;
   case "build":
     run(
       "npm",
-      engineV2Requested
-        ? ["--prefix", "apps/desktop", "run", "tauri:build", "--", "--features", "audio-engine-v2"]
-        : ["--prefix", "apps/desktop", "run", "tauri:build"],
+      ["--prefix", "apps/desktop", "run", "tauri:build"],
       { env: runEnv },
     );
     break;

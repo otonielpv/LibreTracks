@@ -7,7 +7,7 @@
 ![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)
 ![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white)
 
-LibreTracks is a multitrack DAW and live playback workstation for desktop, built with a Rust audio stack and a React/Tauri shell. The current monorepo focuses on non-destructive arrangement, live section jumps, WAV import, and a desktop runtime that keeps audio concerns separate from UI concerns.
+LibreTracks is a multitrack DAW and live playback workstation for desktop, built with a C++ Audio Engine v2 behind a React/Tauri shell. The current monorepo focuses on non-destructive arrangement, live section jumps, audio import, and a native engine boundary that keeps realtime audio concerns separate from UI concerns.
 
 ## Screenshots
 | Screenshot | Screenshot |
@@ -21,13 +21,13 @@ LibreTracks is a multitrack DAW and live playback workstation for desktop, built
 LibreTracks is split into two clear layers:
 
 - `apps/desktop` is the desktop frontend. It uses React, Zustand state stores, and canvas-based timeline rendering for the arrangement view, ruler, markers, and waveform lanes.
-- `apps/desktop/src-tauri` is the native bridge. It exposes Tauri commands, manages desktop state, applies audio settings, and connects the UI to the Rust runtime.
+- `apps/desktop/src-tauri` is the native bridge. It exposes Tauri commands, manages desktop state, applies audio settings, and connects the UI to the C++ Audio Engine v2 FFI layer.
 - `crates/libretracks-core` contains the domain model and validation rules for songs, tracks, clips, markers, buses, and tempo data.
-- `crates/libretracks-audio` contains the transport and mixing logic. It resolves active clips, effective track gain, play/pause/seek/stop, metronome output, vamp loops, song transitions, and musical jump behavior.
+- `crates/libretracks-audio` contains the product-level transport rules used by the desktop session model. The realtime playback implementation now lives in the C++ engine.
 - `crates/libretracks-project` handles project persistence, `song.json`, library assets, LibreTracks package import, and WAV probing/import through `symphonia`.
-- The native desktop audio path uses `cpal` for output device I/O. WAV decoding and metadata probing are handled through `symphonia` in the project/import layer.
+- `native/audio-engine-v2` contains the C++ playback engine, device layer, scheduler, renderer, source preparation, pitch pipeline, and diagnostics.
 
-This separation matters: the frontend decides how to present and edit the session, while the Rust side owns transport rules, persistence, validation, and audio behavior.
+This separation matters: the frontend decides how to present and edit the session, Rust owns app/backend orchestration and persistence, and C++ owns realtime playback.
 
 ## Prerequisites
 
@@ -79,13 +79,11 @@ npm run check:desktop:native
 npm run test:desktop
 npm run lint
 
-# Headless desktop Rust tests on Windows CI or machines without audio hardware
-LIBRETRACKS_DUMMY_AUDIO=1 cargo test --locked -p libretracks-desktop -- --test-threads=1
+# Headless desktop Rust tests
+cargo test --locked -p libretracks-desktop -- --test-threads=1
 ```
 
-When `LIBRETRACKS_DUMMY_AUDIO` is set to `1` or `true`, the desktop audio runtime skips `cpal` device discovery and falls back to the existing null playback backend. This is intended for headless Windows CI, where WASAPI initialization can fail without audio hardware.
-
-The desktop Rust test command above also forces `--test-threads=1`. That keeps tests deterministic when temporary WAV fixtures are backed by `memmap2`, so mapped files are released predictably before Windows tears down the temp directory.
+The native desktop launcher builds `native/audio-engine-v2`, sets `LT_ENGINE_V2_LIB_DIR`, and then starts/checks/builds the Tauri app against the C++ v2 engine.
 
 ## Remote Control (Desktop + Mobile)
 

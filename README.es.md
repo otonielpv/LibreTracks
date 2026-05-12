@@ -5,7 +5,7 @@
 ![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)
 ![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white)
 
-LibreTracks es una DAW y estación de reproducción multitrack para directo, construida con un stack de audio en Rust y una shell de escritorio en React/Tauri. El monorepo actual está centrado en edición no destructiva, saltos musicales entre secciones, importación de WAV y un runtime de escritorio que separa claramente la UI de la lógica de audio.
+LibreTracks es una DAW y estacion de reproduccion multitrack para directo, construida con Audio Engine v2 en C++ y una shell de escritorio en React/Tauri. El monorepo actual esta centrado en edicion no destructiva, saltos musicales entre secciones, importacion de audio y una frontera nativa que separa claramente la UI del audio realtime.
 
 ## Capturas de pantalla
 | Captura | Captura |
@@ -24,9 +24,9 @@ LibreTracks se divide en dos capas principales:
 - `crates/libretracks-core` contiene el modelo de dominio y las validaciones de canciones, tracks, clips, marcas, buses y tempo.
 - `crates/libretracks-audio` contiene la lógica de transporte y mezcla. Resuelve clips activos, ganancia efectiva por pista, `play`/`pause`/`seek`/`stop`, metronomo, vamp, transiciones de cancion y saltos musicales.
 - `crates/libretracks-project` gestiona persistencia de proyecto, `song.json`, assets de librería, importacion de paquetes LibreTracks e importación/probing de WAV mediante `symphonia`.
-- La salida de audio nativa del escritorio usa `cpal` para I/O del dispositivo. La decodificación y lectura de metadatos WAV se resuelve mediante `symphonia` en la capa de proyecto/importación.
+- `native/audio-engine-v2` contiene el motor C++ de reproduccion, capa de dispositivo, scheduler, renderer, preparacion de fuentes, pipeline de pitch y diagnosticos.
 
-Esta separación es intencional: el frontend decide cómo presentar y editar la sesión; Rust mantiene las reglas del transporte, la persistencia, la validación y el comportamiento de audio.
+Esta separacion es intencional: el frontend decide como presentar y editar la sesion; Rust mantiene la orquestacion de app/backend y la persistencia; C++ mantiene la reproduccion realtime.
 
 ## Prerequisites
 
@@ -78,13 +78,12 @@ npm run check:desktop:native
 npm run test:desktop
 npm run lint
 
-# Tests Rust desktop en Windows CI o en equipos sin hardware de audio
-LIBRETRACKS_DUMMY_AUDIO=1 cargo test --locked -p libretracks-desktop -- --test-threads=1
+# Tests Rust desktop headless
+cargo test --locked -p libretracks-desktop -- --test-threads=1
 ```
 
-Cuando `LIBRETRACKS_DUMMY_AUDIO` vale `1` o `true`, el runtime de audio desktop omite la deteccion de dispositivos con `cpal` y usa el backend nulo de reproduccion que ya existe. Esto esta pensado para la CI headless en Windows, donde WASAPI puede fallar si no hay hardware de audio disponible.
+El launcher nativo de escritorio compila `native/audio-engine-v2`, define `LT_ENGINE_V2_LIB_DIR` y despues inicia/chequea/compila la app Tauri contra el motor C++ v2.
 
-Ese comando de tests tambien fuerza `--test-threads=1`. Asi evitamos flakiness cuando los fixtures WAV temporales usan `memmap2`, de modo que los archivos mapeados se liberen de forma predecible antes de que Windows destruya el directorio temporal.
 
 ## Control Remote (Desktop + Movil)
 

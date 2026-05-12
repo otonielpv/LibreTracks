@@ -1,6 +1,8 @@
 #include <lt_engine/sources/audio_decoder.h>
+#include <lt_engine/sources/resampler.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -8,31 +10,20 @@
 // ---------------------------------------------------------------------------
 // Backend selection
 // ---------------------------------------------------------------------------
-#if defined(LT_USE_LIBSNDFILE)
+#if LT_ENGINE_USE_LIBSNDFILE
 #  include <sndfile.h>
-
-// dr_mp3 — single-header MP3 decoder
 #  define DR_MP3_IMPLEMENTATION
-#  define DR_MP3_NO_STDIO
 #  include "dr_mp3.h"
 
-#endif // LT_USE_LIBSNDFILE
-
-// ---------------------------------------------------------------------------
-// Resampler selection
-// ---------------------------------------------------------------------------
-#if defined(LT_USE_R8BRAIN)
-#  include <CDSPResampler.h>   // r8brain
-#elif defined(LT_USE_LIBSAMPLERATE)
-#  include <samplerate.h>
-#endif
+// dr_mp3 — single-header MP3 decoder
+#endif // LT_ENGINE_USE_LIBSNDFILE
 
 namespace lt {
 
 // ============================================================================
 // libsndfile decoder
 // ============================================================================
-#if defined(LT_USE_LIBSNDFILE)
+#if LT_ENGINE_USE_LIBSNDFILE
 
 class SndfileDecoder : public AudioDecoder {
 public:
@@ -90,9 +81,6 @@ private:
     }
 };
 
-// ---------------------------------------------------------------------------
-// dr_mp3 decoder (MP3)
-// ---------------------------------------------------------------------------
 class DrMp3Decoder : public AudioDecoder {
 public:
     ~DrMp3Decoder() override { close(); }
@@ -101,11 +89,11 @@ public:
         if (!drmp3_init_file(&mp3_, path.c_str(), nullptr))
             return Result<void>::err("dr_mp3: failed to open " + path);
 
-        info_.file_path             = path;
-        info_.channel_count         = static_cast<int>(mp3_.channels);
-        info_.original_sample_rate  = static_cast<int>(mp3_.sampleRate);
-        info_.duration_frames       = static_cast<Frame>(drmp3_get_pcm_frame_count(&mp3_));
-        info_.format                = "mp3";
+        info_.file_path = path;
+        info_.channel_count = static_cast<int>(mp3_.channels);
+        info_.original_sample_rate = static_cast<int>(mp3_.sampleRate);
+        info_.duration_frames = static_cast<Frame>(drmp3_get_pcm_frame_count(&mp3_));
+        info_.format = "mp3";
         open_ = true;
         return Result<void>::ok();
     }
@@ -132,12 +120,12 @@ public:
     }
 
 private:
-    drmp3         mp3_{};
+    drmp3 mp3_{};
     AudioFileInfo info_;
-    bool          open_ = false;
+    bool open_ = false;
 };
 
-#endif // LT_USE_LIBSNDFILE
+#endif // LT_ENGINE_USE_LIBSNDFILE
 
 // ============================================================================
 // Factory
@@ -153,77 +141,15 @@ static std::string file_extension(const std::string& path) {
 std::unique_ptr<AudioDecoder> make_decoder(const std::string& file_path) {
     std::string ext = file_extension(file_path);
 
-#if defined(LT_USE_LIBSNDFILE)
+#if LT_ENGINE_USE_LIBSNDFILE
     if (ext == "mp3") {
         return std::make_unique<DrMp3Decoder>();
     }
-    // libsndfile handles wav, flac, ogg, aiff, and many others.
+    // libsndfile handles WAV/FLAC/OGG/AIFF when compiled with those backends.
     return std::make_unique<SndfileDecoder>();
 #else
     (void)ext;
     return nullptr;  // No decoder backend compiled.
-#endif
-}
-
-// ============================================================================
-// Resampler helper
-// ============================================================================
-static std::vector<float> resample_if_needed(
-    const std::vector<float>& input,
-    int                       in_channels,
-    int                       in_rate,
-    int                       out_rate,
-    Frame                     in_frames)
-{
-    if (in_rate == out_rate) return input;
-
-#if defined(LT_USE_R8BRAIN)
-    // r8brain operates per-channel on non-interleaved data.
-    Frame out_frames = static_cast<Frame>(
-        std::ceil(static_cast<double>(in_frames) * out_rate / in_rate));
-
-    std::vector<float> output(static_cast<size_t>(out_frames) * in_channels, 0.f);
-
-    for (int ch = 0; ch < in_channels; ++ch) {
-        // De-interleave channel.
-        std::vector<double> ch_in(in_frames);
-        for (Frame f = 0; f < in_frames; ++f)
-            ch_in[f] = static_cast<double>(input[f * in_channels + ch]);
-
-        r8b::CDSPResampler24 resampler(in_rate, out_rate,
-                                       static_cast<int>(in_frames));
-
-        double* out_ptr = nullptr;
-        int produced = resampler.process(ch_in.data(),
-                                          static_cast<int>(in_frames),
-                                          out_ptr);
-        Frame copy = std::min<Frame>(produced, out_frames);
-        for (Frame f = 0; f < copy; ++f)
-            output[f * in_channels + ch] = static_cast<float>(out_ptr[f]);
-    }
-    return output;
-
-#elif defined(LT_USE_LIBSAMPLERATE)
-    double ratio = static_cast<double>(out_rate) / in_rate;
-    Frame out_frames = static_cast<Frame>(std::ceil(in_frames * ratio));
-    std::vector<float> output(static_cast<size_t>(out_frames) * in_channels, 0.f);
-
-    SRC_DATA src_data{};
-    src_data.data_in       = input.data();
-    src_data.input_frames  = static_cast<long>(in_frames);
-    src_data.data_out      = output.data();
-    src_data.output_frames = static_cast<long>(out_frames);
-    src_data.src_ratio     = ratio;
-    src_data.channels      = in_channels;
-
-    // SRC_SINC_BEST_QUALITY = 0
-    src_simple(&src_data, 0, in_channels);
-    output.resize(static_cast<size_t>(src_data.output_frames_gen) * in_channels);
-    return output;
-
-#else
-    // No resampler: return as-is (drift warning issued at session validation).
-    return input;
 #endif
 }
 
@@ -259,10 +185,17 @@ Result<std::vector<float>> decode_file_to_float32(
     raw.resize(static_cast<size_t>(read) * fi.channel_count);
 
     // Resample if needed.
-    auto resampled = resample_if_needed(raw, fi.channel_count,
-                                         fi.original_sample_rate,
-                                         target_sample_rate,
-                                         static_cast<Frame>(read));
+    auto resampler = make_resampler();
+    ResamplerDiagnostics resampler_diagnostics;
+    auto resample_result = resampler->process(raw, fi.channel_count,
+                                              fi.original_sample_rate,
+                                              target_sample_rate,
+                                              static_cast<Frame>(read),
+                                              &resampler_diagnostics);
+    if (resample_result.is_err()) {
+        return Result<std::vector<float>>::err(resample_result.error());
+    }
+    auto resampled = resample_result.take();
 
     Frame out_frames = static_cast<Frame>(resampled.size()) / fi.channel_count;
 

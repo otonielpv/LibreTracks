@@ -60,12 +60,12 @@ Cliente web reducido para control desde movil/tablet.
 - Calcula clips activos y ganancias efectivas por pista y grupo.
 - Debe seguir siendo testeable sin UI ni runtime de escritorio.
 
-#### `apps/desktop/src-tauri/src/audio_runtime.rs`
+#### `apps/desktop/src-tauri/src/audio_engine.rs`
 
-- Traduce un `Song` ya resuelto a reproduccion real con `rodio`.
-- Mantiene el hilo dedicado de audio y su cola de comandos.
-- Aplica mezcla incremental sobre sinks vivos cuando el cambio es `MixOnly`.
-- Expone telemetria de runtime y una estimacion del playhead para depuracion.
+- Traduce un `Song` ya resuelto a comandos/session JSON para Audio Engine v2.
+- Mantiene la frontera Rust/FFI hacia `lt-audio-engine-v2`.
+- Aplica cambios incrementales de mezcla con `EngineCommand`.
+- Expone telemetria/snapshot de v2 y una estimacion del playhead para depuracion.
 
 #### `apps/desktop/src-tauri/src/state.rs`
 
@@ -77,7 +77,7 @@ Cliente web reducido para control desde movil/tablet.
 ### Regla de frontera
 
 - Las reglas musicales viven en `libretracks-audio`.
-- Las decisiones de runtime real y telemetria viven en `audio_runtime.rs`.
+- Las decisiones de engine nativo y telemetria viven en `audio_engine.rs`.
 - La coordinacion de estado desktop y persistencia del proyecto vive en `state.rs`.
 - Si una futura funcionalidad no cabe con claridad en una sola capa, hay que tratarla como deuda de arquitectura y no resolverla con atajos en React.
 
@@ -86,7 +86,7 @@ Cliente web reducido para control desde movil/tablet.
 ### `solo`
 
 - Debe modelarse primero como regla de mezcla efectiva en `libretracks-audio`.
-- `audio_runtime.rs` solo deberia recibir la nueva ganancia resuelta y aplicarla incrementalmente.
+- `audio_engine.rs` solo deberia recibir la nueva ganancia resuelta y aplicarla incrementalmente con `EngineCommand`.
 
 ### `fades`
 

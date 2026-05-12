@@ -15,21 +15,14 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 base64 = "0.22"
 libretracks-audio = { path = "../../../crates/libretracks-audio" }
-lt-audio-engine-v2 = { path = "../../../crates/lt-audio-engine-v2", optional = true }
+lt-audio-engine-v2 = { path = "../../../crates/lt-audio-engine-v2" }
 libretracks-project = { path = "../../../crates/libretracks-project" }
 libretracks-remote = { path = "../../../crates/libretracks-remote" }
 midir = "0.9"
-memmap2 = "0.9"
-rtrb = "0.3"
 rfd = "0.15"
 rayon = "1.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# CI runners must provide Rubber Band at runtime (for example librubberband-dev on Linux)
-# or make a statically built Rubber Band library available to the app/test process.
-rubberband = { version = "0.3", path = "../../../crates/rubberband" }
-hound = "3"
-symphonia = { version = "0.5", default-features = false, features = ["aac", "flac", "isomp4", "mp3", "ogg", "pcm", "vorbis", "wav"] }
 tauri = { version = "2", features = [] }
 thiserror = "2"
 tokio = { version = "1", features = ["sync", "time"] }
@@ -38,14 +31,9 @@ tauri-plugin-dialog = "2.7.0"
 [dependencies.libretracks-core]
 path = "../../../crates/libretracks-core"
 
-[target.'cfg(windows)'.dependencies]
-cpal = { version = "0.15", features = ["asio"] }
-
-[target.'cfg(not(windows))'.dependencies]
-cpal = "0.15"
-
 [features]
-audio-engine-v2 = ["lt-audio-engine-v2"]
+audio-engine-v2 = []
 
 [dev-dependencies]
+hound = "3"
 tempfile = "3"

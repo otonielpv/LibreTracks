@@ -3,7 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-mod audio_runtime;
+mod audio_engine;
 mod commands;
 mod error;
 mod midi;
@@ -17,12 +17,11 @@ use tauri::Manager;
 use settings::{load_app_settings, AppSettingsStore};
 use state::DesktopState;
 
-#[cfg(feature = "audio-engine-v2")]
 use commands::engine_v2::EngineV2State;
 
 fn main() {
-    // Check env flag to confirm v2 engine intent (informational; actual
-    // activation is the Cargo feature flag `audio-engine-v2`).
+    // Keep the env flag visible for diagnostics; desktop audio now routes
+    // through the C++ engine v2 path by default.
     let _engine_v2_requested = std::env::var("LIBRETRACKS_AUDIO_ENGINE")
         .map(|v| v == "cpp-v2")
         .unwrap_or(false);
@@ -31,7 +30,6 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(DesktopState::default());
 
-    #[cfg(feature = "audio-engine-v2")]
     let builder = builder.manage(EngineV2State::new());
 
     builder.setup(|app| {
@@ -60,7 +58,7 @@ fn main() {
                         .and_then(|settings| settings.selected_midi_device),
                 )
                 .unwrap_or_else(|error| {
-                    if audio_runtime::audio_debug_logging_enabled() {
+                    if audio_engine::audio_debug_logging_enabled() {
                         eprintln!("[libretracks-midi] startup warning: {error}");
                     }
                 });
@@ -81,7 +79,7 @@ fn main() {
             commands::library::get_library_folders,
             commands::library::get_waveform_summaries,
             commands::library::get_library_waveform_summaries,
-            audio_runtime::get_audio_output_devices,
+            audio_engine::get_audio_output_devices,
             commands::system::get_audio_debug_snapshot,
             commands::system::get_desktop_performance_snapshot,
             commands::system::append_debug_log,
@@ -143,23 +141,14 @@ fn main() {
             commands::timeline::update_track_transpose_enabled,
             commands::timeline::delete_track,
             // ── Engine v2 commands (only available with `audio-engine-v2` feature) ──
-            #[cfg(feature = "audio-engine-v2")]
             commands::engine_v2::engine_v2_initialize,
-            #[cfg(feature = "audio-engine-v2")]
             commands::engine_v2::engine_v2_shutdown,
-            #[cfg(feature = "audio-engine-v2")]
             commands::engine_v2::engine_v2_get_version,
-            #[cfg(feature = "audio-engine-v2")]
             commands::engine_v2::engine_v2_get_snapshot,
-            #[cfg(feature = "audio-engine-v2")]
             commands::engine_v2::engine_v2_send_command,
-            #[cfg(feature = "audio-engine-v2")]
             commands::engine_v2::engine_v2_poll_events,
-            #[cfg(feature = "audio-engine-v2")]
             commands::engine_v2::engine_v2_list_devices,
-            #[cfg(feature = "audio-engine-v2")]
             commands::engine_v2::engine_v2_get_diagnostics,
-            #[cfg(feature = "audio-engine-v2")]
             commands::engine_v2::engine_v2_load_session
         ])
         .run(tauri::generate_context!())

@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs, io, path::PathBuf, sync::Mutex};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-use crate::audio_runtime::{
+use crate::audio_engine::{
     AudioBackendKind, AudioBufferSizeRequest, AudioSampleFormat, OutputChannelRequest,
 };
 

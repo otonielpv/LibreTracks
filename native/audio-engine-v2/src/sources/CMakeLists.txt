@@ -2,6 +2,7 @@ target_sources(lt_audio_engine_v2 PRIVATE
     decoded_source.cpp
     source_manager.cpp
     audio_decoder.cpp
+    resampler.cpp
     worker_pool.cpp
     preparation_queue.cpp
     block_cache.cpp

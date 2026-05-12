@@ -1,12 +1,7 @@
 //! Tauri commands for the C++ Audio Engine v2.
 //!
-//! Only compiled when the `audio-engine-v2` feature flag is active.
-//! Activate via:
-//!   cargo tauri dev  --features audio-engine-v2
-//! or by setting env var:
-//!   LIBRETRACKS_AUDIO_ENGINE=cpp-v2
-
-#![cfg(feature = "audio-engine-v2")]
+//! This is now the desktop audio command surface; the old Rust runtime was
+//! removed during the C++ engine v2 cutover.
 
 use lt_audio_engine_v2::{Engine, EngineCommand, EngineError, EngineSnapshot};
 use std::sync::Mutex;

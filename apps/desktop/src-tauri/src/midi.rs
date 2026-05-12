@@ -14,7 +14,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
-    audio_runtime::AudioCommand,
+    audio_engine::AudioCommand,
     commands::events::emit_transport_lifecycle_event,
     commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
     settings::{save_app_settings, AppSettings, AppSettingsStore, MidiBinding},
@@ -788,7 +788,7 @@ fn apply_midi_settings_update(
 
 fn jump_to_next_region(
     session: &mut crate::state::DesktopSession,
-    audio: &crate::audio_runtime::AudioController,
+    audio: &crate::audio_engine::AudioController,
     settings: &AppSettings,
 ) -> Result<crate::models::TransportSnapshot, String> {
     let song = session
