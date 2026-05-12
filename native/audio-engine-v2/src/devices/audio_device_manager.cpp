@@ -35,7 +35,7 @@ public:
             std::fill(output_channels[ch], output_channels[ch] + num_sample_frames, 0.f);
 
         if (render_cb_) {
-            render_cb_->render(output_channels,
+            render_cb_->render(const_cast<float**>(output_channels),
                                num_output_channels,
                                num_sample_frames,
                                device_sample_rate_.load(std::memory_order_relaxed));
@@ -83,6 +83,7 @@ struct AudioDeviceManager::Impl {
     juce::AudioDeviceManager     juce_manager;
     std::unique_ptr<JuceCallbackAdaptor> adaptor;
     AudioRenderCallback*         user_callback = nullptr;
+    bool                         initialized = false;
 
     // Last successfully opened device info.
     std::string  device_name;
@@ -92,9 +93,41 @@ struct AudioDeviceManager::Impl {
     std::string  last_error;
 };
 
+namespace {
+
+constexpr const char* kDeviceIdSeparator = "::";
+
+std::string make_device_id(const std::string& backend, const std::string& name) {
+    return backend + kDeviceIdSeparator + name;
+}
+
+std::pair<std::string, std::string> split_device_id(const std::string& id) {
+    auto pos = id.find(kDeviceIdSeparator);
+    if (pos == std::string::npos)
+        return { {}, id };
+    return { id.substr(0, pos), id.substr(pos + 2) };
+}
+
+template <typename ImplT>
+Result<void> ensure_initialized(ImplT& impl) {
+    if (impl.initialized)
+        return Result<void>::ok();
+
+    juce::String err = impl.juce_manager.initialise(0, 2, nullptr, true);
+    if (err.isNotEmpty()) {
+        impl.last_error = err.toStdString();
+        return Result<void>::err(impl.last_error);
+    }
+
+    impl.initialized = true;
+    return Result<void>::ok();
+}
+
+} // namespace
+
 // ---------------------------------------------------------------------------
 AudioDeviceManager::AudioDeviceManager() : impl_(std::make_unique<Impl>()) {
-    // juce_manager initialises lazily on first open.
+    // juce_manager initialises lazily on first device query/open.
 }
 
 AudioDeviceManager::~AudioDeviceManager() {
@@ -104,16 +137,22 @@ AudioDeviceManager::~AudioDeviceManager() {
 std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
     std::vector<DeviceDescriptor> result;
 
+    auto init = ensure_initialized(*impl_);
+    if (init.is_err())
+        return result;
+
     auto& mgr = impl_->juce_manager;
     for (auto* type : mgr.getAvailableDeviceTypes()) {
         const juce::String backend_name = type->getTypeName();
         type->scanForDevices();
         auto names = type->getDeviceNames(false); // false = output devices
         for (const auto& name : names) {
+            auto backend = backend_name.toStdString();
+            auto device_name = name.toStdString();
             DeviceDescriptor d;
-            d.id      = name.toStdString();
-            d.name    = name.toStdString();
-            d.backend = backend_name.toStdString();
+            d.id      = make_device_id(backend, device_name);
+            d.name    = device_name;
+            d.backend = backend;
             result.push_back(std::move(d));
         }
     }
@@ -124,12 +163,21 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
                                                AudioRenderCallback* callback) {
     close_device();
 
+    auto init = ensure_initialized(*impl_);
+    if (init.is_err())
+        return init;
+
     impl_->user_callback = callback;
     impl_->adaptor = std::make_unique<JuceCallbackAdaptor>(callback);
 
-    juce::AudioDeviceManager::AudioDeviceSetup setup;
-    if (!request.device_id.empty())
-        setup.outputDeviceName = juce::String(request.device_id);
+    auto setup = impl_->juce_manager.getAudioDeviceSetup();
+    if (!request.device_id.empty()) {
+        auto [backend, device_name] = split_device_id(request.device_id);
+        if (!backend.empty())
+            impl_->juce_manager.setCurrentAudioDeviceType(juce::String(backend), true);
+        setup = impl_->juce_manager.getAudioDeviceSetup();
+        setup.outputDeviceName = juce::String(device_name);
+    }
     if (request.sample_rate > 0)
         setup.sampleRate = request.sample_rate;
     if (request.buffer_size > 0)
@@ -184,6 +232,7 @@ std::string AudioDeviceManager::actual_backend()      const { return impl_->back
 
 DeviceInfo AudioDeviceManager::device_info() const {
     DeviceInfo info;
+    info.device_id   = impl_->device_name.empty() ? std::string{} : make_device_id(impl_->backend, impl_->device_name);
     info.device_name = impl_->device_name;
     info.backend     = impl_->backend;
     info.sample_rate = impl_->sample_rate;

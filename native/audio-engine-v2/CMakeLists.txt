@@ -86,7 +86,9 @@ endif()
 # On Windows, export symbols from the shared library.
 if(WIN32)
     target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_EXPORT)
-    set_target_properties(lt_audio_engine_v2 PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    if(NOT LT_ENGINE_USE_JUCE)
+        set_target_properties(lt_audio_engine_v2 PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    endif()
 endif()
 
 target_link_libraries(lt_audio_engine_v2

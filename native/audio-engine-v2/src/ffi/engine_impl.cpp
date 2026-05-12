@@ -69,8 +69,7 @@ Result<void> EngineImpl::initialize() {
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
 
     // Open the default audio device with the silent callback.
-    DeviceOpenRequest req;  // empty = default device, default sample rate
-    auto open_result = device_manager_->open_device(req, silent_callback_.get());
+    auto open_result = device_manager_->open_device(current_device_request_, silent_callback_.get());
     if (open_result.is_err()) {
         // Non-fatal: engine works without a device (useful in tests).
         push_event(EvDeviceError{ "Could not open default device: " + open_result.error() });
@@ -192,9 +191,12 @@ std::string EngineImpl::list_devices() const {
     json arr = json::array();
     for (const auto& d : device_manager_->list_devices()) {
         arr.push_back({
-            {"id",      d.id},
-            {"name",    d.name},
-            {"backend", d.backend},
+            {"device_id",   d.id},
+            {"device_name", d.name},
+            {"backend",     d.backend},
+            {"sample_rate", 0},
+            {"buffer_size", 0},
+            {"last_error",  ""},
         });
     }
     return arr.dump();
@@ -236,11 +238,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 &*session_, source_manager_.get(),
                 clock_.get(), scheduler_.get());
 
-            DeviceOpenRequest req;
-            auto open = device_manager_->open_device(req, mixer_.get());
+            auto open = device_manager_->open_device(current_device_request_, mixer_.get());
             if (open.is_err()) {
                 push_event(EvDeviceError{ open.error() });
-                return open;
+                return Result<void>::ok();
             }
 
             return Result<void>::ok();
@@ -389,6 +390,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         else if constexpr (std::is_same_v<T, CmdSetOutputDevice>) {
             DeviceOpenRequest req;
             req.device_id = c.device_id;
+            req.sample_rate = current_device_request_.sample_rate;
+            req.buffer_size = current_device_request_.buffer_size;
             bool was_playing = clock_ && clock_->position().state == TransportState::Playing;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
@@ -398,6 +401,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 if (was_playing && clock_) clock_->play();
                 return r;
             }
+            current_device_request_ = req;
             if (was_playing && clock_) clock_->play();
             push_event(EvDeviceChanged{
                 device_manager_->actual_device_name(),
@@ -409,17 +413,27 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSetSampleRate>) {
             DeviceOpenRequest req;
+            req.device_id = current_device_request_.device_id;
             req.sample_rate = c.sample_rate;
+            req.buffer_size = current_device_request_.buffer_size;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
-            return device_manager_->open_device(req, callback);
+            auto r = device_manager_->open_device(req, callback);
+            if (r.is_ok())
+                current_device_request_ = req;
+            return r;
         }
         else if constexpr (std::is_same_v<T, CmdSetBufferSize>) {
             DeviceOpenRequest req;
+            req.device_id = current_device_request_.device_id;
+            req.sample_rate = current_device_request_.sample_rate;
             req.buffer_size = c.buffer_size;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
-            return device_manager_->open_device(req, callback);
+            auto r = device_manager_->open_device(req, callback);
+            if (r.is_ok())
+                current_device_request_ = req;
+            return r;
         }
         else {
             // Track gain/mute/solo, pitch, scheduler jumps — handled in later phases.

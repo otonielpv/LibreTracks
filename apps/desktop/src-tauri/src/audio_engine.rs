@@ -267,6 +267,7 @@ struct ControllerState {
     anchor_started_at: Option<Instant>,
     song_duration_seconds: Option<f64>,
     last_start_reason: Option<String>,
+    song_dir: Option<PathBuf>,
 }
 
 impl ControllerState {
@@ -284,6 +285,7 @@ impl ControllerState {
             anchor_started_at: None,
             song_duration_seconds: None,
             last_start_reason: None,
+            song_dir: None,
         }
     }
 }
@@ -312,15 +314,16 @@ impl AudioController {
 
     pub fn play(
         &self,
-        _song_dir: PathBuf,
+        song_dir: PathBuf,
         song: Song,
         position_seconds: f64,
         reason: PlaybackStartReason,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("play", Some(reason), |engine, state| {
-            load_song(engine, &song)?;
+            state.song_dir = Some(song_dir);
+            load_song(engine, state.song_dir.as_deref(), &song)?;
             engine.send_command(&EngineCommand::SeekAbsolute {
-                frame: seconds_to_frame(position_seconds),
+                frame: seconds_to_frame_for_engine(engine, position_seconds),
             })?;
             engine.send_command(&EngineCommand::Play)?;
             state.running = true;
@@ -346,9 +349,9 @@ impl AudioController {
         reason: PlaybackStartReason,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("seek", Some(reason), |engine, state| {
-            load_song(engine, &song)?;
+            load_song(engine, state.song_dir.as_deref(), &song)?;
             engine.send_command(&EngineCommand::SeekAbsolute {
-                frame: seconds_to_frame(position_seconds),
+                frame: seconds_to_frame_for_engine(engine, position_seconds),
             })?;
             state.anchor_position_seconds = Some(position_seconds);
             state.anchor_started_at = if state.running {
@@ -364,16 +367,28 @@ impl AudioController {
 
     pub fn on_timeline_hover_or_drag(
         &self,
-        _song_dir: PathBuf,
+        song_dir: PathBuf,
         song: Song,
         _position_seconds: f64,
     ) -> Result<(), DesktopError> {
-        self.sync_song(song)
+        self.with_engine_state("sync_song", None, |engine, state| {
+            state.song_dir = Some(song_dir);
+            load_song(engine, state.song_dir.as_deref(), &song)?;
+            state.song_duration_seconds = Some(song.duration_seconds);
+            state.last_sync = Some(AudioOperationSummary {
+                reason: Some("load_session".into()),
+                elapsed_ms: 0.0,
+                scheduled_clips: song.clips.len(),
+                active_sinks: song.tracks.len(),
+                opened_files: 0,
+            });
+            Ok(())
+        })
     }
 
     pub fn sync_song(&self, song: Song) -> Result<(), DesktopError> {
         self.with_engine_state("sync_song", None, |engine, state| {
-            load_song(engine, &song)?;
+            load_song(engine, state.song_dir.as_deref(), &song)?;
             state.song_duration_seconds = Some(song.duration_seconds);
             state.last_sync = Some(AudioOperationSummary {
                 reason: Some("load_session".into()),
@@ -562,12 +577,37 @@ impl AudioController {
         })
     }
 
-    pub fn replace_song_buffers(&self, _song_dir: &Path, song: &Song) -> Result<(), DesktopError> {
-        self.sync_song(song.clone())
+    pub fn replace_song_buffers(&self, song_dir: &Path, song: &Song) -> Result<(), DesktopError> {
+        let song_dir = song_dir.to_path_buf();
+        let song = song.clone();
+        self.with_engine_state("sync_song", None, |engine, state| {
+            state.song_dir = Some(song_dir);
+            load_song(engine, state.song_dir.as_deref(), &song)?;
+            state.song_duration_seconds = Some(song.duration_seconds);
+            state.last_sync = Some(AudioOperationSummary {
+                reason: Some("load_session".into()),
+                elapsed_ms: 0.0,
+                scheduled_clips: song.clips.len(),
+                active_sinks: song.tracks.len(),
+                opened_files: 0,
+            });
+            Ok(())
+        })
     }
 
-    pub fn prepare_song_buffers_async(&self, _song_dir: PathBuf, song: Song) {
-        let _ = self.sync_song(song);
+    pub fn prepare_song_buffers_async(&self, song_dir: PathBuf, _song: Song) {
+        // Source preparation is owned by the C++ engine after LoadSession.
+        // Avoid issuing a second LoadSession immediately before Play; replacing
+        // the native preparation queue while decode workers are active can race
+        // with worker completion callbacks.
+        if let Ok(mut state) = self.state.lock() {
+            state.song_dir = Some(song_dir);
+            state.command_count += 1;
+            state.last_command = Some(AudioCommandTrace {
+                kind: "prepare_sources".into(),
+                reason: Some("engine_v2_owned".into()),
+            });
+        }
     }
 
     pub fn export_region_rendered_audio(
@@ -657,16 +697,42 @@ fn ensure_engine(state: &mut ControllerState) -> Result<&Engine, DesktopError> {
     Ok(state.engine.as_ref().expect("engine should be initialized"))
 }
 
-fn load_song(engine: &Engine, song: &Song) -> Result<(), DesktopError> {
+fn load_song(engine: &Engine, song_dir: Option<&Path>, song: &Song) -> Result<(), DesktopError> {
+    let song = song_with_resolved_audio_paths(song_dir, song);
     let project_json =
-        serde_json::to_string(song).map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        serde_json::to_string(&song).map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
     engine
         .send_command(&EngineCommand::LoadSession { project_json })
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))
 }
 
-fn seconds_to_frame(seconds: f64) -> i64 {
-    (seconds.max(0.0) * ENGINE_SAMPLE_RATE).round() as i64
+fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song {
+    let Some(song_dir) = song_dir else {
+        return song.clone();
+    };
+    let mut resolved = song.clone();
+    for clip in &mut resolved.clips {
+        let raw_path = clip.file_path.trim();
+        if raw_path.is_empty() {
+            continue;
+        }
+        let path = Path::new(raw_path);
+        if path.is_relative() {
+            clip.file_path = song_dir.join(path).to_string_lossy().replace('\\', "/");
+        }
+    }
+    resolved
+}
+
+fn seconds_to_frame_for_engine(engine: &Engine, seconds: f64) -> i64 {
+    let sample_rate = engine
+        .get_snapshot()
+        .ok()
+        .map(|snapshot| snapshot.device.sample_rate)
+        .filter(|sample_rate| *sample_rate > 0)
+        .map(f64::from)
+        .unwrap_or(ENGINE_SAMPLE_RATE);
+    (seconds.max(0.0) * sample_rate).round() as i64
 }
 
 fn estimate_position(state: &ControllerState) -> Option<f64> {
@@ -696,14 +762,20 @@ fn devices_response(devices: Vec<DeviceInfo>) -> AudioOutputDevicesResponse {
     let mut backends = Vec::new();
     let mut descriptors = Vec::new();
 
-    for device in devices {
+    for (index, device) in devices.into_iter().enumerate() {
         let name = if device.device_name.is_empty() {
             device.device_id.clone()
         } else {
             device.device_name.clone()
         };
+        let stable_id = if device.device_id.is_empty() {
+            name.clone()
+        } else {
+            device.device_id.clone()
+        };
         names.push(name.clone());
         channel_counts.insert(name.clone(), 2);
+        channel_counts.insert(stable_id.clone(), 2);
         let backend = backend_from_str(&device.backend);
         if !backends.contains(&backend) {
             backends.push(backend);
@@ -711,21 +783,21 @@ fn devices_response(devices: Vec<DeviceInfo>) -> AudioOutputDevicesResponse {
         descriptors.push(AudioDeviceDescriptor {
             backend,
             backend_id: device.backend.clone(),
-            stable_id: device.device_id.clone(),
+            stable_id,
             name: name.clone(),
             display_name: name,
-            is_default: false,
+            is_default: index == 0,
             max_output_channels: 2,
             default_sample_rate: (device.sample_rate > 0).then_some(device.sample_rate as u32),
             supported_sample_rates: if device.sample_rate > 0 {
                 vec![device.sample_rate as u32]
             } else {
-                Vec::new()
+                vec![44100, 48000]
             },
             supported_buffer_sizes: if device.buffer_size > 0 {
                 vec![device.buffer_size as u32]
             } else {
-                Vec::new()
+                vec![128, 256, 512, 1024]
             },
             supported_sample_formats: vec![AudioSampleFormat::F32],
         });
@@ -743,11 +815,11 @@ fn devices_response(devices: Vec<DeviceInfo>) -> AudioOutputDevicesResponse {
 fn backend_from_str(value: &str) -> AudioBackendKind {
     match value.to_ascii_lowercase().as_str() {
         "asio" => AudioBackendKind::Asio,
-        "wasapi" => AudioBackendKind::Wasapi,
-        "coreaudio" | "core_audio" => AudioBackendKind::CoreAudio,
+        "wasapi" | "windows audio" | "wasapi shared" | "wasapi exclusive" => AudioBackendKind::Wasapi,
+        "coreaudio" | "core_audio" | "core audio" => AudioBackendKind::CoreAudio,
         "alsa" => AudioBackendKind::Alsa,
         "jack" => AudioBackendKind::Jack,
-        "directsound" | "direct_sound" => AudioBackendKind::DirectSound,
+        "directsound" | "direct_sound" | "direct sound" => AudioBackendKind::DirectSound,
         "mme" => AudioBackendKind::Mme,
         _ => AudioBackendKind::Unknown,
     }

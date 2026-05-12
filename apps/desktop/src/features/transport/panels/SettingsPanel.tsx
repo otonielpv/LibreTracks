@@ -207,7 +207,7 @@ export function SettingsPanel({
                       </span>
                       <select
                         value={appSettings.selectedAudioBackend ?? ""}
-                        disabled={isLoading || isSaving}
+                        disabled={isSaving}
                         onChange={(event) =>
                           onAudioBackendChange(event.target.value)
                         }
@@ -232,7 +232,7 @@ export function SettingsPanel({
                       </span>
                       <select
                         value={selectedAudioOutputDevice}
-                        disabled={isLoading || isSaving}
+                        disabled={isSaving}
                         onChange={(event) =>
                           onAudioOutputDeviceChange(event.target.value)
                         }
@@ -295,7 +295,7 @@ export function SettingsPanel({
                       <button
                         type="button"
                         className="lt-secondary-button"
-                        disabled={isLoading || isSaving}
+                        disabled={isSaving}
                         onClick={onRefreshAudioDevices}
                       >
                         {t(
@@ -313,7 +313,7 @@ export function SettingsPanel({
                       </span>
                       <select
                         value={appSettings.outputSampleRate ?? ""}
-                        disabled={isLoading || isSaving}
+                        disabled={isSaving}
                         onChange={(event) =>
                           onOutputSampleRateChange(event.target.value)
                         }
@@ -340,7 +340,7 @@ export function SettingsPanel({
                             ? String(appSettings.outputBufferSize.fixed)
                             : ""
                         }
-                        disabled={isLoading || isSaving}
+                        disabled={isSaving}
                         onChange={(event) =>
                           onOutputBufferSizeChange(event.target.value)
                         }
@@ -378,7 +378,7 @@ export function SettingsPanel({
                                 checked={appSettings.enabledOutputChannels.includes(
                                   channelIndex,
                                 )}
-                                disabled={isLoading || isSaving}
+                                disabled={isSaving}
                                 onChange={(event) =>
                                   onEnabledOutputChannelChange(
                                     channelIndex,
@@ -405,7 +405,7 @@ export function SettingsPanel({
                       <input
                         type="checkbox"
                         checked={appSettings.audioSafeMode}
-                        disabled={isLoading || isSaving}
+                        disabled={isSaving}
                         onChange={(event) =>
                           onAudioSafeModeChange(event.target.checked)
                         }

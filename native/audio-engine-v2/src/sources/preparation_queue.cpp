@@ -20,7 +20,7 @@ SourcePreparationQueue::SourcePreparationQueue(SourceManager*    source_manager,
                                                 DecodeWorkerPool* pool,
                                                 EventPushCallback push_event,
                                                 int               engine_sample_rate)
-    : impl_(std::make_unique<Impl>())
+    : impl_(std::make_shared<Impl>())
 {
     impl_->source_manager    = source_manager;
     impl_->pool              = pool;
@@ -56,23 +56,28 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
     Id          source_id = source.id;
     int         sr        = impl_->engine_sample_rate;
 
+    std::weak_ptr<Impl> weak_impl = impl_;
     impl_->pool->submit_decode(
         source_id,  // job_id == source_id for simplicity
         source_id,
         file_path,
         sr,
-        [this, source_id](const Job& job) {
+        [weak_impl, source_id](const Job& job) {
+            auto impl = weak_impl.lock();
+            if (!impl) {
+                return;
+            }
             // Worker thread callback — marshal into engine event queue.
             if (job.status == JobStatus::Completed) {
-                auto stored = impl_->source_manager->store_decoded_source(
+                auto stored = impl->source_manager->store_decoded_source(
                     source_id,
                     job.decoded_samples,
                     job.channel_count,
                     job.sample_rate,
                     job.duration_frames);
                 {
-                    std::lock_guard lock(impl_->mtx);
-                    auto& info = impl_->states[source_id];
+                    std::lock_guard lock(impl->mtx);
+                    auto& info = impl->states[source_id];
                     if (stored.is_ok()) {
                         info.status           = "ready";
                         info.progress_percent = 100;
@@ -81,19 +86,19 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
                     }
                 }
                 if (stored.is_ok()) {
-                    impl_->push_event(EvSourcePrepared{ source_id });
+                    impl->push_event(EvSourcePrepared{ source_id });
                 } else {
-                    impl_->push_event(EvDiagnosticWarning{
+                    impl->push_event(EvDiagnosticWarning{
                         "Source preparation failed [" + source_id + "]: " + stored.error()
                     });
                 }
             } else if (job.status == JobStatus::Failed) {
                 {
-                    std::lock_guard lock(impl_->mtx);
-                    auto& info = impl_->states[source_id];
+                    std::lock_guard lock(impl->mtx);
+                    auto& info = impl->states[source_id];
                     info.status = "failed";
                 }
-                impl_->push_event(EvDiagnosticWarning{
+                impl->push_event(EvDiagnosticWarning{
                     "Source decode failed [" + source_id + "]: " + job.error_message
                 });
             }

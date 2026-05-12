@@ -216,12 +216,14 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
 
 cmake -S native/audio-engine-v2 -B native/audio-engine-v2/build `
   -DLT_ENGINE_BUILD_TESTS=OFF `
-  -DLT_ENGINE_USE_JUCE=OFF `
+  -DLT_ENGINE_USE_JUCE=ON `
   -DLT_ENGINE_USE_RUBBERBAND=OFF `
   -DLT_ENGINE_USE_LIBSNDFILE=ON `
   -DLT_ENGINE_USE_R8BRAIN=ON
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 cmake --build native/audio-engine-v2/build --config Debug --target lt_audio_engine_v2
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $env:LIBRETRACKS_AUDIO_ENGINE = "cpp-v2"
 $env:LT_ENGINE_V2_LIB_DIR = $engineV2LibDir

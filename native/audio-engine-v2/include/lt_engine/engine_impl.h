@@ -56,6 +56,7 @@ private:
     std::unique_ptr<SourcePreparationQueue> prep_queue_;
     std::unique_ptr<Mixer>              mixer_;
     std::optional<Session>              session_;
+    DeviceOpenRequest                   current_device_request_;
 
     // Cached snapshot string (rebuilt on snapshot request).
     mutable std::string snapshot_cache_;

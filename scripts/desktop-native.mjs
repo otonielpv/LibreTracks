@@ -64,7 +64,7 @@ const ensureEngineV2 = () => {
     "-B",
     "native/audio-engine-v2/build",
     "-DLT_ENGINE_BUILD_TESTS=OFF",
-    "-DLT_ENGINE_USE_JUCE=OFF",
+    "-DLT_ENGINE_USE_JUCE=ON",
     "-DLT_ENGINE_USE_RUBBERBAND=OFF",
     "-DLT_ENGINE_USE_LIBSNDFILE=ON",
     "-DLT_ENGINE_USE_R8BRAIN=ON",
