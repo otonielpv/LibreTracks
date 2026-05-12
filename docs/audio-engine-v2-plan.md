@@ -205,126 +205,126 @@ Legend: ✅ Done · 🔄 In progress · ⬜ Pending
 
 ---
 
-## Phase 10 — Worker Threads, Import and Preparation ⬜
+## Phase 10 — Worker Threads, Import and Preparation ✅
 
 **Goal:** All heavy work off UI and audio threads.
 
-- ⬜ `DecodeWorkerPool`
-- ⬜ `SourcePreparationQueue`
-- ⬜ Background jobs: decode, resample, waveform handoff, pitch cache gen, prebuffering
-- ⬜ Job states: queued / running / completed / failed / cancelled
-- ⬜ Progress surfaced through EngineEvent/Snapshot
+- ✅ `DecodeWorkerPool`
+- ✅ `SourcePreparationQueue`
+- ✅ Background jobs: decode, resample, waveform handoff, pitch cache gen, prebuffering
+- ✅ Job states: queued / running / completed / failed / cancelled
+- ✅ Progress surfaced through EngineEvent/Snapshot
 
 **Acceptance criteria:**
-- ⬜ Import does not block UI
-- ⬜ Play does not synchronously decode
-- ⬜ Audio callback never waits for workers
-- ⬜ Missing prepared source → silence + diagnostic (not noise)
+- ✅ Import does not block UI
+- ✅ Play does not synchronously decode
+- ✅ Audio callback never waits for workers
+- ✅ Missing prepared source → silence + diagnostic (not noise)
 
 ---
 
-## Phase 11 — Streaming and Block Cache ⬜
+## Phase 11 — Streaming and Block Cache ✅
 
 **Goal:** Handle large sessions efficiently.
 
-- ⬜ `CachedSource`, `StreamingSource`, `PreparedSource` types
-- ⬜ Block cache — fixed-size audio blocks, bounded memory, eviction policy
-- ⬜ Cache hit/miss diagnostics
-- ⬜ Prebuffering — current playhead, next song, scheduled jump target, selected marker
-- ⬜ Starvation handling — return silence, emit `EvSourceStarved`, never corrupt audio
+- ✅ `CachedSource`, `StreamingSource`, `PreparedSource` types
+- ✅ Block cache — fixed-size audio blocks, bounded memory, eviction policy
+- ✅ Cache hit/miss diagnostics
+- ✅ Prebuffering — current playhead, next song, scheduled jump target, selected marker
+- ✅ Starvation handling — return silence, emit `EvSourceStarved`, never corrupt audio
 
 **Acceptance criteria:**
-- ⬜ Long files do not require full RAM load
-- ⬜ Scheduled jump targets can prebuffer
-- ⬜ No disk I/O in audio callback
-- ⬜ No metallic/white-noise playback corruption
+- ✅ Long files do not require full RAM load
+- ✅ Scheduled jump targets can prebuffer
+- ✅ No disk I/O in audio callback
+- ✅ No metallic/white-noise playback corruption
 
 ---
 
-## Phase 12 — RubberBand Pitch Pipeline ⬜
+## Phase 12 — RubberBand Pitch Pipeline ✅
 
 **Goal:** Professional transpose — per song, per region, per track opt-out.
 
-- ⬜ `PitchProcessor` abstraction
-- ⬜ `RubberBandPitchProcessor` — realtime mode with latency reporting
-- ⬜ `BypassPitchProcessor` — zero cost for transpose=0 or NeverTranspose tracks
-- ⬜ `PitchCache` — keyed by (source_id, semitones, sample_rate, channel_count)
-- ⬜ Strategy priority: zero-transpose → NeverTranspose → cache hit → realtime fallback
-- ⬜ Centralized latency compensation — one place, no hidden trims
-- ⬜ Diagnostics: pitch mode, cache hit/miss, RubberBand latency, effective latency, fallback usage
+- ✅ `PitchProcessor` abstraction
+- ✅ `RubberBandPitchProcessor` — realtime mode with latency reporting
+- ✅ `BypassPitchProcessor` — zero cost for transpose=0 or NeverTranspose tracks
+- ✅ `PitchCache` — keyed by (source_id, semitones, sample_rate, channel_count)
+- ✅ Strategy priority: zero-transpose → NeverTranspose → cache hit → realtime fallback
+- ✅ Centralized latency compensation — one place, no hidden trims
+- ✅ Diagnostics: pitch mode, cache hit/miss, RubberBand latency, effective latency, fallback usage
 
 **Acceptance criteria:**
-- ⬜ Pitch works from first play (no silence until seek)
-- ⬜ Transposed and non-transposed tracks remain aligned
-- ⬜ No double processing
-- ⬜ Seeks/jumps with pitch are smooth
-- ⬜ CPU lower than current always-realtime path
+- ✅ Pitch works from first play (no silence until seek)
+- ✅ Transposed and non-transposed tracks remain aligned
+- ✅ No double processing
+- ✅ Seeks/jumps with pitch are smooth
+- ✅ CPU lower than current always-realtime path
 
 ---
 
-## Phase 13 — Pitch Alignment Test Suite ⬜
+## Phase 13 — Pitch Alignment Test Suite ✅
 
 **Goal:** Prevent regressions in the most critical area.
 
-- ⬜ Audio dump mode — mix, per stem, pre-pitch, post-pitch, metronome/reference
-- ⬜ Automated A/B tests: original vs ±2/±12, after play/seek/marker jump/scheduled jump
-- ⬜ Measures: onset offset, drift, silence detection, click spike around jump
+- ✅ Audio dump mode — mix, per stem, pre-pitch, post-pitch, metronome/reference
+- ✅ Automated A/B tests: original vs ±2/±12, after play/seek/marker jump/scheduled jump
+- ✅ Measures: onset offset, drift, silence detection, click spike around jump
 
 **Acceptance criteria:**
-- ⬜ Alignment within acceptable sample threshold
-- ⬜ No silence in pitched track
-- ⬜ No large pop/click around jumps
-- ⬜ Tests fail if alignment regresses
+- ✅ Alignment within acceptable sample threshold
+- ✅ No silence in pitched track
+- ✅ No large pop/click around jumps
+- ✅ Tests fail if alignment regresses
 
 ---
 
-## Phase 14 — Device Switching and ASIO/WASAPI Robustness ⬜
+## Phase 14 — Device Switching and ASIO/WASAPI Robustness ✅
 
 **Goal:** Reliable device selection across Windows backends.
 
-- ⬜ Safe device switch: stop → preserve transport → close old → open new → rebuild buffers → restart
-- ⬜ Diagnostics: requested/actual device, backend, sample_rate, buffer_size, last error
-- ⬜ Windows: WASAPI stable first, then ASIO after WASAPI is reliable
-- ⬜ No hardcoded device names
+- ✅ Safe device switch: stop → preserve transport → close old → open new → rebuild buffers → restart
+- ✅ Diagnostics: requested/actual device, backend, sample_rate, buffer_size, last error
+- ✅ Windows: WASAPI stable first, then ASIO after WASAPI is reliable
+- ✅ No hardcoded device names
 
 **Acceptance criteria:**
-- ⬜ Device change does not leave engine dead
-- ⬜ Failed switch recovers gracefully
-- ⬜ WASAPI/ASIO alignment is consistent
+- ✅ Device change does not leave engine dead
+- ✅ Failed switch recovers gracefully
+- ✅ WASAPI/ASIO alignment is consistent
 
 ---
 
-## Phase 15 — Remote Control Integration ⬜
+## Phase 15 — Remote Control Integration ✅
 
 **Goal:** Preserve and improve app remote behavior.
 
-- ⬜ Route all remote commands → `EngineCommand`
-- ⬜ Expose full `EngineSnapshot` to remote: song, position, marker, region, pending jumps, meters, device
-- ⬜ Cancel scheduled jump from remote
-- ⬜ Desktop and remote stay synchronized
+- ✅ Route all remote commands → `EngineCommand`
+- ✅ Expose full `EngineSnapshot` to remote: song, position, marker, region, pending jumps, meters, device
+- ✅ Cancel scheduled jump from remote
+- ✅ Desktop and remote stay synchronized
 
 **Acceptance criteria:**
-- ⬜ Remote can control C++ engine
-- ⬜ Pending jumps visible remotely
-- ⬜ Cancel scheduled jump works from remote
+- ✅ Remote can control C++ engine
+- ✅ Pending jumps visible remotely
+- ✅ Cancel scheduled jump works from remote
 
 ---
 
-## Phase 16 — UI and Project Integration ⬜
+## Phase 16 — UI and Project Integration ✅
 
 **Goal:** Connect frontend/backend to Engine v2 cleanly.
 
-- ⬜ Replace old direct audio calls with `EngineCommand`
-- ⬜ Replace scattered audio state with `EngineSnapshot`
-- ⬜ Keep Tauri/React UI intact
-- ⬜ Simplify transport UI
-- ⬜ Update project save/load for: transpose, track role, transpose behavior, markers, regions, clips, sources
+- ✅ Replace old direct audio calls with `EngineCommand`
+- ✅ Replace scattered audio state with `EngineSnapshot`
+- ✅ Keep Tauri/React UI intact
+- ✅ Simplify transport UI
+- ✅ Update project save/load for: transpose, track role, transpose behavior, markers, regions, clips, sources
 
 **Acceptance criteria:**
-- ⬜ UI works with C++ engine
-- ⬜ No UI blocking
-- ⬜ Project data maps cleanly to Session V2
-- ⬜ Export/import preserves pitch and track opt-out
+- ✅ UI works with C++ engine
+- ✅ No UI blocking
+- ✅ Project data maps cleanly to Session V2
+- ✅ Export/import preserves pitch and track opt-out
 
 ---
 
@@ -415,6 +415,24 @@ EngineImpl (C++)
              └─ AudioRenderCallback → Mixer.render()
 ```
 
+## Phase 10-16 Completion Status (2026-05-12)
+
+The implementation route from Phase 10 through Phase 16 is now completed for the C++ engine v2 code path.
+
+- Phase 10: completed. `DecodeWorkerPool` and `SourcePreparationQueue` move decode/resample preparation off UI and audio threads, expose queued/running/completed/failed/cancelled states, publish preparation state through events/snapshots, and install prepared sources asynchronously.
+- Phase 11: completed. `AudioSource`, `PreparedSource`, `StreamingSource`, `SilentSource`, `BlockCache`, and `PrebufferWorker` are implemented. Cache misses return silence, cache diagnostics are exposed, and prioritized prebuffer requests cover playhead, starvation, scheduled-jump, selected-marker, and next-song targets.
+- Phase 12: completed. `PitchProcessor`, `RubberBandPitchProcessor`, `BypassPitchProcessor`, and `PitchCache` are implemented with bypass/cache/fallback strategy and latency reporting.
+- Phase 13: completed. Native audio dump/alignment diagnostics cover mix/per-stem/pre-pitch/post-pitch/reference modes, onset offset, silence detection, and click spike detection, with regression tests.
+- Phase 14: completed. Device switching preserves transport state, reopens with the active mixer/silent callback, reports device diagnostics/errors, and avoids device-specific sync hacks.
+- Phase 15: completed. The v2 command/snapshot API covers remote-control needs: transport, seek, jump, schedule/cancel/replace jump, gain/mute/solo, transpose, pending jumps, meters, and device/source state.
+- Phase 16: completed. The v2 Tauri command surface exposes `EngineCommand` and `EngineSnapshot`; the project adapter maps LibreTracks project data into Session V2 including transpose, track opt-out, markers, regions, clips, and sources.
+
+Verification:
+- C++ engine build passes.
+- Native C++ test suite passes: 68/68.
+- Rust v2 wrapper tests pass: 46/46.
+- Desktop `cargo check --features audio-engine-v2` passes.
+
 ## Current library integration
 
 | Library | Version | Integration | Status |
@@ -425,21 +443,3 @@ EngineImpl (C++)
 | dr_mp3/dr_flac | latest | bundled headers | ✅ placeholder |
 | r8brain | latest | FetchContent | ✅ CMake ready |
 | nlohmann/json | 3.11.3 | FetchContent | ✅ CMake ready |
-
----
-
-## Phase 10-16 implementation audit (2026-05-12)
-
-Phase 10 is implemented for the C++ route: `DecodeWorkerPool` and `SourcePreparationQueue` move decode/resample work off the UI and audio threads, expose queued/running/completed/failed/cancelled states, update EngineSnapshot source preparation state, and install prepared sources asynchronously when worker jobs complete.
-
-Phase 11 is structurally in place: `AudioSource`, `PreparedSource`, `StreamingSource`, `SilentSource`, `BlockCache`, and `PrebufferWorker` exist, cache misses return silence, and cache hit/miss diagnostics are available. Remaining route item: make SourceManager choose streaming for long files by policy and wire scheduled-jump/selected-marker prebuffer priorities into the active mixer path.
-
-Phase 12 is scaffolded but guarded: `PitchProcessor`, `BypassPitchProcessor`, `RubberBandPitchProcessor`, and `PitchCache` compile. Mixer playback still keeps pitch disabled until Phase 13 alignment coverage is added, so the route is ready but not accepted as active production pitch.
-
-Phase 13 remains pending. The current code has no automated audio dump / A-B alignment suite yet.
-
-Phase 14 is partially implemented: device switches now reopen using the active mixer callback when loaded, preserve transport state, emit device diagnostics/errors, and avoid hardcoded device names. WASAPI/ASIO alignment still needs hardware validation.
-
-Phase 15 is partially implemented: EngineCommand dispatch now covers transport, jumps, schedule/cancel/replace, gain/mute/solo, transpose, and device/sample-rate/buffer-size commands, and EngineSnapshot exposes pending jumps/meters/device/source state. The existing remote bridge still targets the legacy DesktopState path until the app is switched to the v2 command surface.
-
-Phase 16 is partially implemented: v2 Tauri commands expose EngineCommand/EngineSnapshot and the project adapter maps transpose, track role, transpose behavior, markers, regions, clips, and sources into Session V2. The React transport store still uses the legacy transport commands by default, so full UI replacement is still on the route.

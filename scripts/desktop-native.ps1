@@ -7,6 +7,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $nativeTargetDir = Join-Path $repoRoot "target-desktop-native"
+$engineV2BuildDir = Join-Path $repoRoot "native\audio-engine-v2\build"
+$engineV2LibDir = Join-Path $engineV2BuildDir "Debug"
 $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
 $toolchainRoot = Join-Path $env:USERPROFILE ".rustup\toolchains"
 $toolchainBin = $null
@@ -208,6 +210,24 @@ Assert-NativeToolchainReady
 
 Set-Location $repoRoot
 
+if ($env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp-v2" -or $env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp_v2") {
+  if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+    throw "CMake is required to build Audio Engine v2. Install CMake or build native/audio-engine-v2 manually."
+  }
+
+  cmake -S native/audio-engine-v2 -B native/audio-engine-v2/build `
+    -DLT_ENGINE_BUILD_TESTS=OFF `
+    -DLT_ENGINE_USE_JUCE=OFF `
+    -DLT_ENGINE_USE_RUBBERBAND=OFF `
+    -DLT_ENGINE_USE_LIBSNDFILE=ON `
+    -DLT_ENGINE_USE_R8BRAIN=ON
+
+  cmake --build native/audio-engine-v2/build --config Debug --target lt_audio_engine_v2
+
+  $env:LT_ENGINE_V2_LIB_DIR = $engineV2LibDir
+  $env:PATH = "$engineV2LibDir;" + $env:PATH
+}
+
 # Tauri's desktop build script expects the bundled remote assets to exist.
 $remoteDistDir = Join-Path $repoRoot "apps\remote\dist"
 if (-not (Test-Path $remoteDistDir)) {
@@ -232,12 +252,24 @@ if (Test-Path $windowsVendorBin) {
 
 switch ($Mode) {
   "dev" {
-    npm --prefix apps/desktop run tauri:dev
+    if ($env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp-v2" -or $env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp_v2") {
+      npm --prefix apps/desktop run tauri:dev -- --features audio-engine-v2
+    } else {
+      npm --prefix apps/desktop run tauri:dev
+    }
   }
   "check" {
-    cargo check -p libretracks-desktop
+    if ($env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp-v2" -or $env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp_v2") {
+      cargo check -p libretracks-desktop --features audio-engine-v2
+    } else {
+      cargo check -p libretracks-desktop
+    }
   }
   "build" {
-    npm --prefix apps/desktop run tauri:build
+    if ($env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp-v2" -or $env:LIBRETRACKS_AUDIO_ENGINE -eq "cpp_v2") {
+      npm --prefix apps/desktop run tauri:build -- --features audio-engine-v2
+    } else {
+      npm --prefix apps/desktop run tauri:build
+    }
   }
 }

@@ -10,6 +10,7 @@
   "scripts": {
     "dev:desktop": "npm --prefix apps/desktop run dev --",
     "dev:desktop:native": "node ./scripts/desktop-native.mjs dev",
+    "dev:desktop:engine-v2": "node ./scripts/desktop-native.mjs dev",
     "build:desktop": "npm --prefix apps/desktop run build",
     "check:desktop:native": "node ./scripts/desktop-native.mjs check",
     "build:desktop:native": "node ./scripts/desktop-native.mjs build",
