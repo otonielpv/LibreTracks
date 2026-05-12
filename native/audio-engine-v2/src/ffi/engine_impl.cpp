@@ -67,9 +67,14 @@ Result<void> EngineImpl::initialize() {
     scheduler_      = std::make_unique<JumpScheduler>();
     source_manager_ = std::make_unique<SourceManager>();
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
+    mixer_          = std::make_unique<Mixer>(
+        std::shared_ptr<const Session>{},
+        source_manager_.get(),
+        clock_.get(),
+        scheduler_.get());
 
     // Open the default audio device with the silent callback.
-    auto open_result = device_manager_->open_device(current_device_request_, silent_callback_.get());
+    auto open_result = device_manager_->open_device(current_device_request_, mixer_.get());
     if (open_result.is_err()) {
         // Non-fatal: engine works without a device (useful in tests).
         push_event(EvDeviceError{ "Could not open default device: " + open_result.error() });
@@ -77,7 +82,7 @@ Result<void> EngineImpl::initialize() {
         // Update clock sample rate to the negotiated device rate.
         int sr = device_manager_->actual_sample_rate();
         if (sr > 0)
-            clock_ = std::make_unique<TransportClock>(sr);
+            clock_->set_sample_rate(sr);
 
         push_event(EvDeviceChanged{
             device_manager_->actual_device_name(),
@@ -96,10 +101,11 @@ Result<void> EngineImpl::shutdown() {
         return Result<void>::ok();  // idempotent
 
     device_manager_->close_device();
-    mixer_.reset();
+    if (mixer_) mixer_->clear_session();
     if (prep_queue_) { prep_queue_->cancel_all(); prep_queue_.reset(); }
     if (worker_pool_) { worker_pool_->shutdown(); }
     source_manager_->clear();
+    mixer_.reset();
     clock_.reset();
     scheduler_.reset();
     session_.reset();
@@ -149,6 +155,8 @@ std::string EngineImpl::get_snapshot() const {
 
     if (scheduler_) {
         for (const auto& j : scheduler_->jump_list()) {
+            if (j.status != JumpStatus::Pending && j.status != JumpStatus::Armed)
+                continue;
             PendingJumpInfo info;
             info.jump_id       = j.jump_id;
             info.created_frame = j.created_frame;
@@ -169,6 +177,9 @@ std::string EngineImpl::get_snapshot() const {
         auto m = mixer_->meters();
         snap.meters.left_peak  = m.left_peak;
         snap.meters.right_peak = m.right_peak;
+        snap.meters.left_rms   = m.left_rms;
+        snap.meters.right_rms  = m.right_rms;
+        snap.track_meters      = mixer_->track_meters();
         snap.cpu.callback_duration_ms = mixer_->callback_duration_ms();
         snap.cpu.callback_count       = mixer_->callback_count();
     }
@@ -219,7 +230,14 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (result.is_err())
                 return Result<void>::err(result.error());
 
-            session_ = result.take();
+            if (prep_queue_) {
+                prep_queue_->cancel_all();
+                prep_queue_.reset();
+            }
+
+            auto next_session = std::make_shared<Session>(result.take());
+            session_ = next_session;
+            session_generation_.fetch_add(1, std::memory_order_relaxed);
 
             // Register all sources, then hand off to the async worker pool.
             source_manager_->clear();
@@ -233,15 +251,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             prep_queue_->enqueue_session(session_->sources,
                                           clock_->position().frame);
 
-            // Build the Mixer and replace the device callback.
-            mixer_ = std::make_unique<Mixer>(
-                &*session_, source_manager_.get(),
-                clock_.get(), scheduler_.get());
-
-            auto open = device_manager_->open_device(current_device_request_, mixer_.get());
-            if (open.is_err()) {
-                push_event(EvDeviceError{ open.error() });
-                return Result<void>::ok();
+            if (mixer_) {
+                mixer_->set_session(next_session);
             }
 
             return Result<void>::ok();
@@ -265,6 +276,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         else if constexpr (std::is_same_v<T, CmdSeekAbsolute>) {
             Frame from = clock_->position().frame;
             clock_->seek(c.frame);
+            if (mixer_) mixer_->trigger_crossfade();
             push_event(EvSeekExecuted{ from, c.frame });
             return Result<void>::ok();
         }
@@ -272,6 +284,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             Frame from = clock_->position().frame;
             Frame to   = from + c.delta_frames;
             clock_->seek(to);
+            if (mixer_) mixer_->trigger_crossfade();
             push_event(EvSeekExecuted{ from, to });
             return Result<void>::ok();
         }
@@ -361,29 +374,38 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackTransposeEnabled>) {
             if (session_) {
-                for (auto& song : session_->songs)
+                auto next_session = std::make_shared<Session>(*session_);
+                for (auto& song : next_session->songs)
                     for (auto& track : song.tracks)
                         if (track.id == c.track_id)
                             track.transpose_behavior = c.enabled
                                 ? TransposeBehavior::FollowsSongOrRegion
                                 : TransposeBehavior::NeverTranspose;
+                session_ = next_session;
+                if (mixer_) mixer_->set_session(next_session);
             }
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetSongTranspose>) {
             if (session_) {
-                for (auto& song : session_->songs)
+                auto next_session = std::make_shared<Session>(*session_);
+                for (auto& song : next_session->songs)
                     if (song.id == c.song_id)
                         song.transpose_semitones = c.semitones;
+                session_ = next_session;
+                if (mixer_) mixer_->set_session(next_session);
             }
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetRegionTranspose>) {
             if (session_) {
-                for (auto& song : session_->songs)
+                auto next_session = std::make_shared<Session>(*session_);
+                for (auto& song : next_session->songs)
                     for (auto& region : song.regions)
                         if (region.id == c.region_id)
                             region.transpose_semitones = c.semitones;
+                session_ = next_session;
+                if (mixer_) mixer_->set_session(next_session);
             }
             return Result<void>::ok();
         }
@@ -402,6 +424,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 return r;
             }
             current_device_request_ = req;
+            if (clock_ && device_manager_->actual_sample_rate() > 0)
+                clock_->set_sample_rate(device_manager_->actual_sample_rate());
             if (was_playing && clock_) clock_->play();
             push_event(EvDeviceChanged{
                 device_manager_->actual_device_name(),
@@ -419,8 +443,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
             auto r = device_manager_->open_device(req, callback);
-            if (r.is_ok())
+            if (r.is_ok()) {
                 current_device_request_ = req;
+                if (clock_ && device_manager_->actual_sample_rate() > 0)
+                    clock_->set_sample_rate(device_manager_->actual_sample_rate());
+            }
             return r;
         }
         else if constexpr (std::is_same_v<T, CmdSetBufferSize>) {
@@ -431,8 +458,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
             auto r = device_manager_->open_device(req, callback);
-            if (r.is_ok())
+            if (r.is_ok()) {
                 current_device_request_ = req;
+                if (clock_ && device_manager_->actual_sample_rate() > 0)
+                    clock_->set_sample_rate(device_manager_->actual_sample_rate());
+            }
             return r;
         }
         else {

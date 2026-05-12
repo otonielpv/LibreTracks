@@ -12,6 +12,8 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace lt {
 
@@ -28,6 +30,11 @@ public:
           TransportClock*      clock,
           JumpScheduler*       scheduler);
 
+    Mixer(std::shared_ptr<const Session> session,
+          const SourceManager* sources,
+          TransportClock* clock,
+          JumpScheduler* scheduler);
+
     // Called by the JUCE audio thread.
     void render(float** output_channels,
                 int     num_channels,
@@ -39,16 +46,20 @@ public:
     void set_track_gain(const Id& track_id, Gain gain);
     void set_track_mute(const Id& track_id, bool mute);
     void set_track_solo(const Id& track_id, bool solo);
+    void set_session(std::shared_ptr<const Session> session);
+    void clear_session();
+    void trigger_crossfade() noexcept;
 
     // Meter read (from UI thread — relaxed atomic).
     MeterValues meters() const noexcept;
+    std::vector<TrackMeterValues> track_meters() const;
 
     // Diagnostic counters.
     int    callback_count()          const noexcept;
     double callback_duration_ms()    const noexcept;
 
 private:
-    const Session*       session_;
+    std::shared_ptr<const Session> session_;
     const SourceManager* sources_;
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
@@ -75,6 +86,17 @@ private:
     // Meters (peak hold, updated each block).
     std::atomic<float> meter_l_{0.f};
     std::atomic<float> meter_r_{0.f};
+    std::atomic<float> meter_l_rms_{0.f};
+    std::atomic<float> meter_r_rms_{0.f};
+
+    struct TrackMeterSlot {
+        std::atomic<float> left_peak{0.f};
+        std::atomic<float> right_peak{0.f};
+        std::atomic<float> left_rms{0.f};
+        std::atomic<float> right_rms{0.f};
+    };
+    std::array<TrackMeterSlot, kMaxTracks> track_meters_;
+    std::atomic<int> track_meter_count_{0};
 
     // Callback stats.
     std::atomic<int>    callback_count_{0};
@@ -85,6 +107,7 @@ private:
 
     // Check whether any track is soloed.
     bool any_solo_active(const Song& song) const noexcept;
+    void reset_track_meters() noexcept;
 };
 
 } // namespace lt

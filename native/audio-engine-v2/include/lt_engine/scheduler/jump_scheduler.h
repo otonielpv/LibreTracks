@@ -79,7 +79,8 @@ public:
     // Check whether any armed jump should fire this block.
     // Returns the target frame if a jump should execute now, else nullopt.
     std::optional<Frame> check_due(const TransportClock& clock,
-                                   const Session& session);
+                                   const Session& session,
+                                   int block_frames = 512);
 
     // Mark the last due jump as executed.
     void mark_executed(Frame from_frame, Frame to_frame);

@@ -242,3 +242,47 @@ TEST_CASE("schedule_immediate resolves frame and arms jump") {
     REQUIRE(list.size() == 1);
     CHECK(list[0].status == JumpStatus::Armed);
 }
+
+TEST_CASE("multiple immediate jumps coalesce to latest target") {
+    TransportClock clock(48000);
+    clock.play();
+    auto sess = make_session_with_marker();
+    JumpScheduler sched;
+
+    for (int i = 0; i < 100; ++i) {
+        auto r = sched.schedule_immediate("jump-" + std::to_string(i),
+                                          frame_target(1000 + i),
+                                          sess,
+                                          clock);
+        CHECK(r.is_ok());
+    }
+
+    sched.drain_pending();
+    auto list = sched.jump_list();
+    REQUIRE(list.size() == 1);
+    CHECK(list[0].jump_id == "jump-99");
+    auto due = sched.check_due(clock, sess, 128);
+    REQUIRE(due.has_value());
+    CHECK(due.value() == 1099);
+}
+
+TEST_CASE("region end trigger uses actual render block size") {
+    TransportClock clock(48000);
+    auto sess = make_session_with_marker();
+    JumpScheduler sched;
+    clock.seek(95600);
+    clock.play();
+
+    ScheduledJump jump;
+    jump.jump_id = "region-end";
+    jump.target = frame_target(1234);
+    jump.trigger = JumpTrigger::AtRegionEnd;
+    jump.status = JumpStatus::Pending;
+    sched.schedule(jump);
+    sched.drain_pending();
+
+    CHECK_FALSE(sched.check_due(clock, sess, 128).has_value());
+    auto due = sched.check_due(clock, sess, 512);
+    REQUIRE(due.has_value());
+    CHECK(due.value() == 1234);
+}

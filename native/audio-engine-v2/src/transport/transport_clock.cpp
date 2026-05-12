@@ -33,6 +33,12 @@ void TransportClock::advance(int block_frames) {
     position_.seconds  = static_cast<double>(position_.frame) / sample_rate_;
 }
 
+void TransportClock::set_sample_rate(int sample_rate) {
+    if (sample_rate <= 0) return;
+    sample_rate_ = sample_rate;
+    position_.seconds = static_cast<double>(position_.frame) / sample_rate_;
+}
+
 void TransportClock::resolve_context(const Session& session) {
     position_.song_id.reset();
     position_.region_id.reset();

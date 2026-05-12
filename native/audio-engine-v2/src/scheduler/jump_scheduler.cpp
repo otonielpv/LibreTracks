@@ -97,6 +97,7 @@ struct JumpScheduler::Impl {
     std::queue<PendingOp>   pending_ops;
 
     // Audio thread owns this vector.
+    mutable std::mutex live_mutex;
     std::vector<ScheduledJump> jumps;
 
     // The jump that check_due() identified as due, waiting for mark_executed().
@@ -167,9 +168,19 @@ void JumpScheduler::drain_pending() {
 
     while (!local.empty()) {
         auto& op = local.front();
+        std::lock_guard live_lock(impl_->live_mutex);
         std::visit([this](auto&& o) {
             using T = std::decay_t<decltype(o)>;
             if constexpr (std::is_same_v<T, OpSchedule>) {
+                if (o.jump.trigger == JumpTrigger::Immediate) {
+                    impl_->jumps.erase(
+                        std::remove_if(impl_->jumps.begin(), impl_->jumps.end(),
+                            [](const ScheduledJump& j) {
+                                return j.trigger == JumpTrigger::Immediate &&
+                                    (j.status == JumpStatus::Pending || j.status == JumpStatus::Armed);
+                            }),
+                        impl_->jumps.end());
+                }
                 impl_->jumps.push_back(o.jump);
             }
             else if constexpr (std::is_same_v<T, OpCancel>) {
@@ -203,7 +214,9 @@ void JumpScheduler::drain_pending() {
 }
 
 std::optional<Frame> JumpScheduler::check_due(const TransportClock& clock,
-                                               const Session& session) {
+                                               const Session& session,
+                                               int block_frames) {
+    std::lock_guard live_lock(impl_->live_mutex);
     impl_->due_index.reset();
     Frame cur = clock.position().frame;
 
@@ -220,7 +233,7 @@ std::optional<Frame> JumpScheduler::check_due(const TransportClock& clock,
             case JumpTrigger::AtSongEnd:
                 // Check if the current song ends within this block.
                 for (const auto& song : session.songs) {
-                    if (cur < song.end_frame && cur + 512 >= song.end_frame) {
+                    if (cur < song.end_frame && cur + block_frames >= song.end_frame) {
                         fire = true; break;
                     }
                 }
@@ -228,7 +241,7 @@ std::optional<Frame> JumpScheduler::check_due(const TransportClock& clock,
             case JumpTrigger::AtRegionEnd:
                 for (const auto& song : session.songs)
                     for (const auto& region : song.regions)
-                        if (cur < region.end_frame && cur + 512 >= region.end_frame) {
+                        if (cur < region.end_frame && cur + block_frames >= region.end_frame) {
                             fire = true; break;
                         }
                 break;
@@ -253,6 +266,7 @@ std::optional<Frame> JumpScheduler::check_due(const TransportClock& clock,
 }
 
 void JumpScheduler::mark_executed(Frame from_frame, Frame to_frame) {
+    std::lock_guard live_lock(impl_->live_mutex);
     if (!impl_->due_index) return;
     auto& j        = impl_->jumps[*impl_->due_index];
     j.status        = JumpStatus::Executed;
@@ -261,10 +275,36 @@ void JumpScheduler::mark_executed(Frame from_frame, Frame to_frame) {
 
     if (impl_->on_executed)
         impl_->on_executed(j, from_frame, to_frame);
+
+    constexpr std::size_t kMaxJumpHistory = 32;
+    std::size_t finished = 0;
+    for (const auto& jump : impl_->jumps) {
+        if (jump.status == JumpStatus::Executed ||
+            jump.status == JumpStatus::Cancelled ||
+            jump.status == JumpStatus::Failed) {
+            ++finished;
+        }
+    }
+    if (finished > kMaxJumpHistory) {
+        std::size_t to_remove = finished - kMaxJumpHistory;
+        impl_->jumps.erase(
+            std::remove_if(impl_->jumps.begin(), impl_->jumps.end(),
+                [&to_remove](const ScheduledJump& jump) {
+                    if (to_remove == 0) return false;
+                    if (jump.status == JumpStatus::Executed ||
+                        jump.status == JumpStatus::Cancelled ||
+                        jump.status == JumpStatus::Failed) {
+                        --to_remove;
+                        return true;
+                    }
+                    return false;
+                }),
+            impl_->jumps.end());
+    }
 }
 
 std::vector<ScheduledJump> JumpScheduler::jump_list() const {
-    // Audio thread may be writing, but snapshot reads are non-blocking best-effort.
+    std::lock_guard live_lock(impl_->live_mutex);
     return impl_->jumps;
 }
 

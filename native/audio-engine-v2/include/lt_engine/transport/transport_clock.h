@@ -45,6 +45,7 @@ public:
     ClockPosition position() const { return position_; }
 
     int sample_rate() const { return sample_rate_; }
+    void set_sample_rate(int sample_rate);
 
 private:
     int            sample_rate_;

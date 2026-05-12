@@ -22,6 +22,7 @@
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <memory>
+#include <atomic>
 #include <string>
 
 namespace lt {
@@ -55,8 +56,9 @@ private:
     std::unique_ptr<DecodeWorkerPool>   worker_pool_;
     std::unique_ptr<SourcePreparationQueue> prep_queue_;
     std::unique_ptr<Mixer>              mixer_;
-    std::optional<Session>              session_;
+    std::shared_ptr<const Session>      session_;
     DeviceOpenRequest                   current_device_request_;
+    std::atomic<uint64_t>               session_generation_{0};
 
     // Cached snapshot string (rebuilt on snapshot request).
     mutable std::string snapshot_cache_;

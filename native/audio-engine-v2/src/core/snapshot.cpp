@@ -60,6 +60,18 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"right_rms",  snap.meters.right_rms},
     };
 
+    json track_meters = json::array();
+    for (const auto& m : snap.track_meters) {
+        track_meters.push_back({
+            {"track_id",   m.track_id},
+            {"left_peak",  m.left_peak},
+            {"right_peak", m.right_peak},
+            {"left_rms",   m.left_rms},
+            {"right_rms",  m.right_rms},
+        });
+    }
+    j["track_meters"] = track_meters;
+
     json sources = json::array();
     for (const auto& s : snap.source_states) {
         sources.push_back({

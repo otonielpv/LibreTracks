@@ -45,6 +45,14 @@ struct MeterValues {
     float right_rms   = 0.f;
 };
 
+struct TrackMeterValues {
+    Id    track_id;
+    float left_peak   = 0.f;
+    float right_peak  = 0.f;
+    float left_rms    = 0.f;
+    float right_rms   = 0.f;
+};
+
 struct SourcePreparationInfo {
     Id          source_id;
     std::string status;   // "queued" | "running" | "completed" | "failed"
@@ -73,6 +81,7 @@ struct EngineSnapshot {
 
     // Meters
     MeterValues        meters;
+    std::vector<TrackMeterValues> track_meters;
 
     // Source preparation
     std::vector<SourcePreparationInfo> source_states;

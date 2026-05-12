@@ -30,6 +30,9 @@ pub struct EngineSnapshot {
     pub meters:  MeterValues,
 
     #[serde(default)]
+    pub track_meters: Vec<TrackMeterValues>,
+
+    #[serde(default)]
     pub source_states: Vec<SourcePreparationInfo>,
 }
 
@@ -62,6 +65,15 @@ pub struct CpuDiagnostics {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MeterValues {
+    pub left_peak:  f32,
+    pub right_peak: f32,
+    pub left_rms:   f32,
+    pub right_rms:  f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TrackMeterValues {
+    pub track_id:   String,
     pub left_peak:  f32,
     pub right_peak: f32,
     pub left_rms:   f32,

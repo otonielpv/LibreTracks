@@ -3,7 +3,9 @@
 #include <lt_engine/core/types.h>
 #include <lt_engine/core/result.h>
 #include <lt_engine/sources/decoded_source.h>
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -63,7 +65,12 @@ private:
         std::string              error_message;
     };
 
-    std::unordered_map<Id, Entry> entries_;
+    using EntryMap = std::unordered_map<Id, Entry>;
+
+    mutable std::mutex              write_mutex_;
+    std::shared_ptr<const EntryMap> entries_;
+
+    void publish_locked(EntryMap entries);
 };
 
 } // namespace lt

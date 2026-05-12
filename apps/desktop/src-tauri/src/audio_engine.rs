@@ -1,7 +1,12 @@
 use std::{
-    collections::HashMap,
+    collections::{hash_map::DefaultHasher, HashMap},
+    hash::{Hash, Hasher},
     path::{Path, PathBuf},
-    sync::{mpsc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex,
+    },
+    thread::{self, JoinHandle},
     time::Instant,
 };
 
@@ -11,7 +16,7 @@ use lt_audio_engine_v2::{
     DeviceInfo, Engine, EngineCommand, JumpTarget, JumpTargetKind, JumpTrigger,
 };
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 use crate::{error::DesktopError, settings::AppSettings};
 
@@ -90,6 +95,14 @@ pub struct AudioOutputDevicesResponse {
     pub channel_counts: HashMap<String, usize>,
     pub backends: Vec<AudioBackendKind>,
     pub device_descriptors: Vec<AudioDeviceDescriptor>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioMeterLevel {
+    pub track_id: String,
+    pub left_peak: f32,
+    pub right_peak: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -268,6 +281,7 @@ struct ControllerState {
     song_duration_seconds: Option<f64>,
     last_start_reason: Option<String>,
     song_dir: Option<PathBuf>,
+    loaded_session_signature: Option<String>,
 }
 
 impl ControllerState {
@@ -286,6 +300,7 @@ impl ControllerState {
             song_duration_seconds: None,
             last_start_reason: None,
             song_dir: None,
+            loaded_session_signature: None,
         }
     }
 }
@@ -293,6 +308,9 @@ impl ControllerState {
 pub struct AudioController {
     state: Mutex<ControllerState>,
     sender: mpsc::Sender<AudioCommand>,
+    meter_thread_started: AtomicBool,
+    meter_thread_stop: Arc<AtomicBool>,
+    meter_thread: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl AudioController {
@@ -301,10 +319,37 @@ impl AudioController {
         Self {
             state: Mutex::new(ControllerState::new()),
             sender,
+            meter_thread_started: AtomicBool::new(false),
+            meter_thread_stop: Arc::new(AtomicBool::new(false)),
+            meter_thread: Mutex::new(None),
         }
     }
 
-    pub fn attach_app_handle(&self, _app_handle: AppHandle) {}
+    pub fn attach_app_handle(&self, app_handle: AppHandle) {
+        if self
+            .meter_thread_started
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+        let stop = Arc::clone(&self.meter_thread_stop);
+        let controller_addr = self as *const AudioController as usize;
+        let handle = thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                let controller = unsafe { &*(controller_addr as *const AudioController) };
+                if let Ok(levels) = controller.current_meter_levels() {
+                    if !levels.is_empty() {
+                        let _ = app_handle.emit("audio:meters", levels);
+                    }
+                }
+                thread::sleep(std::time::Duration::from_millis(33));
+            }
+        });
+        if let Ok(mut thread_slot) = self.meter_thread.lock() {
+            *thread_slot = Some(handle);
+        }
+    }
 
     pub fn attach_remote_handle(&self, _remote_handle: RemoteServerHandle) {}
 
@@ -321,7 +366,7 @@ impl AudioController {
     ) -> Result<(), DesktopError> {
         self.with_engine_state("play", Some(reason), |engine, state| {
             state.song_dir = Some(song_dir);
-            load_song(engine, state.song_dir.as_deref(), &song)?;
+            ensure_song_loaded(engine, state, &song)?;
             engine.send_command(&EngineCommand::SeekAbsolute {
                 frame: seconds_to_frame_for_engine(engine, position_seconds),
             })?;
@@ -349,7 +394,7 @@ impl AudioController {
         reason: PlaybackStartReason,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("seek", Some(reason), |engine, state| {
-            load_song(engine, state.song_dir.as_deref(), &song)?;
+            ensure_song_loaded(engine, state, &song)?;
             engine.send_command(&EngineCommand::SeekAbsolute {
                 frame: seconds_to_frame_for_engine(engine, position_seconds),
             })?;
@@ -371,12 +416,11 @@ impl AudioController {
         song: Song,
         _position_seconds: f64,
     ) -> Result<(), DesktopError> {
-        self.with_engine_state("sync_song", None, |engine, state| {
+        self.with_engine_state("sync_song", None, |_engine, state| {
             state.song_dir = Some(song_dir);
-            load_song(engine, state.song_dir.as_deref(), &song)?;
             state.song_duration_seconds = Some(song.duration_seconds);
             state.last_sync = Some(AudioOperationSummary {
-                reason: Some("load_session".into()),
+                reason: Some("remember_song_dir".into()),
                 elapsed_ms: 0.0,
                 scheduled_clips: song.clips.len(),
                 active_sinks: song.tracks.len(),
@@ -388,7 +432,7 @@ impl AudioController {
 
     pub fn sync_song(&self, song: Song) -> Result<(), DesktopError> {
         self.with_engine_state("sync_song", None, |engine, state| {
-            load_song(engine, state.song_dir.as_deref(), &song)?;
+            ensure_song_loaded(engine, state, &song)?;
             state.song_duration_seconds = Some(song.duration_seconds);
             state.last_sync = Some(AudioOperationSummary {
                 reason: Some("load_session".into()),
@@ -582,7 +626,7 @@ impl AudioController {
         let song = song.clone();
         self.with_engine_state("sync_song", None, |engine, state| {
             state.song_dir = Some(song_dir);
-            load_song(engine, state.song_dir.as_deref(), &song)?;
+            force_load_song(engine, state, &song)?;
             state.song_duration_seconds = Some(song.duration_seconds);
             state.last_sync = Some(AudioOperationSummary {
                 reason: Some("load_session".into()),
@@ -593,6 +637,25 @@ impl AudioController {
             });
             Ok(())
         })
+    }
+
+    fn current_meter_levels(&self) -> Result<Vec<AudioMeterLevel>, DesktopError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))?;
+        let snapshot = ensure_engine(&mut state)?
+            .get_snapshot()
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        Ok(snapshot
+            .track_meters
+            .into_iter()
+            .map(|meter| AudioMeterLevel {
+                track_id: meter.track_id,
+                left_peak: meter.left_peak,
+                right_peak: meter.right_peak,
+            })
+            .collect())
     }
 
     pub fn prepare_song_buffers_async(&self, song_dir: PathBuf, _song: Song) {
@@ -662,6 +725,12 @@ impl Default for AudioController {
 
 impl Drop for AudioController {
     fn drop(&mut self) {
+        self.meter_thread_stop.store(true, Ordering::Relaxed);
+        if let Ok(mut handle) = self.meter_thread.lock() {
+            if let Some(handle) = handle.take() {
+                let _ = handle.join();
+            }
+        }
         if let Ok(mut state) = self.state.lock() {
             if let Some(engine) = state.engine.as_ref() {
                 let _ = engine.shutdown();
@@ -697,13 +766,42 @@ fn ensure_engine(state: &mut ControllerState) -> Result<&Engine, DesktopError> {
     Ok(state.engine.as_ref().expect("engine should be initialized"))
 }
 
-fn load_song(engine: &Engine, song_dir: Option<&Path>, song: &Song) -> Result<(), DesktopError> {
-    let song = song_with_resolved_audio_paths(song_dir, song);
+fn ensure_song_loaded(
+    engine: &Engine,
+    state: &mut ControllerState,
+    song: &Song,
+) -> Result<(), DesktopError> {
+    let resolved = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
+    let signature = session_signature(&resolved);
+    if state.loaded_session_signature.as_deref() == Some(signature.as_str()) {
+        return Ok(());
+    }
+    load_resolved_song(engine, state, &resolved, signature)
+}
+
+fn force_load_song(
+    engine: &Engine,
+    state: &mut ControllerState,
+    song: &Song,
+) -> Result<(), DesktopError> {
+    let resolved = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
+    let signature = session_signature(&resolved);
+    load_resolved_song(engine, state, &resolved, signature)
+}
+
+fn load_resolved_song(
+    engine: &Engine,
+    state: &mut ControllerState,
+    song: &Song,
+    signature: String,
+) -> Result<(), DesktopError> {
     let project_json =
-        serde_json::to_string(&song).map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        serde_json::to_string(song).map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
     engine
         .send_command(&EngineCommand::LoadSession { project_json })
-        .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    state.loaded_session_signature = Some(signature);
+    Ok(())
 }
 
 fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song {
@@ -722,6 +820,51 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
         }
     }
     resolved
+}
+
+fn session_signature(song: &Song) -> String {
+    let mut hasher = DefaultHasher::new();
+    song.id.hash(&mut hasher);
+    song.title.hash(&mut hasher);
+    song.duration_seconds.to_bits().hash(&mut hasher);
+    song.tracks.len().hash(&mut hasher);
+    song.clips.len().hash(&mut hasher);
+    song.section_markers.len().hash(&mut hasher);
+    song.regions.len().hash(&mut hasher);
+    for track in &song.tracks {
+        track.id.hash(&mut hasher);
+        track.name.hash(&mut hasher);
+        format!("{:?}", track.kind).hash(&mut hasher);
+        track.parent_track_id.hash(&mut hasher);
+        track.volume.to_bits().hash(&mut hasher);
+        track.muted.hash(&mut hasher);
+        track.solo.hash(&mut hasher);
+        track.transpose_enabled.hash(&mut hasher);
+    }
+    for clip in &song.clips {
+        clip.id.hash(&mut hasher);
+        clip.track_id.hash(&mut hasher);
+        clip.file_path.hash(&mut hasher);
+        clip.timeline_start_seconds.to_bits().hash(&mut hasher);
+        clip.source_start_seconds.to_bits().hash(&mut hasher);
+        clip.duration_seconds.to_bits().hash(&mut hasher);
+        clip.gain.to_bits().hash(&mut hasher);
+        clip.fade_in_seconds.map(f64::to_bits).hash(&mut hasher);
+        clip.fade_out_seconds.map(f64::to_bits).hash(&mut hasher);
+    }
+    for marker in &song.section_markers {
+        marker.id.hash(&mut hasher);
+        marker.name.hash(&mut hasher);
+        marker.start_seconds.to_bits().hash(&mut hasher);
+    }
+    for region in &song.regions {
+        region.id.hash(&mut hasher);
+        region.name.hash(&mut hasher);
+        region.start_seconds.to_bits().hash(&mut hasher);
+        region.end_seconds.to_bits().hash(&mut hasher);
+        region.transpose_semitones.hash(&mut hasher);
+    }
+    format!("{:016x}", hasher.finish())
 }
 
 fn seconds_to_frame_for_engine(engine: &Engine, seconds: f64) -> i64 {
