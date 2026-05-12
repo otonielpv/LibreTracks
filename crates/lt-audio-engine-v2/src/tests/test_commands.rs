@@ -175,6 +175,20 @@ fn set_track_transpose_enabled_false_round_trip() {
     ));
 }
 
+#[test]
+fn set_metronome_config_round_trip() {
+    let cmd = EngineCommand::SetMetronomeConfig {
+        enabled: true,
+        volume: 0.5,
+        route: "monitor".into(),
+    };
+    let rt = round_trip(&cmd);
+    assert!(
+        matches!(rt, EngineCommand::SetMetronomeConfig { enabled: true, volume, route }
+            if (volume - 0.5).abs() < 1e-6 && route == "monitor")
+    );
+}
+
 // ── Pitch ───────────────────────────────────────────────────────────────────
 
 #[test]
@@ -270,6 +284,7 @@ fn all_commands_have_type_field() {
             track_id: "t1".into(),
             audio_to: "master".into(),
         },
+        EngineCommand::SetMetronomeEnabled { enabled: true },
         EngineCommand::SetSampleRate { sample_rate: 48000 },
         EngineCommand::SetBufferSize { buffer_size: 512 },
     ];

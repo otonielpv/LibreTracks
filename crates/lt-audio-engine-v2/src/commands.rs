@@ -73,6 +73,21 @@ pub enum EngineCommand {
         enabled: bool,
     },
 
+    SetMetronomeEnabled {
+        enabled: bool,
+    },
+    SetMetronomeVolume {
+        volume: f32,
+    },
+    SetMetronomeOutputRoute {
+        route: String,
+    },
+    SetMetronomeConfig {
+        enabled: bool,
+        volume: f32,
+        route: String,
+    },
+
     SetSongTranspose {
         song_id: String,
         semitones: i32,

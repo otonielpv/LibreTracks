@@ -99,6 +99,7 @@ Result<void> EngineImpl::initialize() {
         source_manager_.get(),
         clock_.get(),
         scheduler_.get());
+    mixer_->set_metronome_config(metronome_config_);
 
     // Open the default audio device with the silent callback.
     auto open_result = device_manager_->open_device(current_device_request_, mixer_.get());
@@ -209,6 +210,17 @@ std::string EngineImpl::get_snapshot() const {
         snap.track_meters      = mixer_->track_meters();
         snap.cpu.callback_duration_ms = mixer_->callback_duration_ms();
         snap.cpu.callback_count       = mixer_->callback_count();
+        auto metro = mixer_->metronome_diagnostics();
+        snap.metronome.enabled = metro.enabled;
+        snap.metronome.volume = metro.volume;
+        snap.metronome.output = metro.output;
+        snap.metronome.last_beat_frame = metro.last_beat_frame;
+        snap.metronome.next_beat_frame = metro.next_beat_frame;
+        snap.metronome.current_bar = metro.current_bar;
+        snap.metronome.current_beat = metro.current_beat;
+        snap.metronome.route_resolved = metro.route_resolved;
+        snap.metronome.rendered_clicks_count = metro.rendered_clicks_count;
+        snap.metronome.muted_reason = metro.muted_reason;
     }
 
     if (prep_queue_) {
@@ -218,6 +230,7 @@ std::string EngineImpl::get_snapshot() const {
             SourcePreparationInfo info;
             info.source_id = d.source_id;
             info.status    = d.status;
+            info.error_message = d.error_message;
             snap.source_states.push_back(std::move(info));
         }
     }
@@ -346,6 +359,28 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             update_track_session(session_, mixer_.get(), c.track_id, [route = c.audio_to](Track& track) {
                 track.audio_to = route.empty() ? std::string("master") : route;
             });
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetMetronomeEnabled>) {
+            metronome_config_.enabled = c.enabled;
+            if (mixer_) mixer_->set_metronome_config(metronome_config_);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetMetronomeVolume>) {
+            metronome_config_.volume = std::clamp(c.volume, 0.0f, 1.0f);
+            if (mixer_) mixer_->set_metronome_config(metronome_config_);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetMetronomeOutputRoute>) {
+            metronome_config_.output_route = c.route.empty() ? std::string("master") : c.route;
+            if (mixer_) mixer_->set_metronome_config(metronome_config_);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetMetronomeConfig>) {
+            metronome_config_.enabled = c.enabled;
+            metronome_config_.volume = std::clamp(c.volume, 0.0f, 1.0f);
+            metronome_config_.output_route = c.route.empty() ? std::string("master") : c.route;
+            if (mixer_) mixer_->set_metronome_config(metronome_config_);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdJumpToMarker>) {

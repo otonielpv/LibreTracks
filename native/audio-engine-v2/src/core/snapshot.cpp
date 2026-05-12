@@ -78,9 +78,23 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
             {"source_id",        s.source_id},
             {"status",           s.status},
             {"progress_percent", s.progress_percent},
+            {"error_message",     s.error_message},
         });
     }
     j["source_states"] = sources;
+
+    j["metronome"] = {
+        {"enabled", snap.metronome.enabled},
+        {"volume", snap.metronome.volume},
+        {"output", snap.metronome.output},
+        {"last_beat_frame", snap.metronome.last_beat_frame},
+        {"next_beat_frame", snap.metronome.next_beat_frame},
+        {"current_bar", snap.metronome.current_bar},
+        {"current_beat", snap.metronome.current_beat},
+        {"route_resolved", snap.metronome.route_resolved},
+        {"rendered_clicks_count", snap.metronome.rendered_clicks_count},
+        {"muted_reason", snap.metronome.muted_reason},
+    };
 
     return j.dump();
 }

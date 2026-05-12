@@ -3,6 +3,7 @@
 #include <lt_engine/core/types.h>
 #include <optional>
 #include <string>
+#include <cstdint>
 #include <vector>
 
 namespace lt {
@@ -57,6 +58,20 @@ struct SourcePreparationInfo {
     Id          source_id;
     std::string status;   // "queued" | "running" | "completed" | "failed"
     int         progress_percent = 0;
+    std::string error_message;
+};
+
+struct MetronomeSnapshot {
+    bool        enabled = false;
+    float       volume = 0.f;
+    std::string output;
+    Frame       last_beat_frame = -1;
+    Frame       next_beat_frame = 0;
+    int         current_bar = 1;
+    int         current_beat = 1;
+    std::string route_resolved;
+    uint64_t    rendered_clicks_count = 0;
+    std::string muted_reason;
 };
 
 struct EngineSnapshot {
@@ -85,6 +100,9 @@ struct EngineSnapshot {
 
     // Source preparation
     std::vector<SourcePreparationInfo> source_states;
+
+    // Internal metronome
+    MetronomeSnapshot metronome;
 };
 
 std::string snapshot_to_json(const EngineSnapshot& snap);

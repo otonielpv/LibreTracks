@@ -218,6 +218,9 @@ void Mixer::render(float** output_channels,
             break;
         }
 
+        metronome_.render(output_channels, num_channels, num_frames,
+                          clock_->sample_rate(), timeline_frame, session.get());
+
         // Advance transport clock.
         clock_->advance(num_frames);
     }
@@ -299,6 +302,14 @@ void Mixer::clear_session() {
 
 void Mixer::trigger_crossfade() noexcept {
     fade_.trigger_crossfade();
+}
+
+void Mixer::set_metronome_config(const MetronomeConfig& config) {
+    metronome_.set_config(config);
+}
+
+MetronomeDiagnostics Mixer::metronome_diagnostics() const {
+    return metronome_.diagnostics();
 }
 
 MeterValues Mixer::meters() const noexcept {

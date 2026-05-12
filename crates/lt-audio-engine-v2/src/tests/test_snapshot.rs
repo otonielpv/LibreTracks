@@ -117,17 +117,41 @@ fn source_states_round_trip() {
             source_id: "s1".into(),
             status: "ready".into(),
             progress_percent: 100,
+            error_message: String::new(),
         },
         SourcePreparationInfo {
             source_id: "s2".into(),
             status: "queued".into(),
             progress_percent: 0,
+            error_message: String::new(),
         },
     ];
     let rt = round_trip(&snap);
     assert_eq!(rt.source_states.len(), 2);
     assert_eq!(rt.source_states[0].status, "ready");
     assert_eq!(rt.source_states[1].status, "queued");
+}
+
+#[test]
+fn metronome_snapshot_round_trips() {
+    let mut snap = EngineSnapshot::default();
+    snap.metronome = MetronomeSnapshot {
+        enabled: true,
+        volume: 0.5,
+        output: "monitor".into(),
+        last_beat_frame: 24000,
+        next_beat_frame: 48000,
+        current_bar: 2,
+        current_beat: 1,
+        route_resolved: "monitor".into(),
+        rendered_clicks_count: 4,
+        muted_reason: String::new(),
+    };
+    let rt = round_trip(&snap);
+    assert!(rt.metronome.enabled);
+    assert_eq!(rt.metronome.output, "monitor");
+    assert_eq!(rt.metronome.current_bar, 2);
+    assert_eq!(rt.metronome.rendered_clicks_count, 4);
 }
 
 #[test]

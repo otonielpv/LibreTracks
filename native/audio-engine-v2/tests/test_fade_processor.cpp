@@ -1,0 +1,56 @@
+#include <doctest/doctest.h>
+#include <lt_engine/render/fade_processor.h>
+
+#include <algorithm>
+#include <cmath>
+#include <vector>
+
+using namespace lt;
+
+TEST_CASE("seek fade starts near zero and rises monotonically") {
+    FadeProcessor fade(128);
+    std::vector<float> left(160, 1.0f);
+    float* channels[] = { left.data() };
+
+    fade.trigger_fade_in();
+    fade.process(channels, 1, static_cast<int>(left.size()));
+
+    CHECK(left.front() == doctest::Approx(0.0f));
+    CHECK(left[127] == doctest::Approx(1.0f));
+    for (int i = 1; i < 128; ++i) {
+        CHECK(left[i] >= left[i - 1]);
+        CHECK(left[i] <= 1.0f);
+        CHECK(std::isfinite(left[i]));
+    }
+    CHECK(left[128] == doctest::Approx(1.0f));
+}
+
+TEST_CASE("repeated seeks restart fade without sudden second-phase drop") {
+    FadeProcessor fade(64);
+    std::vector<float> left(96, 1.0f);
+    float* channels[] = { left.data() };
+
+    fade.trigger_fade_in();
+    fade.process(channels, 1, 16);
+    fade.trigger_fade_in();
+    fade.process(channels, 1, 96);
+
+    CHECK(left[0] == doctest::Approx(0.0f));
+    for (int i = 1; i < 64; ++i)
+        CHECK(left[i] >= left[i - 1]);
+    CHECK(left[63] == doctest::Approx(1.0f));
+    CHECK(left[64] == doctest::Approx(1.0f));
+}
+
+TEST_CASE("paused seek state can be cleared deterministically") {
+    FadeProcessor fade(64);
+    fade.trigger_fade_in();
+    CHECK(fade.is_active());
+    fade.clear();
+    CHECK_FALSE(fade.is_active());
+
+    std::vector<float> left(8, 1.0f);
+    float* channels[] = { left.data() };
+    fade.process(channels, 1, 8);
+    CHECK(std::all_of(left.begin(), left.end(), [](float v) { return v == 1.0f; }));
+}

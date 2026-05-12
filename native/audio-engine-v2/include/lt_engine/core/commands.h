@@ -80,6 +80,14 @@ struct CmdSetTrackAudioRoute        { Id track_id; std::string audio_to; };
 struct CmdSetTrackTransposeEnabled  { Id track_id; bool enabled; };
 
 // ---------------------------------------------------------------------------
+// Metronome
+// ---------------------------------------------------------------------------
+struct CmdSetMetronomeEnabled     { bool enabled; };
+struct CmdSetMetronomeVolume      { float volume; };
+struct CmdSetMetronomeOutputRoute { std::string route; };
+struct CmdSetMetronomeConfig      { bool enabled; float volume; std::string route; };
+
+// ---------------------------------------------------------------------------
 // Pitch
 // ---------------------------------------------------------------------------
 struct CmdSetSongTranspose    { Id song_id;    Semitones semitones; };
@@ -114,6 +122,8 @@ using EngineCommand = std::variant<
     CmdSetTrackGain, CmdSetTrackPan, CmdSetTrackMute, CmdSetTrackSolo,
     CmdSetTrackAudioRoute,
     CmdSetTrackTransposeEnabled,
+    CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
+    CmdSetMetronomeConfig,
     CmdSetSongTranspose, CmdSetRegionTranspose,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize
 >;

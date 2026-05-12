@@ -6,6 +6,7 @@
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/render/fade_processor.h>
+#include <lt_engine/render/metronome_renderer.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -49,6 +50,8 @@ public:
     void set_session(std::shared_ptr<const Session> session);
     void clear_session();
     void trigger_crossfade() noexcept;
+    void set_metronome_config(const MetronomeConfig& config);
+    MetronomeDiagnostics metronome_diagnostics() const;
 
     // Meter read (from UI thread — relaxed atomic).
     MeterValues meters() const noexcept;
@@ -104,6 +107,7 @@ private:
 
     // Click-free crossfade around seeks/jumps.
     FadeProcessor fade_;
+    MetronomeRenderer metronome_;
 
     // Check whether any track is soloed.
     bool any_solo_active(const Song& song) const noexcept;

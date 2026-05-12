@@ -87,6 +87,15 @@ TEST_CASE("parse SetTrackAudioRoute") {
     CHECK(c.audio_to == "ext:2-3");
 }
 
+TEST_CASE("parse SetMetronomeConfig") {
+    auto cmd = command_from_json(R"({"type":"SetMetronomeConfig","enabled":true,"volume":0.5,"route":"monitor"})");
+    REQUIRE(std::holds_alternative<CmdSetMetronomeConfig>(cmd));
+    auto& c = std::get<CmdSetMetronomeConfig>(cmd);
+    CHECK(c.enabled == true);
+    CHECK(c.volume == doctest::Approx(0.5f));
+    CHECK(c.route == "monitor");
+}
+
 TEST_CASE("parse SetSongTranspose negative") {
     auto cmd = command_from_json(R"({"type":"SetSongTranspose","song_id":"s1","semitones":-5})");
     REQUIRE(std::holds_alternative<CmdSetSongTranspose>(cmd));
@@ -148,6 +157,7 @@ TEST_CASE("snapshot has required top-level keys") {
     CHECK(json.find("\"WASAPI\"")         != std::string::npos);
     CHECK(json.find("\"pending_jumps\"")  != std::string::npos);
     CHECK(json.find("\"meters\"")         != std::string::npos);
+    CHECK(json.find("\"metronome\"")      != std::string::npos);
 }
 
 TEST_CASE("snapshot serializes pending jumps array") {

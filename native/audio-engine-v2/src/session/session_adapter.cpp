@@ -23,6 +23,18 @@ static TrackRole parse_track_role(const std::string& s) {
     return TrackRole::Normal;
 }
 
+static std::pair<int, int> parse_time_signature(const std::string& signature) {
+    auto slash = signature.find('/');
+    if (slash == std::string::npos) return {4, 4};
+    try {
+        int beats = std::stoi(signature.substr(0, slash));
+        int unit = std::stoi(signature.substr(slash + 1));
+        if (beats > 0 && unit > 0) return {beats, unit};
+    } catch (...) {
+    }
+    return {4, 4};
+}
+
 static Frame seconds_to_frames(double seconds, int sample_rate) {
     return static_cast<Frame>(std::llround(seconds * static_cast<double>(sample_rate)));
 }
@@ -100,6 +112,11 @@ Result<Session> session_from_project_json(const std::string& project_json,
                     value_any<double>(jsong, "duration_seconds", "durationSeconds", 0.0),
                     engine_sample_rate);
             }
+            song.bpm = value_any<double>(jsong, "bpm", "bpm", 120.0);
+            auto [beats_per_bar, beat_unit] = parse_time_signature(
+                value_any<std::string>(jsong, "time_signature", "timeSignature", "4/4"));
+            song.beats_per_bar = beats_per_bar;
+            song.beat_unit = beat_unit;
             song.transpose_semitones = value_any<Semitones>(jsong, "transpose_semitones", "transposeSemitones", 0);
 
             std::vector<json> top_level_clips;
@@ -200,6 +217,48 @@ Result<Session> session_from_project_json(const std::string& project_json,
                     }
                     song.markers.push_back(std::move(marker));
                 }
+            }
+
+            if (auto* tempo_markers = array_any(jsong, "tempo_markers", "tempoMarkers")) {
+                for (const auto& jt : *tempo_markers) {
+                    TempoMarker marker;
+                    marker.id = jt.value("id", "");
+                    marker.frame = value_any<Frame>(jt, "frame", "frame", 0LL);
+                    if (marker.frame == 0) {
+                        marker.frame = seconds_to_frames(
+                            value_any<double>(jt, "start_seconds", "startSeconds", 0.0),
+                            engine_sample_rate);
+                    }
+                    marker.bpm = value_any<double>(jt, "bpm", "bpm", song.bpm);
+                    if (marker.bpm > 0.0)
+                        song.tempo_markers.push_back(std::move(marker));
+                }
+                std::sort(song.tempo_markers.begin(), song.tempo_markers.end(),
+                          [](const TempoMarker& a, const TempoMarker& b) {
+                              return a.frame < b.frame;
+                          });
+            }
+
+            if (auto* ts_markers = array_any(jsong, "time_signature_markers", "timeSignatureMarkers")) {
+                for (const auto& jt : *ts_markers) {
+                    TimeSignatureMarker marker;
+                    marker.id = jt.value("id", "");
+                    marker.frame = value_any<Frame>(jt, "frame", "frame", 0LL);
+                    if (marker.frame == 0) {
+                        marker.frame = seconds_to_frames(
+                            value_any<double>(jt, "start_seconds", "startSeconds", 0.0),
+                            engine_sample_rate);
+                    }
+                    auto [beats, unit] = parse_time_signature(
+                        value_any<std::string>(jt, "signature", "signature", "4/4"));
+                    marker.beats_per_bar = beats;
+                    marker.beat_unit = unit;
+                    song.time_signature_markers.push_back(std::move(marker));
+                }
+                std::sort(song.time_signature_markers.begin(), song.time_signature_markers.end(),
+                          [](const TimeSignatureMarker& a, const TimeSignatureMarker& b) {
+                              return a.frame < b.frame;
+                          });
             }
 
             if (auto* regions = array_any(jsong, "regions", "regions")) {

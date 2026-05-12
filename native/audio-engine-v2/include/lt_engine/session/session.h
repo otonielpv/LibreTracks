@@ -91,6 +91,19 @@ struct Marker {
     Frame       frame = 0;
 };
 
+struct TempoMarker {
+    Id     id;
+    Frame  frame = 0;
+    double bpm = 120.0;
+};
+
+struct TimeSignatureMarker {
+    Id     id;
+    Frame  frame = 0;
+    int    beats_per_bar = 4;
+    int    beat_unit = 4;
+};
+
 // ---------------------------------------------------------------------------
 // Region — a named sub-range of a Song that can carry its own transpose
 // ---------------------------------------------------------------------------
@@ -110,9 +123,14 @@ struct Song {
     std::string           name;
     Frame                 start_frame = 0;
     Frame                 end_frame   = 0;
+    double                bpm = 120.0;
+    int                   beats_per_bar = 4;
+    int                   beat_unit = 4;
     Semitones             transpose_semitones = 0;
     std::vector<Track>    tracks;
     std::vector<Marker>   markers;
+    std::vector<TempoMarker> tempo_markers;
+    std::vector<TimeSignatureMarker> time_signature_markers;
     std::vector<Region>   regions;
 };
 

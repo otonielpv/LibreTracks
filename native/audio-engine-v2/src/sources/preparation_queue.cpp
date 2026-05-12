@@ -83,6 +83,7 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
                         info.progress_percent = 100;
                     } else {
                         info.status = "failed";
+                        info.error_message = stored.error();
                     }
                 }
                 if (stored.is_ok()) {
@@ -95,8 +96,9 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
             } else if (job.status == JobStatus::Failed) {
                 {
                     std::lock_guard lock(impl->mtx);
-                    auto& info = impl->states[source_id];
-                    info.status = "failed";
+                auto& info = impl->states[source_id];
+                info.status = "failed";
+                info.error_message = job.error_message;
                 }
                 impl->push_event(EvDiagnosticWarning{
                     "Source decode failed [" + source_id + "]: " + job.error_message

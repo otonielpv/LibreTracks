@@ -16,6 +16,9 @@ add_executable(lt_engine_tests
     test_jump_scheduler.cpp
     test_command_json.cpp
     test_audio_dump.cpp
+    test_audio_decoder.cpp
+    test_fade_processor.cpp
+    test_metronome_renderer.cpp
 )
 
 target_link_libraries(lt_engine_tests

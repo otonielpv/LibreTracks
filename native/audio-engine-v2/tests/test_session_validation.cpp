@@ -176,6 +176,12 @@ TEST_CASE("session adapter maps LibreTracks camelCase song JSON") {
       "sectionMarkers": [
         { "id": "marker-1", "name": "Intro", "startSeconds": 2.0 }
       ],
+      "tempoMarkers": [
+        { "id": "tempo-1", "startSeconds": 3.0, "bpm": 142.0 }
+      ],
+      "timeSignatureMarkers": [
+        { "id": "sig-1", "startSeconds": 4.0, "signature": "3/4" }
+      ],
       "tracks": [
         { "id": "track-1", "name": "Stem", "kind": "audio", "volume": 0.75, "muted": false, "solo": false, "transposeEnabled": false }
       ],
@@ -198,4 +204,11 @@ TEST_CASE("session adapter maps LibreTracks camelCase song JSON") {
     CHECK(session.songs[0].tracks[0].clips[0].source_start_frame == 12000);
     CHECK(session.songs[0].regions[0].transpose_semitones == 2);
     CHECK(session.songs[0].markers[0].frame == 96000);
+    REQUIRE(session.songs[0].tempo_markers.size() == 1);
+    CHECK(session.songs[0].tempo_markers[0].frame == 144000);
+    CHECK(session.songs[0].tempo_markers[0].bpm == doctest::Approx(142.0));
+    REQUIRE(session.songs[0].time_signature_markers.size() == 1);
+    CHECK(session.songs[0].time_signature_markers[0].frame == 192000);
+    CHECK(session.songs[0].time_signature_markers[0].beats_per_bar == 3);
+    CHECK(session.songs[0].time_signature_markers[0].beat_unit == 4);
 }

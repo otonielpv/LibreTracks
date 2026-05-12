@@ -7,7 +7,7 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread::{self, JoinHandle},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use libretracks_core::Song;
@@ -371,6 +371,7 @@ impl AudioController {
             engine.send_command(&EngineCommand::SeekAbsolute {
                 frame: seconds_to_frame_for_engine(engine, position_seconds),
             })?;
+            wait_for_playback_sources(engine)?;
             engine.send_command(&EngineCommand::Play)?;
             state.running = true;
             state.anchor_position_seconds = Some(position_seconds);
@@ -560,6 +561,11 @@ impl AudioController {
                     buffer_size: buffer_size as i32,
                 })?;
             }
+            engine.send_command(&EngineCommand::SetMetronomeConfig {
+                enabled: settings.metronome_enabled,
+                volume: settings.metronome_volume.clamp(0.0, 1.0) as f32,
+                route: settings.metronome_output.clone(),
+            })?;
             state.settings = settings;
             Ok(())
         })
@@ -833,23 +839,44 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
     };
     let mut resolved = song.clone();
     for clip in &mut resolved.clips {
-        let raw_path = clip.file_path.trim();
+        let normalized_clip_path = normalize_engine_audio_path(&clip.file_path);
+        let raw_path = normalized_clip_path.trim();
         if raw_path.is_empty() {
             continue;
         }
         let path = Path::new(raw_path);
         if path.is_relative() {
             clip.file_path = song_dir.join(path).to_string_lossy().replace('\\', "/");
+        } else {
+            clip.file_path = raw_path.replace('\\', "/");
         }
     }
     resolved
+}
+
+fn normalize_engine_audio_path(path: &str) -> String {
+    let mut normalized = path.trim().trim_matches('"').trim_matches('\'').replace('\\', "/");
+    while normalized.starts_with('?') {
+        normalized.remove(0);
+    }
+    for prefix in ["//?/", "/?/", "file:///"] {
+        if let Some(stripped) = normalized.strip_prefix(prefix) {
+            normalized = stripped.to_string();
+            break;
+        }
+    }
+    normalized
 }
 
 fn session_signature(song: &Song) -> String {
     let mut hasher = DefaultHasher::new();
     song.id.hash(&mut hasher);
     song.title.hash(&mut hasher);
+    song.bpm.to_bits().hash(&mut hasher);
+    song.time_signature.hash(&mut hasher);
     song.duration_seconds.to_bits().hash(&mut hasher);
+    song.tempo_markers.len().hash(&mut hasher);
+    song.time_signature_markers.len().hash(&mut hasher);
     song.tracks.len().hash(&mut hasher);
     song.clips.len().hash(&mut hasher);
     song.section_markers.len().hash(&mut hasher);
@@ -882,6 +909,16 @@ fn session_signature(song: &Song) -> String {
         marker.name.hash(&mut hasher);
         marker.start_seconds.to_bits().hash(&mut hasher);
     }
+    for marker in &song.tempo_markers {
+        marker.id.hash(&mut hasher);
+        marker.start_seconds.to_bits().hash(&mut hasher);
+        marker.bpm.to_bits().hash(&mut hasher);
+    }
+    for marker in &song.time_signature_markers {
+        marker.id.hash(&mut hasher);
+        marker.start_seconds.to_bits().hash(&mut hasher);
+        marker.signature.hash(&mut hasher);
+    }
     for region in &song.regions {
         region.id.hash(&mut hasher);
         region.name.hash(&mut hasher);
@@ -901,6 +938,123 @@ fn seconds_to_frame_for_engine(engine: &Engine, seconds: f64) -> i64 {
         .map(f64::from)
         .unwrap_or(ENGINE_SAMPLE_RATE);
     (seconds.max(0.0) * sample_rate).round() as i64
+}
+
+fn wait_for_playback_sources(engine: &Engine) -> Result<(), DesktopError> {
+    let timeout_ms = std::env::var("LIBRETRACKS_PREBUFFER_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(5_000)
+        .clamp(0, 5_000);
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+
+    loop {
+        let snapshot = engine
+            .get_snapshot()
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        if snapshot.source_states.is_empty() {
+            return Ok(());
+        }
+
+        let failed = snapshot
+            .source_states
+            .iter()
+            .find(|state| state.status == "failed");
+        if let Some(failed) = failed {
+            let reason = if failed.error_message.trim().is_empty() {
+                "decode failed".to_string()
+            } else {
+                failed.error_message.clone()
+            };
+            return Err(DesktopError::AudioCommand(format!(
+                "audio source '{}' is not playable: {}",
+                failed.source_id, reason
+            )));
+        }
+
+        let pending = snapshot.source_states.iter().any(|state| {
+            matches!(
+                state.status.as_str(),
+                "queued" | "loading" | "running" | "unloaded"
+            )
+        });
+        if !pending {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libretracks_core::{Clip, Song, Track, TrackKind};
+
+    fn song_for_signature() -> Song {
+        Song {
+            id: "song".into(),
+            title: "Song".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 10.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![],
+            tracks: vec![Track {
+                id: "track".into(),
+                name: "Track".into(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: true,
+                audio_to: "master".into(),
+            }],
+            clips: vec![Clip {
+                id: "clip".into(),
+                track_id: "track".into(),
+                file_path: "audio/test.mp3".into(),
+                timeline_start_seconds: 0.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 10.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+            }],
+            section_markers: vec![],
+        }
+    }
+
+    #[test]
+    fn session_signature_changes_when_bpm_changes() {
+        let mut song = song_for_signature();
+        let before = session_signature(&song);
+        song.bpm = 96.0;
+        assert_ne!(before, session_signature(&song));
+    }
+
+    #[test]
+    fn session_signature_changes_when_time_signature_changes() {
+        let mut song = song_for_signature();
+        let before = session_signature(&song);
+        song.time_signature = "6/8".into();
+        assert_ne!(before, session_signature(&song));
+    }
+
+    #[test]
+    fn engine_audio_path_normalization_strips_malformed_windows_verbatim_prefix() {
+        assert_eq!(
+            normalize_engine_audio_path("?//?/C:/Users/me/song.mp3"),
+            "C:/Users/me/song.mp3"
+        );
+    }
 }
 
 fn estimate_position(state: &ControllerState) -> Option<f64> {

@@ -34,6 +34,9 @@ pub struct EngineSnapshot {
 
     #[serde(default)]
     pub source_states: Vec<SourcePreparationInfo>,
+
+    #[serde(default)]
+    pub metronome: MetronomeSnapshot,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -85,4 +88,20 @@ pub struct SourcePreparationInfo {
     pub source_id: String,
     pub status: String,
     pub progress_percent: i32,
+    #[serde(default)]
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MetronomeSnapshot {
+    pub enabled: bool,
+    pub volume: f32,
+    pub output: String,
+    pub last_beat_frame: i64,
+    pub next_beat_frame: i64,
+    pub current_bar: i32,
+    pub current_beat: i32,
+    pub route_resolved: String,
+    pub rendered_clicks_count: u64,
+    pub muted_reason: String,
 }

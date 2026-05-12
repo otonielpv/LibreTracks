@@ -107,6 +107,22 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "SetTrackTransposeEnabled")
         return CmdSetTrackTransposeEnabled{ j.at("track_id").get<Id>(), j.at("enabled").get<bool>() };
 
+    if (type == "SetMetronomeEnabled")
+        return CmdSetMetronomeEnabled{ j.at("enabled").get<bool>() };
+
+    if (type == "SetMetronomeVolume")
+        return CmdSetMetronomeVolume{ j.at("volume").get<float>() };
+
+    if (type == "SetMetronomeOutputRoute")
+        return CmdSetMetronomeOutputRoute{ j.at("route").get<std::string>() };
+
+    if (type == "SetMetronomeConfig")
+        return CmdSetMetronomeConfig{
+            j.at("enabled").get<bool>(),
+            j.at("volume").get<float>(),
+            j.at("route").get<std::string>()
+        };
+
     if (type == "SetSongTranspose")
         return CmdSetSongTranspose{ j.at("song_id").get<Id>(), j.at("semitones").get<Semitones>() };
 
@@ -140,6 +156,21 @@ std::string command_to_json(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSeekRelative>) {
             j["type"] = "SeekRelative"; j["delta_frames"] = c.delta_frames;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetMetronomeEnabled>) {
+            j["type"] = "SetMetronomeEnabled"; j["enabled"] = c.enabled;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetMetronomeVolume>) {
+            j["type"] = "SetMetronomeVolume"; j["volume"] = c.volume;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetMetronomeOutputRoute>) {
+            j["type"] = "SetMetronomeOutputRoute"; j["route"] = c.route;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetMetronomeConfig>) {
+            j["type"] = "SetMetronomeConfig";
+            j["enabled"] = c.enabled;
+            j["volume"] = c.volume;
+            j["route"] = c.route;
         }
         // ... additional types follow the same pattern.
         // Omitted for brevity — expand as needed.
