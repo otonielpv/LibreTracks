@@ -113,7 +113,7 @@ Result<void> ensure_initialized(ImplT& impl) {
     if (impl.initialized)
         return Result<void>::ok();
 
-    juce::String err = impl.juce_manager.initialise(0, 2, nullptr, true);
+    juce::String err = impl.juce_manager.initialise(0, 64, nullptr, true);
     if (err.isNotEmpty()) {
         impl.last_error = err.toStdString();
         return Result<void>::err(impl.last_error);
@@ -178,6 +178,9 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         setup = impl_->juce_manager.getAudioDeviceSetup();
         setup.outputDeviceName = juce::String(device_name);
     }
+    setup.outputChannels.clear();
+    for (int ch = 0; ch < 64; ++ch)
+        setup.outputChannels.setBit(ch);
     if (request.sample_rate > 0)
         setup.sampleRate = request.sample_rate;
     if (request.buffer_size > 0)

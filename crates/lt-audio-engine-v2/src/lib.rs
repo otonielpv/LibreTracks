@@ -3,19 +3,19 @@
 //! Exposes a safe `Engine` wrapper around the raw C ABI.
 //! The C++ shared library is loaded at link time (build.rs).
 
-mod ffi;
-mod error;
 mod commands;
+mod error;
 mod events;
+mod ffi;
 mod snapshot;
 
 #[cfg(test)]
 mod tests;
 
 pub use commands::*;
+pub use error::EngineError;
 pub use events::*;
 pub use snapshot::*;
-pub use error::EngineError;
 
 use ffi::*;
 
@@ -58,21 +58,25 @@ impl Engine {
 
     pub fn version(&self) -> String {
         let ptr = unsafe { lt_audio_engine_get_version(self.handle) };
-        if ptr.is_null() { return "0.0.0".into(); }
+        if ptr.is_null() {
+            return "0.0.0".into();
+        }
         unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() }
     }
 
     pub fn diagnostics(&self) -> String {
         let ptr = unsafe { lt_audio_engine_get_diagnostics(self.handle) };
-        if ptr.is_null() { return "{}".into(); }
+        if ptr.is_null() {
+            return "{}".into();
+        }
         unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() }
     }
 
     pub fn send_command(&self, cmd: &EngineCommand) -> Result<(), EngineError> {
-        let json = serde_json::to_string(cmd)
-            .map_err(|e| EngineError::Serialization(e.to_string()))?;
-        let c_str = std::ffi::CString::new(json)
-            .map_err(|e| EngineError::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string(cmd).map_err(|e| EngineError::Serialization(e.to_string()))?;
+        let c_str =
+            std::ffi::CString::new(json).map_err(|e| EngineError::Serialization(e.to_string()))?;
         let rc = unsafe { lt_audio_engine_send_command(self.handle, c_str.as_ptr()) };
         lt_result_to_rust(rc)
     }
@@ -81,7 +85,9 @@ impl Engine {
     /// Returns `None` when the queue is empty.
     pub fn poll_event(&self) -> Option<EngineEvent> {
         let ptr = unsafe { lt_audio_engine_poll_event(self.handle) };
-        if ptr.is_null() { return None; }
+        if ptr.is_null() {
+            return None;
+        }
         let s = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy() };
         serde_json::from_str(&s).ok()
     }
@@ -97,14 +103,18 @@ impl Engine {
 
     pub fn get_snapshot(&self) -> Result<EngineSnapshot, EngineError> {
         let ptr = unsafe { lt_audio_engine_get_snapshot(self.handle) };
-        if ptr.is_null() { return Err(EngineError::SnapshotFailed); }
+        if ptr.is_null() {
+            return Err(EngineError::SnapshotFailed);
+        }
         let s = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy() };
         serde_json::from_str(&s).map_err(|e| EngineError::Serialization(e.to_string()))
     }
 
     pub fn list_devices(&self) -> Result<Vec<DeviceInfo>, EngineError> {
         let ptr = unsafe { lt_audio_engine_list_devices(self.handle) };
-        if ptr.is_null() { return Ok(vec![]); }
+        if ptr.is_null() {
+            return Ok(vec![]);
+        }
         let s = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy() };
         serde_json::from_str(&s).map_err(|e| EngineError::Serialization(e.to_string()))
     }
@@ -121,12 +131,12 @@ impl Drop for Engine {
 // ---------------------------------------------------------------------------
 fn lt_result_to_rust(rc: LtResult) -> Result<(), EngineError> {
     match rc {
-        LT_OK                  => Ok(()),
-        LT_ERR_INVALID_HANDLE  => Err(EngineError::InvalidHandle),
-        LT_ERR_ALREADY_INIT    => Err(EngineError::AlreadyInitialized),
-        LT_ERR_NOT_INIT        => Err(EngineError::NotInitialized),
+        LT_OK => Ok(()),
+        LT_ERR_INVALID_HANDLE => Err(EngineError::InvalidHandle),
+        LT_ERR_ALREADY_INIT => Err(EngineError::AlreadyInitialized),
+        LT_ERR_NOT_INIT => Err(EngineError::NotInitialized),
         LT_ERR_INVALID_COMMAND => Err(EngineError::InvalidCommand),
-        LT_ERR_DEVICE          => Err(EngineError::Device("device error".into())),
-        _                      => Err(EngineError::Internal("unknown error code".into())),
+        LT_ERR_DEVICE => Err(EngineError::Device("device error".into())),
+        _ => Err(EngineError::Internal("unknown error code".into())),
     }
 }

@@ -73,8 +73,10 @@ struct CmdReplaceScheduledJump {
 // Track / mix
 // ---------------------------------------------------------------------------
 struct CmdSetTrackGain              { Id track_id; Gain gain; };
+struct CmdSetTrackPan               { Id track_id; float pan; };
 struct CmdSetTrackMute              { Id track_id; bool mute; };
 struct CmdSetTrackSolo              { Id track_id; bool solo; };
+struct CmdSetTrackAudioRoute        { Id track_id; std::string audio_to; };
 struct CmdSetTrackTransposeEnabled  { Id track_id; bool enabled; };
 
 // ---------------------------------------------------------------------------
@@ -109,7 +111,8 @@ using EngineCommand = std::variant<
     CmdJumpToSong, CmdJumpToNextSong, CmdJumpToPreviousSong,
     CmdScheduleJump, CmdCancelScheduledJump,
     CmdCancelAllScheduledJumps, CmdReplaceScheduledJump,
-    CmdSetTrackGain, CmdSetTrackMute, CmdSetTrackSolo,
+    CmdSetTrackGain, CmdSetTrackPan, CmdSetTrackMute, CmdSetTrackSolo,
+    CmdSetTrackAudioRoute,
     CmdSetTrackTransposeEnabled,
     CmdSetSongTranspose, CmdSetRegionTranspose,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize

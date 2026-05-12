@@ -2,6 +2,7 @@
 #include <lt_engine/core/engine_core.h>
 #include <lt_engine/core/events.h>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <mutex>
 #include <queue>
 #include <stdexcept>
@@ -9,6 +10,32 @@
 namespace lt {
 
 using json = nlohmann::json;
+
+namespace {
+
+template <typename Update>
+bool update_track_session(std::shared_ptr<const Session>& session,
+                          Mixer* mixer,
+                          const Id& track_id,
+                          Update update) {
+    if (!session) return false;
+    auto next_session = std::make_shared<Session>(*session);
+    bool changed = false;
+    for (auto& song : next_session->songs) {
+        for (auto& track : song.tracks) {
+            if (track.id == track_id) {
+                update(track);
+                changed = true;
+            }
+        }
+    }
+    if (!changed) return false;
+    session = next_session;
+    if (mixer) mixer->set_session(next_session);
+    return true;
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Event queue
@@ -301,12 +328,24 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (mixer_) mixer_->set_track_gain(c.track_id, c.gain);
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdSetTrackPan>) {
+            update_track_session(session_, mixer_.get(), c.track_id, [pan = c.pan](Track& track) {
+                track.pan = std::clamp(pan, -1.0f, 1.0f);
+            });
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdSetTrackMute>) {
             if (mixer_) mixer_->set_track_mute(c.track_id, c.mute);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackSolo>) {
             if (mixer_) mixer_->set_track_solo(c.track_id, c.solo);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetTrackAudioRoute>) {
+            update_track_session(session_, mixer_.get(), c.track_id, [route = c.audio_to](Track& track) {
+                track.audio_to = route.empty() ? std::string("master") : route;
+            });
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdJumpToMarker>) {
@@ -373,17 +412,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return scheduler_->replace(c.jump_id, c.new_target, c.new_trigger);
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackTransposeEnabled>) {
-            if (session_) {
-                auto next_session = std::make_shared<Session>(*session_);
-                for (auto& song : next_session->songs)
-                    for (auto& track : song.tracks)
-                        if (track.id == c.track_id)
-                            track.transpose_behavior = c.enabled
-                                ? TransposeBehavior::FollowsSongOrRegion
-                                : TransposeBehavior::NeverTranspose;
-                session_ = next_session;
-                if (mixer_) mixer_->set_session(next_session);
-            }
+            update_track_session(session_, mixer_.get(), c.track_id, [enabled = c.enabled](Track& track) {
+                track.transpose_behavior = enabled
+                    ? TransposeBehavior::FollowsSongOrRegion
+                    : TransposeBehavior::NeverTranspose;
+            });
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetSongTranspose>) {

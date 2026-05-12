@@ -18,7 +18,7 @@ fn default_snapshot_round_trips() {
 fn playing_state_round_trips() {
     let mut snap = EngineSnapshot::default();
     snap.playback_state = PlaybackState::Playing;
-    snap.current_frame  = 96000;
+    snap.current_frame = 96000;
     snap.current_seconds = 2.0;
     let rt = round_trip(&snap);
     assert!(matches!(rt.playback_state, PlaybackState::Playing));
@@ -37,11 +37,11 @@ fn paused_state_round_trips() {
 #[test]
 fn song_region_marker_ids_round_trip() {
     let mut snap = EngineSnapshot::default();
-    snap.current_song_id   = "song-1".into();
+    snap.current_song_id = "song-1".into();
     snap.current_region_id = "region-A".into();
     snap.current_marker_id = "marker-intro".into();
     let rt = round_trip(&snap);
-    assert_eq!(rt.current_song_id,   "song-1");
+    assert_eq!(rt.current_song_id, "song-1");
     assert_eq!(rt.current_region_id, "region-A");
     assert_eq!(rt.current_marker_id, "marker-intro");
 }
@@ -67,15 +67,15 @@ fn pending_jump_round_trips() {
 fn device_info_round_trips() {
     let mut snap = EngineSnapshot::default();
     snap.device = DeviceInfo {
-        device_id:   "speakers-1".into(),
+        device_id: "speakers-1".into(),
         device_name: "Speakers (Realtek Audio)".into(),
-        backend:     "WASAPI".into(),
+        backend: "WASAPI".into(),
         sample_rate: 48000,
         buffer_size: 256,
-        last_error:  String::new(),
+        last_error: String::new(),
     };
     let rt = round_trip(&snap);
-    assert_eq!(rt.device.backend,     "WASAPI");
+    assert_eq!(rt.device.backend, "WASAPI");
     assert_eq!(rt.device.sample_rate, 48000);
     assert_eq!(rt.device.buffer_size, 256);
 }
@@ -84,10 +84,10 @@ fn device_info_round_trips() {
 fn cpu_diagnostics_round_trip() {
     let mut snap = EngineSnapshot::default();
     snap.cpu = CpuDiagnostics {
-        callback_duration_ms:  1.23,
+        callback_duration_ms: 1.23,
         callback_load_percent: 5.6,
-        underrun_count:        2,
-        callback_count:        1000,
+        underrun_count: 2,
+        callback_count: 1000,
     };
     let rt = round_trip(&snap);
     assert!((rt.cpu.callback_duration_ms - 1.23).abs() < 1e-9);
@@ -98,9 +98,14 @@ fn cpu_diagnostics_round_trip() {
 #[test]
 fn meter_values_round_trip() {
     let mut snap = EngineSnapshot::default();
-    snap.meters = MeterValues { left_peak: 0.9, right_peak: 0.85, left_rms: 0.3, right_rms: 0.28 };
+    snap.meters = MeterValues {
+        left_peak: 0.9,
+        right_peak: 0.85,
+        left_rms: 0.3,
+        right_rms: 0.28,
+    };
     let rt = round_trip(&snap);
-    assert!((rt.meters.left_peak  - 0.9 ).abs() < 1e-6);
+    assert!((rt.meters.left_peak - 0.9).abs() < 1e-6);
     assert!((rt.meters.right_peak - 0.85).abs() < 1e-6);
 }
 
@@ -108,8 +113,16 @@ fn meter_values_round_trip() {
 fn source_states_round_trip() {
     let mut snap = EngineSnapshot::default();
     snap.source_states = vec![
-        SourcePreparationInfo { source_id: "s1".into(), status: "ready".into(),  progress_percent: 100 },
-        SourcePreparationInfo { source_id: "s2".into(), status: "queued".into(), progress_percent: 0   },
+        SourcePreparationInfo {
+            source_id: "s1".into(),
+            status: "ready".into(),
+            progress_percent: 100,
+        },
+        SourcePreparationInfo {
+            source_id: "s2".into(),
+            status: "queued".into(),
+            progress_percent: 0,
+        },
     ];
     let rt = round_trip(&snap);
     assert_eq!(rt.source_states.len(), 2);

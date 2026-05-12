@@ -32,7 +32,8 @@ fn main() {
 
     let builder = builder.manage(EngineV2State::new());
 
-    builder.setup(|app| {
+    builder
+        .setup(|app| {
             let initial_settings = load_app_settings(&app.handle()).unwrap_or_else(|error| {
                 eprintln!("[libretracks-settings] failed to load settings: {error}");
                 settings::AppSettings::default()

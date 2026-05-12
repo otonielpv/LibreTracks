@@ -21,6 +21,7 @@ use tauri::{AppHandle, Emitter};
 use crate::{error::DesktopError, settings::AppSettings};
 
 const ENGINE_SAMPLE_RATE: f64 = 48_000.0;
+const ENGINE_V2_MAX_OUTPUT_CHANNELS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -452,6 +453,10 @@ impl AudioController {
                     track_id: track.id.clone(),
                     gain: track.volume as f32,
                 })?;
+                engine.send_command(&EngineCommand::SetTrackPan {
+                    track_id: track.id.clone(),
+                    pan: track.pan as f32,
+                })?;
                 engine.send_command(&EngineCommand::SetTrackMute {
                     track_id: track.id.clone(),
                     mute: track.muted,
@@ -459,6 +464,10 @@ impl AudioController {
                 engine.send_command(&EngineCommand::SetTrackSolo {
                     track_id: track.id.clone(),
                     solo: track.solo,
+                })?;
+                engine.send_command(&EngineCommand::SetTrackAudioRoute {
+                    track_id: track.id.clone(),
+                    audio_to: track.audio_to.clone(),
                 })?;
                 engine.send_command(&EngineCommand::SetTrackTransposeEnabled {
                     track_id: track.id.clone(),
@@ -477,16 +486,22 @@ impl AudioController {
         &self,
         track_id: &str,
         volume: Option<f64>,
-        _pan: Option<f64>,
+        pan: Option<f64>,
         muted: Option<bool>,
         solo: Option<bool>,
-        _audio_to: Option<&str>,
+        audio_to: Option<&str>,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("update_live_track_mix", None, |engine, _state| {
             if let Some(volume) = volume {
                 engine.send_command(&EngineCommand::SetTrackGain {
                     track_id: track_id.into(),
                     gain: volume as f32,
+                })?;
+            }
+            if let Some(pan) = pan {
+                engine.send_command(&EngineCommand::SetTrackPan {
+                    track_id: track_id.into(),
+                    pan: pan as f32,
                 })?;
             }
             if let Some(muted) = muted {
@@ -499,6 +514,12 @@ impl AudioController {
                 engine.send_command(&EngineCommand::SetTrackSolo {
                     track_id: track_id.into(),
                     solo,
+                })?;
+            }
+            if let Some(audio_to) = audio_to {
+                engine.send_command(&EngineCommand::SetTrackAudioRoute {
+                    track_id: track_id.into(),
+                    audio_to: audio_to.into(),
                 })?;
             }
             Ok(())
@@ -592,9 +613,9 @@ impl AudioController {
                 anchor_position_seconds: state.anchor_position_seconds,
                 estimated_position_seconds,
                 song_duration_seconds: state.song_duration_seconds,
-                anchor_age_ms: state.anchor_started_at.map(|started| {
-                    started.elapsed().as_secs_f64() * 1000.0
-                }),
+                anchor_age_ms: state
+                    .anchor_started_at
+                    .map(|started| started.elapsed().as_secs_f64() * 1000.0),
                 last_start_reason: state.last_start_reason.clone(),
             },
             backend_counters: AudioBackendCountersSummary {
@@ -701,7 +722,8 @@ impl AudioController {
             reason: reason.map(playback_reason_label).map(str::to_string),
         });
         if state.engine.is_none() {
-            let engine = Engine::new().map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+            let engine =
+                Engine::new().map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
             engine
                 .initialize()
                 .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
@@ -757,7 +779,8 @@ pub fn audio_debug_logging_enabled() -> bool {
 
 fn ensure_engine(state: &mut ControllerState) -> Result<&Engine, DesktopError> {
     if state.engine.is_none() {
-        let engine = Engine::new().map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        let engine =
+            Engine::new().map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
         engine
             .initialize()
             .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
@@ -795,8 +818,8 @@ fn load_resolved_song(
     song: &Song,
     signature: String,
 ) -> Result<(), DesktopError> {
-    let project_json =
-        serde_json::to_string(song).map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    let project_json = serde_json::to_string(song)
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
     engine
         .send_command(&EngineCommand::LoadSession { project_json })
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
@@ -837,8 +860,10 @@ fn session_signature(song: &Song) -> String {
         format!("{:?}", track.kind).hash(&mut hasher);
         track.parent_track_id.hash(&mut hasher);
         track.volume.to_bits().hash(&mut hasher);
+        track.pan.to_bits().hash(&mut hasher);
         track.muted.hash(&mut hasher);
         track.solo.hash(&mut hasher);
+        track.audio_to.hash(&mut hasher);
         track.transpose_enabled.hash(&mut hasher);
     }
     for clip in &song.clips {
@@ -917,8 +942,8 @@ fn devices_response(devices: Vec<DeviceInfo>) -> AudioOutputDevicesResponse {
             device.device_id.clone()
         };
         names.push(name.clone());
-        channel_counts.insert(name.clone(), 2);
-        channel_counts.insert(stable_id.clone(), 2);
+        channel_counts.insert(name.clone(), ENGINE_V2_MAX_OUTPUT_CHANNELS);
+        channel_counts.insert(stable_id.clone(), ENGINE_V2_MAX_OUTPUT_CHANNELS);
         let backend = backend_from_str(&device.backend);
         if !backends.contains(&backend) {
             backends.push(backend);
@@ -930,7 +955,7 @@ fn devices_response(devices: Vec<DeviceInfo>) -> AudioOutputDevicesResponse {
             name: name.clone(),
             display_name: name,
             is_default: index == 0,
-            max_output_channels: 2,
+            max_output_channels: ENGINE_V2_MAX_OUTPUT_CHANNELS,
             default_sample_rate: (device.sample_rate > 0).then_some(device.sample_rate as u32),
             supported_sample_rates: if device.sample_rate > 0 {
                 vec![device.sample_rate as u32]
@@ -958,7 +983,9 @@ fn devices_response(devices: Vec<DeviceInfo>) -> AudioOutputDevicesResponse {
 fn backend_from_str(value: &str) -> AudioBackendKind {
     match value.to_ascii_lowercase().as_str() {
         "asio" => AudioBackendKind::Asio,
-        "wasapi" | "windows audio" | "wasapi shared" | "wasapi exclusive" => AudioBackendKind::Wasapi,
+        "wasapi" | "windows audio" | "wasapi shared" | "wasapi exclusive" => {
+            AudioBackendKind::Wasapi
+        }
         "coreaudio" | "core_audio" | "core audio" => AudioBackendKind::CoreAudio,
         "alsa" => AudioBackendKind::Alsa,
         "jack" => AudioBackendKind::Jack,

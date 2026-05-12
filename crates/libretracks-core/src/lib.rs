@@ -12,8 +12,8 @@ pub use validation::{
 #[cfg(test)]
 mod tests {
     use crate::{
-        validate_song, Clip, Marker, Song, SongRegion, Track, TrackKind,
-        MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
+        validate_song, Clip, Marker, Song, SongRegion, Track, TrackKind, MAX_TRANSPOSE_SEMITONES,
+        MIN_TRANSPOSE_SEMITONES,
     };
 
     fn valid_song() -> Song {

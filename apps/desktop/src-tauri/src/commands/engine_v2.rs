@@ -63,8 +63,7 @@ pub fn engine_v2_get_version(state: State<'_, EngineV2State>) -> Result<String, 
 
 #[tauri::command]
 pub fn engine_v2_get_snapshot(state: State<'_, EngineV2State>) -> Result<EngineSnapshot, String> {
-    with_engine(&state, |e| e.get_snapshot().map_err(|err| err))
-        .map_err(|e| e.to_string())
+    with_engine(&state, |e| e.get_snapshot().map_err(|err| err)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -72,30 +71,26 @@ pub fn engine_v2_send_command(
     state: State<'_, EngineV2State>,
     command: EngineCommand,
 ) -> Result<(), String> {
-    with_engine(&state, |e| e.send_command(&command))
-        .map_err(|e| e.to_string())
+    with_engine(&state, |e| e.send_command(&command)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn engine_v2_poll_events(
     state: State<'_, EngineV2State>,
 ) -> Result<Vec<lt_audio_engine_v2::EngineEvent>, String> {
-    with_engine(&state, |e| Ok(e.drain_events()))
-        .map_err(|e| e.to_string())
+    with_engine(&state, |e| Ok(e.drain_events())).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn engine_v2_list_devices(
     state: State<'_, EngineV2State>,
 ) -> Result<Vec<lt_audio_engine_v2::DeviceInfo>, String> {
-    with_engine(&state, |e| e.list_devices())
-        .map_err(|e| e.to_string())
+    with_engine(&state, |e| e.list_devices()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn engine_v2_get_diagnostics(state: State<'_, EngineV2State>) -> Result<String, String> {
-    with_engine(&state, |e| Ok(e.diagnostics()))
-        .map_err(|e| e.to_string())
+    with_engine(&state, |e| Ok(e.diagnostics())).map_err(|e| e.to_string())
 }
 
 /// Load a session from a serialized libretracks-project JSON string.

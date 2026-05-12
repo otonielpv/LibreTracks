@@ -3,8 +3,85 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <cctype>
+#include <cmath>
 
 namespace lt {
+
+namespace {
+
+float clamp_pan(float pan) noexcept {
+    return std::max(-1.0f, std::min(1.0f, pan));
+}
+
+std::vector<int> route_channels(const std::string& audio_to, int available_channels) {
+    const int channels = std::max(1, available_channels);
+    std::string normalized = audio_to;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    normalized.erase(normalized.begin(), std::find_if(normalized.begin(), normalized.end(), [](unsigned char c) {
+        return std::isspace(c) == 0;
+    }));
+    normalized.erase(std::find_if(normalized.rbegin(), normalized.rend(), [](unsigned char c) {
+        return std::isspace(c) == 0;
+    }).base(), normalized.end());
+
+    auto stereo_pair = [channels](int start) {
+        int first = std::max(0, std::min(start, channels - 1));
+        int second = std::max(0, std::min(first + 1, channels - 1));
+        return std::vector<int>{ first, second };
+    };
+
+    if (normalized.empty() || normalized == "master" || normalized == "main")
+        return stereo_pair(0);
+    if (normalized == "monitor")
+        return channels >= 4 ? stereo_pair(2) : stereo_pair(0);
+
+    bool ext_zero_based = normalized.rfind("ext:", 0) == 0;
+    for (const auto& prefix : { std::string("ext:"), std::string("hardware:"), std::string("out_"), std::string("out ") }) {
+        if (normalized.rfind(prefix, 0) == 0) {
+            normalized = normalized.substr(prefix.size());
+            break;
+        }
+    }
+    if (normalized.rfind("out", 0) == 0)
+        normalized = normalized.substr(3);
+
+    normalized.erase(std::remove_if(normalized.begin(), normalized.end(), [](unsigned char c) {
+        return std::isspace(c) != 0;
+    }), normalized.end());
+    std::vector<int> result;
+    auto add_channel = [&](int parsed) {
+        int zero_based = ext_zero_based ? parsed : parsed - 1;
+        if (zero_based >= 0 && zero_based < channels)
+            result.push_back(zero_based);
+    };
+
+    auto dash = normalized.find('-');
+    if (dash != std::string::npos) {
+        try {
+            int start = std::stoi(normalized.substr(0, dash));
+            int end = std::stoi(normalized.substr(dash + 1));
+            if (end >= start) {
+                for (int ch = start; ch <= end; ++ch)
+                    add_channel(ch);
+            }
+        } catch (...) {
+            result.clear();
+        }
+    } else {
+        try {
+            add_channel(std::stoi(normalized));
+        } catch (...) {
+        }
+    }
+
+    if (result.empty())
+        return stereo_pair(0);
+    return result;
+}
+
+} // namespace
 
 Mixer::Mixer(const Session*       session,
              const SourceManager* sources,
@@ -108,11 +185,34 @@ void Mixer::render(float** output_channels,
                 track_meters_[ti].left_rms.store(static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames))), std::memory_order_relaxed);
                 track_meters_[ti].right_rms.store(static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames))), std::memory_order_relaxed);
 
-                // Accumulate into stereo output.
+                auto route = route_channels(track.audio_to, num_channels);
+                const int left_channel = route.empty() ? 0 : route[0];
+                const int right_channel = route.size() > 1 ? route[1] : -1;
+                const float pan = clamp_pan(track.pan);
+                const float left_gain = pan > 0.0f ? 1.0f - pan : 1.0f;
+                const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
+                const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
+                const bool right_only_source = track_peak_r > 1.0e-7f && track_peak_l <= 1.0e-7f;
+
+                // Accumulate into selected output route.
                 for (int f = 0; f < num_frames; ++f) {
-                    output_channels[0][f] += mix_l_[f];
-                    if (num_channels >= 2)
-                        output_channels[1][f] += mix_r_[f];
+                    float source_l = mix_l_[f];
+                    float source_r = mix_r_[f];
+                    if (left_only_source)
+                        source_r = source_l;
+                    else if (right_only_source)
+                        source_l = source_r;
+
+                    float out_l = source_l * left_gain;
+                    float out_r = source_r * right_gain;
+                    if (right_channel < 0) {
+                        if (left_channel >= 0 && left_channel < num_channels)
+                            output_channels[left_channel][f] += 0.5f * (out_l + out_r);
+                    } else {
+                        if (left_channel >= 0 && left_channel < num_channels)
+                            output_channels[left_channel][f] += out_l;
+                        output_channels[right_channel][f] += out_r;
+                    }
                 }
             }
             break;

@@ -65,10 +65,26 @@ TEST_CASE("parse SetTrackGain") {
     CHECK(c.gain == doctest::Approx(0.75f));
 }
 
+TEST_CASE("parse SetTrackPan") {
+    auto cmd = command_from_json(R"({"type":"SetTrackPan","track_id":"t1","pan":-0.5})");
+    REQUIRE(std::holds_alternative<CmdSetTrackPan>(cmd));
+    auto& c = std::get<CmdSetTrackPan>(cmd);
+    CHECK(c.track_id == "t1");
+    CHECK(c.pan == doctest::Approx(-0.5f));
+}
+
 TEST_CASE("parse SetTrackMute true") {
     auto cmd = command_from_json(R"({"type":"SetTrackMute","track_id":"t1","mute":true})");
     REQUIRE(std::holds_alternative<CmdSetTrackMute>(cmd));
     CHECK(std::get<CmdSetTrackMute>(cmd).mute == true);
+}
+
+TEST_CASE("parse SetTrackAudioRoute") {
+    auto cmd = command_from_json(R"({"type":"SetTrackAudioRoute","track_id":"t1","audio_to":"ext:2-3"})");
+    REQUIRE(std::holds_alternative<CmdSetTrackAudioRoute>(cmd));
+    auto& c = std::get<CmdSetTrackAudioRoute>(cmd);
+    CHECK(c.track_id == "t1");
+    CHECK(c.audio_to == "ext:2-3");
 }
 
 TEST_CASE("parse SetSongTranspose negative") {

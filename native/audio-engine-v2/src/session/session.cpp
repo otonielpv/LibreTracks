@@ -155,6 +155,8 @@ std::string session_to_json(const Session& session) {
             jtrack["id"]                  = track.id;
             jtrack["name"]                = track.name;
             jtrack["gain"]                = track.gain;
+            jtrack["pan"]                 = track.pan;
+            jtrack["audio_to"]            = track.audio_to;
             jtrack["mute"]                = track.mute;
             jtrack["solo"]                = track.solo;
             jtrack["transpose_behavior"]  = transpose_behavior_str(track.transpose_behavior);

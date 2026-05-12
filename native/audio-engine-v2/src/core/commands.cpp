@@ -92,11 +92,17 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "SetTrackGain")
         return CmdSetTrackGain{ j.at("track_id").get<Id>(), j.at("gain").get<float>() };
 
+    if (type == "SetTrackPan")
+        return CmdSetTrackPan{ j.at("track_id").get<Id>(), j.at("pan").get<float>() };
+
     if (type == "SetTrackMute")
         return CmdSetTrackMute{ j.at("track_id").get<Id>(), j.at("mute").get<bool>() };
 
     if (type == "SetTrackSolo")
         return CmdSetTrackSolo{ j.at("track_id").get<Id>(), j.at("solo").get<bool>() };
+
+    if (type == "SetTrackAudioRoute")
+        return CmdSetTrackAudioRoute{ j.at("track_id").get<Id>(), j.at("audio_to").get<std::string>() };
 
     if (type == "SetTrackTransposeEnabled")
         return CmdSetTrackTransposeEnabled{ j.at("track_id").get<Id>(), j.at("enabled").get<bool>() };

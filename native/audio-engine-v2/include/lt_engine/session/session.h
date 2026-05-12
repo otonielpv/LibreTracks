@@ -73,6 +73,8 @@ struct Track {
     Id                  id;
     std::string         name;
     Gain                gain               = 1.0f;
+    float               pan                = 0.0f;
+    std::string         audio_to           = "master";
     bool                mute               = false;
     bool                solo               = false;
     TransposeBehavior   transpose_behavior = TransposeBehavior::FollowsSongOrRegion;
