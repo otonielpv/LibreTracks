@@ -113,6 +113,14 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"pitch_reset_count", snap.pitch.pitch_reset_count},
         {"pitch_seek_generation", snap.pitch.pitch_seek_generation},
         {"pitch_starvation_count", snap.pitch.pitch_starvation_count},
+        {"pitch_jobs_queued", snap.pitch.pitch_jobs_queued},
+        {"pitch_jobs_running", snap.pitch.pitch_jobs_running},
+        {"pitch_jobs_completed", snap.pitch.pitch_jobs_completed},
+        {"pitch_jobs_failed", snap.pitch.pitch_jobs_failed},
+        {"pitch_proxy_prepare_sync_count", snap.pitch.pitch_proxy_prepare_sync_count},
+        {"pitch_proxy_prepare_blocking_ms", snap.pitch.pitch_proxy_prepare_blocking_ms},
+        {"last_pitch_prepare_reason", snap.pitch.last_pitch_prepare_reason},
+        {"active_pitch_mode", snap.pitch.active_pitch_mode},
         {"pitch_muted_or_bypassed_reason", snap.pitch.pitch_muted_or_bypassed_reason},
     };
 

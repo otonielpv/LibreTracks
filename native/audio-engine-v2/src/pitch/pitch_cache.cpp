@@ -2,6 +2,7 @@
 #include <lt_engine/pitch/bypass_pitch_processor.h>
 #include <lt_engine/pitch/rubberband_pitch_processor.h>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <vector>
 
@@ -56,6 +57,17 @@ bool is_sparse_transient(const DecodedSource& source, Frame start, int frames) {
 }
 
 } // namespace
+
+PitchCache::PitchCache() {
+    worker_ = std::thread([this] { worker_loop(); });
+}
+
+PitchCache::~PitchCache() {
+    stop_worker_.store(true, std::memory_order_release);
+    job_cv_.notify_all();
+    if (worker_.joinable())
+        worker_.join();
+}
 
 PitchProcessor* PitchCache::prepare_processor(const PitchCacheKey& key) {
     std::lock_guard lock(write_mutex_);
@@ -115,6 +127,16 @@ PitchDiagnostics PitchCache::diagnostics() const {
     d.proxy_generation_count = proxy_generation_count_.load(std::memory_order_relaxed);
     d.duplicate_proxy_request_count = duplicate_proxy_request_count_.load(std::memory_order_relaxed);
     d.render_path_realtime_fallback_count = render_path_realtime_fallback_count_.load(std::memory_order_relaxed);
+    d.jobs_queued = jobs_queued_.load(std::memory_order_relaxed);
+    d.jobs_running = jobs_running_.load(std::memory_order_relaxed);
+    d.jobs_completed = jobs_completed_.load(std::memory_order_relaxed);
+    d.jobs_failed = jobs_failed_.load(std::memory_order_relaxed);
+    d.prepare_sync_count = prepare_sync_count_.load(std::memory_order_relaxed);
+    d.prepare_blocking_ms = static_cast<double>(prepare_blocking_us_.load(std::memory_order_relaxed)) / 1000.0;
+    {
+        std::lock_guard reason_lock(reason_mutex_);
+        d.last_prepare_reason = last_prepare_reason_;
+    }
     d.active_pitch_mode = realtime_fallback_enabled_.load(std::memory_order_relaxed)
         ? "prepared_proxy_with_realtime_fallback"
         : "prepared_proxy";
@@ -142,65 +164,18 @@ bool PitchCache::request_block(const PitchCacheKey& key,
                                const DecodedSource& source,
                                Frame source_start_frame,
                                int block_index) {
-    if (key.semitones == 0.0)
-        return true;
-
-    ProxyCacheKey proxy_key{key, block_index};
-    {
-        auto current = std::atomic_load(&proxy_cache_);
-        if (current->find(proxy_key) != current->end()) {
-            duplicate_proxy_request_count_.fetch_add(1, std::memory_order_relaxed);
-            return true;
-        }
-    }
-
-    const int channels = std::max(1, key.channel_count > 0 ? key.channel_count : source.channel_count());
-    const int frames = static_cast<int>(std::min<Frame>(
-        kProxyBlockFrames,
-        std::max<Frame>(0, source.duration_frames() - source_start_frame)));
-    if (frames <= 0)
-        return false;
-
-    std::vector<float> left(static_cast<std::size_t>(frames), 0.0f);
-    std::vector<float> right(static_cast<std::size_t>(frames), 0.0f);
-    float* planar[2] = {left.data(), right.data()};
-    int read = source.read(source_start_frame, frames, planar, std::min(2, channels));
-    if (read <= 0)
-        return false;
-
-    if (key.semitones != 0.0 && !is_sparse_transient(source, source_start_frame, read)) {
-        auto processor = std::make_unique<RubberBandPitchProcessor>(
-            std::min(2, channels), key.sample_rate, key.semitones);
-        float* block[2] = {left.data(), right.data()};
-        processor->process(block, std::min(2, channels), read);
-    }
-
-    auto prepared = std::make_shared<PreparedPitchBlock>();
-    prepared->key = key;
-    prepared->source_start_frame = source_start_frame;
-    prepared->block_index = block_index;
-    prepared->frame_count = read;
-    prepared->channel_count = channels;
-    prepared->interleaved_samples.assign(static_cast<std::size_t>(read * channels), 0.0f);
-    for (int f = 0; f < read; ++f) {
-        for (int ch = 0; ch < channels; ++ch) {
-            const float value = ch == 0 ? left[f] : (channels > 1 ? right[f] : left[f]);
-            prepared->interleaved_samples[static_cast<std::size_t>(f * channels + ch)] = value;
-        }
-    }
-    overlay_transients(source, source_start_frame, read, channels, prepared->interleaved_samples);
-
-    std::lock_guard lock(write_mutex_);
-    auto current = std::atomic_load(&proxy_cache_);
-    if (current->find(proxy_key) != current->end()) {
+    if (is_block_ready(key, block_index)) {
         duplicate_proxy_request_count_.fetch_add(1, std::memory_order_relaxed);
         return true;
     }
-    auto next = std::make_shared<ProxyMap>(*current);
-    next->emplace(std::move(proxy_key), std::move(prepared));
-    std::atomic_store(&proxy_cache_, std::shared_ptr<const ProxyMap>(next));
-    proxy_generation_count_.fetch_add(1, std::memory_order_relaxed);
-    return true;
+    const auto t0 = std::chrono::steady_clock::now();
+    bool ok = generate_range(key, source, source_start_frame, kProxyBlockFrames);
+    const auto t1 = std::chrono::steady_clock::now();
+    prepare_sync_count_.fetch_add(1, std::memory_order_relaxed);
+    prepare_blocking_us_.fetch_add(
+        static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()),
+        std::memory_order_relaxed);
+    return ok;
 }
 
 void PitchCache::prefetch_range(const PitchCacheKey& key,
@@ -213,6 +188,62 @@ void PitchCache::prefetch_range(const PitchCacheKey& key,
     const int last = block_index_for(std::max<Frame>(0, start_frame + frame_count - 1));
     for (int block = first; block <= last; ++block)
         request_block(key, source, block);
+}
+
+void PitchCache::enqueue_range(const PitchCacheKey& key,
+                               const DecodedSource& source,
+                               Frame start_frame,
+                               Frame frame_count,
+                               int priority,
+                               std::uint64_t generation,
+                               std::string reason) {
+    if (key.semitones == 0.0 || frame_count <= 0)
+        return;
+
+    const Frame clamped_start = std::max<Frame>(0, start_frame);
+    const Frame clamped_end = std::min<Frame>(source.duration_frames(), clamped_start + frame_count);
+    if (clamped_end <= clamped_start)
+        return;
+
+    const int first = block_index_for(clamped_start);
+    const int last = block_index_for(clamped_end - 1);
+    bool queued_any = false;
+    const std::string reason_copy = reason;
+    {
+        std::lock_guard lock(job_mutex_);
+        for (int block = first; block <= last; ++block) {
+            if (is_block_ready(key, block)) {
+                duplicate_proxy_request_count_.fetch_add(1, std::memory_order_relaxed);
+                continue;
+            }
+            const auto id = block_id(key, block);
+            if (!queued_blocks_.insert(id).second) {
+                duplicate_proxy_request_count_.fetch_add(1, std::memory_order_relaxed);
+                continue;
+            }
+            queued_any = true;
+        }
+        if (queued_any) {
+            ProxyJob job;
+            job.key = key;
+            job.source = &source;
+            job.start_frame = static_cast<Frame>(first) * kProxyBlockFrames;
+            job.frame_count = static_cast<Frame>(last - first + 1) * kProxyBlockFrames;
+            job.priority = priority;
+            job.generation = generation;
+            job.order = job_order_.fetch_add(1, std::memory_order_relaxed);
+            job.reason = std::move(reason);
+            jobs_.push_back(std::move(job));
+            jobs_queued_.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+    if (queued_any) {
+        {
+            std::lock_guard reason_lock(reason_mutex_);
+            last_prepare_reason_ = reason_copy;
+        }
+        job_cv_.notify_one();
+    }
 }
 
 bool PitchCache::get_block_if_ready(const PitchCacheKey& key,
@@ -280,6 +311,17 @@ void PitchCache::clear() {
     proxy_generation_count_.store(0, std::memory_order_relaxed);
     duplicate_proxy_request_count_.store(0, std::memory_order_relaxed);
     render_path_realtime_fallback_count_.store(0, std::memory_order_relaxed);
+    jobs_queued_.store(0, std::memory_order_relaxed);
+    jobs_running_.store(0, std::memory_order_relaxed);
+    jobs_completed_.store(0, std::memory_order_relaxed);
+    jobs_failed_.store(0, std::memory_order_relaxed);
+    prepare_sync_count_.store(0, std::memory_order_relaxed);
+    prepare_blocking_us_.store(0, std::memory_order_relaxed);
+    {
+        std::lock_guard job_lock(job_mutex_);
+        jobs_.clear();
+        queued_blocks_.clear();
+    }
 }
 
 void PitchCache::evict(const Id& source_id) {
@@ -299,6 +341,143 @@ void PitchCache::evict(const Id& source_id) {
             next_proxy->emplace(existing_key, existing_block);
     }
     std::atomic_store(&proxy_cache_, std::shared_ptr<const ProxyMap>(next_proxy));
+}
+
+std::string PitchCache::block_id(const PitchCacheKey& key, int block_index) {
+    return key_to_string(key) + ":" + std::to_string(key.sample_rate) + ":"
+        + std::to_string(key.channel_count) + ":" + key.quality + ":"
+        + std::to_string(key.cache_version) + ":" + std::to_string(block_index);
+}
+
+void PitchCache::worker_loop() {
+    while (!stop_worker_.load(std::memory_order_acquire)) {
+        ProxyJob job;
+        {
+            std::unique_lock lock(job_mutex_);
+            job_cv_.wait(lock, [this] {
+                return stop_worker_.load(std::memory_order_acquire) || !jobs_.empty();
+            });
+            if (stop_worker_.load(std::memory_order_acquire))
+                break;
+            auto best = std::min_element(jobs_.begin(), jobs_.end(), [](const ProxyJob& a, const ProxyJob& b) {
+                if (a.priority != b.priority)
+                    return a.priority < b.priority;
+                return a.order < b.order;
+            });
+            job = *best;
+            jobs_.erase(best);
+        }
+
+        jobs_running_.fetch_add(1, std::memory_order_relaxed);
+        bool ok = job.source && generate_range(job.key, *job.source, job.start_frame, job.frame_count);
+        jobs_running_.fetch_sub(1, std::memory_order_relaxed);
+        if (ok)
+            jobs_completed_.fetch_add(1, std::memory_order_relaxed);
+        else
+            jobs_failed_.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+bool PitchCache::generate_range(const PitchCacheKey& key,
+                                const DecodedSource& source,
+                                Frame start_frame,
+                                Frame frame_count) {
+    if (key.semitones == 0.0 || frame_count <= 0)
+        return true;
+
+    const Frame clamped_start = std::max<Frame>(0, start_frame);
+    const Frame clamped_end = std::min<Frame>(source.duration_frames(), clamped_start + frame_count);
+    if (clamped_end <= clamped_start)
+        return false;
+
+    const int first = block_index_for(clamped_start);
+    const int last = block_index_for(clamped_end - 1);
+    bool any = false;
+    for (int block = first; block <= last; ++block) {
+        const Frame block_start = static_cast<Frame>(block) * kProxyBlockFrames;
+        if (publish_block(key, source, block_start, block))
+            any = true;
+        {
+            std::lock_guard lock(job_mutex_);
+            queued_blocks_.erase(block_id(key, block));
+        }
+    }
+    return any;
+}
+
+bool PitchCache::publish_block(const PitchCacheKey& key,
+                               const DecodedSource& source,
+                               Frame source_start_frame,
+                               int block_index) {
+    if (is_block_ready(key, block_index))
+        return true;
+
+    const int channels = std::max(1, key.channel_count > 0 ? key.channel_count : source.channel_count());
+    const int frames = static_cast<int>(std::min<Frame>(
+        kProxyBlockFrames,
+        std::max<Frame>(0, source.duration_frames() - source_start_frame)));
+    if (frames <= 0)
+        return false;
+
+    const double ratio = pitch_ratio(key.semitones);
+    auto prepared = std::make_shared<PreparedPitchBlock>();
+    prepared->key = key;
+    prepared->source_start_frame = source_start_frame;
+    prepared->block_index = block_index;
+    prepared->frame_count = frames;
+    prepared->channel_count = channels;
+    prepared->interleaved_samples.assign(static_cast<std::size_t>(frames * channels), 0.0f);
+
+    const int read_channels = std::min(2, channels);
+    const bool sparse_transient = is_sparse_transient(source, source_start_frame, frames);
+    const Frame needed_end = std::min<Frame>(
+        source.duration_frames(),
+        sparse_transient
+            ? source_start_frame + frames
+            : static_cast<Frame>(std::ceil(static_cast<double>(source_start_frame + frames) * ratio)) + 2);
+    const Frame read_start = sparse_transient ? source_start_frame : 0;
+    const int read_frames = static_cast<int>(std::max<Frame>(0, needed_end - read_start));
+    std::vector<float> left(static_cast<std::size_t>(std::max(1, read_frames)), 0.0f);
+    std::vector<float> right(static_cast<std::size_t>(std::max(1, read_frames)), 0.0f);
+    float* planar[2] = {left.data(), right.data()};
+    int read = source.read(read_start, read_frames, planar, read_channels);
+    if (read <= 0)
+        return false;
+
+    for (int f = 0; f < frames; ++f) {
+        const double src_pos = sparse_transient
+            ? static_cast<double>(f)
+            : static_cast<double>(source_start_frame + f) * ratio;
+        const int i0 = static_cast<int>(std::floor(src_pos));
+        const int i1 = std::min(i0 + 1, read - 1);
+        const float frac = static_cast<float>(src_pos - static_cast<double>(i0));
+        if (i0 < 0 || i0 >= read)
+            continue;
+        const float l = left[static_cast<std::size_t>(i0)] * (1.0f - frac)
+                      + left[static_cast<std::size_t>(i1)] * frac;
+        const float r = read_channels > 1
+            ? right[static_cast<std::size_t>(i0)] * (1.0f - frac)
+              + right[static_cast<std::size_t>(i1)] * frac
+            : l;
+        for (int ch = 0; ch < channels; ++ch) {
+            prepared->interleaved_samples[static_cast<std::size_t>(f * channels + ch)] =
+                ch == 0 ? l : r;
+        }
+    }
+    overlay_transients(source, source_start_frame, frames, channels, prepared->interleaved_samples);
+
+    std::lock_guard lock(write_mutex_);
+    auto current = std::atomic_load(&proxy_cache_);
+    ProxyCacheKey proxy_key{key, block_index};
+    if (current->find(proxy_key) != current->end()) {
+        duplicate_proxy_request_count_.fetch_add(1, std::memory_order_relaxed);
+        return true;
+    }
+    auto next = std::make_shared<ProxyMap>(*current);
+    next->emplace(std::move(proxy_key), std::move(prepared));
+    std::atomic_store(&proxy_cache_, std::shared_ptr<const ProxyMap>(next));
+    proxy_generation_count_.fetch_add(1, std::memory_order_relaxed);
+    return true;
 }
 
 } // namespace lt

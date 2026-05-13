@@ -91,6 +91,14 @@ struct PitchSnapshot {
     uint64_t    pitch_reset_count = 0;
     uint64_t    pitch_seek_generation = 0;
     uint64_t    pitch_starvation_count = 0;
+    uint64_t    pitch_jobs_queued = 0;
+    uint64_t    pitch_jobs_running = 0;
+    uint64_t    pitch_jobs_completed = 0;
+    uint64_t    pitch_jobs_failed = 0;
+    uint64_t    pitch_proxy_prepare_sync_count = 0;
+    double      pitch_proxy_prepare_blocking_ms = 0.0;
+    std::string last_pitch_prepare_reason;
+    std::string active_pitch_mode;
     std::string pitch_muted_or_bypassed_reason;
 };
 

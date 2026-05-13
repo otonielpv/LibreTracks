@@ -271,6 +271,14 @@ std::string EngineImpl::get_snapshot() const {
             source_ready_pitch_prepare_count_.load(std::memory_order_relaxed);
         snap.pitch.pitch_latency_frames = pitch.max_latency_frames;
         snap.pitch.active_pitch_keys = pitch.active_keys;
+        snap.pitch.pitch_jobs_queued = pitch.jobs_queued;
+        snap.pitch.pitch_jobs_running = pitch.jobs_running;
+        snap.pitch.pitch_jobs_completed = pitch.jobs_completed;
+        snap.pitch.pitch_jobs_failed = pitch.jobs_failed;
+        snap.pitch.pitch_proxy_prepare_sync_count = pitch.prepare_sync_count;
+        snap.pitch.pitch_proxy_prepare_blocking_ms = pitch.prepare_blocking_ms;
+        snap.pitch.last_pitch_prepare_reason = pitch.last_prepare_reason;
+        snap.pitch.active_pitch_mode = pitch.active_pitch_mode;
         if (pitch.missing_processor_count > 0)
             snap.pitch.pitch_muted_or_bypassed_reason = "Pitch processor missing; bypassed instead of muting.";
     }
@@ -291,12 +299,19 @@ std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& sess
         return 0;
 
     const int sample_rate = clock_->sample_rate();
+    const Frame playhead = clock_->position().frame;
+    const Frame prepare_frames = static_cast<Frame>(sample_rate) * 3;
     std::size_t prepared = 0;
     for (const auto& song : session.songs) {
+        if (playhead + prepare_frames < song.start_frame || playhead >= song.end_frame)
+            continue;
         for (const auto& track : song.tracks) {
             for (const auto& clip : track.clips) {
                 const auto* source = source_manager_->get(clip.source_id);
                 if (!source || !source->is_loaded())
+                    continue;
+                const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
+                if (playhead + prepare_frames < clip.timeline_start_frame || playhead >= clip_end)
                     continue;
                 Semitones semitones = resolve_effective_semitones(
                     track, clip, song, clip.timeline_start_frame);
@@ -305,8 +320,13 @@ std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& sess
                 PitchCacheKey key{clip.source_id, track.id, clip.id,
                                   static_cast<double>(semitones),
                                   sample_rate, source->channel_count(), "prepared_proxy"};
-                pitch_cache_->prefetch_range(key, *source, clip.source_start_frame, clip.length_frames);
-                if (pitch_cache_->is_block_ready(key, pitch_cache_->block_index_for(clip.source_start_frame)))
+                const Frame overlap_start = std::max(playhead, clip.timeline_start_frame);
+                const Frame source_start = clip.source_start_frame + (overlap_start - clip.timeline_start_frame);
+                const Frame source_frames = std::min<Frame>(prepare_frames, clip_end - overlap_start);
+                pitch_cache_->enqueue_range(key, *source, source_start, source_frames,
+                                            0, session_generation_.load(std::memory_order_relaxed),
+                                            "current_playhead");
+                if (pitch_cache_->is_block_ready(key, pitch_cache_->block_index_for(source_start)))
                     ++prepared;
             }
         }
@@ -400,6 +420,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         else if constexpr (std::is_same_v<T, CmdSeekAbsolute>) {
             Frame from = clock_->position().frame;
             clock_->seek(c.frame);
+            prepare_pitch_processors_for_session();
             if (mixer_) mixer_->trigger_crossfade();
             push_event(EvSeekExecuted{ from, c.frame });
             return Result<void>::ok();
@@ -408,6 +429,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             Frame from = clock_->position().frame;
             Frame to   = from + c.delta_frames;
             clock_->seek(to);
+            prepare_pitch_processors_for_session();
             if (mixer_) mixer_->trigger_crossfade();
             push_event(EvSeekExecuted{ from, to });
             return Result<void>::ok();

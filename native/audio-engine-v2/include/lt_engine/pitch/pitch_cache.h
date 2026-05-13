@@ -6,10 +6,14 @@
 #include <lt_engine/sources/block_cache.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -63,6 +67,13 @@ struct PitchDiagnostics {
     std::uint64_t proxy_generation_count = 0;
     std::uint64_t duplicate_proxy_request_count = 0;
     std::uint64_t render_path_realtime_fallback_count = 0;
+    std::uint64_t jobs_queued = 0;
+    std::uint64_t jobs_running = 0;
+    std::uint64_t jobs_completed = 0;
+    std::uint64_t jobs_failed = 0;
+    std::uint64_t prepare_sync_count = 0;
+    double prepare_blocking_ms = 0.0;
+    std::string last_prepare_reason;
     std::string active_pitch_mode = "prepared_proxy";
     int max_latency_frames = 0;
     std::vector<std::string> active_keys;
@@ -80,7 +91,8 @@ struct PreparedPitchBlock {
 
 class PitchCache {
 public:
-    PitchCache() = default;
+    PitchCache();
+    ~PitchCache();
 
     static constexpr int kProxyBlockFrames = kDefaultBlockFrames;
 
@@ -102,6 +114,13 @@ public:
                         const DecodedSource& source,
                         Frame start_frame,
                         Frame frame_count);
+    void enqueue_range(const PitchCacheKey& key,
+                       const DecodedSource& source,
+                       Frame start_frame,
+                       Frame frame_count,
+                       int priority,
+                       std::uint64_t generation,
+                       std::string reason);
     bool get_block_if_ready(const PitchCacheKey& key,
                             int block_index,
                             int frame_offset_in_block,
@@ -140,7 +159,25 @@ private:
 
     using ProxyMap = std::unordered_map<ProxyCacheKey, std::shared_ptr<PreparedPitchBlock>, ProxyCacheKeyHash>;
 
+    struct ProxyJob {
+        PitchCacheKey key;
+        const DecodedSource* source = nullptr;
+        Frame start_frame = 0;
+        Frame frame_count = 0;
+        int priority = 0;
+        std::uint64_t generation = 0;
+        std::uint64_t order = 0;
+        std::string reason;
+    };
+
     mutable std::mutex write_mutex_;
+    mutable std::mutex job_mutex_;
+    std::condition_variable job_cv_;
+    std::deque<ProxyJob> jobs_;
+    std::set<std::string> queued_blocks_;
+    std::thread worker_;
+    std::atomic<bool> stop_worker_{false};
+    std::atomic<std::uint64_t> job_order_{0};
     std::shared_ptr<const CacheMap> cache_{std::make_shared<const CacheMap>()};
     std::shared_ptr<const ProxyMap> proxy_cache_{std::make_shared<const ProxyMap>()};
     std::atomic<std::uint64_t> missing_processor_count_{0};
@@ -148,7 +185,26 @@ private:
     std::atomic<std::uint64_t> proxy_generation_count_{0};
     std::atomic<std::uint64_t> duplicate_proxy_request_count_{0};
     std::atomic<std::uint64_t> render_path_realtime_fallback_count_{0};
+    std::atomic<std::uint64_t> jobs_queued_{0};
+    std::atomic<std::uint64_t> jobs_running_{0};
+    std::atomic<std::uint64_t> jobs_completed_{0};
+    std::atomic<std::uint64_t> jobs_failed_{0};
+    std::atomic<std::uint64_t> prepare_sync_count_{0};
+    std::atomic<std::uint64_t> prepare_blocking_us_{0};
     std::atomic<bool> realtime_fallback_enabled_{false};
+    mutable std::mutex reason_mutex_;
+    std::string last_prepare_reason_;
+
+    void worker_loop();
+    bool generate_range(const PitchCacheKey& key,
+                        const DecodedSource& source,
+                        Frame start_frame,
+                        Frame frame_count);
+    bool publish_block(const PitchCacheKey& key,
+                       const DecodedSource& source,
+                       Frame source_start_frame,
+                       int block_index);
+    static std::string block_id(const PitchCacheKey& key, int block_index);
 };
 
 } // namespace lt
