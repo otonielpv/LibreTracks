@@ -95,9 +95,17 @@ struct PitchSnapshot {
     uint64_t    pitch_jobs_running = 0;
     uint64_t    pitch_jobs_completed = 0;
     uint64_t    pitch_jobs_failed = 0;
+    uint64_t    seek_immediate_jobs_queued = 0;
+    uint64_t    seek_immediate_jobs_completed = 0;
+    std::size_t pitch_proxy_blocks_ready = 0;
+    std::size_t pitch_proxy_blocks_missing = 0;
     uint64_t    pitch_proxy_prepare_sync_count = 0;
     double      pitch_proxy_prepare_blocking_ms = 0.0;
     std::string last_pitch_prepare_reason;
+    std::string active_pitch_render_path;
+    std::string last_pitch_proxy_error;
+    std::string last_missing_proxy_key;
+    int         last_missing_proxy_block_index = -1;
     std::string active_pitch_mode;
     uint64_t    offline_pitch_segments_rendered = 0;
     uint64_t    offline_pitch_segment_failures = 0;

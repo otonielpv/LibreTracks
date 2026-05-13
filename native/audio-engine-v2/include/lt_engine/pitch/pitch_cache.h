@@ -75,6 +75,8 @@ struct PitchDiagnostics {
     std::uint64_t jobs_running = 0;
     std::uint64_t jobs_completed = 0;
     std::uint64_t jobs_failed = 0;
+    std::uint64_t seek_immediate_jobs_queued = 0;
+    std::uint64_t seek_immediate_jobs_completed = 0;
     std::uint64_t offline_segments_rendered = 0;
     std::uint64_t offline_segment_failures = 0;
     int offline_latency_frames = 0;
@@ -83,6 +85,10 @@ struct PitchDiagnostics {
     std::uint64_t offline_trimmed_frames = 0;
     double offline_render_ms = 0.0;
     std::string last_offline_error;
+    std::string active_pitch_render_path = "bypass";
+    std::string last_pitch_proxy_error;
+    std::string last_missing_proxy_key;
+    int last_missing_proxy_block_index = -1;
     bool disk_cache_enabled = false;
     std::string disk_cache_dir;
     std::uint64_t disk_cache_hits = 0;
@@ -122,6 +128,7 @@ public:
     void note_missing_processor(const PitchCacheKey& key) noexcept;
     void note_missing_proxy_block(const PitchCacheKey& key, int block_index) noexcept;
     void note_realtime_fallback_used() noexcept;
+    void note_prepared_proxy_used() noexcept;
     PitchDiagnostics diagnostics() const;
 
     bool request_block(const PitchCacheKey& key,
@@ -213,6 +220,8 @@ private:
     std::atomic<std::uint64_t> jobs_running_{0};
     std::atomic<std::uint64_t> jobs_completed_{0};
     std::atomic<std::uint64_t> jobs_failed_{0};
+    std::atomic<std::uint64_t> seek_immediate_jobs_queued_{0};
+    std::atomic<std::uint64_t> seek_immediate_jobs_completed_{0};
     std::atomic<std::uint64_t> offline_segments_rendered_{0};
     std::atomic<std::uint64_t> offline_segment_failures_{0};
     std::atomic<int> offline_latency_frames_{0};
@@ -226,6 +235,10 @@ private:
     mutable std::mutex reason_mutex_;
     std::string last_prepare_reason_;
     std::string last_offline_error_;
+    std::string active_pitch_render_path_ = "bypass";
+    std::string last_pitch_proxy_error_;
+    std::string last_missing_proxy_key_;
+    int last_missing_proxy_block_index_ = -1;
     std::unique_ptr<PersistentPitchProxyCache> disk_cache_;
 
     void worker_loop();

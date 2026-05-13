@@ -100,10 +100,12 @@ void TrackRenderer::render_clip(const Clip&          clip,
                         proc->process(chunk_out, 2, read);
                     } else {
                         pitch_cache->note_missing_processor(realtime_key);
-                        return;
+                        std::fill(chunk_out[0], chunk_out[0] + chunk, 0.0f);
+                        std::fill(chunk_out[1], chunk_out[1] + chunk, 0.0f);
                     }
                 } else {
-                    return;
+                    std::fill(chunk_out[0], chunk_out[0] + chunk, 0.0f);
+                    std::fill(chunk_out[1], chunk_out[1] + chunk, 0.0f);
                 }
             }
             copied += chunk;

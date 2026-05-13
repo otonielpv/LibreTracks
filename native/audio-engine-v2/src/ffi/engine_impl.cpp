@@ -287,9 +287,17 @@ std::string EngineImpl::get_snapshot() const {
         snap.pitch.pitch_jobs_running = pitch.jobs_running;
         snap.pitch.pitch_jobs_completed = pitch.jobs_completed;
         snap.pitch.pitch_jobs_failed = pitch.jobs_failed;
+        snap.pitch.seek_immediate_jobs_queued = pitch.seek_immediate_jobs_queued;
+        snap.pitch.seek_immediate_jobs_completed = pitch.seek_immediate_jobs_completed;
+        snap.pitch.pitch_proxy_blocks_ready = pitch.proxy_blocks_ready;
+        snap.pitch.pitch_proxy_blocks_missing = pitch.proxy_blocks_missing;
         snap.pitch.pitch_proxy_prepare_sync_count = pitch.prepare_sync_count;
         snap.pitch.pitch_proxy_prepare_blocking_ms = pitch.prepare_blocking_ms;
         snap.pitch.last_pitch_prepare_reason = pitch.last_prepare_reason;
+        snap.pitch.active_pitch_render_path = pitch.active_pitch_render_path;
+        snap.pitch.last_pitch_proxy_error = pitch.last_pitch_proxy_error;
+        snap.pitch.last_missing_proxy_key = pitch.last_missing_proxy_key;
+        snap.pitch.last_missing_proxy_block_index = pitch.last_missing_proxy_block_index;
         snap.pitch.active_pitch_mode = pitch.active_pitch_mode;
         snap.pitch.offline_pitch_segments_rendered = pitch.offline_segments_rendered;
         snap.pitch.offline_pitch_segment_failures = pitch.offline_segment_failures;
@@ -327,7 +335,9 @@ std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& sess
 
     const int sample_rate = clock_->sample_rate();
     const Frame playhead = clock_->position().frame;
-    const Frame prepare_frames = static_cast<Frame>(sample_rate) * 3;
+    const Frame immediate_frames = std::max<Frame>(PitchCache::kProxyBlockFrames, sample_rate / 2);
+    const Frame forward_frames = static_cast<Frame>(sample_rate) * 3;
+    const Frame prepare_frames = immediate_frames + forward_frames;
     std::size_t prepared = 0;
     for (const auto& song : session.songs) {
         if (playhead + prepare_frames < song.start_frame || playhead >= song.end_frame)
@@ -349,10 +359,26 @@ std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& sess
                                   sample_rate, source->channel_count(), "prepared_proxy"};
                 const Frame overlap_start = std::max(playhead, clip.timeline_start_frame);
                 const Frame source_start = clip.source_start_frame + (overlap_start - clip.timeline_start_frame);
-                const Frame source_frames = std::min<Frame>(prepare_frames, clip_end - overlap_start);
-                pitch_cache_->enqueue_range(key, *source, source_start, source_frames,
+                const Frame available_frames = clip_end - overlap_start;
+                const Frame immediate_start =
+                    static_cast<Frame>(pitch_cache_->block_index_for(source_start)) * PitchCache::kProxyBlockFrames;
+                const Frame immediate_count = std::min<Frame>(
+                    immediate_frames + (source_start - immediate_start),
+                    std::max<Frame>(0, source->duration_frames() - immediate_start));
+                pitch_cache_->enqueue_range(key, *source, immediate_start, immediate_count,
                                             0, session_generation_.load(std::memory_order_relaxed),
-                                            "current_playhead");
+                                            "seek_immediate");
+                const Frame forward_start = source_start + immediate_frames;
+                const Frame forward_available = std::max<Frame>(0, available_frames - immediate_frames);
+                const Frame forward_count = std::min<Frame>(forward_frames, forward_available);
+                pitch_cache_->enqueue_range(key, *source, forward_start, forward_count,
+                                            1, session_generation_.load(std::memory_order_relaxed),
+                                            "seek_forward_prebuffer");
+                const Frame background_start = forward_start + forward_count;
+                const Frame background_count = std::max<Frame>(0, available_frames - immediate_frames - forward_count);
+                pitch_cache_->enqueue_range(key, *source, background_start, background_count,
+                                            4, session_generation_.load(std::memory_order_relaxed),
+                                            "background_pitch_prepare");
                 if (pitch_cache_->is_block_ready(key, pitch_cache_->block_index_for(source_start)))
                     ++prepared;
             }

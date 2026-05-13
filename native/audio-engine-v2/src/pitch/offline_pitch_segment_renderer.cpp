@@ -3,51 +3,43 @@
 #include <algorithm>
 #include <cmath>
 
+#if LT_ENGINE_USE_RUBBERBAND && __has_include(<rubberband/RubberBandStretcher.h>)
+#  define LT_ENGINE_OFFLINE_HAS_RUBBERBAND 1
+#  include <rubberband/RubberBandStretcher.h>
+#elif LT_ENGINE_USE_RUBBERBAND && __has_include(<RubberBandStretcher.h>)
+#  define LT_ENGINE_OFFLINE_HAS_RUBBERBAND 1
+#  include <RubberBandStretcher.h>
+#else
+#  define LT_ENGINE_OFFLINE_HAS_RUBBERBAND 0
+#endif
+
 namespace lt {
 
 namespace {
 
-double pitch_ratio(double semitones) {
+double pitch_scale(double semitones) {
     return std::pow(2.0, semitones / 12.0);
 }
 
-bool is_sparse_transient(const DecodedSource& source, Frame start, int frames) {
-    const int read_frames = static_cast<int>(std::min<Frame>(
-        std::max<Frame>(0, source.duration_frames() - start), frames));
-    if (read_frames <= 0)
-        return false;
-    std::vector<float> left(static_cast<std::size_t>(read_frames), 0.0f);
-    std::vector<float> right(static_cast<std::size_t>(read_frames), 0.0f);
-    float* planar[2] = {left.data(), right.data()};
-    int read = source.read(start, read_frames, planar, 2);
-    int hot = 0;
-    for (int f = 0; f < read; ++f) {
-        if (std::max(std::abs(left[f]), std::abs(right[f])) >= 0.2f)
-            ++hot;
-    }
-    return hot > 0 && hot <= 8;
-}
+void read_source_interleaved(const DecodedSource& source,
+                             Frame start,
+                             int frames,
+                             int channels,
+                             std::vector<float>& out) {
+    out.assign(static_cast<std::size_t>(frames * channels), 0.0f);
+    if (frames <= 0)
+        return;
 
-void overlay_transients(const DecodedSource& source,
-                        Frame start,
-                        int frames,
-                        int channels,
-                        std::vector<float>& out) {
     const int read_channels = std::min(2, std::max(1, channels));
     std::vector<float> left(static_cast<std::size_t>(frames), 0.0f);
     std::vector<float> right(static_cast<std::size_t>(frames), 0.0f);
     float* planar[2] = {left.data(), right.data()};
-    int read = source.read(start, frames, planar, read_channels);
+    const int read = source.read(start, frames, planar, read_channels);
     for (int f = 0; f < read; ++f) {
-        float peak = std::max(std::abs(left[f]), read_channels > 1 ? std::abs(right[f]) : 0.0f);
-        const float prev_l = f > 0 ? left[f - 1] : 0.0f;
-        const float prev_r = f > 0 && read_channels > 1 ? right[f - 1] : 0.0f;
-        float prev_peak = std::max(std::abs(prev_l), std::abs(prev_r));
-        if (peak >= 0.2f && peak >= prev_peak * 8.0f) {
-            for (int ch = 0; ch < channels; ++ch) {
-                const float value = ch == 0 ? left[f] : (read_channels > 1 ? right[f] : left[f]);
-                out[static_cast<std::size_t>(f * channels + ch)] = value;
-            }
+        for (int ch = 0; ch < channels; ++ch) {
+            out[static_cast<std::size_t>(f * channels + ch)] =
+                ch == 0 || read_channels == 1 ? left[static_cast<std::size_t>(f)]
+                                               : right[static_cast<std::size_t>(f)];
         }
     }
 }
@@ -63,77 +55,120 @@ RenderedPitchSegment OfflinePitchSegmentRenderer::render_segment(
     result.start_frame = std::max<Frame>(0, requested_start_frame);
     result.frame_count = std::max<Frame>(0, requested_frame_count);
     result.channel_count = std::max(1, key.channel_count > 0 ? key.channel_count : source.channel_count());
-    result.sample_rate = key.sample_rate;
+    result.sample_rate = key.sample_rate > 0 ? key.sample_rate : source.sample_rate();
     result.latency_frames = 0;
     result.preroll_frames = PitchCache::kProxyBlockFrames;
     result.postroll_frames = PitchCache::kProxyBlockFrames;
     result.trimmed_frames = 0;
+    result.interleaved_samples.assign(
+        static_cast<std::size_t>(result.frame_count * result.channel_count), 0.0f);
 
-    if (key.semitones == 0.0 || result.frame_count <= 0) {
+    if (result.frame_count <= 0) {
         result.ok = true;
-        result.interleaved_samples.assign(
-            static_cast<std::size_t>(result.frame_count * result.channel_count), 0.0f);
         return result;
     }
 
-    const bool sparse = is_sparse_transient(source, result.start_frame,
-                                            static_cast<int>(result.frame_count));
-    const double ratio = pitch_ratio(key.semitones);
+    const Frame source_duration = source.duration_frames();
+    if (result.start_frame >= source_duration) {
+        result.ok = true;
+        return result;
+    }
+
+    if (key.semitones == 0.0) {
+        read_source_interleaved(source, result.start_frame, static_cast<int>(result.frame_count),
+                                result.channel_count, result.interleaved_samples);
+        result.ok = true;
+        return result;
+    }
+
+#if LT_ENGINE_OFFLINE_HAS_RUBBERBAND
+    const Frame read_start = std::max<Frame>(0, result.start_frame - result.preroll_frames);
     const Frame requested_end = result.start_frame + result.frame_count;
-    const Frame read_start = sparse
-        ? result.start_frame
-        : std::max<Frame>(0, result.start_frame - result.preroll_frames);
-    const Frame read_end = sparse
-        ? std::min<Frame>(source.duration_frames(), requested_end)
-        : std::min<Frame>(
-              source.duration_frames(),
-              static_cast<Frame>(std::ceil(static_cast<double>(requested_end + result.postroll_frames) * ratio)) + 2);
+    const Frame read_end = std::min<Frame>(source_duration, requested_end + result.postroll_frames);
     const int read_frames = static_cast<int>(std::max<Frame>(0, read_end - read_start));
     if (read_frames <= 0) {
         result.error = "source range empty";
         return result;
     }
 
-    const int read_channels = std::min(2, result.channel_count);
-    std::vector<float> left(static_cast<std::size_t>(read_frames), 0.0f);
-    std::vector<float> right(static_cast<std::size_t>(read_frames), 0.0f);
-    float* planar[2] = {left.data(), right.data()};
-    int read = source.read(read_start, read_frames, planar, read_channels);
+    const int channels = result.channel_count;
+    std::vector<std::vector<float>> input(static_cast<std::size_t>(channels));
+    for (auto& channel : input)
+        channel.assign(static_cast<std::size_t>(read_frames), 0.0f);
+
+    const int read_channels = std::min(2, channels);
+    float* read_planar[2] = {input[0].data(), input[std::min(1, channels - 1)].data()};
+    const int read = source.read(read_start, read_frames, read_planar, read_channels);
     if (read <= 0) {
         result.error = "source read failed";
         return result;
     }
-
-    result.interleaved_samples.assign(
-        static_cast<std::size_t>(result.frame_count * result.channel_count), 0.0f);
-
-    for (Frame f = 0; f < result.frame_count; ++f) {
-        const double source_pos_abs = sparse
-            ? static_cast<double>(result.start_frame + f)
-            : static_cast<double>(result.start_frame + f) * ratio;
-        const double source_pos = source_pos_abs - static_cast<double>(read_start);
-        const int i0 = static_cast<int>(std::floor(source_pos));
-        if (i0 < 0 || i0 >= read)
-            continue;
-        const int i1 = std::min(i0 + 1, read - 1);
-        const float frac = static_cast<float>(source_pos - static_cast<double>(i0));
-        const float l = left[static_cast<std::size_t>(i0)] * (1.0f - frac)
-                      + left[static_cast<std::size_t>(i1)] * frac;
-        const float r = read_channels > 1
-            ? right[static_cast<std::size_t>(i0)] * (1.0f - frac)
-              + right[static_cast<std::size_t>(i1)] * frac
-            : l;
-        for (int ch = 0; ch < result.channel_count; ++ch) {
-            result.interleaved_samples[static_cast<std::size_t>(f * result.channel_count + ch)] =
-                ch == 0 ? l : r;
-        }
+    if (read_channels == 1 && channels > 1) {
+        for (int ch = 1; ch < channels; ++ch)
+            std::copy(input[0].begin(), input[0].end(), input[static_cast<std::size_t>(ch)].begin());
+    } else if (channels > 2) {
+        for (int ch = 2; ch < channels; ++ch)
+            std::copy(input[1].begin(), input[1].end(), input[static_cast<std::size_t>(ch)].begin());
     }
 
-    overlay_transients(source, result.start_frame, static_cast<int>(result.frame_count),
-                       result.channel_count, result.interleaved_samples);
-    result.trimmed_frames = result.preroll_frames;
+    std::vector<float*> in_ptrs(static_cast<std::size_t>(channels));
+    for (int ch = 0; ch < channels; ++ch)
+        in_ptrs[static_cast<std::size_t>(ch)] = input[static_cast<std::size_t>(ch)].data();
+
+    using RBOption = RubberBand::RubberBandStretcher::Option;
+    int options = RBOption::OptionProcessOffline
+                | RBOption::OptionPitchHighConsistency
+                | RBOption::OptionChannelsTogether;
+    RubberBand::RubberBandStretcher rb(static_cast<size_t>(result.sample_rate),
+                                       static_cast<size_t>(channels),
+                                       options,
+                                       1.0,
+                                       pitch_scale(key.semitones));
+    rb.setTimeRatio(1.0);
+    rb.setPitchScale(pitch_scale(key.semitones));
+    rb.study(in_ptrs.data(), static_cast<size_t>(read), true);
+    rb.process(in_ptrs.data(), static_cast<size_t>(read), true);
+    result.latency_frames = static_cast<int>(rb.getLatency());
+
+    int available = static_cast<int>(rb.available());
+    if (available < 0)
+        available = 0;
+    const int trim_start = static_cast<int>(result.start_frame - read_start);
+    const int needed = trim_start + static_cast<int>(result.frame_count);
+    const int retrieve_frames = std::max(available, needed);
+    std::vector<std::vector<float>> processed(static_cast<std::size_t>(channels));
+    for (auto& channel : processed)
+        channel.assign(static_cast<std::size_t>(std::max(1, retrieve_frames)), 0.0f);
+    std::vector<float*> out_ptrs(static_cast<std::size_t>(channels));
+    for (int ch = 0; ch < channels; ++ch)
+        out_ptrs[static_cast<std::size_t>(ch)] = processed[static_cast<std::size_t>(ch)].data();
+    const int retrieved = available > 0
+        ? static_cast<int>(rb.retrieve(out_ptrs.data(), static_cast<size_t>(available)))
+        : 0;
+
+    if (retrieved < needed) {
+        result.error = "RubberBand returned fewer frames than requested window";
+    }
+
+    for (Frame f = 0; f < result.frame_count; ++f) {
+        const int src = trim_start + static_cast<int>(f);
+        if (src < 0 || src >= retrieved)
+            continue;
+        for (int ch = 0; ch < channels; ++ch) {
+            result.interleaved_samples[static_cast<std::size_t>(f * channels + ch)] =
+                processed[static_cast<std::size_t>(ch)][static_cast<std::size_t>(src)];
+        }
+    }
+    result.trimmed_frames = trim_start;
     result.ok = true;
     return result;
+#else
+    read_source_interleaved(source, result.start_frame, static_cast<int>(result.frame_count),
+                            result.channel_count, result.interleaved_samples);
+    result.error = "RubberBand unavailable; returned duration-preserving bypass";
+    result.ok = true;
+    return result;
+#endif
 }
 
 } // namespace lt

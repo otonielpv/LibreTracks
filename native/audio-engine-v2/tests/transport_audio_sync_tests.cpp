@@ -50,7 +50,7 @@ TEST_CASE("committed audio playhead advances only after successful render") {
     CHECK(clock.position().frame == before + 256);
 }
 
-TEST_CASE("blocked prepared pitch render does not advance committed playhead") {
+TEST_CASE("missing pitch proxy does not prevent transport advancement") {
     SourceManager sources;
     sources.register_source("source", "");
     REQUIRE(sources.store_decoded_source("source", test::make_stereo_click(8192, 128, 1.0f),
@@ -69,5 +69,5 @@ TEST_CASE("blocked prepared pitch render does not advance committed playhead") {
     Frame before = clock.position().frame;
     mixer->render(out, 2, 256, test::kFixtureSampleRate);
     CHECK(cache.diagnostics().proxy_blocks_missing > 0);
-    CHECK(clock.position().frame == before);
+    CHECK(clock.position().frame == before + 256);
 }

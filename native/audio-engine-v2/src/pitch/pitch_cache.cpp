@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 namespace lt {
@@ -17,45 +18,12 @@ std::string key_to_string(const PitchCacheKey& key) {
         + std::to_string(key.semitones);
 }
 
-double pitch_ratio(double semitones) {
-    return std::pow(2.0, semitones / 12.0);
-}
-
-void overlay_transients(const DecodedSource& source,
-                        Frame start,
-                        int frames,
-                        int channels,
-                        std::vector<float>& out) {
-    const int read_channels = std::min(2, std::max(1, channels));
-    std::vector<float> left(static_cast<std::size_t>(frames), 0.0f);
-    std::vector<float> right(static_cast<std::size_t>(frames), 0.0f);
-    float* planar[2] = {left.data(), right.data()};
-    int read = source.read(start, frames, planar, read_channels);
-    for (int f = 0; f < read; ++f) {
-        float peak = std::max(std::abs(left[f]), read_channels > 1 ? std::abs(right[f]) : 0.0f);
-        const float prev_l = f > 0 ? left[f - 1] : 0.0f;
-        const float prev_r = f > 0 && read_channels > 1 ? right[f - 1] : 0.0f;
-        float prev_peak = std::max(std::abs(prev_l), std::abs(prev_r));
-        if (peak >= 0.2f && peak >= prev_peak * 8.0f) {
-            for (int ch = 0; ch < channels; ++ch) {
-                const float value = ch == 0 ? left[f] : (read_channels > 1 ? right[f] : left[f]);
-                out[static_cast<std::size_t>(f * channels + ch)] = value;
-            }
-        }
+bool valid_samples(const std::vector<float>& samples) {
+    for (float sample : samples) {
+        if (!std::isfinite(sample) || std::abs(sample) > 32.0f)
+            return false;
     }
-}
-
-bool is_sparse_transient(const DecodedSource& source, Frame start, int frames) {
-    std::vector<float> left(static_cast<std::size_t>(frames), 0.0f);
-    std::vector<float> right(static_cast<std::size_t>(frames), 0.0f);
-    float* planar[2] = {left.data(), right.data()};
-    int read = source.read(start, frames, planar, 2);
-    int hot = 0;
-    for (int f = 0; f < read; ++f) {
-        if (std::max(std::abs(left[f]), std::abs(right[f])) >= 0.2f)
-            ++hot;
-    }
-    return hot > 0 && hot <= 8;
+    return true;
 }
 
 } // namespace
@@ -112,13 +80,22 @@ void PitchCache::note_missing_processor(const PitchCacheKey& key) noexcept {
 }
 
 void PitchCache::note_missing_proxy_block(const PitchCacheKey& key, int block_index) noexcept {
-    (void)key;
-    (void)block_index;
     missing_proxy_count_.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard reason_lock(reason_mutex_);
+    active_pitch_render_path_ = "missing_proxy_silence";
+    last_missing_proxy_key_ = key_to_string(key);
+    last_missing_proxy_block_index_ = block_index;
 }
 
 void PitchCache::note_realtime_fallback_used() noexcept {
     render_path_realtime_fallback_count_.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard reason_lock(reason_mutex_);
+    active_pitch_render_path_ = "realtime_fallback";
+}
+
+void PitchCache::note_prepared_proxy_used() noexcept {
+    std::lock_guard reason_lock(reason_mutex_);
+    active_pitch_render_path_ = "prepared_proxy";
 }
 
 PitchDiagnostics PitchCache::diagnostics() const {
@@ -138,6 +115,8 @@ PitchDiagnostics PitchCache::diagnostics() const {
     d.jobs_running = jobs_running_.load(std::memory_order_relaxed);
     d.jobs_completed = jobs_completed_.load(std::memory_order_relaxed);
     d.jobs_failed = jobs_failed_.load(std::memory_order_relaxed);
+    d.seek_immediate_jobs_queued = seek_immediate_jobs_queued_.load(std::memory_order_relaxed);
+    d.seek_immediate_jobs_completed = seek_immediate_jobs_completed_.load(std::memory_order_relaxed);
     d.offline_segments_rendered = offline_segments_rendered_.load(std::memory_order_relaxed);
     d.offline_segment_failures = offline_segment_failures_.load(std::memory_order_relaxed);
     d.offline_latency_frames = offline_latency_frames_.load(std::memory_order_relaxed);
@@ -148,6 +127,10 @@ PitchDiagnostics PitchCache::diagnostics() const {
     {
         std::lock_guard reason_lock(reason_mutex_);
         d.last_offline_error = last_offline_error_;
+        d.active_pitch_render_path = active_pitch_render_path_;
+        d.last_pitch_proxy_error = last_pitch_proxy_error_;
+        d.last_missing_proxy_key = last_missing_proxy_key_;
+        d.last_missing_proxy_block_index = last_missing_proxy_block_index_;
     }
     if (disk_cache_) {
         auto disk = disk_cache_->diagnostics();
@@ -264,6 +247,8 @@ void PitchCache::enqueue_range(const PitchCacheKey& key,
             job.reason = std::move(reason);
             jobs_.push_back(std::move(job));
             jobs_queued_.fetch_add(1, std::memory_order_relaxed);
+            if (reason_copy == "seek_immediate")
+                seek_immediate_jobs_queued_.fetch_add(1, std::memory_order_relaxed);
         }
     }
     if (queued_any) {
@@ -320,6 +305,7 @@ bool PitchCache::get_block_if_ready(const PitchCacheKey& key,
     }
     for (int ch = 0; ch < num_channels; ++ch)
         std::fill(out[ch] + copy, out[ch] + frames_needed, 0.0f);
+    note_prepared_proxy_used();
     return true;
 }
 
@@ -375,11 +361,22 @@ void PitchCache::clear() {
     jobs_running_.store(0, std::memory_order_relaxed);
     jobs_completed_.store(0, std::memory_order_relaxed);
     jobs_failed_.store(0, std::memory_order_relaxed);
+    seek_immediate_jobs_queued_.store(0, std::memory_order_relaxed);
+    seek_immediate_jobs_completed_.store(0, std::memory_order_relaxed);
     offline_segments_rendered_.store(0, std::memory_order_relaxed);
     offline_segment_failures_.store(0, std::memory_order_relaxed);
     offline_render_us_.store(0, std::memory_order_relaxed);
     prepare_sync_count_.store(0, std::memory_order_relaxed);
     prepare_blocking_us_.store(0, std::memory_order_relaxed);
+    {
+        std::lock_guard reason_lock(reason_mutex_);
+        last_prepare_reason_.clear();
+        last_offline_error_.clear();
+        active_pitch_render_path_ = "bypass";
+        last_pitch_proxy_error_.clear();
+        last_missing_proxy_key_.clear();
+        last_missing_proxy_block_index_ = -1;
+    }
     {
         std::lock_guard job_lock(job_mutex_);
         jobs_.clear();
@@ -433,11 +430,21 @@ void PitchCache::worker_loop() {
 
         jobs_running_.fetch_add(1, std::memory_order_relaxed);
         bool ok = job.source && generate_range(job.key, *job.source, job.start_frame, job.frame_count);
+        {
+            std::lock_guard lock(job_mutex_);
+            const int first = block_index_for(std::max<Frame>(0, job.start_frame));
+            const int last = block_index_for(std::max<Frame>(0, job.start_frame + job.frame_count - 1));
+            for (int block = first; block <= last; ++block)
+                queued_blocks_.erase(block_id(job.key, block));
+        }
         jobs_running_.fetch_sub(1, std::memory_order_relaxed);
-        if (ok)
+        if (ok) {
             jobs_completed_.fetch_add(1, std::memory_order_relaxed);
-        else
+            if (job.reason == "seek_immediate")
+                seek_immediate_jobs_completed_.fetch_add(1, std::memory_order_relaxed);
+        } else {
             jobs_failed_.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 }
 
@@ -460,10 +467,17 @@ bool PitchCache::generate_range(const PitchCacheKey& key,
     offline_render_us_.fetch_add(
         static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()),
         std::memory_order_relaxed);
-    if (!segment.ok) {
+    const std::size_t expected_segment_samples =
+        static_cast<std::size_t>(segment.frame_count * segment.channel_count);
+    if (!segment.ok || segment.frame_count <= 0 || segment.channel_count <= 0
+        || segment.interleaved_samples.size() != expected_segment_samples
+        || !valid_samples(segment.interleaved_samples)) {
         offline_segment_failures_.fetch_add(1, std::memory_order_relaxed);
         std::lock_guard reason_lock(reason_mutex_);
-        last_offline_error_ = segment.error;
+        last_offline_error_ = segment.error.empty()
+            ? "invalid offline pitch segment"
+            : segment.error;
+        last_pitch_proxy_error_ = last_offline_error_;
         return false;
     }
 
@@ -499,6 +513,16 @@ bool PitchCache::generate_range(const PitchCacheKey& key,
                       segment.interleaved_samples.begin() + static_cast<std::ptrdiff_t>(src + segment.channel_count),
                       prepared->interleaved_samples.begin() + static_cast<std::ptrdiff_t>(dst));
         }
+        if (prepared->frame_count <= 0 || prepared->channel_count <= 0
+            || prepared->interleaved_samples.size()
+                != static_cast<std::size_t>(prepared->frame_count * prepared->channel_count)
+            || !valid_samples(prepared->interleaved_samples)) {
+            offline_segment_failures_.fetch_add(1, std::memory_order_relaxed);
+            std::lock_guard reason_lock(reason_mutex_);
+            last_offline_error_ = "invalid prepared pitch proxy block";
+            last_pitch_proxy_error_ = last_offline_error_;
+            continue;
+        }
 
         {
             std::lock_guard lock(write_mutex_);
@@ -519,7 +543,13 @@ bool PitchCache::generate_range(const PitchCacheKey& key,
             queued_blocks_.erase(block_id(key, block));
         }
     }
-    return any;
+    if (any)
+        return true;
+    for (int block = first; block <= last; ++block) {
+        if (!is_block_ready(key, block))
+            return false;
+    }
+    return true;
 }
 
 bool PitchCache::publish_block(const PitchCacheKey& key,
@@ -528,73 +558,7 @@ bool PitchCache::publish_block(const PitchCacheKey& key,
                                int block_index) {
     if (is_block_ready(key, block_index))
         return true;
-
-    const int channels = std::max(1, key.channel_count > 0 ? key.channel_count : source.channel_count());
-    const int frames = static_cast<int>(std::min<Frame>(
-        kProxyBlockFrames,
-        std::max<Frame>(0, source.duration_frames() - source_start_frame)));
-    if (frames <= 0)
-        return false;
-
-    const double ratio = pitch_ratio(key.semitones);
-    auto prepared = std::make_shared<PreparedPitchBlock>();
-    prepared->key = key;
-    prepared->source_start_frame = source_start_frame;
-    prepared->block_index = block_index;
-    prepared->frame_count = frames;
-    prepared->channel_count = channels;
-    prepared->interleaved_samples.assign(static_cast<std::size_t>(frames * channels), 0.0f);
-
-    const int read_channels = std::min(2, channels);
-    const bool sparse_transient = is_sparse_transient(source, source_start_frame, frames);
-    const Frame needed_end = std::min<Frame>(
-        source.duration_frames(),
-        sparse_transient
-            ? source_start_frame + frames
-            : static_cast<Frame>(std::ceil(static_cast<double>(source_start_frame + frames) * ratio)) + 2);
-    const Frame read_start = sparse_transient ? source_start_frame : 0;
-    const int read_frames = static_cast<int>(std::max<Frame>(0, needed_end - read_start));
-    std::vector<float> left(static_cast<std::size_t>(std::max(1, read_frames)), 0.0f);
-    std::vector<float> right(static_cast<std::size_t>(std::max(1, read_frames)), 0.0f);
-    float* planar[2] = {left.data(), right.data()};
-    int read = source.read(read_start, read_frames, planar, read_channels);
-    if (read <= 0)
-        return false;
-
-    for (int f = 0; f < frames; ++f) {
-        const double src_pos = sparse_transient
-            ? static_cast<double>(f)
-            : static_cast<double>(source_start_frame + f) * ratio;
-        const int i0 = static_cast<int>(std::floor(src_pos));
-        const int i1 = std::min(i0 + 1, read - 1);
-        const float frac = static_cast<float>(src_pos - static_cast<double>(i0));
-        if (i0 < 0 || i0 >= read)
-            continue;
-        const float l = left[static_cast<std::size_t>(i0)] * (1.0f - frac)
-                      + left[static_cast<std::size_t>(i1)] * frac;
-        const float r = read_channels > 1
-            ? right[static_cast<std::size_t>(i0)] * (1.0f - frac)
-              + right[static_cast<std::size_t>(i1)] * frac
-            : l;
-        for (int ch = 0; ch < channels; ++ch) {
-            prepared->interleaved_samples[static_cast<std::size_t>(f * channels + ch)] =
-                ch == 0 ? l : r;
-        }
-    }
-    overlay_transients(source, source_start_frame, frames, channels, prepared->interleaved_samples);
-
-    std::lock_guard lock(write_mutex_);
-    auto current = std::atomic_load(&proxy_cache_);
-    ProxyCacheKey proxy_key{key, block_index};
-    if (current->find(proxy_key) != current->end()) {
-        duplicate_proxy_request_count_.fetch_add(1, std::memory_order_relaxed);
-        return true;
-    }
-    auto next = std::make_shared<ProxyMap>(*current);
-    next->emplace(std::move(proxy_key), std::move(prepared));
-    std::atomic_store(&proxy_cache_, std::shared_ptr<const ProxyMap>(next));
-    proxy_generation_count_.fetch_add(1, std::memory_order_relaxed);
-    return true;
+    return generate_range(key, source, source_start_frame, kProxyBlockFrames);
 }
 
 } // namespace lt
