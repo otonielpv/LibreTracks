@@ -1,6 +1,7 @@
 pub mod view;
 
 pub use view::{
-    DesktopPerformanceSnapshot, LibraryAssetSummary, SongPackageImportResponse, SongView,
-    TransportClockSummary, TransportDriftSummary, TransportSnapshot, WaveformSummaryDto,
+    DesktopPerformanceSnapshot, LibraryAssetSummary, PitchPrepareSummary,
+    SongPackageImportResponse, SongView, TransportClockSummary, TransportDriftSummary,
+    TransportSnapshot, WaveformSummaryDto,
 };

@@ -186,6 +186,8 @@ std::string EngineImpl::poll_event() {
 }
 
 std::string EngineImpl::get_snapshot() const {
+    maybe_enqueue_rolling_pitch_prepare();
+
     EngineSnapshot snap;
 
 #if LT_ENGINE_USE_RUBBERBAND && LT_ENGINE_PITCH_BACKEND_RUBBERBAND
@@ -284,6 +286,7 @@ std::string EngineImpl::get_snapshot() const {
         snap.pitch.pitch_latency_frames = pitch.max_latency_frames;
         snap.pitch.active_pitch_keys = pitch.active_keys;
         snap.pitch.pitch_jobs_queued = pitch.jobs_queued;
+        snap.pitch.pitch_jobs_pending = pitch.jobs_pending;
         snap.pitch.pitch_jobs_running = pitch.jobs_running;
         snap.pitch.pitch_jobs_completed = pitch.jobs_completed;
         snap.pitch.pitch_jobs_failed = pitch.jobs_failed;
@@ -291,6 +294,11 @@ std::string EngineImpl::get_snapshot() const {
         snap.pitch.seek_immediate_jobs_completed = pitch.seek_immediate_jobs_completed;
         snap.pitch.pitch_proxy_blocks_ready = pitch.proxy_blocks_ready;
         snap.pitch.pitch_proxy_blocks_missing = pitch.proxy_blocks_missing;
+        snap.pitch.pitch_proxy_blocks_pending = pitch.queued_blocks;
+        snap.pitch.pitch_prepare_queue_length = static_cast<int>(pitch.jobs_pending);
+        snap.pitch.pitch_prepare_pending = pitch.jobs_pending > 0 || pitch.queued_blocks > 0;
+        snap.pitch.pitch_prepare_active = snap.pitch.pitch_prepare_pending || pitch.jobs_running > 0;
+        snap.pitch.pitch_prepare_progress = snap.pitch.pitch_prepare_active ? 0.0 : 1.0;
         snap.pitch.pitch_proxy_prepare_sync_count = pitch.prepare_sync_count;
         snap.pitch.pitch_proxy_prepare_blocking_ms = pitch.prepare_blocking_ms;
         snap.pitch.last_pitch_prepare_reason = pitch.last_prepare_reason;
@@ -314,6 +322,16 @@ std::string EngineImpl::get_snapshot() const {
         snap.pitch.pitch_disk_cache_invalidations = pitch.disk_cache_invalidations;
         snap.pitch.pitch_disk_cache_size_bytes = pitch.disk_cache_size_bytes;
         snap.pitch.last_pitch_disk_cache_error = pitch.last_disk_cache_error;
+        if (pitch.offline_segment_failures > 0 && !pitch.last_offline_error.empty()) {
+            snap.pitch.pitch_prepare_status = "failed";
+            snap.pitch.pitch_prepare_message = pitch.last_offline_error;
+        } else if (snap.pitch.pitch_prepare_active) {
+            snap.pitch.pitch_prepare_status = "preparing";
+            snap.pitch.pitch_prepare_message = "Preparing pitch-shifted audio";
+        } else {
+            snap.pitch.pitch_prepare_status = "idle";
+            snap.pitch.pitch_prepare_message.clear();
+        }
         if (pitch.missing_processor_count > 0)
             snap.pitch.pitch_muted_or_bypassed_reason = "Pitch processor missing; bypassed instead of muting.";
     }
@@ -329,18 +347,21 @@ std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id)
     return prepare_pitch_processors_for_session(*session_);
 }
 
-std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& session) {
+std::size_t EngineImpl::enqueue_pitch_window(const Session& session,
+                                             Frame timeline_start,
+                                             Frame frame_count,
+                                             int priority,
+                                             const std::string& reason) const {
     if (!source_manager_ || !pitch_cache_ || !clock_)
+        return 0;
+    if (frame_count <= 0)
         return 0;
 
     const int sample_rate = clock_->sample_rate();
-    const Frame playhead = clock_->position().frame;
-    const Frame immediate_frames = std::max<Frame>(PitchCache::kProxyBlockFrames, sample_rate / 2);
-    const Frame forward_frames = static_cast<Frame>(sample_rate) * 3;
-    const Frame prepare_frames = immediate_frames + forward_frames;
+    const Frame timeline_end = timeline_start + frame_count;
     std::size_t prepared = 0;
     for (const auto& song : session.songs) {
-        if (playhead + prepare_frames < song.start_frame || playhead >= song.end_frame)
+        if (timeline_end <= song.start_frame || timeline_start >= song.end_frame)
             continue;
         for (const auto& track : song.tracks) {
             for (const auto& clip : track.clips) {
@@ -348,37 +369,24 @@ std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& sess
                 if (!source || !source->is_loaded())
                     continue;
                 const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
-                if (playhead + prepare_frames < clip.timeline_start_frame || playhead >= clip_end)
+                if (timeline_end <= clip.timeline_start_frame || timeline_start >= clip_end)
                     continue;
+                const Frame overlap_start = std::max(timeline_start, clip.timeline_start_frame);
+                const Frame overlap_end = std::min(timeline_end, clip_end);
                 Semitones semitones = resolve_effective_semitones(
-                    track, clip, song, clip.timeline_start_frame);
+                    track, clip, song, overlap_start);
                 if (semitones == 0)
                     continue;
                 PitchCacheKey key{clip.source_id, track.id, clip.id,
                                   static_cast<double>(semitones),
                                   sample_rate, source->channel_count(), "prepared_proxy"};
-                const Frame overlap_start = std::max(playhead, clip.timeline_start_frame);
                 const Frame source_start = clip.source_start_frame + (overlap_start - clip.timeline_start_frame);
-                const Frame available_frames = clip_end - overlap_start;
-                const Frame immediate_start =
-                    static_cast<Frame>(pitch_cache_->block_index_for(source_start)) * PitchCache::kProxyBlockFrames;
-                const Frame immediate_count = std::min<Frame>(
-                    immediate_frames + (source_start - immediate_start),
-                    std::max<Frame>(0, source->duration_frames() - immediate_start));
-                pitch_cache_->enqueue_range(key, *source, immediate_start, immediate_count,
-                                            0, session_generation_.load(std::memory_order_relaxed),
-                                            "seek_immediate");
-                const Frame forward_start = source_start + immediate_frames;
-                const Frame forward_available = std::max<Frame>(0, available_frames - immediate_frames);
-                const Frame forward_count = std::min<Frame>(forward_frames, forward_available);
-                pitch_cache_->enqueue_range(key, *source, forward_start, forward_count,
-                                            1, session_generation_.load(std::memory_order_relaxed),
-                                            "seek_forward_prebuffer");
-                const Frame background_start = forward_start + forward_count;
-                const Frame background_count = std::max<Frame>(0, available_frames - immediate_frames - forward_count);
-                pitch_cache_->enqueue_range(key, *source, background_start, background_count,
-                                            4, session_generation_.load(std::memory_order_relaxed),
-                                            "background_pitch_prepare");
+                const Frame source_frames = std::min<Frame>(
+                    overlap_end - overlap_start,
+                    std::max<Frame>(0, source->duration_frames() - source_start));
+                pitch_cache_->enqueue_range(key, *source, source_start, source_frames,
+                                            priority, session_generation_.load(std::memory_order_relaxed),
+                                            reason);
                 if (pitch_cache_->is_block_ready(key, pitch_cache_->block_index_for(source_start)))
                     ++prepared;
             }
@@ -387,10 +395,52 @@ std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& sess
     return prepared;
 }
 
+std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& session) {
+    if (!clock_)
+        return 0;
+    const int sample_rate = clock_->sample_rate();
+    const Frame playhead = clock_->position().frame;
+    const Frame immediate_frames = std::max<Frame>(PitchCache::kProxyBlockFrames, sample_rate);
+    const Frame rolling_frames = static_cast<Frame>(sample_rate) * 10;
+    std::size_t prepared = 0;
+    prepared += enqueue_pitch_window(session, playhead, immediate_frames, 0, "pitch_immediate");
+    prepared += enqueue_pitch_window(session, playhead + immediate_frames,
+                                     rolling_frames - immediate_frames, 1, "pitch_rolling");
+    return prepared;
+}
+
 void EngineImpl::prepare_pitch_processors_for_session() {
     if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
         return;
     prepare_pitch_processors_for_session(*session_);
+}
+
+void EngineImpl::maybe_enqueue_rolling_pitch_prepare() const {
+    if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
+        return;
+    if (clock_->position().state != TransportState::Playing)
+        return;
+
+    const int sample_rate = clock_->sample_rate();
+    const Frame playhead = clock_->position().frame;
+    const Frame retrigger_distance = std::max<Frame>(PitchCache::kProxyBlockFrames, sample_rate / 2);
+    const auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard lock(pitch_prepare_mutex_);
+        const Frame last = last_pitch_prepare_playhead_.load(std::memory_order_relaxed);
+        const bool moved_enough = last < 0 || std::llabs(playhead - last) >= retrigger_distance;
+        const bool time_elapsed = last_pitch_prepare_time_ == std::chrono::steady_clock::time_point{}
+            || now - last_pitch_prepare_time_ >= std::chrono::milliseconds(300);
+        if (!moved_enough && !time_elapsed)
+            return;
+        last_pitch_prepare_playhead_.store(playhead, std::memory_order_relaxed);
+        last_pitch_prepare_time_ = now;
+    }
+    const Frame immediate_frames = std::max<Frame>(PitchCache::kProxyBlockFrames, sample_rate);
+    const Frame rolling_frames = static_cast<Frame>(sample_rate) * 10;
+    enqueue_pitch_window(*session_, playhead, immediate_frames, 0, "pitch_immediate");
+    enqueue_pitch_window(*session_, playhead + immediate_frames,
+                         rolling_frames - immediate_frames, 1, "pitch_rolling");
 }
 
 std::string EngineImpl::list_devices() const {
@@ -473,7 +523,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         else if constexpr (std::is_same_v<T, CmdSeekAbsolute>) {
             Frame from = clock_->position().frame;
             clock_->seek(c.frame);
-            prepare_pitch_processors_for_session();
+            if (session_) {
+                const Frame immediate = std::max<Frame>(PitchCache::kProxyBlockFrames, clock_->sample_rate());
+                const Frame forward = static_cast<Frame>(clock_->sample_rate()) * 10;
+                enqueue_pitch_window(*session_, clock_->position().frame, immediate, 0, "seek_immediate");
+                enqueue_pitch_window(*session_, clock_->position().frame + immediate,
+                                     forward - immediate, 1, "seek_forward_prebuffer");
+            }
             if (mixer_) mixer_->trigger_crossfade();
             push_event(EvSeekExecuted{ from, c.frame });
             return Result<void>::ok();
@@ -482,7 +538,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             Frame from = clock_->position().frame;
             Frame to   = from + c.delta_frames;
             clock_->seek(to);
-            prepare_pitch_processors_for_session();
+            if (session_) {
+                const Frame immediate = std::max<Frame>(PitchCache::kProxyBlockFrames, clock_->sample_rate());
+                const Frame forward = static_cast<Frame>(clock_->sample_rate()) * 10;
+                enqueue_pitch_window(*session_, clock_->position().frame, immediate, 0, "seek_immediate");
+                enqueue_pitch_window(*session_, clock_->position().frame + immediate,
+                                     forward - immediate, 1, "seek_forward_prebuffer");
+            }
             if (mixer_) mixer_->trigger_crossfade();
             push_event(EvSeekExecuted{ from, to });
             return Result<void>::ok();
@@ -621,9 +683,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 }
             }
             if (changed) {
-                prepare_pitch_processors_for_session(*next_session);
                 session_ = next_session;
                 if (mixer_) mixer_->set_session(next_session);
+                prepare_pitch_processors_for_session(*next_session);
             }
             return Result<void>::ok();
         }
@@ -633,9 +695,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 for (auto& song : next_session->songs)
                     if (song.id == c.song_id)
                         song.transpose_semitones = c.semitones;
-                prepare_pitch_processors_for_session(*next_session);
                 session_ = next_session;
                 if (mixer_) mixer_->set_session(next_session);
+                prepare_pitch_processors_for_session(*next_session);
             }
             return Result<void>::ok();
         }
@@ -646,9 +708,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     for (auto& region : song.regions)
                         if (region.id == c.region_id)
                             region.transpose_semitones = c.semitones;
-                prepare_pitch_processors_for_session(*next_session);
                 session_ = next_session;
                 if (mixer_) mixer_->set_session(next_session);
+                prepare_pitch_processors_for_session(*next_session);
             }
             return Result<void>::ok();
         }

@@ -18,6 +18,7 @@ use lt_audio_engine_v2::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
+use crate::models::PitchPrepareSummary;
 use crate::{error::DesktopError, settings::AppSettings};
 
 const ENGINE_SAMPLE_RATE: f64 = 48_000.0;
@@ -662,6 +663,40 @@ impl AudioController {
         })
     }
 
+    pub fn pitch_prepare_summary(&self) -> PitchPrepareSummary {
+        let mut state = match self.state.lock() {
+            Ok(state) => state,
+            Err(_) => return PitchPrepareSummary::default(),
+        };
+        let Ok(snapshot) = ensure_engine(&mut state).and_then(|engine| {
+            engine
+                .get_snapshot()
+                .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+        }) else {
+            return PitchPrepareSummary::default();
+        };
+        let pitch = snapshot.pitch;
+        PitchPrepareSummary {
+            pitch_prepare_active: pitch.pitch_prepare_active,
+            pitch_prepare_pending: pitch.pitch_prepare_pending,
+            pitch_prepare_progress: pitch.pitch_prepare_progress,
+            pitch_proxy_blocks_ready: pitch.pitch_proxy_blocks_ready,
+            pitch_proxy_blocks_missing: pitch.pitch_proxy_blocks_missing,
+            pitch_proxy_blocks_pending: pitch.pitch_proxy_blocks_pending,
+            pitch_jobs_pending: pitch.pitch_jobs_pending,
+            pitch_jobs_running: pitch.pitch_jobs_running,
+            pitch_jobs_completed: pitch.pitch_jobs_completed,
+            pitch_jobs_failed: pitch.pitch_jobs_failed,
+            pitch_prepare_status: pitch.pitch_prepare_status,
+            pitch_prepare_message: pitch.pitch_prepare_message,
+            active_pitch_render_path: pitch.active_pitch_render_path,
+            last_pitch_prepare_reason: pitch.last_pitch_prepare_reason,
+            last_pitch_proxy_error: pitch.last_pitch_proxy_error,
+            last_missing_proxy_key: pitch.last_missing_proxy_key,
+            last_missing_proxy_block_index: pitch.last_missing_proxy_block_index,
+        }
+    }
+
     pub fn replace_song_buffers(&self, song_dir: &Path, song: &Song) -> Result<(), DesktopError> {
         let song_dir = song_dir.to_path_buf();
         let song = song.clone();
@@ -869,7 +904,11 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
 }
 
 fn normalize_engine_audio_path(path: &str) -> String {
-    let mut normalized = path.trim().trim_matches('"').trim_matches('\'').replace('\\', "/");
+    let mut normalized = path
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .replace('\\', "/");
     while normalized.starts_with('?') {
         normalized.remove(0);
     }

@@ -20,7 +20,7 @@ std::string key_to_string(const PitchCacheKey& key) {
 
 bool valid_samples(const std::vector<float>& samples) {
     for (float sample : samples) {
-        if (!std::isfinite(sample) || std::abs(sample) > 32.0f)
+        if (!std::isfinite(sample) || std::abs(sample) > 8.0f)
             return false;
     }
     return true;
@@ -115,6 +115,11 @@ PitchDiagnostics PitchCache::diagnostics() const {
     d.jobs_running = jobs_running_.load(std::memory_order_relaxed);
     d.jobs_completed = jobs_completed_.load(std::memory_order_relaxed);
     d.jobs_failed = jobs_failed_.load(std::memory_order_relaxed);
+    {
+        std::lock_guard job_lock(job_mutex_);
+        d.jobs_pending = static_cast<std::uint64_t>(jobs_.size());
+        d.queued_blocks = static_cast<std::uint64_t>(queued_blocks_.size());
+    }
     d.seek_immediate_jobs_queued = seek_immediate_jobs_queued_.load(std::memory_order_relaxed);
     d.seek_immediate_jobs_completed = seek_immediate_jobs_completed_.load(std::memory_order_relaxed);
     d.offline_segments_rendered = offline_segments_rendered_.load(std::memory_order_relaxed);
@@ -233,22 +238,20 @@ void PitchCache::enqueue_range(const PitchCacheKey& key,
                 duplicate_proxy_request_count_.fetch_add(1, std::memory_order_relaxed);
                 continue;
             }
-            queued_any = true;
-        }
-        if (queued_any) {
             ProxyJob job;
             job.key = key;
             job.source = &source;
-            job.start_frame = static_cast<Frame>(first) * kProxyBlockFrames;
-            job.frame_count = static_cast<Frame>(last - first + 1) * kProxyBlockFrames;
+            job.start_frame = static_cast<Frame>(block) * kProxyBlockFrames;
+            job.frame_count = kProxyBlockFrames;
             job.priority = priority;
             job.generation = generation;
             job.order = job_order_.fetch_add(1, std::memory_order_relaxed);
-            job.reason = std::move(reason);
+            job.reason = reason_copy;
             jobs_.push_back(std::move(job));
             jobs_queued_.fetch_add(1, std::memory_order_relaxed);
             if (reason_copy == "seek_immediate")
                 seek_immediate_jobs_queued_.fetch_add(1, std::memory_order_relaxed);
+            queued_any = true;
         }
     }
     if (queued_any) {

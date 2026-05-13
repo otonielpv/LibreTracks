@@ -1,8 +1,15 @@
-import { getCumulativeMusicalPosition, type TimelineRegion } from "./timelineMath";
+import {
+  getCumulativeMusicalPosition,
+  type TimelineRegion,
+} from "./timelineMath";
 
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
 export type TrackKind = "audio" | "folder";
-export type JumpTriggerLabel = "immediate" | "next_marker" | "region_end" | `after_bars:${number}`;
+export type JumpTriggerLabel =
+  | "immediate"
+  | "next_marker"
+  | "region_end"
+  | `after_bars:${number}`;
 export type TransitionTypeLabel = "instant" | `fade_out:${number}`;
 
 export type SectionMarkerSummary = {
@@ -158,14 +165,24 @@ export type DesktopPerformanceSnapshot = {
   cachedWaveforms: number;
 };
 
-function downsampleWaveformLod(lod: WaveformLodDto, targetResolutionFrames: number): WaveformLodDto {
+function downsampleWaveformLod(
+  lod: WaveformLodDto,
+  targetResolutionFrames: number,
+): WaveformLodDto {
   const sourceMin = lod.minPeaks ?? [];
   const sourceMax = lod.maxPeaks ?? [];
-  const chunkSize = Math.max(1, Math.ceil(targetResolutionFrames / Math.max(1, lod.resolutionFrames)));
+  const chunkSize = Math.max(
+    1,
+    Math.ceil(targetResolutionFrames / Math.max(1, lod.resolutionFrames)),
+  );
   const minPeaks: number[] = [];
   const maxPeaks: number[] = [];
 
-  for (let chunkStart = 0; chunkStart < sourceMax.length; chunkStart += chunkSize) {
+  for (
+    let chunkStart = 0;
+    chunkStart < sourceMax.length;
+    chunkStart += chunkSize
+  ) {
     const chunkEnd = Math.min(sourceMax.length, chunkStart + chunkSize);
     let minPeak = 1;
     let maxPeak = -1;
@@ -197,7 +214,9 @@ export function buildWaveformLodsFromPeaks(
   const safeDurationSeconds = Math.max(durationSeconds, 0.001);
   const baseResolutionFrames = Math.max(
     1,
-    Math.ceil((safeDurationSeconds * safeSampleRate) / Math.max(1, maxPeaks.length)),
+    Math.ceil(
+      (safeDurationSeconds * safeSampleRate) / Math.max(1, maxPeaks.length),
+    ),
   );
   const lods: WaveformLodDto[] = [
     {
@@ -239,6 +258,7 @@ export type TransportSnapshot = {
     lastStartPositionSeconds?: number | null;
     lastJumpPositionSeconds?: number | null;
   };
+  pitch?: PitchPrepareSummary;
   projectRevision: number;
   songDir?: string | null;
   songFilePath?: string | null;
@@ -249,7 +269,12 @@ export type TransportClock = NonNullable<TransportSnapshot["transportClock"]>;
 
 const SONG_TEMPO_REGION_VISUAL_END_SECONDS = 1_000_000;
 
-export type TransportLifecycleEventKind = "play" | "pause" | "stop" | "seek" | "sync";
+export type TransportLifecycleEventKind =
+  | "play"
+  | "pause"
+  | "stop"
+  | "seek"
+  | "sync";
 
 export type TransportLifecycleEvent = {
   kind: TransportLifecycleEventKind;
@@ -338,16 +363,24 @@ function normalizeMidiBinding(binding: MidiBinding): MidiBinding {
 
 export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const selectedOutputDevice = settings.selectedOutputDevice?.trim() || null;
-  const selectedAudioBackend = normalizeAudioBackendKind(settings.selectedAudioBackend);
-  const selectedOutputDeviceId = settings.selectedOutputDeviceId?.trim() || null;
+  const selectedAudioBackend = normalizeAudioBackendKind(
+    settings.selectedAudioBackend,
+  );
+  const selectedOutputDeviceId =
+    settings.selectedOutputDeviceId?.trim() || null;
   const selectedOutputDeviceName =
     settings.selectedOutputDeviceName?.trim() || selectedOutputDevice || null;
   const outputSampleRate =
-    Number.isFinite(settings.outputSampleRate) && Number(settings.outputSampleRate) > 0
+    Number.isFinite(settings.outputSampleRate) &&
+    Number(settings.outputSampleRate) > 0
       ? Math.floor(Number(settings.outputSampleRate))
       : null;
-  const outputBufferSize = normalizeAudioBufferSizeRequest(settings.outputBufferSize);
-  const outputSampleFormat = normalizeAudioSampleFormat(settings.outputSampleFormat);
+  const outputBufferSize = normalizeAudioBufferSizeRequest(
+    settings.outputBufferSize,
+  );
+  const outputSampleFormat = normalizeAudioSampleFormat(
+    settings.outputSampleFormat,
+  );
   const selectedMidiDevice = settings.selectedMidiDevice?.trim() || null;
   const locale = settings.locale?.trim().toLowerCase();
   const metronomeVolume = Number.isFinite(settings.metronomeVolume)
@@ -355,26 +388,42 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     : DEFAULT_APP_SETTINGS.metronomeVolume;
   const enabledOutputChannels = Array.from(
     new Set(
-      (settings.enabledOutputChannels ?? DEFAULT_APP_SETTINGS.enabledOutputChannels)
+      (
+        settings.enabledOutputChannels ??
+        DEFAULT_APP_SETTINGS.enabledOutputChannels
+      )
         .map((channel) => Math.floor(channel))
-        .filter((channel) => Number.isFinite(channel) && channel >= 0 && channel < 64),
+        .filter(
+          (channel) => Number.isFinite(channel) && channel >= 0 && channel < 64,
+        ),
     ),
   ).sort((left, right) => left - right);
   const metronomeOutput =
-    settings.metronomeOutput?.trim().toLowerCase() || DEFAULT_APP_SETTINGS.metronomeOutput;
+    settings.metronomeOutput?.trim().toLowerCase() ||
+    DEFAULT_APP_SETTINGS.metronomeOutput;
   const globalJumpMode =
-    settings.globalJumpMode === "after_bars" || settings.globalJumpMode === "next_marker"
+    settings.globalJumpMode === "after_bars" ||
+    settings.globalJumpMode === "next_marker"
       ? settings.globalJumpMode
       : DEFAULT_APP_SETTINGS.globalJumpMode;
   const songJumpTrigger =
-    settings.songJumpTrigger === "after_bars" || settings.songJumpTrigger === "region_end"
+    settings.songJumpTrigger === "after_bars" ||
+    settings.songJumpTrigger === "region_end"
       ? settings.songJumpTrigger
       : DEFAULT_APP_SETTINGS.songJumpTrigger;
   const songTransitionMode =
-    settings.songTransitionMode === "fade_out" ? settings.songTransitionMode : DEFAULT_APP_SETTINGS.songTransitionMode;
-  const vampMode = settings.vampMode === "bars" ? settings.vampMode : DEFAULT_APP_SETTINGS.vampMode;
+    settings.songTransitionMode === "fade_out"
+      ? settings.songTransitionMode
+      : DEFAULT_APP_SETTINGS.songTransitionMode;
+  const vampMode =
+    settings.vampMode === "bars"
+      ? settings.vampMode
+      : DEFAULT_APP_SETTINGS.vampMode;
   const midiMappings = Object.fromEntries(
-    Object.entries(settings.midiMappings ?? {}).map(([key, binding]) => [key, normalizeMidiBinding(binding)]),
+    Object.entries(settings.midiMappings ?? {}).map(([key, binding]) => [
+      key,
+      normalizeMidiBinding(binding),
+    ]),
   );
 
   return {
@@ -384,23 +433,40 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     selectedOutputDeviceName,
     outputSampleRate,
     outputBufferSize,
-    outputChannelMapping: { channels: enabledOutputChannels.length ? enabledOutputChannels : DEFAULT_APP_SETTINGS.enabledOutputChannels },
+    outputChannelMapping: {
+      channels: enabledOutputChannels.length
+        ? enabledOutputChannels
+        : DEFAULT_APP_SETTINGS.enabledOutputChannels,
+    },
     outputSampleFormat,
     audioSafeMode: Boolean(settings.audioSafeMode),
     selectedMidiDevice,
-    suppressMissingMidiDeviceWarning: Boolean(settings.suppressMissingMidiDeviceWarning),
-    enabledOutputChannels: enabledOutputChannels.length ? enabledOutputChannels : DEFAULT_APP_SETTINGS.enabledOutputChannels,
+    suppressMissingMidiDeviceWarning: Boolean(
+      settings.suppressMissingMidiDeviceWarning,
+    ),
+    enabledOutputChannels: enabledOutputChannels.length
+      ? enabledOutputChannels
+      : DEFAULT_APP_SETTINGS.enabledOutputChannels,
     locale: locale === "en" || locale === "es" ? locale : null,
     metronomeEnabled: Boolean(settings.metronomeEnabled),
     metronomeVolume,
     metronomeOutput,
     globalJumpMode,
-    globalJumpBars: normalizeJumpBars(settings.globalJumpBars, DEFAULT_APP_SETTINGS.globalJumpBars),
+    globalJumpBars: normalizeJumpBars(
+      settings.globalJumpBars,
+      DEFAULT_APP_SETTINGS.globalJumpBars,
+    ),
     songJumpTrigger,
-    songJumpBars: normalizeJumpBars(settings.songJumpBars, DEFAULT_APP_SETTINGS.songJumpBars),
+    songJumpBars: normalizeJumpBars(
+      settings.songJumpBars,
+      DEFAULT_APP_SETTINGS.songJumpBars,
+    ),
     songTransitionMode,
     vampMode,
-    vampBars: normalizeJumpBars(settings.vampBars, DEFAULT_APP_SETTINGS.vampBars),
+    vampBars: normalizeJumpBars(
+      settings.vampBars,
+      DEFAULT_APP_SETTINGS.vampBars,
+    ),
     midiMappings,
   };
 }
@@ -411,6 +477,28 @@ export type AudioOutputDevices = {
   channelCounts?: Record<string, number>;
   backends?: AudioBackendKind[];
   deviceDescriptors?: AudioDeviceDescriptor[];
+};
+
+export type PitchPrepareStatus = "idle" | "preparing" | "failed" | string;
+
+export type PitchPrepareSummary = {
+  pitchPrepareActive: boolean;
+  pitchPreparePending: boolean;
+  pitchPrepareProgress: number;
+  pitchProxyBlocksReady: number;
+  pitchProxyBlocksMissing: number;
+  pitchProxyBlocksPending: number;
+  pitchJobsPending: number;
+  pitchJobsRunning: number;
+  pitchJobsCompleted: number;
+  pitchJobsFailed: number;
+  pitchPrepareStatus: PitchPrepareStatus;
+  pitchPrepareMessage: string;
+  activePitchRenderPath: string;
+  lastPitchPrepareReason: string;
+  lastPitchProxyError: string;
+  lastMissingProxyKey: string;
+  lastMissingProxyBlockIndex: number;
 };
 
 export type AudioBackendKind =
@@ -447,19 +535,34 @@ export type AudioDeviceDescriptor = {
 
 function normalizeAudioBackendKind(value: unknown): AudioBackendKind | null {
   return typeof value === "string" &&
-    ["asio", "wasapi", "core_audio", "alsa", "jack", "direct_sound", "mme", "unknown"].includes(value)
+    [
+      "asio",
+      "wasapi",
+      "core_audio",
+      "alsa",
+      "jack",
+      "direct_sound",
+      "mme",
+      "unknown",
+    ].includes(value)
     ? (value as AudioBackendKind)
     : null;
 }
 
 function normalizeAudioSampleFormat(value: unknown): AudioSampleFormat | null {
-  return typeof value === "string" && ["f32", "i16", "u16"].includes(value) ? (value as AudioSampleFormat) : null;
+  return typeof value === "string" && ["f32", "i16", "u16"].includes(value)
+    ? (value as AudioSampleFormat)
+    : null;
 }
 
-function normalizeAudioBufferSizeRequest(value: unknown): AudioBufferSizeRequest {
+function normalizeAudioBufferSizeRequest(
+  value: unknown,
+): AudioBufferSizeRequest {
   if (value && typeof value === "object" && "fixed" in value) {
     const fixed = Number((value as { fixed?: unknown }).fixed);
-    return Number.isFinite(fixed) && fixed > 0 ? { fixed: Math.floor(fixed) } : "default";
+    return Number.isFinite(fixed) && fixed > 0
+      ? { fixed: Math.floor(fixed) }
+      : "default";
   }
   return "default";
 }
@@ -497,7 +600,9 @@ export type CreateClipArgs = {
   timelineStartSeconds: number;
 };
 
-export function buildSongTempoRegions(song: SongView | null | undefined): SongTempoRegionSummary[] {
+export function buildSongTempoRegions(
+  song: SongView | null | undefined,
+): SongTempoRegionSummary[] {
   if (!song) {
     return [];
   }
@@ -505,10 +610,18 @@ export function buildSongTempoRegions(song: SongView | null | undefined): SongTe
   const boundaries = [
     ...song.tempoMarkers
       .filter((marker) => marker.startSeconds > 0)
-      .map((marker) => ({ startSeconds: marker.startSeconds, bpm: marker.bpm, timeSignature: null as string | null })),
+      .map((marker) => ({
+        startSeconds: marker.startSeconds,
+        bpm: marker.bpm,
+        timeSignature: null as string | null,
+      })),
     ...song.timeSignatureMarkers
       .filter((marker) => marker.startSeconds > 0)
-      .map((marker) => ({ startSeconds: marker.startSeconds, bpm: null as number | null, timeSignature: marker.signature })),
+      .map((marker) => ({
+        startSeconds: marker.startSeconds,
+        bpm: null as number | null,
+        timeSignature: marker.signature,
+      })),
   ].sort((left, right) => left.startSeconds - right.startSeconds);
   const regions: SongTempoRegionSummary[] = [];
   let startSeconds = 0;
@@ -549,7 +662,9 @@ export function buildSongTempoRegions(song: SongView | null | undefined): SongTe
   return regions;
 }
 
-export function getPrimarySongRegion(song: SongView | null | undefined): SongRegionSummary | null {
+export function getPrimarySongRegion(
+  song: SongView | null | undefined,
+): SongRegionSummary | null {
   if (!song || song.regions.length === 0) {
     return null;
   }
@@ -561,7 +676,9 @@ export function getSongBaseBpm(song: SongView | null | undefined): number {
   return song?.bpm ?? 120;
 }
 
-export function getSongBaseTimeSignature(song: SongView | null | undefined): string {
+export function getSongBaseTimeSignature(
+  song: SongView | null | undefined,
+): string {
   return song?.timeSignature ?? "4/4";
 }
 
@@ -576,9 +693,13 @@ export function getSongTempoRegionAtPosition(
 
   return (
     tempoRegions.find(
-      (region) => positionSeconds >= region.startSeconds && positionSeconds < region.endSeconds,
+      (region) =>
+        positionSeconds >= region.startSeconds &&
+        positionSeconds < region.endSeconds,
     ) ??
-    [...tempoRegions].reverse().find((region) => positionSeconds >= region.endSeconds) ??
+    [...tempoRegions]
+      .reverse()
+      .find((region) => positionSeconds >= region.endSeconds) ??
     tempoRegions[0] ??
     null
   );
@@ -594,9 +715,13 @@ export function getSongRegionAtPosition(
 
   return (
     song.regions.find(
-      (region) => positionSeconds >= region.startSeconds && positionSeconds < region.endSeconds,
+      (region) =>
+        positionSeconds >= region.startSeconds &&
+        positionSeconds < region.endSeconds,
     ) ??
-    [...song.regions].reverse().find((region) => positionSeconds >= region.endSeconds) ??
+    [...song.regions]
+      .reverse()
+      .find((region) => positionSeconds >= region.endSeconds) ??
     song.regions[0] ??
     null
   );

@@ -24,6 +24,8 @@
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <memory>
 #include <atomic>
+#include <chrono>
+#include <mutex>
 #include <string>
 
 namespace lt {
@@ -64,6 +66,9 @@ private:
     std::atomic<uint64_t>               session_generation_{0};
     std::atomic<uint64_t>               pitch_prepare_on_source_ready_count_{0};
     std::atomic<uint64_t>               source_ready_pitch_prepare_count_{0};
+    mutable std::atomic<Frame>          last_pitch_prepare_playhead_{-1};
+    mutable std::mutex                  pitch_prepare_mutex_;
+    mutable std::chrono::steady_clock::time_point last_pitch_prepare_time_{};
 
     // Cached snapshot string (rebuilt on snapshot request).
     mutable std::string snapshot_cache_;
@@ -80,6 +85,12 @@ private:
     void prepare_pitch_processors_for_session();
     std::size_t prepare_pitch_processors_for_session(const Session& session);
     std::size_t prepare_pitch_processors_for_source(const Id& source_id);
+    std::size_t enqueue_pitch_window(const Session& session,
+                                     Frame timeline_start,
+                                     Frame frame_count,
+                                     int priority,
+                                     const std::string& reason) const;
+    void maybe_enqueue_rolling_pitch_prepare() const;
 
     // Silent audio render callback used during Phases 1-5.
     class SilentCallback;

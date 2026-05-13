@@ -86,7 +86,11 @@ TEST_CASE("pitch proxy range request returns before background job completes") {
 
     CHECK(elapsed < 20.0);
     CHECK(cache.diagnostics().prepare_sync_count == 0);
-    CHECK(cache.diagnostics().jobs_queued == 1);
+    CHECK(cache.diagnostics().jobs_queued >= 1);
+    CHECK(cache.diagnostics().jobs_pending
+          + cache.diagnostics().jobs_running
+          + cache.diagnostics().jobs_completed
+          + cache.diagnostics().jobs_failed >= 1);
     CHECK(wait_ready(cache, key, 0, 0));
 }
 

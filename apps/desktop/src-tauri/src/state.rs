@@ -34,8 +34,9 @@ use crate::models::view::{
     waveform_summary_to_dto,
 };
 use crate::models::{
-    DesktopPerformanceSnapshot, LibraryAssetSummary, SongPackageImportResponse, SongView,
-    TransportClockSummary, TransportDriftSummary, TransportSnapshot, WaveformSummaryDto,
+    DesktopPerformanceSnapshot, LibraryAssetSummary, PitchPrepareSummary,
+    SongPackageImportResponse, SongView, TransportClockSummary, TransportDriftSummary,
+    TransportSnapshot, WaveformSummaryDto,
 };
 use crate::settings::AppSettings;
 
@@ -109,6 +110,7 @@ pub struct DesktopSession {
     pub song_dir: Option<PathBuf>,
     song_file_path: Option<PathBuf>,
     last_drift_sample: Option<TransportDriftSummary>,
+    last_runtime_pitch: Option<PitchPrepareSummary>,
     project_revision: u64,
     undo_stack: Vec<Song>,
     redo_stack: Vec<Song>,
@@ -147,6 +149,7 @@ impl Default for DesktopSession {
             song_dir: None,
             song_file_path: None,
             last_drift_sample: None,
+            last_runtime_pitch: None,
             project_revision: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -1635,6 +1638,7 @@ impl DesktopSession {
             true,
         )?;
         audio.update_live_region_transpose(region_id, transpose_semitones)?;
+        self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
 
         Ok(self.snapshot())
     }
@@ -1668,6 +1672,7 @@ impl DesktopSession {
             record_history,
             true,
         )?;
+        self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
 
         Ok(self.snapshot())
     }
@@ -2185,6 +2190,7 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
+        self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
         Ok(self.snapshot())
     }
 
@@ -2605,6 +2611,7 @@ impl DesktopSession {
                 .map(|song| musical_position_summary(song, self.current_position()))
                 .unwrap_or_else(empty_musical_position_summary),
             transport_clock: self.transport_clock.summary(),
+            pitch: self.last_runtime_pitch.clone().unwrap_or_default(),
             last_drift_sample: self.last_drift_sample.clone(),
             project_revision: self.project_revision,
             song_dir: self

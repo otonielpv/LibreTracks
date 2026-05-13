@@ -29,6 +29,7 @@ import {
   type LibraryAssetSummary,
   type LibraryImportProgressEvent,
   type MidiBinding,
+  type PitchPrepareSummary,
   type RemoteServerInfo,
   type SectionMarkerSummary,
   type SongRegionSummary,
@@ -122,10 +123,7 @@ import {
   TIMELINE_ZOOM_MULTIPLIER,
   zoomCameraAtViewportX,
 } from "./timelineMath";
-import {
-  useTransportStore,
-  type OptimisticMixState,
-} from "./store";
+import { useTransportStore, type OptimisticMixState } from "./store";
 import {
   createPendingAudioImports,
   createPendingAudioImportsFromPaths,
@@ -255,8 +253,10 @@ export {
   selectNativeDropCandidate,
   getNativeCandidatePointerDelta,
 } from "./helpers";
-export type { NativeDropCandidateDebug, NativeDropCoordinateMode } from "./types";
-
+export type {
+  NativeDropCandidateDebug,
+  NativeDropCoordinateMode,
+} from "./types";
 
 export function TransportPanelContent() {
   const { t, i18n } = useTranslation();
@@ -273,6 +273,13 @@ export function TransportPanelContent() {
   const [status, setStatus] = useState(() =>
     t("transport.status.loadingSession"),
   );
+  const [pitchPrepareUiState, setPitchPrepareUiState] = useState<{
+    active: boolean;
+    message: string;
+    pendingBlocks?: number;
+    error?: string;
+    startedAt?: number;
+  }>({ active: false, message: "" });
   const [isBusy, setIsBusy] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isRemoteModalOpen, setIsRemoteModalOpen] = useState(false);
@@ -956,12 +963,7 @@ export function TransportPanelContent() {
     return () => {
       unlisten?.();
     };
-  }, [
-    formatMidiLearnCommandLabel,
-    runAction,
-    setMidiLearnMode,
-    t,
-  ]);
+  }, [formatMidiLearnCommandLabel, runAction, setMidiLearnMode, t]);
 
   const persistAudioSettings = useCallback(
     (
@@ -1000,12 +1002,44 @@ export function TransportPanelContent() {
     [appSettings, runAction, syncSettingsLanguage],
   );
 
+  const applyPitchPrepareSnapshot = useCallback(
+    (pitch: PitchPrepareSummary | null | undefined) => {
+      if (!pitch) {
+        return;
+      }
+      if (pitch.pitchPrepareStatus === "failed") {
+        setPitchPrepareUiState({
+          active: true,
+          message: "No se pudo preparar el audio transpuesto",
+          error: pitch.lastPitchProxyError || pitch.pitchPrepareMessage,
+          startedAt: Date.now(),
+        });
+        return;
+      }
+      if (pitch.pitchPrepareActive) {
+        setPitchPrepareUiState({
+          active: true,
+          message: "Preparando audio transpuesto...",
+          pendingBlocks:
+            pitch.pitchProxyBlocksPending ||
+            pitch.pitchJobsPending ||
+            undefined,
+          startedAt: Date.now(),
+        });
+        return;
+      }
+      setPitchPrepareUiState({ active: false, message: "" });
+    },
+    [],
+  );
+
   const applyPlaybackSnapshot = useCallback(
     (nextSnapshot: TransportSnapshot | null) => {
       snapshotRef.current = nextSnapshot;
       useTransportStore.getState().setPlaybackState(nextSnapshot);
+      applyPitchPrepareSnapshot(nextSnapshot?.pitch);
     },
-    [],
+    [applyPitchPrepareSnapshot],
   );
 
   const missingFilePaths = useMemo(() => {
@@ -1682,7 +1716,12 @@ export function TransportPanelContent() {
     };
   }, [isRemoteModalOpen, isSettingsModalOpen]);
 
-  useTransportLifecycle({ applyPlaybackSnapshot, transportAnchorMetaRef, setStatus, t });
+  useTransportLifecycle({
+    applyPlaybackSnapshot,
+    transportAnchorMetaRef,
+    setStatus,
+    t,
+  });
 
   useAudioMeters();
 
@@ -1740,10 +1779,24 @@ export function TransportPanelContent() {
       }
 
       void runAction(async () => {
+        setPitchPrepareUiState({
+          active: true,
+          message: "Aplicando cambio de tono...",
+          startedAt: Date.now(),
+        });
         const nextSnapshot = await updateSongRegionTranspose(
           selectedRegion.id,
           clampedTransposeSemitones,
         );
+        setPitchPrepareUiState({
+          active: true,
+          message: "Preparando audio transpuesto...",
+          pendingBlocks:
+            nextSnapshot.pitch?.pitchProxyBlocksPending ||
+            nextSnapshot.pitch?.pitchJobsPending ||
+            undefined,
+          startedAt: Date.now(),
+        });
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           t("transport.status.regionTransposeUpdated", {
@@ -3824,9 +3877,23 @@ export function TransportPanelContent() {
       }
 
       void runAction(async () => {
+        setPitchPrepareUiState({
+          active: true,
+          message: "Aplicando cambio de tono...",
+          startedAt: Date.now(),
+        });
         const nextSnapshot = await updateTrackTransposeEnabled({
           trackId,
           transposeEnabled: !track.transposeEnabled,
+        });
+        setPitchPrepareUiState({
+          active: true,
+          message: "Preparando audio transpuesto...",
+          pendingBlocks:
+            nextSnapshot.pitch?.pitchProxyBlocksPending ||
+            nextSnapshot.pitch?.pitchJobsPending ||
+            undefined,
+          startedAt: Date.now(),
         });
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
@@ -6259,8 +6326,8 @@ export function TransportPanelContent() {
   const selectedAudioBackend = appSettings.selectedAudioBackend ?? null;
   const audioDevicesForSelectedBackend = useMemo(
     () =>
-      audioDeviceDescriptors.filter(
-        (device) => isAudioDeviceVisibleForBackend(device, selectedAudioBackend),
+      audioDeviceDescriptors.filter((device) =>
+        isAudioDeviceVisibleForBackend(device, selectedAudioBackend),
       ),
     [audioDeviceDescriptors, selectedAudioBackend],
   );
@@ -6311,14 +6378,15 @@ export function TransportPanelContent() {
   const outputSampleRateOptions = outputSampleRates.filter(
     (sampleRate, index, values) => values.indexOf(sampleRate) === index,
   );
-  const autoOutputSampleRateLabel = previewAudioOutputDescriptor?.defaultSampleRate
-    ? t("transport.settingsModal.sampleRateAutoWithDefault", {
-        sampleRate: previewAudioOutputDescriptor.defaultSampleRate,
-        defaultValue: "Auto - device default: {{sampleRate}} Hz",
-      })
-    : t("transport.settingsModal.sampleRateAuto", {
-        defaultValue: "Auto - device default",
-      });
+  const autoOutputSampleRateLabel =
+    previewAudioOutputDescriptor?.defaultSampleRate
+      ? t("transport.settingsModal.sampleRateAutoWithDefault", {
+          sampleRate: previewAudioOutputDescriptor.defaultSampleRate,
+          defaultValue: "Auto - device default: {{sampleRate}} Hz",
+        })
+      : t("transport.settingsModal.sampleRateAuto", {
+          defaultValue: "Auto - device default",
+        });
   const outputBufferSizes =
     previewAudioOutputDescriptor?.supportedBufferSizes ?? [];
   const selectedMidiInputDeviceMissing = Boolean(
@@ -6546,12 +6614,24 @@ export function TransportPanelContent() {
                 internalLibraryPointerDrag={internalLibraryPointerDrag}
                 onLocateAsset={handleLocateMissingFile}
                 onPointerDragStart={startInternalLibraryPointerDrag}
-                onImport={() => { void handleImportLibraryAssetsClick(); }}
-                onCreateFolder={() => { void handleCreateLibraryFolder(); }}
-                onMoveAssetsToFolder={(filePaths, folderPath) => { void handleMoveLibraryAssets(filePaths, folderPath); }}
-                onRenameFolder={(folderPath) => { void handleRenameLibraryFolder(folderPath); }}
-                onDeleteFolder={(folderPath) => { void handleDeleteLibraryFolder(folderPath); }}
-                onDeleteRequested={(assets) => { void handleDeleteLibraryAssets(assets); }}
+                onImport={() => {
+                  void handleImportLibraryAssetsClick();
+                }}
+                onCreateFolder={() => {
+                  void handleCreateLibraryFolder();
+                }}
+                onMoveAssetsToFolder={(filePaths, folderPath) => {
+                  void handleMoveLibraryAssets(filePaths, folderPath);
+                }}
+                onRenameFolder={(folderPath) => {
+                  void handleRenameLibraryFolder(folderPath);
+                }}
+                onDeleteFolder={(folderPath) => {
+                  void handleDeleteLibraryFolder(folderPath);
+                }}
+                onDeleteRequested={(assets) => {
+                  void handleDeleteLibraryAssets(assets);
+                }}
               />
               {shouldShowEmptyState ? (
                 <div className="lt-empty-state">
@@ -7176,7 +7256,9 @@ export function TransportPanelContent() {
               audioDevicesForSelectedBackend={audioDevicesForSelectedBackend}
               defaultAudioOutputDevice={defaultAudioOutputDevice}
               selectedAudioOutputDevice={selectedAudioOutputDevice}
-              selectedAudioOutputDeviceMissing={selectedAudioOutputDeviceMissing}
+              selectedAudioOutputDeviceMissing={
+                selectedAudioOutputDeviceMissing
+              }
               selectedOutputChannelCount={selectedOutputChannelCount}
               outputSampleRateOptions={outputSampleRateOptions}
               autoOutputSampleRateLabel={autoOutputSampleRateLabel}
@@ -7243,7 +7325,19 @@ export function TransportPanelContent() {
             ) : null}
 
             <div className="lt-status-overlay" aria-live="polite">
-              <span>{status}</span>
+              <span>
+                {pitchPrepareUiState.active
+                  ? `${pitchPrepareUiState.message}${
+                      pitchPrepareUiState.pendingBlocks
+                        ? ` ${pitchPrepareUiState.pendingBlocks} bloques pendientes`
+                        : ""
+                    }${
+                      pitchPrepareUiState.error
+                        ? `: ${pitchPrepareUiState.error}`
+                        : ""
+                    }`
+                  : status}
+              </span>
             </div>
           </div>
         </div>

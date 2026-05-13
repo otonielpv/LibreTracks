@@ -37,6 +37,9 @@ pub struct EngineSnapshot {
 
     #[serde(default)]
     pub metronome: MetronomeSnapshot,
+
+    #[serde(default)]
+    pub pitch: PitchSnapshot,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -104,4 +107,52 @@ pub struct MetronomeSnapshot {
     pub route_resolved: String,
     pub rendered_clicks_count: u64,
     pub muted_reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PitchSnapshot {
+    #[serde(default)]
+    pub pitch_engine_available: bool,
+    #[serde(default)]
+    pub pitch_backend: String,
+    #[serde(default)]
+    pub rubberband_version: String,
+    #[serde(default)]
+    pub pitch_runtime_enabled: bool,
+    #[serde(default)]
+    pub pitch_prepare_active: bool,
+    #[serde(default)]
+    pub pitch_prepare_pending: bool,
+    #[serde(default)]
+    pub pitch_prepare_progress: f64,
+    #[serde(default)]
+    pub pitch_prepare_status: String,
+    #[serde(default)]
+    pub pitch_prepare_message: String,
+    #[serde(default)]
+    pub pitch_proxy_blocks_ready: u64,
+    #[serde(default)]
+    pub pitch_proxy_blocks_missing: u64,
+    #[serde(default)]
+    pub pitch_proxy_blocks_pending: u64,
+    #[serde(default)]
+    pub pitch_jobs_queued: u64,
+    #[serde(default)]
+    pub pitch_jobs_pending: u64,
+    #[serde(default)]
+    pub pitch_jobs_running: u64,
+    #[serde(default)]
+    pub pitch_jobs_completed: u64,
+    #[serde(default)]
+    pub pitch_jobs_failed: u64,
+    #[serde(default)]
+    pub active_pitch_render_path: String,
+    #[serde(default)]
+    pub last_pitch_prepare_reason: String,
+    #[serde(default)]
+    pub last_pitch_proxy_error: String,
+    #[serde(default)]
+    pub last_missing_proxy_key: String,
+    #[serde(default)]
+    pub last_missing_proxy_block_index: i64,
 }

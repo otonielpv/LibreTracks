@@ -72,9 +72,11 @@ struct PitchDiagnostics {
     std::uint64_t duplicate_proxy_request_count = 0;
     std::uint64_t render_path_realtime_fallback_count = 0;
     std::uint64_t jobs_queued = 0;
+    std::uint64_t jobs_pending = 0;
     std::uint64_t jobs_running = 0;
     std::uint64_t jobs_completed = 0;
     std::uint64_t jobs_failed = 0;
+    std::uint64_t queued_blocks = 0;
     std::uint64_t seek_immediate_jobs_queued = 0;
     std::uint64_t seek_immediate_jobs_completed = 0;
     std::uint64_t offline_segments_rendered = 0;

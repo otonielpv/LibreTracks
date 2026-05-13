@@ -21,11 +21,34 @@ pub struct TransportSnapshot {
     pub active_vamp: Option<ActiveVampSummary>,
     pub musical_position: MusicalPositionSummary,
     pub transport_clock: TransportClockSummary,
+    pub pitch: PitchPrepareSummary,
     pub last_drift_sample: Option<TransportDriftSummary>,
     pub project_revision: u64,
     pub song_dir: Option<String>,
     pub song_file_path: Option<String>,
     pub is_native_runtime: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PitchPrepareSummary {
+    pub pitch_prepare_active: bool,
+    pub pitch_prepare_pending: bool,
+    pub pitch_prepare_progress: f64,
+    pub pitch_proxy_blocks_ready: u64,
+    pub pitch_proxy_blocks_missing: u64,
+    pub pitch_proxy_blocks_pending: u64,
+    pub pitch_jobs_pending: u64,
+    pub pitch_jobs_running: u64,
+    pub pitch_jobs_completed: u64,
+    pub pitch_jobs_failed: u64,
+    pub pitch_prepare_status: String,
+    pub pitch_prepare_message: String,
+    pub active_pitch_render_path: String,
+    pub last_pitch_prepare_reason: String,
+    pub last_pitch_proxy_error: String,
+    pub last_missing_proxy_key: String,
+    pub last_missing_proxy_block_index: i64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]

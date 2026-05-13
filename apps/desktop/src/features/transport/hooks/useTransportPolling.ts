@@ -12,7 +12,7 @@ export function useTransportPolling({
   applyPlaybackSnapshot,
 }: UseTransportPollingProps) {
   useEffect(() => {
-    if (!isTauriApp || playbackState !== "playing") {
+    if (!isTauriApp) {
       return;
     }
 
@@ -37,9 +37,12 @@ export function useTransportPolling({
       }
     };
 
-    const intervalId = window.setInterval(() => {
-      void refreshSnapshot();
-    }, 120);
+    const intervalId = window.setInterval(
+      () => {
+        void refreshSnapshot();
+      },
+      playbackState === "playing" ? 120 : 500,
+    );
 
     return () => {
       active = false;
