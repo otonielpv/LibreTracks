@@ -24,7 +24,7 @@ TEST_CASE("source ready callback fires after delayed decoded source is stored") 
     CHECK(ready_id == "source");
 }
 
-TEST_CASE("missing pitch processor bypasses audio and records diagnostic") {
+TEST_CASE("missing prepared pitch proxy renders no stale stem and records diagnostic") {
     SourceManager sources;
     sources.register_source("source", "");
     auto samples = test::make_stereo_click(4096, 1024, 1.0f);
@@ -42,12 +42,12 @@ TEST_CASE("missing pitch processor bypasses audio and records diagnostic") {
     TrackRenderer renderer;
     renderer.render(track, 0, 4096, out, 2, sources, &cache, test::kFixtureSampleRate, 2);
 
-    CHECK(cache.diagnostics().missing_processor_count == 1);
-    CHECK(left[1024] == doctest::Approx(1.0f));
-    CHECK(right[1024] == doctest::Approx(1.0f));
+    CHECK(cache.diagnostics().proxy_blocks_missing > 0);
+    CHECK(left[1024] == doctest::Approx(0.0f));
+    CHECK(right[1024] == doctest::Approx(0.0f));
 }
 
-TEST_CASE("prepared pitch processor produces non-zero pitched audio") {
+TEST_CASE("prepared pitch proxy produces non-zero pitched audio") {
     SourceManager sources;
     sources.register_source("source", "");
     auto samples = test::make_stereo_sine(4096, 440.0, 0.25f);
@@ -59,7 +59,10 @@ TEST_CASE("prepared pitch processor produces non-zero pitched audio") {
     track.clips.push_back(Clip{"clip", "source", 0, 0, 4096});
 
     PitchCache cache;
-    cache.prepare_processor(PitchCacheKey{"source", "track", "clip", 2.0, test::kFixtureSampleRate, 2, "realtime"});
+    PitchCacheKey key{"source", "track", "clip", 2.0, test::kFixtureSampleRate, 2, "prepared_proxy"};
+    const DecodedSource* source = sources.get("source");
+    REQUIRE(source != nullptr);
+    cache.prefetch_range(key, *source, 0, 4096);
 
     float left[4096] = {};
     float right[4096] = {};

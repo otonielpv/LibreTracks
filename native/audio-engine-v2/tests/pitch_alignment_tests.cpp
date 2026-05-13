@@ -28,8 +28,10 @@ std::vector<float> render_track(const std::vector<float>& samples,
     PitchCache cache;
     if (effective != 0) {
         PitchCacheKey key{"source", track.id, "clip", static_cast<double>(effective),
-                          test::kFixtureSampleRate, 2, "realtime"};
-        cache.prepare_processor(key);
+                          test::kFixtureSampleRate, 2, "prepared_proxy"};
+        const DecodedSource* source = sources.get("source");
+        REQUIRE(source != nullptr);
+        cache.prefetch_range(key, *source, 0, static_cast<Frame>(samples.size() / 2));
     }
 
     std::vector<float> left(static_cast<std::size_t>(samples.size() / 2), 0.0f);
@@ -58,6 +60,19 @@ TEST_CASE("pitched and unpitched click onsets remain aligned") {
     REQUIRE(a >= 0);
     REQUIRE(b >= 0);
     CHECK(std::llabs(a - b) <= 2);
+}
+
+TEST_CASE("prepared pitch click onsets stay aligned at extreme semitones") {
+    for (Semitones semitones : {12, -12, -2}) {
+        auto click = test::make_stereo_click(8192, 2048, 1.0f);
+        auto unpitched = render_track(click, 0);
+        auto pitched = render_track(click, semitones);
+        Frame a = test::first_onset_frame(unpitched, 0.2f);
+        Frame b = test::first_onset_frame(pitched, 0.2f);
+        REQUIRE(a >= 0);
+        REQUIRE(b >= 0);
+        CHECK(std::llabs(a - b) <= 2);
+    }
 }
 
 TEST_CASE("NeverTranspose remains unpitched and aligned under song transpose") {

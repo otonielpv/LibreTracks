@@ -73,21 +73,45 @@ void TrackRenderer::render_clip(const Clip&          clip,
     std::fill(scratch_l_, scratch_l_ + frames_to_read, 0.f);
     std::fill(scratch_r_, scratch_r_ + frames_to_read, 0.f);
 
-    int read = src->read(source_frame, frames_to_read, scratch_, 2);
-    if (read <= 0) return;
-
     if (effective_semitones != 0) {
         PitchCacheKey key{clip.source_id, track_id, clip.id,
                           static_cast<double>(effective_semitones),
-                          engine_sample_rate, src->channel_count(), "realtime"};
-        PitchProcessor* proc = pitch_cache ? pitch_cache->find_processor(key) : nullptr;
-        if (proc) {
-            proc->process(scratch_, 2, read);
-        } else {
-            if (pitch_cache)
-                pitch_cache->note_missing_processor(key);
+                          engine_sample_rate, src->channel_count(), "prepared_proxy"};
+        if (!pitch_cache) return;
+
+        int copied = 0;
+        while (copied < frames_to_read) {
+            const Frame absolute = source_frame + copied;
+            const int block_index = pitch_cache->block_index_for(absolute);
+            const int offset = pitch_cache->offset_in_block(absolute);
+            const int chunk = std::min(frames_to_read - copied,
+                                       PitchCache::kProxyBlockFrames - offset);
+            float* chunk_out[2] = {scratch_l_ + copied, scratch_r_ + copied};
+            if (!pitch_cache->get_block_if_ready(key, block_index, offset, chunk, chunk_out, 2)) {
+                if (pitch_cache->realtime_fallback_enabled()) {
+                    int read = src->read(absolute, chunk, chunk_out, 2);
+                    if (read <= 0) return;
+                    PitchCacheKey realtime_key{clip.source_id, track_id, clip.id,
+                                               static_cast<double>(effective_semitones),
+                                               engine_sample_rate, src->channel_count(), "realtime"};
+                    PitchProcessor* proc = pitch_cache->find_processor(realtime_key);
+                    if (proc) {
+                        proc->process(chunk_out, 2, read);
+                    } else {
+                        pitch_cache->note_missing_processor(realtime_key);
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            }
+            copied += chunk;
         }
+    } else {
+        int read = src->read(source_frame, frames_to_read, scratch_, 2);
+        if (read <= 0) return;
     }
+    int read = frames_to_read;
 
     float effective_gain = track_gain * clip.gain;
 

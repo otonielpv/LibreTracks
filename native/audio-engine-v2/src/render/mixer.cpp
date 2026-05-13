@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 
 namespace lt {
 
@@ -146,6 +147,9 @@ void Mixer::render(float** output_channels,
     reset_track_meters();
 
     if (clock_->position().state == TransportState::Playing && session) {
+        const std::uint64_t missing_proxy_before = pitch_cache_
+            ? pitch_cache_->missing_proxy_block_count()
+            : 0;
         // Find the current song.
         for (const auto& song : session->songs) {
             if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
@@ -226,8 +230,11 @@ void Mixer::render(float** output_channels,
         metronome_.render(output_channels, num_channels, num_frames,
                           clock_->sample_rate(), timeline_frame, session.get());
 
-        // Advance transport clock.
-        clock_->advance(num_frames);
+        const std::uint64_t missing_proxy_after = pitch_cache_
+            ? pitch_cache_->missing_proxy_block_count()
+            : missing_proxy_before;
+        if (missing_proxy_after == missing_proxy_before)
+            clock_->advance(num_frames);
     }
 
     // Apply crossfade ramp (Phase 7).

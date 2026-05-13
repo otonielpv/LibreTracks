@@ -6,6 +6,7 @@ target_sources(lt_audio_engine_v2 PRIVATE
     worker_pool.cpp
     preparation_queue.cpp
     block_cache.cpp
+    original_source_cache.cpp
     streaming_source.cpp
     prebuffer_worker.cpp
 )

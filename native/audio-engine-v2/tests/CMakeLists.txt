@@ -26,6 +26,9 @@ add_executable(lt_engine_tests
     pitch_frequency_tests.cpp
     pitch_seek_tests.cpp
     pitch_preparation_tests.cpp
+    prepared_pitch_cache_tests.cpp
+    prepared_pitch_alignment_tests.cpp
+    transport_audio_sync_tests.cpp
 )
 
 target_link_libraries(lt_engine_tests

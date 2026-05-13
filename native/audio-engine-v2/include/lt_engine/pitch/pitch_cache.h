@@ -2,6 +2,8 @@
 
 #include <lt_engine/core/types.h>
 #include <lt_engine/pitch/pitch_processor.h>
+#include <lt_engine/sources/decoded_source.h>
+#include <lt_engine/sources/block_cache.h>
 
 #include <atomic>
 #include <cstdint>
@@ -21,6 +23,8 @@ struct PitchCacheKey {
     int sample_rate = 0;
     int channel_count = 0;
     std::string quality = "realtime";
+    std::string rubberband_version;
+    std::uint64_t cache_version = 1;
 
     bool operator==(const PitchCacheKey& o) const noexcept {
         return source_id == o.source_id
@@ -29,7 +33,9 @@ struct PitchCacheKey {
             && semitones == o.semitones
             && sample_rate == o.sample_rate
             && channel_count == o.channel_count
-            && quality == o.quality;
+            && quality == o.quality
+            && rubberband_version == o.rubberband_version
+            && cache_version == o.cache_version;
     }
 };
 
@@ -42,6 +48,8 @@ struct PitchCacheKeyHash {
         h ^= std::hash<int>{}(k.sample_rate) + 0x9e3779b9u + (h << 6) + (h >> 2);
         h ^= std::hash<int>{}(k.channel_count) + 0x9e3779b9u + (h << 6) + (h >> 2);
         h ^= std::hash<std::string>{}(k.quality) + 0x9e3779b9u + (h << 6) + (h >> 2);
+        h ^= std::hash<std::string>{}(k.rubberband_version) + 0x9e3779b9u + (h << 6) + (h >> 2);
+        h ^= std::hash<std::uint64_t>{}(k.cache_version) + 0x9e3779b9u + (h << 6) + (h >> 2);
         return h;
     }
 };
@@ -50,30 +58,97 @@ struct PitchDiagnostics {
     std::size_t processors_prepared = 0;
     std::size_t processors_missing = 0;
     std::uint64_t missing_processor_count = 0;
+    std::size_t proxy_blocks_ready = 0;
+    std::size_t proxy_blocks_missing = 0;
+    std::uint64_t proxy_generation_count = 0;
+    std::uint64_t duplicate_proxy_request_count = 0;
+    std::uint64_t render_path_realtime_fallback_count = 0;
+    std::string active_pitch_mode = "prepared_proxy";
     int max_latency_frames = 0;
     std::vector<std::string> active_keys;
     std::vector<PitchCacheKey> missing_keys;
+};
+
+struct PreparedPitchBlock {
+    PitchCacheKey key;
+    Frame source_start_frame = 0;
+    int block_index = 0;
+    int frame_count = 0;
+    int channel_count = 0;
+    std::vector<float> interleaved_samples;
 };
 
 class PitchCache {
 public:
     PitchCache() = default;
 
+    static constexpr int kProxyBlockFrames = kDefaultBlockFrames;
+
     PitchProcessor* prepare_processor(const PitchCacheKey& key);
     PitchProcessor* find_processor(const PitchCacheKey& key) noexcept;
     const PitchProcessor* find_processor(const PitchCacheKey& key) const noexcept;
     void note_missing_processor(const PitchCacheKey& key) noexcept;
+    void note_missing_proxy_block(const PitchCacheKey& key, int block_index) noexcept;
     PitchDiagnostics diagnostics() const;
+
+    bool request_block(const PitchCacheKey& key,
+                       const DecodedSource& source,
+                       int block_index);
+    bool request_block(const PitchCacheKey& key,
+                       const DecodedSource& source,
+                       Frame source_start_frame,
+                       int block_index);
+    void prefetch_range(const PitchCacheKey& key,
+                        const DecodedSource& source,
+                        Frame start_frame,
+                        Frame frame_count);
+    bool get_block_if_ready(const PitchCacheKey& key,
+                            int block_index,
+                            int frame_offset_in_block,
+                            int frames_needed,
+                            float** out,
+                            int num_channels) noexcept;
+    bool is_block_ready(const PitchCacheKey& key, int block_index) const;
+    int block_index_for(Frame frame) const noexcept;
+    int offset_in_block(Frame frame) const noexcept;
+    std::uint64_t missing_proxy_block_count() const noexcept;
+
+    void set_realtime_fallback_enabled(bool enabled) noexcept;
+    bool realtime_fallback_enabled() const noexcept;
 
     void clear();
     void evict(const Id& source_id);
 
 private:
     using CacheMap = std::unordered_map<PitchCacheKey, std::shared_ptr<PitchProcessor>, PitchCacheKeyHash>;
+    struct ProxyCacheKey {
+        PitchCacheKey pitch_key;
+        int block_index = 0;
+
+        bool operator==(const ProxyCacheKey& o) const noexcept {
+            return block_index == o.block_index && pitch_key == o.pitch_key;
+        }
+    };
+
+    struct ProxyCacheKeyHash {
+        std::size_t operator()(const ProxyCacheKey& k) const noexcept {
+            std::size_t h = PitchCacheKeyHash{}(k.pitch_key);
+            h ^= std::hash<int>{}(k.block_index) + 0x9e3779b9u + (h << 6) + (h >> 2);
+            return h;
+        }
+    };
+
+    using ProxyMap = std::unordered_map<ProxyCacheKey, std::shared_ptr<PreparedPitchBlock>, ProxyCacheKeyHash>;
 
     mutable std::mutex write_mutex_;
     std::shared_ptr<const CacheMap> cache_{std::make_shared<const CacheMap>()};
+    std::shared_ptr<const ProxyMap> proxy_cache_{std::make_shared<const ProxyMap>()};
     std::atomic<std::uint64_t> missing_processor_count_{0};
+    std::atomic<std::uint64_t> missing_proxy_count_{0};
+    std::atomic<std::uint64_t> proxy_generation_count_{0};
+    std::atomic<std::uint64_t> duplicate_proxy_request_count_{0};
+    std::atomic<std::uint64_t> render_path_realtime_fallback_count_{0};
+    std::atomic<bool> realtime_fallback_enabled_{false};
 };
 
 } // namespace lt

@@ -281,17 +281,22 @@ std::string EngineImpl::get_snapshot() const {
 std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id) {
     if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
         return 0;
+    if (!source_manager_->get(source_id))
+        return 0;
+    return prepare_pitch_processors_for_session(*session_);
+}
 
-    const auto* source = source_manager_->get(source_id);
-    if (!source || !source->is_loaded())
+std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& session) {
+    if (!source_manager_ || !pitch_cache_ || !clock_)
         return 0;
 
     const int sample_rate = clock_->sample_rate();
     std::size_t prepared = 0;
-    for (const auto& song : session_->songs) {
+    for (const auto& song : session.songs) {
         for (const auto& track : song.tracks) {
             for (const auto& clip : track.clips) {
-                if (clip.source_id != source_id)
+                const auto* source = source_manager_->get(clip.source_id);
+                if (!source || !source->is_loaded())
                     continue;
                 Semitones semitones = resolve_effective_semitones(
                     track, clip, song, clip.timeline_start_frame);
@@ -299,8 +304,9 @@ std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id)
                     continue;
                 PitchCacheKey key{clip.source_id, track.id, clip.id,
                                   static_cast<double>(semitones),
-                                  sample_rate, source->channel_count(), "realtime"};
-                if (pitch_cache_->prepare_processor(key))
+                                  sample_rate, source->channel_count(), "prepared_proxy"};
+                pitch_cache_->prefetch_range(key, *source, clip.source_start_frame, clip.length_frames);
+                if (pitch_cache_->is_block_ready(key, pitch_cache_->block_index_for(clip.source_start_frame)))
                     ++prepared;
             }
         }
@@ -311,16 +317,7 @@ std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id)
 void EngineImpl::prepare_pitch_processors_for_session() {
     if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
         return;
-
-    std::unordered_set<Id> seen_sources;
-    for (const auto& song : session_->songs) {
-        for (const auto& track : song.tracks) {
-            for (const auto& clip : track.clips) {
-                if (seen_sources.insert(clip.source_id).second)
-                    prepare_pitch_processors_for_source(clip.source_id);
-            }
-        }
-    }
+    prepare_pitch_processors_for_session(*session_);
 }
 
 std::string EngineImpl::list_devices() const {
@@ -534,13 +531,25 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return scheduler_->replace(c.jump_id, c.new_target, c.new_trigger);
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackTransposeEnabled>) {
-            bool changed = update_track_session(session_, mixer_.get(), c.track_id, [enabled = c.enabled](Track& track) {
-                track.transpose_behavior = enabled
-                    ? TransposeBehavior::FollowsSongOrRegion
-                    : TransposeBehavior::NeverTranspose;
-            });
-            if (changed)
-                prepare_pitch_processors_for_session();
+            if (!session_)
+                return Result<void>::ok();
+            auto next_session = std::make_shared<Session>(*session_);
+            bool changed = false;
+            for (auto& song : next_session->songs) {
+                for (auto& track : song.tracks) {
+                    if (track.id == c.track_id) {
+                        track.transpose_behavior = c.enabled
+                            ? TransposeBehavior::FollowsSongOrRegion
+                            : TransposeBehavior::NeverTranspose;
+                        changed = true;
+                    }
+                }
+            }
+            if (changed) {
+                prepare_pitch_processors_for_session(*next_session);
+                session_ = next_session;
+                if (mixer_) mixer_->set_session(next_session);
+            }
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetSongTranspose>) {
@@ -549,8 +558,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 for (auto& song : next_session->songs)
                     if (song.id == c.song_id)
                         song.transpose_semitones = c.semitones;
+                prepare_pitch_processors_for_session(*next_session);
                 session_ = next_session;
-                prepare_pitch_processors_for_session();
                 if (mixer_) mixer_->set_session(next_session);
             }
             return Result<void>::ok();
@@ -562,8 +571,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     for (auto& region : song.regions)
                         if (region.id == c.region_id)
                             region.transpose_semitones = c.semitones;
+                prepare_pitch_processors_for_session(*next_session);
                 session_ = next_session;
-                prepare_pitch_processors_for_session();
                 if (mixer_) mixer_->set_session(next_session);
             }
             return Result<void>::ok();

@@ -46,7 +46,7 @@ private:
 
     // Scratch buffer for reading from source (avoids per-block heap alloc by
     // reusing a fixed-size stack buffer up to kMaxBlockFrames).
-    static constexpr int kMaxBlockFrames = 4096;
+    static constexpr int kMaxBlockFrames = 8192;
     float scratch_l_[kMaxBlockFrames] = {};
     float scratch_r_[kMaxBlockFrames] = {};
     float* scratch_[2] = { scratch_l_, scratch_r_ };

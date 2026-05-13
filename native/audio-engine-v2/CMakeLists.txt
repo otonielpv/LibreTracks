@@ -14,7 +14,11 @@ include(cmake/dependencies.cmake)
 # ---------------------------------------------------------------------------
 # Engine library
 # ---------------------------------------------------------------------------
-add_library(lt_audio_engine_v2 SHARED)
+if(LT_ENGINE_BUILD_TESTS)
+    add_library(lt_audio_engine_v2 STATIC)
+else()
+    add_library(lt_audio_engine_v2 SHARED)
+endif()
 
 target_compile_features(lt_audio_engine_v2 PUBLIC cxx_std_20)
 set_target_properties(lt_audio_engine_v2 PROPERTIES
@@ -92,7 +96,7 @@ endif()
 # On Windows, export symbols from the shared library.
 if(WIN32)
     target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_EXPORT)
-    if(NOT LT_ENGINE_USE_JUCE)
+    if(NOT LT_ENGINE_USE_JUCE AND NOT LT_ENGINE_BUILD_TESTS)
         set_target_properties(lt_audio_engine_v2 PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
     endif()
 endif()
