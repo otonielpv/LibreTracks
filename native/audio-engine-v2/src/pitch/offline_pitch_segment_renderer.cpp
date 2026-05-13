@@ -21,6 +21,8 @@ double pitch_scale(double semitones) {
     return std::pow(2.0, semitones / 12.0);
 }
 
+constexpr int kRubberBandGuardFrames = 4096;
+
 #if LT_ENGINE_OFFLINE_HAS_RUBBERBAND
 int calibrate_offline_alignment(int sample_rate, int channels, double semitones) {
     using RBOption = RubberBand::RubberBandStretcher::Option;
@@ -54,7 +56,8 @@ int calibrate_offline_alignment(int sample_rate, int channels, double semitones)
     std::vector<std::vector<float>> output(static_cast<std::size_t>(channels));
     std::vector<float*> out_ptrs(static_cast<std::size_t>(channels));
     for (int ch = 0; ch < channels; ++ch) {
-        output[static_cast<std::size_t>(ch)].assign(static_cast<std::size_t>(available), 0.0f);
+        output[static_cast<std::size_t>(ch)].assign(
+            static_cast<std::size_t>(available + kRubberBandGuardFrames), 0.0f);
         out_ptrs[static_cast<std::size_t>(ch)] = output[static_cast<std::size_t>(ch)].data();
     }
     const int retrieved = static_cast<int>(rb.retrieve(out_ptrs.data(), static_cast<size_t>(available)));
@@ -198,7 +201,8 @@ RenderedPitchSegment OfflinePitchSegmentRenderer::render_segment(
     const int retrieve_frames = std::max(available, needed);
     std::vector<std::vector<float>> processed(static_cast<std::size_t>(channels));
     for (auto& channel : processed)
-        channel.assign(static_cast<std::size_t>(std::max(1, retrieve_frames)), 0.0f);
+        channel.assign(static_cast<std::size_t>(
+            std::max(1, retrieve_frames + kRubberBandGuardFrames)), 0.0f);
     std::vector<float*> out_ptrs(static_cast<std::size_t>(channels));
     for (int ch = 0; ch < channels; ++ch)
         out_ptrs[static_cast<std::size_t>(ch)] = processed[static_cast<std::size_t>(ch)].data();

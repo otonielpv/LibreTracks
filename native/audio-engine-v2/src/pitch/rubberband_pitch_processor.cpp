@@ -18,6 +18,10 @@ namespace lt {
 
 #if LT_ENGINE_HAS_RUBBERBAND_IMPL
 
+namespace {
+constexpr int kRubberBandGuardFrames = 4096;
+}
+
 static inline double semitones_to_ratio(double semitones) noexcept {
     return std::pow(2.0, semitones / 12.0);
 }
@@ -77,8 +81,8 @@ int RubberBandPitchProcessor::process(float** in_out,
             out_ptrs_.resize(static_cast<std::size_t>(ch), nullptr);
         for (int c = 0; c < ch; ++c) {
             auto& channel = out_scratch_[static_cast<std::size_t>(c)];
-            if (static_cast<int>(channel.size()) < frames)
-                channel.resize(static_cast<std::size_t>(frames), 0.0f);
+            if (static_cast<int>(channel.size()) < frames + kRubberBandGuardFrames)
+                channel.resize(static_cast<std::size_t>(frames + kRubberBandGuardFrames), 0.0f);
             out_ptrs_[static_cast<std::size_t>(c)] = channel.data();
         }
     } catch (...) {

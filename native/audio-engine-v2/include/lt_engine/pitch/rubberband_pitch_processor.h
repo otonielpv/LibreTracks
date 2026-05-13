@@ -16,10 +16,7 @@
 #include <memory>
 #include <vector>
 
-#if LT_ENGINE_USE_RUBBERBAND && __has_include(<rubberband/RubberBandStretcher.h>)
-#define LT_ENGINE_HAS_RUBBERBAND_HEADER 1
-namespace RubberBand { class RubberBandStretcher; }
-#elif LT_ENGINE_USE_RUBBERBAND && __has_include(<RubberBandStretcher.h>)
+#if LT_ENGINE_USE_RUBBERBAND
 #define LT_ENGINE_HAS_RUBBERBAND_HEADER 1
 namespace RubberBand { class RubberBandStretcher; }
 #else

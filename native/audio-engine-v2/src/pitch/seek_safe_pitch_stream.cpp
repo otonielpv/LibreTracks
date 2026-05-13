@@ -55,13 +55,14 @@ int calibrate_realtime_alignment(int sample_rate, int channel_count, double semi
     constexpr int kFrames = 16384;
     constexpr int kImpulse = 4096;
     constexpr int kChunk = 4096;
+    constexpr int kGuard = 4096;
     std::vector<std::vector<float>> input(static_cast<std::size_t>(channel_count));
     std::vector<std::vector<float>> output(static_cast<std::size_t>(channel_count));
     std::vector<float*> in_ptrs(static_cast<std::size_t>(channel_count));
     std::vector<float*> out_ptrs(static_cast<std::size_t>(channel_count));
     for (int ch = 0; ch < channel_count; ++ch) {
-        input[static_cast<std::size_t>(ch)].assign(kChunk, 0.0f);
-        output[static_cast<std::size_t>(ch)].assign(kChunk, 0.0f);
+        input[static_cast<std::size_t>(ch)].assign(kChunk + kGuard, 0.0f);
+        output[static_cast<std::size_t>(ch)].assign(kChunk + kGuard, 0.0f);
         in_ptrs[static_cast<std::size_t>(ch)] = input[static_cast<std::size_t>(ch)].data();
         out_ptrs[static_cast<std::size_t>(ch)] = output[static_cast<std::size_t>(ch)].data();
     }
@@ -127,12 +128,7 @@ float smoothstep(float x) noexcept {
 } // namespace
 
 SeekSafePitchStream::SeekSafePitchStream() = default;
-SeekSafePitchStream::~SeekSafePitchStream() {
-#if LT_ENGINE_SEEK_SAFE_HAS_RUBBERBAND_IMPL
-    if (rb_)
-        rb_->reset();
-#endif
-}
+SeekSafePitchStream::~SeekSafePitchStream() = default;
 
 void SeekSafePitchStream::configure(const Config& config) {
     if (configured_
@@ -161,8 +157,8 @@ void SeekSafePitchStream::ensure_buffers() {
     input_ptrs_.assign(static_cast<std::size_t>(channels), nullptr);
     output_ptrs_.assign(static_cast<std::size_t>(channels), nullptr);
     for (int ch = 0; ch < channels; ++ch) {
-        input_[static_cast<std::size_t>(ch)].assign(kMaxChunkFrames, 0.0f);
-        output_[static_cast<std::size_t>(ch)].assign(kMaxChunkFrames, 0.0f);
+        input_[static_cast<std::size_t>(ch)].assign(kMaxChunkFrames + kRubberBandGuardFrames, 0.0f);
+        output_[static_cast<std::size_t>(ch)].assign(kMaxChunkFrames + kRubberBandGuardFrames, 0.0f);
         input_ptrs_[static_cast<std::size_t>(ch)] = input_[static_cast<std::size_t>(ch)].data();
         output_ptrs_[static_cast<std::size_t>(ch)] = output_[static_cast<std::size_t>(ch)].data();
     }
@@ -206,7 +202,8 @@ void SeekSafePitchStream::reset_for_seek(const DecodedSource& source, Frame targ
 
     start_pad_frames_ = static_cast<int>(rb_->getPreferredStartPad());
     start_delay_frames_ = static_cast<int>(rb_->getStartDelay());
-    alignment_correction_frames_ = 0;
+    alignment_correction_frames_ = calibrate_realtime_alignment(
+        config_.sample_rate, config_.channel_count, config_.semitones);
     preroll_frames_ = std::clamp(config_.sample_rate / 20, 1024, 4096);
 
     process_zeroes(start_pad_frames_);
@@ -221,7 +218,8 @@ void SeekSafePitchStream::reset_for_seek(const DecodedSource& source, Frame targ
         feed_source_frame_ += chunk;
         preroll_left -= chunk;
     }
-    discard_remaining_ = std::max(0, start_delay_frames_ + pretarget_frames);
+    discard_remaining_ = std::max(0, start_delay_frames_ + pretarget_frames
+                                      + alignment_correction_frames_);
     while (discard_remaining_ > 0) {
         const int before = discard_remaining_;
         discard_available();

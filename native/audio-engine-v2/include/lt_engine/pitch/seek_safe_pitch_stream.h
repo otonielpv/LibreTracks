@@ -6,10 +6,7 @@
 #include <memory>
 #include <vector>
 
-#if LT_ENGINE_USE_RUBBERBAND && __has_include(<rubberband/RubberBandStretcher.h>)
-#define LT_ENGINE_SEEK_SAFE_HAS_RUBBERBAND_HEADER 1
-namespace RubberBand { class RubberBandStretcher; }
-#elif LT_ENGINE_USE_RUBBERBAND && __has_include(<RubberBandStretcher.h>)
+#if LT_ENGINE_USE_RUBBERBAND
 #define LT_ENGINE_SEEK_SAFE_HAS_RUBBERBAND_HEADER 1
 namespace RubberBand { class RubberBandStretcher; }
 #else
@@ -48,6 +45,7 @@ public:
 private:
     static constexpr int kMaxChannels = 32;
     static constexpr int kMaxChunkFrames = 4096;
+    static constexpr int kRubberBandGuardFrames = 4096;
 
     void ensure_buffers();
     void process_zeroes(int frames) noexcept;
