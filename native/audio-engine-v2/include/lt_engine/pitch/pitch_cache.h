@@ -2,6 +2,7 @@
 
 #include <lt_engine/core/types.h>
 #include <lt_engine/pitch/pitch_processor.h>
+#include <lt_engine/pitch/seek_safe_pitch_stream.h>
 #include <lt_engine/sources/decoded_source.h>
 #include <lt_engine/sources/block_cache.h>
 
@@ -72,7 +73,13 @@ struct PitchDiagnostics {
     std::uint64_t duplicate_proxy_request_count = 0;
     std::uint64_t render_path_realtime_fallback_count = 0;
     std::uint64_t realtime_seek_safe_resets = 0;
+    std::uint64_t realtime_pitch_underflow_count = 0;
+    std::uint64_t realtime_pitch_discontinuities = 0;
     std::uint64_t realtime_seek_safe_preroll_frames = 0;
+    int realtime_pitch_start_pad_frames = 0;
+    int realtime_pitch_start_delay_frames = 0;
+    int realtime_pitch_preroll_frames = 0;
+    int realtime_pitch_discarded_frames = 0;
     std::uint64_t realtime_seek_safe_render_count = 0;
     std::uint64_t prepared_proxy_render_count = 0;
     std::uint64_t emergency_silence_render_count = 0;
@@ -238,7 +245,13 @@ private:
     std::atomic<std::uint64_t> duplicate_proxy_request_count_{0};
     std::atomic<std::uint64_t> render_path_realtime_fallback_count_{0};
     std::atomic<std::uint64_t> realtime_seek_safe_resets_{0};
+    std::atomic<std::uint64_t> realtime_pitch_underflow_count_{0};
+    std::atomic<std::uint64_t> realtime_pitch_discontinuities_{0};
     std::atomic<std::uint64_t> realtime_seek_safe_preroll_frames_{0};
+    std::atomic<int> realtime_pitch_start_pad_frames_{0};
+    std::atomic<int> realtime_pitch_start_delay_frames_{0};
+    std::atomic<int> realtime_pitch_preroll_frames_{0};
+    std::atomic<int> realtime_pitch_discarded_frames_{0};
     std::atomic<std::uint64_t> realtime_seek_safe_render_count_{0};
     std::atomic<std::uint64_t> prepared_proxy_render_count_{0};
     std::atomic<std::uint64_t> emergency_silence_render_count_{0};
@@ -271,15 +284,11 @@ private:
     std::unique_ptr<PersistentPitchProxyCache> disk_cache_;
 
     struct RealtimePitchStream {
-        std::unique_ptr<PitchProcessor> processor;
+        SeekSafePitchStream stream;
         Frame expected_source_frame = -1;
         double semitones = 0.0;
         int sample_rate = 0;
         int channel_count = 0;
-        int fade_frames = 0;
-        int fade_processed = 0;
-        float preroll_l[4096] = {};
-        float preroll_r[4096] = {};
     };
     using RealtimeStreamMap =
         std::unordered_map<PitchCacheKey, RealtimePitchStream, PitchCacheKeyHash>;

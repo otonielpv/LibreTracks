@@ -2,7 +2,11 @@
 
 #include <doctest/doctest.h>
 #include <lt_engine/render/track_renderer.h>
+#include <lt_engine/pitch/offline_pitch_segment_renderer.h>
+#include <lt_engine/pitch/seek_safe_pitch_stream.h>
 #include <lt_engine/sources/source_manager.h>
+
+#include <memory>
 
 using namespace lt;
 
@@ -56,4 +60,65 @@ TEST_CASE("NeverTranspose uses original cache path and remains aligned") {
     auto guide = render_prepared(0, TransposeBehavior::NeverTranspose);
     CHECK(test::first_onset_frame(guide, 0.2f) == 2048);
     CHECK(std::llabs(test::first_onset_frame(music, 0.2f) - test::first_onset_frame(guide, 0.2f)) <= 2);
+}
+
+TEST_CASE("offline prepared proxy compensates RubberBand latency") {
+    for (Semitones semitones : {2, -2, 12, -12}) {
+        INFO("semitones=", semitones);
+        constexpr Frame requested_start = 48000;
+        constexpr Frame impulse_offset = 1024;
+        constexpr Frame duration = requested_start + 8192;
+        auto samples = test::make_stereo_click(duration, requested_start + impulse_offset, 1.0f);
+        DecodedSource source(samples, 2, test::kFixtureSampleRate, duration);
+        PitchCacheKey key{"source", "track", "clip", static_cast<double>(semitones),
+                          test::kFixtureSampleRate, 2, "prepared_proxy"};
+
+        OfflinePitchSegmentRenderer renderer;
+        auto segment = renderer.render_segment(key, source, requested_start, 4096);
+        REQUIRE(segment.ok);
+        REQUIRE(segment.start_frame == requested_start);
+        REQUIRE(segment.frame_count == 4096);
+        const Frame onset = test::first_onset_frame(segment.interleaved_samples, 0.2f);
+        REQUIRE(onset >= 0);
+        CHECK(std::llabs(onset - impulse_offset) <= 2);
+    }
+}
+
+TEST_CASE("realtime and prepared proxy pitch paths are mutually aligned") {
+    for (Semitones semitones : {2, -2, 12, -12}) {
+        INFO("semitones=", semitones);
+        constexpr Frame requested_start = 24000;
+        constexpr Frame impulse_offset = 1536;
+        constexpr Frame render_frames = 4096;
+        constexpr Frame duration = requested_start + render_frames + 4096;
+        auto samples = test::make_stereo_click(duration, requested_start + impulse_offset, 1.0f);
+        DecodedSource source(samples, 2, test::kFixtureSampleRate, duration);
+        PitchCacheKey key{"source", "track", "clip", static_cast<double>(semitones),
+                          test::kFixtureSampleRate, 2, "prepared_proxy"};
+
+        OfflinePitchSegmentRenderer offline;
+        auto proxy = offline.render_segment(key, source, requested_start, render_frames);
+        REQUIRE(proxy.ok);
+
+        std::vector<float> left(render_frames, 0.0f);
+        std::vector<float> right(render_frames, 0.0f);
+        float* out[2] = {left.data(), right.data()};
+        auto realtime = std::make_unique<SeekSafePitchStream>();
+        realtime->configure({test::kFixtureSampleRate, 2, static_cast<double>(semitones)});
+        realtime->reset_for_seek(source, requested_start);
+        const int rendered = realtime->render_aligned(source, requested_start, render_frames, out, 2);
+        REQUIRE(rendered > impulse_offset);
+
+        std::vector<float> rt(static_cast<std::size_t>(render_frames * 2), 0.0f);
+        for (Frame f = 0; f < render_frames; ++f) {
+            rt[static_cast<std::size_t>(f * 2)] = left[static_cast<std::size_t>(f)];
+            rt[static_cast<std::size_t>(f * 2 + 1)] = right[static_cast<std::size_t>(f)];
+        }
+
+        const Frame a = test::first_onset_frame(proxy.interleaved_samples, 0.2f);
+        const Frame b = test::first_onset_frame(rt, 0.2f);
+        REQUIRE(a >= 0);
+        REQUIRE(b >= 0);
+        CHECK(std::llabs(a - b) <= 2);
+    }
 }

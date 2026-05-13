@@ -44,6 +44,16 @@ target_include_directories(lt_engine_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
 
+if(LT_ENGINE_ENABLE_ASAN)
+    if(MSVC)
+        target_compile_options(lt_engine_tests PRIVATE /fsanitize=address)
+        target_link_options(lt_engine_tests PRIVATE /fsanitize=address)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(lt_engine_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+        target_link_options(lt_engine_tests PRIVATE -fsanitize=address)
+    endif()
+endif()
+
 if(LT_ENGINE_USE_RUBBERBAND AND NOT LT_ENGINE_ALLOW_PITCH_STUB)
     target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_TEST_EXPECT_REAL_RUBBERBAND=1)
 else()
@@ -55,6 +65,23 @@ add_custom_command(TARGET lt_engine_tests POST_BUILD
         $<TARGET_FILE:lt_audio_engine_v2>
         $<TARGET_FILE_DIR:lt_engine_tests>
 )
+
+add_custom_command(TARGET lt_engine_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_RUNTIME_DLLS:lt_engine_tests>
+        $<TARGET_FILE_DIR:lt_engine_tests>
+    COMMAND_EXPAND_LISTS
+)
+
+if(LT_RUBBERBAND_RUNTIME_DIR)
+    file(GLOB _lt_rubberband_runtime_dlls "${LT_RUBBERBAND_RUNTIME_DIR}/*.dll")
+    add_custom_command(TARGET lt_engine_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${_lt_rubberband_runtime_dlls}
+            $<TARGET_FILE_DIR:lt_engine_tests>
+        COMMAND_EXPAND_LISTS
+    )
+endif()
 
 include(doctest)
 doctest_discover_tests(lt_engine_tests)

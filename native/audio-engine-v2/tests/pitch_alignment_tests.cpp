@@ -3,8 +3,10 @@
 #include <doctest/doctest.h>
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/render/pitch_resolution.h>
+#include <lt_engine/pitch/seek_safe_pitch_stream.h>
 #include <lt_engine/sources/source_manager.h>
 
+#include <memory>
 #include <vector>
 
 using namespace lt;
@@ -57,9 +59,52 @@ TEST_CASE("pitched and unpitched click onsets remain aligned") {
     auto pitched = render_track(click, 2);
     Frame a = test::first_onset_frame(unpitched, 0.2f);
     Frame b = test::first_onset_frame(pitched, 0.2f);
+    INFO("unpitched=", a, " pitched=", b);
     REQUIRE(a >= 0);
     REQUIRE(b >= 0);
     CHECK(std::llabs(a - b) <= 2);
+}
+
+TEST_CASE("pitched and unpitched duplicate tracks are sample aligned") {
+    for (Semitones semitones : {2, -2, 12, -12}) {
+        INFO("semitones=", semitones);
+        constexpr Frame frames = 16384;
+        constexpr Frame onset = 4096;
+        auto samples = test::make_stereo_click(frames, onset, 1.0f);
+        DecodedSource source(samples, 2, test::kFixtureSampleRate, frames);
+
+        std::vector<float> unpitched(static_cast<std::size_t>(frames * 2), 0.0f);
+        std::vector<float> left(static_cast<std::size_t>(frames), 0.0f);
+        std::vector<float> right(static_cast<std::size_t>(frames), 0.0f);
+        float* original_out[2] = {left.data(), right.data()};
+        REQUIRE(source.read(0, static_cast<int>(frames), original_out, 2) == frames);
+        for (Frame f = 0; f < frames; ++f) {
+            unpitched[static_cast<std::size_t>(f * 2)] = left[static_cast<std::size_t>(f)];
+            unpitched[static_cast<std::size_t>(f * 2 + 1)] = right[static_cast<std::size_t>(f)];
+        }
+
+        auto pitch_stream = std::make_unique<SeekSafePitchStream>();
+        pitch_stream->configure({test::kFixtureSampleRate, 2, static_cast<double>(semitones)});
+        pitch_stream->reset_for_seek(source, 0);
+        std::fill(left.begin(), left.end(), 0.0f);
+        std::fill(right.begin(), right.end(), 0.0f);
+        float* pitched_out[2] = {left.data(), right.data()};
+        const int rendered = pitch_stream->render_aligned(source, 0, static_cast<int>(frames), pitched_out, 2);
+        REQUIRE(rendered > onset);
+
+        std::vector<float> pitched(static_cast<std::size_t>(frames * 2), 0.0f);
+        for (Frame f = 0; f < frames; ++f) {
+            pitched[static_cast<std::size_t>(f * 2)] = left[static_cast<std::size_t>(f)];
+            pitched[static_cast<std::size_t>(f * 2 + 1)] = right[static_cast<std::size_t>(f)];
+        }
+
+        const Frame a = test::first_onset_frame(unpitched, 0.2f);
+        const Frame b = test::first_onset_frame(pitched, 0.2f);
+        INFO("a=", a, " b=", b);
+        REQUIRE(a >= 0);
+        REQUIRE(b >= 0);
+        CHECK(std::llabs(a - b) <= 2);
+    }
 }
 
 TEST_CASE("prepared pitch click onsets stay aligned at extreme semitones") {

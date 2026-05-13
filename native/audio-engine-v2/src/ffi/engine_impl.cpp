@@ -308,7 +308,13 @@ std::string EngineImpl::get_snapshot() const {
         snap.pitch.last_missing_proxy_block_index = pitch.last_missing_proxy_block_index;
         snap.pitch.active_pitch_mode = pitch.active_pitch_mode;
         snap.pitch.realtime_seek_safe_resets = pitch.realtime_seek_safe_resets;
+        snap.pitch.realtime_pitch_underflow_count = pitch.realtime_pitch_underflow_count;
+        snap.pitch.realtime_pitch_discontinuities = pitch.realtime_pitch_discontinuities;
         snap.pitch.realtime_seek_safe_preroll_frames = pitch.realtime_seek_safe_preroll_frames;
+        snap.pitch.realtime_pitch_start_pad_frames = pitch.realtime_pitch_start_pad_frames;
+        snap.pitch.realtime_pitch_start_delay_frames = pitch.realtime_pitch_start_delay_frames;
+        snap.pitch.realtime_pitch_preroll_frames = pitch.realtime_pitch_preroll_frames;
+        snap.pitch.realtime_pitch_discarded_frames = pitch.realtime_pitch_discarded_frames;
         snap.pitch.realtime_seek_safe_render_count = pitch.realtime_seek_safe_render_count;
         snap.pitch.prepared_proxy_render_count = pitch.prepared_proxy_render_count;
         snap.pitch.emergency_silence_render_count = pitch.emergency_silence_render_count;

@@ -115,7 +115,13 @@ struct PitchSnapshot {
     int         last_missing_proxy_block_index = -1;
     std::string active_pitch_mode;
     uint64_t    realtime_seek_safe_resets = 0;
+    uint64_t    realtime_pitch_underflow_count = 0;
+    uint64_t    realtime_pitch_discontinuities = 0;
     uint64_t    realtime_seek_safe_preroll_frames = 0;
+    int         realtime_pitch_start_pad_frames = 0;
+    int         realtime_pitch_start_delay_frames = 0;
+    int         realtime_pitch_preroll_frames = 0;
+    int         realtime_pitch_discarded_frames = 0;
     uint64_t    realtime_seek_safe_render_count = 0;
     uint64_t    prepared_proxy_render_count = 0;
     uint64_t    emergency_silence_render_count = 0;

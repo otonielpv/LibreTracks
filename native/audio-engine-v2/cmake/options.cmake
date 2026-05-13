@@ -18,6 +18,10 @@ option(LT_ENGINE_ALLOW_PITCH_STUB
     "Allow the pitch backend to compile as an explicit no-op developer stub"
     OFF)
 
+option(LT_ENGINE_ENABLE_ASAN
+    "Enable AddressSanitizer for supported debug/development builds"
+    OFF)
+
 # Decoder backend — exactly one must be ON.
 option(LT_ENGINE_USE_FFMPEG
     "Use FFmpeg/libavformat/libavcodec for multi-format decoding (preferred)"

@@ -13,6 +13,40 @@ if (!allowedModes.has(mode)) {
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
+const defaultTargetDir = path.join(repoRoot, "target-desktop-native");
+
+const isTruthyEnvValue = (value) => /^(1|true|yes|on)$/i.test(value ?? "");
+
+const detectToolchainFile = (rawEnv) => {
+  if (rawEnv.CMAKE_TOOLCHAIN_FILE) {
+    return rawEnv.CMAKE_TOOLCHAIN_FILE;
+  }
+
+  const candidates = [
+    path.resolve(repoRoot, "..", "vcpkg", "scripts", "buildsystems", "vcpkg.cmake"),
+    path.resolve(repoRoot, "vcpkg", "scripts", "buildsystems", "vcpkg.cmake"),
+    "D:\\Repos\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake",
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? "";
+};
+
+const buildDesktopNativeEnv = (rawEnv) => {
+  const env = {
+    ...rawEnv,
+    LIBRETRACKS_AUDIO_ENGINE: "cpp-v2",
+    CARGO_TARGET_DIR: defaultTargetDir,
+    LIBRETRACKS_ENGINE_V2_RUBBERBAND: rawEnv.LIBRETRACKS_ENGINE_V2_RUBBERBAND ?? "1",
+    VCPKG_DEFAULT_TRIPLET: rawEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows",
+  };
+
+  const toolchainFile = detectToolchainFile(rawEnv);
+  if (toolchainFile) {
+    env.CMAKE_TOOLCHAIN_FILE = toolchainFile;
+  }
+
+  return env;
+};
 
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
@@ -50,12 +84,11 @@ if (process.platform === "win32") {
 
 const env = {
   ...process.env,
-  LIBRETRACKS_AUDIO_ENGINE: "cpp-v2",
-  CARGO_TARGET_DIR: path.join(repoRoot, "target-desktop-native"),
 };
+const nativeEnv = buildDesktopNativeEnv(env);
 
-const ensureEngineV2 = () => {
-  const useRubberBand = /^(1|true|yes|on)$/i.test(process.env.LIBRETRACKS_ENGINE_V2_RUBBERBAND ?? "") ? "ON" : "OFF";
+const ensureEngineV2 = (normalizedEnv) => {
+  const useRubberBand = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_RUBBERBAND) ? "ON" : "OFF";
   const buildName = useRubberBand === "ON" ? "build-rb-on" : "build-rb-off";
   const buildDir = path.join(repoRoot, "native", "audio-engine-v2", buildName);
   const buildArg = `native/audio-engine-v2/${buildName}`;
@@ -65,16 +98,17 @@ const ensureEngineV2 = () => {
   const useFFmpeg = "OFF";
 
   console.log(`Audio Engine v2 RubberBand: ${useRubberBand}`);
+  console.log(`VCPKG_DEFAULT_TRIPLET: ${normalizedEnv.VCPKG_DEFAULT_TRIPLET}`);
+  if (normalizedEnv.CMAKE_TOOLCHAIN_FILE) {
+    console.log(`CMAKE_TOOLCHAIN_FILE: ${normalizedEnv.CMAKE_TOOLCHAIN_FILE}`);
+  }
   console.log(`Audio Engine v2 CMake build dir: ${buildDir}`);
   console.log(`Audio Engine v2 lib dir: ${libDir}`);
   console.log(`LT_ENGINE_USE_LIBSNDFILE: ${useLibSndFile}`);
   console.log(`LT_ENGINE_USE_R8BRAIN: ${useR8Brain}`);
   console.log(`LT_ENGINE_USE_FFMPEG: ${useFFmpeg}`);
-  if (process.env.CMAKE_TOOLCHAIN_FILE) {
-    console.log(`CMAKE_TOOLCHAIN_FILE: ${process.env.CMAKE_TOOLCHAIN_FILE}`);
-  }
 
-  if (/^(1|true|yes|on)$/i.test(process.env.LIBRETRACKS_ENGINE_V2_CLEAN ?? "") && existsSync(buildDir)) {
+  if (isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_CLEAN) && existsSync(buildDir)) {
     rmSync(buildDir, { recursive: true, force: true });
   }
 
@@ -89,11 +123,11 @@ const ensureEngineV2 = () => {
     `-DLT_ENGINE_USE_LIBSNDFILE=${useLibSndFile}`,
     `-DLT_ENGINE_USE_R8BRAIN=${useR8Brain}`,
   ];
-  if (process.env.CMAKE_TOOLCHAIN_FILE) {
-    configureArgs.push(`-DCMAKE_TOOLCHAIN_FILE=${process.env.CMAKE_TOOLCHAIN_FILE}`);
+  if (normalizedEnv.CMAKE_TOOLCHAIN_FILE) {
+    configureArgs.push(`-DCMAKE_TOOLCHAIN_FILE=${normalizedEnv.CMAKE_TOOLCHAIN_FILE}`);
   }
-  if (process.env.VCPKG_DEFAULT_TRIPLET) {
-    configureArgs.push(`-DVCPKG_TARGET_TRIPLET=${process.env.VCPKG_DEFAULT_TRIPLET}`);
+  if (normalizedEnv.VCPKG_DEFAULT_TRIPLET) {
+    configureArgs.push(`-DVCPKG_TARGET_TRIPLET=${normalizedEnv.VCPKG_DEFAULT_TRIPLET}`);
   }
   run("cmake", configureArgs);
   run("cmake", [
@@ -106,23 +140,23 @@ const ensureEngineV2 = () => {
   ]);
 
   const pathSeparator = process.platform === "win32" ? ";" : ":";
-  const vcpkgRoot = process.env.VCPKG_ROOT
-    ?? (process.env.CMAKE_TOOLCHAIN_FILE
-      ? path.resolve(path.dirname(process.env.CMAKE_TOOLCHAIN_FILE), "..", "..")
+  const vcpkgRoot = normalizedEnv.VCPKG_ROOT
+    ?? (normalizedEnv.CMAKE_TOOLCHAIN_FILE
+      ? path.resolve(path.dirname(normalizedEnv.CMAKE_TOOLCHAIN_FILE), "..", "..")
       : "");
-  const triplet = process.env.VCPKG_DEFAULT_TRIPLET ?? "x64-windows";
+  const triplet = normalizedEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows";
   const vcpkgBin = vcpkgRoot ? path.join(vcpkgRoot, "installed", triplet, "bin") : "";
   const vcpkgDebugBin = vcpkgRoot ? path.join(vcpkgRoot, "installed", triplet, "debug", "bin") : "";
   const extraPath = [libDir, vcpkgDebugBin, vcpkgBin].filter((segment) => segment && existsSync(segment)).join(pathSeparator);
   return {
-    ...env,
+    ...normalizedEnv,
     LT_ENGINE_V2_LIB_DIR: libDir,
-    PATH: `${extraPath}${pathSeparator}${env.PATH ?? ""}`,
+    PATH: `${extraPath}${pathSeparator}${normalizedEnv.PATH ?? ""}`,
   };
 };
 
 ensureRemoteDist();
-const runEnv = ensureEngineV2();
+const runEnv = ensureEngineV2(nativeEnv);
 
 switch (mode) {
   case "dev":

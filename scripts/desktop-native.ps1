@@ -7,6 +7,25 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $nativeTargetDir = Join-Path $repoRoot "target-desktop-native"
+$toolchainCandidates = @(
+  (Join-Path $repoRoot "..\vcpkg\scripts\buildsystems\vcpkg.cmake"),
+  (Join-Path $repoRoot "vcpkg\scripts\buildsystems\vcpkg.cmake"),
+  "D:\Repos\vcpkg\scripts\buildsystems\vcpkg.cmake"
+)
+if (-not $env:LIBRETRACKS_ENGINE_V2_RUBBERBAND) {
+  $env:LIBRETRACKS_ENGINE_V2_RUBBERBAND = "1"
+}
+if (-not $env:VCPKG_DEFAULT_TRIPLET) {
+  $env:VCPKG_DEFAULT_TRIPLET = "x64-windows"
+}
+if (-not $env:CMAKE_TOOLCHAIN_FILE) {
+  foreach ($candidate in $toolchainCandidates) {
+    if (Test-Path $candidate) {
+      $env:CMAKE_TOOLCHAIN_FILE = (Resolve-Path -LiteralPath $candidate).Path
+      break
+    }
+  }
+}
 $useRubberBand = if ($env:LIBRETRACKS_ENGINE_V2_RUBBERBAND -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
 $engineV2BuildName = if ($useRubberBand -eq "ON") { "build-rb-on" } else { "build-rb-off" }
 $engineV2BuildDir = Join-Path $repoRoot "native\audio-engine-v2\$engineV2BuildName"
@@ -221,14 +240,15 @@ $useR8Brain = "ON"
 $useFFmpeg = "OFF"
 
 Write-Host "Audio Engine v2 RubberBand: $useRubberBand"
+Write-Host "VCPKG_DEFAULT_TRIPLET: $env:VCPKG_DEFAULT_TRIPLET"
+if ($env:CMAKE_TOOLCHAIN_FILE) {
+  Write-Host "CMAKE_TOOLCHAIN_FILE: $env:CMAKE_TOOLCHAIN_FILE"
+}
 Write-Host "Audio Engine v2 CMake build dir: $engineV2BuildDir"
 Write-Host "Audio Engine v2 lib dir: $engineV2LibDir"
 Write-Host "LT_ENGINE_USE_LIBSNDFILE: $useLibSndFile"
 Write-Host "LT_ENGINE_USE_R8BRAIN: $useR8Brain"
 Write-Host "LT_ENGINE_USE_FFMPEG: $useFFmpeg"
-if ($env:CMAKE_TOOLCHAIN_FILE) {
-  Write-Host "CMAKE_TOOLCHAIN_FILE: $env:CMAKE_TOOLCHAIN_FILE"
-}
 
 if ($env:LIBRETRACKS_ENGINE_V2_CLEAN -match '^(1|true|TRUE|yes|YES|on|ON)$') {
   if (Test-Path $engineV2BuildDir) {

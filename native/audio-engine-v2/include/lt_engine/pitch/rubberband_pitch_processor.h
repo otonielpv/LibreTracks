@@ -14,6 +14,7 @@
 
 #include <lt_engine/pitch/pitch_processor.h>
 #include <memory>
+#include <vector>
 
 #if LT_ENGINE_USE_RUBBERBAND && __has_include(<rubberband/RubberBandStretcher.h>)
 #define LT_ENGINE_HAS_RUBBERBAND_HEADER 1
@@ -52,12 +53,9 @@ private:
     int    sample_rate_;
     double semitones_{0.0};
 
-    // Scratch output buffers (allocated once, never resized on audio thread).
-    static constexpr int kMaxBlockFrames = 4096;
     static constexpr int kMaxChannels    = 32;
-    float  out_scratch_[kMaxChannels][kMaxBlockFrames]{};
-    float* out_ptrs_[kMaxChannels]{};
-    float  last_output_[kMaxChannels]{};
+    std::vector<std::vector<float>> out_scratch_;
+    std::vector<float*> out_ptrs_;
 #endif
 };
 

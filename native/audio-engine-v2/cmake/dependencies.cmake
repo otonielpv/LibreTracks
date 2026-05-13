@@ -100,18 +100,53 @@ if(LT_ENGINE_USE_RUBBERBAND)
             NAMES rubberband
             PATH_SUFFIXES debug/lib
         )
+        find_file(RUBBERBAND_DLL_RELEASE
+            NAMES rubberband-3.dll rubberband.dll
+            PATH_SUFFIXES bin
+        )
+        find_file(RUBBERBAND_DLL_DEBUG
+            NAMES rubberband-3.dll rubberband.dll
+            PATH_SUFFIXES debug/bin
+        )
         if(RUBBERBAND_INCLUDE_DIR AND RUBBERBAND_LIBRARY_RELEASE)
-            add_library(RubberBand::rubberband UNKNOWN IMPORTED)
+            add_library(RubberBand::rubberband SHARED IMPORTED)
             set(_rubberband_debug_lib "${RUBBERBAND_LIBRARY_RELEASE}")
             if(RUBBERBAND_LIBRARY_DEBUG)
                 set(_rubberband_debug_lib "${RUBBERBAND_LIBRARY_DEBUG}")
             endif()
+            set(_rubberband_release_location "${RUBBERBAND_LIBRARY_RELEASE}")
+            if(RUBBERBAND_DLL_RELEASE)
+                set(_rubberband_release_location "${RUBBERBAND_DLL_RELEASE}")
+            elseif(RUBBERBAND_LIBRARY_RELEASE MATCHES "/debug/lib/" OR RUBBERBAND_LIBRARY_RELEASE MATCHES "\\\\debug\\\\lib\\\\")
+                get_filename_component(_rubberband_triplet_dir "${RUBBERBAND_LIBRARY_RELEASE}/../../.." ABSOLUTE)
+                find_file(_lt_inferred_rubberband_dll
+                    NAMES rubberband-3.dll rubberband.dll
+                    PATHS "${_rubberband_triplet_dir}/debug/bin"
+                    NO_DEFAULT_PATH
+                )
+                if(_lt_inferred_rubberband_dll)
+                    set(_rubberband_release_location "${_lt_inferred_rubberband_dll}")
+                endif()
+            endif()
+            set(_rubberband_debug_location "${_rubberband_release_location}")
+            if(RUBBERBAND_DLL_DEBUG)
+                set(_rubberband_debug_location "${RUBBERBAND_DLL_DEBUG}")
+            elseif(_lt_inferred_rubberband_dll)
+                set(_rubberband_debug_location "${_lt_inferred_rubberband_dll}")
+            endif()
+            if(_rubberband_debug_location)
+                get_filename_component(LT_RUBBERBAND_RUNTIME_DIR "${_rubberband_debug_location}" DIRECTORY)
+                set(LT_RUBBERBAND_RUNTIME_DIR "${LT_RUBBERBAND_RUNTIME_DIR}" CACHE INTERNAL
+                    "Directory containing RubberBand runtime DLLs")
+            endif()
             set_target_properties(RubberBand::rubberband PROPERTIES
                 INTERFACE_INCLUDE_DIRECTORIES "${RUBBERBAND_INCLUDE_DIR}"
-                IMPORTED_LOCATION_RELEASE "${RUBBERBAND_LIBRARY_RELEASE}"
+                IMPORTED_LOCATION_RELEASE "${_rubberband_release_location}"
                 IMPORTED_IMPLIB_RELEASE "${RUBBERBAND_LIBRARY_RELEASE}"
-                IMPORTED_LOCATION_DEBUG "${_rubberband_debug_lib}"
+                IMPORTED_LOCATION_DEBUG "${_rubberband_debug_location}"
                 IMPORTED_IMPLIB_DEBUG "${_rubberband_debug_lib}"
+                MAP_IMPORTED_CONFIG_MINSIZEREL Release
+                MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
             )
             target_link_libraries(lt_deps_rubberband INTERFACE RubberBand::rubberband)
             target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_RUBBERBAND=1)

@@ -24,7 +24,7 @@ TEST_CASE("source ready callback fires after delayed decoded source is stored") 
     CHECK(ready_id == "source");
 }
 
-TEST_CASE("missing prepared pitch proxy renders no stale stem and records diagnostic") {
+TEST_CASE("missing prepared pitch proxy falls back to realtime seek-safe") {
     SourceManager sources;
     sources.register_source("source", "");
     auto samples = test::make_stereo_click(4096, 1024, 1.0f);
@@ -42,9 +42,12 @@ TEST_CASE("missing prepared pitch proxy renders no stale stem and records diagno
     TrackRenderer renderer;
     renderer.render(track, 0, 4096, out, 2, sources, &cache, test::kFixtureSampleRate, 2);
 
-    CHECK(cache.diagnostics().proxy_blocks_missing > 0);
-    CHECK(left[1024] == doctest::Approx(0.0f));
-    CHECK(right[1024] == doctest::Approx(0.0f));
+    CHECK(cache.diagnostics().active_pitch_render_path == "realtime_seek_safe");
+    CHECK(cache.diagnostics().emergency_silence_render_count == 0);
+    bool has_audio = false;
+    for (int i = 0; i < 4096; ++i)
+        has_audio = has_audio || left[i] != 0.0f || right[i] != 0.0f;
+    CHECK(has_audio);
 }
 
 TEST_CASE("prepared pitch proxy produces non-zero pitched audio") {

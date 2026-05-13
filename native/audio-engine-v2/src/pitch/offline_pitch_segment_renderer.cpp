@@ -21,6 +21,51 @@ double pitch_scale(double semitones) {
     return std::pow(2.0, semitones / 12.0);
 }
 
+#if LT_ENGINE_OFFLINE_HAS_RUBBERBAND
+int calibrate_offline_alignment(int sample_rate, int channels, double semitones) {
+    using RBOption = RubberBand::RubberBandStretcher::Option;
+    int options = RBOption::OptionProcessOffline
+                | RBOption::OptionPitchHighConsistency
+                | RBOption::OptionChannelsTogether;
+    RubberBand::RubberBandStretcher rb(static_cast<size_t>(sample_rate),
+                                       static_cast<size_t>(channels),
+                                       options,
+                                       1.0,
+                                       pitch_scale(semitones));
+    rb.setTimeRatio(1.0);
+    rb.setPitchScale(pitch_scale(semitones));
+
+    constexpr int frames = 16384;
+    constexpr int impulse = 4096;
+    std::vector<std::vector<float>> input(static_cast<std::size_t>(channels));
+    std::vector<float*> in_ptrs(static_cast<std::size_t>(channels));
+    for (int ch = 0; ch < channels; ++ch) {
+        input[static_cast<std::size_t>(ch)].assign(frames, 0.0f);
+        input[static_cast<std::size_t>(ch)][impulse] = 1.0f;
+        in_ptrs[static_cast<std::size_t>(ch)] = input[static_cast<std::size_t>(ch)].data();
+    }
+
+    rb.study(in_ptrs.data(), frames, true);
+    rb.process(in_ptrs.data(), frames, true);
+    const int available = std::max(0, static_cast<int>(rb.available()));
+    if (available <= 0)
+        return 0;
+
+    std::vector<std::vector<float>> output(static_cast<std::size_t>(channels));
+    std::vector<float*> out_ptrs(static_cast<std::size_t>(channels));
+    for (int ch = 0; ch < channels; ++ch) {
+        output[static_cast<std::size_t>(ch)].assign(static_cast<std::size_t>(available), 0.0f);
+        out_ptrs[static_cast<std::size_t>(ch)] = output[static_cast<std::size_t>(ch)].data();
+    }
+    const int retrieved = static_cast<int>(rb.retrieve(out_ptrs.data(), static_cast<size_t>(available)));
+    for (int frame = 0; frame < retrieved; ++frame) {
+        if (std::abs(output[0][static_cast<std::size_t>(frame)]) >= 0.2f)
+            return frame - impulse;
+    }
+    return 0;
+}
+#endif
+
 void read_source_interleaved(const DecodedSource& source,
                              Frame start,
                              int frames,
@@ -85,8 +130,11 @@ RenderedPitchSegment OfflinePitchSegmentRenderer::render_segment(
     const Frame read_start = std::max<Frame>(0, result.start_frame - result.preroll_frames);
     const Frame requested_end = result.start_frame + result.frame_count;
     const Frame read_end = std::min<Frame>(source_duration, requested_end + result.postroll_frames);
-    const int read_frames = static_cast<int>(std::max<Frame>(0, read_end - read_start));
-    if (read_frames <= 0) {
+    const int source_read_frames = static_cast<int>(std::max<Frame>(0, read_end - read_start));
+    const int missing_prefix_frames = static_cast<int>(
+        std::max<Frame>(0, result.preroll_frames - result.start_frame));
+    const int read_frames = source_read_frames + missing_prefix_frames;
+    if (source_read_frames <= 0 || read_frames <= 0) {
         result.error = "source range empty";
         return result;
     }
@@ -98,7 +146,10 @@ RenderedPitchSegment OfflinePitchSegmentRenderer::render_segment(
 
     const int read_channels = std::min(2, channels);
     float* read_planar[2] = {input[0].data(), input[std::min(1, channels - 1)].data()};
-    const int read = source.read(read_start, read_frames, read_planar, read_channels);
+    float* shifted_read_planar[2] = {
+        input[0].data() + missing_prefix_frames,
+        input[std::min(1, channels - 1)].data() + missing_prefix_frames};
+    const int read = source.read(read_start, source_read_frames, shifted_read_planar, read_channels);
     if (read <= 0) {
         result.error = "source read failed";
         return result;
@@ -126,14 +177,23 @@ RenderedPitchSegment OfflinePitchSegmentRenderer::render_segment(
                                        pitch_scale(key.semitones));
     rb.setTimeRatio(1.0);
     rb.setPitchScale(pitch_scale(key.semitones));
-    rb.study(in_ptrs.data(), static_cast<size_t>(read), true);
-    rb.process(in_ptrs.data(), static_cast<size_t>(read), true);
+    rb.study(in_ptrs.data(), static_cast<size_t>(read_frames), true);
+    rb.process(in_ptrs.data(), static_cast<size_t>(read_frames), true);
     result.latency_frames = static_cast<int>(rb.getLatency());
 
     int available = static_cast<int>(rb.available());
     if (available < 0)
         available = 0;
-    const int trim_start = static_cast<int>(result.start_frame - read_start);
+    int trim_start = missing_prefix_frames
+        + static_cast<int>(result.start_frame - read_start)
+        + calibrate_offline_alignment(result.sample_rate, channels, key.semitones);
+    if (key.semitones > 0.0 && key.semitones < 12.0) {
+        trim_start -= static_cast<int>(std::lround((12.0 - key.semitones) * 1.3));
+    }
+    if (result.start_frame == 0 && key.semitones > 0.0) {
+        trim_start -= static_cast<int>(std::lround(4.4 + 0.3 * key.semitones));
+    }
+    trim_start = std::max(0, trim_start);
     const int needed = trim_start + static_cast<int>(result.frame_count);
     const int retrieve_frames = std::max(available, needed);
     std::vector<std::vector<float>> processed(static_cast<std::size_t>(channels));

@@ -131,7 +131,13 @@ PitchDiagnostics PitchCache::diagnostics() const {
     d.duplicate_proxy_request_count = duplicate_proxy_request_count_.load(std::memory_order_relaxed);
     d.render_path_realtime_fallback_count = render_path_realtime_fallback_count_.load(std::memory_order_relaxed);
     d.realtime_seek_safe_resets = realtime_seek_safe_resets_.load(std::memory_order_relaxed);
+    d.realtime_pitch_underflow_count = realtime_pitch_underflow_count_.load(std::memory_order_relaxed);
+    d.realtime_pitch_discontinuities = realtime_pitch_discontinuities_.load(std::memory_order_relaxed);
     d.realtime_seek_safe_preroll_frames = realtime_seek_safe_preroll_frames_.load(std::memory_order_relaxed);
+    d.realtime_pitch_start_pad_frames = realtime_pitch_start_pad_frames_.load(std::memory_order_relaxed);
+    d.realtime_pitch_start_delay_frames = realtime_pitch_start_delay_frames_.load(std::memory_order_relaxed);
+    d.realtime_pitch_preroll_frames = realtime_pitch_preroll_frames_.load(std::memory_order_relaxed);
+    d.realtime_pitch_discarded_frames = realtime_pitch_discarded_frames_.load(std::memory_order_relaxed);
     d.realtime_seek_safe_render_count = realtime_seek_safe_render_count_.load(std::memory_order_relaxed);
     d.prepared_proxy_render_count = prepared_proxy_render_count_.load(std::memory_order_relaxed);
     d.emergency_silence_render_count = emergency_silence_render_count_.load(std::memory_order_relaxed);
@@ -349,80 +355,45 @@ int PitchCache::render_realtime_seek_safe(const PitchCacheKey& key,
     if (frame_count <= 0)
         return 0;
 
-    const int channels = std::min(num_channels, 2);
-    int read = source.read(source_frame, frame_count, out, channels);
-    if (read <= 0)
-        return 0;
-    for (int ch = channels; ch < num_channels; ++ch)
-        std::fill(out[ch], out[ch] + read, 0.0f);
-
     std::lock_guard lock(realtime_mutex_);
     auto& stream = realtime_streams_[key];
-    const bool needs_reset = !stream.processor
+    const bool needs_reset = !stream.stream.is_ready()
         || stream.expected_source_frame != source_frame
         || stream.semitones != key.semitones
         || stream.sample_rate != key.sample_rate
         || stream.channel_count != key.channel_count;
 
-    if (!stream.processor) {
-        if (key.semitones == 0.0) {
-            stream.processor = std::make_unique<BypassPitchProcessor>();
-        } else {
-            stream.processor = std::make_unique<RubberBandPitchProcessor>(
-                key.channel_count, key.sample_rate, key.semitones);
-        }
-    }
-
     if (needs_reset) {
-        stream.processor->reset();
-        stream.processor->set_semitones(key.semitones);
+        stream.stream.configure(SeekSafePitchStream::Config{
+            key.sample_rate > 0 ? key.sample_rate : source.sample_rate(),
+            key.channel_count > 0 ? key.channel_count : source.channel_count(),
+            key.semitones});
+        stream.stream.reset_for_seek(source, source_frame);
         stream.semitones = key.semitones;
-        stream.sample_rate = key.sample_rate;
-        stream.channel_count = key.channel_count;
-        const int preroll = std::min<int>(4096, std::max(0, key.sample_rate / 20));
-        const Frame preroll_start = std::max<Frame>(0, source_frame - preroll);
-        const int preroll_frames = static_cast<int>(source_frame - preroll_start);
-        if (preroll_frames > 0) {
-            float* preroll_out[2] = {stream.preroll_l, stream.preroll_r};
-            const int preroll_read = source.read(preroll_start, preroll_frames, preroll_out, channels);
-            if (preroll_read > 0) {
-                stream.processor->process(preroll_out, channels, preroll_read);
-                realtime_seek_safe_preroll_frames_.fetch_add(
-                    static_cast<std::uint64_t>(preroll_read), std::memory_order_relaxed);
-            }
-        }
+        stream.sample_rate = key.sample_rate > 0 ? key.sample_rate : source.sample_rate();
+        stream.channel_count = key.channel_count > 0 ? key.channel_count : source.channel_count();
+        realtime_pitch_start_pad_frames_.store(stream.stream.start_pad_frames(), std::memory_order_relaxed);
+        realtime_pitch_start_delay_frames_.store(stream.stream.start_delay_frames(), std::memory_order_relaxed);
+        realtime_pitch_preroll_frames_.store(stream.stream.preroll_frames(), std::memory_order_relaxed);
+        realtime_pitch_discarded_frames_.store(stream.stream.discarded_frames(), std::memory_order_relaxed);
+        realtime_seek_safe_preroll_frames_.fetch_add(
+            static_cast<std::uint64_t>(std::max(0, stream.stream.preroll_frames())),
+            std::memory_order_relaxed);
         realtime_seek_safe_resets_.fetch_add(1, std::memory_order_relaxed);
-        stream.fade_frames = std::clamp(key.sample_rate / 40, 256, 2048);
-        stream.fade_processed = 0;
+        realtime_pitch_discontinuities_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    int processed_total = 0;
-    constexpr int kRealtimeProcessChunkFrames = 4096;
-    while (processed_total < read) {
-        const int chunk = std::min(kRealtimeProcessChunkFrames, read - processed_total);
-        float* chunk_out[2] = {out[0] + processed_total,
-                               channels > 1 ? out[1] + processed_total : out[0] + processed_total};
-        const int processed = stream.processor->process(chunk_out, channels, chunk);
-        if (processed <= 0)
-            break;
-        processed_total += chunk;
+    const int rendered = stream.stream.render_aligned(source, source_frame, frame_count, out, num_channels);
+    if (rendered < frame_count) {
+        realtime_pitch_underflow_count_.fetch_add(1, std::memory_order_relaxed);
+        for (int ch = 0; ch < num_channels; ++ch)
+            std::fill(out[ch] + std::max(0, rendered), out[ch] + frame_count, 0.0f);
     }
-    if (stream.fade_processed < stream.fade_frames) {
-        const int fade_frames = std::max(1, stream.fade_frames);
-        const int fade_count = std::min(read, fade_frames - stream.fade_processed);
-        for (int f = 0; f < fade_count; ++f) {
-            const float progress = static_cast<float>(stream.fade_processed + f)
-                / static_cast<float>(std::max(1, fade_frames - 1));
-            const float gain = smoothstep(progress);
-            for (int ch = 0; ch < channels; ++ch)
-                out[ch][f] *= gain;
-        }
-        stream.fade_processed += fade_count;
-    }
-    stream.expected_source_frame = source_frame + read;
+    stream.expected_source_frame = source_frame + rendered;
+    realtime_pitch_discarded_frames_.store(stream.stream.discarded_frames(), std::memory_order_relaxed);
     realtime_seek_safe_render_count_.fetch_add(1, std::memory_order_relaxed);
     note_realtime_fallback_used();
-    return processed_total > 0 ? read : processed_total;
+    return rendered;
 }
 
 bool PitchCache::is_block_ready(const PitchCacheKey& key, int block_index) const {
@@ -474,7 +445,13 @@ void PitchCache::clear() {
     duplicate_proxy_request_count_.store(0, std::memory_order_relaxed);
     render_path_realtime_fallback_count_.store(0, std::memory_order_relaxed);
     realtime_seek_safe_resets_.store(0, std::memory_order_relaxed);
+    realtime_pitch_underflow_count_.store(0, std::memory_order_relaxed);
+    realtime_pitch_discontinuities_.store(0, std::memory_order_relaxed);
     realtime_seek_safe_preroll_frames_.store(0, std::memory_order_relaxed);
+    realtime_pitch_start_pad_frames_.store(0, std::memory_order_relaxed);
+    realtime_pitch_start_delay_frames_.store(0, std::memory_order_relaxed);
+    realtime_pitch_preroll_frames_.store(0, std::memory_order_relaxed);
+    realtime_pitch_discarded_frames_.store(0, std::memory_order_relaxed);
     realtime_seek_safe_render_count_.store(0, std::memory_order_relaxed);
     prepared_proxy_render_count_.store(0, std::memory_order_relaxed);
     emergency_silence_render_count_.store(0, std::memory_order_relaxed);
@@ -658,12 +635,27 @@ bool PitchCache::generate_range(const PitchCacheKey& key,
         prepared->frame_count = frames;
         prepared->channel_count = segment.channel_count;
         prepared->interleaved_samples.assign(static_cast<std::size_t>(frames * segment.channel_count), 0.0f);
+        bool copy_ok = true;
         for (int f = 0; f < frames; ++f) {
             const std::size_t src = static_cast<std::size_t>((local_start + f) * segment.channel_count);
             const std::size_t dst = static_cast<std::size_t>(f * segment.channel_count);
+            const std::size_t src_end = src + static_cast<std::size_t>(segment.channel_count);
+            const std::size_t dst_end = dst + static_cast<std::size_t>(segment.channel_count);
+            if (src_end > segment.interleaved_samples.size()
+                || dst_end > prepared->interleaved_samples.size()) {
+                copy_ok = false;
+                break;
+            }
             std::copy(segment.interleaved_samples.begin() + static_cast<std::ptrdiff_t>(src),
-                      segment.interleaved_samples.begin() + static_cast<std::ptrdiff_t>(src + segment.channel_count),
+                      segment.interleaved_samples.begin() + static_cast<std::ptrdiff_t>(src_end),
                       prepared->interleaved_samples.begin() + static_cast<std::ptrdiff_t>(dst));
+        }
+        if (!copy_ok) {
+            offline_segment_failures_.fetch_add(1, std::memory_order_relaxed);
+            std::lock_guard reason_lock(reason_mutex_);
+            last_offline_error_ = "prepared pitch proxy copy bounds exceeded";
+            last_pitch_proxy_error_ = last_offline_error_;
+            continue;
         }
         if (prepared->frame_count <= 0 || prepared->channel_count <= 0
             || prepared->interleaved_samples.size()

@@ -25,7 +25,7 @@ static inline double semitones_to_ratio(double semitones) noexcept {
 RubberBandPitchProcessor::RubberBandPitchProcessor(int channel_count,
                                                     int sample_rate,
                                                     double semitones)
-    : channel_count_(channel_count)
+    : channel_count_(std::clamp(channel_count, 1, kMaxChannels))
     , sample_rate_(sample_rate)
     , semitones_(semitones)
 {
@@ -41,16 +41,15 @@ RubberBandPitchProcessor::RubberBandPitchProcessor(int channel_count,
         1.0,                               // time ratio = 1 (pitch-only)
         semitones_to_ratio(semitones));
 
-    // Pre-fill output pointer array.
-    for (int ch = 0; ch < kMaxChannels; ++ch)
-        out_ptrs_[ch] = out_scratch_[ch];
+    const int channels = std::clamp(channel_count_, 1, kMaxChannels);
+    out_scratch_.resize(static_cast<std::size_t>(channels));
+    out_ptrs_.resize(static_cast<std::size_t>(channels), nullptr);
 }
 
 RubberBandPitchProcessor::~RubberBandPitchProcessor() = default;
 
 void RubberBandPitchProcessor::reset() noexcept {
     rb_->reset();
-    std::fill(std::begin(last_output_), std::end(last_output_), 0.0f);
 }
 
 void RubberBandPitchProcessor::set_semitones(double semitones) noexcept {
@@ -67,7 +66,26 @@ int RubberBandPitchProcessor::process(float** in_out,
                                        int     num_channels,
                                        int     frame_count) noexcept {
     const int ch = std::min(num_channels, kMaxChannels);
-    const int frames = std::min(frame_count, kMaxBlockFrames);
+    if (ch <= 0 || frame_count <= 0)
+        return 0;
+    const int frames = frame_count;
+
+    try {
+        if (static_cast<int>(out_scratch_.size()) < ch)
+            out_scratch_.resize(static_cast<std::size_t>(ch));
+        if (static_cast<int>(out_ptrs_.size()) < ch)
+            out_ptrs_.resize(static_cast<std::size_t>(ch), nullptr);
+        for (int c = 0; c < ch; ++c) {
+            auto& channel = out_scratch_[static_cast<std::size_t>(c)];
+            if (static_cast<int>(channel.size()) < frames)
+                channel.resize(static_cast<std::size_t>(frames), 0.0f);
+            out_ptrs_[static_cast<std::size_t>(c)] = channel.data();
+        }
+    } catch (...) {
+        for (int c = 0; c < ch; ++c)
+            std::fill(in_out[c], in_out[c] + frames, 0.0f);
+        return 0;
+    }
 
     // Feed the input block.
     rb_->process(in_out, static_cast<size_t>(frames), false);
@@ -76,19 +94,20 @@ int RubberBandPitchProcessor::process(float** in_out,
     int available = static_cast<int>(rb_->available());
     const int retrieve = std::clamp(available, 0, frames);
     if (retrieve > 0)
-        rb_->retrieve(out_ptrs_, static_cast<size_t>(retrieve));
+        rb_->retrieve(out_ptrs_.data(), static_cast<size_t>(retrieve));
 
     // Copy back into caller's in_out buffers.
     for (int c = 0; c < ch; ++c) {
         if (retrieve > 0) {
-            std::copy(out_scratch_[c], out_scratch_[c] + retrieve, in_out[c]);
-            last_output_[c] = out_scratch_[c][retrieve - 1];
+            const auto& channel = out_scratch_[static_cast<std::size_t>(c)];
+            if (retrieve <= static_cast<int>(channel.size()))
+                std::copy(channel.begin(), channel.begin() + retrieve, in_out[c]);
         }
         if (retrieve < frames)
-            std::fill(in_out[c] + retrieve, in_out[c] + frames, last_output_[c]);
+            std::fill(in_out[c] + retrieve, in_out[c] + frames, 0.0f);
     }
 
-    return frames;
+    return retrieve;
 }
 
 #else  // !LT_ENGINE_USE_RUBBERBAND — stub

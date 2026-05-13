@@ -6,6 +6,24 @@
 
 namespace lt {
 
+bool TrackRenderer::ensure_scratch_capacity(int frames) noexcept {
+    if (frames < 0)
+        return false;
+    try {
+        if (static_cast<int>(scratch_l_.size()) < frames)
+            scratch_l_.resize(static_cast<std::size_t>(frames), 0.0f);
+        if (static_cast<int>(scratch_r_.size()) < frames)
+            scratch_r_.resize(static_cast<std::size_t>(frames), 0.0f);
+    } catch (...) {
+        scratch_[0] = nullptr;
+        scratch_[1] = nullptr;
+        return false;
+    }
+    scratch_[0] = scratch_l_.data();
+    scratch_[1] = scratch_r_.data();
+    return true;
+}
+
 void TrackRenderer::render(const Track&         track,
                             Frame                timeline_frame,
                             int                  block_frames,
@@ -68,10 +86,11 @@ void TrackRenderer::render_clip(const Clip&          clip,
     frames_to_read = std::min(frames_to_read,
                                static_cast<int>(clip_end - (timeline_frame + block_offset)));
     if (frames_to_read <= 0) return;
+    if (!ensure_scratch_capacity(frames_to_read)) return;
 
     // Read into scratch (always 2-ch).
-    std::fill(scratch_l_, scratch_l_ + frames_to_read, 0.f);
-    std::fill(scratch_r_, scratch_r_ + frames_to_read, 0.f);
+    std::fill(scratch_l_.begin(), scratch_l_.begin() + frames_to_read, 0.f);
+    std::fill(scratch_r_.begin(), scratch_r_.begin() + frames_to_read, 0.f);
 
     if (effective_semitones != 0) {
         PitchCacheKey key{clip.source_id, track_id, clip.id,
@@ -93,7 +112,7 @@ void TrackRenderer::render_clip(const Clip&          clip,
                 const int offset = pitch_cache->offset_in_block(absolute);
                 const int chunk = std::min(frames_to_read - copied,
                                            PitchCache::kProxyBlockFrames - offset);
-                float* chunk_out[2] = {scratch_l_ + copied, scratch_r_ + copied};
+                float* chunk_out[2] = {scratch_l_.data() + copied, scratch_r_.data() + copied};
                 if (!pitch_cache->get_block_if_ready(key, block_index, offset, chunk, chunk_out, 2)) {
                     const int rendered = pitch_cache->render_realtime_seek_safe(
                         PitchCacheKey{clip.source_id, track_id, clip.id,
@@ -116,8 +135,8 @@ void TrackRenderer::render_clip(const Clip&          clip,
                 *src, source_frame, frames_to_read, scratch_, 2);
             if (rendered <= 0) {
                 pitch_cache->note_emergency_silence_used();
-                std::fill(scratch_l_, scratch_l_ + frames_to_read, 0.0f);
-                std::fill(scratch_r_, scratch_r_ + frames_to_read, 0.0f);
+                std::fill(scratch_l_.begin(), scratch_l_.begin() + frames_to_read, 0.0f);
+                std::fill(scratch_r_.begin(), scratch_r_.begin() + frames_to_read, 0.0f);
             }
         }
     } else {
@@ -130,7 +149,7 @@ void TrackRenderer::render_clip(const Clip&          clip,
                                        original_cache_.block_frames() - offset);
             if (!original_cache_.is_block_ready(clip.source_id, block_index))
                 original_cache_.request_block(clip.source_id, *src, block_index);
-            float* chunk_out[2] = {scratch_l_ + copied, scratch_r_ + copied};
+            float* chunk_out[2] = {scratch_l_.data() + copied, scratch_r_.data() + copied};
             if (!original_cache_.get_block_if_ready(clip.source_id, block_index, offset, chunk, chunk_out, 2))
                 return;
             copied += chunk;
@@ -147,8 +166,8 @@ void TrackRenderer::render_clip(const Clip&          clip,
             Frame pos = played + f;
             if (pos < clip.fade_in_frames) {
                 float g = static_cast<float>(pos) / clip.fade_in_frames;
-                scratch_l_[f] *= g;
-                scratch_r_[f] *= g;
+                scratch_l_[static_cast<std::size_t>(f)] *= g;
+                scratch_r_[static_cast<std::size_t>(f)] *= g;
             }
         }
     }
@@ -161,8 +180,8 @@ void TrackRenderer::render_clip(const Clip&          clip,
             Frame from_end = clip.length_frames - pos;
             if (from_end < clip.fade_out_frames && from_end >= 0) {
                 float g = static_cast<float>(from_end) / clip.fade_out_frames;
-                scratch_l_[f] *= g;
-                scratch_r_[f] *= g;
+                scratch_l_[static_cast<std::size_t>(f)] *= g;
+                scratch_r_[static_cast<std::size_t>(f)] *= g;
             }
         }
     }
@@ -172,8 +191,8 @@ void TrackRenderer::render_clip(const Clip&          clip,
     float* dst_r = (num_out_channels >= 2) ? out[1] + block_offset : nullptr;
 
     for (int f = 0; f < read; ++f) {
-        dst_l[f] += scratch_l_[f] * effective_gain;
-        if (dst_r) dst_r[f] += scratch_r_[f] * effective_gain;
+        dst_l[f] += scratch_l_[static_cast<std::size_t>(f)] * effective_gain;
+        if (dst_r) dst_r[f] += scratch_r_[static_cast<std::size_t>(f)] * effective_gain;
     }
 }
 

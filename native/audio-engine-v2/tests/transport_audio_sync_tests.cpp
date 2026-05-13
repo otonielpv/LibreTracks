@@ -68,6 +68,7 @@ TEST_CASE("missing pitch proxy does not prevent transport advancement") {
     clock.play();
     Frame before = clock.position().frame;
     mixer->render(out, 2, 256, test::kFixtureSampleRate);
-    CHECK(cache.diagnostics().proxy_blocks_missing > 0);
+    CHECK(cache.diagnostics().active_pitch_render_path == "realtime_seek_safe");
+    CHECK(cache.diagnostics().emergency_silence_render_count == 0);
     CHECK(clock.position().frame == before + 256);
 }

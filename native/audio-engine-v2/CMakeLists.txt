@@ -46,51 +46,51 @@ add_subdirectory(src/devices)
 add_subdirectory(src/diagnostics)
 add_subdirectory(src/ffi)
 
-target_compile_definitions(lt_audio_engine_v2 PRIVATE
+target_compile_definitions(lt_audio_engine_v2 PUBLIC
     LT_ENGINE_V2_BUILD=1
     _SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING
 )
 
 if(LT_ENGINE_USE_JUCE)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_JUCE=1)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_JUCE=1)
 else()
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_JUCE=0)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_JUCE=0)
 endif()
 
 if(LT_ENGINE_USE_RUBBERBAND)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_RUBBERBAND=1)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_RUBBERBAND=1)
 else()
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_RUBBERBAND=0)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_RUBBERBAND=0)
 endif()
 
 if(LT_ENGINE_ALLOW_PITCH_STUB)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_ALLOW_PITCH_STUB=1)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_ALLOW_PITCH_STUB=1)
 else()
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_ALLOW_PITCH_STUB=0)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_ALLOW_PITCH_STUB=0)
 endif()
 
 if(LT_ENGINE_USE_FFMPEG)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_FFMPEG=1)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_FFMPEG=1)
 else()
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_FFMPEG=0)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_FFMPEG=0)
 endif()
 
 if(LT_ENGINE_USE_LIBSNDFILE)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_LIBSNDFILE=1)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_LIBSNDFILE=1)
 else()
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_LIBSNDFILE=0)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_LIBSNDFILE=0)
 endif()
 
 if(LT_ENGINE_USE_R8BRAIN)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_R8BRAIN=1)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_R8BRAIN=1)
 else()
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_R8BRAIN=0)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_R8BRAIN=0)
 endif()
 
 if(LT_ENGINE_USE_LIBSAMPLERATE)
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_LIBSAMPLERATE=1)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_LIBSAMPLERATE=1)
 else()
-    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_LIBSAMPLERATE=0)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_LIBSAMPLERATE=0)
 endif()
 
 # On Windows, export symbols from the shared library.
@@ -109,6 +109,16 @@ target_link_libraries(lt_audio_engine_v2
         lt_deps_resampler
         lt_deps_json
 )
+
+if(LT_ENGINE_ENABLE_ASAN)
+    if(MSVC)
+        target_compile_options(lt_audio_engine_v2 PRIVATE /fsanitize=address)
+        target_link_options(lt_audio_engine_v2 PRIVATE /fsanitize=address)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(lt_audio_engine_v2 PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+        target_link_options(lt_audio_engine_v2 PRIVATE -fsanitize=address)
+    endif()
+endif()
 
 # ---------------------------------------------------------------------------
 # Optional: standalone test executable used during development
