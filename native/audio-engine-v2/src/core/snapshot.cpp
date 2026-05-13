@@ -104,6 +104,8 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"pitch_processors_prepared", snap.pitch.pitch_processors_prepared},
         {"pitch_processors_missing", snap.pitch.pitch_processors_missing},
         {"pitch_missing_processor_count", snap.pitch.pitch_missing_processor_count},
+        {"pitch_prepare_on_source_ready_count", snap.pitch.pitch_prepare_on_source_ready_count},
+        {"source_ready_pitch_prepare_count", snap.pitch.source_ready_pitch_prepare_count},
         {"pitch_latency_frames", snap.pitch.pitch_latency_frames},
         {"active_pitch_keys", snap.pitch.active_pitch_keys},
         {"active_song_transpose", snap.pitch.active_song_transpose},

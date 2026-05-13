@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include <lt_engine/render/pitch_resolution.h>
+#include <lt_engine/session/session_adapter.h>
 
 using namespace lt;
 
@@ -46,6 +47,8 @@ TEST_CASE("NeverTranspose forces zero regardless of song or clip transpose") {
 TEST_CASE("pitch resolution clamps to product range") {
     CHECK(resolve_effective_semitones(make_track(), make_clip(8), make_song(12), 0) == 12);
     CHECK(resolve_effective_semitones(make_track(), make_clip(-8), make_song(-12), 0) == -12);
+    CHECK(resolve_effective_semitones(make_track(), make_clip(20), make_song(), 0) == 12);
+    CHECK(resolve_effective_semitones(make_track(), make_clip(-20), make_song(), 0) == -12);
 }
 
 TEST_CASE("region transpose overrides song transpose at timeline position") {
@@ -53,4 +56,64 @@ TEST_CASE("region transpose overrides song transpose at timeline position") {
     song.regions.push_back(Region{"region", "Bridge", 100, 200, -3});
     CHECK(resolve_effective_semitones(make_track(), make_clip(1), song, 50) == 3);
     CHECK(resolve_effective_semitones(make_track(), make_clip(1), song, 150) == -2);
+}
+
+TEST_CASE("session adapter treats missing clip semitones as local zero") {
+    auto result = session_from_project_json(R"({
+      "id": "project",
+      "songs": [{
+        "id": "song",
+        "duration_seconds": 1.0,
+        "transposeSemitones": 2,
+        "tracks": [{
+          "id": "track",
+          "clips": [{
+            "id": "clip",
+            "sourceId": "source",
+            "filePath": "source.wav",
+            "duration_seconds": 1.0
+          }]
+        }]
+      }]
+    })", 48000);
+
+    REQUIRE(result.is_ok());
+    auto session = result.take();
+    REQUIRE(session.songs.size() == 1);
+    REQUIRE(session.songs[0].tracks.size() == 1);
+    REQUIRE(session.songs[0].tracks[0].clips.size() == 1);
+    const auto& song = session.songs[0];
+    const auto& track = song.tracks[0];
+    const auto& clip = track.clips[0];
+    CHECK(clip.semitones == 0);
+    CHECK(resolve_effective_semitones(track, clip, song, 0) == 2);
+}
+
+TEST_CASE("session adapter keeps explicit clip semitones as local offset") {
+    auto result = session_from_project_json(R"({
+      "id": "project",
+      "songs": [{
+        "id": "song",
+        "duration_seconds": 1.0,
+        "transposeSemitones": 2,
+        "tracks": [{
+          "id": "track",
+          "clips": [{
+            "id": "clip",
+            "sourceId": "source",
+            "filePath": "source.wav",
+            "duration_seconds": 1.0,
+            "semitones": 1
+          }]
+        }]
+      }]
+    })", 48000);
+
+    REQUIRE(result.is_ok());
+    auto session = result.take();
+    const auto& song = session.songs[0];
+    const auto& track = song.tracks[0];
+    const auto& clip = track.clips[0];
+    CHECK(clip.semitones == 1);
+    CHECK(resolve_effective_semitones(track, clip, song, 0) == 3);
 }

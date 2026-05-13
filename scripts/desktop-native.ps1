@@ -7,7 +7,9 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $nativeTargetDir = Join-Path $repoRoot "target-desktop-native"
-$engineV2BuildDir = Join-Path $repoRoot "native\audio-engine-v2\build"
+$useRubberBand = if ($env:LIBRETRACKS_ENGINE_V2_RUBBERBAND -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
+$engineV2BuildName = if ($useRubberBand -eq "ON") { "build-rb-on" } else { "build-rb-off" }
+$engineV2BuildDir = Join-Path $repoRoot "native\audio-engine-v2\$engineV2BuildName"
 $engineV2LibDir = Join-Path $engineV2BuildDir "Debug"
 $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
 $toolchainRoot = Join-Path $env:USERPROFILE ".rustup\toolchains"
@@ -214,22 +216,60 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
   throw "CMake is required to build Audio Engine v2. Install CMake or build native/audio-engine-v2 manually."
 }
 
-$useRubberBand = if ($env:LIBRETRACKS_ENGINE_V2_RUBBERBAND -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
+$useLibSndFile = "ON"
+$useR8Brain = "ON"
+$useFFmpeg = "OFF"
 
-cmake -S native/audio-engine-v2 -B native/audio-engine-v2/build `
-  -DLT_ENGINE_BUILD_TESTS=OFF `
-  -DLT_ENGINE_USE_JUCE=ON `
-  -DLT_ENGINE_USE_RUBBERBAND=$useRubberBand `
-  -DLT_ENGINE_USE_LIBSNDFILE=ON `
-  -DLT_ENGINE_USE_R8BRAIN=ON
+Write-Host "Audio Engine v2 RubberBand: $useRubberBand"
+Write-Host "Audio Engine v2 CMake build dir: $engineV2BuildDir"
+Write-Host "Audio Engine v2 lib dir: $engineV2LibDir"
+Write-Host "LT_ENGINE_USE_LIBSNDFILE: $useLibSndFile"
+Write-Host "LT_ENGINE_USE_R8BRAIN: $useR8Brain"
+Write-Host "LT_ENGINE_USE_FFMPEG: $useFFmpeg"
+if ($env:CMAKE_TOOLCHAIN_FILE) {
+  Write-Host "CMAKE_TOOLCHAIN_FILE: $env:CMAKE_TOOLCHAIN_FILE"
+}
+
+if ($env:LIBRETRACKS_ENGINE_V2_CLEAN -match '^(1|true|TRUE|yes|YES|on|ON)$') {
+  if (Test-Path $engineV2BuildDir) {
+    Remove-Item -LiteralPath $engineV2BuildDir -Recurse -Force
+  }
+}
+
+$cmakeConfigureArgs = @(
+  "-S", "native/audio-engine-v2",
+  "-B", $engineV2BuildDir,
+  "-DLT_ENGINE_BUILD_TESTS=OFF",
+  "-DLT_ENGINE_USE_JUCE=ON",
+  "-DLT_ENGINE_USE_RUBBERBAND=$useRubberBand",
+  "-DLT_ENGINE_USE_LIBSNDFILE=$useLibSndFile",
+  "-DLT_ENGINE_USE_R8BRAIN=$useR8Brain"
+)
+if ($env:CMAKE_TOOLCHAIN_FILE) {
+  $cmakeConfigureArgs += "-DCMAKE_TOOLCHAIN_FILE=$env:CMAKE_TOOLCHAIN_FILE"
+}
+if ($env:VCPKG_DEFAULT_TRIPLET) {
+  $cmakeConfigureArgs += "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_DEFAULT_TRIPLET"
+}
+cmake @cmakeConfigureArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-cmake --build native/audio-engine-v2/build --config Debug --target lt_audio_engine_v2
+cmake --build $engineV2BuildDir --config Debug --target lt_audio_engine_v2
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $env:LIBRETRACKS_AUDIO_ENGINE = "cpp-v2"
 $env:LT_ENGINE_V2_LIB_DIR = $engineV2LibDir
 $env:PATH = "$engineV2LibDir;" + $env:PATH
+
+$vcpkgRoot = $env:VCPKG_ROOT
+if (-not $vcpkgRoot -and $env:CMAKE_TOOLCHAIN_FILE) {
+  $vcpkgRoot = Resolve-Path (Join-Path (Split-Path -Parent $env:CMAKE_TOOLCHAIN_FILE) "..\..") -ErrorAction SilentlyContinue
+}
+$vcpkgTriplet = if ($env:VCPKG_DEFAULT_TRIPLET) { $env:VCPKG_DEFAULT_TRIPLET } else { "x64-windows" }
+if ($vcpkgRoot) {
+  Add-PathSegment (Join-Path $vcpkgRoot "installed\$vcpkgTriplet\bin")
+  Add-PathSegment (Join-Path $vcpkgRoot "installed\$vcpkgTriplet\debug\bin")
+}
 
 # Tauri's desktop build script expects the bundled remote assets to exist.
 $remoteDistDir = Join-Path $repoRoot "apps\remote\dist"

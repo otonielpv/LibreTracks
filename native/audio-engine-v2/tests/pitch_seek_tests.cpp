@@ -6,7 +6,7 @@
 
 using namespace lt;
 
-TEST_CASE("pitched render after seek resumes non-silent and aligned" * doctest::may_fail()) {
+TEST_CASE("pitched render after seek resumes non-silent and aligned") {
     auto samples = test::make_stereo_click(96000, 50000, 1.0f);
     SourceManager sources;
     sources.register_source("source", "");

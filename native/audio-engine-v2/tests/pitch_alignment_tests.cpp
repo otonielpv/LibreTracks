@@ -49,7 +49,7 @@ std::vector<float> render_track(const std::vector<float>& samples,
 
 }
 
-TEST_CASE("pitched and unpitched click onsets remain aligned" * doctest::may_fail()) {
+TEST_CASE("pitched and unpitched click onsets remain aligned") {
     auto click = test::make_stereo_click(4096, 1024, 1.0f);
     auto unpitched = render_track(click, 0);
     auto pitched = render_track(click, 2);

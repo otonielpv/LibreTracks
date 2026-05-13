@@ -183,7 +183,7 @@ Result<Session> session_from_project_json(const std::string& project_json,
                                 value_any<double>(jclip, "fade_out_seconds", "fadeOutSeconds", 0.0),
                                 engine_sample_rate);
                         }
-                        clip.semitones = jclip.value("semitones", song.transpose_semitones);
+                        clip.semitones = value_any<Semitones>(jclip, "semitones", "transposeSemitones", 0);
 
                         if (!clip.id.empty() && !clip.source_id.empty()) {
                             ensure_source(session, clip.source_id, file_path.empty() ? clip.source_id : file_path);

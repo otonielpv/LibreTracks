@@ -73,23 +73,16 @@ int RubberBandPitchProcessor::process(float** in_out,
     // Retrieve available output.
     int available = static_cast<int>(rb_->available());
     if (available <= 0) {
-        // No output yet (latency fill period) — write silence.
-        for (int c = 0; c < ch; ++c)
-            std::fill(in_out[c], in_out[c] + frame_count, 0.f);
         return frame_count;
     }
 
     const int retrieve = std::min(available, frame_count);
-    const int to_clear = frame_count - retrieve;
-
     // RubberBand writes into out_scratch_.
     rb_->retrieve(out_ptrs_, static_cast<size_t>(retrieve));
 
     // Copy back into caller's in_out buffers.
     for (int c = 0; c < ch; ++c) {
         std::copy(out_scratch_[c], out_scratch_[c] + retrieve, in_out[c]);
-        if (to_clear > 0)
-            std::fill(in_out[c] + retrieve, in_out[c] + frame_count, 0.f);
     }
 
     return frame_count;

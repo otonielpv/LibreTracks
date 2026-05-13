@@ -41,9 +41,15 @@ void check_frequency(Semitones semitones, double expected) {
 
 }
 
-TEST_CASE("RubberBand shifts 440 Hz to expected semitone frequencies" * doctest::may_fail()) {
+#if LT_ENGINE_TEST_EXPECT_REAL_RUBBERBAND
+TEST_CASE("RubberBand shifts 440 Hz to expected semitone frequencies") {
     check_frequency(12, 880.0);
     check_frequency(-12, 220.0);
     check_frequency(2, 493.88);
     check_frequency(-2, 392.00);
 }
+#else
+TEST_CASE("RubberBand shifts 440 Hz to expected semitone frequencies" * doctest::skip()) {
+    CHECK(true);
+}
+#endif

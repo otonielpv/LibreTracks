@@ -1,8 +1,18 @@
 #include <lt_engine/pitch/pitch_cache.h>
 #include <lt_engine/pitch/bypass_pitch_processor.h>
 #include <lt_engine/pitch/rubberband_pitch_processor.h>
+#include <algorithm>
 
 namespace lt {
+
+namespace {
+
+std::string key_to_string(const PitchCacheKey& key) {
+    return key.source_id + ":" + key.track_id + ":" + key.clip_id + ":"
+        + std::to_string(key.semitones);
+}
+
+} // namespace
 
 PitchProcessor* PitchCache::prepare_processor(const PitchCacheKey& key) {
     std::lock_guard lock(write_mutex_);
@@ -50,6 +60,11 @@ PitchDiagnostics PitchCache::diagnostics() const {
     d.processors_prepared = cache->size();
     d.processors_missing = missing_processor_count_.load(std::memory_order_relaxed) > 0 ? 1 : 0;
     d.missing_processor_count = missing_processor_count_.load(std::memory_order_relaxed);
+    d.active_keys.reserve(cache->size());
+    for (const auto& [key, proc] : *cache) {
+        d.active_keys.push_back(key_to_string(key));
+        d.max_latency_frames = std::max(d.max_latency_frames, proc->latency_frames());
+    }
     return d;
 }
 

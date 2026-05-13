@@ -8,6 +8,11 @@ SourceManager::SourceManager()
 {}
 SourceManager::~SourceManager() = default;
 
+void SourceManager::set_source_ready_callback(SourceReadyCallback callback) {
+    std::lock_guard lock(write_mutex_);
+    source_ready_callback_ = std::move(callback);
+}
+
 void SourceManager::publish_locked(EntryMap entries) {
     std::atomic_store(&entries_, std::make_shared<const EntryMap>(std::move(entries)));
 }
@@ -63,18 +68,24 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
                                                  int channel_count,
                                                  int sample_rate,
                                                  Frame duration_frames) {
-    std::lock_guard lock(write_mutex_);
-    EntryMap next = *std::atomic_load(&entries_);
-    auto it = next.find(source_id);
-    if (it == next.end())
-        return Result<void>::err("Source not registered: " + source_id);
+    SourceReadyCallback ready_callback;
+    {
+        std::lock_guard lock(write_mutex_);
+        EntryMap next = *std::atomic_load(&entries_);
+        auto it = next.find(source_id);
+        if (it == next.end())
+            return Result<void>::err("Source not registered: " + source_id);
 
-    auto& entry = it->second;
-    entry.source = std::make_shared<DecodedSource>(
-        std::move(samples), channel_count, sample_rate, duration_frames);
-    entry.status = "ready";
-    entry.error_message.clear();
-    publish_locked(std::move(next));
+        auto& entry = it->second;
+        entry.source = std::make_shared<DecodedSource>(
+            std::move(samples), channel_count, sample_rate, duration_frames);
+        entry.status = "ready";
+        entry.error_message.clear();
+        publish_locked(std::move(next));
+        ready_callback = source_ready_callback_;
+    }
+    if (ready_callback)
+        ready_callback(source_id);
     return Result<void>::ok();
 }
 

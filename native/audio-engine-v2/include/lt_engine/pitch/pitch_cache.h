@@ -50,6 +50,8 @@ struct PitchDiagnostics {
     std::size_t processors_prepared = 0;
     std::size_t processors_missing = 0;
     std::uint64_t missing_processor_count = 0;
+    int max_latency_frames = 0;
+    std::vector<std::string> active_keys;
     std::vector<PitchCacheKey> missing_keys;
 };
 

@@ -86,8 +86,6 @@ void TrackRenderer::render_clip(const Clip&          clip,
         } else {
             if (pitch_cache)
                 pitch_cache->note_missing_processor(key);
-            std::fill(scratch_l_, scratch_l_ + read, 0.f);
-            std::fill(scratch_r_, scratch_r_ + read, 0.f);
         }
     }
 

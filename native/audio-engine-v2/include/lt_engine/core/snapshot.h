@@ -82,6 +82,8 @@ struct PitchSnapshot {
     std::size_t pitch_processors_prepared = 0;
     std::size_t pitch_processors_missing = 0;
     uint64_t    pitch_missing_processor_count = 0;
+    uint64_t    pitch_prepare_on_source_ready_count = 0;
+    uint64_t    source_ready_pitch_prepare_count = 0;
     int         pitch_latency_frames = 0;
     std::vector<std::string> active_pitch_keys;
     Semitones   active_song_transpose = 0;

@@ -88,6 +88,39 @@ if(LT_ENGINE_USE_RUBBERBAND)
         target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_RUBBERBAND=1)
         message(STATUS "Pitch backend: RubberBand package")
     else()
+        find_path(RUBBERBAND_INCLUDE_DIR
+            NAMES rubberband/RubberBandStretcher.h
+            PATH_SUFFIXES include
+        )
+        find_library(RUBBERBAND_LIBRARY_RELEASE
+            NAMES rubberband
+            PATH_SUFFIXES lib
+        )
+        find_library(RUBBERBAND_LIBRARY_DEBUG
+            NAMES rubberband
+            PATH_SUFFIXES debug/lib
+        )
+        if(RUBBERBAND_INCLUDE_DIR AND RUBBERBAND_LIBRARY_RELEASE)
+            add_library(RubberBand::rubberband UNKNOWN IMPORTED)
+            set(_rubberband_debug_lib "${RUBBERBAND_LIBRARY_RELEASE}")
+            if(RUBBERBAND_LIBRARY_DEBUG)
+                set(_rubberband_debug_lib "${RUBBERBAND_LIBRARY_DEBUG}")
+            endif()
+            set_target_properties(RubberBand::rubberband PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${RUBBERBAND_INCLUDE_DIR}"
+                IMPORTED_LOCATION_RELEASE "${RUBBERBAND_LIBRARY_RELEASE}"
+                IMPORTED_IMPLIB_RELEASE "${RUBBERBAND_LIBRARY_RELEASE}"
+                IMPORTED_LOCATION_DEBUG "${_rubberband_debug_lib}"
+                IMPORTED_IMPLIB_DEBUG "${_rubberband_debug_lib}"
+            )
+            target_link_libraries(lt_deps_rubberband INTERFACE RubberBand::rubberband)
+            target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_RUBBERBAND=1)
+            message(STATUS "Pitch backend: RubberBand library/header")
+        endif()
+    endif()
+
+    get_target_property(_lt_rubberband_links lt_deps_rubberband INTERFACE_LINK_LIBRARIES)
+    if(NOT _lt_rubberband_links)
         FetchContent_Declare(rubberband
             GIT_REPOSITORY https://github.com/breakfastquay/rubberband.git
             GIT_TAG        v3.3.0

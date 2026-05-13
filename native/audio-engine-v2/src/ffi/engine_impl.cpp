@@ -7,6 +7,7 @@
 #include <mutex>
 #include <queue>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace lt {
 
@@ -94,6 +95,11 @@ Result<void> EngineImpl::initialize() {
     clock_          = std::make_unique<TransportClock>(48000);
     scheduler_      = std::make_unique<JumpScheduler>();
     source_manager_ = std::make_unique<SourceManager>();
+    source_manager_->set_source_ready_callback([this](const Id& source_id) {
+        source_ready_pitch_prepare_count_.fetch_add(1, std::memory_order_relaxed);
+        if (prepare_pitch_processors_for_source(source_id) > 0)
+            pitch_prepare_on_source_ready_count_.fetch_add(1, std::memory_order_relaxed);
+    });
     pitch_cache_    = std::make_unique<PitchCache>();
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
     mixer_          = std::make_unique<Mixer>(
@@ -259,30 +265,59 @@ std::string EngineImpl::get_snapshot() const {
         snap.pitch.pitch_processors_prepared = pitch.processors_prepared;
         snap.pitch.pitch_processors_missing = pitch.processors_missing;
         snap.pitch.pitch_missing_processor_count = pitch.missing_processor_count;
+        snap.pitch.pitch_prepare_on_source_ready_count =
+            pitch_prepare_on_source_ready_count_.load(std::memory_order_relaxed);
+        snap.pitch.source_ready_pitch_prepare_count =
+            source_ready_pitch_prepare_count_.load(std::memory_order_relaxed);
+        snap.pitch.pitch_latency_frames = pitch.max_latency_frames;
+        snap.pitch.active_pitch_keys = pitch.active_keys;
+        if (pitch.missing_processor_count > 0)
+            snap.pitch.pitch_muted_or_bypassed_reason = "Pitch processor missing; bypassed instead of muting.";
     }
 
     return snapshot_to_json(snap);
+}
+
+std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id) {
+    if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
+        return 0;
+
+    const auto* source = source_manager_->get(source_id);
+    if (!source || !source->is_loaded())
+        return 0;
+
+    const int sample_rate = clock_->sample_rate();
+    std::size_t prepared = 0;
+    for (const auto& song : session_->songs) {
+        for (const auto& track : song.tracks) {
+            for (const auto& clip : track.clips) {
+                if (clip.source_id != source_id)
+                    continue;
+                Semitones semitones = resolve_effective_semitones(
+                    track, clip, song, clip.timeline_start_frame);
+                if (semitones == 0)
+                    continue;
+                PitchCacheKey key{clip.source_id, track.id, clip.id,
+                                  static_cast<double>(semitones),
+                                  sample_rate, source->channel_count(), "realtime"};
+                if (pitch_cache_->prepare_processor(key))
+                    ++prepared;
+            }
+        }
+    }
+    return prepared;
 }
 
 void EngineImpl::prepare_pitch_processors_for_session() {
     if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
         return;
 
-    const int sample_rate = clock_->sample_rate();
+    std::unordered_set<Id> seen_sources;
     for (const auto& song : session_->songs) {
         for (const auto& track : song.tracks) {
             for (const auto& clip : track.clips) {
-                Semitones semitones = resolve_effective_semitones(
-                    track, clip, song, clip.timeline_start_frame);
-                if (semitones == 0)
-                    continue;
-                const auto* source = source_manager_->get(clip.source_id);
-                if (!source || !source->is_loaded())
-                    continue;
-                PitchCacheKey key{clip.source_id, track.id, clip.id,
-                                  static_cast<double>(semitones),
-                                  sample_rate, source->channel_count(), "realtime"};
-                pitch_cache_->prepare_processor(key);
+                if (seen_sources.insert(clip.source_id).second)
+                    prepare_pitch_processors_for_source(clip.source_id);
             }
         }
     }

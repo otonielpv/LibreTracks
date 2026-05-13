@@ -4,6 +4,7 @@
 #include <lt_engine/core/result.h>
 #include <lt_engine/sources/decoded_source.h>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -22,6 +23,8 @@ struct SourceDiagnostics {
     size_t      memory_bytes    = 0;
 };
 
+using SourceReadyCallback = std::function<void(const Id&)>;
+
 // ---------------------------------------------------------------------------
 // SourceManager — owns all DecodedSources for a session.
 //
@@ -32,6 +35,8 @@ class SourceManager {
 public:
     SourceManager();
     ~SourceManager();
+
+    void set_source_ready_callback(SourceReadyCallback callback);
 
     // Register a source file.  Does not decode yet.
     void register_source(const Id& source_id, const std::string& file_path);
@@ -69,6 +74,7 @@ private:
 
     mutable std::mutex              write_mutex_;
     std::shared_ptr<const EntryMap> entries_;
+    SourceReadyCallback             source_ready_callback_;
 
     void publish_locked(EntryMap entries);
 };

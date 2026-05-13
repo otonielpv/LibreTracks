@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -55,23 +55,50 @@ const env = {
 };
 
 const ensureEngineV2 = () => {
-  const buildDir = path.join(repoRoot, "native", "audio-engine-v2", "build");
+  const useRubberBand = /^(1|true|yes|on)$/i.test(process.env.LIBRETRACKS_ENGINE_V2_RUBBERBAND ?? "") ? "ON" : "OFF";
+  const buildName = useRubberBand === "ON" ? "build-rb-on" : "build-rb-off";
+  const buildDir = path.join(repoRoot, "native", "audio-engine-v2", buildName);
+  const buildArg = `native/audio-engine-v2/${buildName}`;
   const libDir = path.join(buildDir, "Debug");
+  const useLibSndFile = "ON";
+  const useR8Brain = "ON";
+  const useFFmpeg = "OFF";
 
-  run("cmake", [
+  console.log(`Audio Engine v2 RubberBand: ${useRubberBand}`);
+  console.log(`Audio Engine v2 CMake build dir: ${buildDir}`);
+  console.log(`Audio Engine v2 lib dir: ${libDir}`);
+  console.log(`LT_ENGINE_USE_LIBSNDFILE: ${useLibSndFile}`);
+  console.log(`LT_ENGINE_USE_R8BRAIN: ${useR8Brain}`);
+  console.log(`LT_ENGINE_USE_FFMPEG: ${useFFmpeg}`);
+  if (process.env.CMAKE_TOOLCHAIN_FILE) {
+    console.log(`CMAKE_TOOLCHAIN_FILE: ${process.env.CMAKE_TOOLCHAIN_FILE}`);
+  }
+
+  if (/^(1|true|yes|on)$/i.test(process.env.LIBRETRACKS_ENGINE_V2_CLEAN ?? "") && existsSync(buildDir)) {
+    rmSync(buildDir, { recursive: true, force: true });
+  }
+
+  const configureArgs = [
     "-S",
     "native/audio-engine-v2",
     "-B",
-    "native/audio-engine-v2/build",
+    buildArg,
     "-DLT_ENGINE_BUILD_TESTS=OFF",
     "-DLT_ENGINE_USE_JUCE=ON",
-    `-DLT_ENGINE_USE_RUBBERBAND=${/^(1|true|yes|on)$/i.test(process.env.LIBRETRACKS_ENGINE_V2_RUBBERBAND ?? "") ? "ON" : "OFF"}`,
-    "-DLT_ENGINE_USE_LIBSNDFILE=ON",
-    "-DLT_ENGINE_USE_R8BRAIN=ON",
-  ]);
+    `-DLT_ENGINE_USE_RUBBERBAND=${useRubberBand}`,
+    `-DLT_ENGINE_USE_LIBSNDFILE=${useLibSndFile}`,
+    `-DLT_ENGINE_USE_R8BRAIN=${useR8Brain}`,
+  ];
+  if (process.env.CMAKE_TOOLCHAIN_FILE) {
+    configureArgs.push(`-DCMAKE_TOOLCHAIN_FILE=${process.env.CMAKE_TOOLCHAIN_FILE}`);
+  }
+  if (process.env.VCPKG_DEFAULT_TRIPLET) {
+    configureArgs.push(`-DVCPKG_TARGET_TRIPLET=${process.env.VCPKG_DEFAULT_TRIPLET}`);
+  }
+  run("cmake", configureArgs);
   run("cmake", [
     "--build",
-    "native/audio-engine-v2/build",
+    buildArg,
     "--config",
     "Debug",
     "--target",
@@ -79,10 +106,18 @@ const ensureEngineV2 = () => {
   ]);
 
   const pathSeparator = process.platform === "win32" ? ";" : ":";
+  const vcpkgRoot = process.env.VCPKG_ROOT
+    ?? (process.env.CMAKE_TOOLCHAIN_FILE
+      ? path.resolve(path.dirname(process.env.CMAKE_TOOLCHAIN_FILE), "..", "..")
+      : "");
+  const triplet = process.env.VCPKG_DEFAULT_TRIPLET ?? "x64-windows";
+  const vcpkgBin = vcpkgRoot ? path.join(vcpkgRoot, "installed", triplet, "bin") : "";
+  const vcpkgDebugBin = vcpkgRoot ? path.join(vcpkgRoot, "installed", triplet, "debug", "bin") : "";
+  const extraPath = [libDir, vcpkgDebugBin, vcpkgBin].filter((segment) => segment && existsSync(segment)).join(pathSeparator);
   return {
     ...env,
     LT_ENGINE_V2_LIB_DIR: libDir,
-    PATH: `${libDir}${pathSeparator}${env.PATH ?? ""}`,
+    PATH: `${extraPath}${pathSeparator}${env.PATH ?? ""}`,
   };
 };
 

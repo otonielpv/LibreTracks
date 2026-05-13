@@ -16,5 +16,4 @@ Thumbs.db
 repomix-output.xml
 graphify-out/
 .claude/settings.local.json
-native/audio-engine-v2/build/*
-native/audio-engine-v2/build-tests/*
+native/audio-engine-v2/build*

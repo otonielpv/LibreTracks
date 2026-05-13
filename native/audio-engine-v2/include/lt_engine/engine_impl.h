@@ -62,6 +62,8 @@ private:
     DeviceOpenRequest                   current_device_request_;
     MetronomeConfig                     metronome_config_;
     std::atomic<uint64_t>               session_generation_{0};
+    std::atomic<uint64_t>               pitch_prepare_on_source_ready_count_{0};
+    std::atomic<uint64_t>               source_ready_pitch_prepare_count_{0};
 
     // Cached snapshot string (rebuilt on snapshot request).
     mutable std::string snapshot_cache_;
@@ -76,6 +78,7 @@ private:
     void push_event(EngineEvent ev);
     Result<void> dispatch_command(const EngineCommand& cmd);
     void prepare_pitch_processors_for_session();
+    std::size_t prepare_pitch_processors_for_source(const Id& source_id);
 
     // Silent audio render callback used during Phases 1-5.
     class SilentCallback;

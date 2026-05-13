@@ -25,6 +25,7 @@ add_executable(lt_engine_tests
     pitch_alignment_tests.cpp
     pitch_frequency_tests.cpp
     pitch_seek_tests.cpp
+    pitch_preparation_tests.cpp
 )
 
 target_link_libraries(lt_engine_tests
@@ -36,6 +37,12 @@ target_link_libraries(lt_engine_tests
 target_include_directories(lt_engine_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
+
+if(LT_ENGINE_USE_RUBBERBAND AND NOT LT_ENGINE_ALLOW_PITCH_STUB)
+    target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_TEST_EXPECT_REAL_RUBBERBAND=1)
+else()
+    target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_TEST_EXPECT_REAL_RUBBERBAND=0)
+endif()
 
 add_custom_command(TARGET lt_engine_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
