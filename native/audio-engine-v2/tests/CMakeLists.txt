@@ -17,8 +17,14 @@ add_executable(lt_engine_tests
     test_command_json.cpp
     test_audio_dump.cpp
     test_audio_decoder.cpp
+    test_audio_fixtures.cpp
     test_fade_processor.cpp
     test_metronome_renderer.cpp
+    pitch_resolution_tests.cpp
+    pitch_cache_tests.cpp
+    pitch_alignment_tests.cpp
+    pitch_frequency_tests.cpp
+    pitch_seek_tests.cpp
 )
 
 target_link_libraries(lt_engine_tests

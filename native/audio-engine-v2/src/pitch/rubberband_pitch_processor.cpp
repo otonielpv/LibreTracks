@@ -2,10 +2,14 @@
 #include <cmath>
 #include <algorithm>
 
-#if LT_ENGINE_USE_RUBBERBAND && __has_include(<RubberBandStretcher.h>)
+#if LT_ENGINE_USE_RUBBERBAND && __has_include(<rubberband/RubberBandStretcher.h>)
+#  define LT_ENGINE_HAS_RUBBERBAND_IMPL 1
+#  include <rubberband/RubberBandStretcher.h>
+#  define LT_ENGINE_RUBBERBAND_HEADER_FOUND 1
+#elif LT_ENGINE_USE_RUBBERBAND && __has_include(<RubberBandStretcher.h>)
 #  define LT_ENGINE_HAS_RUBBERBAND_IMPL 1
 #  include <RubberBandStretcher.h>
-using namespace RubberBand;
+#  define LT_ENGINE_RUBBERBAND_HEADER_FOUND 1
 #else
 #  define LT_ENGINE_HAS_RUBBERBAND_IMPL 0
 #endif
@@ -25,12 +29,12 @@ RubberBandPitchProcessor::RubberBandPitchProcessor(int channel_count,
     , sample_rate_(sample_rate)
     , semitones_(semitones)
 {
-    using RBOption = RubberBandStretcher::Option;
+    using RBOption = RubberBand::RubberBandStretcher::Option;
     int options = RBOption::OptionProcessRealTime
                 | RBOption::OptionPitchHighConsistency
                 | RBOption::OptionChannelsTogether;
 
-    rb_ = std::make_unique<RubberBandStretcher>(
+    rb_ = std::make_unique<RubberBand::RubberBandStretcher>(
         static_cast<size_t>(sample_rate),
         static_cast<size_t>(channel_count),
         options,

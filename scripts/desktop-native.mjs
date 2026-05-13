@@ -65,7 +65,7 @@ const ensureEngineV2 = () => {
     "native/audio-engine-v2/build",
     "-DLT_ENGINE_BUILD_TESTS=OFF",
     "-DLT_ENGINE_USE_JUCE=ON",
-    "-DLT_ENGINE_USE_RUBBERBAND=OFF",
+    `-DLT_ENGINE_USE_RUBBERBAND=${/^(1|true|yes|on)$/i.test(process.env.LIBRETRACKS_ENGINE_V2_RUBBERBAND ?? "") ? "ON" : "OFF"}`,
     "-DLT_ENGINE_USE_LIBSNDFILE=ON",
     "-DLT_ENGINE_USE_R8BRAIN=ON",
   ]);

@@ -74,6 +74,24 @@ struct MetronomeSnapshot {
     std::string muted_reason;
 };
 
+struct PitchSnapshot {
+    bool        pitch_engine_available = false;
+    std::string pitch_backend = "disabled";
+    std::string rubberband_version;
+    bool        pitch_runtime_enabled = false;
+    std::size_t pitch_processors_prepared = 0;
+    std::size_t pitch_processors_missing = 0;
+    uint64_t    pitch_missing_processor_count = 0;
+    int         pitch_latency_frames = 0;
+    std::vector<std::string> active_pitch_keys;
+    Semitones   active_song_transpose = 0;
+    int         pitch_prepare_queue_length = 0;
+    uint64_t    pitch_reset_count = 0;
+    uint64_t    pitch_seek_generation = 0;
+    uint64_t    pitch_starvation_count = 0;
+    std::string pitch_muted_or_bypassed_reason;
+};
+
 struct EngineSnapshot {
     // Transport position
     Frame              current_frame   = 0;
@@ -103,6 +121,9 @@ struct EngineSnapshot {
 
     // Internal metronome
     MetronomeSnapshot metronome;
+
+    // Pitch processing diagnostics
+    PitchSnapshot pitch;
 };
 
 std::string snapshot_to_json(const EngineSnapshot& snap);

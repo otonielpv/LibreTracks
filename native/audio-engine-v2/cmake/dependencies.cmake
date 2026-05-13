@@ -73,11 +73,45 @@ if(LT_ENGINE_USE_JUCE)
 endif()
 
 # ── RUBBER BAND ───────────────────────────────────────────────────────────
-# RubberBand integration is not fully wired up yet. Keep the placeholder
-# interface target for now so the engine can compile without requiring the
-# upstream library target.
 if(LT_ENGINE_USE_RUBBERBAND)
-    message(STATUS "LT_ENGINE_USE_RUBBERBAND enabled; using placeholder lt_deps_rubberband until RubberBand integration is completed.")
+    find_package(RubberBand CONFIG QUIET)
+    if(RubberBand_FOUND)
+        if(TARGET RubberBand::rubberband)
+            target_link_libraries(lt_deps_rubberband INTERFACE RubberBand::rubberband)
+        elseif(TARGET RubberBand::RubberBand)
+            target_link_libraries(lt_deps_rubberband INTERFACE RubberBand::RubberBand)
+        elseif(TARGET rubberband)
+            target_link_libraries(lt_deps_rubberband INTERFACE rubberband)
+        else()
+            message(FATAL_ERROR "RubberBand was found, but no known CMake target was exported.")
+        endif()
+        target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_RUBBERBAND=1)
+        message(STATUS "Pitch backend: RubberBand package")
+    else()
+        FetchContent_Declare(rubberband
+            GIT_REPOSITORY https://github.com/breakfastquay/rubberband.git
+            GIT_TAG        v3.3.0
+            GIT_SHALLOW    TRUE
+        )
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+        set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(rubberband)
+        if(TARGET rubberband)
+            target_link_libraries(lt_deps_rubberband INTERFACE rubberband)
+            target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_RUBBERBAND=1)
+            message(STATUS "Pitch backend: RubberBand FetchContent")
+        elseif(LT_ENGINE_ALLOW_PITCH_STUB)
+            target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_STUB=1)
+            message(WARNING "Pitch backend: explicit stub because LT_ENGINE_ALLOW_PITCH_STUB=ON")
+        else()
+            message(FATAL_ERROR
+                "LT_ENGINE_USE_RUBBERBAND=ON requires a real RubberBand target. "
+                "Install RubberBand via vcpkg/conan/system packages, or configure with "
+                "-DLT_ENGINE_ALLOW_PITCH_STUB=ON for developer-only no-op pitch.")
+        endif()
+    endif()
+elseif(LT_ENGINE_ALLOW_PITCH_STUB)
+    target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_STUB=1)
 endif()
 
 # ── DECODER ───────────────────────────────────────────────────────────────

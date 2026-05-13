@@ -1,4 +1,5 @@
 #include <lt_engine/render/track_renderer.h>
+#include <lt_engine/render/pitch_resolution.h>
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -12,7 +13,9 @@ void TrackRenderer::render(const Track&         track,
                             int                  num_out_channels,
                             const SourceManager& sources,
                             PitchCache*          pitch_cache,
-                            int                  engine_sample_rate) noexcept {
+                            int                  engine_sample_rate,
+                            Semitones            effective_semitones,
+                            const Song*          active_song) noexcept {
     if (track.mute) return;
 
     // Callers set active_semitones to 0 if the track should not be transposed.
@@ -21,9 +24,13 @@ void TrackRenderer::render(const Track&         track,
     // For now render() has no active_semitones parameter yet; it is forwarded
     // via the existing render() overload below.
     for (const auto& clip : track.clips) {
+        Semitones clip_semitones = active_song
+            ? resolve_effective_semitones(track, clip, *active_song, timeline_frame)
+            : effective_semitones;
         render_clip(clip, timeline_frame, block_frames,
                     track.gain, out, num_out_channels,
-                    sources, pitch_cache, engine_sample_rate);
+                    sources, pitch_cache, engine_sample_rate,
+                    track.id, clip_semitones);
     }
 }
 
@@ -35,7 +42,9 @@ void TrackRenderer::render_clip(const Clip&          clip,
                                  int                  num_out_channels,
                                  const SourceManager& sources,
                                  PitchCache*          pitch_cache,
-                                 int                  engine_sample_rate) noexcept {
+                                 int                  engine_sample_rate,
+                                 const Id&            track_id,
+                                 Semitones            effective_semitones) noexcept {
     // Does this clip overlap the current block?
     Frame clip_end = clip.timeline_start_frame + clip.length_frames;
     if (timeline_frame >= clip_end)                        return;
@@ -67,17 +76,18 @@ void TrackRenderer::render_clip(const Clip&          clip,
     int read = src->read(source_frame, frames_to_read, scratch_, 2);
     if (read <= 0) return;
 
-    // Apply pitch shifting if a cache is provided and the clip has a non-zero pitch.
-    // The active semitones are stored on the clip (resolved by the session adapter
-    // from Song/Region transpose_semitones before the session is handed to the engine).
-    if (pitch_cache && clip.semitones != 0.0) {
-        PitchProcessor* proc = pitch_cache->get_or_create(
-            clip.source_id, clip.semitones,
-            engine_sample_rate, src->channel_count());
+    if (effective_semitones != 0) {
+        PitchCacheKey key{clip.source_id, track_id, clip.id,
+                          static_cast<double>(effective_semitones),
+                          engine_sample_rate, src->channel_count(), "realtime"};
+        PitchProcessor* proc = pitch_cache ? pitch_cache->find_processor(key) : nullptr;
         if (proc) {
-            // Latency compensation: source was read shifted back by latency_frames()
-            // already (handled in the read offset below if proc is available).
             proc->process(scratch_, 2, read);
+        } else {
+            if (pitch_cache)
+                pitch_cache->note_missing_processor(key);
+            std::fill(scratch_l_, scratch_l_ + read, 0.f);
+            std::fill(scratch_r_, scratch_r_ + read, 0.f);
         }
     }
 

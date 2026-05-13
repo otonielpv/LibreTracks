@@ -18,6 +18,7 @@
 #include <lt_engine/sources/worker_pool.h>
 #include <lt_engine/sources/preparation_queue.h>
 #include <lt_engine/render/mixer.h>
+#include <lt_engine/pitch/pitch_cache.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -55,6 +56,7 @@ private:
     std::unique_ptr<SourceManager>      source_manager_;
     std::unique_ptr<DecodeWorkerPool>   worker_pool_;
     std::unique_ptr<SourcePreparationQueue> prep_queue_;
+    std::unique_ptr<PitchCache>         pitch_cache_;
     std::unique_ptr<Mixer>              mixer_;
     std::shared_ptr<const Session>      session_;
     DeviceOpenRequest                   current_device_request_;
@@ -73,6 +75,7 @@ private:
     // ── Internal helpers ─────────────────────────────────────────────────
     void push_event(EngineEvent ev);
     Result<void> dispatch_command(const EngineCommand& cmd);
+    void prepare_pitch_processors_for_session();
 
     // Silent audio render callback used during Phases 1-5.
     class SilentCallback;

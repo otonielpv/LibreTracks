@@ -214,10 +214,12 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
   throw "CMake is required to build Audio Engine v2. Install CMake or build native/audio-engine-v2 manually."
 }
 
+$useRubberBand = if ($env:LIBRETRACKS_ENGINE_V2_RUBBERBAND -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
+
 cmake -S native/audio-engine-v2 -B native/audio-engine-v2/build `
   -DLT_ENGINE_BUILD_TESTS=OFF `
   -DLT_ENGINE_USE_JUCE=ON `
-  -DLT_ENGINE_USE_RUBBERBAND=OFF `
+  -DLT_ENGINE_USE_RUBBERBAND=$useRubberBand `
   -DLT_ENGINE_USE_LIBSNDFILE=ON `
   -DLT_ENGINE_USE_R8BRAIN=ON
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

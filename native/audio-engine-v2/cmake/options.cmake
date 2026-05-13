@@ -14,6 +14,10 @@ option(LT_ENGINE_USE_RUBBERBAND
     "Use Rubber Band Library for pitch shifting"
     ON)
 
+option(LT_ENGINE_ALLOW_PITCH_STUB
+    "Allow the pitch backend to compile as an explicit no-op developer stub"
+    OFF)
+
 # Decoder backend — exactly one must be ON.
 option(LT_ENGINE_USE_FFMPEG
     "Use FFmpeg/libavformat/libavcodec for multi-format decoding (preferred)"

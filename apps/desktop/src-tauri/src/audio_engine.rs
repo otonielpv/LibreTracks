@@ -479,6 +479,20 @@ impl AudioController {
         })
     }
 
+    pub fn update_live_region_transpose(
+        &self,
+        region_id: &str,
+        semitones: i32,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("set_region_transpose", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetRegionTranspose {
+                region_id: region_id.into(),
+                semitones,
+            })?;
+            Ok(())
+        })
+    }
+
     pub fn ensure_live_track(&self, song: &Song, _track_id: &str) -> Result<(), DesktopError> {
         self.sync_live_mix(song)
     }

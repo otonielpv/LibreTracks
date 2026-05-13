@@ -59,6 +59,12 @@ else()
     target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_RUBBERBAND=0)
 endif()
 
+if(LT_ENGINE_ALLOW_PITCH_STUB)
+    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_ALLOW_PITCH_STUB=1)
+else()
+    target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_ALLOW_PITCH_STUB=0)
+endif()
+
 if(LT_ENGINE_USE_FFMPEG)
     target_compile_definitions(lt_audio_engine_v2 PRIVATE LT_ENGINE_USE_FFMPEG=1)
 else()

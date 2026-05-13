@@ -1,5 +1,6 @@
 #include <lt_engine/render/mixer.h>
 #include <lt_engine/render/fade_processor.h>
+#include <lt_engine/render/pitch_resolution.h>
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -86,22 +87,26 @@ std::vector<int> route_channels(const std::string& audio_to, int available_chann
 Mixer::Mixer(const Session*       session,
              const SourceManager* sources,
              TransportClock*      clock,
-             JumpScheduler*       scheduler)
+             JumpScheduler*       scheduler,
+             PitchCache*          pitch_cache)
     : session_(session ? std::make_shared<Session>(*session) : nullptr)
     , sources_(sources)
     , clock_(clock)
     , scheduler_(scheduler)
+    , pitch_cache_(pitch_cache)
 {
 }
 
 Mixer::Mixer(std::shared_ptr<const Session> session,
              const SourceManager* sources,
              TransportClock* clock,
-             JumpScheduler* scheduler)
+             JumpScheduler* scheduler,
+             PitchCache* pitch_cache)
     : session_(std::move(session))
     , sources_(sources)
     , clock_(clock)
     , scheduler_(scheduler)
+    , pitch_cache_(pitch_cache)
 {
 }
 
@@ -169,8 +174,8 @@ void Mixer::render(float** output_channels,
                 patched.mute  = false;  // already handled above
 
                 renderers_[ti].render(patched, timeline_frame, num_frames,
-                                       mix_, 2, *sources_, nullptr,
-                                       clock_->sample_rate());
+                                       mix_, 2, *sources_, pitch_cache_,
+                                       clock_->sample_rate(), 0, &song);
 
                 float track_peak_l = 0.f, track_peak_r = 0.f;
                 double track_sum_l = 0.0, track_sum_r = 0.0;
@@ -293,6 +298,10 @@ void Mixer::set_track_solo(const Id& track_id, bool solo) {
 void Mixer::set_session(std::shared_ptr<const Session> session) {
     std::atomic_store(&session_, std::move(session));
     reset_track_meters();
+}
+
+void Mixer::set_pitch_cache(PitchCache* pitch_cache) noexcept {
+    pitch_cache_ = pitch_cache;
 }
 
 void Mixer::clear_session() {

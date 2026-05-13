@@ -1634,6 +1634,7 @@ impl DesktopSession {
             record_history,
             true,
         )?;
+        audio.update_live_region_transpose(region_id, transpose_semitones)?;
 
         Ok(self.snapshot())
     }
@@ -2281,12 +2282,6 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         audio.sync_live_mix(&loaded_song)?;
-
-        if playback_state == PlaybackState::Playing
-            && matches!(impact, AudioChangeImpact::TransportOnly)
-        {
-            audio.sync_song(loaded_song.clone())?;
-        }
 
         if let Some(pending_jump) = pending_jump {
             if loaded_song

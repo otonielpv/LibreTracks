@@ -4,40 +4,70 @@
 
 namespace lt {
 
-PitchProcessor* PitchCache::get_or_create(const Id&  source_id,
-                                           double     semitones,
-                                           int        sample_rate,
-                                           int        channel_count) {
-    PitchCacheKey key{ source_id, semitones, sample_rate, channel_count };
-
-    auto it = cache_.find(key);
-    if (it != cache_.end())
+PitchProcessor* PitchCache::prepare_processor(const PitchCacheKey& key) {
+    std::lock_guard lock(write_mutex_);
+    auto current = std::atomic_load(&cache_);
+    auto it = current->find(key);
+    if (it != current->end())
         return it->second.get();
 
-    std::unique_ptr<PitchProcessor> proc;
-    if (semitones == 0.0) {
-        proc = std::make_unique<BypassPitchProcessor>();
+    std::shared_ptr<PitchProcessor> proc;
+    if (key.semitones == 0.0) {
+        proc = std::make_shared<BypassPitchProcessor>();
     } else {
-        proc = std::make_unique<RubberBandPitchProcessor>(
-            channel_count, sample_rate, semitones);
+        proc = std::make_shared<RubberBandPitchProcessor>(
+            key.channel_count, key.sample_rate, key.semitones);
     }
 
     auto* raw = proc.get();
-    cache_.emplace(key, std::move(proc));
+    auto next = std::make_shared<CacheMap>(*current);
+    next->emplace(key, std::move(proc));
+    std::atomic_store(&cache_, std::shared_ptr<const CacheMap>(next));
     return raw;
 }
 
+PitchProcessor* PitchCache::find_processor(const PitchCacheKey& key) noexcept {
+    auto cache = std::atomic_load(&cache_);
+    auto it = cache->find(key);
+    return it == cache->end() ? nullptr : it->second.get();
+}
+
+const PitchProcessor* PitchCache::find_processor(const PitchCacheKey& key) const noexcept {
+    auto cache = std::atomic_load(&cache_);
+    auto it = cache->find(key);
+    return it == cache->end() ? nullptr : it->second.get();
+}
+
+void PitchCache::note_missing_processor(const PitchCacheKey& key) noexcept {
+    (void)key;
+    missing_processor_count_.fetch_add(1, std::memory_order_relaxed);
+}
+
+PitchDiagnostics PitchCache::diagnostics() const {
+    std::lock_guard lock(write_mutex_);
+    auto cache = std::atomic_load(&cache_);
+    PitchDiagnostics d;
+    d.processors_prepared = cache->size();
+    d.processors_missing = missing_processor_count_.load(std::memory_order_relaxed) > 0 ? 1 : 0;
+    d.missing_processor_count = missing_processor_count_.load(std::memory_order_relaxed);
+    return d;
+}
+
 void PitchCache::clear() {
-    cache_.clear();
+    std::lock_guard lock(write_mutex_);
+    std::atomic_store(&cache_, std::make_shared<const CacheMap>());
+    missing_processor_count_.store(0, std::memory_order_relaxed);
 }
 
 void PitchCache::evict(const Id& source_id) {
-    for (auto it = cache_.begin(); it != cache_.end(); ) {
-        if (it->first.source_id == source_id)
-            it = cache_.erase(it);
-        else
-            ++it;
+    std::lock_guard lock(write_mutex_);
+    auto current = std::atomic_load(&cache_);
+    auto next = std::make_shared<CacheMap>();
+    for (const auto& [existing_key, existing_proc] : *current) {
+        if (existing_key.source_id != source_id)
+            next->emplace(existing_key, existing_proc);
     }
+    std::atomic_store(&cache_, std::shared_ptr<const CacheMap>(next));
 }
 
 } // namespace lt

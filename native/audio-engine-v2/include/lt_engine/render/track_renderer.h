@@ -26,7 +26,9 @@ public:
                 int                   num_out_channels,
                 const SourceManager&  sources,
                 PitchCache*           pitch_cache,
-                int                   engine_sample_rate) noexcept;
+                int                   engine_sample_rate,
+                Semitones             effective_semitones = 0,
+                const Song*           active_song = nullptr) noexcept;
 
 private:
     // Render one clip's contribution for this block.
@@ -38,7 +40,9 @@ private:
                      int                   num_out_channels,
                      const SourceManager&  sources,
                      PitchCache*           pitch_cache,
-                     int                   engine_sample_rate) noexcept;
+                     int                   engine_sample_rate,
+                     const Id&             track_id,
+                     Semitones             effective_semitones) noexcept;
 
     // Scratch buffer for reading from source (avoids per-block heap alloc by
     // reusing a fixed-size stack buffer up to kMaxBlockFrames).

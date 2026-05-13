@@ -1,6 +1,7 @@
 #include <lt_engine/engine_impl.h>
 #include <lt_engine/core/engine_core.h>
 #include <lt_engine/core/events.h>
+#include <lt_engine/render/pitch_resolution.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <mutex>
@@ -93,12 +94,14 @@ Result<void> EngineImpl::initialize() {
     clock_          = std::make_unique<TransportClock>(48000);
     scheduler_      = std::make_unique<JumpScheduler>();
     source_manager_ = std::make_unique<SourceManager>();
+    pitch_cache_    = std::make_unique<PitchCache>();
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
     mixer_          = std::make_unique<Mixer>(
         std::shared_ptr<const Session>{},
         source_manager_.get(),
         clock_.get(),
-        scheduler_.get());
+        scheduler_.get(),
+        pitch_cache_.get());
     mixer_->set_metronome_config(metronome_config_);
 
     // Open the default audio device with the silent callback.
@@ -133,10 +136,12 @@ Result<void> EngineImpl::shutdown() {
     if (prep_queue_) { prep_queue_->cancel_all(); prep_queue_.reset(); }
     if (worker_pool_) { worker_pool_->shutdown(); }
     source_manager_->clear();
+    if (pitch_cache_) pitch_cache_->clear();
     mixer_.reset();
     clock_.reset();
     scheduler_.reset();
     session_.reset();
+    pitch_cache_.reset();
     state_ = State::ShutDown;
     return Result<void>::ok();
 }
@@ -164,6 +169,21 @@ std::string EngineImpl::poll_event() {
 
 std::string EngineImpl::get_snapshot() const {
     EngineSnapshot snap;
+
+#if LT_ENGINE_USE_RUBBERBAND && LT_ENGINE_PITCH_BACKEND_RUBBERBAND
+    snap.pitch.pitch_engine_available = true;
+    snap.pitch.pitch_backend = "rubberband";
+    snap.pitch.pitch_runtime_enabled = true;
+#elif LT_ENGINE_ALLOW_PITCH_STUB || LT_ENGINE_PITCH_BACKEND_STUB
+    snap.pitch.pitch_engine_available = false;
+    snap.pitch.pitch_backend = "stub";
+    snap.pitch.pitch_runtime_enabled = false;
+    snap.pitch.pitch_muted_or_bypassed_reason = "pitch stub enabled explicitly";
+#else
+    snap.pitch.pitch_engine_available = false;
+    snap.pitch.pitch_backend = "disabled";
+    snap.pitch.pitch_runtime_enabled = false;
+#endif
 
     if (clock_) {
         auto pos = clock_->position();
@@ -234,8 +254,38 @@ std::string EngineImpl::get_snapshot() const {
             snap.source_states.push_back(std::move(info));
         }
     }
+    if (pitch_cache_) {
+        auto pitch = pitch_cache_->diagnostics();
+        snap.pitch.pitch_processors_prepared = pitch.processors_prepared;
+        snap.pitch.pitch_processors_missing = pitch.processors_missing;
+        snap.pitch.pitch_missing_processor_count = pitch.missing_processor_count;
+    }
 
     return snapshot_to_json(snap);
+}
+
+void EngineImpl::prepare_pitch_processors_for_session() {
+    if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
+        return;
+
+    const int sample_rate = clock_->sample_rate();
+    for (const auto& song : session_->songs) {
+        for (const auto& track : song.tracks) {
+            for (const auto& clip : track.clips) {
+                Semitones semitones = resolve_effective_semitones(
+                    track, clip, song, clip.timeline_start_frame);
+                if (semitones == 0)
+                    continue;
+                const auto* source = source_manager_->get(clip.source_id);
+                if (!source || !source->is_loaded())
+                    continue;
+                PitchCacheKey key{clip.source_id, track.id, clip.id,
+                                  static_cast<double>(semitones),
+                                  sample_rate, source->channel_count(), "realtime"};
+                pitch_cache_->prepare_processor(key);
+            }
+        }
+    }
 }
 
 std::string EngineImpl::list_devices() const {
@@ -293,11 +343,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
 
             if (mixer_) {
                 mixer_->set_session(next_session);
+                mixer_->set_pitch_cache(pitch_cache_.get());
             }
 
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdPlay>) {
+            prepare_pitch_processors_for_session();
             clock_->play();
             push_event(EvPlaybackStarted{ clock_->position().frame });
             return Result<void>::ok();
@@ -447,11 +499,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return scheduler_->replace(c.jump_id, c.new_target, c.new_trigger);
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackTransposeEnabled>) {
-            update_track_session(session_, mixer_.get(), c.track_id, [enabled = c.enabled](Track& track) {
+            bool changed = update_track_session(session_, mixer_.get(), c.track_id, [enabled = c.enabled](Track& track) {
                 track.transpose_behavior = enabled
                     ? TransposeBehavior::FollowsSongOrRegion
                     : TransposeBehavior::NeverTranspose;
             });
+            if (changed)
+                prepare_pitch_processors_for_session();
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetSongTranspose>) {
@@ -461,6 +515,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     if (song.id == c.song_id)
                         song.transpose_semitones = c.semitones;
                 session_ = next_session;
+                prepare_pitch_processors_for_session();
                 if (mixer_) mixer_->set_session(next_session);
             }
             return Result<void>::ok();
@@ -473,6 +528,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         if (region.id == c.region_id)
                             region.transpose_semitones = c.semitones;
                 session_ = next_session;
+                prepare_pitch_processors_for_session();
                 if (mixer_) mixer_->set_session(next_session);
             }
             return Result<void>::ok();

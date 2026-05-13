@@ -96,6 +96,24 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"muted_reason", snap.metronome.muted_reason},
     };
 
+    j["pitch"] = {
+        {"pitch_engine_available", snap.pitch.pitch_engine_available},
+        {"pitch_backend", snap.pitch.pitch_backend},
+        {"rubberband_version", snap.pitch.rubberband_version},
+        {"pitch_runtime_enabled", snap.pitch.pitch_runtime_enabled},
+        {"pitch_processors_prepared", snap.pitch.pitch_processors_prepared},
+        {"pitch_processors_missing", snap.pitch.pitch_processors_missing},
+        {"pitch_missing_processor_count", snap.pitch.pitch_missing_processor_count},
+        {"pitch_latency_frames", snap.pitch.pitch_latency_frames},
+        {"active_pitch_keys", snap.pitch.active_pitch_keys},
+        {"active_song_transpose", snap.pitch.active_song_transpose},
+        {"pitch_prepare_queue_length", snap.pitch.pitch_prepare_queue_length},
+        {"pitch_reset_count", snap.pitch.pitch_reset_count},
+        {"pitch_seek_generation", snap.pitch.pitch_seek_generation},
+        {"pitch_starvation_count", snap.pitch.pitch_starvation_count},
+        {"pitch_muted_or_bypassed_reason", snap.pitch.pitch_muted_or_bypassed_reason},
+    };
+
     return j.dump();
 }
 

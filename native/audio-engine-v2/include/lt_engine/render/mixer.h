@@ -7,6 +7,7 @@
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/metronome_renderer.h>
+#include <lt_engine/pitch/pitch_cache.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -29,12 +30,14 @@ public:
     Mixer(const Session*       session,
           const SourceManager* sources,
           TransportClock*      clock,
-          JumpScheduler*       scheduler);
+          JumpScheduler*       scheduler,
+          PitchCache*          pitch_cache = nullptr);
 
     Mixer(std::shared_ptr<const Session> session,
           const SourceManager* sources,
           TransportClock* clock,
-          JumpScheduler* scheduler);
+          JumpScheduler* scheduler,
+          PitchCache* pitch_cache = nullptr);
 
     // Called by the JUCE audio thread.
     void render(float** output_channels,
@@ -48,6 +51,7 @@ public:
     void set_track_mute(const Id& track_id, bool mute);
     void set_track_solo(const Id& track_id, bool solo);
     void set_session(std::shared_ptr<const Session> session);
+    void set_pitch_cache(PitchCache* pitch_cache) noexcept;
     void clear_session();
     void trigger_crossfade() noexcept;
     void set_metronome_config(const MetronomeConfig& config);
@@ -66,6 +70,7 @@ private:
     const SourceManager* sources_;
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
+    PitchCache*          pitch_cache_ = nullptr;
 
     // Per-track renderer pool (one per track, up to kMaxTracks).
     // Allocated once on construction, never in render().
