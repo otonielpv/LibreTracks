@@ -26,6 +26,11 @@ bool valid_samples(const std::vector<float>& samples) {
     return true;
 }
 
+float smoothstep(float x) noexcept {
+    x = std::clamp(x, 0.0f, 1.0f);
+    return x * x * (3.0f - 2.0f * x);
+}
+
 } // namespace
 
 PitchCache::PitchCache() {
@@ -82,7 +87,6 @@ void PitchCache::note_missing_processor(const PitchCacheKey& key) noexcept {
 void PitchCache::note_missing_proxy_block(const PitchCacheKey& key, int block_index) noexcept {
     missing_proxy_count_.fetch_add(1, std::memory_order_relaxed);
     std::lock_guard reason_lock(reason_mutex_);
-    active_pitch_render_path_ = "missing_proxy_silence";
     last_missing_proxy_key_ = key_to_string(key);
     last_missing_proxy_block_index_ = block_index;
 }
@@ -90,12 +94,27 @@ void PitchCache::note_missing_proxy_block(const PitchCacheKey& key, int block_in
 void PitchCache::note_realtime_fallback_used() noexcept {
     render_path_realtime_fallback_count_.fetch_add(1, std::memory_order_relaxed);
     std::lock_guard reason_lock(reason_mutex_);
-    active_pitch_render_path_ = "realtime_fallback";
+    active_pitch_render_path_ = "realtime_seek_safe";
+}
+
+void PitchCache::note_emergency_silence_used() noexcept {
+    emergency_silence_render_count_.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard reason_lock(reason_mutex_);
+    active_pitch_render_path_ = "missing_proxy_emergency_silence";
 }
 
 void PitchCache::note_prepared_proxy_used() noexcept {
+    prepared_proxy_render_count_.fetch_add(1, std::memory_order_relaxed);
     std::lock_guard reason_lock(reason_mutex_);
     active_pitch_render_path_ = "prepared_proxy";
+}
+
+void PitchCache::set_current_generation(std::uint64_t generation) noexcept {
+    auto current = current_generation_.load(std::memory_order_relaxed);
+    while (generation > current
+           && !current_generation_.compare_exchange_weak(
+               current, generation, std::memory_order_relaxed, std::memory_order_relaxed)) {
+    }
 }
 
 PitchDiagnostics PitchCache::diagnostics() const {
@@ -111,6 +130,15 @@ PitchDiagnostics PitchCache::diagnostics() const {
     d.proxy_generation_count = proxy_generation_count_.load(std::memory_order_relaxed);
     d.duplicate_proxy_request_count = duplicate_proxy_request_count_.load(std::memory_order_relaxed);
     d.render_path_realtime_fallback_count = render_path_realtime_fallback_count_.load(std::memory_order_relaxed);
+    d.realtime_seek_safe_resets = realtime_seek_safe_resets_.load(std::memory_order_relaxed);
+    d.realtime_seek_safe_preroll_frames = realtime_seek_safe_preroll_frames_.load(std::memory_order_relaxed);
+    d.realtime_seek_safe_render_count = realtime_seek_safe_render_count_.load(std::memory_order_relaxed);
+    d.prepared_proxy_render_count = prepared_proxy_render_count_.load(std::memory_order_relaxed);
+    d.emergency_silence_render_count = emergency_silence_render_count_.load(std::memory_order_relaxed);
+    d.stale_proxy_jobs_skipped = stale_proxy_jobs_skipped_.load(std::memory_order_relaxed);
+    d.current_pitch_epoch = current_generation_.load(std::memory_order_relaxed);
+    d.disk_cache_audio_thread_load_attempts =
+        disk_cache_audio_thread_load_attempts_.load(std::memory_order_relaxed);
     d.jobs_queued = jobs_queued_.load(std::memory_order_relaxed);
     d.jobs_running = jobs_running_.load(std::memory_order_relaxed);
     d.jobs_completed = jobs_completed_.load(std::memory_order_relaxed);
@@ -154,9 +182,7 @@ PitchDiagnostics PitchCache::diagnostics() const {
         std::lock_guard reason_lock(reason_mutex_);
         d.last_prepare_reason = last_prepare_reason_;
     }
-    d.active_pitch_mode = realtime_fallback_enabled_.load(std::memory_order_relaxed)
-        ? "prepared_proxy_with_realtime_fallback"
-        : "prepared_proxy";
+    d.active_pitch_mode = "dual_path_realtime_seek_safe";
     d.active_keys.reserve(cache->size());
     for (const auto& [key, proc] : *cache) {
         d.active_keys.push_back(key_to_string(key));
@@ -216,6 +242,7 @@ void PitchCache::enqueue_range(const PitchCacheKey& key,
                                std::string reason) {
     if (key.semitones == 0.0 || frame_count <= 0)
         return;
+    set_current_generation(generation);
 
     const Frame clamped_start = std::max<Frame>(0, start_frame);
     const Frame clamped_end = std::min<Frame>(source.duration_frames(), clamped_start + frame_count);
@@ -272,21 +299,6 @@ bool PitchCache::get_block_if_ready(const PitchCacheKey& key,
     auto cache = std::atomic_load(&proxy_cache_);
     auto it = cache->find(ProxyCacheKey{key, block_index});
     if (it == cache->end() || !it->second) {
-        if (disk_cache_) {
-            PreparedPitchBlock disk_block;
-            if (disk_cache_->load_block(key, block_index, disk_block)) {
-                auto prepared = std::make_shared<PreparedPitchBlock>(std::move(disk_block));
-                {
-                    std::lock_guard lock(write_mutex_);
-                    auto current = std::atomic_load(&proxy_cache_);
-                    auto next = std::make_shared<ProxyMap>(*current);
-                    next->emplace(ProxyCacheKey{key, block_index}, prepared);
-                    std::atomic_store(&proxy_cache_, std::shared_ptr<const ProxyMap>(next));
-                }
-                cache = std::atomic_load(&proxy_cache_);
-                it = cache->find(ProxyCacheKey{key, block_index});
-            }
-        }
         if (it == cache->end() || !it->second) {
             note_missing_proxy_block(key, block_index);
             return false;
@@ -310,6 +322,107 @@ bool PitchCache::get_block_if_ready(const PitchCacheKey& key,
         std::fill(out[ch] + copy, out[ch] + frames_needed, 0.0f);
     note_prepared_proxy_used();
     return true;
+}
+
+bool PitchCache::is_range_ready(const PitchCacheKey& key,
+                                Frame start_frame,
+                                Frame frame_count) const {
+    if (frame_count <= 0)
+        return true;
+    const Frame clamped_start = std::max<Frame>(0, start_frame);
+    const int first = block_index_for(clamped_start);
+    const int last = block_index_for(std::max<Frame>(clamped_start, clamped_start + frame_count - 1));
+    auto cache = std::atomic_load(&proxy_cache_);
+    for (int block = first; block <= last; ++block) {
+        if (cache->find(ProxyCacheKey{key, block}) == cache->end())
+            return false;
+    }
+    return true;
+}
+
+int PitchCache::render_realtime_seek_safe(const PitchCacheKey& key,
+                                          const DecodedSource& source,
+                                          Frame source_frame,
+                                          int frame_count,
+                                          float** out,
+                                          int num_channels) noexcept {
+    if (frame_count <= 0)
+        return 0;
+
+    const int channels = std::min(num_channels, 2);
+    int read = source.read(source_frame, frame_count, out, channels);
+    if (read <= 0)
+        return 0;
+    for (int ch = channels; ch < num_channels; ++ch)
+        std::fill(out[ch], out[ch] + read, 0.0f);
+
+    std::lock_guard lock(realtime_mutex_);
+    auto& stream = realtime_streams_[key];
+    const bool needs_reset = !stream.processor
+        || stream.expected_source_frame != source_frame
+        || stream.semitones != key.semitones
+        || stream.sample_rate != key.sample_rate
+        || stream.channel_count != key.channel_count;
+
+    if (!stream.processor) {
+        if (key.semitones == 0.0) {
+            stream.processor = std::make_unique<BypassPitchProcessor>();
+        } else {
+            stream.processor = std::make_unique<RubberBandPitchProcessor>(
+                key.channel_count, key.sample_rate, key.semitones);
+        }
+    }
+
+    if (needs_reset) {
+        stream.processor->reset();
+        stream.processor->set_semitones(key.semitones);
+        stream.semitones = key.semitones;
+        stream.sample_rate = key.sample_rate;
+        stream.channel_count = key.channel_count;
+        const int preroll = std::min<int>(4096, std::max(0, key.sample_rate / 20));
+        const Frame preroll_start = std::max<Frame>(0, source_frame - preroll);
+        const int preroll_frames = static_cast<int>(source_frame - preroll_start);
+        if (preroll_frames > 0) {
+            float* preroll_out[2] = {stream.preroll_l, stream.preroll_r};
+            const int preroll_read = source.read(preroll_start, preroll_frames, preroll_out, channels);
+            if (preroll_read > 0) {
+                stream.processor->process(preroll_out, channels, preroll_read);
+                realtime_seek_safe_preroll_frames_.fetch_add(
+                    static_cast<std::uint64_t>(preroll_read), std::memory_order_relaxed);
+            }
+        }
+        realtime_seek_safe_resets_.fetch_add(1, std::memory_order_relaxed);
+        stream.fade_frames = std::clamp(key.sample_rate / 40, 256, 2048);
+        stream.fade_processed = 0;
+    }
+
+    int processed_total = 0;
+    constexpr int kRealtimeProcessChunkFrames = 4096;
+    while (processed_total < read) {
+        const int chunk = std::min(kRealtimeProcessChunkFrames, read - processed_total);
+        float* chunk_out[2] = {out[0] + processed_total,
+                               channels > 1 ? out[1] + processed_total : out[0] + processed_total};
+        const int processed = stream.processor->process(chunk_out, channels, chunk);
+        if (processed <= 0)
+            break;
+        processed_total += chunk;
+    }
+    if (stream.fade_processed < stream.fade_frames) {
+        const int fade_frames = std::max(1, stream.fade_frames);
+        const int fade_count = std::min(read, fade_frames - stream.fade_processed);
+        for (int f = 0; f < fade_count; ++f) {
+            const float progress = static_cast<float>(stream.fade_processed + f)
+                / static_cast<float>(std::max(1, fade_frames - 1));
+            const float gain = smoothstep(progress);
+            for (int ch = 0; ch < channels; ++ch)
+                out[ch][f] *= gain;
+        }
+        stream.fade_processed += fade_count;
+    }
+    stream.expected_source_frame = source_frame + read;
+    realtime_seek_safe_render_count_.fetch_add(1, std::memory_order_relaxed);
+    note_realtime_fallback_used();
+    return processed_total > 0 ? read : processed_total;
 }
 
 bool PitchCache::is_block_ready(const PitchCacheKey& key, int block_index) const {
@@ -360,6 +473,13 @@ void PitchCache::clear() {
     proxy_generation_count_.store(0, std::memory_order_relaxed);
     duplicate_proxy_request_count_.store(0, std::memory_order_relaxed);
     render_path_realtime_fallback_count_.store(0, std::memory_order_relaxed);
+    realtime_seek_safe_resets_.store(0, std::memory_order_relaxed);
+    realtime_seek_safe_preroll_frames_.store(0, std::memory_order_relaxed);
+    realtime_seek_safe_render_count_.store(0, std::memory_order_relaxed);
+    prepared_proxy_render_count_.store(0, std::memory_order_relaxed);
+    emergency_silence_render_count_.store(0, std::memory_order_relaxed);
+    stale_proxy_jobs_skipped_.store(0, std::memory_order_relaxed);
+    disk_cache_audio_thread_load_attempts_.store(0, std::memory_order_relaxed);
     jobs_queued_.store(0, std::memory_order_relaxed);
     jobs_running_.store(0, std::memory_order_relaxed);
     jobs_completed_.store(0, std::memory_order_relaxed);
@@ -384,6 +504,10 @@ void PitchCache::clear() {
         std::lock_guard job_lock(job_mutex_);
         jobs_.clear();
         queued_blocks_.clear();
+    }
+    {
+        std::lock_guard realtime_lock(realtime_mutex_);
+        realtime_streams_.clear();
     }
 }
 
@@ -432,7 +556,32 @@ void PitchCache::worker_loop() {
         }
 
         jobs_running_.fetch_add(1, std::memory_order_relaxed);
-        bool ok = job.source && generate_range(job.key, *job.source, job.start_frame, job.frame_count);
+        bool skipped = false;
+        const auto current_generation = current_generation_.load(std::memory_order_relaxed);
+        if (job.generation < current_generation && job.priority > 0) {
+            skipped = true;
+            stale_proxy_jobs_skipped_.fetch_add(1, std::memory_order_relaxed);
+        }
+        bool ok = false;
+        if (!skipped && job.source) {
+            const int block = block_index_for(std::max<Frame>(0, job.start_frame));
+            bool loaded_from_disk = false;
+            if (disk_cache_ && !is_block_ready(job.key, block)) {
+                PreparedPitchBlock disk_block;
+                if (disk_cache_->load_block(job.key, block, disk_block)) {
+                    auto prepared = std::make_shared<PreparedPitchBlock>(std::move(disk_block));
+                    std::lock_guard lock(write_mutex_);
+                    auto current = std::atomic_load(&proxy_cache_);
+                    if (current->find(ProxyCacheKey{job.key, block}) == current->end()) {
+                        auto next = std::make_shared<ProxyMap>(*current);
+                        next->emplace(ProxyCacheKey{job.key, block}, prepared);
+                        std::atomic_store(&proxy_cache_, std::shared_ptr<const ProxyMap>(next));
+                    }
+                    loaded_from_disk = true;
+                }
+            }
+            ok = loaded_from_disk || generate_range(job.key, *job.source, job.start_frame, job.frame_count);
+        }
         {
             std::lock_guard lock(job_mutex_);
             const int first = block_index_for(std::max<Frame>(0, job.start_frame));
@@ -441,7 +590,7 @@ void PitchCache::worker_loop() {
                 queued_blocks_.erase(block_id(job.key, block));
         }
         jobs_running_.fetch_sub(1, std::memory_order_relaxed);
-        if (ok) {
+        if (ok || skipped) {
             jobs_completed_.fetch_add(1, std::memory_order_relaxed);
             if (job.reason == "seek_immediate")
                 seek_immediate_jobs_completed_.fetch_add(1, std::memory_order_relaxed);

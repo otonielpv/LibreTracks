@@ -276,7 +276,6 @@ export function TransportPanelContent() {
   const [pitchPrepareUiState, setPitchPrepareUiState] = useState<{
     active: boolean;
     message: string;
-    pendingBlocks?: number;
     error?: string;
     startedAt?: number;
   }>({ active: false, message: "" });
@@ -1016,14 +1015,14 @@ export function TransportPanelContent() {
         });
         return;
       }
+      if (pitch.lastPitchPrepareReason.startsWith("seek_")) {
+        setPitchPrepareUiState({ active: false, message: "" });
+        return;
+      }
       if (pitch.pitchPrepareActive) {
         setPitchPrepareUiState({
           active: true,
           message: "Preparando audio transpuesto...",
-          pendingBlocks:
-            pitch.pitchProxyBlocksPending ||
-            pitch.pitchJobsPending ||
-            undefined,
           startedAt: Date.now(),
         });
         return;
@@ -1791,10 +1790,6 @@ export function TransportPanelContent() {
         setPitchPrepareUiState({
           active: true,
           message: "Preparando audio transpuesto...",
-          pendingBlocks:
-            nextSnapshot.pitch?.pitchProxyBlocksPending ||
-            nextSnapshot.pitch?.pitchJobsPending ||
-            undefined,
           startedAt: Date.now(),
         });
         applyPlaybackSnapshot(nextSnapshot);
@@ -3889,10 +3884,6 @@ export function TransportPanelContent() {
         setPitchPrepareUiState({
           active: true,
           message: "Preparando audio transpuesto...",
-          pendingBlocks:
-            nextSnapshot.pitch?.pitchProxyBlocksPending ||
-            nextSnapshot.pitch?.pitchJobsPending ||
-            undefined,
           startedAt: Date.now(),
         });
         applyPlaybackSnapshot(nextSnapshot);
@@ -7328,10 +7319,6 @@ export function TransportPanelContent() {
               <span>
                 {pitchPrepareUiState.active
                   ? `${pitchPrepareUiState.message}${
-                      pitchPrepareUiState.pendingBlocks
-                        ? ` ${pitchPrepareUiState.pendingBlocks} bloques pendientes`
-                        : ""
-                    }${
                       pitchPrepareUiState.error
                         ? `: ${pitchPrepareUiState.error}`
                         : ""

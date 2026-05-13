@@ -43,7 +43,7 @@ TEST_CASE("pitched render after seek resumes non-silent and aligned") {
     CHECK(std::llabs(onset - (50000 - seek_frame)) <= 2);
 }
 
-TEST_CASE("seek into unprepared pitch reports missing proxy and renders no stale audio") {
+TEST_CASE("far seek with pitch renders through realtime seek-safe path when proxy is missing") {
     auto samples = test::make_stereo_click(96000, 50000, 1.0f);
     SourceManager sources;
     sources.register_source("source", "");
@@ -62,12 +62,46 @@ TEST_CASE("seek into unprepared pitch reports missing proxy and renders no stale
     TrackRenderer renderer;
     renderer.render(track, seek_frame, frames, out, 2, sources, &cache, test::kFixtureSampleRate, 2);
 
-    CHECK(cache.diagnostics().proxy_blocks_missing > 0);
+    bool has_audio = false;
     for (int f = 0; f < frames; ++f) {
         CHECK(std::isfinite(left[f]));
         CHECK(std::isfinite(right[f]));
-        CHECK(left[f] == doctest::Approx(0.0f));
-        CHECK(right[f] == doctest::Approx(0.0f));
+        has_audio = has_audio || std::abs(left[f]) > 0.0001f || std::abs(right[f]) > 0.0001f;
+    }
+    CHECK(has_audio);
+    CHECK(cache.diagnostics().active_pitch_render_path == "realtime_seek_safe");
+    CHECK(cache.diagnostics().emergency_silence_render_count == 0);
+}
+
+TEST_CASE("missing proxy does not alternate proxy and silence block by block during playback") {
+    constexpr Frame duration = 32768;
+    auto samples = test::make_stereo_sine(duration, 440.0, 0.2f);
+    SourceManager sources;
+    sources.register_source("source", "");
+    REQUIRE(sources.store_decoded_source("source", samples, 2, test::kFixtureSampleRate, duration).is_ok());
+
+    Track track;
+    track.id = "track";
+    track.clips.push_back(Clip{"clip", "source", 0, 0, duration});
+
+    PitchCache cache;
+    PitchCacheKey key{"source", "track", "clip", 2.0, test::kFixtureSampleRate, 2, "prepared_proxy"};
+    const DecodedSource* source = sources.get("source");
+    REQUIRE(source != nullptr);
+    cache.prefetch_range(key, *source, 0, PitchCache::kProxyBlockFrames);
+
+    float left[PitchCache::kProxyBlockFrames * 2] = {};
+    float right[PitchCache::kProxyBlockFrames * 2] = {};
+    float* out[2] = {left, right};
+    TrackRenderer renderer;
+    renderer.render(track, 0, PitchCache::kProxyBlockFrames * 2, out, 2,
+                    sources, &cache, test::kFixtureSampleRate, 2);
+
+    CHECK(cache.diagnostics().active_pitch_render_path == "realtime_seek_safe");
+    CHECK(cache.diagnostics().emergency_silence_render_count == 0);
+    for (int f = 0; f < PitchCache::kProxyBlockFrames * 2; ++f) {
+        CHECK(std::isfinite(left[f]));
+        CHECK(std::isfinite(right[f]));
     }
 }
 

@@ -57,6 +57,7 @@ private:
     static constexpr int kMaxChannels    = 32;
     float  out_scratch_[kMaxChannels][kMaxBlockFrames]{};
     float* out_ptrs_[kMaxChannels]{};
+    float  last_output_[kMaxChannels]{};
 #endif
 };
 

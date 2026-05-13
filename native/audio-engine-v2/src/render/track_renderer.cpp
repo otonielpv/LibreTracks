@@ -79,36 +79,46 @@ void TrackRenderer::render_clip(const Clip&          clip,
                           engine_sample_rate, src->channel_count(), "prepared_proxy"};
         if (!pitch_cache) return;
 
-        int copied = 0;
-        while (copied < frames_to_read) {
-            const Frame absolute = source_frame + copied;
-            const int block_index = pitch_cache->block_index_for(absolute);
-            const int offset = pitch_cache->offset_in_block(absolute);
-            const int chunk = std::min(frames_to_read - copied,
-                                       PitchCache::kProxyBlockFrames - offset);
-            float* chunk_out[2] = {scratch_l_ + copied, scratch_r_ + copied};
-            if (!pitch_cache->get_block_if_ready(key, block_index, offset, chunk, chunk_out, 2)) {
-                if (pitch_cache->realtime_fallback_enabled()) {
-                    pitch_cache->note_realtime_fallback_used();
-                    int read = src->read(absolute, chunk, chunk_out, 2);
-                    if (read <= 0) return;
-                    PitchCacheKey realtime_key{clip.source_id, track_id, clip.id,
-                                               static_cast<double>(effective_semitones),
-                                               engine_sample_rate, src->channel_count(), "realtime"};
-                    PitchProcessor* proc = pitch_cache->find_processor(realtime_key);
-                    if (proc) {
-                        proc->process(chunk_out, 2, read);
-                    } else {
-                        pitch_cache->note_missing_processor(realtime_key);
+        const Frame proxy_window = std::max<Frame>(
+            frames_to_read, static_cast<Frame>(engine_sample_rate / 2));
+        const Frame source_remaining = std::max<Frame>(0, src->duration_frames() - source_frame);
+        const Frame ready_window = std::min(proxy_window, source_remaining);
+        const bool prepared_proxy_can_switch_without_crossfade = false;
+        if (prepared_proxy_can_switch_without_crossfade
+            && pitch_cache->is_range_ready(key, source_frame, ready_window)) {
+            int copied = 0;
+            while (copied < frames_to_read) {
+                const Frame absolute = source_frame + copied;
+                const int block_index = pitch_cache->block_index_for(absolute);
+                const int offset = pitch_cache->offset_in_block(absolute);
+                const int chunk = std::min(frames_to_read - copied,
+                                           PitchCache::kProxyBlockFrames - offset);
+                float* chunk_out[2] = {scratch_l_ + copied, scratch_r_ + copied};
+                if (!pitch_cache->get_block_if_ready(key, block_index, offset, chunk, chunk_out, 2)) {
+                    const int rendered = pitch_cache->render_realtime_seek_safe(
+                        PitchCacheKey{clip.source_id, track_id, clip.id,
+                                      static_cast<double>(effective_semitones),
+                                      engine_sample_rate, src->channel_count(), "realtime_seek_safe"},
+                        *src, absolute, chunk, chunk_out, 2);
+                    if (rendered <= 0) {
+                        pitch_cache->note_emergency_silence_used();
                         std::fill(chunk_out[0], chunk_out[0] + chunk, 0.0f);
                         std::fill(chunk_out[1], chunk_out[1] + chunk, 0.0f);
                     }
-                } else {
-                    std::fill(chunk_out[0], chunk_out[0] + chunk, 0.0f);
-                    std::fill(chunk_out[1], chunk_out[1] + chunk, 0.0f);
                 }
+                copied += chunk;
             }
-            copied += chunk;
+        } else {
+            const int rendered = pitch_cache->render_realtime_seek_safe(
+                PitchCacheKey{clip.source_id, track_id, clip.id,
+                              static_cast<double>(effective_semitones),
+                              engine_sample_rate, src->channel_count(), "realtime_seek_safe"},
+                *src, source_frame, frames_to_read, scratch_, 2);
+            if (rendered <= 0) {
+                pitch_cache->note_emergency_silence_used();
+                std::fill(scratch_l_, scratch_l_ + frames_to_read, 0.0f);
+                std::fill(scratch_r_, scratch_r_ + frames_to_read, 0.0f);
+            }
         }
     } else {
         int copied = 0;

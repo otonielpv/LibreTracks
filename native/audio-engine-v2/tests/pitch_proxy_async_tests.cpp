@@ -86,12 +86,23 @@ TEST_CASE("pitch proxy range request returns before background job completes") {
 
     CHECK(elapsed < 20.0);
     CHECK(cache.diagnostics().prepare_sync_count == 0);
-    CHECK(cache.diagnostics().jobs_queued >= 1);
+    CHECK(cache.diagnostics().jobs_queued > 1);
     CHECK(cache.diagnostics().jobs_pending
           + cache.diagnostics().jobs_running
           + cache.diagnostics().jobs_completed
           + cache.diagnostics().jobs_failed >= 1);
     CHECK(wait_ready(cache, key, 0, 0));
+}
+
+TEST_CASE("pitch cache enqueue range creates block-sized jobs") {
+    DecodedSource source(test::make_stereo_sine(480000, 440.0, 0.25f), 2,
+                         test::kFixtureSampleRate, 480000);
+    PitchCache cache;
+    auto key = async_key(2.0);
+
+    cache.enqueue_range(key, source, 0, PitchCache::kProxyBlockFrames * 6, 1, 1, "block_sized");
+
+    CHECK(cache.diagnostics().jobs_queued >= 6);
 }
 
 TEST_CASE("project load with transposed song returns without full pitch pre-render") {

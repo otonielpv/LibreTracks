@@ -71,6 +71,14 @@ struct PitchDiagnostics {
     std::uint64_t proxy_generation_count = 0;
     std::uint64_t duplicate_proxy_request_count = 0;
     std::uint64_t render_path_realtime_fallback_count = 0;
+    std::uint64_t realtime_seek_safe_resets = 0;
+    std::uint64_t realtime_seek_safe_preroll_frames = 0;
+    std::uint64_t realtime_seek_safe_render_count = 0;
+    std::uint64_t prepared_proxy_render_count = 0;
+    std::uint64_t emergency_silence_render_count = 0;
+    std::uint64_t stale_proxy_jobs_skipped = 0;
+    std::uint64_t current_pitch_epoch = 0;
+    std::uint64_t disk_cache_audio_thread_load_attempts = 0;
     std::uint64_t jobs_queued = 0;
     std::uint64_t jobs_pending = 0;
     std::uint64_t jobs_running = 0;
@@ -130,7 +138,9 @@ public:
     void note_missing_processor(const PitchCacheKey& key) noexcept;
     void note_missing_proxy_block(const PitchCacheKey& key, int block_index) noexcept;
     void note_realtime_fallback_used() noexcept;
+    void note_emergency_silence_used() noexcept;
     void note_prepared_proxy_used() noexcept;
+    void set_current_generation(std::uint64_t generation) noexcept;
     PitchDiagnostics diagnostics() const;
 
     bool request_block(const PitchCacheKey& key,
@@ -157,6 +167,15 @@ public:
                             int frames_needed,
                             float** out,
                             int num_channels) noexcept;
+    bool is_range_ready(const PitchCacheKey& key,
+                        Frame start_frame,
+                        Frame frame_count) const;
+    int render_realtime_seek_safe(const PitchCacheKey& key,
+                                  const DecodedSource& source,
+                                  Frame source_frame,
+                                  int frame_count,
+                                  float** out,
+                                  int num_channels) noexcept;
     bool is_block_ready(const PitchCacheKey& key, int block_index) const;
     int block_index_for(Frame frame) const noexcept;
     int offset_in_block(Frame frame) const noexcept;
@@ -218,6 +237,14 @@ private:
     std::atomic<std::uint64_t> proxy_generation_count_{0};
     std::atomic<std::uint64_t> duplicate_proxy_request_count_{0};
     std::atomic<std::uint64_t> render_path_realtime_fallback_count_{0};
+    std::atomic<std::uint64_t> realtime_seek_safe_resets_{0};
+    std::atomic<std::uint64_t> realtime_seek_safe_preroll_frames_{0};
+    std::atomic<std::uint64_t> realtime_seek_safe_render_count_{0};
+    std::atomic<std::uint64_t> prepared_proxy_render_count_{0};
+    std::atomic<std::uint64_t> emergency_silence_render_count_{0};
+    std::atomic<std::uint64_t> stale_proxy_jobs_skipped_{0};
+    std::atomic<std::uint64_t> current_generation_{0};
+    std::atomic<std::uint64_t> disk_cache_audio_thread_load_attempts_{0};
     std::atomic<std::uint64_t> jobs_queued_{0};
     std::atomic<std::uint64_t> jobs_running_{0};
     std::atomic<std::uint64_t> jobs_completed_{0};
@@ -242,6 +269,22 @@ private:
     std::string last_missing_proxy_key_;
     int last_missing_proxy_block_index_ = -1;
     std::unique_ptr<PersistentPitchProxyCache> disk_cache_;
+
+    struct RealtimePitchStream {
+        std::unique_ptr<PitchProcessor> processor;
+        Frame expected_source_frame = -1;
+        double semitones = 0.0;
+        int sample_rate = 0;
+        int channel_count = 0;
+        int fade_frames = 0;
+        int fade_processed = 0;
+        float preroll_l[4096] = {};
+        float preroll_r[4096] = {};
+    };
+    using RealtimeStreamMap =
+        std::unordered_map<PitchCacheKey, RealtimePitchStream, PitchCacheKeyHash>;
+    mutable std::mutex realtime_mutex_;
+    RealtimeStreamMap realtime_streams_;
 
     void worker_loop();
     bool generate_range(const PitchCacheKey& key,

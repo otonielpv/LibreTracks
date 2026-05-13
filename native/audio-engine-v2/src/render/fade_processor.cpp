@@ -9,7 +9,7 @@ namespace lt {
 namespace {
 
 int configured_ramp_frames(int requested) noexcept {
-    int value = requested > 0 ? requested : 256;
+    int value = requested > 0 ? requested : 1024;
     if (requested <= 0) {
         if (const char* env = std::getenv("LIBRETRACKS_SEEK_FADE_FRAMES")) {
             char* end = nullptr;

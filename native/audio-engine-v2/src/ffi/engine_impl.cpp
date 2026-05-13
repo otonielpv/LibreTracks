@@ -112,7 +112,7 @@ Result<void> EngineImpl::initialize() {
             pitch_prepare_on_source_ready_count_.fetch_add(1, std::memory_order_relaxed);
     });
     pitch_cache_    = std::make_unique<PitchCache>();
-    pitch_cache_->set_realtime_fallback_enabled(env_flag_enabled("LT_ENGINE_REALTIME_PITCH_FALLBACK"));
+    pitch_cache_->set_realtime_fallback_enabled(true);
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
     mixer_          = std::make_unique<Mixer>(
         std::shared_ptr<const Session>{},
@@ -307,6 +307,15 @@ std::string EngineImpl::get_snapshot() const {
         snap.pitch.last_missing_proxy_key = pitch.last_missing_proxy_key;
         snap.pitch.last_missing_proxy_block_index = pitch.last_missing_proxy_block_index;
         snap.pitch.active_pitch_mode = pitch.active_pitch_mode;
+        snap.pitch.realtime_seek_safe_resets = pitch.realtime_seek_safe_resets;
+        snap.pitch.realtime_seek_safe_preroll_frames = pitch.realtime_seek_safe_preroll_frames;
+        snap.pitch.realtime_seek_safe_render_count = pitch.realtime_seek_safe_render_count;
+        snap.pitch.prepared_proxy_render_count = pitch.prepared_proxy_render_count;
+        snap.pitch.emergency_silence_render_count = pitch.emergency_silence_render_count;
+        snap.pitch.stale_proxy_jobs_skipped = pitch.stale_proxy_jobs_skipped;
+        snap.pitch.current_pitch_epoch = pitch.current_pitch_epoch;
+        snap.pitch.disk_cache_audio_thread_load_attempts =
+            pitch.disk_cache_audio_thread_load_attempts;
         snap.pitch.offline_pitch_segments_rendered = pitch.offline_segments_rendered;
         snap.pitch.offline_pitch_segment_failures = pitch.offline_segment_failures;
         snap.pitch.offline_pitch_latency_frames = pitch.offline_latency_frames;
@@ -482,7 +491,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
 
             auto next_session = std::make_shared<Session>(result.take());
             session_ = next_session;
-            session_generation_.fetch_add(1, std::memory_order_relaxed);
+            const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (pitch_cache_) pitch_cache_->set_current_generation(generation);
 
             // Register all sources, then hand off to the async worker pool.
             source_manager_->clear();
@@ -523,6 +533,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         else if constexpr (std::is_same_v<T, CmdSeekAbsolute>) {
             Frame from = clock_->position().frame;
             clock_->seek(c.frame);
+            const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (pitch_cache_) pitch_cache_->set_current_generation(generation);
             if (session_) {
                 const Frame immediate = std::max<Frame>(PitchCache::kProxyBlockFrames, clock_->sample_rate());
                 const Frame forward = static_cast<Frame>(clock_->sample_rate()) * 10;
@@ -538,6 +550,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             Frame from = clock_->position().frame;
             Frame to   = from + c.delta_frames;
             clock_->seek(to);
+            const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (pitch_cache_) pitch_cache_->set_current_generation(generation);
             if (session_) {
                 const Frame immediate = std::max<Frame>(PitchCache::kProxyBlockFrames, clock_->sample_rate());
                 const Frame forward = static_cast<Frame>(clock_->sample_rate()) * 10;
@@ -684,7 +698,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             }
             if (changed) {
                 session_ = next_session;
+                const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
+                if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session);
+                if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
             }
             return Result<void>::ok();
@@ -696,7 +713,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     if (song.id == c.song_id)
                         song.transpose_semitones = c.semitones;
                 session_ = next_session;
+                const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
+                if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session);
+                if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
             }
             return Result<void>::ok();
@@ -709,7 +729,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         if (region.id == c.region_id)
                             region.transpose_semitones = c.semitones;
                 session_ = next_session;
+                const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
+                if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session);
+                if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
             }
             return Result<void>::ok();
@@ -752,6 +775,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 current_device_request_ = req;
                 if (clock_ && device_manager_->actual_sample_rate() > 0)
                     clock_->set_sample_rate(device_manager_->actual_sample_rate());
+                const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
+                if (pitch_cache_) pitch_cache_->set_current_generation(generation);
             }
             return r;
         }
@@ -767,6 +792,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 current_device_request_ = req;
                 if (clock_ && device_manager_->actual_sample_rate() > 0)
                     clock_->set_sample_rate(device_manager_->actual_sample_rate());
+                const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
+                if (pitch_cache_) pitch_cache_->set_current_generation(generation);
             }
             return r;
         }
