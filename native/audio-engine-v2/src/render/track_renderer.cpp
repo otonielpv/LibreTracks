@@ -89,6 +89,7 @@ void TrackRenderer::render_clip(const Clip&          clip,
             float* chunk_out[2] = {scratch_l_ + copied, scratch_r_ + copied};
             if (!pitch_cache->get_block_if_ready(key, block_index, offset, chunk, chunk_out, 2)) {
                 if (pitch_cache->realtime_fallback_enabled()) {
+                    pitch_cache->note_realtime_fallback_used();
                     int read = src->read(absolute, chunk, chunk_out, 2);
                     if (read <= 0) return;
                     PitchCacheKey realtime_key{clip.source_id, track_id, clip.id,
@@ -108,8 +109,20 @@ void TrackRenderer::render_clip(const Clip&          clip,
             copied += chunk;
         }
     } else {
-        int read = src->read(source_frame, frames_to_read, scratch_, 2);
-        if (read <= 0) return;
+        int copied = 0;
+        while (copied < frames_to_read) {
+            const Frame absolute = source_frame + copied;
+            const int block_index = original_cache_.block_index_for(absolute);
+            const int offset = original_cache_.offset_in_block(absolute);
+            const int chunk = std::min(frames_to_read - copied,
+                                       original_cache_.block_frames() - offset);
+            if (!original_cache_.is_block_ready(clip.source_id, block_index))
+                original_cache_.request_block(clip.source_id, *src, block_index);
+            float* chunk_out[2] = {scratch_l_ + copied, scratch_r_ + copied};
+            if (!original_cache_.get_block_if_ready(clip.source_id, block_index, offset, chunk, chunk_out, 2))
+                return;
+            copied += chunk;
+        }
     }
     int read = frames_to_read;
 

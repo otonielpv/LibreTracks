@@ -30,6 +30,7 @@ add_executable(lt_engine_tests
     prepared_pitch_alignment_tests.cpp
     pitch_proxy_async_tests.cpp
     pitch_proxy_continuity_tests.cpp
+    pitch_proxy_persistent_tests.cpp
     transport_audio_sync_tests.cpp
 )
 

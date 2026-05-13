@@ -3,6 +3,7 @@
 #include <lt_engine/core/types.h>
 #include <lt_engine/session/session.h>
 #include <lt_engine/sources/source_manager.h>
+#include <lt_engine/sources/original_source_cache.h>
 #include <lt_engine/pitch/pitch_cache.h>
 #include <vector>
 
@@ -50,6 +51,7 @@ private:
     float scratch_l_[kMaxBlockFrames] = {};
     float scratch_r_[kMaxBlockFrames] = {};
     float* scratch_[2] = { scratch_l_, scratch_r_ };
+    OriginalSourceCache original_cache_;
 };
 
 } // namespace lt

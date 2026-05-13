@@ -99,6 +99,21 @@ struct PitchSnapshot {
     double      pitch_proxy_prepare_blocking_ms = 0.0;
     std::string last_pitch_prepare_reason;
     std::string active_pitch_mode;
+    uint64_t    offline_pitch_segments_rendered = 0;
+    uint64_t    offline_pitch_segment_failures = 0;
+    int         offline_pitch_latency_frames = 0;
+    int         offline_pitch_preroll_frames = 0;
+    int         offline_pitch_postroll_frames = 0;
+    double      offline_pitch_render_ms = 0.0;
+    std::string last_offline_pitch_error;
+    bool        pitch_disk_cache_enabled = false;
+    std::string pitch_disk_cache_dir;
+    uint64_t    pitch_disk_cache_hits = 0;
+    uint64_t    pitch_disk_cache_misses = 0;
+    uint64_t    pitch_disk_cache_writes = 0;
+    uint64_t    pitch_disk_cache_invalidations = 0;
+    uint64_t    pitch_disk_cache_size_bytes = 0;
+    std::string last_pitch_disk_cache_error;
     std::string pitch_muted_or_bypassed_reason;
 };
 

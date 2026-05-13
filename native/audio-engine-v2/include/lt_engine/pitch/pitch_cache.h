@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -18,6 +19,9 @@
 #include <vector>
 
 namespace lt {
+
+class PersistentPitchProxyCache;
+struct PersistentPitchProxyCacheDiagnostics;
 
 struct PitchCacheKey {
     Id source_id;
@@ -71,6 +75,22 @@ struct PitchDiagnostics {
     std::uint64_t jobs_running = 0;
     std::uint64_t jobs_completed = 0;
     std::uint64_t jobs_failed = 0;
+    std::uint64_t offline_segments_rendered = 0;
+    std::uint64_t offline_segment_failures = 0;
+    int offline_latency_frames = 0;
+    int offline_preroll_frames = 0;
+    int offline_postroll_frames = 0;
+    std::uint64_t offline_trimmed_frames = 0;
+    double offline_render_ms = 0.0;
+    std::string last_offline_error;
+    bool disk_cache_enabled = false;
+    std::string disk_cache_dir;
+    std::uint64_t disk_cache_hits = 0;
+    std::uint64_t disk_cache_misses = 0;
+    std::uint64_t disk_cache_writes = 0;
+    std::uint64_t disk_cache_invalidations = 0;
+    std::uint64_t disk_cache_size_bytes = 0;
+    std::string last_disk_cache_error;
     std::uint64_t prepare_sync_count = 0;
     double prepare_blocking_ms = 0.0;
     std::string last_prepare_reason;
@@ -101,6 +121,7 @@ public:
     const PitchProcessor* find_processor(const PitchCacheKey& key) const noexcept;
     void note_missing_processor(const PitchCacheKey& key) noexcept;
     void note_missing_proxy_block(const PitchCacheKey& key, int block_index) noexcept;
+    void note_realtime_fallback_used() noexcept;
     PitchDiagnostics diagnostics() const;
 
     bool request_block(const PitchCacheKey& key,
@@ -134,6 +155,9 @@ public:
 
     void set_realtime_fallback_enabled(bool enabled) noexcept;
     bool realtime_fallback_enabled() const noexcept;
+    void set_persistent_cache_dir(const std::filesystem::path& cache_dir);
+    void set_persistent_cache_enabled(bool enabled);
+    PersistentPitchProxyCacheDiagnostics disk_cache_diagnostics() const;
 
     void clear();
     void evict(const Id& source_id);
@@ -189,11 +213,20 @@ private:
     std::atomic<std::uint64_t> jobs_running_{0};
     std::atomic<std::uint64_t> jobs_completed_{0};
     std::atomic<std::uint64_t> jobs_failed_{0};
+    std::atomic<std::uint64_t> offline_segments_rendered_{0};
+    std::atomic<std::uint64_t> offline_segment_failures_{0};
+    std::atomic<int> offline_latency_frames_{0};
+    std::atomic<int> offline_preroll_frames_{0};
+    std::atomic<int> offline_postroll_frames_{0};
+    std::atomic<std::uint64_t> offline_trimmed_frames_{0};
+    std::atomic<std::uint64_t> offline_render_us_{0};
     std::atomic<std::uint64_t> prepare_sync_count_{0};
     std::atomic<std::uint64_t> prepare_blocking_us_{0};
     std::atomic<bool> realtime_fallback_enabled_{false};
     mutable std::mutex reason_mutex_;
     std::string last_prepare_reason_;
+    std::string last_offline_error_;
+    std::unique_ptr<PersistentPitchProxyCache> disk_cache_;
 
     void worker_loop();
     bool generate_range(const PitchCacheKey& key,

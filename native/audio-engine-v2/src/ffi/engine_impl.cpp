@@ -4,6 +4,8 @@
 #include <lt_engine/render/pitch_resolution.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <mutex>
 #include <queue>
 #include <stdexcept>
@@ -14,6 +16,15 @@ namespace lt {
 using json = nlohmann::json;
 
 namespace {
+
+bool env_flag_enabled(const char* name) {
+    const char* raw = std::getenv(name);
+    if (!raw) return false;
+    std::string value = raw;
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value == "1" || value == "true" || value == "yes" || value == "on";
+}
 
 template <typename Update>
 bool update_track_session(std::shared_ptr<const Session>& session,
@@ -101,6 +112,7 @@ Result<void> EngineImpl::initialize() {
             pitch_prepare_on_source_ready_count_.fetch_add(1, std::memory_order_relaxed);
     });
     pitch_cache_    = std::make_unique<PitchCache>();
+    pitch_cache_->set_realtime_fallback_enabled(env_flag_enabled("LT_ENGINE_REALTIME_PITCH_FALLBACK"));
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
     mixer_          = std::make_unique<Mixer>(
         std::shared_ptr<const Session>{},
@@ -279,6 +291,21 @@ std::string EngineImpl::get_snapshot() const {
         snap.pitch.pitch_proxy_prepare_blocking_ms = pitch.prepare_blocking_ms;
         snap.pitch.last_pitch_prepare_reason = pitch.last_prepare_reason;
         snap.pitch.active_pitch_mode = pitch.active_pitch_mode;
+        snap.pitch.offline_pitch_segments_rendered = pitch.offline_segments_rendered;
+        snap.pitch.offline_pitch_segment_failures = pitch.offline_segment_failures;
+        snap.pitch.offline_pitch_latency_frames = pitch.offline_latency_frames;
+        snap.pitch.offline_pitch_preroll_frames = pitch.offline_preroll_frames;
+        snap.pitch.offline_pitch_postroll_frames = pitch.offline_postroll_frames;
+        snap.pitch.offline_pitch_render_ms = pitch.offline_render_ms;
+        snap.pitch.last_offline_pitch_error = pitch.last_offline_error;
+        snap.pitch.pitch_disk_cache_enabled = pitch.disk_cache_enabled;
+        snap.pitch.pitch_disk_cache_dir = pitch.disk_cache_dir;
+        snap.pitch.pitch_disk_cache_hits = pitch.disk_cache_hits;
+        snap.pitch.pitch_disk_cache_misses = pitch.disk_cache_misses;
+        snap.pitch.pitch_disk_cache_writes = pitch.disk_cache_writes;
+        snap.pitch.pitch_disk_cache_invalidations = pitch.disk_cache_invalidations;
+        snap.pitch.pitch_disk_cache_size_bytes = pitch.disk_cache_size_bytes;
+        snap.pitch.last_pitch_disk_cache_error = pitch.last_disk_cache_error;
         if (pitch.missing_processor_count > 0)
             snap.pitch.pitch_muted_or_bypassed_reason = "Pitch processor missing; bypassed instead of muting.";
     }

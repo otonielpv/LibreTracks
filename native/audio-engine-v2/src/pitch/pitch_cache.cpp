@@ -1,5 +1,7 @@
 #include <lt_engine/pitch/pitch_cache.h>
 #include <lt_engine/pitch/bypass_pitch_processor.h>
+#include <lt_engine/pitch/offline_pitch_segment_renderer.h>
+#include <lt_engine/pitch/persistent_pitch_proxy_cache.h>
 #include <lt_engine/pitch/rubberband_pitch_processor.h>
 #include <algorithm>
 #include <chrono>
@@ -59,6 +61,7 @@ bool is_sparse_transient(const DecodedSource& source, Frame start, int frames) {
 } // namespace
 
 PitchCache::PitchCache() {
+    disk_cache_ = std::make_unique<PersistentPitchProxyCache>();
     worker_ = std::thread([this] { worker_loop(); });
 }
 
@@ -114,6 +117,10 @@ void PitchCache::note_missing_proxy_block(const PitchCacheKey& key, int block_in
     missing_proxy_count_.fetch_add(1, std::memory_order_relaxed);
 }
 
+void PitchCache::note_realtime_fallback_used() noexcept {
+    render_path_realtime_fallback_count_.fetch_add(1, std::memory_order_relaxed);
+}
+
 PitchDiagnostics PitchCache::diagnostics() const {
     std::lock_guard lock(write_mutex_);
     auto cache = std::atomic_load(&cache_);
@@ -131,6 +138,28 @@ PitchDiagnostics PitchCache::diagnostics() const {
     d.jobs_running = jobs_running_.load(std::memory_order_relaxed);
     d.jobs_completed = jobs_completed_.load(std::memory_order_relaxed);
     d.jobs_failed = jobs_failed_.load(std::memory_order_relaxed);
+    d.offline_segments_rendered = offline_segments_rendered_.load(std::memory_order_relaxed);
+    d.offline_segment_failures = offline_segment_failures_.load(std::memory_order_relaxed);
+    d.offline_latency_frames = offline_latency_frames_.load(std::memory_order_relaxed);
+    d.offline_preroll_frames = offline_preroll_frames_.load(std::memory_order_relaxed);
+    d.offline_postroll_frames = offline_postroll_frames_.load(std::memory_order_relaxed);
+    d.offline_trimmed_frames = offline_trimmed_frames_.load(std::memory_order_relaxed);
+    d.offline_render_ms = static_cast<double>(offline_render_us_.load(std::memory_order_relaxed)) / 1000.0;
+    {
+        std::lock_guard reason_lock(reason_mutex_);
+        d.last_offline_error = last_offline_error_;
+    }
+    if (disk_cache_) {
+        auto disk = disk_cache_->diagnostics();
+        d.disk_cache_enabled = disk.enabled;
+        d.disk_cache_dir = disk.cache_dir;
+        d.disk_cache_hits = disk.hits;
+        d.disk_cache_misses = disk.misses;
+        d.disk_cache_writes = disk.writes;
+        d.disk_cache_invalidations = disk.invalidations;
+        d.disk_cache_size_bytes = disk.size_bytes;
+        d.last_disk_cache_error = disk.last_error;
+    }
     d.prepare_sync_count = prepare_sync_count_.load(std::memory_order_relaxed);
     d.prepare_blocking_ms = static_cast<double>(prepare_blocking_us_.load(std::memory_order_relaxed)) / 1000.0;
     {
@@ -255,8 +284,25 @@ bool PitchCache::get_block_if_ready(const PitchCacheKey& key,
     auto cache = std::atomic_load(&proxy_cache_);
     auto it = cache->find(ProxyCacheKey{key, block_index});
     if (it == cache->end() || !it->second) {
-        note_missing_proxy_block(key, block_index);
-        return false;
+        if (disk_cache_) {
+            PreparedPitchBlock disk_block;
+            if (disk_cache_->load_block(key, block_index, disk_block)) {
+                auto prepared = std::make_shared<PreparedPitchBlock>(std::move(disk_block));
+                {
+                    std::lock_guard lock(write_mutex_);
+                    auto current = std::atomic_load(&proxy_cache_);
+                    auto next = std::make_shared<ProxyMap>(*current);
+                    next->emplace(ProxyCacheKey{key, block_index}, prepared);
+                    std::atomic_store(&proxy_cache_, std::shared_ptr<const ProxyMap>(next));
+                }
+                cache = std::atomic_load(&proxy_cache_);
+                it = cache->find(ProxyCacheKey{key, block_index});
+            }
+        }
+        if (it == cache->end() || !it->second) {
+            note_missing_proxy_block(key, block_index);
+            return false;
+        }
     }
     const auto& block = *it->second;
     const int avail = block.frame_count - frame_offset_in_block;
@@ -302,6 +348,20 @@ bool PitchCache::realtime_fallback_enabled() const noexcept {
     return realtime_fallback_enabled_.load(std::memory_order_relaxed);
 }
 
+void PitchCache::set_persistent_cache_dir(const std::filesystem::path& cache_dir) {
+    if (disk_cache_)
+        disk_cache_->set_cache_dir(cache_dir);
+}
+
+void PitchCache::set_persistent_cache_enabled(bool enabled) {
+    if (disk_cache_)
+        disk_cache_->set_enabled(enabled);
+}
+
+PersistentPitchProxyCacheDiagnostics PitchCache::disk_cache_diagnostics() const {
+    return disk_cache_ ? disk_cache_->diagnostics() : PersistentPitchProxyCacheDiagnostics{};
+}
+
 void PitchCache::clear() {
     std::lock_guard lock(write_mutex_);
     std::atomic_store(&cache_, std::make_shared<const CacheMap>());
@@ -315,6 +375,9 @@ void PitchCache::clear() {
     jobs_running_.store(0, std::memory_order_relaxed);
     jobs_completed_.store(0, std::memory_order_relaxed);
     jobs_failed_.store(0, std::memory_order_relaxed);
+    offline_segments_rendered_.store(0, std::memory_order_relaxed);
+    offline_segment_failures_.store(0, std::memory_order_relaxed);
+    offline_render_us_.store(0, std::memory_order_relaxed);
     prepare_sync_count_.store(0, std::memory_order_relaxed);
     prepare_blocking_us_.store(0, std::memory_order_relaxed);
     {
@@ -390,13 +453,67 @@ bool PitchCache::generate_range(const PitchCacheKey& key,
     if (clamped_end <= clamped_start)
         return false;
 
-    const int first = block_index_for(clamped_start);
-    const int last = block_index_for(clamped_end - 1);
+    const auto t0 = std::chrono::steady_clock::now();
+    OfflinePitchSegmentRenderer renderer;
+    auto segment = renderer.render_segment(key, source, clamped_start, clamped_end - clamped_start);
+    const auto t1 = std::chrono::steady_clock::now();
+    offline_render_us_.fetch_add(
+        static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()),
+        std::memory_order_relaxed);
+    if (!segment.ok) {
+        offline_segment_failures_.fetch_add(1, std::memory_order_relaxed);
+        std::lock_guard reason_lock(reason_mutex_);
+        last_offline_error_ = segment.error;
+        return false;
+    }
+
+    offline_segments_rendered_.fetch_add(1, std::memory_order_relaxed);
+    offline_latency_frames_.store(segment.latency_frames, std::memory_order_relaxed);
+    offline_preroll_frames_.store(segment.preroll_frames, std::memory_order_relaxed);
+    offline_postroll_frames_.store(segment.postroll_frames, std::memory_order_relaxed);
+    offline_trimmed_frames_.fetch_add(static_cast<std::uint64_t>(segment.trimmed_frames), std::memory_order_relaxed);
+
+    const int first = block_index_for(segment.start_frame);
+    const int last = block_index_for(segment.start_frame + segment.frame_count - 1);
     bool any = false;
     for (int block = first; block <= last; ++block) {
         const Frame block_start = static_cast<Frame>(block) * kProxyBlockFrames;
-        if (publish_block(key, source, block_start, block))
-            any = true;
+        const Frame local_start = std::max<Frame>(0, block_start - segment.start_frame);
+        const int frames = static_cast<int>(std::min<Frame>(
+            kProxyBlockFrames,
+            std::max<Frame>(0, segment.frame_count - local_start)));
+        if (frames <= 0)
+            continue;
+
+        auto prepared = std::make_shared<PreparedPitchBlock>();
+        prepared->key = key;
+        prepared->source_start_frame = block_start;
+        prepared->block_index = block;
+        prepared->frame_count = frames;
+        prepared->channel_count = segment.channel_count;
+        prepared->interleaved_samples.assign(static_cast<std::size_t>(frames * segment.channel_count), 0.0f);
+        for (int f = 0; f < frames; ++f) {
+            const std::size_t src = static_cast<std::size_t>((local_start + f) * segment.channel_count);
+            const std::size_t dst = static_cast<std::size_t>(f * segment.channel_count);
+            std::copy(segment.interleaved_samples.begin() + static_cast<std::ptrdiff_t>(src),
+                      segment.interleaved_samples.begin() + static_cast<std::ptrdiff_t>(src + segment.channel_count),
+                      prepared->interleaved_samples.begin() + static_cast<std::ptrdiff_t>(dst));
+        }
+
+        {
+            std::lock_guard lock(write_mutex_);
+            auto current = std::atomic_load(&proxy_cache_);
+            ProxyCacheKey proxy_key{key, block};
+            if (current->find(proxy_key) == current->end()) {
+                auto next = std::make_shared<ProxyMap>(*current);
+                next->emplace(std::move(proxy_key), prepared);
+                std::atomic_store(&proxy_cache_, std::shared_ptr<const ProxyMap>(next));
+                proxy_generation_count_.fetch_add(1, std::memory_order_relaxed);
+                if (disk_cache_)
+                    disk_cache_->store_block(*prepared);
+                any = true;
+            }
+        }
         {
             std::lock_guard lock(job_mutex_);
             queued_blocks_.erase(block_id(key, block));
