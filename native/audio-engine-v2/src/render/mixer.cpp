@@ -98,6 +98,7 @@ Mixer::Mixer(const Session*       session,
     , pitch_cache_(pitch_cache)
     , pitch_engine_(pitch_engine)
 {
+    rebuild_control_slots(session_);
 }
 
 Mixer::Mixer(std::shared_ptr<const Session> session,
@@ -113,12 +114,81 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
     , pitch_cache_(pitch_cache)
     , pitch_engine_(pitch_engine)
 {
+    rebuild_control_slots(session_);
 }
 
 bool Mixer::any_solo_active(const Song& song) const noexcept {
-    for (std::size_t i = 0; i < song.tracks.size() && i < kMaxTracks; ++i)
-        if (overrides_[i].solo.load(std::memory_order_relaxed)) return true;
+    for (const auto& track : song.tracks) {
+        const auto* control = control_for_track(track.id);
+        if (control && control->solo.load(std::memory_order_relaxed)) return true;
+    }
     return false;
+}
+
+Mixer::TrackControlState* Mixer::control_for_track(const Id& track_id) noexcept {
+    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0, kMaxControlSlots);
+    for (int i = 0; i < count; ++i) {
+        if (controls_[static_cast<std::size_t>(i)].initialized
+            && controls_[static_cast<std::size_t>(i)].track_id == track_id)
+            return &controls_[static_cast<std::size_t>(i)];
+    }
+    return nullptr;
+}
+
+const Mixer::TrackControlState* Mixer::control_for_track(const Id& track_id) const noexcept {
+    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0, kMaxControlSlots);
+    for (int i = 0; i < count; ++i) {
+        if (controls_[static_cast<std::size_t>(i)].initialized
+            && controls_[static_cast<std::size_t>(i)].track_id == track_id)
+            return &controls_[static_cast<std::size_t>(i)];
+    }
+    return nullptr;
+}
+
+void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session) {
+    std::array<TrackControlState, kMaxControlSlots> next;
+    int count = 0;
+    if (session) {
+        for (const auto& song : session->songs) {
+            for (const auto& track : song.tracks) {
+                if (count >= kMaxControlSlots)
+                    break;
+                auto& slot = next[static_cast<std::size_t>(count)];
+                const auto* previous = control_for_track(track.id);
+                slot.track_id = track.id;
+                slot.gain.store(previous ? previous->gain.load(std::memory_order_relaxed) : track.gain,
+                                std::memory_order_relaxed);
+                slot.pan.store(previous ? previous->pan.load(std::memory_order_relaxed)
+                                        : std::clamp(track.pan, -1.0f, 1.0f),
+                               std::memory_order_relaxed);
+                slot.mute.store(previous ? previous->mute.load(std::memory_order_relaxed) : track.mute,
+                                std::memory_order_relaxed);
+                slot.solo.store(previous ? previous->solo.load(std::memory_order_relaxed) : track.solo,
+                                std::memory_order_relaxed);
+                slot.current_gain = previous ? previous->current_gain : track.gain;
+                slot.current_pan = previous ? previous->current_pan : std::clamp(track.pan, -1.0f, 1.0f);
+                slot.current_mute_gain = previous ? previous->current_mute_gain : (track.mute ? 0.0f : 1.0f);
+                slot.current_solo_gain = previous ? previous->current_solo_gain : 1.0f;
+                slot.initialized = true;
+                ++count;
+            }
+        }
+    }
+    for (int i = 0; i < kMaxControlSlots; ++i) {
+        auto& dst = controls_[static_cast<std::size_t>(i)];
+        auto& src = next[static_cast<std::size_t>(i)];
+        dst.track_id = std::move(src.track_id);
+        dst.gain.store(src.gain.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        dst.pan.store(src.pan.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        dst.mute.store(src.mute.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        dst.solo.store(src.solo.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        dst.current_gain = src.current_gain;
+        dst.current_pan = src.current_pan;
+        dst.current_mute_gain = src.current_mute_gain;
+        dst.current_solo_gain = src.current_solo_gain;
+        dst.initialized = src.initialized;
+    }
+    control_count_.store(count, std::memory_order_release);
 }
 
 void Mixer::render(float** output_channels,
@@ -156,35 +226,52 @@ void Mixer::render(float** output_channels,
             if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
                 continue;
 
-            bool solo_active = any_solo_active(song);
+            const bool solo_active = any_solo_active(song);
 
             // Render each track.
             for (std::size_t ti = 0; ti < song.tracks.size() && ti < kMaxTracks; ++ti) {
                 const Track& track = song.tracks[ti];
 
-                float gain = overrides_[ti].gain.load(std::memory_order_relaxed);
-                float pan_target = overrides_[ti].pan.load(std::memory_order_relaxed);
-                bool  mute = overrides_[ti].mute.load(std::memory_order_relaxed);
-                bool  solo = overrides_[ti].solo.load(std::memory_order_relaxed);
+                auto* control = control_for_track(track.id);
+                if (!control) {
+                    fallback_control_.track_id = track.id;
+                    fallback_control_.gain.store(track.gain, std::memory_order_relaxed);
+                    fallback_control_.pan.store(std::clamp(track.pan, -1.0f, 1.0f), std::memory_order_relaxed);
+                    fallback_control_.mute.store(track.mute, std::memory_order_relaxed);
+                    fallback_control_.solo.store(track.solo, std::memory_order_relaxed);
+                    fallback_control_.current_gain = track.gain;
+                    fallback_control_.current_pan = std::clamp(track.pan, -1.0f, 1.0f);
+                    fallback_control_.current_mute_gain = track.mute ? 0.0f : 1.0f;
+                    fallback_control_.current_solo_gain = solo_active && !track.solo ? 0.0f : 1.0f;
+                    fallback_control_.initialized = true;
+                    control = &fallback_control_;
+                }
 
-                if (mute) continue;
-                if (solo_active && !solo) continue;
+                const float gain = control->gain.load(std::memory_order_relaxed);
+                const float pan_target = control->pan.load(std::memory_order_relaxed);
+                const bool mute = control->mute.load(std::memory_order_relaxed);
+                const bool solo = control->solo.load(std::memory_order_relaxed);
 
                 const float smooth_ms = 10.0f;
                 const float coeff = std::clamp(static_cast<float>(num_frames) /
                     std::max(1.0f, static_cast<float>(clock_->sample_rate()) * smooth_ms * 0.001f), 0.0f, 1.0f);
-                overrides_[ti].current_gain += (gain - overrides_[ti].current_gain) * coeff;
-                overrides_[ti].current_pan += (pan_target - overrides_[ti].current_pan) * coeff;
-
+                const float target_mute_gain = mute ? 0.0f : 1.0f;
+                const float target_solo_gain = (solo_active && !solo) ? 0.0f : 1.0f;
+                control->current_gain += (gain - control->current_gain) * coeff;
+                control->current_pan += (pan_target - control->current_pan) * coeff;
+                control->current_mute_gain += (target_mute_gain - control->current_mute_gain) * coeff;
+                control->current_solo_gain += (target_solo_gain - control->current_solo_gain) * coeff;
+                const float effective_gain = control->current_gain
+                                           * control->current_mute_gain
+                                           * control->current_solo_gain;
                 // Render into mix bus.
                 std::fill(mix_l_, mix_l_ + num_frames, 0.f);
                 std::fill(mix_r_, mix_r_ + num_frames, 0.f);
 
-                // Temporarily override gain so TrackRenderer sees the command-thread gain.
                 Track patched = track;
-                patched.gain  = overrides_[ti].current_gain;
+                patched.gain  = 1.0f;
                 patched.mute  = false;  // already handled above
-                patched.pan = overrides_[ti].current_pan;
+                patched.pan = 0.0f;
 
                 renderers_[ti].render(patched, timeline_frame, num_frames,
                                        mix_, 2, *sources_, pitch_cache_,
@@ -206,7 +293,7 @@ void Mixer::render(float** output_channels,
                 auto route = route_channels(track.audio_to, num_channels);
                 const int left_channel = route.empty() ? 0 : route[0];
                 const int right_channel = route.size() > 1 ? route[1] : -1;
-                const float pan = clamp_pan(track.pan);
+                const float pan = clamp_pan(control->current_pan);
                 const float left_gain = pan > 0.0f ? 1.0f - pan : 1.0f;
                 const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
                 const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
@@ -221,8 +308,8 @@ void Mixer::render(float** output_channels,
                     else if (right_only_source)
                         source_l = source_r;
 
-                    float out_l = source_l * left_gain;
-                    float out_r = source_r * right_gain;
+                    float out_l = source_l * effective_gain * left_gain;
+                    float out_r = source_r * effective_gain * right_gain;
                     if (right_channel < 0) {
                         if (left_channel >= 0 && left_channel < num_channels)
                             output_channels[left_channel][f] += 0.5f * (out_l + out_r);
@@ -281,58 +368,28 @@ void Mixer::render(float** output_channels,
 }
 
 void Mixer::set_track_gain(const Id& track_id, Gain gain) {
-    auto session = std::atomic_load(&session_);
-    if (!session) return;
-    for (const auto& song : session->songs)
-        for (std::size_t i = 0; i < song.tracks.size() && i < kMaxTracks; ++i)
-            if (song.tracks[i].id == track_id)
-                overrides_[i].gain.store(gain, std::memory_order_relaxed);
+    if (auto* control = control_for_track(track_id))
+        control->gain.store(std::max(0.0f, gain), std::memory_order_relaxed);
 }
 
 void Mixer::set_track_pan(const Id& track_id, float pan) {
-    auto session = std::atomic_load(&session_);
-    if (!session) return;
-    const float clamped = std::clamp(pan, -1.0f, 1.0f);
-    for (const auto& song : session->songs)
-        for (std::size_t i = 0; i < song.tracks.size() && i < kMaxTracks; ++i)
-            if (song.tracks[i].id == track_id)
-                overrides_[i].pan.store(clamped, std::memory_order_relaxed);
+    if (auto* control = control_for_track(track_id))
+        control->pan.store(std::clamp(pan, -1.0f, 1.0f), std::memory_order_relaxed);
 }
 
 void Mixer::set_track_mute(const Id& track_id, bool mute) {
-    auto session = std::atomic_load(&session_);
-    if (!session) return;
-    for (const auto& song : session->songs)
-        for (std::size_t i = 0; i < song.tracks.size() && i < kMaxTracks; ++i)
-            if (song.tracks[i].id == track_id)
-                overrides_[i].mute.store(mute, std::memory_order_relaxed);
+    if (auto* control = control_for_track(track_id))
+        control->mute.store(mute, std::memory_order_relaxed);
 }
 
 void Mixer::set_track_solo(const Id& track_id, bool solo) {
-    auto session = std::atomic_load(&session_);
-    if (!session) return;
-    for (const auto& song : session->songs)
-        for (std::size_t i = 0; i < song.tracks.size() && i < kMaxTracks; ++i)
-            if (song.tracks[i].id == track_id)
-                overrides_[i].solo.store(solo, std::memory_order_relaxed);
+    if (auto* control = control_for_track(track_id))
+        control->solo.store(solo, std::memory_order_relaxed);
 }
 
 void Mixer::set_session(std::shared_ptr<const Session> session) {
     std::atomic_store(&session_, std::move(session));
-    auto current = std::atomic_load(&session_);
-    if (current) {
-        for (const auto& song : current->songs) {
-            for (std::size_t i = 0; i < song.tracks.size() && i < kMaxTracks; ++i) {
-                overrides_[i].gain.store(song.tracks[i].gain, std::memory_order_relaxed);
-                overrides_[i].pan.store(std::clamp(song.tracks[i].pan, -1.0f, 1.0f), std::memory_order_relaxed);
-                overrides_[i].current_gain = song.tracks[i].gain;
-                overrides_[i].current_pan = std::clamp(song.tracks[i].pan, -1.0f, 1.0f);
-                overrides_[i].mute.store(song.tracks[i].mute, std::memory_order_relaxed);
-                overrides_[i].solo.store(song.tracks[i].solo, std::memory_order_relaxed);
-            }
-            break;
-        }
-    }
+    rebuild_control_slots(std::atomic_load(&session_));
     reset_track_meters();
 }
 

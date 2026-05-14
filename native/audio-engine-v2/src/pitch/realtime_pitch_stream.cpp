@@ -369,6 +369,8 @@ int RealtimePitchStream::render(const DecodedSource& source,
     const int produced = pop_ring(out, out_channels, 0, frame_count);
     if (produced < frame_count)
         underflow_count_.fetch_add(1, std::memory_order_relaxed);
+    if (produced > 0)
+        primed_ = true;
     apply_reset_ramp(out, out_channels, produced);
     current_output_timeline_frame_ = timeline_frame + produced;
     render_count_.fetch_add(1, std::memory_order_relaxed);

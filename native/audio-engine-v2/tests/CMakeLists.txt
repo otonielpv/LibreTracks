@@ -20,6 +20,7 @@ add_executable(lt_engine_tests
     test_audio_fixtures.cpp
     test_fade_processor.cpp
     test_metronome_renderer.cpp
+    test_mixer_realtime_controls.cpp
     pitch_resolution_tests.cpp
     pitch_cache_tests.cpp
     pitch_alignment_tests.cpp

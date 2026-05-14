@@ -57,7 +57,11 @@ TEST_CASE("metronome enabled renders clicks on beats and respects volume zero") 
     std::fill(left.begin(), left.end(), 0.0f);
     std::fill(right.begin(), right.end(), 0.0f);
     renderer.set_config({true, 0.0f, "master", true});
-    renderer.render(out, 2, 2048, 48000.0, 24000, &session);
+    for (int i = 0; i < 40; ++i) {
+        std::fill(left.begin(), left.end(), 0.0f);
+        std::fill(right.begin(), right.end(), 0.0f);
+        renderer.render(out, 2, 2048, 48000.0, 24000 + i * 2048, &session);
+    }
     CHECK(peak(left) == doctest::Approx(0.0f));
 }
 
@@ -65,13 +69,17 @@ TEST_CASE("accent click is louder than normal beat") {
     MetronomeRenderer renderer;
     auto session = make_session();
     renderer.set_config({true, 1.0f, "master", true});
+    std::vector<float> warmup(4096, 0.0f), warmup_r(4096, 0.0f);
+    float* warmup_out[] = { warmup.data(), warmup_r.data() };
+    renderer.render(warmup_out, 2, 4096, 48000.0, 48000, &session);
+
     std::vector<float> accent(4096, 0.0f), normal(4096, 0.0f), scratch(4096, 0.0f);
     float* out1[] = { accent.data(), scratch.data() };
-    renderer.render(out1, 2, 4096, 48000.0, 0, &session);
+    renderer.render(out1, 2, 4096, 48000.0, 96000, &session);
 
     std::fill(scratch.begin(), scratch.end(), 0.0f);
     float* out2[] = { normal.data(), scratch.data() };
-    renderer.render(out2, 2, 4096, 48000.0, 24000, &session);
+    renderer.render(out2, 2, 4096, 48000.0, 120000, &session);
 
     CHECK(peak(accent) > peak(normal));
 }
@@ -156,4 +164,28 @@ TEST_CASE("metronome routes to ext zero-based output channel") {
     CHECK(peak(ch1) == doctest::Approx(0.0f));
     CHECK(peak(ch2) > 0.01f);
     CHECK(peak(ch3) == doctest::Approx(0.0f));
+}
+
+TEST_CASE("metronome toggle is declicked") {
+    MetronomeRenderer renderer;
+    auto session = make_session();
+    renderer.set_config({true, 1.0f, "master", true});
+    std::vector<float> left(2048, 0.0f), right(2048, 0.0f);
+    float* out[] = { left.data(), right.data() };
+    renderer.render(out, 2, 2048, 48000.0, 0, &session);
+
+    renderer.set_config({false, 1.0f, "master", true});
+    float last = left.back();
+    float max_jump = 0.0f;
+    for (int block = 1; block < 12; ++block) {
+        std::fill(left.begin(), left.end(), 0.0f);
+        std::fill(right.begin(), right.end(), 0.0f);
+        renderer.render(out, 2, 2048, 48000.0, block * 2048, &session);
+        for (float sample : left) {
+            max_jump = std::max(max_jump, std::abs(sample - last));
+            last = sample;
+        }
+    }
+    CHECK(max_jump < 0.75f);
+    CHECK(renderer.diagnostics().toggle_count == 2);
 }

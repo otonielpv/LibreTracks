@@ -27,6 +27,9 @@ struct MetronomeDiagnostics {
     std::string route_resolved = "master";
     uint64_t rendered_clicks_count = 0;
     std::string muted_reason = "disabled";
+    float current_gain = 0.0f;
+    float target_gain = 0.0f;
+    uint64_t toggle_count = 0;
 };
 
 class MetronomeRenderer {
@@ -65,12 +68,14 @@ private:
     double voice_phase_ = 0.0;
     double voice_phase_step_ = 0.0;
     float voice_gain_ = 0.0f;
+    float current_output_gain_ = 0.0f;
 
     std::atomic<Frame> last_beat_frame_{-1};
     std::atomic<Frame> next_beat_frame_{0};
     std::atomic<int> current_bar_{1};
     std::atomic<int> current_beat_{1};
     std::atomic<uint64_t> rendered_clicks_count_{0};
+    std::atomic<uint64_t> toggle_count_{0};
     std::array<char, 64> muted_reason_{};
     std::array<char, 64> route_resolved_{};
 };

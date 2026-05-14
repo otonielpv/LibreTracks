@@ -84,15 +84,22 @@ private:
     std::array<TrackRenderer, kMaxTracks> renderers_;
 
     // Per-track mix overrides (command thread writes, audio thread reads).
-    struct TrackOverride {
+    struct TrackControlState {
+        Id track_id;
         std::atomic<float> gain{1.0f};
         std::atomic<float> pan{0.0f};
         std::atomic<bool>  mute{false};
         std::atomic<bool>  solo{false};
         float current_gain = 1.0f;
         float current_pan = 0.0f;
+        float current_mute_gain = 1.0f;
+        float current_solo_gain = 1.0f;
+        bool initialized = false;
     };
-    std::array<TrackOverride, kMaxTracks> overrides_;
+    static constexpr int kMaxControlSlots = 256;
+    std::array<TrackControlState, kMaxControlSlots> controls_;
+    std::atomic<int> control_count_{0};
+    TrackControlState fallback_control_;
 
     // Stereo mix bus (reused each block, fixed size).
     static constexpr int kMaxBlockFrames = 4096;
@@ -126,6 +133,9 @@ private:
     // Check whether any track is soloed.
     bool any_solo_active(const Song& song) const noexcept;
     void reset_track_meters() noexcept;
+    TrackControlState* control_for_track(const Id& track_id) noexcept;
+    const TrackControlState* control_for_track(const Id& track_id) const noexcept;
+    void rebuild_control_slots(std::shared_ptr<const Session> session);
 };
 
 } // namespace lt

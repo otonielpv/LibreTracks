@@ -86,7 +86,10 @@ Frame rounded_beat_frame(Frame segment_start, double beat_frames, int64_t beat_i
 } // namespace
 
 void MetronomeRenderer::set_config(const MetronomeConfig& config) {
+    const bool previous_enabled = enabled_.load(std::memory_order_acquire);
     enabled_.store(config.enabled, std::memory_order_release);
+    if (previous_enabled != config.enabled)
+        toggle_count_.fetch_add(1, std::memory_order_relaxed);
     volume_.store(std::clamp(config.volume, 0.0f, 1.0f), std::memory_order_release);
     accent_enabled_.store(config.accent_enabled, std::memory_order_release);
 
@@ -156,11 +159,12 @@ void MetronomeRenderer::render(float** output_channels,
 
     const bool enabled = enabled_.load(std::memory_order_acquire);
     const float volume = volume_.load(std::memory_order_acquire);
-    if (!enabled) {
+    const float target_gain = enabled ? volume : 0.0f;
+    if (!enabled && current_output_gain_ <= 0.000001f) {
         copy_text(muted_reason_, "disabled");
         return;
     }
-    if (volume <= 0.000001f) {
+    if (target_gain <= 0.000001f && current_output_gain_ <= 0.000001f) {
         copy_text(muted_reason_, "volume_zero");
         return;
     }
@@ -192,6 +196,10 @@ void MetronomeRenderer::render(float** output_channels,
     copy_text(muted_reason_, "");
 
     for (int f = 0; f < num_frames; ++f) {
+        const float ramp_frames = static_cast<float>(std::max(1.0, sample_rate * 0.010));
+        current_output_gain_ += (target_gain - current_output_gain_) / ramp_frames;
+        if (std::abs(current_output_gain_ - target_gain) < 1.0e-6f)
+            current_output_gain_ = target_gain;
         const Frame abs_frame = timeline_frame + f;
         const double bpm = bpm_at(song, abs_frame);
         const auto [beats_per_bar, beat_unit] = signature_at(song, abs_frame);
@@ -235,7 +243,7 @@ void MetronomeRenderer::render(float** output_channels,
                 : static_cast<float>(voice_index_) / static_cast<float>(voice_total_ - 1);
             const float attack = std::min(1.0f, t / 0.03f);
             const float decay = std::exp(-7.0f * t);
-            const float sample = std::sin(voice_phase_) * attack * decay * voice_gain_ * volume;
+            const float sample = std::sin(voice_phase_) * attack * decay * voice_gain_ * current_output_gain_;
             output_channels[left][f] += sample;
             if (right != left)
                 output_channels[right][f] += sample;
@@ -258,6 +266,9 @@ MetronomeDiagnostics MetronomeRenderer::diagnostics() const {
     d.route_resolved = array_text(route_resolved_);
     d.rendered_clicks_count = rendered_clicks_count_.load(std::memory_order_acquire);
     d.muted_reason = array_text(muted_reason_);
+    d.current_gain = current_output_gain_;
+    d.target_gain = d.enabled ? d.volume : 0.0f;
+    d.toggle_count = toggle_count_.load(std::memory_order_acquire);
     return d;
 }
 
