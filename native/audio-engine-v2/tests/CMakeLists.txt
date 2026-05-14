@@ -25,6 +25,7 @@ add_executable(lt_engine_tests
     pitch_alignment_tests.cpp
     pitch_frequency_tests.cpp
     pitch_seek_tests.cpp
+    realtime_pitch_stream_tests.cpp
     pitch_preparation_tests.cpp
     prepared_pitch_cache_tests.cpp
     prepared_pitch_alignment_tests.cpp
@@ -60,18 +61,20 @@ else()
     target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_TEST_EXPECT_REAL_RUBBERBAND=0)
 endif()
 
-add_custom_command(TARGET lt_engine_tests POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:lt_audio_engine_v2>
-        $<TARGET_FILE_DIR:lt_engine_tests>
-)
+if(BUILD_SHARED_LIBS)
+    add_custom_command(TARGET lt_engine_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:lt_audio_engine_v2>
+            $<TARGET_FILE_DIR:lt_engine_tests>
+    )
 
-add_custom_command(TARGET lt_engine_tests POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_RUNTIME_DLLS:lt_engine_tests>
-        $<TARGET_FILE_DIR:lt_engine_tests>
-    COMMAND_EXPAND_LISTS
-)
+    add_custom_command(TARGET lt_engine_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_RUNTIME_DLLS:lt_engine_tests>
+            $<TARGET_FILE_DIR:lt_engine_tests>
+        COMMAND_EXPAND_LISTS
+    )
+endif()
 
 if(LT_RUBBERBAND_RUNTIME_DIR)
     file(GLOB _lt_rubberband_runtime_dlls "${LT_RUBBERBAND_RUNTIME_DIR}/*.dll")

@@ -90,6 +90,8 @@ struct AudioDeviceManager::Impl {
     std::string  backend;
     int          sample_rate = 0;
     int          buffer_size = 0;
+    int          output_channel_count = 2;
+    std::vector<std::string> output_channel_names;
     std::string  last_error;
 };
 
@@ -153,6 +155,8 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
             d.id      = make_device_id(backend, device_name);
             d.name    = device_name;
             d.backend = backend;
+            d.output_channel_count = 2;
+            d.output_channel_names = {"Out 1", "Out 2"};
             result.push_back(std::move(d));
         }
     }
@@ -179,7 +183,7 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         setup.outputDeviceName = juce::String(device_name);
     }
     setup.outputChannels.clear();
-    for (int ch = 0; ch < 64; ++ch)
+    for (int ch = 0; ch < 2; ++ch)
         setup.outputChannels.setBit(ch);
     if (request.sample_rate > 0)
         setup.sampleRate = request.sample_rate;
@@ -200,6 +204,15 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     impl_->backend      = dev->getTypeName().toStdString();
     impl_->sample_rate  = static_cast<int>(dev->getCurrentSampleRate());
     impl_->buffer_size  = dev->getCurrentBufferSizeSamples();
+    impl_->output_channel_names.clear();
+    auto names = dev->getOutputChannelNames();
+    for (const auto& name : names)
+        impl_->output_channel_names.push_back(name.toStdString());
+    impl_->output_channel_count = static_cast<int>(impl_->output_channel_names.size());
+    if (impl_->output_channel_count <= 0) {
+        impl_->output_channel_count = 2;
+        impl_->output_channel_names = {"Out 1", "Out 2"};
+    }
 
     impl_->juce_manager.addAudioCallback(impl_->adaptor.get());
     return Result<void>::ok();
@@ -240,6 +253,8 @@ DeviceInfo AudioDeviceManager::device_info() const {
     info.backend     = impl_->backend;
     info.sample_rate = impl_->sample_rate;
     info.buffer_size = impl_->buffer_size;
+    info.output_channel_count = impl_->output_channel_count;
+    info.output_channel_names = impl_->output_channel_names;
     info.last_error  = impl_->last_error;
     if (impl_->adaptor && impl_->adaptor->has_error())
         info.last_error = impl_->adaptor->last_error();
@@ -255,6 +270,7 @@ namespace lt {
 struct AudioDeviceManager::Impl {
     DeviceOpenRequest request;
     bool open = false;
+    int output_channel_count = 2;
 };
 
 AudioDeviceManager::AudioDeviceManager()  : impl_(std::make_unique<Impl>()) {}
@@ -265,6 +281,8 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
     descriptor.id = "stub-default";
     descriptor.name = "C++ v2 stub output";
     descriptor.backend = "stub";
+    descriptor.output_channel_count = 2;
+    descriptor.output_channel_names = {"Out 1", "Out 2"};
     descriptor.supported_sample_rates = { 44100, 48000 };
     descriptor.supported_buffer_sizes = { 128, 256, 512, 1024 };
     return { descriptor };
@@ -293,6 +311,8 @@ DeviceInfo AudioDeviceManager::device_info() const {
     info.backend = actual_backend();
     info.sample_rate = actual_sample_rate();
     info.buffer_size = actual_buffer_size();
+    info.output_channel_count = 2;
+    info.output_channel_names = {"Out 1", "Out 2"};
     return info;
 }
 

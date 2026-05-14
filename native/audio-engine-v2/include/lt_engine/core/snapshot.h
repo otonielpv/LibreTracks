@@ -29,6 +29,8 @@ struct DeviceInfo {
     std::string backend;
     int         sample_rate  = 0;
     int         buffer_size  = 0;
+    int         output_channel_count = 2;
+    std::vector<std::string> output_channel_names;
     std::string last_error;
 };
 
@@ -125,6 +127,16 @@ struct PitchSnapshot {
     uint64_t    realtime_seek_safe_render_count = 0;
     uint64_t    prepared_proxy_render_count = 0;
     uint64_t    emergency_silence_render_count = 0;
+    uint64_t    active_stream_set_generation = 0;
+    uint64_t    stream_generation = 0;
+    uint64_t    stream_reset_thread_id = 0;
+    uint64_t    stream_render_thread_id = 0;
+    uint64_t    unsafe_cross_thread_reset_count = 0;
+    uint64_t    concurrent_stream_mutation_detected = 0;
+    uint64_t    active_stream_swap_count = 0;
+    uint64_t    long_seek_count = 0;
+    Frame       last_transport_discontinuity_target_frame = 0;
+    std::string last_transport_discontinuity_reason;
     uint64_t    stale_proxy_jobs_skipped = 0;
     uint64_t    current_pitch_epoch = 0;
     uint64_t    disk_cache_audio_thread_load_attempts = 0;

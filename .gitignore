@@ -17,3 +17,4 @@ repomix-output.xml
 graphify-out/
 .claude/settings.local.json
 native/audio-engine-v2/build*
+build-rb-tests*

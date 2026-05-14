@@ -16,7 +16,7 @@
 #include <memory>
 #include <vector>
 
-#if LT_ENGINE_USE_RUBBERBAND
+#if LT_ENGINE_USE_RUBBERBAND && !LT_ENGINE_ALLOW_PITCH_STUB
 #define LT_ENGINE_HAS_RUBBERBAND_HEADER 1
 namespace RubberBand { class RubberBandStretcher; }
 #else

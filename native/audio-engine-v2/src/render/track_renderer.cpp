@@ -34,6 +34,21 @@ void TrackRenderer::render(const Track&         track,
                             int                  engine_sample_rate,
                             Semitones            effective_semitones,
                             const Song*          active_song) noexcept {
+    render(track, timeline_frame, block_frames, out, num_out_channels, sources,
+           pitch_cache, nullptr, engine_sample_rate, effective_semitones, active_song);
+}
+
+void TrackRenderer::render(const Track&         track,
+                            Frame                timeline_frame,
+                            int                  block_frames,
+                            float**              out,
+                            int                  num_out_channels,
+                            const SourceManager& sources,
+                            PitchCache*          pitch_cache,
+                            RealtimePitchEngine* pitch_engine,
+                            int                  engine_sample_rate,
+                            Semitones            effective_semitones,
+                            const Song*          active_song) noexcept {
     if (track.mute) return;
 
     // Callers set active_semitones to 0 if the track should not be transposed.
@@ -47,7 +62,7 @@ void TrackRenderer::render(const Track&         track,
             : effective_semitones;
         render_clip(clip, timeline_frame, block_frames,
                     track.gain, out, num_out_channels,
-                    sources, pitch_cache, engine_sample_rate,
+                    sources, pitch_cache, pitch_engine, engine_sample_rate,
                     track.id, clip_semitones);
     }
 }
@@ -60,6 +75,7 @@ void TrackRenderer::render_clip(const Clip&          clip,
                                  int                  num_out_channels,
                                  const SourceManager& sources,
                                  PitchCache*          pitch_cache,
+                                 RealtimePitchEngine* pitch_engine,
                                  int                  engine_sample_rate,
                                  const Id&            track_id,
                                  Semitones            effective_semitones) noexcept {
@@ -93,52 +109,23 @@ void TrackRenderer::render_clip(const Clip&          clip,
     std::fill(scratch_r_.begin(), scratch_r_.begin() + frames_to_read, 0.f);
 
     if (effective_semitones != 0) {
-        PitchCacheKey key{clip.source_id, track_id, clip.id,
-                          static_cast<double>(effective_semitones),
-                          engine_sample_rate, src->channel_count(), "prepared_proxy"};
-        if (!pitch_cache) return;
-
-        const Frame proxy_window = std::max<Frame>(
-            frames_to_read, static_cast<Frame>(engine_sample_rate / 2));
-        const Frame source_remaining = std::max<Frame>(0, src->duration_frames() - source_frame);
-        const Frame ready_window = std::min(proxy_window, source_remaining);
-        const bool prepared_proxy_can_switch_without_crossfade = false;
-        if (prepared_proxy_can_switch_without_crossfade
-            && pitch_cache->is_range_ready(key, source_frame, ready_window)) {
-            int copied = 0;
-            while (copied < frames_to_read) {
-                const Frame absolute = source_frame + copied;
-                const int block_index = pitch_cache->block_index_for(absolute);
-                const int offset = pitch_cache->offset_in_block(absolute);
-                const int chunk = std::min(frames_to_read - copied,
-                                           PitchCache::kProxyBlockFrames - offset);
-                float* chunk_out[2] = {scratch_l_.data() + copied, scratch_r_.data() + copied};
-                if (!pitch_cache->get_block_if_ready(key, block_index, offset, chunk, chunk_out, 2)) {
-                    const int rendered = pitch_cache->render_realtime_seek_safe(
-                        PitchCacheKey{clip.source_id, track_id, clip.id,
-                                      static_cast<double>(effective_semitones),
-                                      engine_sample_rate, src->channel_count(), "realtime_seek_safe"},
-                        *src, absolute, chunk, chunk_out, 2);
-                    if (rendered <= 0) {
-                        pitch_cache->note_emergency_silence_used();
-                        std::fill(chunk_out[0], chunk_out[0] + chunk, 0.0f);
-                        std::fill(chunk_out[1], chunk_out[1] + chunk, 0.0f);
-                    }
-                }
-                copied += chunk;
-            }
-        } else {
-            const int rendered = pitch_cache->render_realtime_seek_safe(
+        (void)pitch_cache;
+        (void)engine_sample_rate;
+        int rendered = 0;
+        if (pitch_engine) {
+            rendered = pitch_engine->render_pitched_clip(
+                clip, track_id, *src, source_frame, timeline_frame + block_offset,
+                frames_to_read, static_cast<double>(effective_semitones), scratch_, 2);
+        } else if (pitch_cache) {
+            rendered = pitch_cache->render_realtime_seek_safe(
                 PitchCacheKey{clip.source_id, track_id, clip.id,
                               static_cast<double>(effective_semitones),
-                              engine_sample_rate, src->channel_count(), "realtime_seek_safe"},
+                              engine_sample_rate, src->channel_count(), "experimental_legacy_realtime_seek_safe"},
                 *src, source_frame, frames_to_read, scratch_, 2);
-            if (rendered <= 0) {
-                pitch_cache->note_emergency_silence_used();
-                std::fill(scratch_l_.begin(), scratch_l_.begin() + frames_to_read, 0.0f);
-                std::fill(scratch_r_.begin(), scratch_r_.begin() + frames_to_read, 0.0f);
-            }
         }
+        if (rendered <= 0)
+            return;
+        frames_to_read = rendered;
     } else {
         int copied = 0;
         while (copied < frames_to_read) {

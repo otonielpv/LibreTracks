@@ -2,11 +2,11 @@
 #include <cmath>
 #include <algorithm>
 
-#if LT_ENGINE_USE_RUBBERBAND && __has_include(<rubberband/RubberBandStretcher.h>)
+#if LT_ENGINE_USE_RUBBERBAND && !LT_ENGINE_ALLOW_PITCH_STUB && __has_include(<rubberband/RubberBandStretcher.h>)
 #  define LT_ENGINE_HAS_RUBBERBAND_IMPL 1
 #  include <rubberband/RubberBandStretcher.h>
 #  define LT_ENGINE_RUBBERBAND_HEADER_FOUND 1
-#elif LT_ENGINE_USE_RUBBERBAND && __has_include(<RubberBandStretcher.h>)
+#elif LT_ENGINE_USE_RUBBERBAND && !LT_ENGINE_ALLOW_PITCH_STUB && __has_include(<RubberBandStretcher.h>)
 #  define LT_ENGINE_HAS_RUBBERBAND_IMPL 1
 #  include <RubberBandStretcher.h>
 #  define LT_ENGINE_RUBBERBAND_HEADER_FOUND 1

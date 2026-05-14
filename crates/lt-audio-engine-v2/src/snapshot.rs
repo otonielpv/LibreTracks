@@ -58,7 +58,15 @@ pub struct DeviceInfo {
     pub backend: String,
     pub sample_rate: i32,
     pub buffer_size: i32,
+    #[serde(default = "default_output_channel_count")]
+    pub output_channel_count: i32,
+    #[serde(default)]
+    pub output_channel_names: Vec<String>,
     pub last_error: String,
+}
+
+fn default_output_channel_count() -> i32 {
+    2
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -155,4 +163,24 @@ pub struct PitchSnapshot {
     pub last_missing_proxy_key: String,
     #[serde(default)]
     pub last_missing_proxy_block_index: i64,
+    #[serde(default)]
+    pub active_stream_set_generation: u64,
+    #[serde(default)]
+    pub stream_generation: u64,
+    #[serde(default)]
+    pub stream_reset_thread_id: u64,
+    #[serde(default)]
+    pub stream_render_thread_id: u64,
+    #[serde(default)]
+    pub unsafe_cross_thread_reset_count: u64,
+    #[serde(default)]
+    pub concurrent_stream_mutation_detected: u64,
+    #[serde(default)]
+    pub active_stream_swap_count: u64,
+    #[serde(default)]
+    pub long_seek_count: u64,
+    #[serde(default)]
+    pub last_transport_discontinuity_target_frame: i64,
+    #[serde(default)]
+    pub last_transport_discontinuity_reason: String,
 }

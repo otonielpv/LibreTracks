@@ -22,7 +22,7 @@ use crate::models::PitchPrepareSummary;
 use crate::{error::DesktopError, settings::AppSettings};
 
 const ENGINE_SAMPLE_RATE: f64 = 48_000.0;
-const ENGINE_V2_MAX_OUTPUT_CHANNELS: usize = 64;
+const ENGINE_V2_FALLBACK_OUTPUT_CHANNELS: usize = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1149,8 +1149,13 @@ fn devices_response(devices: Vec<DeviceInfo>) -> AudioOutputDevicesResponse {
             device.device_id.clone()
         };
         names.push(name.clone());
-        channel_counts.insert(name.clone(), ENGINE_V2_MAX_OUTPUT_CHANNELS);
-        channel_counts.insert(stable_id.clone(), ENGINE_V2_MAX_OUTPUT_CHANNELS);
+        let output_channels = if device.output_channel_count > 0 {
+            device.output_channel_count as usize
+        } else {
+            ENGINE_V2_FALLBACK_OUTPUT_CHANNELS
+        };
+        channel_counts.insert(name.clone(), output_channels);
+        channel_counts.insert(stable_id.clone(), output_channels);
         let backend = backend_from_str(&device.backend);
         if !backends.contains(&backend) {
             backends.push(backend);
@@ -1162,7 +1167,7 @@ fn devices_response(devices: Vec<DeviceInfo>) -> AudioOutputDevicesResponse {
             name: name.clone(),
             display_name: name,
             is_default: index == 0,
-            max_output_channels: ENGINE_V2_MAX_OUTPUT_CHANNELS,
+            max_output_channels: output_channels,
             default_sample_rate: (device.sample_rate > 0).then_some(device.sample_rate as u32),
             supported_sample_rates: if device.sample_rate > 0 {
                 vec![device.sample_rate as u32]

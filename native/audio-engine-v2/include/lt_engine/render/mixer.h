@@ -8,6 +8,7 @@
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/metronome_renderer.h>
 #include <lt_engine/pitch/pitch_cache.h>
+#include <lt_engine/pitch/realtime_pitch_engine.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -31,13 +32,15 @@ public:
           const SourceManager* sources,
           TransportClock*      clock,
           JumpScheduler*       scheduler,
-          PitchCache*          pitch_cache = nullptr);
+          PitchCache*          pitch_cache = nullptr,
+          RealtimePitchEngine* pitch_engine = nullptr);
 
     Mixer(std::shared_ptr<const Session> session,
           const SourceManager* sources,
           TransportClock* clock,
           JumpScheduler* scheduler,
-          PitchCache* pitch_cache = nullptr);
+          PitchCache* pitch_cache = nullptr,
+          RealtimePitchEngine* pitch_engine = nullptr);
 
     // Called by the JUCE audio thread.
     void render(float** output_channels,
@@ -48,10 +51,12 @@ public:
     // Called from command thread to update track gain/mute/solo atomically.
     // Changes take effect at the next render block.
     void set_track_gain(const Id& track_id, Gain gain);
+    void set_track_pan(const Id& track_id, float pan);
     void set_track_mute(const Id& track_id, bool mute);
     void set_track_solo(const Id& track_id, bool solo);
     void set_session(std::shared_ptr<const Session> session);
     void set_pitch_cache(PitchCache* pitch_cache) noexcept;
+    void set_pitch_engine(RealtimePitchEngine* pitch_engine) noexcept;
     void clear_session();
     void trigger_crossfade() noexcept;
     void set_metronome_config(const MetronomeConfig& config);
@@ -71,6 +76,7 @@ private:
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
     PitchCache*          pitch_cache_ = nullptr;
+    RealtimePitchEngine* pitch_engine_ = nullptr;
 
     // Per-track renderer pool (one per track, up to kMaxTracks).
     // Allocated once on construction, never in render().
@@ -80,8 +86,11 @@ private:
     // Per-track mix overrides (command thread writes, audio thread reads).
     struct TrackOverride {
         std::atomic<float> gain{1.0f};
+        std::atomic<float> pan{0.0f};
         std::atomic<bool>  mute{false};
         std::atomic<bool>  solo{false};
+        float current_gain = 1.0f;
+        float current_pan = 0.0f;
     };
     std::array<TrackOverride, kMaxTracks> overrides_;
 

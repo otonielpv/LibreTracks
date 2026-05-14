@@ -5,6 +5,7 @@
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/sources/original_source_cache.h>
 #include <lt_engine/pitch/pitch_cache.h>
+#include <lt_engine/pitch/realtime_pitch_engine.h>
 #include <vector>
 
 namespace lt {
@@ -31,6 +32,18 @@ public:
                 Semitones             effective_semitones = 0,
                 const Song*           active_song = nullptr) noexcept;
 
+    void render(const Track&          track,
+                Frame                 timeline_frame,
+                int                   block_frames,
+                float**               out,
+                int                   num_out_channels,
+                const SourceManager&  sources,
+                PitchCache*           pitch_cache,
+                RealtimePitchEngine*  pitch_engine,
+                int                   engine_sample_rate,
+                Semitones             effective_semitones = 0,
+                const Song*           active_song = nullptr) noexcept;
+
 private:
     // Render one clip's contribution for this block.
     void render_clip(const Clip&           clip,
@@ -41,6 +54,7 @@ private:
                      int                   num_out_channels,
                      const SourceManager&  sources,
                      PitchCache*           pitch_cache,
+                     RealtimePitchEngine*  pitch_engine,
                      int                   engine_sample_rate,
                      const Id&             track_id,
                      Semitones             effective_semitones) noexcept;

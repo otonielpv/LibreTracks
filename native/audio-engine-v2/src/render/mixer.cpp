@@ -89,12 +89,14 @@ Mixer::Mixer(const Session*       session,
              const SourceManager* sources,
              TransportClock*      clock,
              JumpScheduler*       scheduler,
-             PitchCache*          pitch_cache)
+             PitchCache*          pitch_cache,
+             RealtimePitchEngine* pitch_engine)
     : session_(session ? std::make_shared<Session>(*session) : nullptr)
     , sources_(sources)
     , clock_(clock)
     , scheduler_(scheduler)
     , pitch_cache_(pitch_cache)
+    , pitch_engine_(pitch_engine)
 {
 }
 
@@ -102,12 +104,14 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
              const SourceManager* sources,
              TransportClock* clock,
              JumpScheduler* scheduler,
-             PitchCache* pitch_cache)
+             PitchCache* pitch_cache,
+             RealtimePitchEngine* pitch_engine)
     : session_(std::move(session))
     , sources_(sources)
     , clock_(clock)
     , scheduler_(scheduler)
     , pitch_cache_(pitch_cache)
+    , pitch_engine_(pitch_engine)
 {
 }
 
@@ -159,11 +163,18 @@ void Mixer::render(float** output_channels,
                 const Track& track = song.tracks[ti];
 
                 float gain = overrides_[ti].gain.load(std::memory_order_relaxed);
+                float pan_target = overrides_[ti].pan.load(std::memory_order_relaxed);
                 bool  mute = overrides_[ti].mute.load(std::memory_order_relaxed);
                 bool  solo = overrides_[ti].solo.load(std::memory_order_relaxed);
 
                 if (mute) continue;
                 if (solo_active && !solo) continue;
+
+                const float smooth_ms = 10.0f;
+                const float coeff = std::clamp(static_cast<float>(num_frames) /
+                    std::max(1.0f, static_cast<float>(clock_->sample_rate()) * smooth_ms * 0.001f), 0.0f, 1.0f);
+                overrides_[ti].current_gain += (gain - overrides_[ti].current_gain) * coeff;
+                overrides_[ti].current_pan += (pan_target - overrides_[ti].current_pan) * coeff;
 
                 // Render into mix bus.
                 std::fill(mix_l_, mix_l_ + num_frames, 0.f);
@@ -171,12 +182,13 @@ void Mixer::render(float** output_channels,
 
                 // Temporarily override gain so TrackRenderer sees the command-thread gain.
                 Track patched = track;
-                patched.gain  = gain;
+                patched.gain  = overrides_[ti].current_gain;
                 patched.mute  = false;  // already handled above
+                patched.pan = overrides_[ti].current_pan;
 
                 renderers_[ti].render(patched, timeline_frame, num_frames,
                                        mix_, 2, *sources_, pitch_cache_,
-                                       clock_->sample_rate(), 0, &song);
+                                       pitch_engine_, clock_->sample_rate(), 0, &song);
 
                 float track_peak_l = 0.f, track_peak_r = 0.f;
                 double track_sum_l = 0.0, track_sum_r = 0.0;
@@ -277,6 +289,16 @@ void Mixer::set_track_gain(const Id& track_id, Gain gain) {
                 overrides_[i].gain.store(gain, std::memory_order_relaxed);
 }
 
+void Mixer::set_track_pan(const Id& track_id, float pan) {
+    auto session = std::atomic_load(&session_);
+    if (!session) return;
+    const float clamped = std::clamp(pan, -1.0f, 1.0f);
+    for (const auto& song : session->songs)
+        for (std::size_t i = 0; i < song.tracks.size() && i < kMaxTracks; ++i)
+            if (song.tracks[i].id == track_id)
+                overrides_[i].pan.store(clamped, std::memory_order_relaxed);
+}
+
 void Mixer::set_track_mute(const Id& track_id, bool mute) {
     auto session = std::atomic_load(&session_);
     if (!session) return;
@@ -297,11 +319,29 @@ void Mixer::set_track_solo(const Id& track_id, bool solo) {
 
 void Mixer::set_session(std::shared_ptr<const Session> session) {
     std::atomic_store(&session_, std::move(session));
+    auto current = std::atomic_load(&session_);
+    if (current) {
+        for (const auto& song : current->songs) {
+            for (std::size_t i = 0; i < song.tracks.size() && i < kMaxTracks; ++i) {
+                overrides_[i].gain.store(song.tracks[i].gain, std::memory_order_relaxed);
+                overrides_[i].pan.store(std::clamp(song.tracks[i].pan, -1.0f, 1.0f), std::memory_order_relaxed);
+                overrides_[i].current_gain = song.tracks[i].gain;
+                overrides_[i].current_pan = std::clamp(song.tracks[i].pan, -1.0f, 1.0f);
+                overrides_[i].mute.store(song.tracks[i].mute, std::memory_order_relaxed);
+                overrides_[i].solo.store(song.tracks[i].solo, std::memory_order_relaxed);
+            }
+            break;
+        }
+    }
     reset_track_meters();
 }
 
 void Mixer::set_pitch_cache(PitchCache* pitch_cache) noexcept {
     pitch_cache_ = pitch_cache;
+}
+
+void Mixer::set_pitch_engine(RealtimePitchEngine* pitch_engine) noexcept {
+    pitch_engine_ = pitch_engine;
 }
 
 void Mixer::clear_session() {

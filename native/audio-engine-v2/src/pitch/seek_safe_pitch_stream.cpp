@@ -6,10 +6,10 @@
 #include <mutex>
 #include <tuple>
 
-#if LT_ENGINE_USE_RUBBERBAND && __has_include(<rubberband/RubberBandStretcher.h>)
+#if LT_ENGINE_USE_RUBBERBAND && !LT_ENGINE_ALLOW_PITCH_STUB && __has_include(<rubberband/RubberBandStretcher.h>)
 #  define LT_ENGINE_SEEK_SAFE_HAS_RUBBERBAND_IMPL 1
 #  include <rubberband/RubberBandStretcher.h>
-#elif LT_ENGINE_USE_RUBBERBAND && __has_include(<RubberBandStretcher.h>)
+#elif LT_ENGINE_USE_RUBBERBAND && !LT_ENGINE_ALLOW_PITCH_STUB && __has_include(<RubberBandStretcher.h>)
 #  define LT_ENGINE_SEEK_SAFE_HAS_RUBBERBAND_IMPL 1
 #  include <RubberBandStretcher.h>
 #else

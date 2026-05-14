@@ -26,6 +26,8 @@ struct DeviceDescriptor {
     std::string id;
     std::string name;
     std::string backend;
+    int output_channel_count = 2;
+    std::vector<std::string> output_channel_names;
     std::vector<int> supported_sample_rates;
     std::vector<int> supported_buffer_sizes;
 };

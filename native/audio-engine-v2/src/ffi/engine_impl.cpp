@@ -112,14 +112,16 @@ Result<void> EngineImpl::initialize() {
             pitch_prepare_on_source_ready_count_.fetch_add(1, std::memory_order_relaxed);
     });
     pitch_cache_    = std::make_unique<PitchCache>();
-    pitch_cache_->set_realtime_fallback_enabled(true);
+    pitch_cache_->set_realtime_fallback_enabled(false);
+    realtime_pitch_engine_ = std::make_unique<RealtimePitchEngine>();
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
     mixer_          = std::make_unique<Mixer>(
         std::shared_ptr<const Session>{},
         source_manager_.get(),
         clock_.get(),
         scheduler_.get(),
-        pitch_cache_.get());
+        pitch_cache_.get(),
+        realtime_pitch_engine_.get());
     mixer_->set_metronome_config(metronome_config_);
 
     // Open the default audio device with the silent callback.
@@ -160,6 +162,7 @@ Result<void> EngineImpl::shutdown() {
     scheduler_.reset();
     session_.reset();
     pitch_cache_.reset();
+    realtime_pitch_engine_.reset();
     state_ = State::ShutDown;
     return Result<void>::ok();
 }
@@ -276,6 +279,9 @@ std::string EngineImpl::get_snapshot() const {
     }
     if (pitch_cache_) {
         auto pitch = pitch_cache_->diagnostics();
+        auto realtime_pitch = realtime_pitch_engine_
+            ? realtime_pitch_engine_->diagnostics()
+            : PitchStreamDiagnostics{};
         snap.pitch.pitch_processors_prepared = pitch.processors_prepared;
         snap.pitch.pitch_processors_missing = pitch.processors_missing;
         snap.pitch.pitch_missing_processor_count = pitch.missing_processor_count;
@@ -285,39 +291,51 @@ std::string EngineImpl::get_snapshot() const {
             source_ready_pitch_prepare_count_.load(std::memory_order_relaxed);
         snap.pitch.pitch_latency_frames = pitch.max_latency_frames;
         snap.pitch.active_pitch_keys = pitch.active_keys;
-        snap.pitch.pitch_jobs_queued = pitch.jobs_queued;
-        snap.pitch.pitch_jobs_pending = pitch.jobs_pending;
+        snap.pitch.pitch_jobs_queued = 0;
+        snap.pitch.pitch_jobs_pending = 0;
         snap.pitch.pitch_jobs_running = pitch.jobs_running;
         snap.pitch.pitch_jobs_completed = pitch.jobs_completed;
         snap.pitch.pitch_jobs_failed = pitch.jobs_failed;
         snap.pitch.seek_immediate_jobs_queued = pitch.seek_immediate_jobs_queued;
         snap.pitch.seek_immediate_jobs_completed = pitch.seek_immediate_jobs_completed;
-        snap.pitch.pitch_proxy_blocks_ready = pitch.proxy_blocks_ready;
-        snap.pitch.pitch_proxy_blocks_missing = pitch.proxy_blocks_missing;
-        snap.pitch.pitch_proxy_blocks_pending = pitch.queued_blocks;
-        snap.pitch.pitch_prepare_queue_length = static_cast<int>(pitch.jobs_pending);
-        snap.pitch.pitch_prepare_pending = pitch.jobs_pending > 0 || pitch.queued_blocks > 0;
-        snap.pitch.pitch_prepare_active = snap.pitch.pitch_prepare_pending || pitch.jobs_running > 0;
+        snap.pitch.pitch_proxy_blocks_ready = 0;
+        snap.pitch.pitch_proxy_blocks_missing = 0;
+        snap.pitch.pitch_proxy_blocks_pending = 0;
+        snap.pitch.pitch_prepare_queue_length = 0;
+        snap.pitch.pitch_prepare_pending = false;
+        snap.pitch.pitch_prepare_active = false;
         snap.pitch.pitch_prepare_progress = snap.pitch.pitch_prepare_active ? 0.0 : 1.0;
         snap.pitch.pitch_proxy_prepare_sync_count = pitch.prepare_sync_count;
         snap.pitch.pitch_proxy_prepare_blocking_ms = pitch.prepare_blocking_ms;
         snap.pitch.last_pitch_prepare_reason = pitch.last_prepare_reason;
-        snap.pitch.active_pitch_render_path = pitch.active_pitch_render_path;
+        snap.pitch.active_pitch_render_path = realtime_pitch.active_render_path;
         snap.pitch.last_pitch_proxy_error = pitch.last_pitch_proxy_error;
         snap.pitch.last_missing_proxy_key = pitch.last_missing_proxy_key;
         snap.pitch.last_missing_proxy_block_index = pitch.last_missing_proxy_block_index;
-        snap.pitch.active_pitch_mode = pitch.active_pitch_mode;
-        snap.pitch.realtime_seek_safe_resets = pitch.realtime_seek_safe_resets;
-        snap.pitch.realtime_pitch_underflow_count = pitch.realtime_pitch_underflow_count;
-        snap.pitch.realtime_pitch_discontinuities = pitch.realtime_pitch_discontinuities;
-        snap.pitch.realtime_seek_safe_preroll_frames = pitch.realtime_seek_safe_preroll_frames;
-        snap.pitch.realtime_pitch_start_pad_frames = pitch.realtime_pitch_start_pad_frames;
-        snap.pitch.realtime_pitch_start_delay_frames = pitch.realtime_pitch_start_delay_frames;
-        snap.pitch.realtime_pitch_preroll_frames = pitch.realtime_pitch_preroll_frames;
-        snap.pitch.realtime_pitch_discarded_frames = pitch.realtime_pitch_discarded_frames;
-        snap.pitch.realtime_seek_safe_render_count = pitch.realtime_seek_safe_render_count;
-        snap.pitch.prepared_proxy_render_count = pitch.prepared_proxy_render_count;
-        snap.pitch.emergency_silence_render_count = pitch.emergency_silence_render_count;
+        snap.pitch.active_pitch_mode = "realtime_stream";
+        snap.pitch.realtime_seek_safe_resets = realtime_pitch.reset_count;
+        snap.pitch.realtime_pitch_underflow_count = realtime_pitch.underflow_count;
+        snap.pitch.realtime_pitch_discontinuities = realtime_pitch.reset_count;
+        snap.pitch.realtime_seek_safe_preroll_frames = realtime_pitch.preroll_frames;
+        snap.pitch.realtime_pitch_start_pad_frames = 0;
+        snap.pitch.realtime_pitch_start_delay_frames = realtime_pitch.start_delay_frames;
+        snap.pitch.realtime_pitch_preroll_frames = realtime_pitch.preroll_frames;
+        snap.pitch.realtime_pitch_discarded_frames = realtime_pitch.discarded_frames;
+        snap.pitch.realtime_seek_safe_render_count = realtime_pitch.render_count;
+        snap.pitch.prepared_proxy_render_count = 0;
+        snap.pitch.emergency_silence_render_count = realtime_pitch.emergency_silence_count;
+        snap.pitch.active_stream_set_generation = realtime_pitch.active_stream_set_generation;
+        snap.pitch.stream_generation = realtime_pitch.stream_generation;
+        snap.pitch.stream_reset_thread_id = realtime_pitch.stream_reset_thread_id;
+        snap.pitch.stream_render_thread_id = realtime_pitch.stream_render_thread_id;
+        snap.pitch.unsafe_cross_thread_reset_count = realtime_pitch.unsafe_cross_thread_reset_count;
+        snap.pitch.concurrent_stream_mutation_detected = realtime_pitch.concurrent_stream_mutation_detected;
+        snap.pitch.active_stream_swap_count = realtime_pitch.active_stream_swap_count;
+        snap.pitch.long_seek_count = realtime_pitch.long_seek_count;
+        snap.pitch.last_transport_discontinuity_target_frame =
+            realtime_pitch.last_transport_discontinuity_target_frame;
+        snap.pitch.last_transport_discontinuity_reason =
+            realtime_pitch.last_transport_discontinuity_reason;
         snap.pitch.stale_proxy_jobs_skipped = pitch.stale_proxy_jobs_skipped;
         snap.pitch.current_pitch_epoch = pitch.current_pitch_epoch;
         snap.pitch.disk_cache_audio_thread_load_attempts =
@@ -359,6 +377,8 @@ std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id)
         return 0;
     if (!source_manager_->get(source_id))
         return 0;
+    if (realtime_pitch_engine_)
+        realtime_pitch_engine_->prepare_for_session(*session_, *source_manager_, clock_->sample_rate());
     return prepare_pitch_processors_for_session(*session_);
 }
 
@@ -392,18 +412,10 @@ std::size_t EngineImpl::enqueue_pitch_window(const Session& session,
                     track, clip, song, overlap_start);
                 if (semitones == 0)
                     continue;
-                PitchCacheKey key{clip.source_id, track.id, clip.id,
-                                  static_cast<double>(semitones),
-                                  sample_rate, source->channel_count(), "prepared_proxy"};
-                const Frame source_start = clip.source_start_frame + (overlap_start - clip.timeline_start_frame);
-                const Frame source_frames = std::min<Frame>(
-                    overlap_end - overlap_start,
-                    std::max<Frame>(0, source->duration_frames() - source_start));
-                pitch_cache_->enqueue_range(key, *source, source_start, source_frames,
-                                            priority, session_generation_.load(std::memory_order_relaxed),
-                                            reason);
-                if (pitch_cache_->is_block_ready(key, pitch_cache_->block_index_for(source_start)))
-                    ++prepared;
+                (void)sample_rate;
+                (void)priority;
+                (void)reason;
+                ++prepared;
             }
         }
     }
@@ -427,6 +439,10 @@ std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& sess
 void EngineImpl::prepare_pitch_processors_for_session() {
     if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
         return;
+    if (realtime_pitch_engine_) {
+        realtime_pitch_engine_->prepare_for_session(*session_, *source_manager_, clock_->sample_rate());
+        realtime_pitch_engine_->prepare_for_play(clock_->position().frame, *session_, *source_manager_);
+    }
     prepare_pitch_processors_for_session(*session_);
 }
 
@@ -465,6 +481,8 @@ std::string EngineImpl::list_devices() const {
             {"device_id",   d.id},
             {"device_name", d.name},
             {"backend",     d.backend},
+            {"output_channel_count", d.output_channel_count},
+            {"output_channel_names", d.output_channel_names},
             {"sample_rate", 0},
             {"buffer_size", 0},
             {"last_error",  ""},
@@ -515,7 +533,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (mixer_) {
                 mixer_->set_session(next_session);
                 mixer_->set_pitch_cache(pitch_cache_.get());
+                mixer_->set_pitch_engine(realtime_pitch_engine_.get());
             }
+            if (realtime_pitch_engine_)
+                realtime_pitch_engine_->prepare_for_session(*next_session, *source_manager_, sr);
 
             return Result<void>::ok();
         }
@@ -549,6 +570,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                      forward - immediate, 1, "seek_forward_prebuffer");
             }
             if (mixer_) mixer_->trigger_crossfade();
+            if (realtime_pitch_engine_ && session_)
+                realtime_pitch_engine_->prepare_for_transport_discontinuity(
+                    clock_->position().frame, "seek_absolute", *session_, *source_manager_);
             push_event(EvSeekExecuted{ from, c.frame });
             return Result<void>::ok();
         }
@@ -566,6 +590,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                      forward - immediate, 1, "seek_forward_prebuffer");
             }
             if (mixer_) mixer_->trigger_crossfade();
+            if (realtime_pitch_engine_ && session_)
+                realtime_pitch_engine_->prepare_for_transport_discontinuity(
+                    clock_->position().frame, "seek_relative", *session_, *source_manager_);
             push_event(EvSeekExecuted{ from, to });
             return Result<void>::ok();
         }
@@ -583,9 +610,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackPan>) {
-            update_track_session(session_, mixer_.get(), c.track_id, [pan = c.pan](Track& track) {
-                track.pan = std::clamp(pan, -1.0f, 1.0f);
-            });
+            if (mixer_) mixer_->set_track_pan(c.track_id, c.pan);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackMute>) {
@@ -707,6 +732,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session);
+                if (realtime_pitch_engine_)
+                    realtime_pitch_engine_->prepare_for_session(*next_session, *source_manager_, clock_->sample_rate());
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
             }
@@ -722,6 +749,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session);
+                if (realtime_pitch_engine_)
+                    realtime_pitch_engine_->prepare_for_session(*next_session, *source_manager_, clock_->sample_rate());
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
             }
@@ -738,6 +767,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session);
+                if (realtime_pitch_engine_)
+                    realtime_pitch_engine_->prepare_for_session(*next_session, *source_manager_, clock_->sample_rate());
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
             }
