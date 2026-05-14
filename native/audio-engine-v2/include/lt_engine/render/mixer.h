@@ -58,6 +58,7 @@ public:
     void set_pitch_cache(PitchCache* pitch_cache) noexcept;
     void set_pitch_engine(RealtimePitchEngine* pitch_engine) noexcept;
     void clear_session();
+    void prepare_render_resources(int max_block_frames) noexcept;
     void trigger_crossfade() noexcept;
     void set_metronome_config(const MetronomeConfig& config);
     void set_metronome_enabled(bool enabled);
@@ -71,6 +72,10 @@ public:
     // Diagnostic counters.
     int    callback_count()          const noexcept;
     double callback_duration_ms()    const noexcept;
+    double callback_duration_max_ms() const noexcept;
+    std::uint64_t callback_over_budget_count() const noexcept;
+    std::uint64_t rendered_track_count() const noexcept;
+    std::uint64_t skipped_track_count() const noexcept;
 
 private:
     std::shared_ptr<const Session> session_;
@@ -127,6 +132,10 @@ private:
     // Callback stats.
     std::atomic<int>    callback_count_{0};
     std::atomic<double> callback_duration_ms_{0.0};
+    std::atomic<double> callback_duration_max_ms_{0.0};
+    std::atomic<std::uint64_t> callback_over_budget_count_{0};
+    std::atomic<std::uint64_t> rendered_track_count_{0};
+    std::atomic<std::uint64_t> skipped_track_count_{0};
 
     // Click-free crossfade around seeks/jumps.
     FadeProcessor fade_;

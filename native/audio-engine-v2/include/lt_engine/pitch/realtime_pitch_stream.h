@@ -28,6 +28,11 @@ struct PitchStreamDiagnostics {
     std::uint64_t concurrent_stream_mutation_detected = 0;
     std::uint64_t active_stream_swap_count = 0;
     std::uint64_t active_stream_set_generation = 0;
+    std::uint64_t active_pitch_stream_count = 0;
+    std::uint64_t pitch_timeline_mismatch_count = 0;
+    std::uint64_t pitch_stream_not_aligned_count = 0;
+    std::uint64_t pitch_audio_thread_reset_count = 0;
+    std::uint64_t pitch_audio_thread_prime_count = 0;
     std::uint64_t stream_generation = 0;
     std::uint64_t stream_reset_thread_id = 0;
     std::uint64_t stream_render_thread_id = 0;

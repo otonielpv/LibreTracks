@@ -6,22 +6,69 @@
 
 namespace lt {
 
+std::atomic<std::uint64_t> TrackRenderer::prepare_count_{0};
+std::atomic<std::uint64_t> TrackRenderer::scratch_resize_count_{0};
+std::atomic<std::uint64_t> TrackRenderer::scratch_resize_in_audio_thread_count_{0};
+std::atomic<std::uint64_t> TrackRenderer::block_too_large_count_{0};
+std::atomic<int> TrackRenderer::max_scratch_capacity_frames_{0};
+
+void TrackRenderer::prepare(int max_block_frames) noexcept {
+    if (max_block_frames <= 0)
+        return;
+    try {
+        if (static_cast<int>(scratch_l_.size()) < max_block_frames) {
+            scratch_l_.resize(static_cast<std::size_t>(max_block_frames), 0.0f);
+            scratch_resize_count_.fetch_add(1, std::memory_order_relaxed);
+        }
+        if (static_cast<int>(scratch_r_.size()) < max_block_frames) {
+            scratch_r_.resize(static_cast<std::size_t>(max_block_frames), 0.0f);
+            scratch_resize_count_.fetch_add(1, std::memory_order_relaxed);
+        }
+        scratch_capacity_frames_ = std::min(static_cast<int>(scratch_l_.size()),
+                                            static_cast<int>(scratch_r_.size()));
+        scratch_[0] = scratch_l_.data();
+        scratch_[1] = scratch_r_.data();
+        prepare_count_.fetch_add(1, std::memory_order_relaxed);
+        int observed = max_scratch_capacity_frames_.load(std::memory_order_relaxed);
+        while (scratch_capacity_frames_ > observed
+               && !max_scratch_capacity_frames_.compare_exchange_weak(
+                   observed, scratch_capacity_frames_, std::memory_order_relaxed)) {}
+    } catch (...) {
+        scratch_capacity_frames_ = 0;
+        scratch_[0] = nullptr;
+        scratch_[1] = nullptr;
+    }
+}
+
+TrackRendererDiagnostics TrackRenderer::diagnostics() noexcept {
+    return TrackRendererDiagnostics{
+        prepare_count_.load(std::memory_order_relaxed),
+        scratch_resize_count_.load(std::memory_order_relaxed),
+        scratch_resize_in_audio_thread_count_.load(std::memory_order_relaxed),
+        block_too_large_count_.load(std::memory_order_relaxed),
+        max_scratch_capacity_frames_.load(std::memory_order_relaxed)};
+}
+
+void TrackRenderer::reset_diagnostics() noexcept {
+    prepare_count_.store(0, std::memory_order_relaxed);
+    scratch_resize_count_.store(0, std::memory_order_relaxed);
+    scratch_resize_in_audio_thread_count_.store(0, std::memory_order_relaxed);
+    block_too_large_count_.store(0, std::memory_order_relaxed);
+    max_scratch_capacity_frames_.store(0, std::memory_order_relaxed);
+}
+
 bool TrackRenderer::ensure_scratch_capacity(int frames) noexcept {
     if (frames < 0)
         return false;
-    try {
-        if (static_cast<int>(scratch_l_.size()) < frames)
-            scratch_l_.resize(static_cast<std::size_t>(frames), 0.0f);
-        if (static_cast<int>(scratch_r_.size()) < frames)
-            scratch_r_.resize(static_cast<std::size_t>(frames), 0.0f);
-    } catch (...) {
-        scratch_[0] = nullptr;
-        scratch_[1] = nullptr;
+    if (scratch_capacity_frames_ >= frames && scratch_[0] && scratch_[1])
+        return true;
+    if (scratch_capacity_frames_ > 0) {
+        block_too_large_count_.fetch_add(1, std::memory_order_relaxed);
         return false;
     }
-    scratch_[0] = scratch_l_.data();
-    scratch_[1] = scratch_r_.data();
-    return true;
+    scratch_resize_in_audio_thread_count_.fetch_add(1, std::memory_order_relaxed);
+    prepare(frames);
+    return scratch_capacity_frames_ >= frames && scratch_[0] && scratch_[1];
 }
 
 void TrackRenderer::render(const Track&         track,

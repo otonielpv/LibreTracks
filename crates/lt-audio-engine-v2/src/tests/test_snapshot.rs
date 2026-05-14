@@ -88,9 +88,18 @@ fn cpu_diagnostics_round_trip() {
     let mut snap = EngineSnapshot::default();
     snap.cpu = CpuDiagnostics {
         callback_duration_ms: 1.23,
+        callback_duration_max_ms: 2.34,
         callback_load_percent: 5.6,
         underrun_count: 2,
         callback_count: 1000,
+        callback_over_budget_count: 3,
+        mixer_rendered_track_count: 4,
+        mixer_skipped_track_count: 5,
+        track_renderer_prepare_count: 6,
+        track_renderer_scratch_resize_count: 7,
+        track_renderer_scratch_resize_in_audio_thread_count: 0,
+        track_renderer_block_too_large_count: 0,
+        track_renderer_scratch_capacity_frames: 4096,
     };
     let rt = round_trip(&snap);
     assert!((rt.cpu.callback_duration_ms - 1.23).abs() < 1e-9);

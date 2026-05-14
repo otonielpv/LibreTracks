@@ -99,6 +99,7 @@ Mixer::Mixer(const Session*       session,
     , pitch_engine_(pitch_engine)
 {
     rebuild_control_slots(session_);
+    prepare_render_resources(kMaxBlockFrames);
 }
 
 Mixer::Mixer(std::shared_ptr<const Session> session,
@@ -115,6 +116,7 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
     , pitch_engine_(pitch_engine)
 {
     rebuild_control_slots(session_);
+    prepare_render_resources(kMaxBlockFrames);
 }
 
 bool Mixer::any_solo_active(const Song& song) const noexcept {
@@ -221,6 +223,8 @@ void Mixer::render(float** output_channels,
     reset_track_meters();
 
     if (clock_->position().state == TransportState::Playing && session) {
+        std::uint64_t rendered_this_block = 0;
+        std::uint64_t skipped_this_block = 0;
         // Find the current song.
         for (const auto& song : session->songs) {
             if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
@@ -269,6 +273,13 @@ void Mixer::render(float** output_channels,
                 control->current_pan = end_pan;
                 control->current_mute_gain = end_mute_gain;
                 control->current_solo_gain = end_solo_gain;
+                const bool settled_silent = std::abs(end_gain * end_mute_gain * end_solo_gain) <= 1.0e-6f
+                    && std::abs(start_gain * start_mute_gain * start_solo_gain) <= 1.0e-6f
+                    && std::abs(gain * target_mute_gain * target_solo_gain) <= 1.0e-6f;
+                if (settled_silent && track.clips.empty()) {
+                    ++skipped_this_block;
+                    continue;
+                }
                 // Render into mix bus.
                 std::fill(mix_l_, mix_l_ + num_frames, 0.f);
                 std::fill(mix_r_, mix_r_ + num_frames, 0.f);
@@ -281,6 +292,7 @@ void Mixer::render(float** output_channels,
                 renderers_[ti].render(patched, timeline_frame, num_frames,
                                        mix_, 2, *sources_, pitch_cache_,
                                        pitch_engine_, clock_->sample_rate(), 0, &song);
+                ++rendered_this_block;
 
                 float track_peak_l = 0.f, track_peak_r = 0.f;
                 double track_sum_l = 0.0, track_sum_r = 0.0;
@@ -332,6 +344,8 @@ void Mixer::render(float** output_channels,
             }
             break;
         }
+        rendered_track_count_.fetch_add(rendered_this_block, std::memory_order_relaxed);
+        skipped_track_count_.fetch_add(skipped_this_block, std::memory_order_relaxed);
 
         metronome_.render(output_channels, num_channels, num_frames,
                           clock_->sample_rate(), timeline_frame, session.get());
@@ -375,6 +389,14 @@ void Mixer::render(float** output_channels,
     double dur = std::chrono::duration<double, std::milli>(t1 - t0).count();
     double prev = callback_duration_ms_.load(std::memory_order_relaxed);
     callback_duration_ms_.store(0.9 * prev + 0.1 * dur, std::memory_order_relaxed);
+    double max_prev = callback_duration_max_ms_.load(std::memory_order_relaxed);
+    while (dur > max_prev
+           && !callback_duration_max_ms_.compare_exchange_weak(
+               max_prev, dur, std::memory_order_relaxed)) {}
+    const double budget_ms = clock_ ? (static_cast<double>(num_frames) * 1000.0
+        / static_cast<double>(std::max(1, clock_->sample_rate()))) : 0.0;
+    if (budget_ms > 0.0 && dur > budget_ms * 0.75)
+        callback_over_budget_count_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void Mixer::set_track_gain(const Id& track_id, Gain gain) {
@@ -400,6 +422,7 @@ void Mixer::set_track_solo(const Id& track_id, bool solo) {
 void Mixer::set_session(std::shared_ptr<const Session> session) {
     std::atomic_store(&session_, std::move(session));
     rebuild_control_slots(std::atomic_load(&session_));
+    prepare_render_resources(kMaxBlockFrames);
     reset_track_meters();
 }
 
@@ -414,6 +437,12 @@ void Mixer::set_pitch_engine(RealtimePitchEngine* pitch_engine) noexcept {
 void Mixer::clear_session() {
     std::atomic_store(&session_, std::shared_ptr<const Session>{});
     reset_track_meters();
+}
+
+void Mixer::prepare_render_resources(int max_block_frames) noexcept {
+    const int frames = std::clamp(max_block_frames, 1, kMaxBlockFrames);
+    for (auto& renderer : renderers_)
+        renderer.prepare(frames);
 }
 
 void Mixer::trigger_crossfade() noexcept {
@@ -489,5 +518,9 @@ void Mixer::reset_track_meters() noexcept {
 
 int    Mixer::callback_count()       const noexcept { return callback_count_.load(std::memory_order_relaxed); }
 double Mixer::callback_duration_ms() const noexcept { return callback_duration_ms_.load(std::memory_order_relaxed); }
+double Mixer::callback_duration_max_ms() const noexcept { return callback_duration_max_ms_.load(std::memory_order_relaxed); }
+std::uint64_t Mixer::callback_over_budget_count() const noexcept { return callback_over_budget_count_.load(std::memory_order_relaxed); }
+std::uint64_t Mixer::rendered_track_count() const noexcept { return rendered_track_count_.load(std::memory_order_relaxed); }
+std::uint64_t Mixer::skipped_track_count() const noexcept { return skipped_track_count_.load(std::memory_order_relaxed); }
 
 } // namespace lt

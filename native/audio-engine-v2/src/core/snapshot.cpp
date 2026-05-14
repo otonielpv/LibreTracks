@@ -50,9 +50,18 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
 
     j["cpu"] = {
         {"callback_duration_ms",  snap.cpu.callback_duration_ms},
+        {"callback_duration_max_ms", snap.cpu.callback_duration_max_ms},
         {"callback_load_percent", snap.cpu.callback_load_percent},
         {"underrun_count",        snap.cpu.underrun_count},
         {"callback_count",        snap.cpu.callback_count},
+        {"callback_over_budget_count", snap.cpu.callback_over_budget_count},
+        {"mixer_rendered_track_count", snap.cpu.mixer_rendered_track_count},
+        {"mixer_skipped_track_count", snap.cpu.mixer_skipped_track_count},
+        {"track_renderer_prepare_count", snap.cpu.track_renderer_prepare_count},
+        {"track_renderer_scratch_resize_count", snap.cpu.track_renderer_scratch_resize_count},
+        {"track_renderer_scratch_resize_in_audio_thread_count", snap.cpu.track_renderer_scratch_resize_in_audio_thread_count},
+        {"track_renderer_block_too_large_count", snap.cpu.track_renderer_block_too_large_count},
+        {"track_renderer_scratch_capacity_frames", snap.cpu.track_renderer_scratch_capacity_frames},
     };
 
     j["meters"] = {
@@ -153,6 +162,11 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"prepared_proxy_render_count", snap.pitch.prepared_proxy_render_count},
         {"emergency_silence_render_count", snap.pitch.emergency_silence_render_count},
         {"active_stream_set_generation", snap.pitch.active_stream_set_generation},
+        {"active_pitch_stream_count", snap.pitch.active_pitch_stream_count},
+        {"pitch_timeline_mismatch_count", snap.pitch.pitch_timeline_mismatch_count},
+        {"pitch_stream_not_aligned_count", snap.pitch.pitch_stream_not_aligned_count},
+        {"pitch_audio_thread_reset_count", snap.pitch.pitch_audio_thread_reset_count},
+        {"pitch_audio_thread_prime_count", snap.pitch.pitch_audio_thread_prime_count},
         {"stream_generation", snap.pitch.stream_generation},
         {"stream_reset_thread_id", snap.pitch.stream_reset_thread_id},
         {"stream_render_thread_id", snap.pitch.stream_render_thread_id},

@@ -82,6 +82,10 @@ private:
     std::atomic<std::uint64_t> emergency_silence_count_{0};
     std::atomic<std::uint64_t> unsafe_cross_thread_reset_count_{0};
     std::atomic<std::uint64_t> concurrent_stream_mutation_detected_{0};
+    std::atomic<std::uint64_t> pitch_timeline_mismatch_count_{0};
+    std::atomic<std::uint64_t> pitch_stream_not_aligned_count_{0};
+    std::atomic<std::uint64_t> pitch_audio_thread_reset_count_{0};
+    std::atomic<std::uint64_t> pitch_audio_thread_prime_count_{0};
     std::string last_reason_;
 };
 

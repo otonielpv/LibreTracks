@@ -252,7 +252,18 @@ std::string EngineImpl::get_snapshot() const {
         snap.meters.right_rms  = m.right_rms;
         snap.track_meters      = mixer_->track_meters();
         snap.cpu.callback_duration_ms = mixer_->callback_duration_ms();
+        snap.cpu.callback_duration_max_ms = mixer_->callback_duration_max_ms();
         snap.cpu.callback_count       = mixer_->callback_count();
+        snap.cpu.callback_over_budget_count = mixer_->callback_over_budget_count();
+        snap.cpu.mixer_rendered_track_count = mixer_->rendered_track_count();
+        snap.cpu.mixer_skipped_track_count = mixer_->skipped_track_count();
+        auto tr = TrackRenderer::diagnostics();
+        snap.cpu.track_renderer_prepare_count = tr.prepare_count;
+        snap.cpu.track_renderer_scratch_resize_count = tr.scratch_resize_count;
+        snap.cpu.track_renderer_scratch_resize_in_audio_thread_count =
+            tr.scratch_resize_in_audio_thread_count;
+        snap.cpu.track_renderer_block_too_large_count = tr.block_too_large_count;
+        snap.cpu.track_renderer_scratch_capacity_frames = tr.scratch_capacity_frames;
         auto metro = mixer_->metronome_diagnostics();
         snap.metronome.enabled = metro.enabled;
         snap.metronome.volume = metro.volume;
@@ -328,6 +339,11 @@ std::string EngineImpl::get_snapshot() const {
         snap.pitch.prepared_proxy_render_count = 0;
         snap.pitch.emergency_silence_render_count = realtime_pitch.emergency_silence_count;
         snap.pitch.active_stream_set_generation = realtime_pitch.active_stream_set_generation;
+        snap.pitch.active_pitch_stream_count = realtime_pitch.active_pitch_stream_count;
+        snap.pitch.pitch_timeline_mismatch_count = realtime_pitch.pitch_timeline_mismatch_count;
+        snap.pitch.pitch_stream_not_aligned_count = realtime_pitch.pitch_stream_not_aligned_count;
+        snap.pitch.pitch_audio_thread_reset_count = realtime_pitch.pitch_audio_thread_reset_count;
+        snap.pitch.pitch_audio_thread_prime_count = realtime_pitch.pitch_audio_thread_prime_count;
         snap.pitch.stream_generation = realtime_pitch.stream_generation;
         snap.pitch.stream_reset_thread_id = realtime_pitch.stream_reset_thread_id;
         snap.pitch.stream_render_thread_id = realtime_pitch.stream_render_thread_id;

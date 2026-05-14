@@ -72,9 +72,27 @@ fn default_output_channel_count() -> i32 {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CpuDiagnostics {
     pub callback_duration_ms: f64,
+    #[serde(default)]
+    pub callback_duration_max_ms: f64,
     pub callback_load_percent: f64,
     pub underrun_count: i32,
     pub callback_count: i32,
+    #[serde(default)]
+    pub callback_over_budget_count: u64,
+    #[serde(default)]
+    pub mixer_rendered_track_count: u64,
+    #[serde(default)]
+    pub mixer_skipped_track_count: u64,
+    #[serde(default)]
+    pub track_renderer_prepare_count: u64,
+    #[serde(default)]
+    pub track_renderer_scratch_resize_count: u64,
+    #[serde(default)]
+    pub track_renderer_scratch_resize_in_audio_thread_count: u64,
+    #[serde(default)]
+    pub track_renderer_block_too_large_count: u64,
+    #[serde(default)]
+    pub track_renderer_scratch_capacity_frames: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -171,6 +189,16 @@ pub struct PitchSnapshot {
     pub last_missing_proxy_block_index: i64,
     #[serde(default)]
     pub active_stream_set_generation: u64,
+    #[serde(default)]
+    pub active_pitch_stream_count: u64,
+    #[serde(default)]
+    pub pitch_timeline_mismatch_count: u64,
+    #[serde(default)]
+    pub pitch_stream_not_aligned_count: u64,
+    #[serde(default)]
+    pub pitch_audio_thread_reset_count: u64,
+    #[serde(default)]
+    pub pitch_audio_thread_prime_count: u64,
     #[serde(default)]
     pub stream_generation: u64,
     #[serde(default)]

@@ -115,8 +115,9 @@ int RealtimePitchEngine::render_pitched_clip(const Clip& clip,
     if (!source_cache_.is_ready(source, source_frame, frame_count))
         stream_not_ready_count_.fetch_add(1, std::memory_order_relaxed);
     if (stream->expected_timeline_frame() != timeline_frame) {
-        stream->reset_for_seek(source, source_frame, timeline_frame);
-        stream->prime(source, timeline_frame, frame_count);
+        pitch_timeline_mismatch_count_.fetch_add(1, std::memory_order_relaxed);
+        pitch_stream_not_aligned_count_.fetch_add(1, std::memory_order_relaxed);
+        return 0;
     }
     const int rendered = stream->render(source, timeline_frame, frame_count, out, out_channels);
     render_count_.fetch_add(1, std::memory_order_relaxed);
@@ -130,6 +131,10 @@ PitchStreamDiagnostics RealtimePitchEngine::diagnostics() const noexcept {
     d.emergency_silence_count = emergency_silence_count_.load(std::memory_order_relaxed);
     d.active_stream_set_generation = active_stream_set_generation_.load(std::memory_order_relaxed);
     d.active_stream_swap_count = active_stream_swap_count_.load(std::memory_order_relaxed);
+    d.pitch_timeline_mismatch_count = pitch_timeline_mismatch_count_.load(std::memory_order_relaxed);
+    d.pitch_stream_not_aligned_count = pitch_stream_not_aligned_count_.load(std::memory_order_relaxed);
+    d.pitch_audio_thread_reset_count = pitch_audio_thread_reset_count_.load(std::memory_order_relaxed);
+    d.pitch_audio_thread_prime_count = pitch_audio_thread_prime_count_.load(std::memory_order_relaxed);
     d.long_seek_count = long_seek_count_.load(std::memory_order_relaxed);
     d.last_transport_discontinuity_target_frame =
         last_transport_discontinuity_target_frame_.load(std::memory_order_relaxed);
@@ -139,6 +144,7 @@ PitchStreamDiagnostics RealtimePitchEngine::diagnostics() const noexcept {
     for (const auto& handle : set->streams) {
         if (!handle.stream)
             continue;
+        ++d.active_pitch_stream_count;
         auto sd = handle.stream->diagnostics();
         d.underflow_count += sd.underflow_count;
         d.overflow_count += sd.overflow_count;
@@ -167,6 +173,10 @@ void RealtimePitchEngine::reset_diagnostics() noexcept {
     emergency_silence_count_.store(0, std::memory_order_relaxed);
     unsafe_cross_thread_reset_count_.store(0, std::memory_order_relaxed);
     concurrent_stream_mutation_detected_.store(0, std::memory_order_relaxed);
+    pitch_timeline_mismatch_count_.store(0, std::memory_order_relaxed);
+    pitch_stream_not_aligned_count_.store(0, std::memory_order_relaxed);
+    pitch_audio_thread_reset_count_.store(0, std::memory_order_relaxed);
+    pitch_audio_thread_prime_count_.store(0, std::memory_order_relaxed);
 }
 
 } // namespace lt

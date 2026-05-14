@@ -275,6 +275,87 @@ TEST_CASE("mixer_control_spam_no_clicks_or_callback_spikes") {
     CHECK(mixer.callback_duration_ms() < 10.0);
 }
 
+TEST_CASE("track_renderer_no_scratch_allocation_in_render") {
+    TrackRenderer::reset_diagnostics();
+    SourceManager sources;
+    add_source(sources, "source");
+    auto session = one_track_session();
+    TrackRenderer renderer;
+    renderer.prepare(kBlock);
+    const auto before = TrackRenderer::diagnostics();
+
+    float left[kBlock] = {};
+    float right[kBlock] = {};
+    float* out[2] = {left, right};
+    renderer.render(session.songs[0].tracks[0], 0, kBlock, out, 2, sources, nullptr,
+                    test::kFixtureSampleRate, 0, &session.songs[0]);
+    const auto after = TrackRenderer::diagnostics();
+
+    CHECK(after.prepare_count == before.prepare_count);
+    CHECK(after.scratch_resize_in_audio_thread_count == before.scratch_resize_in_audio_thread_count);
+    CHECK(after.block_too_large_count == 0);
+}
+
+TEST_CASE("mixer_eight_tracks_control_drag_no_glitch") {
+    TrackRenderer::reset_diagnostics();
+    SourceManager sources;
+    Session session;
+    session.id = "session";
+    session.sample_rate = test::kFixtureSampleRate;
+    Song song;
+    song.id = "song";
+    song.end_frame = 48000 * 8;
+    for (int i = 0; i < 8; ++i) {
+        const Id source_id = "source-" + std::to_string(i);
+        sources.register_source(source_id, "");
+        REQUIRE(sources.store_decoded_source(
+            source_id, test::make_stereo_sine(48000 * 8, 180.0 + i * 55.0, 0.12f),
+            2, test::kFixtureSampleRate, 48000 * 8).is_ok());
+        Track track;
+        track.id = "track-" + std::to_string(i);
+        track.clips.push_back(Clip{"clip-" + std::to_string(i), source_id, 0, 0, 48000 * 8});
+        song.tracks.push_back(track);
+    }
+    session.songs.push_back(song);
+    auto shared = std::make_shared<Session>(session);
+
+    RealtimePitchEngine pitch;
+    pitch.prepare_for_session(*shared, sources, test::kFixtureSampleRate);
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(shared, &sources, &clock, &scheduler, nullptr, &pitch);
+    clock.play();
+
+    std::vector<float> left(kBlock), right(kBlock);
+    float* out[2] = {left.data(), right.data()};
+    float last = 0.0f;
+    float max_jump = 0.0f;
+    const auto pitch_before = pitch.diagnostics();
+    for (int block = 0; block < 300; ++block) {
+        const int track_index = block % 8;
+        const Id track_id = "track-" + std::to_string(track_index);
+        mixer.set_track_gain(track_id, 0.2f + 0.7f * static_cast<float>((block % 17) / 16.0f));
+        mixer.set_track_pan(track_id, (block % 2) ? -0.9f : 0.9f);
+        if (block % 53 == 0)
+            mixer.set_track_mute(track_id, (block / 53) % 2 == 0);
+        mixer.render(out, 2, kBlock, clock.sample_rate());
+        for (float sample : left) {
+            CHECK(std::isfinite(sample));
+            max_jump = std::max(max_jump, std::abs(sample - last));
+            last = sample;
+        }
+    }
+    const auto pitch_after = pitch.diagnostics();
+    const auto tr = TrackRenderer::diagnostics();
+    CHECK(max_jump < 2.0f);
+    CHECK(tr.scratch_resize_in_audio_thread_count == 0);
+    CHECK(tr.block_too_large_count == 0);
+    CHECK(pitch_after.reset_count == pitch_before.reset_count);
+    CHECK(pitch_after.active_stream_swap_count == pitch_before.active_stream_swap_count);
+    CHECK(pitch_after.pitch_audio_thread_reset_count == 0);
+    CHECK(pitch_after.pitch_audio_thread_prime_count == 0);
+}
+
 TEST_CASE("metronome_toggle_does_not_stop_existing_audio") {
     SourceManager sources;
     add_source(sources, "source");

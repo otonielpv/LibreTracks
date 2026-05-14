@@ -132,7 +132,7 @@ TEST_CASE("realtime_pitch_source_cache_miss_is_diagnostic_not_silence") {
     float right[512] = {};
     float* out[2] = {left, right};
     TrackRenderer renderer;
-    renderer.render(session.songs[0].tracks[0], 48000, 512, out, 2, sources, nullptr,
+    renderer.render(session.songs[0].tracks[0], 0, 512, out, 2, sources, nullptr,
                     &engine, test::kFixtureSampleRate, 2, &session.songs[0]);
 
     CHECK(finite_non_silent(left, right, 512));
@@ -239,6 +239,38 @@ TEST_CASE("realtime_pitch_concurrent_render_and_seek_is_safe") {
     CHECK(d.emergency_silence_count == 0);
     CHECK(d.unsafe_cross_thread_reset_count == 0);
     CHECK(d.concurrent_stream_mutation_detected == 0);
+}
+
+TEST_CASE("realtime_pitch_render_does_not_reset_or_prime_on_timeline_mismatch") {
+    constexpr Frame duration = 48000 * 4;
+    auto samples = test::make_stereo_sine(duration, 440.0, 0.2f);
+    SourceManager sources;
+    sources.register_source("source", "");
+    REQUIRE(sources.store_decoded_source("source", samples, 2, test::kFixtureSampleRate, duration).is_ok());
+    auto session = make_pitch_session(duration, 2);
+
+    RealtimePitchEngine engine;
+    engine.prepare_for_session(session, sources, test::kFixtureSampleRate);
+    engine.prepare_for_play(0, session, sources);
+    const auto before = engine.diagnostics();
+
+    float left[512] = {};
+    float right[512] = {};
+    float* out[2] = {left, right};
+    const auto& track = session.songs[0].tracks[0];
+    const auto& clip = track.clips[0];
+    const auto* source = sources.get("source");
+    REQUIRE(source != nullptr);
+    const int rendered = engine.render_pitched_clip(clip, track.id, *source, 48000, 48000,
+                                                    512, 2.0, out, 2);
+    const auto after = engine.diagnostics();
+
+    CHECK(rendered == 0);
+    CHECK(after.reset_count == before.reset_count);
+    CHECK(after.prime_count == before.prime_count);
+    CHECK(after.pitch_timeline_mismatch_count == before.pitch_timeline_mismatch_count + 1);
+    CHECK(after.pitch_audio_thread_reset_count == 0);
+    CHECK(after.pitch_audio_thread_prime_count == 0);
 }
 
 TEST_CASE("realtime_pitch_stream_not_mutated_after_publish") {

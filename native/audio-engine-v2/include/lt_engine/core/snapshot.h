@@ -36,9 +36,18 @@ struct DeviceInfo {
 
 struct CpuDiagnostics {
     double callback_duration_ms  = 0.0;
+    double callback_duration_max_ms = 0.0;
     double callback_load_percent = 0.0;
     int    underrun_count        = 0;
     int    callback_count        = 0;
+    uint64_t callback_over_budget_count = 0;
+    uint64_t mixer_rendered_track_count = 0;
+    uint64_t mixer_skipped_track_count = 0;
+    uint64_t track_renderer_prepare_count = 0;
+    uint64_t track_renderer_scratch_resize_count = 0;
+    uint64_t track_renderer_scratch_resize_in_audio_thread_count = 0;
+    uint64_t track_renderer_block_too_large_count = 0;
+    int track_renderer_scratch_capacity_frames = 0;
 };
 
 struct MeterValues {
@@ -131,6 +140,11 @@ struct PitchSnapshot {
     uint64_t    prepared_proxy_render_count = 0;
     uint64_t    emergency_silence_render_count = 0;
     uint64_t    active_stream_set_generation = 0;
+    uint64_t    active_pitch_stream_count = 0;
+    uint64_t    pitch_timeline_mismatch_count = 0;
+    uint64_t    pitch_stream_not_aligned_count = 0;
+    uint64_t    pitch_audio_thread_reset_count = 0;
+    uint64_t    pitch_audio_thread_prime_count = 0;
     uint64_t    stream_generation = 0;
     uint64_t    stream_reset_thread_id = 0;
     uint64_t    stream_render_thread_id = 0;
