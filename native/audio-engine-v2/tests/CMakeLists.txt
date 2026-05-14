@@ -34,6 +34,7 @@ add_executable(lt_engine_tests
     pitch_proxy_continuity_tests.cpp
     pitch_proxy_persistent_tests.cpp
     transport_audio_sync_tests.cpp
+    test_folder_controls.cpp
 )
 
 target_link_libraries(lt_engine_tests

@@ -190,6 +190,8 @@ std::string EngineImpl::poll_event() {
 
 std::string EngineImpl::get_snapshot() const {
     maybe_enqueue_rolling_pitch_prepare();
+    // Service any pitch repair requests posted by the audio thread during mismatch recovery.
+    const_cast<EngineImpl*>(this)->service_pitch_repair_requests();
 
     EngineSnapshot snap;
 
@@ -396,8 +398,14 @@ std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id)
         return 0;
     if (!source_manager_->get(source_id))
         return 0;
-    if (realtime_pitch_engine_)
-        realtime_pitch_engine_->prepare_for_session(*session_, *source_manager_, clock_->sample_rate());
+    if (realtime_pitch_engine_) {
+        // Prime at the current playhead so the new source's stream is immediately aligned.
+        // Using prepare_for_transport_discontinuity instead of prepare_for_session(-1) avoids
+        // publishing unprimed streams that cause mismatch silence on the audio thread.
+        const Frame playhead = clock_->position().frame;
+        realtime_pitch_engine_->prepare_for_transport_discontinuity(
+            playhead, "source_ready", *session_, *source_manager_);
+    }
     return prepare_pitch_processors_for_session(*session_);
 }
 
@@ -459,10 +467,22 @@ void EngineImpl::prepare_pitch_processors_for_session() {
     if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
         return;
     if (realtime_pitch_engine_) {
+        // Always prime at the current playhead so the published stream set is aligned.
+        const Frame playhead = clock_->position().frame;
         realtime_pitch_engine_->prepare_for_session(*session_, *source_manager_, clock_->sample_rate());
-        realtime_pitch_engine_->prepare_for_play(clock_->position().frame, *session_, *source_manager_);
+        realtime_pitch_engine_->prepare_for_play(playhead, *session_, *source_manager_);
     }
     prepare_pitch_processors_for_session(*session_);
+}
+
+void EngineImpl::service_pitch_repair_requests() {
+    if (!realtime_pitch_engine_ || !session_ || !source_manager_ || !clock_)
+        return;
+    Frame target_frame = -1;
+    if (realtime_pitch_engine_->take_repair_request(target_frame)) {
+        // Repair: rebuild and prime streams at the requested frame outside the audio callback.
+        realtime_pitch_engine_->prepare_for_pitch_repair(target_frame, *session_, *source_manager_);
+    }
 }
 
 void EngineImpl::maybe_enqueue_rolling_pitch_prepare() const {
@@ -751,8 +771,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session);
-                if (realtime_pitch_engine_)
-                    realtime_pitch_engine_->prepare_for_session(*next_session, *source_manager_, clock_->sample_rate());
+                // Prime at current playhead so published streams are aligned.
+                if (realtime_pitch_engine_) {
+                    const Frame playhead = clock_->position().frame;
+                    realtime_pitch_engine_->prepare_for_transport_discontinuity(
+                        playhead, "set_transpose_enabled", *next_session, *source_manager_);
+                }
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
             }
@@ -768,8 +792,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session);
-                if (realtime_pitch_engine_)
-                    realtime_pitch_engine_->prepare_for_session(*next_session, *source_manager_, clock_->sample_rate());
+                // Prime at current playhead so published streams are aligned.
+                if (realtime_pitch_engine_) {
+                    const Frame playhead = clock_->position().frame;
+                    realtime_pitch_engine_->prepare_for_transport_discontinuity(
+                        playhead, "set_song_transpose", *next_session, *source_manager_);
+                }
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
             }
@@ -786,8 +814,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session);
-                if (realtime_pitch_engine_)
-                    realtime_pitch_engine_->prepare_for_session(*next_session, *source_manager_, clock_->sample_rate());
+                // Prime at current playhead so published streams are aligned.
+                if (realtime_pitch_engine_) {
+                    const Frame playhead = clock_->position().frame;
+                    realtime_pitch_engine_->prepare_for_transport_discontinuity(
+                        playhead, "set_region_transpose", *next_session, *source_manager_);
+                }
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
             }

@@ -93,6 +93,9 @@ private:
     // Per-track mix overrides (command thread writes, audio thread reads).
     struct TrackControlState {
         Id track_id;
+        Id parent_track_id;
+        int parent_control_index = -1;     // index into controls_[], -1 = no parent
+        bool is_folder = false;
         std::atomic<float> gain{1.0f};
         std::atomic<float> pan{0.0f};
         std::atomic<bool>  mute{false};
@@ -104,9 +107,23 @@ private:
         bool initialized = false;
     };
     static constexpr int kMaxControlSlots = 256;
+    static constexpr int kMaxFolderDepth  = 8;
     std::array<TrackControlState, kMaxControlSlots> controls_;
     std::atomic<int> control_count_{0};
     TrackControlState fallback_control_;
+
+    // Compute effective (folder-chained) controls for a track slot.
+    // Must only be called from the audio thread.
+    struct EffectiveControls {
+        float target_gain;
+        float target_pan;
+        bool  target_muted;
+        float target_solo_gain;
+    };
+    EffectiveControls compute_effective_controls(int slot_index, bool solo_active) const noexcept;
+
+    // Solo eligibility: true if track or any ancestor is soloed, or no solo is active at all.
+    bool is_solo_eligible(int slot_index) const noexcept;
 
     // Stereo mix bus (reused each block, fixed size).
     static constexpr int kMaxBlockFrames = 4096;
@@ -141,11 +158,12 @@ private:
     FadeProcessor fade_;
     MetronomeRenderer metronome_;
 
-    // Check whether any track is soloed.
-    bool any_solo_active(const Song& song) const noexcept;
+    // Check whether any track is soloed (scans control slots).
+    bool any_solo_active_in_slots() const noexcept;
     void reset_track_meters() noexcept;
     TrackControlState* control_for_track(const Id& track_id) noexcept;
     const TrackControlState* control_for_track(const Id& track_id) const noexcept;
+    int control_index_for_track(const Id& track_id) const noexcept;
     void rebuild_control_slots(std::shared_ptr<const Session> session);
 };
 

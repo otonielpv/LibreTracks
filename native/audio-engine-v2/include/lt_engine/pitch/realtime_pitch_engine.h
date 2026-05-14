@@ -29,6 +29,14 @@ struct PitchStreamKey {
     }
 };
 
+// Number of blocks of mismatch allowed before requesting repair (tolerates clock drift).
+static constexpr int kPitchMismatchRepairThreshold = 3;
+
+struct PitchRepairRequest {
+    Frame target_frame = -1;
+    bool pending = false;
+};
+
 class RealtimePitchEngine {
 public:
     RealtimePitchEngine();
@@ -40,6 +48,13 @@ public:
                                              const std::string& reason,
                                              const Session& session,
                                              const SourceManager& sources);
+
+    // Called from control thread (not audio callback) to repair mismatched streams.
+    void prepare_for_pitch_repair(Frame target_frame, const Session& session, const SourceManager& sources);
+
+    // Returns true if a repair was pending and clears the flag. Call from control thread.
+    bool take_repair_request(Frame& out_target_frame) noexcept;
+
     int render_pitched_clip(const Clip& clip,
                             const Id& track_id,
                             const DecodedSource& source,
@@ -86,7 +101,19 @@ private:
     std::atomic<std::uint64_t> pitch_stream_not_aligned_count_{0};
     std::atomic<std::uint64_t> pitch_audio_thread_reset_count_{0};
     std::atomic<std::uint64_t> pitch_audio_thread_prime_count_{0};
+    std::atomic<std::uint64_t> pitch_repair_requested_count_{0};
+    std::atomic<std::uint64_t> pitch_repair_completed_count_{0};
     std::string last_reason_;
+
+    // Repair request set from audio thread, consumed from control thread.
+    // Uses relaxed atomics; worst case is one extra or missed repair cycle — acceptable.
+    std::atomic<bool>  repair_pending_{false};
+    std::atomic<Frame> repair_target_frame_{-1};
+
+    // Per-stream soft mismatch counter (indexed by stream slot, bounded by active set size).
+    // Written only from audio thread; used to throttle repair requests.
+    static constexpr int kMaxStreamSlots = 64;
+    std::atomic<int> stream_mismatch_counts_[kMaxStreamSlots];
 };
 
 } // namespace lt

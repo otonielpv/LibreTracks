@@ -144,6 +144,15 @@ Result<Session> session_from_project_json(const std::string& project_json,
                             value_any<std::string>(jtrack, "transpose_behavior", "transposeBehavior", "FollowsSongOrRegion"));
                     }
 
+                    // Folder/group hierarchy
+                    {
+                        std::string kind_str = value_any<std::string>(jtrack, "kind", "kind", "audio");
+                        std::transform(kind_str.begin(), kind_str.end(), kind_str.begin(),
+                            [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+                        track.kind = (kind_str == "folder") ? TrackKind::Folder : TrackKind::Audio;
+                    }
+                    track.parent_track_id = value_any<std::string>(jtrack, "parent_track_id", "parentTrackId", "");
+
                     auto add_clip = [&](const json& jclip) {
                         Clip clip;
                         clip.id = jclip.value("id", "");
@@ -278,8 +287,30 @@ Result<Session> session_from_project_json(const std::string& project_json,
                             value_any<double>(jr, "end_seconds", "endSeconds", 0.0),
                             engine_sample_rate);
                     }
+                    // Fallback: derive end_frame from length if still unset.
+                    if (region.end_frame == 0) {
+                        const Frame length = value_any<Frame>(jr, "length_frames", "lengthFrames", 0LL);
+                        if (length > 0) {
+                            region.end_frame = region.start_frame + length;
+                        } else {
+                            const double length_s = value_any<double>(jr, "length_seconds", "lengthSeconds", 0.0);
+                            if (length_s > 0.0)
+                                region.end_frame = region.start_frame
+                                    + seconds_to_frames(length_s, engine_sample_rate);
+                        }
+                    }
+                    // Fallback: derive end_frame from duration if still unset.
+                    if (region.end_frame == 0) {
+                        const double duration_s = value_any<double>(jr, "duration_seconds", "durationSeconds", 0.0);
+                        if (duration_s > 0.0)
+                            region.end_frame = region.start_frame
+                                + seconds_to_frames(duration_s, engine_sample_rate);
+                    }
                     region.transpose_semitones = value_any<Semitones>(jr, "transpose_semitones", "transposeSemitones", 0);
-                    song.regions.push_back(std::move(region));
+                    // Only add the region if end_frame > start_frame (otherwise it is malformed
+                    // and would never match in resolve_region_transpose).
+                    if (region.end_frame > region.start_frame)
+                        song.regions.push_back(std::move(region));
                 }
             }
 

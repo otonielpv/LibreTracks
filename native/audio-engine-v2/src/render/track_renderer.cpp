@@ -11,6 +11,7 @@ std::atomic<std::uint64_t> TrackRenderer::scratch_resize_count_{0};
 std::atomic<std::uint64_t> TrackRenderer::scratch_resize_in_audio_thread_count_{0};
 std::atomic<std::uint64_t> TrackRenderer::block_too_large_count_{0};
 std::atomic<int> TrackRenderer::max_scratch_capacity_frames_{0};
+std::atomic<std::uint64_t> TrackRenderer::pitch_missing_stream_silence_count_{0};
 
 void TrackRenderer::prepare(int max_block_frames) noexcept {
     if (max_block_frames <= 0)
@@ -46,7 +47,8 @@ TrackRendererDiagnostics TrackRenderer::diagnostics() noexcept {
         scratch_resize_count_.load(std::memory_order_relaxed),
         scratch_resize_in_audio_thread_count_.load(std::memory_order_relaxed),
         block_too_large_count_.load(std::memory_order_relaxed),
-        max_scratch_capacity_frames_.load(std::memory_order_relaxed)};
+        max_scratch_capacity_frames_.load(std::memory_order_relaxed),
+        pitch_missing_stream_silence_count_.load(std::memory_order_relaxed)};
 }
 
 void TrackRenderer::reset_diagnostics() noexcept {
@@ -55,6 +57,7 @@ void TrackRenderer::reset_diagnostics() noexcept {
     scratch_resize_in_audio_thread_count_.store(0, std::memory_order_relaxed);
     block_too_large_count_.store(0, std::memory_order_relaxed);
     max_scratch_capacity_frames_.store(0, std::memory_order_relaxed);
+    pitch_missing_stream_silence_count_.store(0, std::memory_order_relaxed);
 }
 
 bool TrackRenderer::ensure_scratch_capacity(int frames) noexcept {
@@ -98,15 +101,19 @@ void TrackRenderer::render(const Track&         track,
                             const Song*          active_song) noexcept {
     if (track.mute) return;
 
-    // Callers set active_semitones to 0 if the track should not be transposed.
-    // TrackRenderer itself no longer looks up the active song/region here —
-    // that's the Mixer's responsibility; it passes active_semitones down.
-    // For now render() has no active_semitones parameter yet; it is forwarded
-    // via the existing render() overload below.
+    // Compute the authoritative pitch decision per clip using the canonical helper.
+    // When active_song is provided, the per-clip decision is resolved from it;
+    // otherwise fall back to the caller-provided effective_semitones value.
+    // Using resolve_pitch_render_decision ensures TrackRenderer and
+    // RealtimePitchEngine always agree on the semitone key for stream lookup.
     for (const auto& clip : track.clips) {
-        Semitones clip_semitones = active_song
-            ? resolve_effective_semitones(track, clip, *active_song, timeline_frame)
-            : effective_semitones;
+        Semitones clip_semitones;
+        if (active_song) {
+            const auto decision = resolve_pitch_render_decision(track, clip, *active_song, timeline_frame);
+            clip_semitones = decision.effective_semitones;
+        } else {
+            clip_semitones = effective_semitones;
+        }
         render_clip(clip, timeline_frame, block_frames,
                     track.gain, out, num_out_channels,
                     sources, pitch_cache, pitch_engine, engine_sample_rate,
@@ -156,8 +163,9 @@ void TrackRenderer::render_clip(const Clip&          clip,
     std::fill(scratch_r_.begin(), scratch_r_.begin() + frames_to_read, 0.f);
 
     if (effective_semitones != 0) {
-        (void)pitch_cache;
-        (void)engine_sample_rate;
+        // Pitch processing required — NEVER fall back to original audio on failure.
+        // Instead, count the miss and return silence for this block.
+        // (The repair path via RealtimePitchEngine will rebuild the stream.)
         int rendered = 0;
         if (pitch_engine) {
             rendered = pitch_engine->render_pitched_clip(
@@ -169,9 +177,17 @@ void TrackRenderer::render_clip(const Clip&          clip,
                               static_cast<double>(effective_semitones),
                               engine_sample_rate, src->channel_count(), "experimental_legacy_realtime_seek_safe"},
                 *src, source_frame, frames_to_read, scratch_, 2);
-        }
-        if (rendered <= 0)
+        } else {
+            // No pitch processor available at all — count as missing and return silence.
+            pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
             return;
+        }
+        if (rendered <= 0) {
+            // Pitch engine had no stream or the stream is not aligned — silence this block.
+            // The missing_stream_count counter on RealtimePitchEngine tracks the root cause.
+            pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
         frames_to_read = rendered;
     } else {
         int copied = 0;

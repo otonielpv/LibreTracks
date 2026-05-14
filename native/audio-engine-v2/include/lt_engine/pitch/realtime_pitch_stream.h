@@ -33,6 +33,8 @@ struct PitchStreamDiagnostics {
     std::uint64_t pitch_stream_not_aligned_count = 0;
     std::uint64_t pitch_audio_thread_reset_count = 0;
     std::uint64_t pitch_audio_thread_prime_count = 0;
+    std::uint64_t pitch_repair_requested_count = 0;
+    std::uint64_t pitch_repair_completed_count = 0;
     std::uint64_t stream_generation = 0;
     std::uint64_t stream_reset_thread_id = 0;
     std::uint64_t stream_render_thread_id = 0;

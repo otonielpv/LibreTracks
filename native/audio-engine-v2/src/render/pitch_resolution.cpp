@@ -25,4 +25,17 @@ Semitones resolve_effective_semitones(const Track& track,
     return clamp_supported_semitones(resolve_region_transpose(song, timeline_frame) + clip.semitones);
 }
 
+PitchRenderDecision resolve_pitch_render_decision(
+    const Track& track, const Clip& clip, const Song& song, Frame timeline_frame) noexcept {
+    PitchRenderDecision d;
+    if (track.transpose_behavior == TransposeBehavior::NeverTranspose) {
+        d.is_never_transpose = true;
+        return d;
+    }
+    d.effective_semitones = clamp_supported_semitones(
+        resolve_region_transpose(song, timeline_frame) + clip.semitones);
+    d.needs_pitch = (d.effective_semitones != 0);
+    return d;
+}
+
 } // namespace lt

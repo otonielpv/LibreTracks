@@ -69,6 +69,12 @@ enum class TrackRole {
     Other,
 };
 
+// Semantic kind of the track in the hierarchy.
+enum class TrackKind {
+    Audio,
+    Folder,
+};
+
 struct Track {
     Id                  id;
     std::string         name;
@@ -79,6 +85,8 @@ struct Track {
     bool                solo               = false;
     TransposeBehavior   transpose_behavior = TransposeBehavior::FollowsSongOrRegion;
     TrackRole           role               = TrackRole::Normal;
+    TrackKind           kind               = TrackKind::Audio;
+    Id                  parent_track_id;      // empty if top-level
     std::vector<Clip>   clips;
 };
 

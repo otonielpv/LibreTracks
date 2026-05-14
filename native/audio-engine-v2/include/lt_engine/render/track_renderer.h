@@ -18,6 +18,9 @@ struct TrackRendererDiagnostics {
     std::uint64_t scratch_resize_in_audio_thread_count = 0;
     std::uint64_t block_too_large_count = 0;
     int scratch_capacity_frames = 0;
+    // Number of times a pitched clip had no matching stream in the pitch engine.
+    // Non-zero means pitch was needed but the stream wasn't built — a build bug.
+    std::uint64_t pitch_missing_stream_silence_count = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -86,6 +89,7 @@ private:
     static std::atomic<std::uint64_t> scratch_resize_in_audio_thread_count_;
     static std::atomic<std::uint64_t> block_too_large_count_;
     static std::atomic<int> max_scratch_capacity_frames_;
+    static std::atomic<std::uint64_t> pitch_missing_stream_silence_count_;
 };
 
 } // namespace lt

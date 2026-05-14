@@ -94,6 +94,10 @@ private:
                                      const std::string& reason) const;
     void maybe_enqueue_rolling_pitch_prepare() const;
 
+    // Called from the control thread (not audio callback) to service any pending
+    // pitch stream repair requests posted by render_pitched_clip().
+    void service_pitch_repair_requests();
+
     // Silent audio render callback used during Phases 1-5.
     class SilentCallback;
     std::unique_ptr<SilentCallback> silent_callback_;

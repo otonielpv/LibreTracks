@@ -119,10 +119,12 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
     prepare_render_resources(kMaxBlockFrames);
 }
 
-bool Mixer::any_solo_active(const Song& song) const noexcept {
-    for (const auto& track : song.tracks) {
-        const auto* control = control_for_track(track.id);
-        if (control && control->solo.load(std::memory_order_relaxed)) return true;
+bool Mixer::any_solo_active_in_slots() const noexcept {
+    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0, kMaxControlSlots);
+    for (int i = 0; i < count; ++i) {
+        if (controls_[static_cast<std::size_t>(i)].initialized
+            && controls_[static_cast<std::size_t>(i)].solo.load(std::memory_order_relaxed))
+            return true;
     }
     return false;
 }
@@ -147,6 +149,51 @@ const Mixer::TrackControlState* Mixer::control_for_track(const Id& track_id) con
     return nullptr;
 }
 
+int Mixer::control_index_for_track(const Id& track_id) const noexcept {
+    if (track_id.empty()) return -1;
+    const int count = std::clamp(control_count_.load(std::memory_order_acquire), 0, kMaxControlSlots);
+    for (int i = 0; i < count; ++i) {
+        if (controls_[static_cast<std::size_t>(i)].initialized
+            && controls_[static_cast<std::size_t>(i)].track_id == track_id)
+            return i;
+    }
+    return -1;
+}
+
+bool Mixer::is_solo_eligible(int slot_index) const noexcept {
+    // Walk parent chain: eligible if any ancestor or self is soloed.
+    int depth = 0;
+    int idx = slot_index;
+    while (idx >= 0 && idx < kMaxControlSlots && depth < kMaxFolderDepth) {
+        if (controls_[static_cast<std::size_t>(idx)].solo.load(std::memory_order_relaxed))
+            return true;
+        idx = controls_[static_cast<std::size_t>(idx)].parent_control_index;
+        ++depth;
+    }
+    return false;
+}
+
+Mixer::EffectiveControls Mixer::compute_effective_controls(int slot_index, bool solo_active) const noexcept {
+    float eff_gain = 1.0f;
+    float eff_pan  = 0.0f;
+    bool  eff_muted = false;
+
+    // Walk the parent chain (bounded).
+    int depth = 0;
+    int idx = slot_index;
+    while (idx >= 0 && idx < kMaxControlSlots && depth < kMaxFolderDepth) {
+        const auto& slot = controls_[static_cast<std::size_t>(idx)];
+        eff_gain  *= slot.gain.load(std::memory_order_relaxed);
+        eff_pan    = clamp_pan(eff_pan + slot.pan.load(std::memory_order_relaxed));
+        if (slot.mute.load(std::memory_order_relaxed)) eff_muted = true;
+        idx = slot.parent_control_index;
+        ++depth;
+    }
+
+    const float target_solo_gain = (solo_active && !is_solo_eligible(slot_index)) ? 0.0f : 1.0f;
+    return { eff_gain, eff_pan, eff_muted, target_solo_gain };
+}
+
 void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session) {
     std::array<TrackControlState, kMaxControlSlots> next;
     int count = 0;
@@ -157,7 +204,11 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session) {
                     break;
                 auto& slot = next[static_cast<std::size_t>(count)];
                 const auto* previous = control_for_track(track.id);
-                slot.track_id = track.id;
+                slot.track_id       = track.id;
+                slot.parent_track_id = track.parent_track_id;
+                slot.is_folder      = (track.kind == TrackKind::Folder);
+                // parent_control_index resolved in second pass below.
+                slot.parent_control_index = -1;
                 slot.gain.store(previous ? previous->gain.load(std::memory_order_relaxed) : track.gain,
                                 std::memory_order_relaxed);
                 slot.pan.store(previous ? previous->pan.load(std::memory_order_relaxed)
@@ -176,10 +227,15 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session) {
             }
         }
     }
+
+    // Copy next into controls_ first so control_index_for_track can find them.
     for (int i = 0; i < kMaxControlSlots; ++i) {
         auto& dst = controls_[static_cast<std::size_t>(i)];
         auto& src = next[static_cast<std::size_t>(i)];
-        dst.track_id = std::move(src.track_id);
+        dst.track_id       = std::move(src.track_id);
+        dst.parent_track_id = std::move(src.parent_track_id);
+        dst.is_folder      = src.is_folder;
+        dst.parent_control_index = src.parent_control_index;
         dst.gain.store(src.gain.load(std::memory_order_relaxed), std::memory_order_relaxed);
         dst.pan.store(src.pan.load(std::memory_order_relaxed), std::memory_order_relaxed);
         dst.mute.store(src.mute.load(std::memory_order_relaxed), std::memory_order_relaxed);
@@ -191,6 +247,16 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session) {
         dst.initialized = src.initialized;
     }
     control_count_.store(count, std::memory_order_release);
+
+    // Second pass: resolve parent_control_index for each slot.
+    for (int i = 0; i < count; ++i) {
+        auto& slot = controls_[static_cast<std::size_t>(i)];
+        if (!slot.parent_track_id.empty()) {
+            slot.parent_control_index = control_index_for_track(slot.parent_track_id);
+        } else {
+            slot.parent_control_index = -1;
+        }
+    }
 }
 
 void Mixer::render(float** output_channels,
@@ -230,15 +296,26 @@ void Mixer::render(float** output_channels,
             if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
                 continue;
 
-            const bool solo_active = any_solo_active(song);
+            const bool solo_active = any_solo_active_in_slots();
 
             // Render each track.
             for (std::size_t ti = 0; ti < song.tracks.size() && ti < kMaxTracks; ++ti) {
                 const Track& track = song.tracks[ti];
 
-                auto* control = control_for_track(track.id);
+                // Folder tracks are not audio sources — skip rendering them.
+                if (track.kind == TrackKind::Folder) {
+                    ++skipped_this_block;
+                    continue;
+                }
+
+                int slot_idx = control_index_for_track(track.id);
+                TrackControlState* control = (slot_idx >= 0) ? &controls_[static_cast<std::size_t>(slot_idx)] : nullptr;
+
                 if (!control) {
                     fallback_control_.track_id = track.id;
+                    fallback_control_.parent_track_id = track.parent_track_id;
+                    fallback_control_.parent_control_index = -1;
+                    fallback_control_.is_folder = false;
                     fallback_control_.gain.store(track.gain, std::memory_order_relaxed);
                     fallback_control_.pan.store(std::clamp(track.pan, -1.0f, 1.0f), std::memory_order_relaxed);
                     fallback_control_.mute.store(track.mute, std::memory_order_relaxed);
@@ -249,18 +326,27 @@ void Mixer::render(float** output_channels,
                     fallback_control_.current_solo_gain = solo_active && !track.solo ? 0.0f : 1.0f;
                     fallback_control_.initialized = true;
                     control = &fallback_control_;
+                    slot_idx = -1;
                 }
 
-                const float gain = control->gain.load(std::memory_order_relaxed);
-                const float pan_target = control->pan.load(std::memory_order_relaxed);
-                const bool mute = control->mute.load(std::memory_order_relaxed);
-                const bool solo = control->solo.load(std::memory_order_relaxed);
+                // Compute effective target controls including parent folder chain.
+                const EffectiveControls eff = (slot_idx >= 0)
+                    ? compute_effective_controls(slot_idx, solo_active)
+                    : EffectiveControls{
+                        control->gain.load(std::memory_order_relaxed),
+                        control->pan.load(std::memory_order_relaxed),
+                        control->mute.load(std::memory_order_relaxed),
+                        (solo_active && !control->solo.load(std::memory_order_relaxed)) ? 0.0f : 1.0f
+                      };
+
+                const float gain        = eff.target_gain;
+                const float pan_target  = eff.target_pan;
+                const float target_mute_gain = eff.target_muted ? 0.0f : 1.0f;
+                const float target_solo_gain = eff.target_solo_gain;
 
                 const float smooth_ms = 10.0f;
                 const float coeff = std::clamp(static_cast<float>(num_frames) /
                     std::max(1.0f, static_cast<float>(clock_->sample_rate()) * smooth_ms * 0.001f), 0.0f, 1.0f);
-                const float target_mute_gain = mute ? 0.0f : 1.0f;
-                const float target_solo_gain = (solo_active && !solo) ? 0.0f : 1.0f;
                 const float start_gain = control->current_gain;
                 const float start_pan = control->current_pan;
                 const float start_mute_gain = control->current_mute_gain;
