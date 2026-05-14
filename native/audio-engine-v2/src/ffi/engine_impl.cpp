@@ -264,6 +264,9 @@ std::string EngineImpl::get_snapshot() const {
         snap.metronome.route_resolved = metro.route_resolved;
         snap.metronome.rendered_clicks_count = metro.rendered_clicks_count;
         snap.metronome.muted_reason = metro.muted_reason;
+        snap.metronome.current_gain = metro.current_gain;
+        snap.metronome.target_gain = metro.target_gain;
+        snap.metronome.toggle_count = metro.toggle_count;
     }
 
     if (prep_queue_) {
@@ -629,12 +632,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSetMetronomeEnabled>) {
             metronome_config_.enabled = c.enabled;
-            if (mixer_) mixer_->set_metronome_config(metronome_config_);
+            if (mixer_) mixer_->set_metronome_enabled(c.enabled);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetMetronomeVolume>) {
             metronome_config_.volume = std::clamp(c.volume, 0.0f, 1.0f);
-            if (mixer_) mixer_->set_metronome_config(metronome_config_);
+            if (mixer_) mixer_->set_metronome_volume(metronome_config_.volume);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetMetronomeOutputRoute>) {

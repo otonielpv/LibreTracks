@@ -3,7 +3,7 @@ use std::{
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc, Arc, Mutex,
     },
     thread::{self, JoinHandle},
@@ -313,6 +313,20 @@ pub struct AudioController {
     meter_thread_started: AtomicBool,
     meter_thread_stop: Arc<AtomicBool>,
     meter_thread: Mutex<Option<JoinHandle<()>>>,
+    live_mix_realtime_command_count: AtomicU64,
+    live_mix_sync_live_mix_count: AtomicU64,
+    live_mix_ensure_live_track_count: AtomicU64,
+    metronome_realtime_toggle_count: AtomicU64,
+    metronome_realtime_volume_count: AtomicU64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RealtimeControlDiagnostics {
+    pub live_mix_realtime_command_count: u64,
+    pub live_mix_sync_live_mix_count: u64,
+    pub live_mix_ensure_live_track_count: u64,
+    pub metronome_realtime_toggle_count: u64,
+    pub metronome_realtime_volume_count: u64,
 }
 
 impl AudioController {
@@ -324,6 +338,11 @@ impl AudioController {
             meter_thread_started: AtomicBool::new(false),
             meter_thread_stop: Arc::new(AtomicBool::new(false)),
             meter_thread: Mutex::new(None),
+            live_mix_realtime_command_count: AtomicU64::new(0),
+            live_mix_sync_live_mix_count: AtomicU64::new(0),
+            live_mix_ensure_live_track_count: AtomicU64::new(0),
+            metronome_realtime_toggle_count: AtomicU64::new(0),
+            metronome_realtime_volume_count: AtomicU64::new(0),
         }
     }
 
@@ -449,6 +468,8 @@ impl AudioController {
     }
 
     pub fn sync_live_mix(&self, song: &Song) -> Result<(), DesktopError> {
+        self.live_mix_sync_live_mix_count
+            .fetch_add(1, Ordering::Relaxed);
         self.with_engine_state("sync_live_mix", None, |engine, _state| {
             for track in &song.tracks {
                 engine.send_command(&EngineCommand::SetTrackGain {
@@ -495,6 +516,8 @@ impl AudioController {
     }
 
     pub fn ensure_live_track(&self, song: &Song, _track_id: &str) -> Result<(), DesktopError> {
+        self.live_mix_ensure_live_track_count
+            .fetch_add(1, Ordering::Relaxed);
         self.sync_live_mix(song)
     }
 
@@ -507,6 +530,8 @@ impl AudioController {
         solo: Option<bool>,
         audio_to: Option<&str>,
     ) -> Result<(), DesktopError> {
+        self.live_mix_realtime_command_count
+            .fetch_add(1, Ordering::Relaxed);
         self.with_engine_state("update_live_track_mix", None, |engine, _state| {
             if let Some(volume) = volume {
                 engine.send_command(&EngineCommand::SetTrackGain {
@@ -540,6 +565,44 @@ impl AudioController {
             }
             Ok(())
         })
+    }
+
+    pub fn set_metronome_enabled_realtime(&self, enabled: bool) -> Result<(), DesktopError> {
+        self.metronome_realtime_toggle_count
+            .fetch_add(1, Ordering::Relaxed);
+        self.with_engine_state("set_metronome_enabled_realtime", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetMetronomeEnabled { enabled })?;
+            Ok(())
+        })
+    }
+
+    pub fn set_metronome_volume_realtime(&self, volume: f64) -> Result<(), DesktopError> {
+        self.metronome_realtime_volume_count
+            .fetch_add(1, Ordering::Relaxed);
+        self.with_engine_state("set_metronome_volume_realtime", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetMetronomeVolume {
+                volume: volume.clamp(0.0, 1.0) as f32,
+            })?;
+            Ok(())
+        })
+    }
+
+    pub fn realtime_control_diagnostics(&self) -> RealtimeControlDiagnostics {
+        RealtimeControlDiagnostics {
+            live_mix_realtime_command_count: self
+                .live_mix_realtime_command_count
+                .load(Ordering::Relaxed),
+            live_mix_sync_live_mix_count: self.live_mix_sync_live_mix_count.load(Ordering::Relaxed),
+            live_mix_ensure_live_track_count: self
+                .live_mix_ensure_live_track_count
+                .load(Ordering::Relaxed),
+            metronome_realtime_toggle_count: self
+                .metronome_realtime_toggle_count
+                .load(Ordering::Relaxed),
+            metronome_realtime_volume_count: self
+                .metronome_realtime_volume_count
+                .load(Ordering::Relaxed),
+        }
     }
 
     pub fn current_settings(&self) -> Result<AppSettings, DesktopError> {

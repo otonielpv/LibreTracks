@@ -2108,12 +2108,7 @@ impl DesktopSession {
         audio_to: Option<&str>,
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
-        self.capture_live_history_anchor();
-        self.update_loaded_track(track_id, None, volume, pan, muted, solo, audio_to)?;
-        let loaded_song = self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
-        audio.ensure_live_track(loaded_song, track_id)?;
         audio.update_live_track_mix(track_id, volume, pan, muted, solo, audio_to)?;
-
         Ok(())
     }
 
@@ -4591,7 +4586,7 @@ mod tests {
     }
 
     #[test]
-    fn live_track_mix_updates_skip_disk_and_project_revision() {
+    fn live_track_mix_updates_skip_disk_model_and_project_revision() {
         let mut session = session_with_song_dir("live-mix-demo", demo_song());
         let song_dir = session
             .song_dir
@@ -4614,6 +4609,11 @@ mod tests {
             )
             .expect("live mix update should succeed");
 
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.live_mix_realtime_command_count, 1);
+        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.live_mix_ensure_live_track_count, 0);
+
         let updated_song = session
             .song_view()
             .expect("song view should build")
@@ -4625,10 +4625,10 @@ mod tests {
             .expect("updated track should exist");
 
         assert_eq!(session.snapshot().project_revision, initial_revision);
-        assert_eq!(updated_track.volume, 0.61);
-        assert_eq!(updated_track.pan, -0.22);
-        assert!(updated_track.muted);
-        assert!(updated_track.solo);
+        assert_eq!(updated_track.volume, 1.0);
+        assert_eq!(updated_track.pan, 0.0);
+        assert!(!updated_track.muted);
+        assert!(!updated_track.solo);
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         let saved_track = saved_song
@@ -4640,6 +4640,59 @@ mod tests {
         assert_eq!(saved_track.pan, 0.0);
         assert!(!saved_track.muted);
         assert!(!saved_track.solo);
+    }
+
+    #[test]
+    fn realtime_slider_drag_does_not_sync_session() {
+        let audio = crate::audio_engine::AudioController::default();
+
+        for i in 0..200 {
+            audio
+                .update_live_track_mix("track_1", Some(i as f64 / 200.0), None, None, None, None)
+                .expect("realtime gain update should send");
+        }
+
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.live_mix_realtime_command_count, 200);
+        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.live_mix_ensure_live_track_count, 0);
+    }
+
+    #[test]
+    fn realtime_pan_drag_does_not_rebuild_session() {
+        let audio = crate::audio_engine::AudioController::default();
+
+        for i in 0..200 {
+            let pan = -1.0 + (i as f64 / 100.0);
+            audio
+                .update_live_track_mix("track_1", None, Some(pan), None, None, None)
+                .expect("realtime pan update should send");
+        }
+
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.live_mix_realtime_command_count, 200);
+        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.live_mix_ensure_live_track_count, 0);
+    }
+
+    #[test]
+    fn metronome_realtime_commands_do_not_use_full_config_path() {
+        let audio = crate::audio_engine::AudioController::default();
+
+        for i in 0..20 {
+            audio
+                .set_metronome_enabled_realtime(i % 2 == 0)
+                .expect("realtime metronome toggle should send");
+        }
+        audio
+            .set_metronome_volume_realtime(0.42)
+            .expect("realtime metronome volume should send");
+
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.metronome_realtime_toggle_count, 20);
+        assert_eq!(diagnostics.metronome_realtime_volume_count, 1);
+        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.live_mix_ensure_live_track_count, 0);
     }
 
     #[test]

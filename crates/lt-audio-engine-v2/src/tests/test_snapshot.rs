@@ -149,12 +149,16 @@ fn metronome_snapshot_round_trips() {
         route_resolved: "monitor".into(),
         rendered_clicks_count: 4,
         muted_reason: String::new(),
+        current_gain: 0.4,
+        target_gain: 0.5,
+        toggle_count: 2,
     };
     let rt = round_trip(&snap);
     assert!(rt.metronome.enabled);
     assert_eq!(rt.metronome.output, "monitor");
     assert_eq!(rt.metronome.current_bar, 2);
     assert_eq!(rt.metronome.rendered_clicks_count, 4);
+    assert_eq!(rt.metronome.toggle_count, 2);
 }
 
 #[test]

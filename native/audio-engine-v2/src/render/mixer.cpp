@@ -257,13 +257,18 @@ void Mixer::render(float** output_channels,
                     std::max(1.0f, static_cast<float>(clock_->sample_rate()) * smooth_ms * 0.001f), 0.0f, 1.0f);
                 const float target_mute_gain = mute ? 0.0f : 1.0f;
                 const float target_solo_gain = (solo_active && !solo) ? 0.0f : 1.0f;
-                control->current_gain += (gain - control->current_gain) * coeff;
-                control->current_pan += (pan_target - control->current_pan) * coeff;
-                control->current_mute_gain += (target_mute_gain - control->current_mute_gain) * coeff;
-                control->current_solo_gain += (target_solo_gain - control->current_solo_gain) * coeff;
-                const float effective_gain = control->current_gain
-                                           * control->current_mute_gain
-                                           * control->current_solo_gain;
+                const float start_gain = control->current_gain;
+                const float start_pan = control->current_pan;
+                const float start_mute_gain = control->current_mute_gain;
+                const float start_solo_gain = control->current_solo_gain;
+                const float end_gain = start_gain + (gain - start_gain) * coeff;
+                const float end_pan = start_pan + (pan_target - start_pan) * coeff;
+                const float end_mute_gain = start_mute_gain + (target_mute_gain - start_mute_gain) * coeff;
+                const float end_solo_gain = start_solo_gain + (target_solo_gain - start_solo_gain) * coeff;
+                control->current_gain = end_gain;
+                control->current_pan = end_pan;
+                control->current_mute_gain = end_mute_gain;
+                control->current_solo_gain = end_solo_gain;
                 // Render into mix bus.
                 std::fill(mix_l_, mix_l_ + num_frames, 0.f);
                 std::fill(mix_r_, mix_r_ + num_frames, 0.f);
@@ -293,14 +298,19 @@ void Mixer::render(float** output_channels,
                 auto route = route_channels(track.audio_to, num_channels);
                 const int left_channel = route.empty() ? 0 : route[0];
                 const int right_channel = route.size() > 1 ? route[1] : -1;
-                const float pan = clamp_pan(control->current_pan);
-                const float left_gain = pan > 0.0f ? 1.0f - pan : 1.0f;
-                const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
                 const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
                 const bool right_only_source = track_peak_r > 1.0e-7f && track_peak_l <= 1.0e-7f;
 
                 // Accumulate into selected output route.
                 for (int f = 0; f < num_frames; ++f) {
+                    const float t = static_cast<float>(f + 1) / static_cast<float>(std::max(1, num_frames));
+                    const float sample_gain = start_gain + (end_gain - start_gain) * t;
+                    const float sample_mute_gain = start_mute_gain + (end_mute_gain - start_mute_gain) * t;
+                    const float sample_solo_gain = start_solo_gain + (end_solo_gain - start_solo_gain) * t;
+                    const float effective_gain = sample_gain * sample_mute_gain * sample_solo_gain;
+                    const float pan = clamp_pan(start_pan + (end_pan - start_pan) * t);
+                    const float left_gain = pan > 0.0f ? 1.0f - pan : 1.0f;
+                    const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
                     float source_l = mix_l_[f];
                     float source_r = mix_r_[f];
                     if (left_only_source)
@@ -412,6 +422,14 @@ void Mixer::trigger_crossfade() noexcept {
 
 void Mixer::set_metronome_config(const MetronomeConfig& config) {
     metronome_.set_config(config);
+}
+
+void Mixer::set_metronome_enabled(bool enabled) {
+    metronome_.set_enabled(enabled);
+}
+
+void Mixer::set_metronome_volume(float volume) {
+    metronome_.set_volume(volume);
 }
 
 MetronomeDiagnostics Mixer::metronome_diagnostics() const {

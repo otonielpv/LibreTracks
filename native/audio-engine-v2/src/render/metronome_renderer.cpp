@@ -86,11 +86,8 @@ Frame rounded_beat_frame(Frame segment_start, double beat_frames, int64_t beat_i
 } // namespace
 
 void MetronomeRenderer::set_config(const MetronomeConfig& config) {
-    const bool previous_enabled = enabled_.load(std::memory_order_acquire);
-    enabled_.store(config.enabled, std::memory_order_release);
-    if (previous_enabled != config.enabled)
-        toggle_count_.fetch_add(1, std::memory_order_relaxed);
-    volume_.store(std::clamp(config.volume, 0.0f, 1.0f), std::memory_order_release);
+    set_enabled(config.enabled);
+    set_volume(config.volume);
     accent_enabled_.store(config.accent_enabled, std::memory_order_release);
 
     std::string route = normalize_route(config.output_route.empty() ? "master" : config.output_route);
@@ -124,6 +121,17 @@ void MetronomeRenderer::set_config(const MetronomeConfig& config) {
         route_start_.store(0, std::memory_order_release);
         route_end_.store(1, std::memory_order_release);
     }
+}
+
+void MetronomeRenderer::set_enabled(bool enabled) {
+    const bool previous_enabled = enabled_.load(std::memory_order_acquire);
+    enabled_.store(enabled, std::memory_order_release);
+    if (previous_enabled != enabled)
+        toggle_count_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void MetronomeRenderer::set_volume(float volume) {
+    volume_.store(std::clamp(volume, 0.0f, 1.0f), std::memory_order_release);
 }
 
 MetronomeConfig MetronomeRenderer::config() const {

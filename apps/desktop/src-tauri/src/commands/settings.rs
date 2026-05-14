@@ -72,3 +72,25 @@ pub fn update_audio_settings(
 
     Ok(next_settings)
 }
+
+#[tauri::command]
+pub fn set_metronome_enabled_realtime(
+    enabled: bool,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    state
+        .audio
+        .set_metronome_enabled_realtime(enabled)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn set_metronome_volume_realtime(
+    volume: f64,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    state
+        .audio
+        .set_metronome_volume_realtime(volume)
+        .map_err(|error| error.to_string())
+}

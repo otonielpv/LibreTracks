@@ -89,6 +89,8 @@ import {
   saveSettings,
   scheduleMarkerJump,
   seekTransport,
+  setMetronomeEnabledRealtime,
+  setMetronomeVolumeRealtime,
   splitClip,
   stopTransport,
   updateAudioSettings,
@@ -98,7 +100,8 @@ import {
   updateSongTempo,
   updateSongTimeSignature,
   updateTrack,
-  updateTrackMixLive,
+  updateTrackMixRealtime,
+  commitTrackMixChange,
   updateTrackTransposeEnabled,
   upsertSongTempoMarker,
   upsertSongTimeSignatureMarker,
@@ -1226,7 +1229,7 @@ export function TransportPanelContent() {
       const requestId = nextTrackMixRequestId(trackId);
 
       try {
-        const nextSnapshot = await updateTrack(payload);
+        const nextSnapshot = await commitTrackMixChange(payload);
         if (trackMixRequestIdsRef.current[trackId] === requestId) {
           applyPlaybackSnapshot(nextSnapshot);
         }
@@ -1299,7 +1302,7 @@ export function TransportPanelContent() {
             payload.pan = resolvedMix.pan;
           }
 
-          await updateTrackMixLive(payload);
+          await updateTrackMixRealtime(payload);
           liveState.lastSentAt = performance.now();
         }
       } finally {
@@ -4446,11 +4449,10 @@ export function TransportPanelContent() {
     setAppSettings(nextSettings);
 
     void runAction(async () => {
-      const liveSettings = normalizeAppSettings(
-        await updateAudioSettings(nextSettings),
-      );
-      appSettingsRef.current = liveSettings;
-      setAppSettings(liveSettings);
+      await setMetronomeEnabledRealtime(nextValue);
+      const savedSettings = normalizeAppSettings(await saveSettings(nextSettings));
+      appSettingsRef.current = savedSettings;
+      setAppSettings(savedSettings);
       setStatus(
         nextValue
           ? t("transport.status.metronomeEnabled")
@@ -4472,15 +4474,11 @@ export function TransportPanelContent() {
     setMetronomeVolumeDraft(normalizedValue);
     setAppSettings(nextSettings);
 
-    void updateAudioSettings(nextSettings)
-      .then((liveSettings) => {
+    void setMetronomeVolumeRealtime(normalizedValue)
+      .then(() => {
         if (metronomeLiveRequestIdRef.current !== requestId) {
           return;
         }
-
-        const normalizedLiveSettings = normalizeAppSettings(liveSettings);
-        appSettingsRef.current = normalizedLiveSettings;
-        setAppSettings(normalizedLiveSettings);
       })
       .catch((error) => {
         if (metronomeLiveRequestIdRef.current !== requestId) {
@@ -4504,14 +4502,13 @@ export function TransportPanelContent() {
 
     void runAction(async () => {
       try {
-        const liveSettings = normalizeAppSettings(
-          await updateAudioSettings(nextSettings),
-        );
-        appSettingsRef.current = liveSettings;
-        setAppSettings(liveSettings);
+        await setMetronomeVolumeRealtime(normalizedValue);
+        const savedSettings = normalizeAppSettings(await saveSettings(nextSettings));
+        appSettingsRef.current = savedSettings;
+        setAppSettings(savedSettings);
         setStatus(
           t("transport.status.metronomeVolumeUpdated", {
-            volume: Math.round(liveSettings.metronomeVolume * 100),
+            volume: Math.round(savedSettings.metronomeVolume * 100),
           }),
         );
       } catch (error) {

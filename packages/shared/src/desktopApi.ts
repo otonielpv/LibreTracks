@@ -484,6 +484,17 @@ export async function updateTrack(args: {
   return invokeCommand<TransportSnapshot>("update_track", args);
 }
 
+export async function commitTrackMixChange(args: {
+  trackId: string;
+  volume?: number;
+  pan?: number;
+  muted?: boolean;
+  solo?: boolean;
+  audioTo?: string;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("commit_track_mix_change", args);
+}
+
 export async function updateTrackTransposeEnabled(args: {
   trackId: string;
   transposeEnabled: boolean;
@@ -500,6 +511,24 @@ export async function updateTrackMixLive(args: {
   audioTo?: string;
 }): Promise<void> {
   await invokeCommand("update_track_mix_live", args);
+}
+
+export async function updateTrackMixRealtime(args: {
+  trackId: string;
+  volume?: number;
+  pan?: number;
+  muted?: boolean;
+  solo?: boolean;
+}): Promise<void> {
+  await invokeCommand("update_track_mix_realtime", args);
+}
+
+export async function setMetronomeEnabledRealtime(enabled: boolean): Promise<void> {
+  await invokeCommand("set_metronome_enabled_realtime", { enabled });
+}
+
+export async function setMetronomeVolumeRealtime(volume: number): Promise<void> {
+  await invokeCommand("set_metronome_volume_realtime", { volume });
 }
 
 export async function deleteTrack(trackId: string): Promise<TransportSnapshot> {

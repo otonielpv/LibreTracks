@@ -115,6 +115,12 @@ pub struct MetronomeSnapshot {
     pub route_resolved: String,
     pub rendered_clicks_count: u64,
     pub muted_reason: String,
+    #[serde(default)]
+    pub current_gain: f32,
+    #[serde(default)]
+    pub target_gain: f32,
+    #[serde(default)]
+    pub toggle_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

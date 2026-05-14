@@ -60,6 +60,8 @@ public:
     void clear_session();
     void trigger_crossfade() noexcept;
     void set_metronome_config(const MetronomeConfig& config);
+    void set_metronome_enabled(bool enabled);
+    void set_metronome_volume(float volume);
     MetronomeDiagnostics metronome_diagnostics() const;
 
     // Meter read (from UI thread — relaxed atomic).

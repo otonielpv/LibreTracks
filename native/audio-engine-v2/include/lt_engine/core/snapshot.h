@@ -74,6 +74,9 @@ struct MetronomeSnapshot {
     std::string route_resolved;
     uint64_t    rendered_clicks_count = 0;
     std::string muted_reason;
+    float       current_gain = 0.f;
+    float       target_gain = 0.f;
+    uint64_t    toggle_count = 0;
 };
 
 struct PitchSnapshot {

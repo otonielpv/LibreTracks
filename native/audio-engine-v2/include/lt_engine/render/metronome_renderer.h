@@ -35,6 +35,8 @@ struct MetronomeDiagnostics {
 class MetronomeRenderer {
 public:
     void set_config(const MetronomeConfig& config);
+    void set_enabled(bool enabled);
+    void set_volume(float volume);
     MetronomeConfig config() const;
 
     void render(float** output_channels,

@@ -134,6 +134,10 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     moveTrack: vi.fn(testDesktopApiMock.moveTrack),
     updateTrack: vi.fn(testDesktopApiMock.updateTrack),
     updateTrackMixLive: vi.fn(testDesktopApiMock.updateTrackMixLive),
+    updateTrackMixRealtime: vi.fn(testDesktopApiMock.updateTrackMixRealtime),
+    commitTrackMixChange: vi.fn(testDesktopApiMock.commitTrackMixChange),
+    setMetronomeEnabledRealtime: vi.fn(testDesktopApiMock.setMetronomeEnabledRealtime),
+    setMetronomeVolumeRealtime: vi.fn(testDesktopApiMock.setMetronomeVolumeRealtime),
     deleteTrack: vi.fn(testDesktopApiMock.deleteTrack),
   };
 });

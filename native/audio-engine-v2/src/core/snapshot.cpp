@@ -96,6 +96,9 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"route_resolved", snap.metronome.route_resolved},
         {"rendered_clicks_count", snap.metronome.rendered_clicks_count},
         {"muted_reason", snap.metronome.muted_reason},
+        {"current_gain", snap.metronome.current_gain},
+        {"target_gain", snap.metronome.target_gain},
+        {"toggle_count", snap.metronome.toggle_count},
     };
 
     j["pitch"] = {

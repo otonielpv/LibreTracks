@@ -1343,6 +1343,27 @@ export const testDesktopApiMock = {
       ),
     });
   },
+  updateTrackMixRealtime: async (_args: {
+    trackId: string;
+    muted?: boolean;
+    solo?: boolean;
+    volume?: number;
+    pan?: number;
+  }) => {},
+  commitTrackMixChange: async (args: {
+    trackId: string;
+    muted?: boolean;
+    solo?: boolean;
+    volume?: number;
+    pan?: number;
+    audioTo?: string;
+  }) => testDesktopApiMock.updateTrack(args),
+  setMetronomeEnabledRealtime: async (enabled: boolean) => {
+    state.settings = { ...state.settings, metronomeEnabled: enabled };
+  },
+  setMetronomeVolumeRealtime: async (volume: number) => {
+    state.settings = { ...state.settings, metronomeVolume: volume };
+  },
   deleteTrack: async (trackId: string) => {
     const track = getTrack(trackId);
     if (!track) {
