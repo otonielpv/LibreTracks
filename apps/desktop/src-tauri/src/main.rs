@@ -85,6 +85,7 @@ fn main() {
             audio_engine::get_audio_output_devices,
             commands::system::get_audio_debug_snapshot,
             commands::system::get_desktop_performance_snapshot,
+            commands::system::get_ownership_diagnostics,
             commands::system::append_debug_log,
             commands::system::report_ui_render_metric,
             commands::project::create_song,

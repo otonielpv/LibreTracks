@@ -1,2 +1,5 @@
 [build]
 target-dir = "target-desktop-native"
+
+[env]
+LT_ENGINE_V2_LIB_DIR = { value = "native/audio-engine-v2/build-rb-on/Release", relative = true }

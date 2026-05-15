@@ -217,4 +217,16 @@ pub struct PitchSnapshot {
     pub last_transport_discontinuity_target_frame: i64,
     #[serde(default)]
     pub last_transport_discontinuity_reason: String,
+
+    // Phase 8: fail-fast pitch backend identity fields
+    #[serde(default)]
+    pub pitch_muted_or_bypassed_reason: String,
+    #[serde(default)]
+    pub pitch_stub_passthrough_blocked_count: u64,
+    #[serde(default)]
+    pub pitch_requested_but_backend_unavailable_count: u64,
+    #[serde(default)]
+    pub realtime_pitch_underflow_count: u64,
+    #[serde(default)]
+    pub realtime_pitch_discontinuities: u64,
 }

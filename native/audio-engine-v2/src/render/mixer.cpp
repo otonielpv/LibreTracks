@@ -98,7 +98,7 @@ Mixer::Mixer(const Session*       session,
     , pitch_cache_(pitch_cache)
     , pitch_engine_(pitch_engine)
 {
-    rebuild_control_slots(session_);
+    rebuild_control_slots(session_, false);
     prepare_render_resources(kMaxBlockFrames);
 }
 
@@ -115,7 +115,7 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
     , pitch_cache_(pitch_cache)
     , pitch_engine_(pitch_engine)
 {
-    rebuild_control_slots(session_);
+    rebuild_control_slots(session_, false);
     prepare_render_resources(kMaxBlockFrames);
 }
 
@@ -194,7 +194,7 @@ Mixer::EffectiveControls Mixer::compute_effective_controls(int slot_index, bool 
     return { eff_gain, eff_pan, eff_muted, target_solo_gain };
 }
 
-void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session) {
+void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool preserve_realtime_state) {
     std::array<TrackControlState, kMaxControlSlots> next;
     int count = 0;
     if (session) {
@@ -203,7 +203,7 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session) {
                 if (count >= kMaxControlSlots)
                     break;
                 auto& slot = next[static_cast<std::size_t>(count)];
-                const auto* previous = control_for_track(track.id);
+                const auto* previous = preserve_realtime_state ? control_for_track(track.id) : nullptr;
                 slot.track_id       = track.id;
                 slot.parent_track_id = track.parent_track_id;
                 slot.is_folder      = (track.kind == TrackKind::Folder);
@@ -505,9 +505,9 @@ void Mixer::set_track_solo(const Id& track_id, bool solo) {
         control->solo.store(solo, std::memory_order_relaxed);
 }
 
-void Mixer::set_session(std::shared_ptr<const Session> session) {
+void Mixer::set_session(std::shared_ptr<const Session> session, bool preserve_realtime_state) {
     std::atomic_store(&session_, std::move(session));
-    rebuild_control_slots(std::atomic_load(&session_));
+    rebuild_control_slots(std::atomic_load(&session_), preserve_realtime_state);
     prepare_render_resources(kMaxBlockFrames);
     reset_track_meters();
 }

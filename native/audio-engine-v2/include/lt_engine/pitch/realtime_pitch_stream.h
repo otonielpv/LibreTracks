@@ -115,6 +115,7 @@ private:
 
     double semitones_to_ratio(double semitones) const noexcept;
     void allocate_buffers();
+    void reset_stretcher_only() noexcept;
     void clear_ring() noexcept;
     int ring_available() const noexcept;
     int ring_free() const noexcept;

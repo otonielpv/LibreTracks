@@ -13,7 +13,7 @@ use std::{
 use libretracks_core::Song;
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
-    DeviceInfo, Engine, EngineCommand, JumpTarget, JumpTargetKind, JumpTrigger,
+    DeviceInfo, Engine, EngineCommand, EngineSnapshot, JumpTarget, JumpTargetKind, JumpTrigger,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -471,6 +471,10 @@ impl AudioController {
         self.live_mix_sync_live_mix_count
             .fetch_add(1, Ordering::Relaxed);
         self.with_engine_state("sync_live_mix", None, |engine, _state| {
+            // Folder track invariant: send raw gain/pan/mute/solo for ALL tracks including
+            // folders. Do NOT pre-multiply or flatten folder gain into child gain here.
+            // C++ Mixer resolves effective gain via the parent_control_index chain at render
+            // time. Rust must never pre-compute folder-aggregated values.
             for track in &song.tracks {
                 engine.send_command(&EngineCommand::SetTrackGain {
                     track_id: track.id.clone(),
@@ -505,6 +509,9 @@ impl AudioController {
         &self,
         region_id: &str,
         semitones: i32,
+        // INVARIANT: `semitones` is the raw region offset from the Rust model, not effective
+        // semitones. Rust never computes effective_semitones or needs_pitch.
+        // C++ resolve_pitch_render_decision() is the sole authority on pitch decisions.
     ) -> Result<(), DesktopError> {
         self.with_engine_state("set_region_transpose", None, |engine, _state| {
             engine.send_command(&EngineCommand::SetRegionTranspose {
@@ -513,12 +520,6 @@ impl AudioController {
             })?;
             Ok(())
         })
-    }
-
-    pub fn ensure_live_track(&self, song: &Song, _track_id: &str) -> Result<(), DesktopError> {
-        self.live_mix_ensure_live_track_count
-            .fetch_add(1, Ordering::Relaxed);
-        self.sync_live_mix(song)
     }
 
     pub fn update_live_track_mix(
@@ -563,6 +564,23 @@ impl AudioController {
                     audio_to: audio_to.into(),
                 })?;
             }
+            Ok(())
+        })
+    }
+
+    pub fn set_track_transpose_enabled_realtime(
+        &self,
+        track_id: &str,
+        enabled: bool,
+    ) -> Result<(), DesktopError> {
+        self.live_mix_realtime_command_count
+            .fetch_add(1, Ordering::Relaxed);
+        let track_id = track_id.to_owned();
+        self.with_engine_state("set_track_transpose_enabled_realtime", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetTrackTransposeEnabled {
+                track_id: track_id.clone(),
+                enabled,
+            })?;
             Ok(())
         })
     }
@@ -668,6 +686,16 @@ impl AudioController {
         _duration_seconds: f64,
     ) -> Result<(), DesktopError> {
         Ok(())
+    }
+
+    pub fn engine_snapshot(&self) -> Result<EngineSnapshot, DesktopError> {
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(DesktopError::AudioCommand("engine_snapshot: state locked".into())),
+        };
+        ensure_engine(&mut state)?
+            .get_snapshot()
+            .map_err(|e| DesktopError::AudioCommand(e.to_string()))
     }
 
     pub fn debug_snapshot(&self) -> Result<AudioDebugSnapshot, DesktopError> {

@@ -98,7 +98,7 @@ bool update_track_session(std::shared_ptr<const Session>& session,
     }
     if (!changed) return false;
     session = next_session;
-    if (mixer) mixer->set_session(next_session);
+    if (mixer) mixer->set_session(next_session, /*preserve_realtime_state=*/true);
     return true;
 }
 
@@ -735,7 +735,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                           clock_->position().frame);
 
             if (mixer_) {
-                mixer_->set_session(next_session);
+                // preserve_realtime_state=false: LoadSession is the authoritative source
+                // of truth for gain/pan/mute/solo — always load from session, never keep
+                // stale Mixer atomics. This eliminates the need for sync_live_mix after load.
+                mixer_->set_session(next_session, /*preserve_realtime_state=*/false);
                 mixer_->set_pitch_cache(pitch_cache_.get());
                 mixer_->set_pitch_engine(realtime_pitch_engine_.get());
             }
@@ -935,7 +938,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 session_ = next_session;
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
-                if (mixer_) mixer_->set_session(next_session);
+                if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 // Prime at current playhead so published streams are aligned.
                 if (realtime_pitch_engine_) {
                     const Frame playhead = clock_->position().frame;
@@ -956,7 +959,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 session_ = next_session;
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
-                if (mixer_) mixer_->set_session(next_session);
+                if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 // Prime at current playhead so published streams are aligned.
                 if (realtime_pitch_engine_) {
                     const Frame playhead = clock_->position().frame;
@@ -978,7 +981,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 session_ = next_session;
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
-                if (mixer_) mixer_->set_session(next_session);
+                if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 // Prime at current playhead so published streams are aligned.
                 if (realtime_pitch_engine_) {
                     const Frame playhead = clock_->position().frame;

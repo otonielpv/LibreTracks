@@ -113,18 +113,20 @@ void RealtimePitchStream::configure(const Config& config) {
         allocate_buffers();
 
 #if LT_ENGINE_REALTIME_STREAM_HAS_RB
-    using RBOption = RubberBand::RubberBandStretcher::Option;
-    const int options = RBOption::OptionProcessRealTime
-                      | RBOption::OptionPitchHighConsistency
-                      | RBOption::OptionChannelsTogether;
-    stretcher_ = std::make_unique<RubberBand::RubberBandStretcher>(
-        static_cast<size_t>(config_.sample_rate),
-        static_cast<size_t>(config_.channel_count),
-        options,
-        1.0,
-        config_.pitch_scale);
-    stretcher_->setTimeRatio(1.0);
-    stretcher_->setPitchScale(config_.pitch_scale);
+    if (!same || !stretcher_) {
+        using RBOption = RubberBand::RubberBandStretcher::Option;
+        const int options = RBOption::OptionProcessRealTime
+                          | RBOption::OptionPitchHighConsistency
+                          | RBOption::OptionChannelsTogether;
+        stretcher_ = std::make_unique<RubberBand::RubberBandStretcher>(
+            static_cast<size_t>(config_.sample_rate),
+            static_cast<size_t>(config_.channel_count),
+            options,
+            1.0,
+            config_.pitch_scale);
+        stretcher_->setTimeRatio(1.0);
+        stretcher_->setPitchScale(config_.pitch_scale);
+    }
 #endif
     primed_ = false;
 }
@@ -214,6 +216,32 @@ int RealtimePitchStream::discard_ring(int frames) noexcept {
     return take;
 }
 
+void RealtimePitchStream::reset_stretcher_only() noexcept {
+#if LT_ENGINE_REALTIME_STREAM_HAS_RB
+    if (stretcher_) {
+        // RubberBand v3 reset() flushes all internal buffers and latency state,
+        // making the stretcher behave as if freshly constructed while retaining
+        // the current pitch/time ratio. Much cheaper than recreating the instance.
+        stretcher_->reset();
+        stretcher_->setTimeRatio(1.0);
+        stretcher_->setPitchScale(config_.pitch_scale);
+    } else {
+        using RBOption = RubberBand::RubberBandStretcher::Option;
+        const int options = RBOption::OptionProcessRealTime
+                          | RBOption::OptionPitchHighConsistency
+                          | RBOption::OptionChannelsTogether;
+        stretcher_ = std::make_unique<RubberBand::RubberBandStretcher>(
+            static_cast<size_t>(config_.sample_rate),
+            static_cast<size_t>(config_.channel_count),
+            options,
+            1.0,
+            config_.pitch_scale);
+        stretcher_->setTimeRatio(1.0);
+        stretcher_->setPitchScale(config_.pitch_scale);
+    }
+#endif
+}
+
 void RealtimePitchStream::process_start_pad() noexcept {
 #if LT_ENGINE_REALTIME_STREAM_HAS_RB
     if (!stretcher_)
@@ -239,7 +267,10 @@ void RealtimePitchStream::reset_for_seek(const DecodedSource& source, Frame sour
         (long long)source_frame, (long long)timeline_frame, config_.semitones);
     if (!configured_)
         configure(Config{source.sample_rate(), source.channel_count(), config_.semitones});
-    configure(config_);
+    // Flush RubberBand's internal state without reallocating buffers.
+    // configure(config_) would also recreate the stretcher but redundantly reallocates
+    // all buffers too — skip that when config hasn't changed.
+    reset_stretcher_only();
     clear_ring();
     // Set sentinel so audio thread accepts any position on first render after this seek.
     current_output_timeline_frame_ = -1;

@@ -1453,7 +1453,8 @@ impl DesktopSession {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+        // MixerOnly: section markers are Rust-model-only. C++ does not read them.
+        self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
 
         Ok(self.snapshot())
     }
@@ -1493,7 +1494,8 @@ impl DesktopSession {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+        // MixerOnly: section markers are Rust-model-only. C++ does not read them.
+        self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
 
         Ok(self.snapshot())
     }
@@ -1516,7 +1518,8 @@ impl DesktopSession {
             return Err(DesktopError::SectionNotFound(section_id.to_string()));
         }
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+        // MixerOnly: section markers are Rust-model-only. C++ does not read them.
+        self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
 
         Ok(self.snapshot())
     }
@@ -1630,14 +1633,17 @@ impl DesktopSession {
 
         region.transpose_semitones = transpose_semitones;
 
+        // Send the realtime command first — C++ does the session clone + pitch rebuild
+        // internally via CmdSetRegionTranspose. MixerOnly then updates the Rust model
+        // without triggering a redundant LoadSession on top.
+        audio.update_live_region_transpose(region_id, transpose_semitones)?;
         self.persist_song_update_internal(
             song,
             audio,
-            AudioChangeImpact::TransportOnly,
+            AudioChangeImpact::MixerOnly,
             record_history,
             true,
         )?;
-        audio.update_live_region_transpose(region_id, transpose_semitones)?;
         self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
 
         Ok(self.snapshot())
@@ -1665,10 +1671,14 @@ impl DesktopSession {
 
         track.transpose_enabled = transpose_enabled;
 
+        // Send the realtime command first — C++ handles the session clone + pitch stream
+        // rebuild via CmdSetTrackTransposeEnabled. MixerOnly skips the LoadSession path
+        // so we don't trigger a redundant full session reload on top.
+        audio.set_track_transpose_enabled_realtime(track_id, transpose_enabled)?;
         self.persist_song_update_internal(
             song,
             audio,
-            AudioChangeImpact::TransportOnly,
+            AudioChangeImpact::MixerOnly,
             record_history,
             true,
         )?;
@@ -1727,7 +1737,8 @@ impl DesktopSession {
             .ok_or_else(|| DesktopError::SectionNotFound(section_id.to_string()))?;
         marker.digit = digit;
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+        // MixerOnly: section markers are Rust-model-only. C++ does not read them.
+        self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
 
         Ok(self.snapshot())
     }
@@ -2257,6 +2268,31 @@ impl DesktopSession {
         let pending_jump = self.engine.pending_marker_jump().cloned();
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
 
+        // MixerOnly: C++ already has the correct state via a realtime command.
+        // Just update the Rust model; skip LoadSession and audio restart entirely.
+        // We still seek + reschedule any pending marker jump since engine.load_song clears engine
+        // state and pending jumps compute execute_at_seconds relative to the seek position.
+        if impact == AudioChangeImpact::MixerOnly {
+            self.engine.load_song(song)?;
+            if bump_revision {
+                self.project_revision = self.project_revision.saturating_add(1);
+            }
+            self.engine.seek(position_seconds)?;
+            if let Some(pending_jump) = pending_jump {
+                let loaded_song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
+                if loaded_song.marker_by_id(&pending_jump.target_marker_id).is_some() {
+                    if position_seconds < pending_jump.execute_at_seconds {
+                        self.engine.schedule_marker_jump(
+                            &pending_jump.target_marker_id,
+                            pending_jump.trigger,
+                            pending_jump.transition,
+                        )?;
+                    }
+                }
+            }
+            return Ok(());
+        }
+
         if playback_state == PlaybackState::Playing
             && matches!(
                 impact,
@@ -2281,7 +2317,6 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        audio.sync_live_mix(&loaded_song)?;
 
         if let Some(pending_jump) = pending_jump {
             if loaded_song
@@ -2302,7 +2337,7 @@ impl DesktopSession {
             PlaybackState::Playing => {
                 self.engine.play()?;
                 match impact {
-                    AudioChangeImpact::TransportOnly => {}
+                    AudioChangeImpact::MixerOnly | AudioChangeImpact::TransportOnly => {}
                     AudioChangeImpact::TimelineWindow => {
                         self.restart_audio(audio, PlaybackStartReason::TimelineWindow)?
                     }
@@ -2772,8 +2807,14 @@ impl DesktopSession {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AudioChangeImpact {
+    /// Gain/pan/mute/solo/transpose_enabled changed. C++ already received a realtime command.
+    /// No LoadSession needed — skip replace_song_buffers and restart_audio entirely.
+    MixerOnly,
+    /// Marker/region/BPM/tempo changes that don't move clips. No source reload needed.
     TransportOnly,
+    /// Clips moved or resized. If playing, re-send LoadSession to update render windows.
     TimelineWindow,
+    /// Sources added/removed, tracks added/deleted. Always triggers full source reload.
     StructureRebuild,
 }
 
@@ -6215,6 +6256,128 @@ mod tests {
         assert_eq!(song_view.tempo_markers.len(), 1);
         assert_eq!(song_view.tempo_markers[0].start_seconds, 24.0);
         assert_eq!(song_view.tempo_markers[0].bpm, 91.0);
+    }
+
+    // ── Phase 9: section marker MixerOnly path ────────────────────────────────
+
+    #[test]
+    fn section_marker_create_does_not_trigger_session_rebuild() {
+        // Section markers are Rust-model-only — C++ must not receive a LoadSession.
+        // Verified by checking that realtime_command_count stays at zero (no commands sent).
+        let mut session = session_with_song_dir("section-create-demo", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+        let initial_revision = session.snapshot().project_revision;
+
+        let snapshot = session
+            .create_section_marker(2.5, &audio)
+            .expect("section marker should be created");
+
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.live_mix_realtime_command_count, 0);
+        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        // Revision bumps (model changed) but no realtime commands were sent.
+        assert!(snapshot.project_revision > initial_revision);
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
+        assert_eq!(song_view.section_markers.len(), 1);
+        assert_eq!(song_view.section_markers[0].start_seconds, 2.5);
+    }
+
+    #[test]
+    fn section_marker_update_does_not_trigger_session_rebuild() {
+        let mut session = session_with_song_dir("section-update-demo", demo_song_with_section());
+        let audio = crate::audio_engine::AudioController::default();
+
+        session
+            .update_section_marker("section_1", "Verse", 3.0, &audio)
+            .expect("section marker update should succeed");
+
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.live_mix_realtime_command_count, 0);
+        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
+        assert_eq!(song_view.section_markers[0].name, "Verse");
+        assert_eq!(song_view.section_markers[0].start_seconds, 3.0);
+    }
+
+    #[test]
+    fn section_marker_delete_does_not_trigger_session_rebuild() {
+        let mut session = session_with_song_dir("section-delete-demo", demo_song_with_section());
+        let audio = crate::audio_engine::AudioController::default();
+
+        session
+            .delete_section_marker("section_1", &audio)
+            .expect("section marker deletion should succeed");
+
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.live_mix_realtime_command_count, 0);
+        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
+        assert_eq!(song_view.section_markers.len(), 0);
+    }
+
+    #[test]
+    fn section_marker_assign_digit_does_not_trigger_session_rebuild() {
+        let mut session =
+            session_with_song_dir("section-digit-demo", demo_song_with_section());
+        let audio = crate::audio_engine::AudioController::default();
+
+        session
+            .assign_section_marker_digit("section_1", Some(3), &audio)
+            .expect("assign digit should succeed");
+
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.live_mix_realtime_command_count, 0);
+        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
+        assert_eq!(song_view.section_markers[0].digit, Some(3));
+    }
+
+    // ── Phase 5: set_track_transpose_enabled_realtime path ───────────────────
+
+    #[test]
+    fn transpose_enabled_toggle_sends_realtime_command_not_load_session() {
+        let mut session =
+            session_with_song_dir("transpose-enabled-demo", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+        let initial_revision = session.snapshot().project_revision;
+
+        session
+            .update_track_transpose_enabled("track_1", false, &audio)
+            .expect("transpose enable toggle should succeed");
+
+        let diagnostics = audio.realtime_control_diagnostics();
+        // set_track_transpose_enabled_realtime sends one CmdSetTrackTransposeEnabled.
+        // It is counted as a realtime command (live_mix_realtime_command_count).
+        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        // Revision bumps because the Rust model changed.
+        assert!(session.snapshot().project_revision > initial_revision);
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
+        let track = song_view
+            .tracks
+            .into_iter()
+            .find(|t| t.id == "track_1")
+            .expect("track should exist");
+        assert!(!track.transpose_enabled);
     }
 
     #[test]

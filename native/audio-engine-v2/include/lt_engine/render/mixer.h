@@ -54,7 +54,11 @@ public:
     void set_track_pan(const Id& track_id, float pan);
     void set_track_mute(const Id& track_id, bool mute);
     void set_track_solo(const Id& track_id, bool solo);
-    void set_session(std::shared_ptr<const Session> session);
+    // preserve_realtime_state=true: keep existing gain/pan/mute/solo atomics for known tracks
+    //   (used for session pointer swaps during transpose/region changes — slider state survives).
+    // preserve_realtime_state=false: always load values from session
+    //   (used after LoadSession — the session IS the source of truth for mixer values).
+    void set_session(std::shared_ptr<const Session> session, bool preserve_realtime_state = true);
     void set_pitch_cache(PitchCache* pitch_cache) noexcept;
     void set_pitch_engine(RealtimePitchEngine* pitch_engine) noexcept;
     void clear_session();
@@ -164,7 +168,7 @@ private:
     TrackControlState* control_for_track(const Id& track_id) noexcept;
     const TrackControlState* control_for_track(const Id& track_id) const noexcept;
     int control_index_for_track(const Id& track_id) const noexcept;
-    void rebuild_control_slots(std::shared_ptr<const Session> session);
+    void rebuild_control_slots(std::shared_ptr<const Session> session, bool preserve_realtime_state);
 };
 
 } // namespace lt
