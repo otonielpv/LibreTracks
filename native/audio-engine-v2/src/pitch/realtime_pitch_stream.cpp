@@ -3,8 +3,23 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdarg>
+#include <cstdio>
 #include <functional>
 #include <thread>
+
+static bool s_pitch_debug = false;
+static void pitch_stream_log(const char* fmt, ...) {
+    if (!s_pitch_debug) {
+        const char* v = std::getenv("LIBRETRACKS_AUDIO_DEBUG");
+        s_pitch_debug = v && (v[0] == '1');
+        if (!s_pitch_debug) return;
+    }
+    va_list ap; va_start(ap, fmt);
+    std::vfprintf(stdout, fmt, ap);
+    std::fflush(stdout);
+    va_end(ap);
+}
 
 #if LT_ENGINE_USE_RUBBERBAND && !LT_ENGINE_ALLOW_PITCH_STUB && __has_include(<rubberband/RubberBandStretcher.h>)
 #  define LT_ENGINE_REALTIME_STREAM_HAS_RB 1
@@ -220,11 +235,15 @@ void RealtimePitchStream::process_start_pad() noexcept {
 void RealtimePitchStream::reset_for_seek(const DecodedSource& source, Frame source_frame, Frame timeline_frame) {
     note_control_mutation_if_published();
     reset_thread_id_.store(current_thread_token(), std::memory_order_release);
+    pitch_stream_log("[PITCH_STREAM] reset_for_seek src=%lld tl=%lld st=%.2f\n",
+        (long long)source_frame, (long long)timeline_frame, config_.semitones);
     if (!configured_)
         configure(Config{source.sample_rate(), source.channel_count(), config_.semitones});
     configure(config_);
     clear_ring();
-    current_output_timeline_frame_ = timeline_frame;
+    // Set sentinel so audio thread accepts any position on first render after this seek.
+    current_output_timeline_frame_ = -1;
+    primed_timeline_frame_ = timeline_frame; // ring will start at this position after prime()
     const Frame target = std::max<Frame>(0, source_frame);
     const Frame read_start = std::max<Frame>(0, target - config_.preroll_frames);
     current_source_frame_ = read_start;
@@ -258,6 +277,8 @@ bool RealtimePitchStream::prime(const DecodedSource& source, Frame timeline_fram
     (void)timeline_frame;
     const int produced = feed_required_input(source, min_output_frames);
     primed_ = ring_available() >= min_output_frames;
+    pitch_stream_log("[PITCH_STREAM] prime tl=%lld primed=%d ring=%d src_pos=%lld\n",
+        (long long)timeline_frame, (int)primed_, ring_available(), (long long)current_source_frame_);
     prime_count_.fetch_add(1, std::memory_order_relaxed);
     return primed_ || produced > 0;
 }
@@ -384,20 +405,57 @@ int RealtimePitchStream::render(const DecodedSource& source,
     render_thread_id_.store(current_thread_token(), std::memory_order_release);
     if (config_.semitones == 0.0) {
         const int read = source.read(source_frame, frame_count, out, std::min(out_channels, 2));
-        current_source_frame_ = source_frame + read;
         current_output_timeline_frame_ = timeline_frame + read;
         return read;
     }
-    if (!primed_ || timeline_frame != current_output_timeline_frame_)
-        reset_for_seek(source, source_frame, timeline_frame);
+    // Never call reset_for_seek from the audio thread — it allocates and runs preroll loops.
+    // The control thread primes at primed_timeline_frame_; on first render we may need to
+    // discard a small gap if the clock advanced between priming and publishing.
+    if (current_output_timeline_frame_ == -1) {
+        // First render after a seek. The ring contains audio starting at primed_timeline_frame_.
+        // Discard frames the clock advanced past while we were priming.
+        Frame gap = 0;
+        int ring_before = ring_available();
+        if (primed_timeline_frame_ >= 0 && timeline_frame > primed_timeline_frame_) {
+            gap = timeline_frame - primed_timeline_frame_;
+            const int to_discard = static_cast<int>(std::min(gap, static_cast<Frame>(ring_available())));
+            discard_ring(to_discard);
+            // If gap exceeded ring contents, advance source position to compensate.
+            // This keeps pitched and non-pitched tracks in sync at the seek point.
+            if (gap > static_cast<Frame>(to_discard)) {
+                current_source_frame_ += (gap - to_discard);
+            }
+        }
+        pitch_stream_log("[PITCH_STREAM] first_render tl=%lld primed_tl=%lld gap=%lld ring_before=%d ring_now=%d src_pos=%lld\n",
+            (long long)timeline_frame, (long long)primed_timeline_frame_,
+            (long long)gap, ring_before, ring_available(), (long long)current_source_frame_);
+        current_output_timeline_frame_ = timeline_frame;
+    }
+
+    if (timeline_frame != current_output_timeline_frame_) {
+        pitch_stream_log("[PITCH_STREAM] mismatch tl=%lld expected=%lld delta=%lld ring=%d src_pos=%lld\n",
+            (long long)timeline_frame, (long long)current_output_timeline_frame_,
+            (long long)(timeline_frame - current_output_timeline_frame_),
+            ring_available(), (long long)current_source_frame_);
+        underflow_count_.fetch_add(1, std::memory_order_relaxed);
+        current_output_timeline_frame_ = timeline_frame + frame_count;
+        render_count_.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
+
     feed_required_input(source, frame_count);
     const int produced = pop_ring(out, out_channels, 0, frame_count);
-    if (produced < frame_count)
+    if (produced < frame_count) {
         underflow_count_.fetch_add(1, std::memory_order_relaxed);
+        pitch_stream_log("[PITCH_STREAM] underflow tl=%lld wanted=%d got=%d ring=%d src_pos=%lld\n",
+            (long long)timeline_frame, frame_count, produced, ring_available(), (long long)current_source_frame_);
+    }
     if (produced > 0)
         primed_ = true;
     apply_reset_ramp(out, out_channels, produced);
-    current_output_timeline_frame_ = timeline_frame + produced;
+    // Always advance by frame_count so current_output_timeline_frame_ stays in sync with the
+    // audio clock even on underflow. Falling behind causes a growing delta → false mismatch.
+    current_output_timeline_frame_ = timeline_frame + frame_count;
     render_count_.fetch_add(1, std::memory_order_relaxed);
     return produced;
 }

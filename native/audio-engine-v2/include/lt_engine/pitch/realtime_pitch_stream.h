@@ -107,6 +107,7 @@ public:
     bool configured() const noexcept { return configured_; }
     Frame expected_timeline_frame() const noexcept { return current_output_timeline_frame_; }
     Frame current_source_frame() const noexcept { return current_source_frame_; }
+    int ring_capacity() const noexcept { return config_.ring_capacity_frames; }
 
 private:
     static constexpr int kMaxChannels = 32;
@@ -133,7 +134,8 @@ private:
     bool configured_ = false;
     bool primed_ = false;
     Frame current_source_frame_ = 0;
-    Frame current_output_timeline_frame_ = 0;
+    Frame current_output_timeline_frame_ = -1; // -1 = accept any position on first render
+    Frame primed_timeline_frame_ = -1;          // ring start position after prime(); -1 = unset
     int start_delay_frames_ = 0;
     int discard_remaining_ = 0;
     int discarded_frames_ = 0;

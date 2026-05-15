@@ -2,6 +2,8 @@
 #include <lt_engine/render/pitch_resolution.h>
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 
 namespace lt {
 
@@ -34,7 +36,7 @@ std::shared_ptr<RealtimePitchStream> RealtimePitchEngine::find_stream(const Pitc
 
 void RealtimePitchEngine::prepare_for_session(const Session& session, const SourceManager& sources, int sample_rate) {
     sample_rate_ = sample_rate > 0 ? sample_rate : 48000;
-    publish_stream_set(build_stream_set_for_target(-1, session, sources, false));
+    publish_stream_set(build_stream_set_for_target(0, session, sources, true));
 }
 
 std::shared_ptr<RealtimePitchEngine::ActivePitchStreamSet>
@@ -64,6 +66,8 @@ RealtimePitchEngine::build_stream_set_for_target(Frame target_frame,
                 const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
 
                 // Helper: add a stream for the given semitone value if not already present.
+                // Reuses the existing stream object when the key matches to avoid recreating
+                // the RubberBandStretcher (which is expensive — ~120ms per instance).
                 auto add_stream_for_semitones = [&](Semitones semitones, Frame prime_frame) {
                     if (semitones == 0) return;
                     PitchStreamKey key{clip.source_id, track.id, clip.id,
@@ -74,10 +78,14 @@ RealtimePitchEngine::build_stream_set_for_target(Frame target_frame,
                     for (const auto& h : set->streams)
                         if (h.key == key) return;
 
-                    auto stream = std::make_shared<RealtimePitchStream>();
-                    stream->configure(RealtimePitchStream::Config{
-                        sample_rate_, source->channel_count(), static_cast<double>(semitones),
-                        0.0, 4096, std::clamp(sample_rate_ / 20, 1024, 4096), 32768});
+                    // Reuse existing stream if key matches — avoids RubberBandStretcher recreation.
+                    std::shared_ptr<RealtimePitchStream> stream = find_stream(key);
+                    if (!stream || !stream->configured()) {
+                        stream = std::make_shared<RealtimePitchStream>();
+                        stream->configure(RealtimePitchStream::Config{
+                            sample_rate_, source->channel_count(), static_cast<double>(semitones),
+                            0.0, 4096, std::clamp(sample_rate_ / 20, 1024, 4096), 32768});
+                    }
 
                     if (prime_target_streams && prime_frame >= 0) {
                         if (prime_frame < clip_end && prime_frame + ahead > clip.timeline_start_frame) {
@@ -87,7 +95,12 @@ RealtimePitchEngine::build_stream_set_for_target(Frame target_frame,
                             source_cache_.prepare_window(*source,
                                 std::max<Frame>(0, source_frame - sample_rate_ / 10), ahead);
                             stream->reset_for_seek(*source, source_frame, overlap_start);
-                            stream->prime(*source, overlap_start, 1024);
+                            // Prime just enough to cover RubberBand's startup latency (~2048 frames).
+                            // The sentinel discards any clock-advance gap on first render.
+                            // Keeping this small is critical: this runs synchronously on the control
+                            // thread for every stream, so latency multiplies by stream count.
+                            const int prime_frames = std::max(1024, sample_rate_ / 24);
+                            stream->prime(*source, overlap_start, prime_frames);
                         }
                     }
                     set->streams.push_back(ActivePitchStreamHandle{std::move(key), std::move(stream)});
@@ -147,19 +160,67 @@ void RealtimePitchEngine::prepare_for_transport_discontinuity(Frame target_frame
                                                               const std::string& reason,
                                                               const Session& session,
                                                               const SourceManager& sources) {
+    // Debounce all discontinuity calls: if the same reason+frame was processed
+    // within kDebounceMs, skip the expensive rebuild. This prevents the control thread
+    // being overwhelmed by repeated identical calls (e.g. rapid seek clicks, slider drag).
+    {
+        const auto now = std::chrono::steady_clock::now();
+        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - last_discontinuity_time_).count();
+        if (elapsed_ms < kDebounceMs
+                && last_discontinuity_reason_ == reason
+                && last_transport_discontinuity_target_frame_.load(std::memory_order_relaxed) == target_frame) {
+            std::fprintf(stdout, "[PITCH_ENGINE] discontinuity debounced reason=%s frame=%lld elapsed_ms=%lld\n",
+                reason.c_str(), (long long)target_frame, (long long)elapsed_ms);
+            std::fflush(stdout);
+            return;
+        }
+        last_discontinuity_time_ = now;
+        last_discontinuity_reason_ = reason;
+    }
+    {
+        auto streams = std::atomic_load(&active_);
+        const int n_streams = streams ? static_cast<int>(streams->streams.size()) : 0;
+        std::fprintf(stdout, "[PITCH_ENGINE] discontinuity reason=%s frame=%lld streams=%d\n",
+            reason.c_str(), (long long)target_frame, n_streams);
+        std::fflush(stdout);
+    }
+
     last_reason_ = reason;
     last_transport_discontinuity_target_frame_.store(target_frame, std::memory_order_release);
     if (target_frame > static_cast<Frame>(sample_rate_) * 30)
         long_seek_count_.fetch_add(1, std::memory_order_relaxed);
-    // Suppress repair requests for a grace period after the seek so the stream's
-    // built-in self-seek (reset_for_seek in render()) can correct the frame offset
-    // without triggering a repair storm before the clock catches up.
+    // Suppress repair requests for a grace period after the discontinuity.
     post_seek_repair_suppression_remaining_.store(kPostSeekRepairSuppressionBlocks,
                                                   std::memory_order_release);
     repair_pending_.store(false, std::memory_order_release);
     for (auto& c : stream_mismatch_counts_)
         c.store(0, std::memory_order_relaxed);
+    const auto t_rebuild_start = std::chrono::steady_clock::now();
     prepare_window(target_frame, session, sources, true);
+    const auto t_rebuild_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - t_rebuild_start).count();
+
+    // The audio clock kept running while we were rebuilding. Prime extra frames to
+    // cover the rebuild latency so the gap discard on first_render finds the ring full.
+    if (t_rebuild_ms > 0) {
+        const Frame extra_frames = static_cast<Frame>(t_rebuild_ms * sample_rate_ / 1000) + 512;
+        auto set = std::atomic_load(&active_);
+        if (set) {
+            for (const auto& handle : set->streams) {
+                if (!handle.stream) continue;
+                const auto* source = sources.get(handle.key.source_id);
+                if (!source || !source->is_loaded()) continue;
+                handle.stream->prime(*source, target_frame, static_cast<int>(extra_frames));
+            }
+        }
+        std::fprintf(stdout, "[PITCH_ENGINE] discontinuity_done reason=%s frame=%lld rebuild_ms=%lld extra_primed=%lld\n",
+            reason.c_str(), (long long)target_frame, (long long)t_rebuild_ms, (long long)extra_frames);
+    } else {
+        std::fprintf(stdout, "[PITCH_ENGINE] discontinuity_done reason=%s frame=%lld rebuild_ms=%lld\n",
+            reason.c_str(), (long long)target_frame, (long long)t_rebuild_ms);
+    }
+    std::fflush(stdout);
 }
 
 int RealtimePitchEngine::render_pitched_clip(const Clip& clip,
@@ -193,20 +254,17 @@ int RealtimePitchEngine::render_pitched_clip(const Clip& clip,
     if (!source_cache_.is_ready(source, source_frame, frame_count))
         stream_not_ready_count_.fetch_add(1, std::memory_order_relaxed);
 
-    // stream->render() already handles timeline_frame mismatches via internal reset_for_seek(),
-    // so we pass through directly. We track mismatches for diagnostics and suppress spurious
-    // repair requests in the post-seek grace period (stream self-heals in 1 block).
+    // expected_timeline_frame() == -1 means freshly primed; stream will accept any position.
     const Frame expected = stream->expected_timeline_frame();
-    if (expected != timeline_frame) {
+    const bool primed_sentinel = (expected == -1);
+    if (!primed_sentinel && expected != timeline_frame) {
         pitch_timeline_mismatch_count_.fetch_add(1, std::memory_order_relaxed);
         pitch_stream_not_aligned_count_.fetch_add(1, std::memory_order_relaxed);
 
         const int suppression = post_seek_repair_suppression_remaining_.load(std::memory_order_relaxed);
         if (suppression > 0) {
-            // Post-seek grace window: stream self-heals next block, don't request repair.
             post_seek_repair_suppression_remaining_.store(suppression - 1, std::memory_order_relaxed);
         } else if (slot_index >= 0) {
-            // Sustained production mismatch: request control-thread repair after threshold.
             const int prev = stream_mismatch_counts_[slot_index].fetch_add(1, std::memory_order_relaxed);
             if (prev + 1 >= kPitchMismatchRepairThreshold) {
                 repair_target_frame_.store(timeline_frame, std::memory_order_relaxed);
@@ -215,9 +273,7 @@ int RealtimePitchEngine::render_pitched_clip(const Clip& clip,
                 stream_mismatch_counts_[slot_index].store(0, std::memory_order_relaxed);
             }
         }
-        // Do NOT return 0 here — fall through to render() which calls reset_for_seek internally.
-    } else {
-        // Aligned — clear mismatch counter for this slot.
+    } else if (!primed_sentinel) {
         if (slot_index >= 0)
             stream_mismatch_counts_[slot_index].store(0, std::memory_order_relaxed);
     }

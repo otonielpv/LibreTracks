@@ -5,6 +5,7 @@
 #include <lt_engine/sources/source_manager.h>
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -29,8 +30,10 @@ struct PitchStreamKey {
     }
 };
 
-// Number of blocks of mismatch allowed before requesting repair (tolerates clock drift).
-static constexpr int kPitchMismatchRepairThreshold = 3;
+// Number of consecutive mismatch blocks before requesting repair.
+// Must be large enough to absorb normal underflow gaps without triggering false repairs,
+// but small enough to catch genuine sustained desync.
+static constexpr int kPitchMismatchRepairThreshold = 64;
 
 struct PitchRepairRequest {
     Frame target_frame = -1;
@@ -120,6 +123,12 @@ private:
     // Written only from audio thread; used to throttle repair requests.
     static constexpr int kMaxStreamSlots = 64;
     std::atomic<int> stream_mismatch_counts_[kMaxStreamSlots];
+
+    // Debounce for transpose/region changes: skip expensive rebuild if called again
+    // within this window for non-seek reasons. Seeks always go through immediately.
+    static constexpr int kDebounceMs = 80;
+    std::chrono::steady_clock::time_point last_discontinuity_time_{};
+    std::string last_discontinuity_reason_{};
 };
 
 } // namespace lt

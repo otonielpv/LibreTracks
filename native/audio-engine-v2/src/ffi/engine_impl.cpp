@@ -506,6 +506,7 @@ std::string EngineImpl::get_snapshot() const {
                 "missing_silence=%llu backend_unavailable=%llu "
                 "stub_pass=%llu stub_blocked=%llu "
                 "render=%llu underflow=%llu repair_req=%llu repair_done=%llu "
+                "ring=%d ring_cap=%d resets=%llu primes=%llu "
                 "muted_reason=%s\n",
                 snap.pitch.pitch_backend.c_str(),
                 snap.pitch.pitch_runtime_enabled ? "true" : "false",
@@ -522,6 +523,10 @@ std::string EngineImpl::get_snapshot() const {
                 static_cast<unsigned long long>(snap.pitch.realtime_pitch_underflow_count),
                 static_cast<unsigned long long>(_rb_diag.pitch_repair_requested_count),
                 static_cast<unsigned long long>(_rb_diag.pitch_repair_completed_count),
+                static_cast<int>(_rb_diag.ring_available_frames),
+                static_cast<int>(_rb_diag.ring_capacity_frames),
+                static_cast<unsigned long long>(_rb_diag.reset_count),
+                static_cast<unsigned long long>(_rb_diag.prime_count),
                 snap.pitch.pitch_muted_or_bypassed_reason.empty()
                     ? "(none)"
                     : snap.pitch.pitch_muted_or_bypassed_reason.c_str());
@@ -700,8 +705,18 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     for (const auto& region : song.regions)
                         if (region.transpose_semitones != 0) ++nonzero_regions;
                 }
-                debug_log("[LT_PITCH_DEBUG] LoadSession songs=%d regions=%d nonzero_transpose_regions=%d\n",
-                    static_cast<int>(next_session->songs.size()), region_count, nonzero_regions);
+                int track_count = 0;
+                int clip_count = 0;
+                for (const auto& song : next_session->songs) {
+                    track_count += static_cast<int>(song.tracks.size());
+                    for (const auto& track : song.tracks)
+                        clip_count += static_cast<int>(track.clips.size());
+                }
+                debug_log("[LT_PITCH_DEBUG] LoadSession name=\"%s\" songs=%d tracks=%d clips=%d regions=%d nonzero_transpose_regions=%d\n",
+                    next_session->name.c_str(),
+                    static_cast<int>(next_session->songs.size()),
+                    track_count, clip_count,
+                    region_count, nonzero_regions);
             }
             session_ = next_session;
             const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
