@@ -1319,30 +1319,6 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
-  updateTrackMixLive: async (args: {
-    trackId: string;
-    muted?: boolean;
-    solo?: boolean;
-    volume?: number;
-    pan?: number;
-    audioTo?: string;
-  }) => {
-    replaceSong({
-      ...state.song,
-      tracks: state.song.tracks.map((track) =>
-        track.id === args.trackId
-          ? {
-              ...track,
-              muted: args.muted ?? track.muted,
-              solo: args.solo ?? track.solo,
-              volume: args.volume ?? track.volume,
-              pan: args.pan ?? track.pan,
-              audioTo: args.audioTo ?? track.audioTo,
-            }
-          : track,
-      ),
-    });
-  },
   updateTrackMixRealtime: async (_args: {
     trackId: string;
     muted?: boolean;

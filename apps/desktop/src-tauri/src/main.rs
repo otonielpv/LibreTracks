@@ -140,7 +140,6 @@ fn main() {
             commands::project::create_clip,
             commands::project::create_clips_batch,
             commands::timeline::move_track,
-            commands::timeline::update_track_mix_live,
             commands::timeline::update_track_mix_realtime,
             commands::timeline::commit_track_mix_change,
             commands::timeline::update_track,

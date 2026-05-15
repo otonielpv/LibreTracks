@@ -4,26 +4,36 @@ This document defines the authoritative boundary between Rust/Tauri and C++ for 
 live audio runtime responsibilities. Any code that violates these rules is wrong by
 definition — fix it, not this document.
 
-> **Implementation status**: Phases 1–9 complete.
+> **Implementation status**: All phases complete (original 13 + second pass).
 > Phase 1: this document. Phase 2/3: `Mixer::set_session(preserve_realtime_state)`,
 > `sync_live_mix` removed from `persist_song_update_internal`.
 > Phase 4: `AudioChangeImpact::MixerOnly` skips `LoadSession` when C++ already has state.
 > Phase 5: `ensure_live_track` removed; `set_track_transpose_enabled_realtime` added;
 > transpose toggle and region transpose now use `MixerOnly` + dedicated realtime command.
-> Phase 6: folder/group hierarchy enforced as C++-only (comment in `sync_live_mix`).
-> Phase 7: Rust pitch-decision invariant documented — `update_live_region_transpose` comment
-> confirms `semitones` is raw offset; C++ `resolve_pitch_render_decision()` is sole authority.
-> Phase 8: Fail-fast pitch backend confirmed — `ALLOW_PITCH_STUB=OFF` already fatal-errors
-> without RubberBand; `build-real-rubberband.ps1` sets `REQUIRE_REAL_RUBBERBAND=ON` explicitly;
-> `pitch_stub_passthrough_blocked_count` and `pitch_engine_available` surfaced in snapshot JSON.
-> Phase 9: Session rebuild policy tightened — section marker CRUD (create/update/delete/digit)
-> promoted from `TransportOnly` to `MixerOnly`; C++ confirmed to have zero section marker reads.
-> Phase 10: `get_ownership_diagnostics` Tauri command added — surfaces Rust realtime counters
-> + C++ pitch backend identity + fail-fast counters in a single poll.
-> Phase 11: 5 new unit tests — section marker MixerOnly path (4 tests) + transpose-enabled
-> realtime path (1 test). `MixerOnly` path now correctly restores seek + pending marker jumps.
-> Phase 12: Incremental migration — all phases applied incrementally; no batch cutover needed.
-> Phase 13: Manual validation — see Section 11 below.
+> Phase 6: folder/group hierarchy enforced as C++-only.
+> Phase 7: Rust pitch-decision invariant documented.
+> Phase 8: Fail-fast pitch backend confirmed.
+> Phase 9: Section marker CRUD promoted to `MixerOnly`.
+> Phase 10: `get_ownership_diagnostics` Tauri command added.
+> Phase 11: 5 unit tests (section marker + transpose paths).
+> Phase 12: Incremental migration.
+> Phase 13: Manual validation checklist — see Section 11 below.
+>
+> **Second pass (strict thin-bridge enforcement)**:
+> - `sync_live_mix` quarantined → renamed `legacy_sync_live_mix_for_session_load_only`;
+>   made `pub(crate)`; accepts `LegacySyncReason` param; `legacy_sync_live_mix_count` counter.
+> - `update_track_mix_live` Tauri command and `Session::update_track_mix_live` method removed.
+>   `RemoteCommand::UpdateTrackMixLive` now calls `audio.update_live_track_mix` directly.
+>   Frontend API `updateTrackMixLive` deleted from `desktopApi.ts`.
+> - `Session::update_track_name_only` added for name-only changes (no audio command sent).
+> - `AudioController::session_rebuild_count` counter added; incremented in `replace_song_buffers`.
+>   `replace_song_buffers` now accepts a `reason: &str` arg recorded as `last_session_rebuild_reason`.
+> - `RuntimeUpdateKind` enum added to `state.rs` — documents the A/B/C taxonomy in code.
+> - `OwnershipDiagnostics` updated: `sync_live_mix_count` → `legacy_sync_live_mix_count`,
+>   `session_rebuild_count`, `last_session_rebuild_reason` added.
+> - 11 new unit tests covering: bridge-only invariants, commit paths, undo grouping,
+>   name-only changes, legacy-sync counter, session_rebuild_count, folder track paths.
+> - All test assertions updated to new field names.
 
 ---
 
@@ -150,11 +160,12 @@ Edit operation
 ```
 load_song_from_path()
   └─> audio.stop()
-  └─> audio.replace_song_buffers()                   [LoadSession for source paths]
-  └─> engine.load_song(song)                         [model update]
-  └─> audio.sync_live_mix(&loaded_song)              [one-time full mixer sync — OK here]
+  └─> audio.replace_song_buffers()                              [LoadSession for source paths]
+  └─> engine.load_song(song)                                    [model update]
+  └─> audio.legacy_sync_live_mix_for_session_load_only(song)   [one-time full mixer sync]
 ```
-- `sync_live_mix` is acceptable exactly once at load. Not during live operation.
+- `legacy_sync_live_mix_for_session_load_only` is acceptable exactly once at load.
+  Not during live operation. `legacy_sync_live_mix_count` must stay at 0 during playback.
 
 ### Diagnostics Path
 ```
@@ -252,12 +263,16 @@ load_song_from_path()
 
 1. The audio callback must not allocate, lock a mutex, do disk I/O, or call into Rust.
 2. `reset_for_seek` and `prime` are control-thread-only. Never call them from the audio callback.
-3. `sync_live_mix` is acceptable only once per session load. Not during live operation.
+3. `legacy_sync_live_mix_for_session_load_only` is acceptable only once per session load. Not during live operation. Use `update_live_track_mix` for all live audio state changes.
 4. A volume/pan/mute/solo/metronome/transpose-enabled change must never require `LoadSession`.
 5. Stub pitch passthrough is blocked in runtime builds — silence is the correct failure mode.
 6. Folder gain hierarchy is resolved entirely in C++ Mixer. Rust sends raw values only.
 7. Pitch decisions (`effective_semitones`, `needs_pitch`) are resolved in C++ only.
 8. Every Category A command must complete in < 1µs on the calling thread (atomic store only).
+9. Category A commands (realtime bridge) must never mutate the Rust project model.
+10. Category A commands must never create an undo entry or increment `project_revision`.
+11. `session_rebuild_count` must not increment for any Category A or commit-only operation.
+12. `last_session_rebuild_reason` must be one of: `"session_load"`, `"structure_rebuild"`, `"timeline_window"`, `"restart_audio"`. Any other value is a bug.
 
 ---
 
@@ -275,7 +290,9 @@ To validate the refactor is working correctly during a live session:
 
 ### Session rebuild path (must NOT fire on the above)
 - Call `get_ownership_diagnostics` (via `DevTools → Tauri`) after each action above.
-- `realtimeCommandCount` must increment; `syncLiveMixCount` must stay at 0.
+- `realtimeCommandCount` must increment; `legacySyncLiveMixCount` must stay at 0.
+- `sessionRebuildCount` must not increment during slider drag or mute/solo/metronome actions.
+- `lastSessionRebuildReason` after a project open must be `"session_load"`.
 
 ### Pitch backend health
 - Open `get_ownership_diagnostics` with a pitched track loaded.

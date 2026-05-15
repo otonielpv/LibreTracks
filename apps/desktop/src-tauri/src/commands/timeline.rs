@@ -447,29 +447,6 @@ pub fn update_track_transpose_enabled(
 }
 
 #[tauri::command]
-pub fn update_track_mix_live(
-    track_id: String,
-    volume: Option<f64>,
-    pan: Option<f64>,
-    muted: Option<bool>,
-    solo: Option<bool>,
-    audio_to: Option<String>,
-    state: State<'_, DesktopState>,
-) -> Result<(), String> {
-    state
-        .audio
-        .update_live_track_mix(
-            &track_id,
-            volume,
-            pan,
-            muted,
-            solo,
-            audio_to.as_deref(),
-        )
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
 pub fn update_track_mix_realtime(
     track_id: String,
     volume: Option<f64>,

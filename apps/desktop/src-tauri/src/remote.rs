@@ -202,16 +202,10 @@ async fn run_remote_command_bridge(
                 muted,
                 solo,
             } => {
-                if session
-                    .update_track_mix_live(
-                        track_id,
-                        *volume,
-                        *pan,
-                        *muted,
-                        *solo,
-                        None,
-                        &state.audio,
-                    )
+                // Category A bridge: send directly to C++, no model mutation, no undo.
+                if state
+                    .audio
+                    .update_live_track_mix(track_id, *volume, *pan, *muted, *solo, None)
                     .is_err()
                 {
                     continue;

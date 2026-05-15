@@ -502,17 +502,6 @@ export async function updateTrackTransposeEnabled(args: {
   return invokeCommand<TransportSnapshot>("update_track_transpose_enabled", args);
 }
 
-export async function updateTrackMixLive(args: {
-  trackId: string;
-  volume?: number;
-  pan?: number;
-  muted?: boolean;
-  solo?: boolean;
-  audioTo?: string;
-}): Promise<void> {
-  await invokeCommand("update_track_mix_live", args);
-}
-
 export async function updateTrackMixRealtime(args: {
   trackId: string;
   volume?: number;

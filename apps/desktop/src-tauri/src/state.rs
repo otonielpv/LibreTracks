@@ -2075,6 +2075,26 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Commit a track name change to the model and undo stack. Does NOT send any audio command.
+    /// Use when only the track name changes (no audio-affecting fields).
+    pub fn update_track_name_only(
+        &mut self,
+        track_id: &str,
+        name: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        self.push_history_entry();
+        self.redo_stack.clear();
+        self.update_loaded_track(track_id, Some(name), None, None, None, None, None)?;
+        self.perf_metrics.song_save_millis = 0;
+        self.project_revision = self.project_revision.saturating_add(1);
+        Ok(self.snapshot())
+    }
+
+    /// Commit mixer state (volume/pan/mute/solo/route) to the model and send one targeted
+    /// Category A command to C++. Use for commit-on-pointer-up paths.
+    /// Rule 8: one specific final realtime command is acceptable from a commit path.
     pub fn update_track(
         &mut self,
         track_id: &str,
@@ -2098,7 +2118,7 @@ impl DesktopSession {
             || solo.is_some()
             || audio_to.is_some()
         {
-            // Send only the changed properties — no need to re-sync all tracks.
+            // Category A: one targeted command per changed field. No broad sync.
             audio.update_live_track_mix(track_id, volume, pan, muted, solo, audio_to)?;
         }
 
@@ -2106,20 +2126,6 @@ impl DesktopSession {
         self.project_revision = self.project_revision.saturating_add(1);
 
         Ok(self.snapshot())
-    }
-
-    pub fn update_track_mix_live(
-        &mut self,
-        track_id: &str,
-        volume: Option<f64>,
-        pan: Option<f64>,
-        muted: Option<bool>,
-        solo: Option<bool>,
-        audio_to: Option<&str>,
-        audio: &AudioController,
-    ) -> Result<(), DesktopError> {
-        audio.update_live_track_mix(track_id, volume, pan, muted, solo, audio_to)?;
-        Ok(())
     }
 
     pub fn delete_track(
@@ -2216,7 +2222,7 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
         audio.stop()?;
-        audio.replace_song_buffers(&song_dir, &song)?;
+        audio.replace_song_buffers(&song_dir, &song, "session_load")?;
 
         self.transport_clock.stop();
         self.song_dir = Some(song_dir.clone());
@@ -2232,7 +2238,10 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        audio.sync_live_mix(&loaded_song)?;
+        audio.legacy_sync_live_mix_for_session_load_only(
+            &loaded_song,
+            crate::audio_engine::LegacySyncReason::InitialSessionLoadOnly,
+        )?;
         self.prime_waveform_cache(&song_dir, &loaded_song)?;
 
         Ok(())
@@ -2299,7 +2308,12 @@ impl DesktopSession {
                 AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild
             )
         {
-            audio.replace_song_buffers(&song_dir, &song)?;
+            let rebuild_reason = match impact {
+                AudioChangeImpact::TimelineWindow => "timeline_window",
+                AudioChangeImpact::StructureRebuild => "structure_rebuild",
+                _ => "unknown",
+            };
+            audio.replace_song_buffers(&song_dir, &song, rebuild_reason)?;
         }
 
         self.perf_metrics.song_save_millis = 0;
@@ -2799,10 +2813,36 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        audio.replace_song_buffers(&song_dir, &song)?;
+        audio.replace_song_buffers(&song_dir, &song, "restart_audio")?;
         audio.play(song_dir, song, self.engine.position_seconds(), reason)?;
         Ok(())
     }
+}
+
+/// Taxonomy of runtime update kinds. Documents what a given operation does to the C++ runtime.
+///
+/// This is the canonical classification for the ownership contract:
+/// - **RealtimeBridgeOnly**: sent from a Category A Tauri command — no model mutation, no undo.
+/// - **CommitWithTargetedCommand**: pointer-up / commit path — model + one Category A command.
+/// - **PitchRuntimeUpdate**: transpose change — model + one Category B pitch command.
+/// - **StructuralSessionReload**: source/track CRUD — model + full `LoadSession` rebuild.
+///
+/// Used for diagnostics comments and future assertion points. Not stored at runtime.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeUpdateKind {
+    /// Category A: bridge-only. No Rust model mutation, no undo entry, no LoadSession.
+    /// Examples: slider drag, mute/solo toggle during drag, metronome toggle.
+    RealtimeBridgeOnly,
+    /// Category B (commit): Rust model updated + one targeted Category A command to C++.
+    /// Examples: pointer-up on volume/pan/mute/solo, track name commit.
+    CommitWithTargetedCommand,
+    /// Category B (pitch): Rust model updated + SetRegionTranspose/SetSongTranspose to C++.
+    /// May trigger C++ pitch stream rebuild but NOT a full LoadSession.
+    PitchRuntimeUpdate,
+    /// Category C: Rust model updated + full `LoadSession` (source/track/clip CRUD).
+    /// Examples: add track, delete clip, move clip to different source.
+    StructuralSessionReload,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -4098,6 +4138,30 @@ mod tests {
         song
     }
 
+    fn demo_song_with_folder_track() -> Song {
+        let mut song = demo_song();
+        song.tracks.insert(
+            0,
+            Track {
+                id: "folder_1".into(),
+                name: "Folder".into(),
+                kind: TrackKind::Folder,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: false,
+                audio_to: "master".to_string(),
+            },
+        );
+        // Make the audio track a child of the folder.
+        if let Some(t) = song.tracks.iter_mut().find(|t| t.id == "track_1") {
+            t.parent_track_id = Some("folder_1".into());
+        }
+        song
+    }
+
     fn write_silent_test_wav(path: &Path, duration_seconds: u32) {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("wav parent dir should exist");
@@ -4637,21 +4701,14 @@ mod tests {
         let audio = crate::audio_engine::AudioController::default();
         let initial_revision = session.snapshot().project_revision;
 
-        session
-            .update_track_mix_live(
-                "track_1",
-                Some(0.61),
-                Some(-0.22),
-                Some(true),
-                Some(true),
-                None,
-                &audio,
-            )
+        // Category A: bridge-only, no model mutation, no undo, no revision bump.
+        audio
+            .update_live_track_mix("track_1", Some(0.61), Some(-0.22), Some(true), Some(true), None)
             .expect("live mix update should succeed");
 
         let diagnostics = audio.realtime_control_diagnostics();
         assert_eq!(diagnostics.live_mix_realtime_command_count, 1);
-        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.legacy_sync_live_mix_count, 0);
         assert_eq!(diagnostics.live_mix_ensure_live_track_count, 0);
 
         let updated_song = session
@@ -4664,6 +4721,7 @@ mod tests {
             .find(|track| track.id == "track_1")
             .expect("updated track should exist");
 
+        // Rust model must NOT have changed — Category A is bridge-only.
         assert_eq!(session.snapshot().project_revision, initial_revision);
         assert_eq!(updated_track.volume, 1.0);
         assert_eq!(updated_track.pan, 0.0);
@@ -4694,7 +4752,7 @@ mod tests {
 
         let diagnostics = audio.realtime_control_diagnostics();
         assert_eq!(diagnostics.live_mix_realtime_command_count, 200);
-        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.legacy_sync_live_mix_count, 0);
         assert_eq!(diagnostics.live_mix_ensure_live_track_count, 0);
     }
 
@@ -4711,7 +4769,7 @@ mod tests {
 
         let diagnostics = audio.realtime_control_diagnostics();
         assert_eq!(diagnostics.live_mix_realtime_command_count, 200);
-        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.legacy_sync_live_mix_count, 0);
         assert_eq!(diagnostics.live_mix_ensure_live_track_count, 0);
     }
 
@@ -4731,7 +4789,7 @@ mod tests {
         let diagnostics = audio.realtime_control_diagnostics();
         assert_eq!(diagnostics.metronome_realtime_toggle_count, 20);
         assert_eq!(diagnostics.metronome_realtime_volume_count, 1);
-        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.legacy_sync_live_mix_count, 0);
         assert_eq!(diagnostics.live_mix_ensure_live_track_count, 0);
     }
 
@@ -4740,16 +4798,9 @@ mod tests {
         let mut session = session_with_song_dir("live-mix-undo-demo", demo_song());
         let audio = crate::audio_engine::AudioController::default();
 
-        session
-            .update_track_mix_live(
-                "track_1",
-                Some(0.61),
-                Some(-0.22),
-                Some(true),
-                Some(true),
-                None,
-                &audio,
-            )
+        // Category A bridge: realtime command only, no model mutation, no undo entry.
+        audio
+            .update_live_track_mix("track_1", Some(0.61), Some(-0.22), Some(true), Some(true), None)
             .expect("live mix update should succeed");
         assert_eq!(session.undo_stack.len(), 0);
 
@@ -6274,7 +6325,7 @@ mod tests {
 
         let diagnostics = audio.realtime_control_diagnostics();
         assert_eq!(diagnostics.live_mix_realtime_command_count, 0);
-        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.legacy_sync_live_mix_count, 0);
         // Revision bumps (model changed) but no realtime commands were sent.
         assert!(snapshot.project_revision > initial_revision);
 
@@ -6297,7 +6348,7 @@ mod tests {
 
         let diagnostics = audio.realtime_control_diagnostics();
         assert_eq!(diagnostics.live_mix_realtime_command_count, 0);
-        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.legacy_sync_live_mix_count, 0);
 
         let song_view = session
             .song_view()
@@ -6318,7 +6369,7 @@ mod tests {
 
         let diagnostics = audio.realtime_control_diagnostics();
         assert_eq!(diagnostics.live_mix_realtime_command_count, 0);
-        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.legacy_sync_live_mix_count, 0);
 
         let song_view = session
             .song_view()
@@ -6339,7 +6390,7 @@ mod tests {
 
         let diagnostics = audio.realtime_control_diagnostics();
         assert_eq!(diagnostics.live_mix_realtime_command_count, 0);
-        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.legacy_sync_live_mix_count, 0);
 
         let song_view = session
             .song_view()
@@ -6364,7 +6415,7 @@ mod tests {
         let diagnostics = audio.realtime_control_diagnostics();
         // set_track_transpose_enabled_realtime sends one CmdSetTrackTransposeEnabled.
         // It is counted as a realtime command (live_mix_realtime_command_count).
-        assert_eq!(diagnostics.live_mix_sync_live_mix_count, 0);
+        assert_eq!(diagnostics.legacy_sync_live_mix_count, 0);
         // Revision bumps because the Rust model changed.
         assert!(session.snapshot().project_revision > initial_revision);
 
@@ -6401,5 +6452,256 @@ mod tests {
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.clips[0].timeline_start_seconds, 6.5);
+    }
+
+    // ── Phase 11 (second pass): strict thin-bridge enforcement tests ──────────
+
+    /// Category A: realtime bridge sends command but must NOT mutate the Rust model.
+    #[test]
+    fn realtime_bridge_does_not_mutate_rust_model() {
+        let mut session = session_with_song_dir("realtime-bridge-model-demo", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+
+        let before = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist")
+            .tracks
+            .into_iter()
+            .find(|t| t.id == "track_1")
+            .expect("track should exist");
+
+        // Category A: direct audio controller call, no session involvement.
+        audio
+            .update_live_track_mix("track_1", Some(0.5), Some(0.3), Some(true), None, None)
+            .expect("realtime update should succeed");
+
+        let after = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist")
+            .tracks
+            .into_iter()
+            .find(|t| t.id == "track_1")
+            .expect("track should exist");
+
+        // Rust model must be unchanged — Category A is bridge-only.
+        assert_eq!(after.volume, before.volume);
+        assert_eq!(after.pan, before.pan);
+        assert_eq!(after.muted, before.muted);
+    }
+
+    /// Category A: realtime bridge must not create an undo entry.
+    #[test]
+    fn realtime_bridge_does_not_create_undo_entry() {
+        let mut session = session_with_song_dir("realtime-bridge-undo-demo", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+
+        let undo_before = session.undo_stack.len();
+
+        for _ in 0..10 {
+            audio
+                .update_live_track_mix("track_1", Some(0.8), None, None, None, None)
+                .expect("realtime update should succeed");
+        }
+
+        assert_eq!(session.undo_stack.len(), undo_before, "undo stack must not grow from realtime commands");
+    }
+
+    /// Category A: realtime bridge must not increment the project revision.
+    #[test]
+    fn realtime_bridge_does_not_bump_project_revision() {
+        let mut session = session_with_song_dir("realtime-bridge-revision-demo", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+
+        let revision_before = session.snapshot().project_revision;
+
+        for i in 0..20 {
+            audio
+                .update_live_track_mix("track_1", Some(i as f64 / 20.0), None, None, None, None)
+                .expect("realtime update should succeed");
+        }
+
+        assert_eq!(session.snapshot().project_revision, revision_before,
+            "project revision must not change from Category A commands");
+    }
+
+    /// Commit path (pointer-up): must bump revision and send exactly one realtime command.
+    #[test]
+    fn commit_track_mix_bumps_revision_and_sends_one_realtime_command() {
+        let mut session = session_with_song_dir("commit-mix-demo", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+
+        let revision_before = session.snapshot().project_revision;
+        let diag_before = audio.realtime_control_diagnostics();
+
+        session
+            .update_track("track_1", None, Some(0.75), None, None, None, None, &audio)
+            .expect("commit should succeed");
+
+        let revision_after = session.snapshot().project_revision;
+        let diag_after = audio.realtime_control_diagnostics();
+
+        assert!(revision_after > revision_before, "commit must bump project revision");
+        assert_eq!(
+            diag_after.live_mix_realtime_command_count - diag_before.live_mix_realtime_command_count,
+            1,
+            "commit must send exactly one targeted realtime command"
+        );
+        assert_eq!(diag_after.legacy_sync_live_mix_count, 0,
+            "commit must not call legacy_sync_live_mix");
+        assert_eq!(diag_after.session_rebuild_count, 0,
+            "commit must not trigger a session rebuild");
+    }
+
+    /// Commit path: must create one undo entry.
+    #[test]
+    fn commit_track_mix_creates_one_undo_entry() {
+        let mut session = session_with_song_dir("commit-undo-demo", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+
+        let undo_before = session.undo_stack.len();
+
+        session
+            .update_track("track_1", None, Some(0.5), None, None, None, None, &audio)
+            .expect("commit should succeed");
+        session
+            .update_track("track_1", None, Some(0.6), None, None, None, None, &audio)
+            .expect("commit should succeed");
+
+        assert_eq!(session.undo_stack.len(), undo_before + 2,
+            "each commit must create exactly one undo entry");
+    }
+
+    /// Track name change must not send any audio command.
+    #[test]
+    fn update_track_name_does_not_send_audio_command() {
+        let mut session = session_with_song_dir("name-change-demo", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+
+        let diag_before = audio.realtime_control_diagnostics();
+
+        // Name-only change via update_track_name_only.
+        session
+            .update_track_name_only("track_1", "New Name", &audio)
+            .expect("name change should succeed");
+
+        let diag_after = audio.realtime_control_diagnostics();
+
+        assert_eq!(
+            diag_after.live_mix_realtime_command_count,
+            diag_before.live_mix_realtime_command_count,
+            "name-only change must not send any audio command"
+        );
+        assert_eq!(diag_after.session_rebuild_count, 0);
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
+        let track = song_view.tracks.into_iter().find(|t| t.id == "track_1").expect("track");
+        assert_eq!(track.name, "New Name");
+    }
+
+    /// Legacy sync must only be called once per session load, not during live operation.
+    #[test]
+    fn legacy_sync_counter_reflects_session_load_count() {
+        let audio = crate::audio_engine::AudioController::default();
+
+        // Zero calls initially.
+        assert_eq!(audio.realtime_control_diagnostics().legacy_sync_live_mix_count, 0);
+
+        // Simulate what load_song_from_path does once per open.
+        let song = demo_song();
+        audio
+            .legacy_sync_live_mix_for_session_load_only(
+                &song,
+                crate::audio_engine::LegacySyncReason::InitialSessionLoadOnly,
+            )
+            .expect("legacy sync should succeed");
+
+        assert_eq!(audio.realtime_control_diagnostics().legacy_sync_live_mix_count, 1,
+            "legacy sync count must be exactly 1 after one project open");
+
+        // 100 realtime commands (slider drags) must NOT increment legacy_sync counter.
+        for i in 0..100 {
+            audio
+                .update_live_track_mix("track_1", Some(i as f64 / 100.0), None, None, None, None)
+                .expect("realtime update should succeed");
+        }
+
+        assert_eq!(audio.realtime_control_diagnostics().legacy_sync_live_mix_count, 1,
+            "live slider drags must not call legacy_sync");
+    }
+
+    /// session_rebuild_count must increment only for structural changes, not for mixer changes.
+    #[test]
+    fn session_rebuild_count_does_not_increment_for_mixer_changes() {
+        let audio = crate::audio_engine::AudioController::default();
+
+        // Category A — no rebuild.
+        audio
+            .update_live_track_mix("track_1", Some(0.5), None, None, None, None)
+            .expect("realtime update should succeed");
+        audio
+            .set_metronome_enabled_realtime(true)
+            .expect("metronome toggle should succeed");
+        audio
+            .set_metronome_volume_realtime(0.7)
+            .expect("metronome volume should succeed");
+        audio
+            .set_track_transpose_enabled_realtime("track_1", false)
+            .expect("transpose enabled should succeed");
+
+        assert_eq!(audio.realtime_control_diagnostics().session_rebuild_count, 0,
+            "Category A commands must never trigger a session rebuild");
+    }
+
+    /// Metronome toggle must use realtime commands, not session rebuild.
+    #[test]
+    fn metronome_toggle_uses_realtime_command_not_session_rebuild() {
+        let audio = crate::audio_engine::AudioController::default();
+
+        for i in 0..10 {
+            audio
+                .set_metronome_enabled_realtime(i % 2 == 0)
+                .expect("metronome toggle should succeed");
+        }
+        audio
+            .set_metronome_volume_realtime(0.5)
+            .expect("metronome volume should succeed");
+
+        let diag = audio.realtime_control_diagnostics();
+        assert_eq!(diag.metronome_realtime_toggle_count, 10);
+        assert_eq!(diag.metronome_realtime_volume_count, 1);
+        assert_eq!(diag.session_rebuild_count, 0,
+            "metronome commands must never rebuild the session");
+        assert_eq!(diag.legacy_sync_live_mix_count, 0);
+    }
+
+    /// Folder track volume change must use realtime command, not session rebuild.
+    #[test]
+    fn folder_track_volume_uses_realtime_command_not_session_rebuild() {
+        let mut session = session_with_song_dir("folder-track-demo", demo_song_with_folder_track());
+        let audio = crate::audio_engine::AudioController::default();
+
+        // Folder track volume change — Category A bridge.
+        audio
+            .update_live_track_mix("folder_1", Some(0.6), None, None, None, None)
+            .expect("folder track realtime update should succeed");
+
+        let diag = audio.realtime_control_diagnostics();
+        assert_eq!(diag.session_rebuild_count, 0,
+            "folder track Category A command must not rebuild session");
+        assert_eq!(diag.live_mix_realtime_command_count, 1);
+
+        // Commit the folder track volume change — Category B (commit), still no rebuild.
+        session
+            .update_track("folder_1", None, Some(0.6), None, None, None, None, &audio)
+            .expect("folder track commit should succeed");
+
+        let diag = audio.realtime_control_diagnostics();
+        assert_eq!(diag.session_rebuild_count, 0,
+            "folder track commit must not rebuild session");
     }
 }

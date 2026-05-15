@@ -22,17 +22,22 @@ pub fn healthcheck() -> &'static str {
 
 /// Combined diagnostic snapshot for the audio runtime ownership contract.
 ///
-/// Surfaces both the Rust-side realtime command counters (Category A vs sync_live_mix) and
+/// Surfaces both the Rust-side realtime command counters (Category A vs legacy sync) and
 /// the key C++ snapshot fields (pitch backend identity, fail-fast counters) in a single poll.
 /// Intended for developer diagnostics and automated health checks.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OwnershipDiagnostics {
-    // Rust-side Category A counters — should be >> sync_live_mix_count during live operation.
+    // Rust-side Category A counters — realtime_command_count should be >> legacy_sync_count.
     pub realtime_command_count: u64,
-    pub sync_live_mix_count: u64,
+    /// Calls to legacy_sync_live_mix_for_session_load_only. Must be 0 during live playback.
+    pub legacy_sync_live_mix_count: u64,
     pub metronome_realtime_toggle_count: u64,
     pub metronome_realtime_volume_count: u64,
+    /// Structural session rebuilds (LoadSession). Nonzero is expected only for StructureRebuild.
+    pub session_rebuild_count: u64,
+    /// Reason string from the most recent `replace_song_buffers` call.
+    pub last_session_rebuild_reason: String,
 
     // C++ pitch backend identity — must be "rubberband" in a release build.
     pub pitch_backend: String,
@@ -73,9 +78,11 @@ pub fn get_ownership_diagnostics(
 
     Ok(OwnershipDiagnostics {
         realtime_command_count: rt.live_mix_realtime_command_count,
-        sync_live_mix_count: rt.live_mix_sync_live_mix_count,
+        legacy_sync_live_mix_count: rt.legacy_sync_live_mix_count,
         metronome_realtime_toggle_count: rt.metronome_realtime_toggle_count,
         metronome_realtime_volume_count: rt.metronome_realtime_volume_count,
+        session_rebuild_count: rt.session_rebuild_count,
+        last_session_rebuild_reason: rt.last_session_rebuild_reason.clone(),
 
         pitch_backend: pitch.map(|p| p.pitch_backend.clone()).unwrap_or_default(),
         pitch_engine_available: pitch.map(|p| p.pitch_engine_available).unwrap_or(false),
