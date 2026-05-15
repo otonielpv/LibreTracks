@@ -255,6 +255,17 @@ Result<void> EngineImpl::send_command(const std::string& cmd_json) {
 
 void EngineImpl::service_control_thread_tasks() {
     service_pitch_repair_requests();
+    service_pending_scheduled_jump_pitch();
+}
+
+void EngineImpl::service_pending_scheduled_jump_pitch() {
+    if (!mixer_ || !realtime_pitch_engine_ || !session_ || !source_manager_)
+        return;
+    const Frame jump_frame = mixer_->take_pending_scheduled_jump();
+    if (jump_frame == Mixer::kNoJumpPending)
+        return;
+    realtime_pitch_engine_->prepare_for_transport_discontinuity(
+        jump_frame, "scheduled_jump", *session_, *source_manager_);
 }
 
 

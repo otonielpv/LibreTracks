@@ -80,6 +80,18 @@ public:
     std::uint64_t callback_over_budget_count() const noexcept;
     std::uint64_t rendered_track_count() const noexcept;
     std::uint64_t skipped_track_count() const noexcept;
+    std::uint64_t scheduled_jump_executed_count() const noexcept;
+
+    // Called from the control thread to check if a scheduled jump executed inside the audio
+    // callback since the last call. Returns the target frame if one did, or -1 otherwise.
+    // The control thread must then call prepare_for_transport_discontinuity for that frame.
+    // This is the mechanism that ensures pitch streams are primed before a scheduled jump
+    // becomes audible — the jump fires in the audio callback (atomic clock seek + crossfade),
+    // and the control thread repairs pitch alignment immediately after.
+    Frame take_pending_scheduled_jump() noexcept;
+
+    // Sentinel returned by take_pending_scheduled_jump() when no jump is pending.
+    static constexpr Frame kNoJumpPending = -1;
 
 private:
     std::shared_ptr<const Session> session_;
@@ -157,6 +169,12 @@ private:
     std::atomic<std::uint64_t> callback_over_budget_count_{0};
     std::atomic<std::uint64_t> rendered_track_count_{0};
     std::atomic<std::uint64_t> skipped_track_count_{0};
+    std::atomic<std::uint64_t> scheduled_jump_executed_count_{0};
+
+    // When a scheduled jump fires inside the audio callback, the target frame is written here
+    // so the control thread can call prepare_for_transport_discontinuity() for pitch.
+    // Sentinel: -1 means no pending jump. Written from audio thread, read from control thread.
+    std::atomic<Frame> pending_scheduled_jump_frame_{kNoJumpPending};
 
     // Click-free crossfade around seeks/jumps.
     FadeProcessor fade_;

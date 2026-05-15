@@ -79,7 +79,6 @@ private:
         std::vector<ActivePitchStreamHandle> streams;
     };
 
-    std::shared_ptr<RealtimePitchStream> find_stream(const PitchStreamKey& key) const noexcept;
     void publish_stream_set(std::shared_ptr<ActivePitchStreamSet> set);
     void prepare_window(Frame target_frame, const Session& session, const SourceManager& sources, bool reset_streams);
     std::shared_ptr<ActivePitchStreamSet> build_stream_set_for_target(Frame target_frame,

@@ -25,15 +25,6 @@ void RealtimePitchEngine::publish_stream_set(std::shared_ptr<ActivePitchStreamSe
     active_stream_swap_count_.fetch_add(1, std::memory_order_relaxed);
 }
 
-std::shared_ptr<RealtimePitchStream> RealtimePitchEngine::find_stream(const PitchStreamKey& key) const noexcept {
-    auto set = std::atomic_load(&active_);
-    for (const auto& handle : set->streams) {
-        if (handle.key == key)
-            return handle.stream;
-    }
-    return {};
-}
-
 void RealtimePitchEngine::prepare_for_session(const Session& session, const SourceManager& sources, int sample_rate) {
     sample_rate_ = sample_rate > 0 ? sample_rate : 48000;
     publish_stream_set(build_stream_set_for_target(0, session, sources, true));
@@ -78,14 +69,17 @@ RealtimePitchEngine::build_stream_set_for_target(Frame target_frame,
                     for (const auto& h : set->streams)
                         if (h.key == key) return;
 
-                    // Reuse existing stream if key matches — avoids RubberBandStretcher recreation.
-                    std::shared_ptr<RealtimePitchStream> stream = find_stream(key);
-                    if (!stream || !stream->configured()) {
-                        stream = std::make_shared<RealtimePitchStream>();
-                        stream->configure(RealtimePitchStream::Config{
-                            sample_rate_, source->channel_count(), static_cast<double>(semitones),
-                            0.0, 4096, std::clamp(sample_rate_ / 20, 1024, 4096), 32768});
-                    }
+                    // Always create a fresh stream for the new graph.
+                    // SAFETY INVARIANT: never reuse a stream from the published (live) set and
+                    // then call reset_for_seek() or prime() on it. The audio thread may be inside
+                    // stream->render() concurrently. Mutating the stretcher/ring from the control
+                    // thread while the audio thread renders causes data races and crashes.
+                    // New streams are always freshly constructed here, then published atomically.
+                    // The audio thread only ever sees immutable published sets via atomic_load.
+                    auto stream = std::make_shared<RealtimePitchStream>();
+                    stream->configure(RealtimePitchStream::Config{
+                        sample_rate_, source->channel_count(), static_cast<double>(semitones),
+                        0.0, 4096, std::clamp(sample_rate_ / 20, 1024, 4096), 32768});
 
                     if (prime_target_streams && prime_frame >= 0) {
                         if (prime_frame < clip_end && prime_frame + ahead > clip.timeline_start_frame) {

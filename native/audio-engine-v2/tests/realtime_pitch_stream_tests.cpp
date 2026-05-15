@@ -265,7 +265,6 @@ TEST_CASE("realtime_pitch_render_does_not_reset_or_prime_on_timeline_mismatch") 
     RealtimePitchEngine engine;
     engine.prepare_for_session(session, sources, test::kFixtureSampleRate);
     engine.prepare_for_play(0, session, sources);
-    const auto before = engine.diagnostics();
 
     float left[512] = {};
     float right[512] = {};
@@ -274,6 +273,15 @@ TEST_CASE("realtime_pitch_render_does_not_reset_or_prime_on_timeline_mismatch") 
     const auto& clip = track.clips[0];
     const auto* source = sources.get("source");
     REQUIRE(source != nullptr);
+
+    // Render one block at frame 0 to consume the primed-sentinel (-1) and advance
+    // expected_timeline_frame to 512. After this, the stream expects frame 512 next.
+    engine.render_pitched_clip(clip, track.id, *source, 0, 0, 512, 2.0, out, 2);
+
+    const auto before = engine.diagnostics();
+
+    // Now render at frame 48000 — a genuine mismatch. The engine must count it but
+    // must NOT reset or re-prime the stream from the audio thread.
     const int rendered = engine.render_pitched_clip(clip, track.id, *source, 48000, 48000,
                                                     512, 2.0, out, 2);
     const auto after = engine.diagnostics();

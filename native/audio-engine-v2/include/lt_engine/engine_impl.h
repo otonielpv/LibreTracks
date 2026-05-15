@@ -99,6 +99,10 @@ private:
     // pitch stream repair requests posted by render_pitched_clip().
     void service_pitch_repair_requests();
 
+    // Called from the control thread to detect scheduled jumps that fired in the audio
+    // callback and prepare pitch streams for the new position.
+    void service_pending_scheduled_jump_pitch();
+
     // Silent audio render callback used during Phases 1-5.
     class SilentCallback;
     std::unique_ptr<SilentCallback> silent_callback_;

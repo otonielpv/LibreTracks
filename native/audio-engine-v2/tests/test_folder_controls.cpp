@@ -407,16 +407,17 @@ TEST_CASE("pitch_mismatch_requests_repair_not_audio_thread_reset") {
         CHECK(before_any.active_pitch_stream_count == 1);
     }
 
-    // Block 1: frame=0, expected=0 → match → no mismatch
+    // Block 1: render at frame 0 to consume the primed-sentinel (-1) and advance
+    // expected_timeline_frame to kBlock. After this the stream expects kBlock next.
     pitch.render_pitched_clip(clip, "track", *src_ptr, 0, 0, kBlock, 3.0, out, 2);
 
-    // Blocks 2..N: send larger frames so expected!=current → mismatch counted
-    // Start at frame = kBlock*2 to skip past whatever the stream's expected frame is
-    // after block 1 (which may have stayed at 0 or advanced to kBlock).
-    const Frame start_mismatch = static_cast<Frame>(kBlock) * 10; // far from 0
+    // Blocks 2..N: render at a fixed wrong frame repeatedly so every block is a mismatch.
+    // Each mismatch call advances current_output_timeline_frame_ to wrong_frame+kBlock,
+    // so the NEXT call at wrong_frame is a mismatch again. This generates one mismatch
+    // per iteration and drives the per-slot counter past kPitchMismatchRepairThreshold.
+    const Frame wrong_frame = static_cast<Frame>(kSR) * 4; // far past kBlock
     for (int i = 0; i <= kPitchMismatchRepairThreshold + 1; ++i) {
-        const Frame f = start_mismatch + static_cast<Frame>(i) * kBlock;
-        pitch.render_pitched_clip(clip, "track", *src_ptr, f, f, kBlock, 3.0, out, 2);
+        pitch.render_pitched_clip(clip, "track", *src_ptr, wrong_frame, wrong_frame, kBlock, 3.0, out, 2);
     }
 
     const auto diag = pitch.diagnostics();

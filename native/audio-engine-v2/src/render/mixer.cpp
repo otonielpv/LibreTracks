@@ -278,6 +278,12 @@ void Mixer::render(float** output_channels,
         scheduler_->mark_executed(from, *due_frame);
         // Crossfade to hide the discontinuity (applied below).
         fade_.trigger_crossfade();
+        // Notify the control thread that a scheduled jump executed so it can call
+        // prepare_for_transport_discontinuity() for pitch stream alignment.
+        // This is a single atomic store — realtime-safe.
+        // The control thread drains this via take_pending_scheduled_jump().
+        pending_scheduled_jump_frame_.store(*due_frame, std::memory_order_release);
+        scheduled_jump_executed_count_.fetch_add(1, std::memory_order_relaxed);
     }
 
     // Zero output buses.
@@ -608,5 +614,17 @@ double Mixer::callback_duration_max_ms() const noexcept { return callback_durati
 std::uint64_t Mixer::callback_over_budget_count() const noexcept { return callback_over_budget_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::rendered_track_count() const noexcept { return rendered_track_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::skipped_track_count() const noexcept { return skipped_track_count_.load(std::memory_order_relaxed); }
+std::uint64_t Mixer::scheduled_jump_executed_count() const noexcept { return scheduled_jump_executed_count_.load(std::memory_order_relaxed); }
+
+Frame Mixer::take_pending_scheduled_jump() noexcept {
+    const Frame f = pending_scheduled_jump_frame_.load(std::memory_order_acquire);
+    if (f == kNoJumpPending) return kNoJumpPending;
+    // Use compare_exchange to ensure only one control thread call "wins" the jump.
+    Frame expected = f;
+    if (pending_scheduled_jump_frame_.compare_exchange_strong(
+            expected, kNoJumpPending, std::memory_order_acq_rel))
+        return f;
+    return kNoJumpPending;
+}
 
 } // namespace lt
