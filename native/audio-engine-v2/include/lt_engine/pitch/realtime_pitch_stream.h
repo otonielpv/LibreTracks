@@ -92,6 +92,7 @@ public:
     void reset_for_seek(const DecodedSource& source, Frame source_frame, Frame timeline_frame);
     bool prime(const DecodedSource& source, Frame timeline_frame, int min_output_frames);
     int render(const DecodedSource& source,
+               Frame source_frame,
                Frame timeline_frame,
                int frame_count,
                float** out,

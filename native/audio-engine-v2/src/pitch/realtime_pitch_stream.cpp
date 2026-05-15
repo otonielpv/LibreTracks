@@ -366,6 +366,7 @@ void RealtimePitchStream::apply_reset_ramp(float** out, int out_channels, int fr
 }
 
 int RealtimePitchStream::render(const DecodedSource& source,
+                                Frame source_frame,
                                 Frame timeline_frame,
                                 int frame_count,
                                 float** out,
@@ -382,13 +383,13 @@ int RealtimePitchStream::render(const DecodedSource& source,
     }
     render_thread_id_.store(current_thread_token(), std::memory_order_release);
     if (config_.semitones == 0.0) {
-        const int read = source.read(current_source_frame_, frame_count, out, std::min(out_channels, 2));
-        current_source_frame_ += read;
+        const int read = source.read(source_frame, frame_count, out, std::min(out_channels, 2));
+        current_source_frame_ = source_frame + read;
         current_output_timeline_frame_ = timeline_frame + read;
         return read;
     }
     if (!primed_ || timeline_frame != current_output_timeline_frame_)
-        reset_for_seek(source, current_source_frame_, timeline_frame);
+        reset_for_seek(source, source_frame, timeline_frame);
     feed_required_input(source, frame_count);
     const int produced = pop_ring(out, out_channels, 0, frame_count);
     if (produced < frame_count)

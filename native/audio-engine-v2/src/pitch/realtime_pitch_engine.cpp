@@ -151,6 +151,14 @@ void RealtimePitchEngine::prepare_for_transport_discontinuity(Frame target_frame
     last_transport_discontinuity_target_frame_.store(target_frame, std::memory_order_release);
     if (target_frame > static_cast<Frame>(sample_rate_) * 30)
         long_seek_count_.fetch_add(1, std::memory_order_relaxed);
+    // Suppress repair requests for a grace period after the seek so the stream's
+    // built-in self-seek (reset_for_seek in render()) can correct the frame offset
+    // without triggering a repair storm before the clock catches up.
+    post_seek_repair_suppression_remaining_.store(kPostSeekRepairSuppressionBlocks,
+                                                  std::memory_order_release);
+    repair_pending_.store(false, std::memory_order_release);
+    for (auto& c : stream_mismatch_counts_)
+        c.store(0, std::memory_order_relaxed);
     prepare_window(target_frame, session, sources, true);
 }
 
@@ -185,34 +193,36 @@ int RealtimePitchEngine::render_pitched_clip(const Clip& clip,
     if (!source_cache_.is_ready(source, source_frame, frame_count))
         stream_not_ready_count_.fetch_add(1, std::memory_order_relaxed);
 
+    // stream->render() already handles timeline_frame mismatches via internal reset_for_seek(),
+    // so we pass through directly. We track mismatches for diagnostics and suppress spurious
+    // repair requests in the post-seek grace period (stream self-heals in 1 block).
     const Frame expected = stream->expected_timeline_frame();
     if (expected != timeline_frame) {
         pitch_timeline_mismatch_count_.fetch_add(1, std::memory_order_relaxed);
         pitch_stream_not_aligned_count_.fetch_add(1, std::memory_order_relaxed);
 
-        // Increment per-slot mismatch counter. After threshold, request a control-thread repair.
-        if (slot_index >= 0) {
+        const int suppression = post_seek_repair_suppression_remaining_.load(std::memory_order_relaxed);
+        if (suppression > 0) {
+            // Post-seek grace window: stream self-heals next block, don't request repair.
+            post_seek_repair_suppression_remaining_.store(suppression - 1, std::memory_order_relaxed);
+        } else if (slot_index >= 0) {
+            // Sustained production mismatch: request control-thread repair after threshold.
             const int prev = stream_mismatch_counts_[slot_index].fetch_add(1, std::memory_order_relaxed);
             if (prev + 1 >= kPitchMismatchRepairThreshold) {
-                // Request repair at the current timeline_frame from the control thread.
-                // Publish with relaxed ordering — the control thread polls this periodically.
                 repair_target_frame_.store(timeline_frame, std::memory_order_relaxed);
                 repair_pending_.store(true, std::memory_order_release);
                 pitch_repair_requested_count_.fetch_add(1, std::memory_order_relaxed);
-                // Reset counter so we don't spam requests every block.
                 stream_mismatch_counts_[slot_index].store(0, std::memory_order_relaxed);
             }
         }
-
-        // Return silence for this block only — do NOT permanently silence; repair will come.
-        return 0;
+        // Do NOT return 0 here — fall through to render() which calls reset_for_seek internally.
+    } else {
+        // Aligned — clear mismatch counter for this slot.
+        if (slot_index >= 0)
+            stream_mismatch_counts_[slot_index].store(0, std::memory_order_relaxed);
     }
 
-    // Stream aligned — clear the mismatch counter for this slot.
-    if (slot_index >= 0)
-        stream_mismatch_counts_[slot_index].store(0, std::memory_order_relaxed);
-
-    const int rendered = stream->render(source, timeline_frame, frame_count, out, out_channels);
+    const int rendered = stream->render(source, source_frame, timeline_frame, frame_count, out, out_channels);
     render_count_.fetch_add(1, std::memory_order_relaxed);
     return rendered;
 }

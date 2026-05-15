@@ -671,10 +671,15 @@ impl AudioController {
     }
 
     pub fn debug_snapshot(&self) -> Result<AudioDebugSnapshot, DesktopError> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))?;
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                return Err(DesktopError::AudioCommand("debug_snapshot: state locked".into()))
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err(DesktopError::AudioCommand("audio v2 state lock poisoned".into()))
+            }
+        };
         let snapshot = ensure_engine(&mut state)?.get_snapshot().ok();
         let device = snapshot.as_ref().map(|snapshot| snapshot.device.clone());
         let cpu = snapshot.as_ref().map(|snapshot| snapshot.cpu.clone());

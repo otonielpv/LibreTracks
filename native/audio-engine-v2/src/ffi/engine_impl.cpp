@@ -257,6 +257,7 @@ void EngineImpl::service_control_thread_tasks() {
     service_pitch_repair_requests();
 }
 
+
 std::string EngineImpl::poll_event() {
     return event_queue_->pop();
 }

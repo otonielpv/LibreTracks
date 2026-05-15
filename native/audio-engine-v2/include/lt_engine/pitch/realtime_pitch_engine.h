@@ -110,6 +110,12 @@ private:
     std::atomic<bool>  repair_pending_{false};
     std::atomic<Frame> repair_target_frame_{-1};
 
+    // After a seek/discontinuity, suppress repair requests for this many render blocks.
+    // The stream self-heals via reset_for_seek() in render() — repair is only for sustained
+    // production mismatches, not normal post-seek frame transitions.
+    static constexpr int kPostSeekRepairSuppressionBlocks = 64;
+    std::atomic<int> post_seek_repair_suppression_remaining_{0};
+
     // Per-stream soft mismatch counter (indexed by stream slot, bounded by active set size).
     // Written only from audio thread; used to throttle repair requests.
     static constexpr int kMaxStreamSlots = 64;
