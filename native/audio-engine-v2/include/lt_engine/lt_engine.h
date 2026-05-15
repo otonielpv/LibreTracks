@@ -84,6 +84,11 @@ LT_API const char* lt_audio_engine_get_diagnostics(LtEngine* engine);
 LT_API LtResult lt_audio_engine_send_command(LtEngine* engine,
                                               const char* command_json);
 
+/** Service control-thread housekeeping tasks (e.g. pitch stream repair).
+ *  Call this once on the command thread before dispatching a batch of
+ *  send_command() calls.  Never call from the audio callback. */
+LT_API void lt_audio_engine_service_control_thread(LtEngine* engine);
+
 /** Poll for the next pending EngineEvent as a JSON string.
  *  Returns NULL when the event queue is empty.
  *  The pointer is valid until the next call to poll_event on this instance. */

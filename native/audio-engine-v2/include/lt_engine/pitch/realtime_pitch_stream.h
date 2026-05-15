@@ -48,6 +48,14 @@ struct PitchStreamDiagnostics {
     int ring_available_frames = 0;
     int ring_capacity_frames = 0;
     std::string active_render_path = "realtime_stream";
+    // Backend identity / stub tracking
+    std::string pitch_backend;          // "rubberband" | "stub" | "disabled"
+    bool        pitch_runtime_enabled = false;
+    std::string pitch_muted_or_bypassed_reason;
+    uint64_t    stub_passthrough_count = 0;
+    uint64_t    stub_passthrough_blocked_count = 0;
+    uint64_t    backend_unavailable_count = 0;
+    uint64_t    missing_stream_count = 0;
 };
 
 class SourceReadAheadCache {
@@ -157,6 +165,9 @@ private:
     std::atomic<std::uint64_t> source_miss_count_{0};
     std::atomic<std::uint64_t> unsafe_cross_thread_reset_count_{0};
     std::atomic<std::uint64_t> concurrent_stream_mutation_detected_{0};
+    std::atomic<std::uint64_t> stub_passthrough_count_{0};
+    std::atomic<std::uint64_t> stub_passthrough_blocked_count_{0};
+    std::atomic<std::uint64_t> backend_unavailable_count_{0};
 };
 
 } // namespace lt

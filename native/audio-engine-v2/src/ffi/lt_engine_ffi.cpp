@@ -62,6 +62,11 @@ LT_API LtResult lt_audio_engine_send_command(LtEngine* engine,
     return LT_ERR_INVALID_COMMAND;
 }
 
+LT_API void lt_audio_engine_service_control_thread(LtEngine* engine) {
+    if (!engine) return;
+    as_impl(engine)->service_control_thread_tasks();
+}
+
 LT_API const char* lt_audio_engine_poll_event(LtEngine* engine) {
     if (!engine) return nullptr;
     thread_local std::string buf;

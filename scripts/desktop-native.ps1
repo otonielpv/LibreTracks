@@ -281,6 +281,15 @@ $env:LIBRETRACKS_AUDIO_ENGINE = "cpp-v2"
 $env:LT_ENGINE_V2_LIB_DIR = $engineV2LibDir
 $env:PATH = "$engineV2LibDir;" + $env:PATH
 
+# Copy the engine DLL and its siblings into the Cargo output directory so
+# Windows finds them at exe-load time regardless of PATH inheritance.
+$cargoDebugDir = Join-Path $nativeTargetDir "debug"
+if (Test-Path $cargoDebugDir) {
+  Get-ChildItem $engineV2LibDir -Filter "*.dll" | ForEach-Object {
+    Copy-Item $_.FullName $cargoDebugDir -Force
+  }
+}
+
 $vcpkgRoot = $env:VCPKG_ROOT
 if (-not $vcpkgRoot -and $env:CMAKE_TOOLCHAIN_FILE) {
   $vcpkgRoot = Resolve-Path (Join-Path (Split-Path -Parent $env:CMAKE_TOOLCHAIN_FILE) "..\..") -ErrorAction SilentlyContinue

@@ -81,6 +81,12 @@ impl Engine {
         lt_result_to_rust(rc)
     }
 
+    /// Service control-thread housekeeping tasks (pitch repair etc.).
+    /// Call once before dispatching a batch of `send_command` calls.
+    pub fn service_control_thread(&self) {
+        unsafe { lt_audio_engine_service_control_thread(self.handle) };
+    }
+
     /// Drain all pending events from the engine.
     /// Returns `None` when the queue is empty.
     pub fn poll_event(&self) -> Option<EngineEvent> {

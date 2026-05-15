@@ -2087,8 +2087,7 @@ impl DesktopSession {
             || solo.is_some()
             || audio_to.is_some()
         {
-            let loaded_song = self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
-            audio.ensure_live_track(loaded_song, track_id)?;
+            // Send only the changed properties — no need to re-sync all tracks.
             audio.update_live_track_mix(track_id, volume, pan, muted, solo, audio_to)?;
         }
 

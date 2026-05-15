@@ -779,10 +779,18 @@ impl AudioController {
     }
 
     fn current_meter_levels(&self) -> Result<Vec<AudioMeterLevel>, DesktopError> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))?;
+        // Use try_lock so the meter thread never blocks command dispatch. If a
+        // command holds the lock (e.g. sync_live_mix sending many SetTrack*
+        // commands), we simply return empty levels for this 33ms poll cycle.
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(vec![]),
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err(DesktopError::AudioCommand(
+                    "audio v2 state lock poisoned".into(),
+                ))
+            }
+        };
         let snapshot = ensure_engine(&mut state)?
             .get_snapshot()
             .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
@@ -851,6 +859,9 @@ impl AudioController {
             .engine
             .take()
             .expect("engine should be initialized before command dispatch");
+        // Service pitch repair and other control-thread tasks once per batch,
+        // not inside every individual send_command call.
+        engine.service_control_thread();
         let result = f(&engine, &mut state);
         state.engine = Some(engine);
         result
@@ -1002,11 +1013,9 @@ fn session_signature(song: &Song) -> String {
         track.name.hash(&mut hasher);
         format!("{:?}", track.kind).hash(&mut hasher);
         track.parent_track_id.hash(&mut hasher);
-        track.volume.to_bits().hash(&mut hasher);
-        track.pan.to_bits().hash(&mut hasher);
-        track.muted.hash(&mut hasher);
-        track.solo.hash(&mut hasher);
-        track.audio_to.hash(&mut hasher);
+        // volume/pan/muted/solo/audio_to are sent via SetTrack* commands and
+        // must NOT change the signature — including them causes LoadSession
+        // (which rebuilds all pitch streams) on every fader/pan move.
         track.transpose_enabled.hash(&mut hasher);
     }
     for clip in &song.clips {

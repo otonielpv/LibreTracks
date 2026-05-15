@@ -195,6 +195,16 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"pitch_disk_cache_size_bytes", snap.pitch.pitch_disk_cache_size_bytes},
         {"last_pitch_disk_cache_error", snap.pitch.last_pitch_disk_cache_error},
         {"pitch_muted_or_bypassed_reason", snap.pitch.pitch_muted_or_bypassed_reason},
+        // Phase 1: backend identity fields
+        {"pitch_backend_detail", snap.pitch.pitch_backend_detail},
+        {"pitch_requested_but_backend_unavailable_count", snap.pitch.pitch_requested_but_backend_unavailable_count},
+        {"pitch_stub_passthrough_count", snap.pitch.pitch_stub_passthrough_count},
+        {"pitch_stub_passthrough_blocked_count", snap.pitch.pitch_stub_passthrough_blocked_count},
+        {"pitch_missing_stream_silence_count", snap.pitch.pitch_missing_stream_silence_count},
+        {"last_effective_semitones", snap.pitch.last_effective_semitones},
+        {"last_pitch_track_id", snap.pitch.last_pitch_track_id},
+        {"last_pitch_clip_id", snap.pitch.last_pitch_clip_id},
+        {"last_pitch_reason", snap.pitch.last_pitch_reason},
     };
 
     return j.dump();

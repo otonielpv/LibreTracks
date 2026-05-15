@@ -16,6 +16,19 @@
 #  define LT_ENGINE_REALTIME_STREAM_HAS_RB 0
 #endif
 
+// When the real RubberBand backend is unavailable at runtime, refuse to push original
+// audio as pitch output — that silently deceives the user into thinking pitch is working.
+// Only allow the stub passthrough in explicit test/stub builds
+// (LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH=1).
+// Default: blocked so the diagnostic counters fire instead.
+#ifndef LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH
+#  if LT_ENGINE_ALLOW_PITCH_STUB
+#    define LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH 1
+#  else
+#    define LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH 0
+#  endif
+#endif
+
 namespace lt {
 
 void SourceReadAheadCache::prepare_window(const DecodedSource& source, Frame start_frame, Frame frame_count) noexcept {
@@ -272,7 +285,18 @@ int RealtimePitchStream::process_source(const DecodedSource& source, Frame start
     if (stretcher_)
         stretcher_->process(input_ptrs_.data(), static_cast<size_t>(chunk), false);
 #else
+    // No real pitch backend available.
+#  if LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH
+    // Explicit stub mode (tests only): push original audio and count it.
+    stub_passthrough_count_.fetch_add(1, std::memory_order_relaxed);
     push_ring(input_ptrs_.data(), chunk);
+#  else
+    // Runtime mode: block passthrough to avoid silently playing un-pitched audio.
+    // The caller sees ring_available() == 0 → underflow → silence for this block.
+    // Diagnostics expose this clearly.
+    stub_passthrough_blocked_count_.fetch_add(1, std::memory_order_relaxed);
+    backend_unavailable_count_.fetch_add(1, std::memory_order_relaxed);
+#  endif
 #endif
     return chunk;
 }
@@ -409,6 +433,21 @@ PitchStreamDiagnostics RealtimePitchStream::diagnostics() const noexcept {
     d.compensated_latency_frames = start_delay_frames_ + config_.preroll_frames;
     d.ring_available_frames = ring_available();
     d.ring_capacity_frames = config_.ring_capacity_frames;
+    d.stub_passthrough_count = stub_passthrough_count_.load(std::memory_order_relaxed);
+    d.stub_passthrough_blocked_count = stub_passthrough_blocked_count_.load(std::memory_order_relaxed);
+    d.backend_unavailable_count = backend_unavailable_count_.load(std::memory_order_relaxed);
+#if LT_ENGINE_REALTIME_STREAM_HAS_RB
+    d.pitch_backend = "rubberband";
+    d.pitch_runtime_enabled = true;
+#elif LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH
+    d.pitch_backend = "stub";
+    d.pitch_runtime_enabled = false;
+    d.pitch_muted_or_bypassed_reason = "stub passthrough active (test/stub build only)";
+#else
+    d.pitch_backend = "stub";
+    d.pitch_runtime_enabled = false;
+    d.pitch_muted_or_bypassed_reason = "real RubberBand backend unavailable; passthrough blocked to prevent silent original-audio bypass";
+#endif
     return d;
 }
 

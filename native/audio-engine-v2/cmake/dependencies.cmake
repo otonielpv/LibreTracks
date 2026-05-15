@@ -167,20 +167,52 @@ if(LT_ENGINE_USE_RUBBERBAND)
         if(TARGET rubberband)
             target_link_libraries(lt_deps_rubberband INTERFACE rubberband)
             target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_RUBBERBAND=1)
-            message(STATUS "Pitch backend: RubberBand FetchContent")
+            message(STATUS "Pitch backend: RubberBand FetchContent (v3.3.0)")
         elseif(LT_ENGINE_ALLOW_PITCH_STUB)
             target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_STUB=1)
             message(WARNING "Pitch backend: explicit stub because LT_ENGINE_ALLOW_PITCH_STUB=ON")
+            # Only error if this is a real runtime/app build (not a test stub build).
+            if(LT_ENGINE_REQUIRE_REAL_RUBBERBAND AND NOT LT_ENGINE_BUILD_TESTS)
+                message(FATAL_ERROR
+                    "LT_ENGINE_REQUIRE_REAL_RUBBERBAND=ON: runtime build requested real RubberBand "
+                    "but FetchContent target was not found and LT_ENGINE_ALLOW_PITCH_STUB=ON. "
+                    "To allow stub for runtime (not recommended), set LT_ENGINE_REQUIRE_REAL_RUBBERBAND=OFF.")
+            endif()
         else()
             message(FATAL_ERROR
                 "LT_ENGINE_USE_RUBBERBAND=ON requires a real RubberBand target. "
-                "Install RubberBand via vcpkg/conan/system packages, or configure with "
-                "-DLT_ENGINE_ALLOW_PITCH_STUB=ON for developer-only no-op pitch.")
+                "Install RubberBand via vcpkg/conan/system packages, supply -DRUBBERBAND_ROOT=<path>, "
+                "or configure with -DLT_ENGINE_ALLOW_PITCH_STUB=ON for developer-only no-op pitch.")
         endif()
     endif()
 elseif(LT_ENGINE_ALLOW_PITCH_STUB)
     target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_STUB=1)
 endif()
+
+# ── PITCH BACKEND STATUS SUMMARY ──────────────────────────────────────────────
+get_target_property(_lt_rb_final_defs lt_deps_rubberband INTERFACE_COMPILE_DEFINITIONS)
+message(STATUS "=== LibreTracks Pitch Backend Summary ===")
+message(STATUS "  LT_ENGINE_USE_RUBBERBAND                       = ${LT_ENGINE_USE_RUBBERBAND}")
+message(STATUS "  LT_ENGINE_ALLOW_PITCH_STUB                     = ${LT_ENGINE_ALLOW_PITCH_STUB}")
+message(STATUS "  LT_ENGINE_REQUIRE_REAL_RUBBERBAND              = ${LT_ENGINE_REQUIRE_REAL_RUBBERBAND}")
+message(STATUS "  LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH = ${LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH}")
+if(_lt_rb_final_defs MATCHES "RUBBERBAND")
+    message(STATUS "  Selected pitch backend: RubberBand (real pitch DSP)")
+elseif(_lt_rb_final_defs MATCHES "STUB")
+    message(STATUS "  Selected pitch backend: STUB (no real pitch — passthrough or blocked)")
+else()
+    message(STATUS "  Selected pitch backend: disabled")
+endif()
+if(RUBBERBAND_INCLUDE_DIR)
+    message(STATUS "  RubberBand include dir  = ${RUBBERBAND_INCLUDE_DIR}")
+endif()
+if(RUBBERBAND_LIBRARY_RELEASE)
+    message(STATUS "  RubberBand lib (release)= ${RUBBERBAND_LIBRARY_RELEASE}")
+endif()
+if(LT_RUBBERBAND_RUNTIME_DIR)
+    message(STATUS "  RubberBand runtime DLL  = ${LT_RUBBERBAND_RUNTIME_DIR}")
+endif()
+message(STATUS "===========================================")
 
 # ── DECODER ───────────────────────────────────────────────────────────────
 if(LT_ENGINE_USE_LIBSNDFILE)

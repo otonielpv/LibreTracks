@@ -35,6 +35,7 @@ add_executable(lt_engine_tests
     pitch_proxy_persistent_tests.cpp
     transport_audio_sync_tests.cpp
     test_folder_controls.cpp
+    test_pitch_backend_identity.cpp
 )
 
 target_link_libraries(lt_engine_tests
@@ -61,6 +62,12 @@ if(LT_ENGINE_USE_RUBBERBAND AND NOT LT_ENGINE_ALLOW_PITCH_STUB)
     target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_TEST_EXPECT_REAL_RUBBERBAND=1)
 else()
     target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_TEST_EXPECT_REAL_RUBBERBAND=0)
+endif()
+
+if(LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH)
+    target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH=1)
+else()
+    target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH=0)
 endif()
 
 if(BUILD_SHARED_LIBS)

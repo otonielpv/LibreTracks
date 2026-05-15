@@ -43,6 +43,7 @@ public:
     std::string  diagnostics()  const;
 
     Result<void> send_command(const std::string& json);
+    void         service_control_thread_tasks();  // call once before command batches
     std::string  poll_event();           // returns "" when queue empty
     std::string  get_snapshot()  const;
     std::string  list_devices()  const;

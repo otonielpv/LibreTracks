@@ -276,6 +276,29 @@ PitchStreamDiagnostics RealtimePitchEngine::diagnostics() const noexcept {
         d.ring_capacity_frames = std::max(d.ring_capacity_frames, sd.ring_capacity_frames);
     }
     d.underflow_count += stream_not_ready_count_.load(std::memory_order_relaxed);
+    // Aggregate stub/backend diagnostics from each stream and set engine-level fields.
+    auto set2 = std::atomic_load(&active_);
+    for (const auto& handle : set2->streams) {
+        if (!handle.stream) continue;
+        auto sd = handle.stream->diagnostics();
+        d.stub_passthrough_count += sd.stub_passthrough_count;
+        d.stub_passthrough_blocked_count += sd.stub_passthrough_blocked_count;
+        d.backend_unavailable_count += sd.backend_unavailable_count;
+        // Use last stream's backend identity (all streams have same backend).
+        d.pitch_backend = sd.pitch_backend;
+        d.pitch_runtime_enabled = sd.pitch_runtime_enabled;
+        if (!sd.pitch_muted_or_bypassed_reason.empty())
+            d.pitch_muted_or_bypassed_reason = sd.pitch_muted_or_bypassed_reason;
+    }
+    // If no streams exist, get backend identity from a temporary stream's diagnostics.
+    if (set2->streams.empty()) {
+        RealtimePitchStream tmp;
+        auto td = tmp.diagnostics();
+        d.pitch_backend = td.pitch_backend;
+        d.pitch_runtime_enabled = td.pitch_runtime_enabled;
+        d.pitch_muted_or_bypassed_reason = td.pitch_muted_or_bypassed_reason;
+    }
+    d.missing_stream_count = missing_stream_count_.load(std::memory_order_relaxed);
     return d;
 }
 

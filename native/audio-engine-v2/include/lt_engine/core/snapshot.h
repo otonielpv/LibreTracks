@@ -173,6 +173,17 @@ struct PitchSnapshot {
     uint64_t    pitch_disk_cache_size_bytes = 0;
     std::string last_pitch_disk_cache_error;
     std::string pitch_muted_or_bypassed_reason;
+
+    // Phase 1: backend identity fields
+    std::string pitch_backend_detail;            // e.g. "rubberband v3.3.0" or "stub (passthrough blocked)"
+    uint64_t    pitch_requested_but_backend_unavailable_count = 0;
+    uint64_t    pitch_stub_passthrough_count = 0;
+    uint64_t    pitch_stub_passthrough_blocked_count = 0;
+    uint64_t    pitch_missing_stream_silence_count = 0;
+    Semitones   last_effective_semitones = 0;
+    std::string last_pitch_track_id;
+    std::string last_pitch_clip_id;
+    std::string last_pitch_reason;
 };
 
 struct EngineSnapshot {

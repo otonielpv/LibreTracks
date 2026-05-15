@@ -35,6 +35,7 @@ extern "C" {
         engine: *mut LtEngine,
         command_json: *const c_char,
     ) -> LtResult;
+    pub fn lt_audio_engine_service_control_thread(engine: *mut LtEngine);
     pub fn lt_audio_engine_poll_event(engine: *mut LtEngine) -> *const c_char;
     pub fn lt_audio_engine_get_snapshot(engine: *mut LtEngine) -> *const c_char;
     pub fn lt_audio_engine_list_devices(engine: *mut LtEngine) -> *const c_char;
@@ -67,6 +68,8 @@ pub unsafe fn lt_audio_engine_get_diagnostics(_: *mut LtEngine) -> *const c_char
 pub unsafe fn lt_audio_engine_send_command(_: *mut LtEngine, _: *const c_char) -> LtResult {
     LT_ERR_INTERNAL
 }
+#[cfg(feature = "no-link")]
+pub unsafe fn lt_audio_engine_service_control_thread(_: *mut LtEngine) {}
 #[cfg(feature = "no-link")]
 pub unsafe fn lt_audio_engine_poll_event(_: *mut LtEngine) -> *const c_char {
     std::ptr::null()

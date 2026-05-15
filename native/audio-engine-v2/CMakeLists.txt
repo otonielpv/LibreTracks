@@ -69,6 +69,12 @@ else()
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_ALLOW_PITCH_STUB=0)
 endif()
 
+if(LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH=1)
+else()
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH=0)
+endif()
+
 if(LT_ENGINE_USE_FFMPEG)
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_FFMPEG=1)
 else()

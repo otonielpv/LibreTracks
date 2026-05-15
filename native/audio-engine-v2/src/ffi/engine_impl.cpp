@@ -5,10 +5,14 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <cstdarg>
+#include <cstdio>
 #include <cstdlib>
 #include <mutex>
 #include <queue>
 #include <stdexcept>
+#include <string>
 #include <unordered_set>
 
 namespace lt {
@@ -25,6 +29,56 @@ bool env_flag_enabled(const char* name) {
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value == "1" || value == "true" || value == "yes" || value == "on";
 }
+
+// Debug log: writes to both stdout AND a temp file so output survives Tauri's stdio routing.
+// File: %TEMP%\lt_pitch_debug.log  (or /tmp/lt_pitch_debug.log on non-Windows)
+static FILE* debug_log_file() {
+    static FILE* s_file = nullptr;
+    static bool  s_tried = false;
+    if (!s_tried) {
+        s_tried = true;
+        // Try several locations in order so at least one succeeds.
+        const char* candidates[] = {
+            "D:\\Repos\\LibreTracks\\lt_pitch_debug.log",
+            "C:\\lt_pitch_debug.log",
+            nullptr
+        };
+        for (int i = 0; candidates[i] != nullptr; ++i) {
+            s_file = std::fopen(candidates[i], "w");
+            if (s_file) break;
+        }
+    }
+    return s_file;
+}
+
+static void debug_log(const char* fmt, ...) {
+    va_list args1, args2;
+    va_start(args1, fmt);
+    va_copy(args2, args1);
+    std::vfprintf(stdout, fmt, args1);
+    std::fflush(stdout);
+    va_end(args1);
+    FILE* f = debug_log_file();
+    if (f) {
+        std::vfprintf(f, fmt, args2);
+        std::fflush(f);
+    }
+    va_end(args2);
+}
+
+// Fires the moment the DLL is loaded by Windows, before any exported function is called.
+struct DllLoadProbe {
+    DllLoadProbe() {
+        FILE* f = debug_log_file();
+        if (f) {
+            std::fprintf(f, "[LT_PITCH_DEBUG] DLL_LOADED lt_audio_engine_v2\n");
+            std::fflush(f);
+        }
+        std::fprintf(stdout, "[LT_PITCH_DEBUG] DLL_LOADED lt_audio_engine_v2\n");
+        std::fflush(stdout);
+    }
+};
+static DllLoadProbe s_dll_load_probe;
 
 template <typename Update>
 bool update_track_session(std::shared_ptr<const Session>& session,
@@ -144,6 +198,21 @@ Result<void> EngineImpl::initialize() {
     }
 
     state_ = State::Initialized;
+
+    // Always log on startup so we can confirm the DLL version and backend regardless
+    // of env var inheritance through Tauri's process chain.
+    {
+        PitchStreamDiagnostics startup_diag = realtime_pitch_engine_
+            ? realtime_pitch_engine_->diagnostics()
+            : PitchStreamDiagnostics{};
+        const char* debug_flag = std::getenv("LIBRETRACKS_AUDIO_DEBUG");
+        debug_log("[LT_PITCH_DEBUG] engine_initialized pitch_backend=%s runtime_enabled=%s "
+            "debug_flag=%s log=D:\\Repos\\LibreTracks\\lt_pitch_debug.log\n",
+            startup_diag.pitch_backend.empty() ? "(unknown)" : startup_diag.pitch_backend.c_str(),
+            startup_diag.pitch_runtime_enabled ? "true" : "false",
+            debug_flag ? debug_flag : "(not set)");
+    }
+
     return Result<void>::ok();
 }
 
@@ -184,31 +253,48 @@ Result<void> EngineImpl::send_command(const std::string& cmd_json) {
     }
 }
 
+void EngineImpl::service_control_thread_tasks() {
+    service_pitch_repair_requests();
+}
+
 std::string EngineImpl::poll_event() {
     return event_queue_->pop();
 }
 
 std::string EngineImpl::get_snapshot() const {
     maybe_enqueue_rolling_pitch_prepare();
-    // Service any pitch repair requests posted by the audio thread during mismatch recovery.
-    const_cast<EngineImpl*>(this)->service_pitch_repair_requests();
 
     EngineSnapshot snap;
 
+    // Backend identity is derived at runtime from the actual stream diagnostics,
+    // so it reflects what is truly compiled in — not just what the CMake flags say.
+    {
+        auto realtime_diag = realtime_pitch_engine_
+            ? realtime_pitch_engine_->diagnostics()
+            : PitchStreamDiagnostics{};
+        if (!realtime_diag.pitch_backend.empty()) {
+            snap.pitch.pitch_backend = realtime_diag.pitch_backend;
+            snap.pitch.pitch_runtime_enabled = realtime_diag.pitch_runtime_enabled;
+            snap.pitch.pitch_engine_available = realtime_diag.pitch_runtime_enabled;
+            if (!realtime_diag.pitch_muted_or_bypassed_reason.empty())
+                snap.pitch.pitch_muted_or_bypassed_reason = realtime_diag.pitch_muted_or_bypassed_reason;
+        } else {
 #if LT_ENGINE_USE_RUBBERBAND && LT_ENGINE_PITCH_BACKEND_RUBBERBAND
-    snap.pitch.pitch_engine_available = true;
-    snap.pitch.pitch_backend = "rubberband";
-    snap.pitch.pitch_runtime_enabled = true;
+            snap.pitch.pitch_engine_available = true;
+            snap.pitch.pitch_backend = "rubberband";
+            snap.pitch.pitch_runtime_enabled = true;
 #elif LT_ENGINE_ALLOW_PITCH_STUB || LT_ENGINE_PITCH_BACKEND_STUB
-    snap.pitch.pitch_engine_available = false;
-    snap.pitch.pitch_backend = "stub";
-    snap.pitch.pitch_runtime_enabled = false;
-    snap.pitch.pitch_muted_or_bypassed_reason = "pitch stub enabled explicitly";
+            snap.pitch.pitch_engine_available = false;
+            snap.pitch.pitch_backend = "stub";
+            snap.pitch.pitch_runtime_enabled = false;
+            snap.pitch.pitch_muted_or_bypassed_reason = "pitch stub enabled explicitly";
 #else
-    snap.pitch.pitch_engine_available = false;
-    snap.pitch.pitch_backend = "disabled";
-    snap.pitch.pitch_runtime_enabled = false;
+            snap.pitch.pitch_engine_available = false;
+            snap.pitch.pitch_backend = "disabled";
+            snap.pitch.pitch_runtime_enabled = false;
 #endif
+        }
+    }
 
     if (clock_) {
         auto pos = clock_->position();
@@ -388,6 +474,57 @@ std::string EngineImpl::get_snapshot() const {
         }
         if (pitch.missing_processor_count > 0)
             snap.pitch.pitch_muted_or_bypassed_reason = "Pitch processor missing; bypassed instead of muting.";
+        // Phase 1 new fields
+        auto tr_diag = TrackRenderer::diagnostics();
+        snap.pitch.pitch_missing_stream_silence_count = tr_diag.pitch_missing_stream_silence_count;
+        snap.pitch.pitch_requested_but_backend_unavailable_count = realtime_pitch.backend_unavailable_count;
+        snap.pitch.pitch_stub_passthrough_count = realtime_pitch.stub_passthrough_count;
+        snap.pitch.pitch_stub_passthrough_blocked_count = realtime_pitch.stub_passthrough_blocked_count;
+        // Backend-level reason from streams (may override the CMake-level reason above).
+        if (!realtime_pitch.pitch_muted_or_bypassed_reason.empty())
+            snap.pitch.pitch_muted_or_bypassed_reason = realtime_pitch.pitch_muted_or_bypassed_reason;
+        snap.pitch.pitch_backend_detail = snap.pitch.pitch_backend;
+        if (!snap.pitch.pitch_runtime_enabled && snap.pitch.pitch_stub_passthrough_blocked_count > 0)
+            snap.pitch.last_pitch_reason = "stub passthrough blocked — RubberBand unavailable at compile time";
+        else if (snap.pitch.pitch_stub_passthrough_count > 0)
+            snap.pitch.last_pitch_reason = "stub passthrough active — test/stub build, not real pitch";
+    }
+
+    // Phase 1 debug logging — enabled by LIBRETRACKS_AUDIO_DEBUG=1
+    if (env_flag_enabled("LIBRETRACKS_AUDIO_DEBUG")) {
+        static std::chrono::steady_clock::time_point s_last_log;
+        const auto now = std::chrono::steady_clock::now();
+        if (now - s_last_log >= std::chrono::seconds(1)) {
+            s_last_log = now;
+            auto _rb_diag = realtime_pitch_engine_
+                ? realtime_pitch_engine_->diagnostics()
+                : PitchStreamDiagnostics{};
+            debug_log("[LT_PITCH_DEBUG] pitch_backend=%s runtime_enabled=%s "
+                "active_streams=%llu last_st=%d "
+                "missing_stream=%llu mismatch=%llu not_aligned=%llu "
+                "missing_silence=%llu backend_unavailable=%llu "
+                "stub_pass=%llu stub_blocked=%llu "
+                "render=%llu underflow=%llu repair_req=%llu repair_done=%llu "
+                "muted_reason=%s\n",
+                snap.pitch.pitch_backend.c_str(),
+                snap.pitch.pitch_runtime_enabled ? "true" : "false",
+                static_cast<unsigned long long>(snap.pitch.active_pitch_stream_count),
+                static_cast<int>(snap.pitch.last_effective_semitones),
+                static_cast<unsigned long long>(_rb_diag.missing_stream_count),
+                static_cast<unsigned long long>(snap.pitch.pitch_timeline_mismatch_count),
+                static_cast<unsigned long long>(snap.pitch.pitch_stream_not_aligned_count),
+                static_cast<unsigned long long>(snap.pitch.pitch_missing_stream_silence_count),
+                static_cast<unsigned long long>(snap.pitch.pitch_requested_but_backend_unavailable_count),
+                static_cast<unsigned long long>(snap.pitch.pitch_stub_passthrough_count),
+                static_cast<unsigned long long>(snap.pitch.pitch_stub_passthrough_blocked_count),
+                static_cast<unsigned long long>(snap.pitch.realtime_seek_safe_render_count),
+                static_cast<unsigned long long>(snap.pitch.realtime_pitch_underflow_count),
+                static_cast<unsigned long long>(_rb_diag.pitch_repair_requested_count),
+                static_cast<unsigned long long>(_rb_diag.pitch_repair_completed_count),
+                snap.pitch.pitch_muted_or_bypassed_reason.empty()
+                    ? "(none)"
+                    : snap.pitch.pitch_muted_or_bypassed_reason.c_str());
+        }
     }
 
     return snapshot_to_json(snap);
@@ -553,6 +690,18 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             }
 
             auto next_session = std::make_shared<Session>(result.take());
+            // Log parsed session for pitch diagnostics.
+            {
+                int region_count = 0;
+                int nonzero_regions = 0;
+                for (const auto& song : next_session->songs) {
+                    region_count += static_cast<int>(song.regions.size());
+                    for (const auto& region : song.regions)
+                        if (region.transpose_semitones != 0) ++nonzero_regions;
+                }
+                debug_log("[LT_PITCH_DEBUG] LoadSession songs=%d regions=%d nonzero_transpose_regions=%d\n",
+                    static_cast<int>(next_session->songs.size()), region_count, nonzero_regions);
+            }
             session_ = next_session;
             const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
             if (pitch_cache_) pitch_cache_->set_current_generation(generation);
