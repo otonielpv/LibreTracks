@@ -61,7 +61,7 @@ private:
     std::unique_ptr<DecodeWorkerPool>   worker_pool_;
     std::unique_ptr<SourcePreparationQueue> prep_queue_;
     std::unique_ptr<PitchCache>         pitch_cache_;
-    std::unique_ptr<RealtimePitchEngine> realtime_pitch_engine_;
+    mutable std::unique_ptr<RealtimePitchEngine> realtime_pitch_engine_;
     std::unique_ptr<Mixer>              mixer_;
     std::shared_ptr<const Session>      session_;
     DeviceOpenRequest                   current_device_request_;

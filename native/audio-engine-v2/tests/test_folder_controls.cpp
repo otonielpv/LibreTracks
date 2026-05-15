@@ -389,9 +389,9 @@ TEST_CASE("pitch_mismatch_requests_repair_not_audio_thread_reset") {
     const Session& session_ref = session_obj;
 
     RealtimePitchEngine pitch;
-    // prepare_for_session creates streams but doesn't prime them (target_frame=-1).
-    // This simulates a set_session without priming (the bug scenario).
     pitch.prepare_for_session(session_ref, sources, kSR);
+    // prepare_for_play builds and primes streams at frame 0.
+    pitch.prepare_for_play(0, session_ref, sources);
 
     // Directly call render_pitched_clip to avoid mixer routing complexities in stub mode.
     // This tests the mismatch repair mechanism directly.
@@ -470,10 +470,10 @@ TEST_CASE("region_transpose_stream_built_for_region_semitones") {
     session_obj.songs.push_back(song);
 
     RealtimePitchEngine pitch;
-    // prepare_for_session with target=-1: uses clip.timeline_start_frame=0, which is OUTSIDE
-    // the region → previously created zero-semitone (no) stream. With the fix, it also
-    // enumerates the region and creates a +3 semitone stream.
     pitch.prepare_for_session(session_obj, sources, kSR);
+    // prepare_for_play at frame 0: window [0, 2*kSR) includes the region [kSR, 2*kSR),
+    // so a +3 semitone stream must be created for that clip.
+    pitch.prepare_for_play(0, session_obj, sources);
 
     const auto diag = pitch.diagnostics();
     // Must have exactly one stream for semitones=3 (the region overlap).

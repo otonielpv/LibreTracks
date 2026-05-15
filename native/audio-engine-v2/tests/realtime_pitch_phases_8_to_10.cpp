@@ -689,3 +689,126 @@ TEST_CASE("AC6_mismatch_repair_fires_and_clears_exactly_once") {
     CHECK(after_fix.pitch_repair_completed_count == before_fix.pitch_repair_completed_count + 1);
     CHECK(after_fix.unsafe_cross_thread_reset_count == 0);
 }
+
+// ---------------------------------------------------------------------------
+// AC-7: Rolling extend — streams for clips outside the initial 2-second
+//       seek window are added by extend_for_playhead() before the audio
+//       thread reaches them. Verifies that seeks "far away" don't leave
+//       upcoming clips without pitch streams.
+// ---------------------------------------------------------------------------
+TEST_CASE("AC7_rolling_extend_adds_streams_for_clips_entering_lookahead_window") {
+    // Song: 10 seconds total.
+    //   clip A: [0s, 4s) — always pitched at 3 semitones
+    //   clip B: [5s, 9s) — always pitched at 3 semitones (same source, different clip slot)
+    // After a seek to frame 0, the 2-second window [0, 2s) does NOT include clip B.
+    // After the playhead advances to 3s, extend_for_playhead(3s) makes window [3s, 5s).
+    // Clip B starts at 5s — just at the edge. At playhead 3s+1 frame, window is [3s+1, 5s+1)
+    // which does include clip B. We use playhead = 3s exactly so window_end = 5s == clip B start.
+    // To guarantee inclusion use playhead = 3s + 1 sample.
+
+    constexpr Frame kDur10 = kSR * 10;
+    SourceManager sources;
+    add_source(sources, "srcA", kDur10);
+    add_source(sources, "srcB", kDur10);
+
+    Session session;
+    session.sample_rate = kSR;
+    session.sources = {Source{"srcA", ""}, Source{"srcB", ""}};
+
+    Song song; song.id = "song"; song.start_frame = 0; song.end_frame = kDur10;
+    song.transpose_semitones = 3;
+
+    Track track; track.id = "t"; track.kind = TrackKind::Audio;
+    // Clip A: [0s, 4s)
+    Clip clipA{"cA", "srcA", 0, 0, static_cast<Frame>(kSR * 4)};
+    // Clip B: [5s, 9s)
+    Clip clipB{"cB", "srcB", static_cast<Frame>(kSR * 5), 0, static_cast<Frame>(kSR * 4)};
+    track.clips.push_back(clipA);
+    track.clips.push_back(clipB);
+    song.tracks.push_back(track);
+    session.songs.push_back(song);
+
+    RealtimePitchEngine engine;
+    engine.prepare_for_session(session, sources, kSR);
+    // Seek to frame 0: builds window [0, 2s). Only clip A is in range.
+    engine.prepare_for_play(0, session, sources);
+
+    const auto after_play = engine.diagnostics();
+    // Clip A should have a stream; clip B (starts at 5s) is outside [0, 2s).
+    CHECK(after_play.active_pitch_stream_count >= 1);
+
+    const Frame stream_count_at_seek = after_play.active_pitch_stream_count;
+
+    // Simulate playhead advancing to 3s (past clip A's stream but before clip B).
+    // The retrigger threshold is 1s, so 3s > 0s + 1s → extend fires.
+    const Frame playhead_3s = static_cast<Frame>(kSR * 3) + 1;
+    const int added = engine.extend_for_playhead(playhead_3s, session, sources);
+
+    const auto after_extend = engine.diagnostics();
+
+    // extend_for_playhead must have added clip B's stream (window [3s+1, 5s+1) includes [5s, 9s)).
+    CHECK(added >= 1);
+    CHECK(after_extend.active_pitch_stream_count > stream_count_at_seek);
+
+    // Existing clip A stream must still be there (total >= 2).
+    CHECK(after_extend.active_pitch_stream_count >= 2);
+
+    // Rendering at clip B's start must not produce a missing_stream_count increment.
+    const auto* srcB = sources.get("srcB");
+    REQUIRE(srcB != nullptr);
+    float ol[kBlock] = {}, or_[kBlock] = {};
+    float* out2[2] = { ol, or_ };
+
+    engine.reset_diagnostics();
+    const Frame clipB_start = static_cast<Frame>(kSR * 5);
+    engine.render_pitched_clip(clipB, "t", *srcB, 0, clipB_start, kBlock, 3.0, out2, 2);
+
+    CHECK(engine.diagnostics().missing_stream_count == 0);
+}
+
+// ---------------------------------------------------------------------------
+// AC-8: Seeking to a position far from frame 0 (e.g., 30 seconds into a
+//       60-second clip) produces a valid stream with no missing_stream count
+//       on the first render. Verifies the long-seek priming path.
+// ---------------------------------------------------------------------------
+TEST_CASE("AC8_far_seek_produces_valid_stream_no_missing_on_first_render") {
+    // 60-second clip — seek to 30 seconds in.
+    constexpr Frame kDur60 = static_cast<Frame>(kSR) * 60;
+    SourceManager sources;
+    add_source(sources, "src", kDur60);
+
+    Session session;
+    session.sample_rate = kSR;
+    session.sources = {Source{"src", ""}};
+    Song song; song.id = "song"; song.start_frame = 0; song.end_frame = kDur60;
+    song.transpose_semitones = 2;
+    Track track; track.id = "t"; track.kind = TrackKind::Audio;
+    track.clips.push_back(Clip{"c", "src", 0, 0, kDur60});
+    song.tracks.push_back(track);
+    session.songs.push_back(song);
+
+    RealtimePitchEngine engine;
+    engine.prepare_for_session(session, sources, kSR);
+
+    // Seek to 30 seconds in — well outside the 2-second initial window.
+    const Frame far_frame = static_cast<Frame>(kSR) * 30;
+    engine.prepare_for_transport_discontinuity(far_frame, "seek_absolute", session, sources);
+
+    const auto after_seek = engine.diagnostics();
+    CHECK(after_seek.active_pitch_stream_count >= 1);
+
+    const auto& t = session.songs[0].tracks[0];
+    const auto& c = t.clips[0];
+    const auto* src = sources.get("src");
+    REQUIRE(src != nullptr);
+    float ol[kBlock] = {}, or_[kBlock] = {};
+    float* out2[2] = { ol, or_ };
+
+    engine.reset_diagnostics();
+    engine.render_pitched_clip(c, t.id, *src, far_frame, far_frame, kBlock, 2.0, out2, 2);
+
+    // Stream was primed at far_frame — first block must not be missing.
+    CHECK(engine.diagnostics().missing_stream_count == 0);
+    // Output must be finite (not uninitialized memory).
+    for (int i = 0; i < kBlock; ++i) CHECK(std::isfinite(ol[i]));
+}

@@ -2,6 +2,7 @@
 #include <lt_engine/core/engine_core.h>
 #include <lt_engine/core/events.h>
 #include <lt_engine/render/pitch_resolution.h>
+#include <lt_engine/scheduler/jump_scheduler.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cctype>
@@ -264,8 +265,9 @@ void EngineImpl::service_pending_scheduled_jump_pitch() {
     const Frame jump_frame = mixer_->take_pending_scheduled_jump();
     if (jump_frame == Mixer::kNoJumpPending)
         return;
-    realtime_pitch_engine_->prepare_for_transport_discontinuity(
-        jump_frame, "scheduled_jump", *session_, *source_manager_);
+    // Use the pre-built graph if it exists for this target frame (built when the jump was scheduled).
+    // This eliminates the rebuild latency gap — the audio thread gets a fully-primed ring immediately.
+    realtime_pitch_engine_->publish_pending_jump_graph(jump_frame, *session_, *source_manager_);
 }
 
 
@@ -626,6 +628,8 @@ void EngineImpl::prepare_pitch_processors_for_session() {
     if (realtime_pitch_engine_) {
         // Always prime at the current playhead so the published stream set is aligned.
         const Frame playhead = clock_->position().frame;
+        if (device_manager_ && device_manager_->actual_buffer_size() > 0)
+            realtime_pitch_engine_->set_max_block_size_hint(device_manager_->actual_buffer_size());
         realtime_pitch_engine_->prepare_for_session(*session_, *source_manager_, clock_->sample_rate());
         realtime_pitch_engine_->prepare_for_play(playhead, *session_, *source_manager_);
     }
@@ -650,6 +654,13 @@ void EngineImpl::maybe_enqueue_rolling_pitch_prepare() const {
 
     const int sample_rate = clock_->sample_rate();
     const Frame playhead = clock_->position().frame;
+
+    // Extend the realtime pitch stream set for the upcoming lookahead window.
+    // This adds streams for clips that have entered the window since the last seek/extend,
+    // without disturbing existing playing streams. Cheap when nothing new is needed.
+    if (realtime_pitch_engine_)
+        realtime_pitch_engine_->extend_for_playhead(playhead, *session_, *source_manager_);
+
     const Frame retrigger_distance = std::max<Frame>(PitchCache::kProxyBlockFrames, sample_rate / 2);
     const auto now = std::chrono::steady_clock::now();
     {
@@ -926,12 +937,30 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 jump.created_frame = clock_->position().frame;
                 auto r = scheduler_->schedule(jump);
                 if (r.is_err()) return r;
+
+                // Pre-build the pitch graph at the jump target frame so it's ready
+                // before the jump fires. This eliminates the rebuild gap that causes
+                // crackles on the block immediately after the jump.
+                if (realtime_pitch_engine_ && clock_) {
+                    auto resolved = resolve_jump_target(c.target, *session_, *clock_);
+                    if (resolved.is_ok())
+                        realtime_pitch_engine_->pre_prepare_for_scheduled_jump(
+                            resolved.unwrap(), *session_, *source_manager_);
+                }
             }
             push_event(EvJumpScheduled{ c.jump_id, c.jump_id });
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdReplaceScheduledJump>) {
-            return scheduler_->replace(c.jump_id, c.new_target, c.new_trigger);
+            auto r = scheduler_->replace(c.jump_id, c.new_target, c.new_trigger);
+            // Re-pre-prepare the pitch graph for the new target frame.
+            if (r.is_ok() && realtime_pitch_engine_ && session_ && clock_) {
+                auto resolved = resolve_jump_target(c.new_target, *session_, *clock_);
+                if (resolved.is_ok())
+                    realtime_pitch_engine_->pre_prepare_for_scheduled_jump(
+                        resolved.unwrap(), *session_, *source_manager_);
+            }
+            return r;
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackTransposeEnabled>) {
             if (!session_)
@@ -1024,6 +1053,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             current_device_request_ = req;
             if (clock_ && device_manager_->actual_sample_rate() > 0)
                 clock_->set_sample_rate(device_manager_->actual_sample_rate());
+            if (realtime_pitch_engine_ && device_manager_->actual_buffer_size() > 0)
+                realtime_pitch_engine_->set_max_block_size_hint(device_manager_->actual_buffer_size());
             if (was_playing && clock_) clock_->play();
             push_event(EvDeviceChanged{
                 device_manager_->actual_device_name(),
@@ -1062,6 +1093,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 current_device_request_ = req;
                 if (clock_ && device_manager_->actual_sample_rate() > 0)
                     clock_->set_sample_rate(device_manager_->actual_sample_rate());
+                if (realtime_pitch_engine_ && device_manager_->actual_buffer_size() > 0)
+                    realtime_pitch_engine_->set_max_block_size_hint(device_manager_->actual_buffer_size());
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
             }

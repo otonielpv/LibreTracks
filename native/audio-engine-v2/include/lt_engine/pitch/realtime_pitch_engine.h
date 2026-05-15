@@ -47,10 +47,31 @@ public:
 
     void prepare_for_session(const Session& session, const SourceManager& sources, int sample_rate);
     void prepare_for_play(Frame playhead_frame, const Session& session, const SourceManager& sources);
+    void set_max_block_size_hint(int max_block_size) noexcept { max_block_size_hint_ = std::max(1, max_block_size); }
     void prepare_for_transport_discontinuity(Frame target_frame,
                                              const std::string& reason,
                                              const Session& session,
                                              const SourceManager& sources);
+
+    // Called periodically from the control thread while playing.
+    // Adds streams for clips entering the lookahead window without disturbing existing streams.
+    // Returns the number of new streams added (0 = already up to date).
+    int extend_for_playhead(Frame playhead_frame,
+                            const Session& session,
+                            const SourceManager& sources);
+
+    // Pre-build a pitch graph at jump_target_frame so it's ready before the jump fires.
+    // Call from the control thread immediately after scheduling a jump.
+    // When the jump fires, call publish_pending_jump_graph() to atomically swap it in.
+    void pre_prepare_for_scheduled_jump(Frame jump_target_frame,
+                                        const Session& session,
+                                        const SourceManager& sources);
+
+    // Called from control thread when a scheduled jump fires (via service_pending_scheduled_jump_pitch).
+    // Publishes the pre-built graph if it matches jump_target_frame; otherwise rebuilds.
+    void publish_pending_jump_graph(Frame jump_target_frame,
+                                    const Session& session,
+                                    const SourceManager& sources);
 
     // Called from control thread (not audio callback) to repair mismatched streams.
     void prepare_for_pitch_repair(Frame target_frame, const Session& session, const SourceManager& sources);
@@ -77,16 +98,22 @@ private:
     };
     struct ActivePitchStreamSet {
         std::vector<ActivePitchStreamHandle> streams;
+        int   min_ready_frames = 0;
+        Frame target_frame     = 0;
+        Frame build_lookahead  = 0;
     };
 
     void publish_stream_set(std::shared_ptr<ActivePitchStreamSet> set);
-    void prepare_window(Frame target_frame, const Session& session, const SourceManager& sources, bool reset_streams);
+    void prepare_window(Frame target_frame, const Session& session, const SourceManager& sources,
+                        bool reset_streams, int max_block_size = 512);
     std::shared_ptr<ActivePitchStreamSet> build_stream_set_for_target(Frame target_frame,
                                                                       const Session& session,
                                                                       const SourceManager& sources,
-                                                                      bool prime_target_streams);
+                                                                      bool prime_target_streams,
+                                                                      int max_block_size = 512);
 
     int sample_rate_ = 48000;
+    int max_block_size_hint_ = 512;
     std::shared_ptr<const ActivePitchStreamSet> active_;
     SourceReadAheadCache source_cache_;
     std::atomic<std::uint64_t> active_stream_set_generation_{0};
@@ -128,6 +155,16 @@ private:
     static constexpr int kDebounceMs = 80;
     std::chrono::steady_clock::time_point last_discontinuity_time_{};
     std::string last_discontinuity_reason_{};
+
+    // Pre-built graph for the next scheduled jump. Only accessed from the control thread.
+    // Set by pre_prepare_for_scheduled_jump(); consumed by publish_pending_jump_graph().
+    std::shared_ptr<ActivePitchStreamSet> pending_jump_graph_;
+    Frame pending_jump_target_frame_ = -1;
+
+    // Rolling extend: last playhead position at which extend_for_playhead extended the set.
+    // Compared against the current playhead to decide if a new extension is needed.
+    // Only accessed from the control thread.
+    Frame last_extend_playhead_ = -1;
 };
 
 } // namespace lt
