@@ -28,12 +28,16 @@ pub fn healthcheck() -> &'static str {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OwnershipDiagnostics {
-    // Rust-side Category A counters — realtime_command_count should be >> legacy_sync_count.
+    // Rust-side Category A counters.
     pub realtime_command_count: u64,
-    /// Calls to legacy_sync_live_mix_for_session_load_only. Must be 0 during live playback.
-    pub legacy_sync_live_mix_count: u64,
     pub metronome_realtime_toggle_count: u64,
     pub metronome_realtime_volume_count: u64,
+    /// Pointer-up commits that updated mixer state + sent one targeted Category A command.
+    pub commit_mix_command_count: u64,
+    /// Pointer-up commits that updated pitch runtime (transpose_enabled, region_transpose).
+    pub commit_pitch_command_count: u64,
+    /// Model-only commits (name, visual metadata) — no audio command sent.
+    pub commit_model_only_count: u64,
     /// Structural session rebuilds (LoadSession). Nonzero is expected only for StructureRebuild.
     pub session_rebuild_count: u64,
     /// Reason string from the most recent `replace_song_buffers` call.
@@ -78,9 +82,11 @@ pub fn get_ownership_diagnostics(
 
     Ok(OwnershipDiagnostics {
         realtime_command_count: rt.live_mix_realtime_command_count,
-        legacy_sync_live_mix_count: rt.legacy_sync_live_mix_count,
         metronome_realtime_toggle_count: rt.metronome_realtime_toggle_count,
         metronome_realtime_volume_count: rt.metronome_realtime_volume_count,
+        commit_mix_command_count: rt.commit_mix_command_count,
+        commit_pitch_command_count: rt.commit_pitch_command_count,
+        commit_model_only_count: rt.commit_model_only_count,
         session_rebuild_count: rt.session_rebuild_count,
         last_session_rebuild_reason: rt.last_session_rebuild_reason.clone(),
 

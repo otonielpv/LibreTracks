@@ -4429,7 +4429,7 @@ export function TransportPanelContent() {
 
   function handleTrackAudioToChange(trackId: string, nextAudioTo: string) {
     void runAction(async () => {
-      const nextSnapshot = await updateTrack({ trackId, audioTo: nextAudioTo });
+      const nextSnapshot = await commitTrackMixChange({ trackId, audioTo: nextAudioTo });
       applyPlaybackSnapshot(nextSnapshot);
       setStatus(
         t("transport.status.trackRoutingUpdated", {

@@ -400,15 +400,12 @@ pub fn move_track(
         .map_err(|error| error.to_string())
 }
 
+/// RuntimeUpdateKind: ModelOnly — only name/metadata changes are accepted here.
+/// Mix fields (volume/pan/muted/solo/audioTo) must use `commit_track_mix_change`.
 #[tauri::command]
 pub fn update_track(
     track_id: String,
     name: Option<String>,
-    volume: Option<f64>,
-    pan: Option<f64>,
-    muted: Option<bool>,
-    solo: Option<bool>,
-    audio_to: Option<String>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -416,17 +413,9 @@ pub fn update_track(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
+    let name = name.unwrap_or_default();
     session
-        .update_track(
-            &track_id,
-            name.as_deref(),
-            volume,
-            pan,
-            muted,
-            solo,
-            audio_to.as_deref(),
-            &state.audio,
-        )
+        .update_track_metadata(&track_id, &name, &state.audio)
         .map_err(|error| error.to_string())
 }
 
@@ -477,9 +466,8 @@ pub fn commit_track_mix_change(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .update_track(
+        .commit_track_mix_model_and_command(
             &track_id,
-            None,
             volume,
             pan,
             muted,

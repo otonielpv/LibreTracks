@@ -1295,25 +1295,12 @@ export const testDesktopApiMock = {
   updateTrack: async (args: {
     trackId: string;
     name?: string;
-    muted?: boolean;
-    solo?: boolean;
-    volume?: number;
-    pan?: number;
-    audioTo?: string;
   }) => {
     replaceSong({
       ...state.song,
       tracks: state.song.tracks.map((track) =>
         track.id === args.trackId
-          ? {
-              ...track,
-              name: args.name ?? track.name,
-              muted: args.muted ?? track.muted,
-              solo: args.solo ?? track.solo,
-              volume: args.volume ?? track.volume,
-              pan: args.pan ?? track.pan,
-              audioTo: args.audioTo ?? track.audioTo,
-            }
+          ? { ...track, name: args.name ?? track.name }
           : track,
       ),
     });
@@ -1333,7 +1320,24 @@ export const testDesktopApiMock = {
     volume?: number;
     pan?: number;
     audioTo?: string;
-  }) => testDesktopApiMock.updateTrack(args),
+  }) => {
+    replaceSong({
+      ...state.song,
+      tracks: state.song.tracks.map((track) =>
+        track.id === args.trackId
+          ? {
+              ...track,
+              muted: args.muted ?? track.muted,
+              solo: args.solo ?? track.solo,
+              volume: args.volume ?? track.volume,
+              pan: args.pan ?? track.pan,
+              audioTo: args.audioTo ?? track.audioTo,
+            }
+          : track,
+      ),
+    });
+    return clone(buildSnapshot());
+  },
   setMetronomeEnabledRealtime: async (enabled: boolean) => {
     state.settings = { ...state.settings, metronomeEnabled: enabled };
   },

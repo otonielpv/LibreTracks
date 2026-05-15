@@ -307,27 +307,24 @@ impl ControllerState {
     }
 }
 
-/// Reason passed to `legacy_sync_live_mix_for_session_load_only`.
-/// Only `InitialSessionLoadOnly` is a legitimate call site. Any other variant is a bug.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LegacySyncReason {
-    /// Called once per project load from `load_song_from_path`. The only allowed use.
-    InitialSessionLoadOnly,
-}
-
 pub struct AudioController {
     state: Mutex<ControllerState>,
     sender: mpsc::Sender<AudioCommand>,
     meter_thread_started: AtomicBool,
     meter_thread_stop: Arc<AtomicBool>,
     meter_thread: Mutex<Option<JoinHandle<()>>>,
+    /// Total Category A realtime bridge commands (SetTrackGain/Pan/Mute/Solo/Route/Transpose).
     live_mix_realtime_command_count: AtomicU64,
-    /// Counts calls to `legacy_sync_live_mix_for_session_load_only`.
-    /// Must be exactly 1 per project open and 0 during live operation.
-    legacy_sync_live_mix_count: AtomicU64,
     live_mix_ensure_live_track_count: AtomicU64,
     metronome_realtime_toggle_count: AtomicU64,
     metronome_realtime_volume_count: AtomicU64,
+    /// Total commits that updated mixer state (volume/pan/muted/solo/audioTo) in the model
+    /// and sent one targeted realtime command. Should match pointer-up events.
+    commit_mix_command_count: AtomicU64,
+    /// Total commits that updated pitch runtime (transpose_enabled, region_transpose).
+    commit_pitch_command_count: AtomicU64,
+    /// Total commits that updated model only (name, visual metadata) with no audio command.
+    commit_model_only_count: AtomicU64,
     /// Counts `LoadSession` commands sent for structural changes.
     session_rebuild_count: AtomicU64,
     /// Human-readable reason string for the most recent `replace_song_buffers` call.
@@ -336,15 +333,20 @@ pub struct AudioController {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RealtimeControlDiagnostics {
+    /// Category A: realtime bridge commands (no model mutation, no undo, no session reload).
     pub live_mix_realtime_command_count: u64,
-    /// Calls to `legacy_sync_live_mix_for_session_load_only`. Must be 0 during live playback.
-    pub legacy_sync_live_mix_count: u64,
     pub live_mix_ensure_live_track_count: u64,
     pub metronome_realtime_toggle_count: u64,
     pub metronome_realtime_volume_count: u64,
-    /// Total `LoadSession` commands sent (structural session rebuilds).
+    /// Commit: model updated + one targeted mixer command. Fires on pointer-up.
+    pub commit_mix_command_count: u64,
+    /// Commit: model updated + one targeted pitch command (transpose_enabled, region_transpose).
+    pub commit_pitch_command_count: u64,
+    /// Commit: model updated only — no audio command (name, visual metadata).
+    pub commit_model_only_count: u64,
+    /// Structural: `LoadSession` sent. Must not increment for any Category A or commit-only op.
     pub session_rebuild_count: u64,
-    /// Reason string for the most recent `replace_song_buffers` call.
+    /// Reason for the most recent structural `replace_song_buffers` call.
     pub last_session_rebuild_reason: String,
 }
 
@@ -358,10 +360,12 @@ impl AudioController {
             meter_thread_stop: Arc::new(AtomicBool::new(false)),
             meter_thread: Mutex::new(None),
             live_mix_realtime_command_count: AtomicU64::new(0),
-            legacy_sync_live_mix_count: AtomicU64::new(0),
             live_mix_ensure_live_track_count: AtomicU64::new(0),
             metronome_realtime_toggle_count: AtomicU64::new(0),
             metronome_realtime_volume_count: AtomicU64::new(0),
+            commit_mix_command_count: AtomicU64::new(0),
+            commit_pitch_command_count: AtomicU64::new(0),
+            commit_model_only_count: AtomicU64::new(0),
             session_rebuild_count: AtomicU64::new(0),
             last_session_rebuild_reason: Mutex::new(String::new()),
         }
@@ -488,54 +492,6 @@ impl AudioController {
         })
     }
 
-    /// Synchronizes all track mixer state from the Rust model to C++ in bulk.
-    ///
-    /// QUARANTINED — call only from `load_song_from_path` (once per project open).
-    /// Reason: this sends 6 commands per track and rebuilds all live state from the model.
-    /// During live operation, use `update_live_track_mix` (Category A) instead.
-    /// Any new call site for this function is a bug — use the `_reason` param to document it.
-    pub(crate) fn legacy_sync_live_mix_for_session_load_only(
-        &self,
-        song: &Song,
-        _reason: LegacySyncReason,
-    ) -> Result<(), DesktopError> {
-        self.legacy_sync_live_mix_count
-            .fetch_add(1, Ordering::Relaxed);
-        self.with_engine_state("legacy_sync_live_mix", None, |engine, _state| {
-            // Folder track invariant: send raw gain/pan/mute/solo for ALL tracks including
-            // folders. Do NOT pre-multiply or flatten folder gain into child gain here.
-            // C++ Mixer resolves effective gain via the parent_control_index chain at render
-            // time. Rust must never pre-compute folder-aggregated values.
-            for track in &song.tracks {
-                engine.send_command(&EngineCommand::SetTrackGain {
-                    track_id: track.id.clone(),
-                    gain: track.volume as f32,
-                })?;
-                engine.send_command(&EngineCommand::SetTrackPan {
-                    track_id: track.id.clone(),
-                    pan: track.pan as f32,
-                })?;
-                engine.send_command(&EngineCommand::SetTrackMute {
-                    track_id: track.id.clone(),
-                    mute: track.muted,
-                })?;
-                engine.send_command(&EngineCommand::SetTrackSolo {
-                    track_id: track.id.clone(),
-                    solo: track.solo,
-                })?;
-                engine.send_command(&EngineCommand::SetTrackAudioRoute {
-                    track_id: track.id.clone(),
-                    audio_to: track.audio_to.clone(),
-                })?;
-                engine.send_command(&EngineCommand::SetTrackTransposeEnabled {
-                    track_id: track.id.clone(),
-                    enabled: track.transpose_enabled,
-                })?;
-            }
-            Ok(())
-        })
-    }
-
     pub fn update_live_region_transpose(
         &self,
         region_id: &str,
@@ -616,6 +572,22 @@ impl AudioController {
         })
     }
 
+    /// Record that a mixer commit (volume/pan/muted/solo/audioTo) was completed.
+    /// Called by commit paths in state.rs after model update + targeted command.
+    pub fn record_commit_mix(&self) {
+        self.commit_mix_command_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record that a pitch commit (transpose_enabled, region_transpose) was completed.
+    pub fn record_commit_pitch(&self) {
+        self.commit_pitch_command_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record that a model-only commit (name, visual metadata) was completed.
+    pub fn record_commit_model_only(&self) {
+        self.commit_model_only_count.fetch_add(1, Ordering::Relaxed);
+    }
+
     pub fn set_metronome_enabled_realtime(&self, enabled: bool) -> Result<(), DesktopError> {
         self.metronome_realtime_toggle_count
             .fetch_add(1, Ordering::Relaxed);
@@ -641,7 +613,6 @@ impl AudioController {
             live_mix_realtime_command_count: self
                 .live_mix_realtime_command_count
                 .load(Ordering::Relaxed),
-            legacy_sync_live_mix_count: self.legacy_sync_live_mix_count.load(Ordering::Relaxed),
             live_mix_ensure_live_track_count: self
                 .live_mix_ensure_live_track_count
                 .load(Ordering::Relaxed),
@@ -651,6 +622,9 @@ impl AudioController {
             metronome_realtime_volume_count: self
                 .metronome_realtime_volume_count
                 .load(Ordering::Relaxed),
+            commit_mix_command_count: self.commit_mix_command_count.load(Ordering::Relaxed),
+            commit_pitch_command_count: self.commit_pitch_command_count.load(Ordering::Relaxed),
+            commit_model_only_count: self.commit_model_only_count.load(Ordering::Relaxed),
             session_rebuild_count: self.session_rebuild_count.load(Ordering::Relaxed),
             last_session_rebuild_reason: self
                 .last_session_rebuild_reason

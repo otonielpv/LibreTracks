@@ -4,7 +4,7 @@ This document defines the authoritative boundary between Rust/Tauri and C++ for 
 live audio runtime responsibilities. Any code that violates these rules is wrong by
 definition — fix it, not this document.
 
-> **Implementation status**: All phases complete (original 13 + second pass).
+> **Implementation status**: All phases complete (original 13 + second pass + third pass).
 > Phase 1: this document. Phase 2/3: `Mixer::set_session(preserve_realtime_state)`,
 > `sync_live_mix` removed from `persist_song_update_internal`.
 > Phase 4: `AudioChangeImpact::MixerOnly` skips `LoadSession` when C++ already has state.
@@ -20,20 +20,30 @@ definition — fix it, not this document.
 > Phase 13: Manual validation checklist — see Section 11 below.
 >
 > **Second pass (strict thin-bridge enforcement)**:
-> - `sync_live_mix` quarantined → renamed `legacy_sync_live_mix_for_session_load_only`;
->   made `pub(crate)`; accepts `LegacySyncReason` param; `legacy_sync_live_mix_count` counter.
-> - `update_track_mix_live` Tauri command and `Session::update_track_mix_live` method removed.
->   `RemoteCommand::UpdateTrackMixLive` now calls `audio.update_live_track_mix` directly.
->   Frontend API `updateTrackMixLive` deleted from `desktopApi.ts`.
-> - `Session::update_track_name_only` added for name-only changes (no audio command sent).
-> - `AudioController::session_rebuild_count` counter added; incremented in `replace_song_buffers`.
->   `replace_song_buffers` now accepts a `reason: &str` arg recorded as `last_session_rebuild_reason`.
-> - `RuntimeUpdateKind` enum added to `state.rs` — documents the A/B/C taxonomy in code.
-> - `OwnershipDiagnostics` updated: `sync_live_mix_count` → `legacy_sync_live_mix_count`,
->   `session_rebuild_count`, `last_session_rebuild_reason` added.
-> - 11 new unit tests covering: bridge-only invariants, commit paths, undo grouping,
->   name-only changes, legacy-sync counter, session_rebuild_count, folder track paths.
-> - All test assertions updated to new field names.
+> - `sync_live_mix` quarantined → `legacy_sync_live_mix_for_session_load_only`; `legacy_sync_live_mix_count` counter.
+> - `update_track_mix_live` Tauri command removed; `RemoteCommand::UpdateTrackMixLive` calls `audio.update_live_track_mix` directly.
+> - `RuntimeUpdateKind` enum, `session_rebuild_count`, `last_session_rebuild_reason` added.
+> - 11 new unit tests.
+>
+> **Third pass (legacy sync deletion + explicit API split)**:
+> - `legacy_sync_live_mix_for_session_load_only` DELETED entirely.
+>   `LoadSession` (via `replace_song_buffers`) is the complete C++ mixer initializer — no Rust broad
+>   sync needed after project open. Confirmed: `session_adapter.cpp` parses all track fields
+>   (gain/pan/mute/solo/audio_to/transpose_behavior/parent_track_id) and `rebuild_control_slots(false)`
+>   populates all mixer atomics including folder `parent_control_index` chains.
+> - Generic `update_track` split into explicit API:
+>   - `update_track_metadata(track_id, name, audio)` — RuntimeUpdateKind: ModelOnly; no audio command; increments `commit_model_only_count`.
+>   - `commit_track_mix_model_and_command(track_id, volume, pan, muted, solo, audio_to, audio)` — RuntimeUpdateKind: CommitWithTargetedCommand; one targeted Category A command; increments `commit_mix_command_count`.
+>   - `update_track` (kept for undo/redo replay; routes internally).
+> - `update_track` Tauri command now accepts ONLY `name` (no mix fields). Mix fields must use `commit_track_mix_change`.
+> - `commit_track_mix_change` Tauri command now calls `commit_track_mix_model_and_command` directly.
+> - Frontend `updateTrack` API narrowed: `{ trackId, name? }` only; mix fields removed.
+>   `handleTrackAudioToChange` updated to call `commitTrackMixChange`.
+> - `OwnershipDiagnostics`: removed `legacy_sync_live_mix_count`; added `commit_mix_command_count`,
+>   `commit_pitch_command_count`, `commit_model_only_count`.
+> - 7 new unit tests: commit_mix_count, metadata_count, commit_mute, commit_solo, commit_pan,
+>   count_accumulation, independent_counters.
+> - Total tests: 94/95 pass (1 pre-existing audio hardware failure).
 
 ---
 
@@ -160,12 +170,14 @@ Edit operation
 ```
 load_song_from_path()
   └─> audio.stop()
-  └─> audio.replace_song_buffers()                              [LoadSession for source paths]
-  └─> engine.load_song(song)                                    [model update]
-  └─> audio.legacy_sync_live_mix_for_session_load_only(song)   [one-time full mixer sync]
+  └─> audio.replace_song_buffers("session_load")   [LoadSession — initializes complete C++ mixer state]
+  └─> engine.load_song(song)                        [model update]
 ```
-- `legacy_sync_live_mix_for_session_load_only` is acceptable exactly once at load.
-  Not during live operation. `legacy_sync_live_mix_count` must stay at 0 during playback.
+- `replace_song_buffers` sends `LoadSession` which calls `rebuild_control_slots(preserve_realtime_state=false)`.
+  This populates all mixer atomics from the session JSON: gain, pan, mute, solo, audio_to,
+  transpose_behavior, and folder `parent_control_index` chains.
+  **No additional Rust broad sync is needed or performed after this point.**
+  `legacy_sync_live_mix_for_session_load_only` has been deleted — it was redundant.
 
 ### Diagnostics Path
 ```
@@ -263,7 +275,7 @@ load_song_from_path()
 
 1. The audio callback must not allocate, lock a mutex, do disk I/O, or call into Rust.
 2. `reset_for_seek` and `prime` are control-thread-only. Never call them from the audio callback.
-3. `legacy_sync_live_mix_for_session_load_only` is acceptable only once per session load. Not during live operation. Use `update_live_track_mix` for all live audio state changes.
+3. `legacy_sync_live_mix_for_session_load_only` is DELETED. `LoadSession` via `replace_song_buffers` is the complete mixer initializer. No Rust broad sync after session load. Use `update_live_track_mix` for all live audio state changes.
 4. A volume/pan/mute/solo/metronome/transpose-enabled change must never require `LoadSession`.
 5. Stub pitch passthrough is blocked in runtime builds — silence is the correct failure mode.
 6. Folder gain hierarchy is resolved entirely in C++ Mixer. Rust sends raw values only.
@@ -273,6 +285,9 @@ load_song_from_path()
 10. Category A commands must never create an undo entry or increment `project_revision`.
 11. `session_rebuild_count` must not increment for any Category A or commit-only operation.
 12. `last_session_rebuild_reason` must be one of: `"session_load"`, `"structure_rebuild"`, `"timeline_window"`, `"restart_audio"`. Any other value is a bug.
+13. `update_track` Tauri command and `updateTrack` frontend API accept ONLY name/metadata. Mix fields (volume/pan/muted/solo/audioTo) must use `commit_track_mix_change`/`commitTrackMixChange`.
+14. `commit_mix_command_count` must increment exactly once per pointer-up mix commit. It must not increment for realtime drag commands or metadata-only updates.
+15. `commit_model_only_count` must increment for name/metadata changes. It must not increment for any mix or audio command path.
 
 ---
 
@@ -290,9 +305,14 @@ To validate the refactor is working correctly during a live session:
 
 ### Session rebuild path (must NOT fire on the above)
 - Call `get_ownership_diagnostics` (via `DevTools → Tauri`) after each action above.
-- `realtimeCommandCount` must increment; `legacySyncLiveMixCount` must stay at 0.
+- `realtimeCommandCount` must increment for each slider drag or mute/solo toggle.
 - `sessionRebuildCount` must not increment during slider drag or mute/solo/metronome actions.
 - `lastSessionRebuildReason` after a project open must be `"session_load"`.
+
+### Commit path counters
+- After releasing a volume slider (pointer-up), `commitMixCommandCount` must increment by 1.
+- After renaming a track, `commitModelOnlyCount` must increment by 1; `commitMixCommandCount` must not increment.
+- After a mute/solo toggle commit, `commitMixCommandCount` must increment; `sessionRebuildCount` must not.
 
 ### Pitch backend health
 - Open `get_ownership_diagnostics` with a pitched track loaded.

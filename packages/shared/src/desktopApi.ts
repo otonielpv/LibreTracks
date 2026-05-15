@@ -472,14 +472,10 @@ export async function moveTrack(args: {
   return invokeCommand<TransportSnapshot>("move_track", args);
 }
 
+/** RuntimeUpdateKind: ModelOnly — name/metadata only. Use commitTrackMixChange for audio fields. */
 export async function updateTrack(args: {
   trackId: string;
   name?: string;
-  volume?: number;
-  pan?: number;
-  muted?: boolean;
-  solo?: boolean;
-  audioTo?: string;
 }): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("update_track", args);
 }
