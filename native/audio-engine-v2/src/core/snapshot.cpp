@@ -205,6 +205,10 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"last_pitch_track_id", snap.pitch.last_pitch_track_id},
         {"last_pitch_clip_id", snap.pitch.last_pitch_clip_id},
         {"last_pitch_reason", snap.pitch.last_pitch_reason},
+        // Phase 9: repair cycle and scheduled-jump counters
+        {"pitch_repair_requested_count", snap.pitch.pitch_repair_requested_count},
+        {"pitch_repair_completed_count", snap.pitch.pitch_repair_completed_count},
+        {"mixer_scheduled_jump_executed_count", snap.pitch.mixer_scheduled_jump_executed_count},
     };
 
     return j.dump();

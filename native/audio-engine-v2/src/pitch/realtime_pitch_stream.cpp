@@ -491,18 +491,6 @@ int RealtimePitchStream::render(const DecodedSource& source,
     return produced;
 }
 
-void RealtimePitchStream::set_pitch_ratio_or_reset(const DecodedSource& source,
-                                                   double semitones,
-                                                   Frame source_frame,
-                                                   Frame timeline_frame) {
-    if (semitones == config_.semitones)
-        return;
-    note_control_mutation_if_published();
-    Config next = config_;
-    next.semitones = semitones;
-    configure(next);
-    reset_for_seek(source, source_frame, timeline_frame);
-}
 
 PitchStreamDiagnostics RealtimePitchStream::diagnostics() const noexcept {
     PitchStreamDiagnostics d;

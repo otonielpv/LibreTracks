@@ -184,6 +184,11 @@ struct PitchSnapshot {
     std::string last_pitch_track_id;
     std::string last_pitch_clip_id;
     std::string last_pitch_reason;
+
+    // Phase 9: repair cycle and scheduled-jump counters
+    uint64_t    pitch_repair_requested_count = 0;
+    uint64_t    pitch_repair_completed_count = 0;
+    uint64_t    mixer_scheduled_jump_executed_count = 0;
 };
 
 struct EngineSnapshot {

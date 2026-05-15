@@ -357,6 +357,7 @@ std::string EngineImpl::get_snapshot() const {
         snap.cpu.callback_over_budget_count = mixer_->callback_over_budget_count();
         snap.cpu.mixer_rendered_track_count = mixer_->rendered_track_count();
         snap.cpu.mixer_skipped_track_count = mixer_->skipped_track_count();
+        snap.pitch.mixer_scheduled_jump_executed_count = mixer_->scheduled_jump_executed_count();
         auto tr = TrackRenderer::diagnostics();
         snap.cpu.track_renderer_prepare_count = tr.prepare_count;
         snap.cpu.track_renderer_scratch_resize_count = tr.scratch_resize_count;
@@ -455,6 +456,8 @@ std::string EngineImpl::get_snapshot() const {
             realtime_pitch.last_transport_discontinuity_target_frame;
         snap.pitch.last_transport_discontinuity_reason =
             realtime_pitch.last_transport_discontinuity_reason;
+        snap.pitch.pitch_repair_requested_count = realtime_pitch.pitch_repair_requested_count;
+        snap.pitch.pitch_repair_completed_count = realtime_pitch.pitch_repair_completed_count;
         snap.pitch.stale_proxy_jobs_skipped = pitch.stale_proxy_jobs_skipped;
         snap.pitch.current_pitch_epoch = pitch.current_pitch_epoch;
         snap.pitch.disk_cache_audio_thread_load_attempts =

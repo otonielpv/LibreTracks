@@ -36,6 +36,8 @@ add_executable(lt_engine_tests
     transport_audio_sync_tests.cpp
     test_folder_controls.cpp
     test_pitch_backend_identity.cpp
+    realtime_pitch_phases_5_to_7.cpp
+    realtime_pitch_phases_8_to_10.cpp
 )
 
 target_link_libraries(lt_engine_tests

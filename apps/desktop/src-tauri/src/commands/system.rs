@@ -61,6 +61,13 @@ pub struct OwnershipDiagnostics {
     pub pitch_audio_thread_reset_count: u64,
     pub pitch_audio_thread_prime_count: u64,
 
+    // Repair cycle health — repair_requested should equal repair_completed in steady state.
+    pub pitch_repair_requested_count: u64,
+    pub pitch_repair_completed_count: u64,
+
+    // Scheduled jumps fired in audio callback (nonzero during live performance).
+    pub mixer_scheduled_jump_executed_count: u64,
+
     // C++ CPU load.
     pub callback_duration_ms: f64,
     pub callback_load_percent: f64,
@@ -121,6 +128,16 @@ pub fn get_ownership_diagnostics(
             .unwrap_or(0),
         pitch_audio_thread_prime_count: pitch
             .map(|p| p.pitch_audio_thread_prime_count)
+            .unwrap_or(0),
+
+        pitch_repair_requested_count: pitch
+            .map(|p| p.pitch_repair_requested_count)
+            .unwrap_or(0),
+        pitch_repair_completed_count: pitch
+            .map(|p| p.pitch_repair_completed_count)
+            .unwrap_or(0),
+        mixer_scheduled_jump_executed_count: pitch
+            .map(|p| p.mixer_scheduled_jump_executed_count)
             .unwrap_or(0),
 
         callback_duration_ms: cpu.map(|c| c.callback_duration_ms).unwrap_or(0.0),

@@ -97,10 +97,6 @@ public:
                int frame_count,
                float** out,
                int out_channels) noexcept;
-    void set_pitch_ratio_or_reset(const DecodedSource& source,
-                                  double semitones,
-                                  Frame source_frame,
-                                  Frame timeline_frame);
 
     PitchStreamDiagnostics diagnostics() const noexcept;
     void mark_published(std::uint64_t generation) noexcept;

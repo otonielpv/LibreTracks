@@ -229,4 +229,12 @@ pub struct PitchSnapshot {
     pub realtime_pitch_underflow_count: u64,
     #[serde(default)]
     pub realtime_pitch_discontinuities: u64,
+
+    // Phase 9: repair cycle and scheduled-jump counters
+    #[serde(default)]
+    pub pitch_repair_requested_count: u64,
+    #[serde(default)]
+    pub pitch_repair_completed_count: u64,
+    #[serde(default)]
+    pub mixer_scheduled_jump_executed_count: u64,
 }
