@@ -2324,6 +2324,13 @@ impl DesktopSession {
         // state and pending jumps compute execute_at_seconds relative to the seek position.
         if impact == AudioChangeImpact::MixerOnly {
             self.engine.load_song(song)?;
+            // load_song resets playback_state to Stopped — restore it so snapshot()
+            // returns the correct state and the UI doesn't briefly show "detenido".
+            match playback_state {
+                PlaybackState::Playing => { let _ = self.engine.play(); }
+                PlaybackState::Paused  => { let _ = self.engine.pause(); }
+                _ => {}
+            }
             if bump_revision {
                 self.project_revision = self.project_revision.saturating_add(1);
             }
