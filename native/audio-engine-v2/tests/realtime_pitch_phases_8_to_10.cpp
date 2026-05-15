@@ -54,8 +54,8 @@ struct PitchedMixerFixture {
     RealtimePitchEngine        pitch;
     std::unique_ptr<Mixer>     mixer;
 
-    std::vector<float> out_l{kBlock, 0.f};
-    std::vector<float> out_r{kBlock, 0.f};
+    std::vector<float> out_l = std::vector<float>(kBlock, 0.f);
+    std::vector<float> out_r = std::vector<float>(kBlock, 0.f);
     float* out[2];
 
     explicit PitchedMixerFixture(Semitones semitones, Frame dur = kDur) : out{out_l.data(), out_r.data()} {
