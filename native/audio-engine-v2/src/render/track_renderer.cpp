@@ -163,74 +163,25 @@ void TrackRenderer::render_clip(const Clip&          clip,
     std::fill(scratch_r_.begin(), scratch_r_.begin() + frames_to_read, 0.f);
 
     if (effective_semitones != 0) {
-        // Cache-first path (Ableton-style): if every required PitchCache block is
-        // already rendered, serve the audio from the cache via memcpy. Audio-thread
-        // safety: is_block_ready() is lock-free (atomic_load on the shared map).
-        // get_block_if_ready() acquires reason_mutex_ in note_prepared_proxy_used();
-        // we pre-check is_block_ready() so the lock is only taken on confirmed hits.
+        // Pitch processing required — NEVER fall back to original audio on failure.
+        // Instead, count the miss and return silence for this block.
+        // (The repair path via RealtimePitchEngine will rebuild the stream.)
         int rendered = 0;
-        bool served_from_cache = false;
-        if (pitch_cache) {
-            const PitchCacheKey cache_key{clip.source_id, track_id, clip.id,
-                                          static_cast<double>(effective_semitones),
-                                          engine_sample_rate, src->channel_count(), "prepared"};
-            // Pass 1: confirm every block we need is ready (lock-free).
-            bool all_ready = true;
-            for (int checked = 0; checked < frames_to_read; ) {
-                const Frame abs_frame = source_frame + checked;
-                const int block_idx   = pitch_cache->block_index_for(abs_frame);
-                const int blk_offset  = pitch_cache->offset_in_block(abs_frame);
-                const int chunk = std::min(frames_to_read - checked,
-                                           PitchCache::kProxyBlockFrames - blk_offset);
-                if (!pitch_cache->is_block_ready(cache_key, block_idx)) {
-                    all_ready = false;
-                    break;
-                }
-                checked += chunk;
-            }
-            // Pass 2: copy out only if all confirmed ready (avoids the missing-block lock).
-            if (all_ready) {
-                int copied = 0;
-                bool copy_ok = true;
-                while (copied < frames_to_read) {
-                    const Frame abs_frame = source_frame + copied;
-                    const int block_idx   = pitch_cache->block_index_for(abs_frame);
-                    const int blk_offset  = pitch_cache->offset_in_block(abs_frame);
-                    const int chunk = std::min(frames_to_read - copied,
-                                               PitchCache::kProxyBlockFrames - blk_offset);
-                    float* chunk_out[2] = {scratch_l_.data() + copied, scratch_r_.data() + copied};
-                    if (!pitch_cache->get_block_if_ready(cache_key, block_idx, blk_offset, chunk, chunk_out, 2)) {
-                        copy_ok = false;
-                        break;
-                    }
-                    copied += chunk;
-                }
-                if (copy_ok && copied > 0) {
-                    rendered = copied;
-                    served_from_cache = true;
-                }
-            }
+        if (pitch_engine) {
+            rendered = pitch_engine->render_pitched_clip(
+                clip, track_id, *src, source_frame, timeline_frame + block_offset,
+                frames_to_read, static_cast<double>(effective_semitones), scratch_, 2);
+        } else if (pitch_cache) {
+            rendered = pitch_cache->render_realtime_seek_safe(
+                PitchCacheKey{clip.source_id, track_id, clip.id,
+                              static_cast<double>(effective_semitones),
+                              engine_sample_rate, src->channel_count(), "experimental_legacy_realtime_seek_safe"},
+                *src, source_frame, frames_to_read, scratch_, 2);
+        } else {
+            // No pitch processor available at all — count as missing and return silence.
+            pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
+            return;
         }
-
-        // Fallback path: realtime pitch engine when the cache is cold.
-        // This is the existing pre-cache behavior, preserved verbatim.
-        if (!served_from_cache) {
-            if (pitch_engine) {
-                rendered = pitch_engine->render_pitched_clip(
-                    clip, track_id, *src, source_frame, timeline_frame + block_offset,
-                    frames_to_read, static_cast<double>(effective_semitones), scratch_, 2);
-            } else if (pitch_cache) {
-                rendered = pitch_cache->render_realtime_seek_safe(
-                    PitchCacheKey{clip.source_id, track_id, clip.id,
-                                  static_cast<double>(effective_semitones),
-                                  engine_sample_rate, src->channel_count(), "experimental_legacy_realtime_seek_safe"},
-                    *src, source_frame, frames_to_read, scratch_, 2);
-            } else {
-                pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
-                return;
-            }
-        }
-
         if (rendered <= 0) {
             // Pitch engine had no stream or the stream is not aligned — silence this block.
             // The missing_stream_count counter on RealtimePitchEngine tracks the root cause.

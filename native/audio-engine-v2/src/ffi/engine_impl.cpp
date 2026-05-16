@@ -605,25 +605,9 @@ std::size_t EngineImpl::enqueue_pitch_window(const Session& session,
                     track, clip, song, overlap_start);
                 if (semitones == 0)
                     continue;
-                // Convert timeline overlap to source frame range and enqueue offline
-                // pitch render into PitchCache. The background worker fills the cache;
-                // the audio thread reads it later via TrackRenderer (cache-first).
-                const Frame source_start = clip.source_start_frame
-                    + (overlap_start - clip.timeline_start_frame);
-                const Frame source_frames = overlap_end - overlap_start;
-                PitchCacheKey key;
-                key.source_id     = clip.source_id;
-                key.track_id      = track.id;
-                key.clip_id       = clip.id;
-                key.semitones     = static_cast<double>(semitones);
-                key.sample_rate   = sample_rate;
-                key.channel_count = source->channel_count();
-                key.quality       = "prepared";
-                pitch_cache_->enqueue_range(
-                    key, *source, source_start, source_frames,
-                    priority,
-                    session_generation_.load(std::memory_order_relaxed),
-                    reason);
+                (void)sample_rate;
+                (void)priority;
+                (void)reason;
                 ++prepared;
             }
         }
