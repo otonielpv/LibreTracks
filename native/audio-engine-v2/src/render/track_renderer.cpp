@@ -205,23 +205,42 @@ void TrackRenderer::render_clip(const Clip&          clip,
             const int max_in = std::min({frames_to_read,
                                          static_cast<int>(bungee_in_l_.size()),
                                          static_cast<int>(bungee_in_r_.size())});
+            // Per Bungee issue #38: the output we get back from process()
+            // corresponds to input frame outputPosition() == inputPosition()
+            // - latency(). To make the listener hear audio that aligns to
+            // `source_frame` we have to feed input from source_frame +
+            // latency() forward. Latency is reported in input-rate frames; at
+            // speed=1 that is just source-frame units.
+            const long long latency = static_cast<long long>(bv->latency_frames());
+            const Frame read_from = source_frame + static_cast<Frame>(latency);
+            const Frame src_end   = src->duration_frames();
+            // How many of `max_in` frames are actually available in the source
+            // starting at `read_from`? Anything past src_end is padded with
+            // silence (clip end / past end of file).
+            const int available = (read_from >= src_end)
+                ? 0
+                : static_cast<int>(std::min<long long>(
+                                       max_in,
+                                       static_cast<long long>(src_end - read_from)));
             float* read_into[2] = {bungee_in_l_.data(), bungee_in_r_.data()};
-            const int got = src->read(source_frame, max_in, read_into,
-                                       std::min(2, src->channel_count()));
-            if (got < max_in) {
+            int got = 0;
+            if (available > 0) {
+                got = src->read(read_from, available, read_into,
+                                std::min(2, src->channel_count()));
                 if (got > 0 && src->channel_count() == 1) {
                     // Mono source: mirror L into R so Bungee gets stereo.
                     std::copy_n(bungee_in_l_.begin(), got, bungee_in_r_.begin());
                 }
-                // Pad any short read with zeros so we always feed `max_in` frames.
-                if (got < max_in) {
-                    std::fill(bungee_in_l_.begin() + std::max(0, got),
-                              bungee_in_l_.begin() + max_in, 0.0f);
-                    std::fill(bungee_in_r_.begin() + std::max(0, got),
-                              bungee_in_r_.begin() + max_in, 0.0f);
-                }
-            } else if (src->channel_count() == 1) {
-                std::copy_n(bungee_in_l_.begin(), max_in, bungee_in_r_.begin());
+            }
+            // Pad any short read or tail-after-source-end with zeros so we
+            // always feed Bungee exactly `max_in` input frames per call —
+            // this keeps Bungee's inputPosition advancing in lockstep with
+            // the audio thread's frame counter regardless of clip bounds.
+            if (got < max_in) {
+                std::fill(bungee_in_l_.begin() + std::max(0, got),
+                          bungee_in_l_.begin() + max_in, 0.0f);
+                std::fill(bungee_in_r_.begin() + std::max(0, got),
+                          bungee_in_r_.begin() + max_in, 0.0f);
             }
             const float* in_ptrs[2] = {bungee_in_l_.data(), bungee_in_r_.data()};
             const double pitch_scale = std::pow(2.0,

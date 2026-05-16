@@ -197,6 +197,18 @@ void warm_voice(BungeePitchVoice& voice,
         if (voice.is_warm())
             break;
     }
+
+    // One-shot diagnostic so we can see what Bungee's stable latency turned
+    // out to be on this hardware/voice configuration. The audio thread uses
+    // this number directly (track_renderer reads source from
+    // source_frame + latency_frames so output aligns to the timeline).
+    const double final_latency = voice.latency_frames();
+    const long long final_input = voice.input_position();
+    const bool warm = voice.is_warm();
+    std::fprintf(stdout,
+        "[BUNGEE] warm_voice fed=%d max=%d input_pos=%lld latency=%.1f warm=%d\n",
+        fed, max_warm_frames, final_input, final_latency, warm ? 1 : 0);
+    std::fflush(stdout);
 }
 #endif // LT_ENGINE_HAVE_BUNGEE
 
