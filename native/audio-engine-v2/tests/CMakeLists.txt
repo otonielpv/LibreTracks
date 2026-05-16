@@ -38,6 +38,7 @@ add_executable(lt_engine_tests
     test_pitch_backend_identity.cpp
     realtime_pitch_phases_5_to_7.cpp
     realtime_pitch_phases_8_to_10.cpp
+    bungee_pitch_voice_tests.cpp
 )
 
 target_link_libraries(lt_engine_tests
@@ -95,6 +96,19 @@ if(LT_RUBBERBAND_RUNTIME_DIR)
             $<TARGET_FILE_DIR:lt_engine_tests>
         COMMAND_EXPAND_LISTS
     )
+endif()
+
+# When the engine was built with Bungee support, make sure bungee.dll sits next
+# to the test executable so the tests can load it.
+if(LT_ENGINE_USE_BUNGEE AND WIN32 AND DEFINED LT_BUNGEE_DIR)
+    set(_lt_bungee_test_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
+    if(EXISTS "${_lt_bungee_test_dll}")
+        add_custom_command(TARGET lt_engine_tests POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_lt_bungee_test_dll}"
+                "$<TARGET_FILE_DIR:lt_engine_tests>"
+            COMMENT "Copying Bungee DLL next to lt_engine_tests")
+    endif()
 endif()
 
 include(doctest)

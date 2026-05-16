@@ -116,6 +116,53 @@ target_link_libraries(lt_audio_engine_v2
         lt_deps_json
 )
 
+# ---------------------------------------------------------------------------
+# Bungee pitch backend (optional, opt-in).
+#
+# Bungee (https://github.com/bungee-audio-stretch/bungee, MPL-2.0) is a phase-
+# vocoder library with much lower per-voice CPU than RubberBand. We consume the
+# upstream-published Windows prebuilt because Bungee's source uses GCC-only
+# attributes that MSVC cannot compile.
+#
+# Enable with:
+#   cmake -DLT_ENGINE_USE_BUNGEE=ON -DLT_BUNGEE_DIR=<unpacked-release-folder>
+#
+# When OFF (default), LT_ENGINE_HAVE_BUNGEE is 0 and BungeePitchVoice compiles
+# to a no-op stub; the production build is unchanged.
+# ---------------------------------------------------------------------------
+option(LT_ENGINE_USE_BUNGEE "Link the Bungee pitch backend into the engine" OFF)
+if(LT_ENGINE_USE_BUNGEE)
+    if(NOT DEFINED LT_BUNGEE_DIR OR NOT EXISTS "${LT_BUNGEE_DIR}/include/bungee/Bungee.h")
+        message(FATAL_ERROR
+            "LT_ENGINE_USE_BUNGEE=ON requires -DLT_BUNGEE_DIR=<path> pointing at "
+            "an unpacked Bungee release (must contain include/bungee/Bungee.h and "
+            "a platform binary folder, e.g. windows-x86_64/bungee.lib).")
+    endif()
+    if(WIN32)
+        set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/windows-x86_64")
+        set(_lt_bungee_lib    "${_lt_bungee_libdir}/bungee.lib")
+        set(_lt_bungee_dll    "${_lt_bungee_libdir}/bungee.dll")
+    else()
+        message(FATAL_ERROR "LT_ENGINE_USE_BUNGEE: only Windows x86_64 wiring is in place.")
+    endif()
+    if(NOT EXISTS "${_lt_bungee_lib}")
+        message(FATAL_ERROR "Expected ${_lt_bungee_lib} not found.")
+    endif()
+    target_include_directories(lt_audio_engine_v2 PRIVATE "${LT_BUNGEE_DIR}/include")
+    target_link_libraries(lt_audio_engine_v2 PRIVATE "${_lt_bungee_lib}")
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HAVE_BUNGEE=1)
+    if(WIN32 AND EXISTS "${_lt_bungee_dll}")
+        add_custom_command(TARGET lt_audio_engine_v2 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_lt_bungee_dll}"
+                "$<TARGET_FILE_DIR:lt_audio_engine_v2>"
+            COMMENT "Copying Bungee DLL next to lt_audio_engine_v2")
+    endif()
+    message(STATUS "Pitch backend (optional): Bungee enabled from ${LT_BUNGEE_DIR}")
+else()
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HAVE_BUNGEE=0)
+endif()
+
 if(LT_ENGINE_ENABLE_ASAN)
     if(MSVC)
         target_compile_options(lt_audio_engine_v2 PRIVATE /fsanitize=address)
