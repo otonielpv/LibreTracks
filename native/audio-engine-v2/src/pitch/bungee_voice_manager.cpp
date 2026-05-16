@@ -146,34 +146,36 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
 }
 
 #if LT_ENGINE_HAVE_BUNGEE
-// Push approximately `latency_frames` of source audio into the voice and
-// throw away the output. This burns through Bungee's analysis latency so
-// the audio thread's first render_block emits aligned audio immediately.
-// We can't query latency() until the first process() call (upstream issue
-// #23), so we use a conservative fixed estimate based on the documented
-// ~200 ms inherent latency.
-constexpr int kPrimeFramesAt48k = 9600;  // 200 ms at 48 kHz
+// Warm a freshly-constructed voice on the control thread by feeding ZERO
+// input until Bungee reports its analysis pipeline is full (latency caught
+// up). The discarded output is what the listener WOULD have heard during
+// Bungee's startup transient if we let the audio thread see it.
+//
+// Per the maintainer (issue #38 comment 4364737326), the precise runtime
+// latency is reported by Bungee::Stream::latency(), and it is only valid
+// after at least one process() call has returned output. So we loop:
+//   process(zeros) → check latency() → repeat until small enough.
+//
+// We do NOT pre-feed real source audio. That was the previous bug: any
+// real input fed before the audio thread takes over advances Bungee's
+// internal output position, which then no longer corresponds to the
+// source_frame the audio thread expects on its first read.
+//
+// Worst-case bound for safety: at most kMaxWarmFramesAt48k input frames
+// before we give up (in case Bungee never reports "warm" with the configured
+// ratios). At 200 ms documented latency this is ~3x the expected need.
+constexpr int kMaxWarmFramesAt48k = 28800;  // 600 ms at 48 kHz
 
-void prime_voice(BungeePitchVoice& voice,
-                  const DecodedSource& src,
-                  Frame source_frame,
-                  int sample_rate,
-                  int channel_count,
-                  int max_in_frames) {
-    const int prime_frames = std::max(0,
-        static_cast<int>(static_cast<long long>(kPrimeFramesAt48k) * sample_rate / 48000));
-    if (prime_frames <= 0) return;
+void warm_voice(BungeePitchVoice& voice,
+                int sample_rate,
+                int channel_count,
+                int max_in_frames) {
+    if (!voice.is_ready()) return;
+    const int max_warm_frames = std::max(0,
+        static_cast<int>(static_cast<long long>(kMaxWarmFramesAt48k) * sample_rate / 48000));
+    if (max_warm_frames <= 0) return;
 
-    // Read input from (source_frame - prime_frames) up to source_frame. If
-    // that range extends before the source start, we use silence for the
-    // pre-clip portion.
-    const Frame raw_begin = source_frame - prime_frames;
-    const Frame begin     = std::max<Frame>(0, raw_begin);
-    const int  lead_silence = static_cast<int>(begin - raw_begin);  // 0 if raw_begin >= 0
-    const int  real_frames  = prime_frames - lead_silence;
-
-    // Reusable planar scratch buffers. Sized to max_in_frames; we drive the
-    // voice in slices of that size so we never exceed its configured limit.
+    // Pre-allocated planar zero buffers. Reused across iterations.
     std::vector<std::vector<float>> in_planes(static_cast<std::size_t>(channel_count),
         std::vector<float>(static_cast<std::size_t>(max_in_frames), 0.0f));
     std::vector<std::vector<float>> out_planes(static_cast<std::size_t>(channel_count),
@@ -185,36 +187,15 @@ void prime_voice(BungeePitchVoice& voice,
         out_ptrs[static_cast<std::size_t>(c)] = out_planes[static_cast<std::size_t>(c)].data();
     }
 
-    // Phase 1: feed lead_silence frames of zeros (no source data available).
-    int remaining = lead_silence;
-    while (remaining > 0) {
-        const int chunk = std::min(remaining, max_in_frames);
-        for (int c = 0; c < channel_count; ++c)
-            std::fill_n(in_planes[static_cast<std::size_t>(c)].begin(), chunk, 0.0f);
-        (void)voice.render_block(in_ptrs.data(), chunk, out_ptrs.data(), chunk,
-                                 /*pitch_scale*/ 1.0);  // pitch updated for real on first audio call
-        remaining -= chunk;
-    }
-
-    // Phase 2: feed real source from `begin` up to `source_frame`.
-    Frame cur = begin;
-    while (real_frames > 0 && cur < source_frame) {
-        const int chunk = std::min(max_in_frames, static_cast<int>(source_frame - cur));
-        // Build a planar pointer array that DecodedSource::read writes into.
-        float* read_into[8] = {nullptr};
-        for (int c = 0; c < std::min(channel_count, 8); ++c)
-            read_into[c] = in_planes[static_cast<std::size_t>(c)].data();
-        const int got = src.read(cur, chunk, read_into,
-                                  std::min(channel_count, src.channel_count()));
-        const int feed = std::max(0, got);
-        // If the source returned fewer frames than requested, pad the rest.
-        if (feed < chunk) {
-            for (int c = 0; c < channel_count; ++c)
-                std::fill(in_planes[static_cast<std::size_t>(c)].begin() + feed,
-                          in_planes[static_cast<std::size_t>(c)].begin() + chunk, 0.0f);
-        }
-        (void)voice.render_block(in_ptrs.data(), chunk, out_ptrs.data(), chunk, 1.0);
-        cur += chunk;
+    int fed = 0;
+    while (fed < max_warm_frames) {
+        const int chunk = std::min(max_in_frames, max_warm_frames - fed);
+        (void)voice.render_block(in_ptrs.data(), chunk,
+                                  out_ptrs.data(), chunk,
+                                  /*pitch_scale*/ 1.0);
+        fed += chunk;
+        if (voice.is_warm())
+            break;
     }
 }
 #endif // LT_ENGINE_HAVE_BUNGEE
@@ -257,9 +238,8 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
                               impl_->max_in_frames)) {
             continue;
         }
-        prime_voice(*voice,
-                    *spec.source, spec.source_frame,
-                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+        warm_voice(*voice,
+                   impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
         (*next)[spec.key] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
@@ -301,9 +281,8 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
                               impl_->max_in_frames)) {
             continue;
         }
-        prime_voice(*voice,
-                    *spec.source, spec.source_frame,
-                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+        warm_voice(*voice,
+                   impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
         (*next)[spec.key] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);

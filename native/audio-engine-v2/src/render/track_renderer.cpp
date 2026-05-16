@@ -226,7 +226,25 @@ void TrackRenderer::render_clip(const Clip&          clip,
             const float* in_ptrs[2] = {bungee_in_l_.data(), bungee_in_r_.data()};
             const double pitch_scale = std::pow(2.0,
                 static_cast<double>(effective_semitones) / 12.0);
-            rendered = bv->render_block(in_ptrs, max_in, scratch_, max_in, pitch_scale);
+            const int produced = bv->render_block(
+                in_ptrs, max_in, scratch_, max_in, pitch_scale);
+
+            // CRITICAL: the audio thread always advances by `max_in` frames
+            // per callback. Bungee's Stream::process may return fewer output
+            // frames than requested (e.g. during the analysis-pipeline warm-up
+            // window, or whenever grain boundaries don't line up). If we
+            // reported the actual `produced` count downstream, the transposed
+            // clip would write fewer frames into the mix bus while the timeline
+            // still advances by `max_in`, causing transposed tracks to lag
+            // non-transposed ones by the accumulated gap. To keep timeline
+            // alignment we zero-pad the tail and report `max_in` instead.
+            if (produced < max_in) {
+                std::fill(scratch_l_.begin() + std::max(0, produced),
+                          scratch_l_.begin() + max_in, 0.0f);
+                std::fill(scratch_r_.begin() + std::max(0, produced),
+                          scratch_r_.begin() + max_in, 0.0f);
+            }
+            rendered = max_in;
         } else if (pitch_engine) {
             rendered = pitch_engine->render_pitched_clip(
                 clip, track_id, *src, source_frame, timeline_frame + block_offset,

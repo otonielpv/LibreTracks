@@ -104,6 +104,28 @@ int BungeePitchVoice::render_block(const float* const* input,
         pitch_scale);
 }
 
+long long BungeePitchVoice::input_position() const noexcept {
+    if (!impl_ || !impl_->stream) return 0;
+    return static_cast<long long>(impl_->stream->inputPosition());
+}
+
+double BungeePitchVoice::output_position() const noexcept {
+    if (!impl_ || !impl_->stream) return 0.0;
+    return impl_->stream->outputPosition();
+}
+
+double BungeePitchVoice::latency_frames() const noexcept {
+    if (!impl_ || !impl_->stream) return 0.0;
+    return impl_->stream->latency();
+}
+
+bool BungeePitchVoice::is_warm() const noexcept {
+    if (!impl_ || !impl_->stream) return false;
+    // Stream::latency() reports input-rate frames. "Warm" = output has caught
+    // up to within one block of the input we've fed (cheap and stable).
+    return impl_->stream->latency() < static_cast<double>(impl_->max_in_frames);
+}
+
 #else // !LT_ENGINE_HAVE_BUNGEE
 
 // ─── Stub when Bungee is not compiled in ────────────────────────────────
@@ -118,6 +140,11 @@ BungeePitchVoice& BungeePitchVoice::operator=(BungeePitchVoice&&) noexcept = def
 bool BungeePitchVoice::configure(int, int, int) { return false; }
 bool BungeePitchVoice::is_ready() const noexcept { return false; }
 const char* BungeePitchVoice::backend_name() const noexcept { return "unavailable"; }
+
+long long BungeePitchVoice::input_position() const noexcept { return 0; }
+double    BungeePitchVoice::output_position() const noexcept { return 0.0; }
+double    BungeePitchVoice::latency_frames() const noexcept  { return 0.0; }
+bool      BungeePitchVoice::is_warm() const noexcept         { return false; }
 
 int BungeePitchVoice::render_block(const float* const* /*input*/,
                                     int /*input_frames*/,

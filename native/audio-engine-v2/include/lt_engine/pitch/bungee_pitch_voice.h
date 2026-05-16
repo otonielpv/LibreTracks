@@ -62,6 +62,36 @@ public:
                      int output_frames,
                      double pitch_scale) noexcept;
 
+    // ── Latency / position introspection (per Bungee issue #38) ─────────
+    //
+    // Per the Bungee maintainer, the correct way to know the current
+    // algorithmic delay is to query the Stream wrapper after at least one
+    // process() call has returned output. Bungee Stream APIs:
+    //   inputPosition()  - total input frames fed so far
+    //   outputPosition() - input-frame position corresponding to current out
+    //   latency()        - inputPosition() - outputPosition()
+    //
+    // These are reported in INPUT-rate frames. Before the first process()
+    // call has produced output, latency() may return 0 or be undefined per
+    // issue #23; callers should call render_block() at least once before
+    // relying on this value.
+
+    // Total input frames passed to the underlying Stream so far.
+    long long input_position() const noexcept;
+
+    // Input-frame position corresponding to the most recent output sample.
+    double output_position() const noexcept;
+
+    // Current algorithmic delay in input-rate frames. 0 when no Bungee voice
+    // is alive (stub build). May be 0 until the first render_block() returns
+    // a non-zero frame count.
+    double latency_frames() const noexcept;
+
+    // Convenience: true when the next render_block() should produce useful,
+    // timeline-aligned audio (i.e. latency has caught up). Equivalent to
+    // latency_frames() < epsilon.
+    bool   is_warm() const noexcept;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
