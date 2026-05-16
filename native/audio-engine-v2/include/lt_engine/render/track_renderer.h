@@ -10,6 +10,8 @@
 #include <atomic>
 #include <cstdint>
 
+namespace lt { class BungeeVoiceManager; }
+
 namespace lt {
 
 struct TrackRendererDiagnostics {
@@ -61,6 +63,22 @@ public:
                 Semitones             effective_semitones = 0,
                 const Song*           active_song = nullptr) noexcept;
 
+    // Same as above, plus an optional BungeeVoiceManager that takes priority
+    // over the realtime pitch engine on the audio thread for any clip whose
+    // (clip_id, effective_semitones) is currently held by the manager.
+    void render(const Track&          track,
+                Frame                 timeline_frame,
+                int                   block_frames,
+                float**               out,
+                int                   num_out_channels,
+                const SourceManager&  sources,
+                PitchCache*           pitch_cache,
+                RealtimePitchEngine*  pitch_engine,
+                BungeeVoiceManager*   bungee_voices,
+                int                   engine_sample_rate,
+                Semitones             effective_semitones = 0,
+                const Song*           active_song = nullptr) noexcept;
+
 private:
     // Render one clip's contribution for this block.
     void render_clip(const Clip&           clip,
@@ -72,6 +90,7 @@ private:
                      const SourceManager&  sources,
                      PitchCache*           pitch_cache,
                      RealtimePitchEngine*  pitch_engine,
+                     BungeeVoiceManager*   bungee_voices,
                      int                   engine_sample_rate,
                      const Id&             track_id,
                      Semitones             effective_semitones) noexcept;
@@ -82,6 +101,10 @@ private:
     std::vector<float> scratch_r_;
     int scratch_capacity_frames_ = 0;
     float* scratch_[2] = { nullptr, nullptr };
+    // Planar input scratch used to feed BungeePitchVoice (which wants planar
+    // pointers). Sized to match scratch_l_/scratch_r_ during prepare().
+    std::vector<float> bungee_in_l_;
+    std::vector<float> bungee_in_r_;
     OriginalSourceCache original_cache_;
 
     static std::atomic<std::uint64_t> prepare_count_;

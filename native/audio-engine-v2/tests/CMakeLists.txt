@@ -39,6 +39,7 @@ add_executable(lt_engine_tests
     realtime_pitch_phases_5_to_7.cpp
     realtime_pitch_phases_8_to_10.cpp
     bungee_pitch_voice_tests.cpp
+    bungee_voice_manager_tests.cpp
 )
 
 target_link_libraries(lt_engine_tests

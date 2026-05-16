@@ -169,6 +169,7 @@ Result<void> EngineImpl::initialize() {
     pitch_cache_    = std::make_unique<PitchCache>();
     pitch_cache_->set_realtime_fallback_enabled(false);
     realtime_pitch_engine_ = std::make_unique<RealtimePitchEngine>();
+    bungee_voices_ = std::make_unique<BungeeVoiceManager>();
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
     mixer_          = std::make_unique<Mixer>(
         std::shared_ptr<const Session>{},
@@ -178,6 +179,7 @@ Result<void> EngineImpl::initialize() {
         pitch_cache_.get(),
         realtime_pitch_engine_.get());
     mixer_->set_metronome_config(metronome_config_);
+    mixer_->set_bungee_voice_manager(bungee_voices_.get());
 
     // Open the default audio device with the silent callback.
     auto open_result = device_manager_->open_device(current_device_request_, mixer_.get());
@@ -196,6 +198,16 @@ Result<void> EngineImpl::initialize() {
             device_manager_->actual_sample_rate(),
             device_manager_->actual_buffer_size(),
         });
+    }
+
+    // Prepare the Bungee voice manager with the negotiated (or default) audio
+    // format. Safe to call again later if the device sample rate changes.
+    if (bungee_voices_) {
+        const int sr  = clock_->sample_rate() > 0 ? clock_->sample_rate() : 48000;
+        const int bs  = device_manager_->actual_buffer_size() > 0
+                        ? device_manager_->actual_buffer_size()
+                        : 1024;  // generous default; tracks the OS buffer size when available
+        bungee_voices_->prepare(sr, /*channels=*/2, bs);
     }
 
     state_ = State::Initialized;
@@ -229,7 +241,12 @@ Result<void> EngineImpl::shutdown() {
     }
 
     device_manager_->close_device();
-    if (mixer_) mixer_->clear_session();
+    if (mixer_) {
+        mixer_->clear_session();
+        // Detach the Bungee manager pointer before destroying the manager so
+        // the (now silent) mixer cannot dereference a dangling pointer.
+        mixer_->set_bungee_voice_manager(nullptr);
+    }
     if (prep_queue_) { prep_queue_->cancel_all(); prep_queue_.reset(); }
     if (worker_pool_) { worker_pool_->shutdown(); }
     source_manager_->clear();
@@ -240,6 +257,7 @@ Result<void> EngineImpl::shutdown() {
     session_.reset();
     pitch_cache_.reset();
     realtime_pitch_engine_.reset();
+    bungee_voices_.reset();
     state_ = State::ShutDown;
     return Result<void>::ok();
 }
@@ -564,6 +582,12 @@ std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id)
         return 0;
     if (!source_manager_->get(source_id))
         return 0;
+    if (bungee_voices_ && bungee_voices_->is_available()) {
+        // Build/refresh Bungee voices now that this source has finished decoding.
+        // Existing voices keyed on (clip_id, semitones) are reused.
+        bungee_voices_->rebuild_for_session(*session_, *source_manager_,
+                                             clock_->position().frame);
+    }
     if (realtime_pitch_engine_) {
         // Prime at the current playhead so the new source's stream is immediately aligned.
         // Using prepare_for_transport_discontinuity instead of prepare_for_session(-1) avoids
@@ -773,9 +797,16 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 mixer_->set_session(next_session, /*preserve_realtime_state=*/false);
                 mixer_->set_pitch_cache(pitch_cache_.get());
                 mixer_->set_pitch_engine(realtime_pitch_engine_.get());
+                mixer_->set_bungee_voice_manager(bungee_voices_.get());
             }
             if (realtime_pitch_engine_)
                 realtime_pitch_engine_->prepare_for_session(*next_session, *source_manager_, sr);
+            // Build Bungee voices for whatever is currently transposed at playhead.
+            // Source data may not be decoded yet — voices for unloaded sources are
+            // skipped and rebuilt later when sources become ready.
+            if (bungee_voices_ && bungee_voices_->is_available())
+                bungee_voices_->rebuild_for_session(
+                    *next_session, *source_manager_, clock_->position().frame);
 
             return Result<void>::ok();
         }
@@ -809,6 +840,14 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                      forward - immediate, 1, "seek_forward_prebuffer");
             }
             if (mixer_) mixer_->trigger_crossfade();
+            // Bungee voice manager: synchronous rebuild on the command thread.
+            // Construction at 9 voices is ~1.5 ms (per the bench), so this stays
+            // visually instant. When a Bungee voice exists track_renderer uses it;
+            // otherwise it falls back to the RubberBand path rebuilt asynchronously
+            // below.
+            if (bungee_voices_ && bungee_voices_->is_available() && session_)
+                bungee_voices_->rebuild_for_seek(
+                    clock_->position().frame, *session_, *source_manager_);
             if (realtime_pitch_engine_ && session_) {
                 // Launch the rebuild off the command thread so the UI doesn't freeze
                 // for ~700ms while RubberBand primes. Serialize via the pending future
@@ -842,6 +881,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                      forward - immediate, 1, "seek_forward_prebuffer");
             }
             if (mixer_) mixer_->trigger_crossfade();
+            // Bungee voice manager: synchronous rebuild on the command thread.
+            // See CmdSeekAbsolute for rationale.
+            if (bungee_voices_ && bungee_voices_->is_available() && session_)
+                bungee_voices_->rebuild_for_seek(
+                    clock_->position().frame, *session_, *source_manager_);
             if (realtime_pitch_engine_ && session_) {
                 // Async rebuild — see CmdSeekAbsolute for rationale.
                 const Frame seek_frame = clock_->position().frame;
@@ -1013,6 +1057,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                // Bungee: rebuild voices at the current playhead so their pitch
+                // matches the new transpose decision (per-track enable can flip
+                // a voice's effective semitones to 0 / from 0).
+                if (bungee_voices_ && bungee_voices_->is_available()) {
+                    bungee_voices_->rebuild_for_seek(
+                        clock_->position().frame, *next_session, *source_manager_);
+                }
                 // Prime at current playhead so published streams are aligned.
                 if (realtime_pitch_engine_) {
                     const Frame playhead = clock_->position().frame;
@@ -1034,6 +1085,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                // Bungee: rebuild voices fresh because the pitch key changes for
+                // every transposed clip in the affected song.
+                if (bungee_voices_ && bungee_voices_->is_available()) {
+                    bungee_voices_->rebuild_for_seek(
+                        clock_->position().frame, *next_session, *source_manager_);
+                }
                 // Prime at current playhead so published streams are aligned.
                 // Async rebuild — see CmdSeekAbsolute for rationale.
                 if (realtime_pitch_engine_) {
@@ -1064,6 +1121,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                // Bungee: rebuild voices fresh because the region pitch change
+                // alters the effective semitones key for affected clips.
+                if (bungee_voices_ && bungee_voices_->is_available()) {
+                    bungee_voices_->rebuild_for_seek(
+                        clock_->position().frame, *next_session, *source_manager_);
+                }
                 // Prime at current playhead so published streams are aligned.
                 // Async rebuild — see CmdSeekAbsolute for rationale.
                 if (realtime_pitch_engine_) {

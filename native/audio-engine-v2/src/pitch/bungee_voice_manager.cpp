@@ -1,0 +1,311 @@
+#include <lt_engine/pitch/bungee_voice_manager.h>
+
+#include <lt_engine/render/pitch_resolution.h>
+#include <lt_engine/sources/source_manager.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cstring>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+namespace lt {
+
+// ─── Key / map ───────────────────────────────────────────────────────────
+
+struct VoiceKey {
+    Id        clip_id;
+    Semitones semitones;
+    bool operator==(const VoiceKey& o) const noexcept {
+        return semitones == o.semitones && clip_id == o.clip_id;
+    }
+};
+
+struct VoiceKeyHash {
+    std::size_t operator()(const VoiceKey& k) const noexcept {
+        std::size_t h = std::hash<std::string>{}(k.clip_id);
+        h ^= std::hash<int>{}(static_cast<int>(k.semitones))
+             + 0x9e3779b9u + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+using VoiceMap = std::unordered_map<VoiceKey,
+                                    std::shared_ptr<BungeePitchVoice>,
+                                    VoiceKeyHash>;
+
+// ─── Impl ────────────────────────────────────────────────────────────────
+
+struct BungeeVoiceManager::Impl {
+    bool prepared      = false;
+    int  sample_rate   = 0;
+    int  channel_count = 0;
+    int  max_in_frames = 0;
+
+    // Published voice map. Audio thread reads via std::atomic_load; control
+    // thread builds a new map and swaps via std::atomic_store.
+    std::shared_ptr<const VoiceMap> active{std::make_shared<const VoiceMap>()};
+};
+
+BungeeVoiceManager::BungeeVoiceManager()
+    : impl_(std::make_unique<Impl>()) {}
+
+BungeeVoiceManager::~BungeeVoiceManager() = default;
+
+// ─── prepare / availability ──────────────────────────────────────────────
+
+bool BungeeVoiceManager::prepare(int sample_rate,
+                                  int channel_count,
+                                  int max_input_frames) {
+    if (!impl_) return false;
+    if (sample_rate <= 0 || channel_count <= 0 || max_input_frames <= 0)
+        return false;
+#if !LT_ENGINE_HAVE_BUNGEE
+    impl_->prepared = false;
+    return false;
+#else
+    impl_->sample_rate   = sample_rate;
+    impl_->channel_count = channel_count;
+    impl_->max_in_frames = max_input_frames;
+    impl_->prepared      = true;
+    // Start with an empty map — voices are built on the first rebuild_*.
+    std::atomic_store(&impl_->active,
+                      std::shared_ptr<const VoiceMap>(std::make_shared<const VoiceMap>()));
+    return true;
+#endif
+}
+
+bool BungeeVoiceManager::is_available() const noexcept {
+#if !LT_ENGINE_HAVE_BUNGEE
+    return false;
+#else
+    return impl_ && impl_->prepared;
+#endif
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+
+namespace {
+
+// Iterate the session and collect (clip_id, semitones, source, source_frame)
+// tuples for every transposed-and-currently-playing voice at `playhead`.
+struct VoiceSpec {
+    VoiceKey             key;
+    const DecodedSource* source = nullptr;
+    Frame                source_frame = 0;  // where in the source we will start
+};
+
+std::vector<VoiceSpec> enumerate_voices(const Session& session,
+                                        const SourceManager& sources,
+                                        Frame playhead) {
+    std::vector<VoiceSpec> out;
+    out.reserve(16);
+    for (const auto& song : session.songs) {
+        for (const auto& track : song.tracks) {
+            for (const auto& clip : track.clips) {
+                // Skip clips that don't include the playhead — Phase 2 builds
+                // only voices for clips audible right now. Future phases can
+                // pre-build a forward window, mirroring extend_for_playhead.
+                const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
+                const bool playhead_in_clip = (playhead >= clip.timeline_start_frame
+                                                && playhead < clip_end);
+                if (!playhead_in_clip) continue;
+
+                const auto* src = sources.get(clip.source_id);
+                if (!src || !src->is_loaded()) continue;
+
+                const auto decision = resolve_pitch_render_decision(
+                    track, clip, song, playhead);
+                if (!decision.needs_pitch || decision.effective_semitones == 0)
+                    continue;
+
+                VoiceSpec spec;
+                spec.key.clip_id      = clip.id;
+                spec.key.semitones    = decision.effective_semitones;
+                spec.source           = src;
+                // Source frame the audio thread will request first after the
+                // playhead lands here. We will prime up to this position.
+                spec.source_frame     = clip.source_start_frame
+                                        + (playhead - clip.timeline_start_frame);
+                out.push_back(spec);
+            }
+        }
+    }
+    return out;
+}
+
+#if LT_ENGINE_HAVE_BUNGEE
+// Push approximately `latency_frames` of source audio into the voice and
+// throw away the output. This burns through Bungee's analysis latency so
+// the audio thread's first render_block emits aligned audio immediately.
+// We can't query latency() until the first process() call (upstream issue
+// #23), so we use a conservative fixed estimate based on the documented
+// ~200 ms inherent latency.
+constexpr int kPrimeFramesAt48k = 9600;  // 200 ms at 48 kHz
+
+void prime_voice(BungeePitchVoice& voice,
+                  const DecodedSource& src,
+                  Frame source_frame,
+                  int sample_rate,
+                  int channel_count,
+                  int max_in_frames) {
+    const int prime_frames = std::max(0,
+        static_cast<int>(static_cast<long long>(kPrimeFramesAt48k) * sample_rate / 48000));
+    if (prime_frames <= 0) return;
+
+    // Read input from (source_frame - prime_frames) up to source_frame. If
+    // that range extends before the source start, we use silence for the
+    // pre-clip portion.
+    const Frame raw_begin = source_frame - prime_frames;
+    const Frame begin     = std::max<Frame>(0, raw_begin);
+    const int  lead_silence = static_cast<int>(begin - raw_begin);  // 0 if raw_begin >= 0
+    const int  real_frames  = prime_frames - lead_silence;
+
+    // Reusable planar scratch buffers. Sized to max_in_frames; we drive the
+    // voice in slices of that size so we never exceed its configured limit.
+    std::vector<std::vector<float>> in_planes(static_cast<std::size_t>(channel_count),
+        std::vector<float>(static_cast<std::size_t>(max_in_frames), 0.0f));
+    std::vector<std::vector<float>> out_planes(static_cast<std::size_t>(channel_count),
+        std::vector<float>(static_cast<std::size_t>(max_in_frames), 0.0f));
+    std::vector<const float*> in_ptrs(static_cast<std::size_t>(channel_count), nullptr);
+    std::vector<float*>       out_ptrs(static_cast<std::size_t>(channel_count), nullptr);
+    for (int c = 0; c < channel_count; ++c) {
+        in_ptrs[static_cast<std::size_t>(c)]  = in_planes[static_cast<std::size_t>(c)].data();
+        out_ptrs[static_cast<std::size_t>(c)] = out_planes[static_cast<std::size_t>(c)].data();
+    }
+
+    // Phase 1: feed lead_silence frames of zeros (no source data available).
+    int remaining = lead_silence;
+    while (remaining > 0) {
+        const int chunk = std::min(remaining, max_in_frames);
+        for (int c = 0; c < channel_count; ++c)
+            std::fill_n(in_planes[static_cast<std::size_t>(c)].begin(), chunk, 0.0f);
+        (void)voice.render_block(in_ptrs.data(), chunk, out_ptrs.data(), chunk,
+                                 /*pitch_scale*/ 1.0);  // pitch updated for real on first audio call
+        remaining -= chunk;
+    }
+
+    // Phase 2: feed real source from `begin` up to `source_frame`.
+    Frame cur = begin;
+    while (real_frames > 0 && cur < source_frame) {
+        const int chunk = std::min(max_in_frames, static_cast<int>(source_frame - cur));
+        // Build a planar pointer array that DecodedSource::read writes into.
+        float* read_into[8] = {nullptr};
+        for (int c = 0; c < std::min(channel_count, 8); ++c)
+            read_into[c] = in_planes[static_cast<std::size_t>(c)].data();
+        const int got = src.read(cur, chunk, read_into,
+                                  std::min(channel_count, src.channel_count()));
+        const int feed = std::max(0, got);
+        // If the source returned fewer frames than requested, pad the rest.
+        if (feed < chunk) {
+            for (int c = 0; c < channel_count; ++c)
+                std::fill(in_planes[static_cast<std::size_t>(c)].begin() + feed,
+                          in_planes[static_cast<std::size_t>(c)].begin() + chunk, 0.0f);
+        }
+        (void)voice.render_block(in_ptrs.data(), chunk, out_ptrs.data(), chunk, 1.0);
+        cur += chunk;
+    }
+}
+#endif // LT_ENGINE_HAVE_BUNGEE
+
+} // namespace
+
+// ─── Control-thread rebuilds ─────────────────────────────────────────────
+
+void BungeeVoiceManager::rebuild_for_session(const Session& session,
+                                              const SourceManager& sources,
+                                              Frame playhead) {
+    if (!is_available()) return;
+
+#if LT_ENGINE_HAVE_BUNGEE
+    const auto specs = enumerate_voices(session, sources, playhead);
+
+    auto current = std::atomic_load(&impl_->active);
+    auto next    = std::make_shared<VoiceMap>();
+    next->reserve(specs.size());
+
+    for (const auto& spec : specs) {
+        // Reuse the existing voice when its key is unchanged — saves the
+        // ~0.15 ms construct cost per voice and keeps Bungee's internal
+        // pipeline warm (no re-priming needed). When the effective pitch
+        // changed mid-clip, the key differs and we build a fresh voice.
+        auto it = current->find(spec.key);
+        if (it != current->end()) {
+            (*next)[spec.key] = it->second;
+            continue;
+        }
+
+        auto voice = std::make_shared<BungeePitchVoice>();
+        if (!voice->configure(impl_->sample_rate,
+                              impl_->channel_count,
+                              impl_->max_in_frames)) {
+            continue;
+        }
+        prime_voice(*voice,
+                    *spec.source, spec.source_frame,
+                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+        (*next)[spec.key] = std::move(voice);
+    }
+
+    std::atomic_store(&impl_->active,
+                      std::shared_ptr<const VoiceMap>(std::move(next)));
+#else
+    (void)session; (void)sources; (void)playhead;
+#endif
+}
+
+void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
+                                           const Session& session,
+                                           const SourceManager& sources) {
+    if (!is_available()) return;
+
+#if LT_ENGINE_HAVE_BUNGEE
+    // Per Bungee issue #16: the recommended reset model is destroy + rebuild.
+    // We unconditionally build fresh voices for every audible clip at the
+    // seek target, primed to that exact source frame.
+    const auto specs = enumerate_voices(session, sources, target_frame);
+
+    auto next = std::make_shared<VoiceMap>();
+    next->reserve(specs.size());
+
+    for (const auto& spec : specs) {
+        auto voice = std::make_shared<BungeePitchVoice>();
+        if (!voice->configure(impl_->sample_rate,
+                              impl_->channel_count,
+                              impl_->max_in_frames)) {
+            continue;
+        }
+        prime_voice(*voice,
+                    *spec.source, spec.source_frame,
+                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+        (*next)[spec.key] = std::move(voice);
+    }
+
+    std::atomic_store(&impl_->active,
+                      std::shared_ptr<const VoiceMap>(std::move(next)));
+#else
+    (void)target_frame; (void)session; (void)sources;
+#endif
+}
+
+void BungeeVoiceManager::clear() {
+    if (!impl_) return;
+    std::atomic_store(&impl_->active,
+                      std::shared_ptr<const VoiceMap>(std::make_shared<const VoiceMap>()));
+}
+
+// ─── Audio-thread lookup ─────────────────────────────────────────────────
+
+BungeePitchVoice* BungeeVoiceManager::voice_for(const Id& clip_id,
+                                                 Semitones semitones) noexcept {
+    if (!impl_) return nullptr;
+    auto snapshot = std::atomic_load(&impl_->active);
+    if (!snapshot) return nullptr;
+    auto it = snapshot->find(VoiceKey{clip_id, semitones});
+    if (it == snapshot->end()) return nullptr;
+    return it->second.get();
+}
+
+} // namespace lt

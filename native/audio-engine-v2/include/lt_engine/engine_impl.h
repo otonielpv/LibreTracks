@@ -20,6 +20,7 @@
 #include <lt_engine/render/mixer.h>
 #include <lt_engine/pitch/pitch_cache.h>
 #include <lt_engine/pitch/realtime_pitch_engine.h>
+#include <lt_engine/pitch/bungee_voice_manager.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -63,6 +64,7 @@ private:
     std::unique_ptr<SourcePreparationQueue> prep_queue_;
     std::unique_ptr<PitchCache>         pitch_cache_;
     mutable std::unique_ptr<RealtimePitchEngine> realtime_pitch_engine_;
+    std::unique_ptr<BungeeVoiceManager> bungee_voices_;
     std::unique_ptr<Mixer>              mixer_;
     std::shared_ptr<const Session>      session_;
     DeviceOpenRequest                   current_device_request_;

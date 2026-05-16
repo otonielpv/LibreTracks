@@ -1,5 +1,6 @@
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/render/pitch_resolution.h>
+#include <lt_engine/pitch/bungee_voice_manager.h>
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -25,6 +26,11 @@ void TrackRenderer::prepare(int max_block_frames) noexcept {
             scratch_r_.resize(static_cast<std::size_t>(max_block_frames), 0.0f);
             scratch_resize_count_.fetch_add(1, std::memory_order_relaxed);
         }
+        // Bungee planar input scratch, sized to match the output scratch.
+        if (static_cast<int>(bungee_in_l_.size()) < max_block_frames)
+            bungee_in_l_.resize(static_cast<std::size_t>(max_block_frames), 0.0f);
+        if (static_cast<int>(bungee_in_r_.size()) < max_block_frames)
+            bungee_in_r_.resize(static_cast<std::size_t>(max_block_frames), 0.0f);
         scratch_capacity_frames_ = std::min(static_cast<int>(scratch_l_.size()),
                                             static_cast<int>(scratch_r_.size()));
         scratch_[0] = scratch_l_.data();
@@ -85,7 +91,7 @@ void TrackRenderer::render(const Track&         track,
                             Semitones            effective_semitones,
                             const Song*          active_song) noexcept {
     render(track, timeline_frame, block_frames, out, num_out_channels, sources,
-           pitch_cache, nullptr, engine_sample_rate, effective_semitones, active_song);
+           pitch_cache, nullptr, nullptr, engine_sample_rate, effective_semitones, active_song);
 }
 
 void TrackRenderer::render(const Track&         track,
@@ -96,6 +102,22 @@ void TrackRenderer::render(const Track&         track,
                             const SourceManager& sources,
                             PitchCache*          pitch_cache,
                             RealtimePitchEngine* pitch_engine,
+                            int                  engine_sample_rate,
+                            Semitones            effective_semitones,
+                            const Song*          active_song) noexcept {
+    render(track, timeline_frame, block_frames, out, num_out_channels, sources,
+           pitch_cache, pitch_engine, nullptr, engine_sample_rate, effective_semitones, active_song);
+}
+
+void TrackRenderer::render(const Track&         track,
+                            Frame                timeline_frame,
+                            int                  block_frames,
+                            float**              out,
+                            int                  num_out_channels,
+                            const SourceManager& sources,
+                            PitchCache*          pitch_cache,
+                            RealtimePitchEngine* pitch_engine,
+                            BungeeVoiceManager*  bungee_voices,
                             int                  engine_sample_rate,
                             Semitones            effective_semitones,
                             const Song*          active_song) noexcept {
@@ -116,7 +138,7 @@ void TrackRenderer::render(const Track&         track,
         }
         render_clip(clip, timeline_frame, block_frames,
                     track.gain, out, num_out_channels,
-                    sources, pitch_cache, pitch_engine, engine_sample_rate,
+                    sources, pitch_cache, pitch_engine, bungee_voices, engine_sample_rate,
                     track.id, clip_semitones);
     }
 }
@@ -130,6 +152,7 @@ void TrackRenderer::render_clip(const Clip&          clip,
                                  const SourceManager& sources,
                                  PitchCache*          pitch_cache,
                                  RealtimePitchEngine* pitch_engine,
+                                 BungeeVoiceManager*  bungee_voices,
                                  int                  engine_sample_rate,
                                  const Id&            track_id,
                                  Semitones            effective_semitones) noexcept {
@@ -167,7 +190,44 @@ void TrackRenderer::render_clip(const Clip&          clip,
         // Instead, count the miss and return silence for this block.
         // (The repair path via RealtimePitchEngine will rebuild the stream.)
         int rendered = 0;
-        if (pitch_engine) {
+
+        // Bungee-first path: when a primed Bungee voice exists for this
+        // (clip_id, effective_semitones), use it. Bungee is ~25x cheaper per
+        // voice than RubberBand on this hardware and supports gapless live
+        // pitch changes. Falls through to the legacy RubberBand path when no
+        // voice is found (e.g. the control thread hasn't built one yet).
+        BungeePitchVoice* bv = nullptr;
+        if (bungee_voices)
+            bv = bungee_voices->voice_for(clip.id, effective_semitones);
+        if (bv) {
+            // Fetch planar source audio into the Bungee input scratch.
+            // The render scratch (scratch_l_/scratch_r_) is reserved for output.
+            const int max_in = std::min({frames_to_read,
+                                         static_cast<int>(bungee_in_l_.size()),
+                                         static_cast<int>(bungee_in_r_.size())});
+            float* read_into[2] = {bungee_in_l_.data(), bungee_in_r_.data()};
+            const int got = src->read(source_frame, max_in, read_into,
+                                       std::min(2, src->channel_count()));
+            if (got < max_in) {
+                if (got > 0 && src->channel_count() == 1) {
+                    // Mono source: mirror L into R so Bungee gets stereo.
+                    std::copy_n(bungee_in_l_.begin(), got, bungee_in_r_.begin());
+                }
+                // Pad any short read with zeros so we always feed `max_in` frames.
+                if (got < max_in) {
+                    std::fill(bungee_in_l_.begin() + std::max(0, got),
+                              bungee_in_l_.begin() + max_in, 0.0f);
+                    std::fill(bungee_in_r_.begin() + std::max(0, got),
+                              bungee_in_r_.begin() + max_in, 0.0f);
+                }
+            } else if (src->channel_count() == 1) {
+                std::copy_n(bungee_in_l_.begin(), max_in, bungee_in_r_.begin());
+            }
+            const float* in_ptrs[2] = {bungee_in_l_.data(), bungee_in_r_.data()};
+            const double pitch_scale = std::pow(2.0,
+                static_cast<double>(effective_semitones) / 12.0);
+            rendered = bv->render_block(in_ptrs, max_in, scratch_, max_in, pitch_scale);
+        } else if (pitch_engine) {
             rendered = pitch_engine->render_pitched_clip(
                 clip, track_id, *src, source_frame, timeline_frame + block_offset,
                 frames_to_read, static_cast<double>(effective_semitones), scratch_, 2);

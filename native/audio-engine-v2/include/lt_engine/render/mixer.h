@@ -61,6 +61,7 @@ public:
     void set_session(std::shared_ptr<const Session> session, bool preserve_realtime_state = true);
     void set_pitch_cache(PitchCache* pitch_cache) noexcept;
     void set_pitch_engine(RealtimePitchEngine* pitch_engine) noexcept;
+    void set_bungee_voice_manager(class BungeeVoiceManager* mgr) noexcept;
     void clear_session();
     void prepare_render_resources(int max_block_frames) noexcept;
     void trigger_crossfade() noexcept;
@@ -100,6 +101,7 @@ private:
     JumpScheduler*       scheduler_;
     PitchCache*          pitch_cache_ = nullptr;
     RealtimePitchEngine* pitch_engine_ = nullptr;
+    class BungeeVoiceManager* bungee_voices_ = nullptr;
 
     // Per-track renderer pool (one per track, up to kMaxTracks).
     // Allocated once on construction, never in render().

@@ -1,6 +1,7 @@
 #include <lt_engine/render/mixer.h>
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/pitch_resolution.h>
+#include <lt_engine/pitch/bungee_voice_manager.h>
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -383,7 +384,8 @@ void Mixer::render(float** output_channels,
 
                 renderers_[ti].render(patched, timeline_frame, num_frames,
                                        mix_, 2, *sources_, pitch_cache_,
-                                       pitch_engine_, clock_->sample_rate(), 0, &song);
+                                       pitch_engine_, bungee_voices_,
+                                       clock_->sample_rate(), 0, &song);
                 ++rendered_this_block;
 
                 float track_peak_l = 0.f, track_peak_r = 0.f;
@@ -524,6 +526,10 @@ void Mixer::set_pitch_cache(PitchCache* pitch_cache) noexcept {
 
 void Mixer::set_pitch_engine(RealtimePitchEngine* pitch_engine) noexcept {
     pitch_engine_ = pitch_engine;
+}
+
+void Mixer::set_bungee_voice_manager(BungeeVoiceManager* mgr) noexcept {
+    bungee_voices_ = mgr;
 }
 
 void Mixer::clear_session() {
