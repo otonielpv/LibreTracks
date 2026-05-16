@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -47,6 +48,14 @@ struct BungeeVoiceManager::Impl {
     // Published voice map. Audio thread reads via std::atomic_load; control
     // thread builds a new map and swaps via std::atomic_store.
     std::shared_ptr<const VoiceMap> active{std::make_shared<const VoiceMap>()};
+
+    // Diagnostic counters. All relaxed atomics — we only need to know "did
+    // the audio thread ever consume a Bungee voice?", not strict ordering.
+    std::atomic<std::uint64_t> voices_built_total{0};
+    std::atomic<std::uint64_t> rebuilds_for_session{0};
+    std::atomic<std::uint64_t> rebuilds_for_seek{0};
+    std::atomic<std::uint64_t> voice_lookups_hit{0};
+    std::atomic<std::uint64_t> voice_lookups_miss{0};
 };
 
 BungeeVoiceManager::BungeeVoiceManager()
@@ -220,12 +229,16 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
     if (!is_available()) return;
 
 #if LT_ENGINE_HAVE_BUNGEE
+    impl_->rebuilds_for_session.fetch_add(1, std::memory_order_relaxed);
+
     const auto specs = enumerate_voices(session, sources, playhead);
 
     auto current = std::atomic_load(&impl_->active);
     auto next    = std::make_shared<VoiceMap>();
     next->reserve(specs.size());
 
+    int reused = 0;
+    int built  = 0;
     for (const auto& spec : specs) {
         // Reuse the existing voice when its key is unchanged — saves the
         // ~0.15 ms construct cost per voice and keeps Bungee's internal
@@ -234,6 +247,7 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
         auto it = current->find(spec.key);
         if (it != current->end()) {
             (*next)[spec.key] = it->second;
+            ++reused;
             continue;
         }
 
@@ -247,10 +261,17 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
                     *spec.source, spec.source_frame,
                     impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
         (*next)[spec.key] = std::move(voice);
+        ++built;
+        impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
     }
 
+    const int active_count = static_cast<int>(next->size());
     std::atomic_store(&impl_->active,
                       std::shared_ptr<const VoiceMap>(std::move(next)));
+    std::fprintf(stdout,
+        "[BUNGEE] rebuild_for_session playhead=%lld active=%d built=%d reused=%d\n",
+        static_cast<long long>(playhead), active_count, built, reused);
+    std::fflush(stdout);
 #else
     (void)session; (void)sources; (void)playhead;
 #endif
@@ -262,6 +283,8 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
     if (!is_available()) return;
 
 #if LT_ENGINE_HAVE_BUNGEE
+    impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
+
     // Per Bungee issue #16: the recommended reset model is destroy + rebuild.
     // We unconditionally build fresh voices for every audible clip at the
     // seek target, primed to that exact source frame.
@@ -270,6 +293,7 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
     auto next = std::make_shared<VoiceMap>();
     next->reserve(specs.size());
 
+    int built = 0;
     for (const auto& spec : specs) {
         auto voice = std::make_shared<BungeePitchVoice>();
         if (!voice->configure(impl_->sample_rate,
@@ -281,10 +305,17 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
                     *spec.source, spec.source_frame,
                     impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
         (*next)[spec.key] = std::move(voice);
+        ++built;
+        impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
     }
 
+    const int active_count = static_cast<int>(next->size());
     std::atomic_store(&impl_->active,
                       std::shared_ptr<const VoiceMap>(std::move(next)));
+    std::fprintf(stdout,
+        "[BUNGEE] rebuild_for_seek target=%lld active=%d built=%d\n",
+        static_cast<long long>(target_frame), active_count, built);
+    std::fflush(stdout);
 #else
     (void)target_frame; (void)session; (void)sources;
 #endif
@@ -302,10 +333,30 @@ BungeePitchVoice* BungeeVoiceManager::voice_for(const Id& clip_id,
                                                  Semitones semitones) noexcept {
     if (!impl_) return nullptr;
     auto snapshot = std::atomic_load(&impl_->active);
-    if (!snapshot) return nullptr;
+    if (!snapshot) {
+        impl_->voice_lookups_miss.fetch_add(1, std::memory_order_relaxed);
+        return nullptr;
+    }
     auto it = snapshot->find(VoiceKey{clip_id, semitones});
-    if (it == snapshot->end()) return nullptr;
+    if (it == snapshot->end()) {
+        impl_->voice_lookups_miss.fetch_add(1, std::memory_order_relaxed);
+        return nullptr;
+    }
+    impl_->voice_lookups_hit.fetch_add(1, std::memory_order_relaxed);
     return it->second.get();
+}
+
+BungeeVoiceManagerDiagnostics BungeeVoiceManager::diagnostics() const noexcept {
+    BungeeVoiceManagerDiagnostics d;
+    if (!impl_) return d;
+    auto snapshot = std::atomic_load(&impl_->active);
+    d.active_voice_count   = snapshot ? static_cast<int>(snapshot->size()) : 0;
+    d.voices_built_total   = impl_->voices_built_total.load(std::memory_order_relaxed);
+    d.rebuilds_for_session = impl_->rebuilds_for_session.load(std::memory_order_relaxed);
+    d.rebuilds_for_seek    = impl_->rebuilds_for_seek.load(std::memory_order_relaxed);
+    d.voice_lookups_hit    = impl_->voice_lookups_hit.load(std::memory_order_relaxed);
+    d.voice_lookups_miss   = impl_->voice_lookups_miss.load(std::memory_order_relaxed);
+    return d;
 }
 
 } // namespace lt

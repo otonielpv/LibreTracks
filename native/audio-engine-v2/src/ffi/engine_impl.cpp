@@ -571,6 +571,23 @@ std::string EngineImpl::get_snapshot() const {
                 snap.pitch.pitch_muted_or_bypassed_reason.empty()
                     ? "(none)"
                     : snap.pitch.pitch_muted_or_bypassed_reason.c_str());
+
+            // Bungee voice-manager diagnostics — tells us whether the audio
+            // thread is actually consuming Bungee voices or falling back to
+            // RubberBand. hit > 0 means Bungee is in the audio path.
+            if (bungee_voices_) {
+                const auto bd = bungee_voices_->diagnostics();
+                debug_log("[LT_PITCH_DEBUG] bungee available=%s active_voices=%d "
+                    "built=%llu rebuilds_session=%llu rebuilds_seek=%llu "
+                    "lookups_hit=%llu lookups_miss=%llu\n",
+                    bungee_voices_->is_available() ? "true" : "false",
+                    bd.active_voice_count,
+                    static_cast<unsigned long long>(bd.voices_built_total),
+                    static_cast<unsigned long long>(bd.rebuilds_for_session),
+                    static_cast<unsigned long long>(bd.rebuilds_for_seek),
+                    static_cast<unsigned long long>(bd.voice_lookups_hit),
+                    static_cast<unsigned long long>(bd.voice_lookups_miss));
+            }
         }
     }
 

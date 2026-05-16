@@ -16,12 +16,25 @@
 #include <lt_engine/pitch/bungee_pitch_voice.h>
 #include <lt_engine/session/session.h>
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
 namespace lt {
 
 class SourceManager;
+
+// Snapshot of voice-manager counters, safe to read from any thread.
+// Useful for confirming whether the audio thread is actually consuming
+// Bungee voices or silently falling back to the legacy pitch engine.
+struct BungeeVoiceManagerDiagnostics {
+    int           active_voice_count   = 0;
+    std::uint64_t voices_built_total   = 0;   // construct + prime calls
+    std::uint64_t rebuilds_for_session = 0;
+    std::uint64_t rebuilds_for_seek    = 0;
+    std::uint64_t voice_lookups_hit    = 0;   // voice_for() returned non-null
+    std::uint64_t voice_lookups_miss   = 0;   // voice_for() returned nullptr
+};
 
 class BungeeVoiceManager {
 public:
@@ -69,6 +82,9 @@ public:
     //
     // Audio-thread safe: snapshots the current voice map via atomic_load.
     BungeePitchVoice* voice_for(const Id& clip_id, Semitones semitones) noexcept;
+
+    // ── Diagnostics (any thread) ─────────────────────────────────────────
+    BungeeVoiceManagerDiagnostics diagnostics() const noexcept;
 
 private:
     struct Impl;
