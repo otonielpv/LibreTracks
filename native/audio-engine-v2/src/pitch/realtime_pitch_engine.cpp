@@ -52,13 +52,18 @@ RealtimePitchEngine::build_stream_set_for_target(Frame target_frame,
                                                  const Session& session,
                                                  const SourceManager& sources,
                                                  bool prime_target_streams,
-                                                 int max_block_size) {
+                                                 int max_block_size,
+                                                 Frame lookahead_override) {
     auto set = std::make_shared<ActivePitchStreamSet>();
     set->streams.reserve(16);
 
     // Lookahead window: cover enough time that the audio thread stays fed even if
-    // the control thread is delayed. 2 seconds is safe without building far-future voices.
-    const Frame lookahead = static_cast<Frame>(sample_rate_) * 2;
+    // the control thread is delayed. 2 seconds is the default safe window. Seek and
+    // transpose-change rebuilds pass a smaller override (~500ms) so they finish faster;
+    // extend_for_playhead fills in the rest of the lookahead as playback advances.
+    const Frame lookahead = lookahead_override > 0
+        ? lookahead_override
+        : static_cast<Frame>(sample_rate_) * 2;
     const Frame window_start = std::max<Frame>(0, target_frame);
     const Frame window_end   = window_start + lookahead;
 
@@ -243,9 +248,14 @@ void RealtimePitchEngine::prepare_for_transport_discontinuity(Frame target_frame
         c.store(0, std::memory_order_relaxed);
 
     const auto t_rebuild_start = std::chrono::steady_clock::now();
-    // Build a new stream set primed at target_frame.
+    // Build a new stream set primed at target_frame. Use a SHORT lookahead (~500ms)
+    // so the rebuild finishes quickly; extend_for_playhead will add the rest of the
+    // 2-second lookahead as playback advances. This trades a longer total warm-up for
+    // a much shorter blocking rebuild — critical for live seeks/transpose changes.
+    const Frame discontinuity_lookahead = static_cast<Frame>(sample_rate_) / 2;
     auto new_set = build_stream_set_for_target(target_frame, session, sources,
-                                               /*prime=*/true, max_block_size_hint_);
+                                               /*prime=*/true, max_block_size_hint_,
+                                               discontinuity_lookahead);
 
     const auto t_rebuild_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - t_rebuild_start).count();

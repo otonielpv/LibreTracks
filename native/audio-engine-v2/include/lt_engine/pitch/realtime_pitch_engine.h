@@ -110,7 +110,8 @@ private:
                                                                       const Session& session,
                                                                       const SourceManager& sources,
                                                                       bool prime_target_streams,
-                                                                      int max_block_size = 512);
+                                                                      int max_block_size = 512,
+                                                                      Frame lookahead_override = 0);
 
     int sample_rate_ = 48000;
     int max_block_size_hint_ = 512;
