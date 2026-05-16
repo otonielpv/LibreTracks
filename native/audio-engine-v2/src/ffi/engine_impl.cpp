@@ -221,6 +221,13 @@ Result<void> EngineImpl::shutdown() {
     if (state_ != State::Initialized)
         return Result<void>::ok();  // idempotent
 
+    // Drain any in-flight async pitch rebuild before destroying engine/sources —
+    // the lambda holds raw pointers to them.
+    {
+        std::lock_guard lk(pending_pitch_rebuild_mutex_);
+        if (pending_pitch_rebuild_.valid()) pending_pitch_rebuild_.wait();
+    }
+
     device_manager_->close_device();
     if (mixer_) mixer_->clear_session();
     if (prep_queue_) { prep_queue_->cancel_all(); prep_queue_.reset(); }
@@ -802,9 +809,22 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                      forward - immediate, 1, "seek_forward_prebuffer");
             }
             if (mixer_) mixer_->trigger_crossfade();
-            if (realtime_pitch_engine_ && session_)
-                realtime_pitch_engine_->prepare_for_transport_discontinuity(
-                    clock_->position().frame, "seek_absolute", *session_, *source_manager_);
+            if (realtime_pitch_engine_ && session_) {
+                // Launch the rebuild off the command thread so the UI doesn't freeze
+                // for ~700ms while RubberBand primes. Serialize via the pending future
+                // so two seeks in quick succession don't race.
+                const Frame seek_frame = clock_->position().frame;
+                auto* engine = realtime_pitch_engine_.get();
+                auto session_snapshot = session_;
+                auto* sources = source_manager_.get();
+                std::lock_guard lk(pending_pitch_rebuild_mutex_);
+                if (pending_pitch_rebuild_.valid()) pending_pitch_rebuild_.wait();
+                pending_pitch_rebuild_ = std::async(std::launch::async,
+                    [engine, session_snapshot, sources, seek_frame]() {
+                        engine->prepare_for_transport_discontinuity(
+                            seek_frame, "seek_absolute", *session_snapshot, *sources);
+                    });
+            }
             push_event(EvSeekExecuted{ from, c.frame });
             return Result<void>::ok();
         }
@@ -822,9 +842,20 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                      forward - immediate, 1, "seek_forward_prebuffer");
             }
             if (mixer_) mixer_->trigger_crossfade();
-            if (realtime_pitch_engine_ && session_)
-                realtime_pitch_engine_->prepare_for_transport_discontinuity(
-                    clock_->position().frame, "seek_relative", *session_, *source_manager_);
+            if (realtime_pitch_engine_ && session_) {
+                // Async rebuild — see CmdSeekAbsolute for rationale.
+                const Frame seek_frame = clock_->position().frame;
+                auto* engine = realtime_pitch_engine_.get();
+                auto session_snapshot = session_;
+                auto* sources = source_manager_.get();
+                std::lock_guard lk(pending_pitch_rebuild_mutex_);
+                if (pending_pitch_rebuild_.valid()) pending_pitch_rebuild_.wait();
+                pending_pitch_rebuild_ = std::async(std::launch::async,
+                    [engine, session_snapshot, sources, seek_frame]() {
+                        engine->prepare_for_transport_discontinuity(
+                            seek_frame, "seek_relative", *session_snapshot, *sources);
+                    });
+            }
             push_event(EvSeekExecuted{ from, to });
             return Result<void>::ok();
         }
@@ -1004,10 +1035,18 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 // Prime at current playhead so published streams are aligned.
+                // Async rebuild — see CmdSeekAbsolute for rationale.
                 if (realtime_pitch_engine_) {
                     const Frame playhead = clock_->position().frame;
-                    realtime_pitch_engine_->prepare_for_transport_discontinuity(
-                        playhead, "set_song_transpose", *next_session, *source_manager_);
+                    auto* engine = realtime_pitch_engine_.get();
+                    auto* sources = source_manager_.get();
+                    std::lock_guard lk(pending_pitch_rebuild_mutex_);
+                    if (pending_pitch_rebuild_.valid()) pending_pitch_rebuild_.wait();
+                    pending_pitch_rebuild_ = std::async(std::launch::async,
+                        [engine, next_session, sources, playhead]() {
+                            engine->prepare_for_transport_discontinuity(
+                                playhead, "set_song_transpose", *next_session, *sources);
+                        });
                 }
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
@@ -1026,10 +1065,18 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 // Prime at current playhead so published streams are aligned.
+                // Async rebuild — see CmdSeekAbsolute for rationale.
                 if (realtime_pitch_engine_) {
                     const Frame playhead = clock_->position().frame;
-                    realtime_pitch_engine_->prepare_for_transport_discontinuity(
-                        playhead, "set_region_transpose", *next_session, *source_manager_);
+                    auto* engine = realtime_pitch_engine_.get();
+                    auto* sources = source_manager_.get();
+                    std::lock_guard lk(pending_pitch_rebuild_mutex_);
+                    if (pending_pitch_rebuild_.valid()) pending_pitch_rebuild_.wait();
+                    pending_pitch_rebuild_ = std::async(std::launch::async,
+                        [engine, next_session, sources, playhead]() {
+                            engine->prepare_for_transport_discontinuity(
+                                playhead, "set_region_transpose", *next_session, *sources);
+                        });
                 }
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);

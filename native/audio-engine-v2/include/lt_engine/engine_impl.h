@@ -26,6 +26,7 @@
 #include <memory>
 #include <atomic>
 #include <chrono>
+#include <future>
 #include <mutex>
 #include <string>
 
@@ -72,6 +73,12 @@ private:
     mutable std::atomic<Frame>          last_pitch_prepare_playhead_{-1};
     mutable std::mutex                  pitch_prepare_mutex_;
     mutable std::chrono::steady_clock::time_point last_pitch_prepare_time_{};
+
+    // Pending pitch rebuild launched off the command thread by seek/transpose
+    // handlers so the UI doesn't freeze for the ~700ms RubberBand priming cost.
+    // Serialized: each new rebuild waits for the previous future before launching.
+    std::mutex                          pending_pitch_rebuild_mutex_;
+    std::future<void>                   pending_pitch_rebuild_;
 
     // Cached snapshot string (rebuilt on snapshot request).
     mutable std::string snapshot_cache_;
