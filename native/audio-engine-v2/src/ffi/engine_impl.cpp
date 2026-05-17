@@ -593,6 +593,19 @@ std::string EngineImpl::get_snapshot() const {
         }
     }
 
+    // Phase 8: prearmed-jump diagnostics. Cheap (mutex-protected reads).
+    if (prearmed_jumps_) {
+        const auto pd = prearmed_jumps_->diagnostics();
+        snap.prearmed_jumps.ready_count          = pd.ready_count;
+        snap.prearmed_jumps.prepared_total       = pd.prepared_total;
+        snap.prearmed_jumps.prepare_failed_total = pd.prepare_failed_total;
+        snap.prearmed_jumps.take_hit_total       = pd.take_hit_total;
+        snap.prearmed_jumps.take_miss_total      = pd.take_miss_total;
+        snap.prearmed_jumps.stale_discard_total  = pd.stale_discard_total;
+        snap.prearmed_jumps.eviction_total       = pd.eviction_total;
+        snap.prearmed_jumps.max_prepared_targets = pd.max_prepared_targets;
+    }
+
     return snapshot_to_json(snap);
 }
 

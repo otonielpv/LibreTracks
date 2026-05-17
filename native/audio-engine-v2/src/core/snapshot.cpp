@@ -94,6 +94,18 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
     }
     j["source_states"] = sources;
 
+    // Phase 8: prearmed-jumps diagnostics for the UI.
+    j["prearmed_jumps"] = {
+        {"ready_count",          snap.prearmed_jumps.ready_count},
+        {"prepared_total",       snap.prearmed_jumps.prepared_total},
+        {"prepare_failed_total", snap.prearmed_jumps.prepare_failed_total},
+        {"take_hit_total",       snap.prearmed_jumps.take_hit_total},
+        {"take_miss_total",      snap.prearmed_jumps.take_miss_total},
+        {"stale_discard_total",  snap.prearmed_jumps.stale_discard_total},
+        {"eviction_total",       snap.prearmed_jumps.eviction_total},
+        {"max_prepared_targets", snap.prearmed_jumps.max_prepared_targets},
+    };
+
     j["metronome"] = {
         {"enabled", snap.metronome.enabled},
         {"volume", snap.metronome.volume},

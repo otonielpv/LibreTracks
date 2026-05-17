@@ -223,6 +223,19 @@ struct EngineSnapshot {
 
     // Pitch processing diagnostics
     PitchSnapshot pitch;
+
+    // Phase 8: prearmed-jump manager diagnostics. All counters monotonic
+    // since engine init; ready_count is the live cache size.
+    struct PrearmedJumps {
+        int           ready_count          = 0;
+        std::uint64_t prepared_total       = 0;
+        std::uint64_t prepare_failed_total = 0;
+        std::uint64_t take_hit_total       = 0;
+        std::uint64_t take_miss_total      = 0;
+        std::uint64_t stale_discard_total  = 0;
+        std::uint64_t eviction_total       = 0;
+        int           max_prepared_targets = 0;
+    } prearmed_jumps;
 };
 
 std::string snapshot_to_json(const EngineSnapshot& snap);
