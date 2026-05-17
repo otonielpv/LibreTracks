@@ -59,7 +59,20 @@ bool BungeePitchVoice::configure(int sample_rate,
 
     try {
         Bungee::SampleRates rates{sample_rate, sample_rate};
-        impl_->stretcher = std::make_unique<Impl::Stretcher>(rates, channel_count);
+        // log2SynthesisHopAdjust = -1 halves Bungee's grain size, which halves
+        // the structural latency baked into Bungee::Stream (the wrapper
+        // positions every grain maxInputFrameCount/2 frames behind the input
+        // cursor). At 48 kHz this drops latency from ~170 ms to ~85 ms.
+        // Per the maintainer's docs (Bungee.h::Stretcher ctor):
+        //   "Non-zero values are likely to result in degraded audio quality"
+        //   "-1 doubles granular frequency (lower latency, may help weak
+        //    transients), +1 halves granular frequency (may benefit dense
+        //    tones). Values other than -1, 0, and +1 are unsupported."
+        // We're trading the warned quality cost against the live-performance
+        // benefit of a shorter post-seek silence. If the audio quality
+        // degradation is unacceptable on real material, revert this to 0.
+        impl_->stretcher = std::make_unique<Impl::Stretcher>(
+            rates, channel_count, /*log2SynthesisHopAdjust=*/-1);
         // Stream allocates an internal overlap buffer sized to:
         //   stretcher.maxInputFrameCount() + max_input_frames_per_block
         impl_->stream = std::make_unique<Impl::Stream>(
