@@ -232,6 +232,30 @@ if(LT_ENGINE_BUILD_BENCHES AND LT_ENGINE_USE_RUBBERBAND)
                 COMMENT "Copying RubberBand DLLs for bench")
         endif()
     endif()
+
+    # Phase 10 prearm bench: measures end-to-end seek latency for prearmed
+    # vs reactive paths. Links lt_audio_engine_v2 directly.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_prearm_vs_reactive.cpp")
+        add_executable(bench_prearm_vs_reactive bench/bench_prearm_vs_reactive.cpp)
+        target_compile_features(bench_prearm_vs_reactive PRIVATE cxx_std_20)
+        target_link_libraries(bench_prearm_vs_reactive PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_prearm_vs_reactive PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        if(WIN32 AND DEFINED LT_RUBBERBAND_RUNTIME_DIR)
+            add_custom_command(TARGET bench_prearm_vs_reactive POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${LT_RUBBERBAND_RUNTIME_DIR}"
+                    "$<TARGET_FILE_DIR:bench_prearm_vs_reactive>"
+                COMMENT "Copying RubberBand DLLs for prearm bench")
+        endif()
+        if(WIN32 AND DEFINED _lt_bungee_dll AND EXISTS "${_lt_bungee_dll}")
+            add_custom_command(TARGET bench_prearm_vs_reactive POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_lt_bungee_dll}"
+                    "$<TARGET_FILE_DIR:bench_prearm_vs_reactive>"
+                COMMENT "Copying Bungee DLL for prearm bench")
+        endif()
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
