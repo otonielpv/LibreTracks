@@ -835,7 +835,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // ≤5 markers and ≤9 tracks → ~3.6 s worst case, no UI freeze
             // because LoadSession isn't called during playback.
             if (prearmed_jumps_) {
-                const auto rev = session_revision_.fetch_add(1,
+                const auto rev = prearm_revision_.fetch_add(1,
                     std::memory_order_relaxed) + 1;
                 prearmed_jumps_->prepare_all_markers(
                     *next_session, *source_manager_, rev);
@@ -1027,7 +1027,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     key.block_size       = device_manager_
                         ? device_manager_->actual_buffer_size()
                         : 1024;
-                    key.session_revision = session_revision_.load(
+                    key.session_revision = prearm_revision_.load(
                         std::memory_order_relaxed);
 
                     if (auto prepared = prearmed_jumps_->take_ready(key)) {
@@ -1079,7 +1079,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     key.sample_rate      = clock_->sample_rate();
                     key.block_size       = device_manager_
                         ? device_manager_->actual_buffer_size() : 1024;
-                    key.session_revision = session_revision_.load(
+                    key.session_revision = prearm_revision_.load(
                         std::memory_order_relaxed);
                     if (auto prepared = prearmed_jumps_->take_ready(key)) {
                         bungee_voices_->swap_in_prepared_voices(
@@ -1122,7 +1122,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     key.sample_rate      = clock_->sample_rate();
                     key.block_size       = device_manager_
                         ? device_manager_->actual_buffer_size() : 1024;
-                    key.session_revision = session_revision_.load(
+                    key.session_revision = prearm_revision_.load(
                         std::memory_order_relaxed);
                     if (auto prepared = prearmed_jumps_->take_ready(key)) {
                         bungee_voices_->swap_in_prepared_voices(
@@ -1233,6 +1233,14 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 }
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
+                // Prearm: pitch decision changed → re-prearm all targets
+                // under a new revision (auto-invalidates existing cache).
+                if (prearmed_jumps_) {
+                    const auto rev = prearm_revision_.fetch_add(1,
+                        std::memory_order_relaxed) + 1;
+                    prearmed_jumps_->prepare_all_targets(
+                        *next_session, *source_manager_, rev);
+                }
             }
             return Result<void>::ok();
         }
@@ -1269,6 +1277,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 }
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
+                // Prearm: song transpose changed → re-prearm all targets.
+                if (prearmed_jumps_) {
+                    const auto rev = prearm_revision_.fetch_add(1,
+                        std::memory_order_relaxed) + 1;
+                    prearmed_jumps_->prepare_all_targets(
+                        *next_session, *source_manager_, rev);
+                }
             }
             return Result<void>::ok();
         }
@@ -1305,6 +1320,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 }
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
+                // Prearm: region transpose changed → re-prearm all targets.
+                if (prearmed_jumps_) {
+                    const auto rev = prearm_revision_.fetch_add(1,
+                        std::memory_order_relaxed) + 1;
+                    prearmed_jumps_->prepare_all_targets(
+                        *next_session, *source_manager_, rev);
+                }
             }
             return Result<void>::ok();
         }
@@ -1328,6 +1350,22 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (realtime_pitch_engine_ && device_manager_->actual_buffer_size() > 0)
                 realtime_pitch_engine_->set_max_block_size_hint(device_manager_->actual_buffer_size());
             if (was_playing && clock_) clock_->play();
+            // Prearm: device change can alter the negotiated sample rate /
+            // buffer size, which changes prepared voice dimensions. Clear
+            // the cache and reconfigure with new params; the next prearm
+            // pass will rebuild voices with matching dimensions. We do NOT
+            // automatically re-prearm here — that happens on the next
+            // LoadSession or transpose change. Audio stays glitch-free
+            // because jumps will fall back to reactive rebuild_for_seek.
+            if (prearmed_jumps_) {
+                prearmed_jumps_->clear();
+                const int sr = device_manager_->actual_sample_rate() > 0
+                    ? device_manager_->actual_sample_rate() : 48000;
+                const int bs = device_manager_->actual_buffer_size() > 0
+                    ? device_manager_->actual_buffer_size() : 1024;
+                prearmed_jumps_->prepare(sr, /*channels=*/2, bs);
+                prearm_revision_.fetch_add(1, std::memory_order_relaxed);
+            }
             push_event(EvDeviceChanged{
                 device_manager_->actual_device_name(),
                 device_manager_->actual_device_name(),
@@ -1350,6 +1388,16 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     clock_->set_sample_rate(device_manager_->actual_sample_rate());
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
+                // Prearm: sample rate changed → voice dimensions invalid.
+                if (prearmed_jumps_) {
+                    prearmed_jumps_->clear();
+                    const int sr = device_manager_->actual_sample_rate() > 0
+                        ? device_manager_->actual_sample_rate() : 48000;
+                    const int bs = device_manager_->actual_buffer_size() > 0
+                        ? device_manager_->actual_buffer_size() : 1024;
+                    prearmed_jumps_->prepare(sr, /*channels=*/2, bs);
+                    prearm_revision_.fetch_add(1, std::memory_order_relaxed);
+                }
             }
             return r;
         }
@@ -1369,6 +1417,16 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     realtime_pitch_engine_->set_max_block_size_hint(device_manager_->actual_buffer_size());
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
+                // Prearm: buffer size changed → voice max_in_frames invalid.
+                if (prearmed_jumps_) {
+                    prearmed_jumps_->clear();
+                    const int sr = device_manager_->actual_sample_rate() > 0
+                        ? device_manager_->actual_sample_rate() : 48000;
+                    const int bs = device_manager_->actual_buffer_size() > 0
+                        ? device_manager_->actual_buffer_size() : 1024;
+                    prearmed_jumps_->prepare(sr, /*channels=*/2, bs);
+                    prearm_revision_.fetch_add(1, std::memory_order_relaxed);
+                }
             }
             return r;
         }

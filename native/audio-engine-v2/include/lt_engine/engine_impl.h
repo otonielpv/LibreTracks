@@ -67,10 +67,20 @@ private:
     mutable std::unique_ptr<RealtimePitchEngine> realtime_pitch_engine_;
     std::unique_ptr<BungeeVoiceManager> bungee_voices_;
     std::unique_ptr<PrearmedJumpManager> prearmed_jumps_;
-    // Bumped on any structural session change so PrearmedJumpManager
-    // invalidates its cache. Phase 6 will introduce finer-grained revisions
-    // (pitch_revision, source_revision, device_revision) per the spec.
-    std::atomic<std::uint64_t>          session_revision_{0};
+    // Bumped on ANY change that could invalidate a prearmed voice set:
+    //   - LoadSession (structural session change)
+    //   - SetSongTranspose / SetRegionTranspose / SetTrackTransposeEnabled
+    //     (pitch changes — voices need rebuild with new effective semitones)
+    //   - SetOutputDevice / SetSampleRate / SetBufferSize
+    //     (voice dimensions change — also force clear()).
+    //
+    // Phase 6 implementation: single combined revision counter. The spec
+    // proposes 5 separate revisions (session/pitch/source/device/audio_graph);
+    // we use one for simplicity and accept the over-invalidation tradeoff —
+    // e.g. a song transpose change invalidates ALL prepared sets, not just
+    // those for the changed song. Acceptable since prearming is async and
+    // re-population is cheap.
+    std::atomic<std::uint64_t>          prearm_revision_{0};
     std::unique_ptr<Mixer>              mixer_;
     std::shared_ptr<const Session>      session_;
     DeviceOpenRequest                   current_device_request_;

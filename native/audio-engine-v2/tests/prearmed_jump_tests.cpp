@@ -372,6 +372,89 @@ TEST_CASE("PrearmedJumpManager prefeed: first post-jump block emits audio") {
     CHECK(rms > 0.05f);
 }
 
+// Phase 6: revision bump invalidates previously prepared sets.
+//
+// Models the engine_impl flow: load session → prearm at revision 1 → user
+// changes a transpose → engine bumps prearm_revision_ and re-prearms at
+// revision 2. take_ready(key with revision 1) must miss; take_ready(key
+// with revision 2) must hit.
+TEST_CASE("PrearmedJumpManager: revision bump invalidates stale prepared sets") {
+    SourceManager sources;
+    Session       session;
+    init_fixture(sources, session, "src-rv", "clip-rv", "track-rv", "song-rv",
+                  "marker-rv", kMarkerFrame, /*transposed*/ true);
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+    prearm.prepare_all_targets(session, sources, /*revision*/ 1);
+
+    PrearmTargetKey old_key;
+    old_key.kind             = PrearmTargetKind::Marker;
+    old_key.song_id          = "song-rv";
+    old_key.target_id        = "marker-rv";
+    old_key.timeline_frame   = kMarkerFrame;
+    old_key.sample_rate      = kSR;
+    old_key.block_size       = kBlockFrames;
+    old_key.session_revision = 1;
+
+    // Bump to revision 2 and re-prearm. The old cache must be discarded.
+    prearm.prepare_all_targets(session, sources, /*revision*/ 2);
+
+    // The OLD key (revision 1) must not be found — keyed on revision.
+    auto stale = prearm.take_ready(old_key);
+    CHECK_FALSE(stale);
+
+    // The NEW key (revision 2) must hit.
+    PrearmTargetKey new_key = old_key;
+    new_key.session_revision = 2;
+    auto fresh = prearm.take_ready(new_key);
+    REQUIRE(fresh);
+    CHECK(fresh->valid);
+
+    // Diagnostics should reflect: 2 prepared totals (rev 1 then rev 2),
+    // 1 stale discard (rev 1 cleared on rev 2), 1 hit (the new take), 1
+    // miss (the old take).
+    const auto d = prearm.diagnostics();
+    CHECK(d.prepared_total >= 2u);
+    CHECK(d.stale_discard_total >= 1u);
+    CHECK_EQ(d.take_hit_total, 1u);
+    CHECK_EQ(d.take_miss_total, 1u);
+}
+
+// Phase 6: PrearmedJumpManager::clear() drops everything regardless of
+// revision — used by device-change handlers in engine_impl.
+TEST_CASE("PrearmedJumpManager: clear() drops all prepared sets") {
+    SourceManager sources;
+    Session       session;
+    init_fixture(sources, session, "src-cl", "clip-cl", "track-cl", "song-cl",
+                  "marker-cl", kMarkerFrame, /*transposed*/ true);
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+    prearm.prepare_all_targets(session, sources, /*revision*/ 1);
+
+    PrearmTargetKey key;
+    key.kind             = PrearmTargetKind::Marker;
+    key.song_id          = "song-cl";
+    key.target_id        = "marker-cl";
+    key.timeline_frame   = kMarkerFrame;
+    key.sample_rate      = kSR;
+    key.block_size       = kBlockFrames;
+    key.session_revision = 1;
+
+    // Confirm prepared exists. prepare_all_targets builds one set per
+    // marker + one per region + one per song start. Our fixture has 1
+    // marker and 1 song with no regions, so 2 valid sets.
+    CHECK(prearm.diagnostics().ready_count >= 1);
+
+    prearm.clear();
+    CHECK_EQ(prearm.diagnostics().ready_count, 0);
+
+    // take_ready misses after clear.
+    auto post_clear = prearm.take_ready(key);
+    CHECK_FALSE(post_clear);
+}
+
 // Phase 1 ext: Region + Song targets share the marker pipeline. We verify
 // that prepare_all_targets builds prepared sets for them and take_ready
 // returns valid sets.
@@ -398,8 +481,8 @@ TEST_CASE("PrearmedJumpManager: region and song targets are prearmed alongside m
     marker_key.block_size       = kBlockFrames;
     marker_key.session_revision = 1;
     auto marker_set = prearm.take_ready(marker_key);
-    CHECK(marker_set);
-    CHECK(marker_set && marker_set->valid);
+    REQUIRE(marker_set);
+    CHECK(marker_set->valid);
 
     // Region (new)
     PrearmTargetKey region_key;
@@ -411,8 +494,8 @@ TEST_CASE("PrearmedJumpManager: region and song targets are prearmed alongside m
     region_key.block_size       = kBlockFrames;
     region_key.session_revision = 1;
     auto region_set = prearm.take_ready(region_key);
-    CHECK(region_set);
-    CHECK(region_set && region_set->valid);
+    REQUIRE(region_set);
+    CHECK(region_set->valid);
 
     // Song start (new)
     PrearmTargetKey song_key;
@@ -424,8 +507,8 @@ TEST_CASE("PrearmedJumpManager: region and song targets are prearmed alongside m
     song_key.block_size       = kBlockFrames;
     song_key.session_revision = 1;
     auto song_set = prearm.take_ready(song_key);
-    CHECK(song_set);
-    CHECK(song_set && song_set->valid);
+    REQUIRE(song_set);
+    CHECK(song_set->valid);
 }
 
 // Phase 2 Test B: pitched onset stays sample-aligned with unpitched onset
