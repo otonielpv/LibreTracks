@@ -43,6 +43,9 @@ constexpr Semitones kSemitones  = -2;
 
 // SourceManager holds a mutex, so we can't return it by value. Callers own
 // the storage and pass it in.
+//
+// `samples_override` lets a test inject a specific source signal (e.g. a click
+// instead of a sine). If empty, falls back to a continuous 440 Hz sine.
 void init_fixture(SourceManager& sources,
                    Session& session,
                    const std::string& source_id,
@@ -51,10 +54,13 @@ void init_fixture(SourceManager& sources,
                    const std::string& song_id,
                    const std::string& marker_id,
                    Frame marker_frame,
-                   bool transposed) {
+                   bool transposed,
+                   const std::vector<float>& samples_override = {}) {
     // Continuous sine so any output block has measurable energy regardless
     // of where the marker lands.
-    auto samples = test::make_stereo_sine(kClipLen, 440.0, 0.5f);
+    auto samples = samples_override.empty()
+        ? test::make_stereo_sine(kClipLen, 440.0, 0.5f)
+        : samples_override;
     sources.register_source(source_id, "");
     REQUIRE(sources.store_decoded_source(
         source_id, samples, kCh, kSR, kClipLen).is_ok());
@@ -314,4 +320,118 @@ TEST_CASE("PrearmedJumpManager: fallback path renders audio when prearm missed")
     const float rms = block_rms(settled);
     INFO("fallback settled rms=", rms);
     CHECK(rms > 0.05f);
+}
+
+// ─── Phase 2 prefeed tests ──────────────────────────────────────────────────
+//
+// These tests validate that real-audio prefeed delivers what silence-only
+// could not: the FIRST post-jump render block contains audio corresponding
+// to the target source position. If these regress, revert the prefeed commit.
+
+// Phase 2 Test A: first block after a prepared jump emits non-zero output.
+// (Was a deliberately-deferred goal in the MVP; this is the load-bearing
+// assertion that prefeed actually works.)
+TEST_CASE("PrearmedJumpManager prefeed: first post-jump block emits audio") {
+    SourceManager sources;
+    Session       session;
+    init_fixture(sources, session, "src-pf1", "clip-pf1", "track-pf1",
+                  "song-pf1", "marker-pf1", kMarkerFrame, /*transposed*/ true);
+
+    BungeeVoiceManager bvm;
+    REQUIRE(bvm.prepare(kSR, kCh, kBlockFrames));
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+    prearm.prepare_all_markers(session, sources, /*revision*/ 1);
+
+    PrearmTargetKey key;
+    key.kind             = PrearmTargetKind::Marker;
+    key.song_id          = "song-pf1";
+    key.marker_id        = "marker-pf1";
+    key.timeline_frame   = kMarkerFrame;
+    key.sample_rate      = kSR;
+    key.block_size       = kBlockFrames;
+    key.session_revision = 1;
+
+    auto prepared = prearm.take_ready(key);
+    REQUIRE(prepared);
+    REQUIRE(prepared->valid);
+    bvm.swap_in_prepared_voices(prepared->extract_voice_map());
+
+    const Track& track = session.songs[0].tracks[0];
+    auto first_block = render_n_blocks(track, kMarkerFrame, 1,
+                                        sources, &bvm, kSemitones);
+
+    // Expected first-block RMS for 0.5-amp sine pitched -2 semitones ≈ 0.35.
+    // Bungee may attenuate first samples for the 5ms fade-in; settled RMS
+    // averaged over the whole block should still be substantial.
+    const float rms = block_rms(first_block);
+    INFO("first-block rms with prefeed=", rms);
+    // 0.05 = same threshold the silence-warm test uses for SETTLED audio.
+    // If prefeed works, the first block already passes this bar.
+    CHECK(rms > 0.05f);
+}
+
+// Phase 2 Test B: pitched onset stays sample-aligned with unpitched onset
+// after a prepared jump. Uses the same fixture pattern as
+// pitch_alignment_tests.cpp so the bar is comparable.
+TEST_CASE("PrearmedJumpManager prefeed: pitched click onset aligned with unpitched") {
+    // Click 1024 frames AFTER the marker, so we can find the onset by
+    // scanning the rendered output starting at sample 0. Click amplitude 1.0
+    // dominates any pitch-shifter ringing.
+    constexpr Frame click_offset = 1024;
+    auto click_samples = test::make_stereo_click(
+        kClipLen, kMarkerFrame + click_offset, 1.0f);
+
+    SourceManager p_sources, u_sources;
+    Session       p_session, u_session;
+    init_fixture(p_sources, p_session, "src-pf2p", "clip-pf2p", "track-pf2p",
+                  "song-pf2p", "marker-pf2p", kMarkerFrame, /*transposed*/ true,
+                  click_samples);
+    init_fixture(u_sources, u_session, "src-pf2u", "clip-pf2u", "track-pf2u",
+                  "song-pf2u", "marker-pf2u", kMarkerFrame, /*transposed*/ false,
+                  click_samples);
+
+    BungeeVoiceManager bvm;
+    REQUIRE(bvm.prepare(kSR, kCh, kBlockFrames));
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+    prearm.prepare_all_markers(p_session, p_sources, 1);
+
+    PrearmTargetKey key;
+    key.kind             = PrearmTargetKind::Marker;
+    key.song_id          = "song-pf2p";
+    key.marker_id        = "marker-pf2p";
+    key.timeline_frame   = kMarkerFrame;
+    key.sample_rate      = kSR;
+    key.block_size       = kBlockFrames;
+    key.session_revision = 1;
+
+    auto prepared = prearm.take_ready(key);
+    REQUIRE(prepared);
+    bvm.swap_in_prepared_voices(prepared->extract_voice_map());
+
+    // Render enough blocks to comfortably contain the click. Click is 1024
+    // frames past the marker, well within the first ~3 blocks (1440 frames).
+    constexpr int n_blocks = 8;
+    auto pitched_il = render_n_blocks(p_session.songs[0].tracks[0],
+                                       kMarkerFrame, n_blocks, p_sources,
+                                       &bvm, kSemitones);
+    auto unpitched_il = render_n_blocks(u_session.songs[0].tracks[0],
+                                         kMarkerFrame, n_blocks, u_sources,
+                                         /*bvm*/ nullptr, 0);
+
+    const Frame p_onset = test::first_onset_frame(pitched_il, 0.2f);
+    const Frame u_onset = test::first_onset_frame(unpitched_il, 0.2f);
+    INFO("pitched onset=", p_onset, " unpitched onset=", u_onset);
+    REQUIRE(u_onset >= 0); // unpitched should always find the click
+    REQUIRE(p_onset >= 0); // prefeed should make pitched find it too
+
+    // The existing pitch_alignment_tests bar is ≤ 2 samples. With prefeed
+    // we may not hit that exactly (pitch shifting smears transients
+    // slightly), so we accept ≤ 32 samples (~0.67ms at 48kHz) for the MVP
+    // — tight enough to prove prefeed delivers the alignment win, loose
+    // enough to allow Bungee's natural transient smear.
+    CHECK(std::llabs(p_onset - u_onset) <= 32);
 }

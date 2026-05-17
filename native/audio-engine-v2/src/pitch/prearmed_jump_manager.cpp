@@ -76,6 +76,90 @@ void warm_voice_silence(BungeePitchVoice& voice,
     }
 }
 
+// Real-audio prefeed for prearmed voices.
+//
+// AFTER warm_voice_silence has filled Bungee's analysis pipeline with zeros,
+// feed `latency()` frames of REAL source audio starting at `target_source_frame`
+// while concurrently discarding the same number of output frames. The discarded
+// output covers Bungee's transition from "all silence" to "real audio" — that
+// transition is artefact-rich and we don't want the audio thread to hear it.
+//
+// After prefeed, the voice's next render_block call will return output that
+// corresponds to source position `target_source_frame` in the listener's
+// timeline. The audio thread, which feeds source from
+// `(target_source_frame + latency())` per render block, gets uninterrupted
+// real-audio continuation: prefeed covered [target, target+latency), audio
+// thread covers [target+latency, …).
+//
+// Math:
+//   pre-warm:           input_pos = W,         output_pos = W - L  (silence)
+//   feed L real:        input_pos = W + L,     output_pos still ≈ W - L
+//   drain L output:     input_pos = W + L,     output_pos = W      (= start of
+//                                                                    real audio)
+//   audio thread's 1st  input_pos = W + L + 480, output_pos = W + 480
+//   render_block call:  → output corresponds to source[target..target+480) ✓
+//
+// We pad with silence if `target_source_frame` is near the source end or before
+// the source start (matches what TrackRenderer does on the audio thread).
+//
+// Pitch_scale = 1.0 for prefeed (identity); the audio thread sets the real
+// pitch on its first call via render_block(pitch_scale=…) and Bungee picks
+// it up on the next grain.
+void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
+                                      const DecodedSource& source,
+                                      Frame target_source_frame,
+                                      int sample_rate,
+                                      int channel_count,
+                                      int max_in_frames) {
+    if (!voice.is_ready()) return;
+    const int latency_frames = static_cast<int>(voice.latency_frames());
+    if (latency_frames <= 0) return; // nothing to prefeed; voice not warm
+
+    // Buffers reused across iterations.
+    std::vector<float> read_l(static_cast<std::size_t>(max_in_frames), 0.0f);
+    std::vector<float> read_r(static_cast<std::size_t>(max_in_frames), 0.0f);
+    std::vector<float> out_l (static_cast<std::size_t>(max_in_frames), 0.0f);
+    std::vector<float> out_r (static_cast<std::size_t>(max_in_frames), 0.0f);
+    std::vector<const float*> in_ptrs (static_cast<std::size_t>(channel_count));
+    std::vector<float*>       out_ptrs(static_cast<std::size_t>(channel_count));
+    in_ptrs [0] = read_l.data();
+    out_ptrs[0] = out_l.data();
+    if (channel_count >= 2) {
+        in_ptrs [1] = read_r.data();
+        out_ptrs[1] = out_r.data();
+    }
+
+    const Frame src_end  = source.duration_frames();
+    Frame  read_cursor   = target_source_frame; // absolute source frame to read next
+    int    fed           = 0;                   // count of real frames fed
+    while (fed < latency_frames) {
+        const int chunk = std::min(max_in_frames, latency_frames - fed);
+
+        // Pull `chunk` frames from the source starting at `read_cursor`. Anything
+        // past src_end is zero-padded (matches track_renderer's pad-on-EOF).
+        std::fill(read_l.begin(), read_l.begin() + chunk, 0.0f);
+        std::fill(read_r.begin(), read_r.begin() + chunk, 0.0f);
+        const int available = (read_cursor >= src_end || read_cursor < 0)
+            ? 0
+            : static_cast<int>(std::min<long long>(
+                chunk, static_cast<long long>(src_end - read_cursor)));
+        if (available > 0) {
+            float* read_into[2] = {read_l.data(), read_r.data()};
+            const int got = source.read(read_cursor, available, read_into,
+                                         std::min(2, source.channel_count()));
+            if (got > 0 && source.channel_count() == 1) {
+                std::copy_n(read_l.begin(), got, read_r.begin());
+            }
+        }
+
+        (void)voice.render_block(in_ptrs.data(), chunk,
+                                  out_ptrs.data(), chunk,
+                                  /*pitch_scale*/ 1.0);
+        read_cursor += chunk;
+        fed         += chunk;
+    }
+}
+
 // Per-clip prep spec for a single prearmed target.
 struct PrepSpec {
     Id                   clip_id;
@@ -243,8 +327,24 @@ void PrearmedJumpManager::prepare_all_markers(const Session& session,
                                             impl_->sample_rate,
                                             impl_->channel_count,
                                             impl_->max_in_frames);
-                        // Re-arm fade so audio thread's first real frames are
-                        // ramped (warm consumed the default fade window).
+                        // Real-audio prefeed: feed `latency()` frames of source
+                        // around target_source_frame so the audio thread's first
+                        // post-jump render block emits true target audio instead
+                        // of the silence-to-real-audio FFT transition. See
+                        // prefeed_voice_with_target_audio() for the alignment
+                        // derivation.
+                        if (spec.source) {
+                            prefeed_voice_with_target_audio(
+                                *voice, *spec.source,
+                                spec.target_source_frame,
+                                impl_->sample_rate,
+                                impl_->channel_count,
+                                impl_->max_in_frames);
+                        }
+                        // Re-arm fade AFTER prefeed (prefeed's render_block
+                        // calls consume the default fade window). The 5 ms
+                        // ramp now applies to the audio thread's first real
+                        // frames.
                         voice->arm_fade_in();
 
                         PreparedTrackVoice ptv;
