@@ -138,6 +138,14 @@ public:
     // is dimensionally compatible.
     bool prepare(int sample_rate, int channel_count, int max_input_frames);
 
+    // Phase 7: max number of prepared target sets to keep in the cache.
+    // When a new prepare would exceed this count, the OLDEST prepared set
+    // (by insertion order — simple FIFO, not LRU access tracking) is
+    // evicted. Default 8 (matches spec). Set via LIBRETRACKS_PREARM_MAX_TARGETS
+    // env var at process start, or programmatically before prepare_all_targets.
+    void set_max_prepared_targets(int max_targets) noexcept;
+    int  max_prepared_targets() const noexcept;
+
     // Walk the session and prearm every supported target (markers, region
     // starts, song starts). Idempotent: targets already valid under the
     // current session_revision are skipped; stale targets discarded; new
@@ -178,6 +186,8 @@ public:
         std::uint64_t take_hit_total       = 0; // take_ready returned a valid set
         std::uint64_t take_miss_total      = 0; // take_ready returned nullptr
         std::uint64_t stale_discard_total  = 0; // sets dropped on revision bump
+        std::uint64_t eviction_total       = 0; // sets evicted when over cap
+        int           max_prepared_targets = 0; // current cap (Phase 7)
     };
     Diagnostics diagnostics() const noexcept;
 

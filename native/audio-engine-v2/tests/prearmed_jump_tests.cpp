@@ -372,6 +372,35 @@ TEST_CASE("PrearmedJumpManager prefeed: first post-jump block emits audio") {
     CHECK(rms > 0.05f);
 }
 
+// Phase 7: max_prepared_targets cap evicts oldest when exceeded.
+TEST_CASE("PrearmedJumpManager: max_prepared_targets evicts oldest (FIFO)") {
+    SourceManager sources;
+    Session       session;
+    init_fixture(sources, session, "src-ev", "clip-ev", "track-ev", "song-ev",
+                  "marker-ev-0", 1024, /*transposed*/ true);
+    // Add 5 more markers — total 6 markers + 1 song start = 7 targets.
+    for (int i = 1; i < 6; ++i) {
+        Marker m;
+        m.id = std::string("marker-ev-") + std::to_string(i);
+        m.name = "M";
+        m.frame = 1024 + i * 1024;
+        session.songs[0].markers.push_back(m);
+    }
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+    prearm.set_max_prepared_targets(3); // tight cap to force eviction
+    REQUIRE_EQ(prearm.max_prepared_targets(), 3);
+
+    prearm.prepare_all_targets(session, sources, /*revision*/ 1);
+
+    // We built 7 targets, cap was 3 → at least 4 evictions.
+    const auto d = prearm.diagnostics();
+    INFO("ready_count=", d.ready_count, " eviction_total=", d.eviction_total);
+    CHECK_EQ(d.ready_count, 3);
+    CHECK(d.eviction_total >= 4u);
+}
+
 // Phase 6: revision bump invalidates previously prepared sets.
 //
 // Models the engine_impl flow: load session → prearm at revision 1 → user

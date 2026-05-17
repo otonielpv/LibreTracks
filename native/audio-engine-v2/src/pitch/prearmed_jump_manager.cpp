@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <unordered_set>
 
 namespace lt {
@@ -213,15 +214,31 @@ struct PrearmedJumpManager::Impl {
                        std::unique_ptr<PreparedJumpVoiceSet>,
                        PrearmTargetKeyHash>                  prepared_map;
 
+    // Insertion order for FIFO eviction. Front = oldest, back = newest.
+    // Phase 7 keeps a deque parallel to prepared_map; both are mutated
+    // together under `mtx`.
+    std::deque<PrearmTargetKey>                              insertion_order;
+
     // Revision the current prepared_map was built for. Bumping it invalidates
     // the whole cache. Phase 6 adds finer-grained revisions.
     std::uint64_t current_revision = 0;
+
+    // Phase 7: max prepared sets retained. Initial default reads env var
+    // LIBRETRACKS_PREARM_MAX_TARGETS, falling back to 8 (spec default).
+    int max_prepared_targets = [] {
+        if (const char* v = std::getenv("LIBRETRACKS_PREARM_MAX_TARGETS")) {
+            const int n = std::atoi(v);
+            if (n > 0 && n < 1024) return n;
+        }
+        return 8;
+    }();
 
     std::atomic<std::uint64_t> prepared_total       {0};
     std::atomic<std::uint64_t> prepare_failed_total {0};
     std::atomic<std::uint64_t> take_hit_total       {0};
     std::atomic<std::uint64_t> take_miss_total      {0};
     std::atomic<std::uint64_t> stale_discard_total  {0};
+    std::atomic<std::uint64_t> eviction_total       {0};
 
     // Drop the cache; caller must hold mtx. Bumps stale_discard_total.
     void clear_prepared_map_locked() {
@@ -229,6 +246,22 @@ struct PrearmedJumpManager::Impl {
             stale_discard_total.fetch_add(prepared_map.size(),
                                           std::memory_order_relaxed);
             prepared_map.clear();
+        }
+        insertion_order.clear();
+    }
+
+    // Drop one prepared set (the oldest by insertion order). Caller holds mtx.
+    void evict_one_oldest_locked() {
+        while (!insertion_order.empty()) {
+            const auto& key = insertion_order.front();
+            auto it = prepared_map.find(key);
+            insertion_order.pop_front();
+            if (it != prepared_map.end()) {
+                prepared_map.erase(it);
+                eviction_total.fetch_add(1, std::memory_order_relaxed);
+                return; // evicted one
+            }
+            // Key was already gone (e.g. removed by take_ready). Keep popping.
         }
     }
 };
@@ -387,6 +420,21 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
         }
 
         impl_->prepared_map[key] = std::move(set);
+        impl_->insertion_order.push_back(key);
+
+        // Phase 7: enforce cap. Evict oldest until we're at or below the cap.
+        while (static_cast<int>(impl_->prepared_map.size())
+                > impl_->max_prepared_targets) {
+            const std::size_t before = impl_->prepared_map.size();
+            impl_->evict_one_oldest_locked();
+            if (impl_->prepared_map.size() == before) break; // safety
+            if (prearm_log_enabled()) {
+                std::fprintf(stdout,
+                    "[PREARM] evicted_oldest (over cap=%d, now=%zu)\n",
+                    impl_->max_prepared_targets, impl_->prepared_map.size());
+                std::fflush(stdout);
+            }
+        }
     };
 
     for (const auto& song : session.songs) {
@@ -407,6 +455,12 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
     for (auto it = impl_->prepared_map.begin(); it != impl_->prepared_map.end(); ) {
         if (kept.find(it->first) == kept.end()) {
             impl_->stale_discard_total.fetch_add(1, std::memory_order_relaxed);
+            // Remove from insertion_order too. O(N) where N ≤ max cap.
+            const auto dit = std::find(impl_->insertion_order.begin(),
+                                        impl_->insertion_order.end(),
+                                        it->first);
+            if (dit != impl_->insertion_order.end())
+                impl_->insertion_order.erase(dit);
             it = impl_->prepared_map.erase(it);
         } else {
             ++it;
@@ -426,6 +480,11 @@ PrearmedJumpManager::take_ready(const PrearmTargetKey& key) {
     impl_->take_hit_total.fetch_add(1, std::memory_order_relaxed);
     auto out = std::move(it->second);
     impl_->prepared_map.erase(it);
+    // Remove from insertion_order too so eviction tracking stays consistent.
+    const auto dit = std::find(impl_->insertion_order.begin(),
+                                impl_->insertion_order.end(), key);
+    if (dit != impl_->insertion_order.end())
+        impl_->insertion_order.erase(dit);
     return out;
 }
 
@@ -442,7 +501,27 @@ PrearmedJumpManager::diagnostics() const noexcept {
     d.take_hit_total       = impl_->take_hit_total.load(std::memory_order_relaxed);
     d.take_miss_total      = impl_->take_miss_total.load(std::memory_order_relaxed);
     d.stale_discard_total  = impl_->stale_discard_total.load(std::memory_order_relaxed);
+    d.eviction_total       = impl_->eviction_total.load(std::memory_order_relaxed);
+    d.max_prepared_targets = impl_->max_prepared_targets;
     return d;
+}
+
+void PrearmedJumpManager::set_max_prepared_targets(int max_targets) noexcept {
+    if (!impl_ || max_targets <= 0) return;
+    std::lock_guard<std::mutex> g(impl_->mtx);
+    impl_->max_prepared_targets = max_targets;
+    // Evict down to the new cap immediately.
+    while (static_cast<int>(impl_->prepared_map.size()) > max_targets) {
+        const std::size_t before = impl_->prepared_map.size();
+        impl_->evict_one_oldest_locked();
+        if (impl_->prepared_map.size() == before) break;
+    }
+}
+
+int PrearmedJumpManager::max_prepared_targets() const noexcept {
+    if (!impl_) return 0;
+    std::lock_guard<std::mutex> g(impl_->mtx);
+    return impl_->max_prepared_targets;
 }
 
 } // namespace lt
