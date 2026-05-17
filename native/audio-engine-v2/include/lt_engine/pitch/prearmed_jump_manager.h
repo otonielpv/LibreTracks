@@ -149,13 +149,25 @@ public:
     // Walk the session and prearm every supported target (markers, region
     // starts, song starts). Idempotent: targets already valid under the
     // current session_revision are skipped; stale targets discarded; new
-    // targets built. Runs on the control thread.
+    // targets built. Runs synchronously on the calling thread (blocks).
     //
     // `session_revision` should be bumped by the caller on any structural
     // session change so this method invalidates the cache appropriately.
     void prepare_all_targets(const Session& session,
                               const SourceManager& sources,
                               std::uint64_t session_revision);
+
+    // Phase 2: async version. Snapshots the session via shared_ptr and posts
+    // a job to the manager's worker thread; returns immediately. The job
+    // runs prepare_all_targets in the background. If a newer revision is
+    // posted before this one runs, the older job is skipped to avoid
+    // wasted CPU. Use this from command handlers (LoadSession, transpose
+    // changes) so the UI doesn't freeze.
+    //
+    // `sources` must outlive the engine — typically `EngineImpl::source_manager_`.
+    void prepare_all_targets_async(std::shared_ptr<const Session> session,
+                                    const SourceManager* sources,
+                                    std::uint64_t session_revision);
 
     // Backwards-compat alias for the MVP wiring. Same behaviour as
     // prepare_all_targets — kept so existing call sites and tests don't all

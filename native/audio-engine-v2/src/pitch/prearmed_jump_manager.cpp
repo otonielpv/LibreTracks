@@ -6,10 +6,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <optional>
+#include <thread>
 #include <unordered_set>
 
 namespace lt {
@@ -250,6 +253,24 @@ struct PrearmedJumpManager::Impl {
         insertion_order.clear();
     }
 
+    // ── Phase 2: async worker ────────────────────────────────────────────
+    //
+    // Single worker thread + a 1-slot pending job (newer requests overwrite
+    // older ones — we don't need a full queue because every job rebuilds
+    // EVERYTHING for a given revision; an older job is wasted CPU once a
+    // newer one arrives).
+    struct PendingJob {
+        std::shared_ptr<const Session> session;
+        const SourceManager*           sources;
+        std::uint64_t                  revision;
+    };
+    std::mutex               worker_mtx;
+    std::condition_variable  worker_cv;
+    std::optional<PendingJob> pending_job;
+    std::atomic<bool>        worker_should_exit{false};
+    std::thread              worker_thread;
+    std::atomic<bool>        worker_started{false};
+
     // Drop one prepared set (the oldest by insertion order). Caller holds mtx.
     void evict_one_oldest_locked() {
         while (!insertion_order.empty()) {
@@ -269,7 +290,17 @@ struct PrearmedJumpManager::Impl {
 // ─── Lifecycle ───────────────────────────────────────────────────────────
 
 PrearmedJumpManager::PrearmedJumpManager() : impl_(std::make_unique<Impl>()) {}
-PrearmedJumpManager::~PrearmedJumpManager() = default;
+
+PrearmedJumpManager::~PrearmedJumpManager() {
+    // Stop worker thread cleanly. Must happen BEFORE impl_ is destroyed so
+    // the worker doesn't touch dangling members.
+    if (impl_ && impl_->worker_started.load()) {
+        impl_->worker_should_exit.store(true);
+        impl_->worker_cv.notify_all();
+        if (impl_->worker_thread.joinable())
+            impl_->worker_thread.join();
+    }
+}
 
 bool PrearmedJumpManager::prepare(int sample_rate,
                                    int channel_count,
@@ -522,6 +553,63 @@ int PrearmedJumpManager::max_prepared_targets() const noexcept {
     if (!impl_) return 0;
     std::lock_guard<std::mutex> g(impl_->mtx);
     return impl_->max_prepared_targets;
+}
+
+// ─── Phase 2: background worker ──────────────────────────────────────────
+
+void PrearmedJumpManager::prepare_all_targets_async(
+        std::shared_ptr<const Session> session,
+        const SourceManager* sources,
+        std::uint64_t session_revision) {
+    if (!impl_ || !session || !sources) return;
+
+    // Lazy-start worker thread on first async call.
+    if (!impl_->worker_started.exchange(true)) {
+        impl_->worker_thread = std::thread([this] {
+            for (;;) {
+                std::optional<Impl::PendingJob> job;
+                {
+                    std::unique_lock<std::mutex> lk(impl_->worker_mtx);
+                    impl_->worker_cv.wait(lk, [this] {
+                        return impl_->worker_should_exit.load()
+                            || impl_->pending_job.has_value();
+                    });
+                    if (impl_->worker_should_exit.load()) return;
+                    job = std::move(impl_->pending_job);
+                    impl_->pending_job.reset();
+                }
+                if (!job) continue;
+                // Pre-check: revision still current? If a newer revision was
+                // posted while we were waiting, we'd still run this one (job
+                // got swapped in worker_mtx). But if user clears via the
+                // sync path, current_revision moved. Run anyway; the sync
+                // clear will discard our results on next revision bump.
+                if (prearm_log_enabled()) {
+                    std::fprintf(stdout,
+                        "[PREARM] worker_start revision=%llu\n",
+                        static_cast<unsigned long long>(job->revision));
+                    std::fflush(stdout);
+                }
+                prepare_all_targets(*job->session, *job->sources, job->revision);
+                if (prearm_log_enabled()) {
+                    std::fprintf(stdout,
+                        "[PREARM] worker_done revision=%llu\n",
+                        static_cast<unsigned long long>(job->revision));
+                    std::fflush(stdout);
+                }
+            }
+        });
+    }
+
+    // Post / replace pending job. Single-slot: if a newer post arrives
+    // before the worker picks up an older one, the older one is dropped.
+    // This is correct because each job rebuilds EVERYTHING for its revision.
+    {
+        std::lock_guard<std::mutex> lk(impl_->worker_mtx);
+        impl_->pending_job = Impl::PendingJob{
+            std::move(session), sources, session_revision};
+    }
+    impl_->worker_cv.notify_one();
 }
 
 } // namespace lt

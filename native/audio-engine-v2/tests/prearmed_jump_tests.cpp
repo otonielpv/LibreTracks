@@ -22,8 +22,10 @@
 #include <lt_engine/sources/source_manager.h>
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace lt;
@@ -445,6 +447,33 @@ TEST_CASE("PrearmedJumpManager: rapid prepare+take cycles are safe") {
     const auto d = prearm.diagnostics();
     CHECK_EQ(d.take_hit_total, 20u);
     CHECK_EQ(d.take_miss_total, 0u);
+}
+
+// Phase 2: prepare_all_targets_async posts a job to the worker thread and
+// returns immediately. Wait briefly for completion then check the cache.
+//
+// We poll the diagnostics counter instead of using a future, mirroring the
+// pattern engine_impl uses (fire-and-forget; UI sees results via snapshot).
+TEST_CASE("PrearmedJumpManager: prepare_all_targets_async completes off-thread") {
+    auto session = std::make_shared<Session>();
+    SourceManager sources;
+    init_fixture(sources, *session, "src-as", "clip-as", "track-as", "song-as",
+                  "marker-as", kMarkerFrame, /*transposed*/ true);
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+
+    prearm.prepare_all_targets_async(session, &sources, /*revision*/ 1);
+
+    // Wait up to ~5 s for the worker to finish (cap is generous — actual
+    // time is ~1 s for 1 marker × 1 voice on this hardware).
+    const auto deadline = std::chrono::steady_clock::now()
+                           + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (prearm.diagnostics().ready_count >= 1) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    CHECK(prearm.diagnostics().ready_count >= 1);
 }
 
 // Phase 7: max_prepared_targets cap evicts oldest when exceeded.

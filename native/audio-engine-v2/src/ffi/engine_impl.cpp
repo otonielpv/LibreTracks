@@ -840,18 +840,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 bungee_voices_->rebuild_for_session(
                     *next_session, *source_manager_, clock_->position().frame);
 
-            // Prearm marker targets on session load. Bumps session_revision
-            // so any previous prepared sets are discarded. The prepare call
-            // is synchronous on the command thread — Phase 2 will move it to
-            // a worker; for the MVP we accept the (~80ms × markers × tracks)
-            // cost happening once at LoadSession time. Most sessions have
-            // ≤5 markers and ≤9 tracks → ~3.6 s worst case, no UI freeze
-            // because LoadSession isn't called during playback.
+            // Prearm marker / region / song targets on session load. Bumps
+            // prearm_revision_ so any previous prepared sets are discarded.
+            // Phase 2: posts to PrearmedJumpManager's worker thread so we
+            // don't block LoadSession on ~80ms × markers × tracks of warm.
             if (prearmed_jumps_) {
                 const auto rev = prearm_revision_.fetch_add(1,
                     std::memory_order_relaxed) + 1;
-                prearmed_jumps_->prepare_all_markers(
-                    *next_session, *source_manager_, rev);
+                prearmed_jumps_->prepare_all_targets_async(
+                    next_session, source_manager_.get(), rev);
             }
 
             return Result<void>::ok();
@@ -1251,8 +1248,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 if (prearmed_jumps_) {
                     const auto rev = prearm_revision_.fetch_add(1,
                         std::memory_order_relaxed) + 1;
-                    prearmed_jumps_->prepare_all_targets(
-                        *next_session, *source_manager_, rev);
+                    prearmed_jumps_->prepare_all_targets_async(
+                        next_session, source_manager_.get(), rev);
                 }
             }
             return Result<void>::ok();
@@ -1294,8 +1291,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 if (prearmed_jumps_) {
                     const auto rev = prearm_revision_.fetch_add(1,
                         std::memory_order_relaxed) + 1;
-                    prearmed_jumps_->prepare_all_targets(
-                        *next_session, *source_manager_, rev);
+                    prearmed_jumps_->prepare_all_targets_async(
+                        next_session, source_manager_.get(), rev);
                 }
             }
             return Result<void>::ok();
@@ -1337,8 +1334,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 if (prearmed_jumps_) {
                     const auto rev = prearm_revision_.fetch_add(1,
                         std::memory_order_relaxed) + 1;
-                    prearmed_jumps_->prepare_all_targets(
-                        *next_session, *source_manager_, rev);
+                    prearmed_jumps_->prepare_all_targets_async(
+                        next_session, source_manager_.get(), rev);
                 }
             }
             return Result<void>::ok();
