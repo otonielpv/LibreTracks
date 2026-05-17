@@ -136,72 +136,20 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
     return out;
 }
 
-#if LT_ENGINE_HAVE_BUNGEE
-// Warm a freshly-constructed voice on the control thread by feeding ZERO
-// input until Bungee reports its analysis pipeline is full (latency caught
-// up). The discarded output is what the listener WOULD have heard during
-// Bungee's startup transient if we let the audio thread see it.
+// (warm_voice removed.)
 //
-// Per the maintainer (issue #38 comment 4364737326), the precise runtime
-// latency is reported by Bungee::Stream::latency(), and it is only valid
-// after at least one process() call has returned output. So we loop:
-//   process(zeros) → check latency() → repeat until small enough.
-//
-// We do NOT pre-feed real source audio. That was the previous bug: any
-// real input fed before the audio thread takes over advances Bungee's
-// internal output position, which then no longer corresponds to the
-// source_frame the audio thread expects on its first read.
-//
-// Worst-case bound for safety: at most kMaxWarmFramesAt48k input frames
-// before we give up (in case Bungee never reports "warm" with the configured
-// ratios). At 200 ms documented latency this is ~3x the expected need.
-constexpr int kMaxWarmFramesAt48k = 28800;  // 600 ms at 48 kHz
-
-void warm_voice(BungeePitchVoice& voice,
-                int sample_rate,
-                int channel_count,
-                int max_in_frames) {
-    if (!voice.is_ready()) return;
-    const int max_warm_frames = std::max(0,
-        static_cast<int>(static_cast<long long>(kMaxWarmFramesAt48k) * sample_rate / 48000));
-    if (max_warm_frames <= 0) return;
-
-    // Pre-allocated planar zero buffers. Reused across iterations.
-    std::vector<std::vector<float>> in_planes(static_cast<std::size_t>(channel_count),
-        std::vector<float>(static_cast<std::size_t>(max_in_frames), 0.0f));
-    std::vector<std::vector<float>> out_planes(static_cast<std::size_t>(channel_count),
-        std::vector<float>(static_cast<std::size_t>(max_in_frames), 0.0f));
-    std::vector<const float*> in_ptrs(static_cast<std::size_t>(channel_count), nullptr);
-    std::vector<float*>       out_ptrs(static_cast<std::size_t>(channel_count), nullptr);
-    for (int c = 0; c < channel_count; ++c) {
-        in_ptrs[static_cast<std::size_t>(c)]  = in_planes[static_cast<std::size_t>(c)].data();
-        out_ptrs[static_cast<std::size_t>(c)] = out_planes[static_cast<std::size_t>(c)].data();
-    }
-
-    int fed = 0;
-    while (fed < max_warm_frames) {
-        const int chunk = std::min(max_in_frames, max_warm_frames - fed);
-        (void)voice.render_block(in_ptrs.data(), chunk,
-                                  out_ptrs.data(), chunk,
-                                  /*pitch_scale*/ 1.0);
-        fed += chunk;
-        if (voice.is_warm())
-            break;
-    }
-
-    // One-shot diagnostic so we can see what Bungee's stable latency turned
-    // out to be on this hardware/voice configuration. The audio thread uses
-    // this number directly (track_renderer reads source from
-    // source_frame + latency_frames so output aligns to the timeline).
-    const double final_latency = voice.latency_frames();
-    const long long final_input = voice.input_position();
-    const bool warm = voice.is_warm();
-    std::fprintf(stdout,
-        "[BUNGEE] warm_voice fed=%d max=%d input_pos=%lld latency=%.1f warm=%d\n",
-        fed, max_warm_frames, final_input, final_latency, warm ? 1 : 0);
-    std::fflush(stdout);
-}
-#endif // LT_ENGINE_HAVE_BUNGEE
+// We previously fed up to 600 ms of zero input on the control thread to try
+// to "skip past" Bungee's analysis-pipeline startup. Empirically (per the
+// [BUNGEE] warm_voice fed=28800 ... warm=0 log lines), it never succeeded:
+// Bungee::Stream's latency() reflects the wrapper's structural
+// maxInputFrameCount/2 lookbehind, which is constant per stretcher and
+// cannot be drained by feeding more input. The compensation that actually
+// keeps transposed audio aligned with non-transposed lives in
+// track_renderer.cpp, which reads source from (source_frame +
+// latency_frames()) on every block. With log2SynthesisHopAdjust=-1 that
+// latency is ~85 ms — and we cannot shrink it from inside the wrapper. So
+// the warm_voice loop was just wasted CPU; deleting it does not change
+// audible behaviour.
 
 } // namespace
 
@@ -241,8 +189,9 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
                               impl_->max_in_frames)) {
             continue;
         }
-        warm_voice(*voice,
-                   impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+        // Voice is left "cold" intentionally. track_renderer compensates for
+        // Bungee's structural latency on every render block, so the first
+        // audio-thread call already produces timeline-aligned output.
         (*next)[spec.clip_id] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
@@ -284,8 +233,9 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
                               impl_->max_in_frames)) {
             continue;
         }
-        warm_voice(*voice,
-                   impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+        // Voice is left "cold" intentionally. track_renderer compensates for
+        // Bungee's structural latency on every render block, so the first
+        // audio-thread call already produces timeline-aligned output.
         (*next)[spec.clip_id] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
