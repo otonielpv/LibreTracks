@@ -1050,9 +1050,24 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         push_event(EvJumpScheduled{ jump_id, c.marker_id });
                         return Result<void>::ok();
                     }
-                    // Miss: fall through to scheduler path. Synchronous
-                    // rebuild_for_seek so audio doesn't break — the cost is
-                    // unchanged from the pre-prearm behaviour.
+                    // Miss: try the sync prepare-one fast path. This handles
+                    // the case where the user triggers a jump before the
+                    // async worker finishes building the cache (e.g. first
+                    // jump immediately after a pitch change).
+                    if (auto prepared = prearmed_jumps_->prepare_target_now(
+                            *session_, *source_manager_,
+                            PrearmTargetKind::Marker, song_id,
+                            c.marker_id, target_frame,
+                            prearm_revision_.load(std::memory_order_relaxed))) {
+                        bungee_voices_->swap_in_prepared_voices(
+                            prepared->extract_voice_map());
+                        clock_->seek(target_frame);
+                        push_event(EvJumpScheduled{ jump_id, c.marker_id });
+                        return Result<void>::ok();
+                    }
+                    // Both fast paths exhausted: fall through to the legacy
+                    // reactive rebuild + scheduler. Audio still works but
+                    // the listener gets the structural Bungee silence.
                     bungee_voices_->rebuild_for_seek(
                         target_frame, *session_, *source_manager_);
                 }
@@ -1098,6 +1113,18 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         push_event(EvJumpScheduled{ jump_id, c.region_id });
                         return Result<void>::ok();
                     }
+                    // Sync prepare-one fast path (see CmdJumpToMarker comment).
+                    if (auto prepared = prearmed_jumps_->prepare_target_now(
+                            *session_, *source_manager_,
+                            PrearmTargetKind::RegionStart, song_id,
+                            c.region_id, target_frame,
+                            prearm_revision_.load(std::memory_order_relaxed))) {
+                        bungee_voices_->swap_in_prepared_voices(
+                            prepared->extract_voice_map());
+                        clock_->seek(target_frame);
+                        push_event(EvJumpScheduled{ jump_id, c.region_id });
+                        return Result<void>::ok();
+                    }
                     bungee_voices_->rebuild_for_seek(
                         target_frame, *session_, *source_manager_);
                 }
@@ -1135,6 +1162,18 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     key.session_revision = prearm_revision_.load(
                         std::memory_order_relaxed);
                     if (auto prepared = prearmed_jumps_->take_ready(key)) {
+                        bungee_voices_->swap_in_prepared_voices(
+                            prepared->extract_voice_map());
+                        clock_->seek(target_frame);
+                        push_event(EvJumpScheduled{ jump_id, c.song_id });
+                        return Result<void>::ok();
+                    }
+                    // Sync prepare-one fast path (see CmdJumpToMarker comment).
+                    if (auto prepared = prearmed_jumps_->prepare_target_now(
+                            *session_, *source_manager_,
+                            PrearmTargetKind::SongStart, c.song_id,
+                            c.song_id, target_frame,
+                            prearm_revision_.load(std::memory_order_relaxed))) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
                         clock_->seek(target_frame);

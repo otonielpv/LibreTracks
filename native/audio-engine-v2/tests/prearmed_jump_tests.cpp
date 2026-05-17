@@ -476,6 +476,58 @@ TEST_CASE("PrearmedJumpManager: prepare_all_targets_async completes off-thread")
     CHECK(prearm.diagnostics().ready_count >= 1);
 }
 
+// Phase 6b: prepare_target_now is the sync fast path used when take_ready
+// misses (first jump after a pitch change beats the async worker).
+TEST_CASE("PrearmedJumpManager: prepare_target_now builds one set immediately") {
+    SourceManager sources;
+    Session       session;
+    init_fixture(sources, session, "src-pn", "clip-pn", "track-pn", "song-pn",
+                  "marker-pn", kMarkerFrame, /*transposed*/ true);
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+
+    // No prepare_all_targets call → cache is empty (models "user jumped
+    // before async worker finished").
+    PrearmTargetKey key;
+    key.kind             = PrearmTargetKind::Marker;
+    key.song_id          = "song-pn";
+    key.target_id        = "marker-pn";
+    key.timeline_frame   = kMarkerFrame;
+    key.sample_rate      = kSR;
+    key.block_size       = kBlockFrames;
+    key.session_revision = 1;
+    REQUIRE_FALSE(prearm.take_ready(key)); // confirm cache miss
+
+    // Sync prepare-one should succeed and return a usable set.
+    auto prepared = prearm.prepare_target_now(
+        session, sources,
+        PrearmTargetKind::Marker, "song-pn", "marker-pn", kMarkerFrame,
+        /*revision*/ 1);
+    REQUIRE(prepared);
+    CHECK(prepared->valid);
+    REQUIRE_EQ(prepared->tracks.size(), 1);
+    CHECK(prepared->tracks[0].ready);
+
+    // Swap in and confirm audio comes out — same load-bearing assertion as
+    // test 5 (prefeed first-block-audio) but via the sync miss path.
+    BungeeVoiceManager bvm;
+    REQUIRE(bvm.prepare(kSR, kCh, kBlockFrames));
+    bvm.swap_in_prepared_voices(prepared->extract_voice_map());
+    auto first_block = render_n_blocks(session.songs[0].tracks[0],
+                                        kMarkerFrame, 1, sources,
+                                        &bvm, kSemitones);
+    const float rms = block_rms(first_block);
+    INFO("sync-prepared first-block rms=", rms);
+    CHECK(rms > 0.05f);
+
+    // Diagnostics: prepared_total bumped, take_miss_total bumped (from the
+    // initial take_ready failure).
+    const auto d = prearm.diagnostics();
+    CHECK(d.prepared_total >= 1u);
+    CHECK_EQ(d.take_miss_total, 1u);
+}
+
 // Phase 7: max_prepared_targets cap evicts oldest when exceeded.
 TEST_CASE("PrearmedJumpManager: max_prepared_targets evicts oldest (FIFO)") {
     SourceManager sources;

@@ -169,6 +169,24 @@ public:
                                     const SourceManager* sources,
                                     std::uint64_t session_revision);
 
+    // Phase 6b: synchronous prepare-one-target fast path. Used by jump
+    // handlers when take_ready misses (e.g. user triggered jump before the
+    // async worker finished building the cache). Builds the prepared set
+    // for THIS one target on the calling thread (~13 ms / 9 voices /
+    // 1 marker) and returns it ready to swap. Returns nullptr if the
+    // target can't be prepared (e.g. no clips contain target_frame).
+    //
+    // Does NOT insert the set into the prepared_map — the caller consumes
+    // it immediately by handing it to BungeeVoiceManager::swap_in_prepared_voices.
+    std::unique_ptr<PreparedJumpVoiceSet> prepare_target_now(
+        const Session& session,
+        const SourceManager& sources,
+        PrearmTargetKind kind,
+        const Id& song_id,
+        const Id& target_id,
+        Frame target_frame,
+        std::uint64_t session_revision);
+
     // Backwards-compat alias for the MVP wiring. Same behaviour as
     // prepare_all_targets — kept so existing call sites and tests don't all
     // have to change in one commit. New callers should use prepare_all_targets.

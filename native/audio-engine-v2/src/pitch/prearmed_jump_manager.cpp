@@ -341,6 +341,60 @@ const char* target_kind_label(PrearmTargetKind k) {
     return "unknown";
 }
 
+// Build a PreparedJumpVoiceSet for a single (song, target_frame). Pure
+// computation — no map mutation. Caller decides how to publish the result.
+// Returns an empty set with valid=false on configure failure for any voice.
+std::unique_ptr<PreparedJumpVoiceSet> build_prepared_set(
+        PrearmTargetKind kind,
+        const Song& song,
+        const Id& target_id,
+        Frame target_frame,
+        const SourceManager& sources,
+        int sample_rate,
+        int channel_count,
+        int max_in_frames,
+        std::uint64_t session_revision) {
+    auto set = std::make_unique<PreparedJumpVoiceSet>();
+    set->key.kind             = kind;
+    set->key.song_id          = song.id;
+    set->key.target_id        = target_id;
+    set->key.timeline_frame   = target_frame;
+    set->key.sample_rate      = sample_rate;
+    set->key.block_size       = max_in_frames;
+    set->key.session_revision = session_revision;
+    set->target_timeline_frame = target_frame;
+    set->valid                 = false;
+
+    bool any_failed = false;
+    for (const auto& track : song.tracks) {
+        for (const auto& clip : track.clips) {
+            auto specs = enumerate_prep_specs(song, track, clip, sources, target_frame);
+            for (const auto& spec : specs) {
+                auto voice = std::make_shared<BungeePitchVoice>();
+                if (!voice->configure(sample_rate, channel_count, max_in_frames)) {
+                    any_failed = true;
+                    continue;
+                }
+                warm_voice_silence(*voice, sample_rate, channel_count, max_in_frames);
+                if (spec.source) {
+                    prefeed_voice_with_target_audio(
+                        *voice, *spec.source, spec.target_source_frame,
+                        sample_rate, channel_count, max_in_frames);
+                }
+                voice->arm_fade_in();
+                PreparedTrackVoice ptv;
+                ptv.clip_id             = spec.clip_id;
+                ptv.voice               = std::move(voice);
+                ptv.target_source_frame = spec.target_source_frame;
+                ptv.ready               = true;
+                set->tracks.push_back(std::move(ptv));
+            }
+        }
+    }
+    set->valid = !any_failed;
+    return set;
+}
+
 } // namespace
 
 void PrearmedJumpManager::prepare_all_targets(const Session& session,
@@ -365,8 +419,8 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
     std::unordered_set<PrearmTargetKey, PrearmTargetKeyHash> kept;
     kept.reserve(32);
 
-    // build_one: walk a song's tracks/clips, prime voices targeting
-    // `target_frame`. Inserts into impl_->prepared_map under `key`.
+    // build_one: prime voices targeting `target_frame` and insert into the
+    // prepared_map. Skips if a valid set already exists for the same key.
     auto build_one = [&](PrearmTargetKind kind,
                           const Song& song,
                           const Id& target_id,
@@ -385,51 +439,13 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
         if (it != impl_->prepared_map.end() && it->second && it->second->valid)
             return; // already prepared
 
-        auto set = std::make_unique<PreparedJumpVoiceSet>();
-        set->key                   = key;
-        set->target_timeline_frame = target_frame;
-        set->valid                 = false;
-        bool any_failed = false;
+        auto set = build_prepared_set(kind, song, target_id, target_frame,
+                                       sources, impl_->sample_rate,
+                                       impl_->channel_count,
+                                       impl_->max_in_frames, session_revision);
 
-        for (const auto& track : song.tracks) {
-            for (const auto& clip : track.clips) {
-                auto specs = enumerate_prep_specs(
-                    song, track, clip, sources, target_frame);
-                for (const auto& spec : specs) {
-                    auto voice = std::make_shared<BungeePitchVoice>();
-                    if (!voice->configure(impl_->sample_rate,
-                                          impl_->channel_count,
-                                          impl_->max_in_frames)) {
-                        any_failed = true;
-                        continue;
-                    }
-                    warm_voice_silence(*voice,
-                                        impl_->sample_rate,
-                                        impl_->channel_count,
-                                        impl_->max_in_frames);
-                    if (spec.source) {
-                        prefeed_voice_with_target_audio(
-                            *voice, *spec.source,
-                            spec.target_source_frame,
-                            impl_->sample_rate,
-                            impl_->channel_count,
-                            impl_->max_in_frames);
-                    }
-                    voice->arm_fade_in();
-
-                    PreparedTrackVoice ptv;
-                    ptv.clip_id             = spec.clip_id;
-                    ptv.voice               = std::move(voice);
-                    ptv.target_source_frame = spec.target_source_frame;
-                    ptv.ready               = true;
-                    set->tracks.push_back(std::move(ptv));
-                }
-            }
-        }
-
-        if (any_failed) {
+        if (!set->valid) {
             impl_->prepare_failed_total.fetch_add(1, std::memory_order_relaxed);
-            set->valid = false;
             if (prearm_log_enabled()) {
                 std::fprintf(stdout,
                     "[PREARM] prepare_failed kind=%s song=%s id=%s frame=%lld\n",
@@ -438,7 +454,6 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
                 std::fflush(stdout);
             }
         } else {
-            set->valid = true;
             impl_->prepared_total.fetch_add(1, std::memory_order_relaxed);
             if (prearm_log_enabled()) {
                 std::fprintf(stdout,
@@ -497,6 +512,59 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
             ++it;
         }
     }
+}
+
+std::unique_ptr<PreparedJumpVoiceSet>
+PrearmedJumpManager::prepare_target_now(const Session& session,
+                                          const SourceManager& sources,
+                                          PrearmTargetKind kind,
+                                          const Id& song_id,
+                                          const Id& target_id,
+                                          Frame target_frame,
+                                          std::uint64_t session_revision) {
+    if (!impl_ || !impl_->prepared) return nullptr;
+
+    // Find the song in the session.
+    const Song* song_ptr = nullptr;
+    for (const auto& s : session.songs) {
+        if (s.id == song_id) { song_ptr = &s; break; }
+    }
+    if (!song_ptr) return nullptr;
+
+    // Build the set without holding the manager mutex — voice priming is
+    // ~13 ms and we don't want to block other threads' diagnostics reads.
+    int sr, ch, bs;
+    {
+        std::lock_guard<std::mutex> g(impl_->mtx);
+        sr = impl_->sample_rate;
+        ch = impl_->channel_count;
+        bs = impl_->max_in_frames;
+    }
+    auto set = build_prepared_set(kind, *song_ptr, target_id, target_frame,
+                                   sources, sr, ch, bs, session_revision);
+
+    // Update diagnostics; do NOT insert into prepared_map (caller consumes it).
+    if (!set->valid) {
+        impl_->prepare_failed_total.fetch_add(1, std::memory_order_relaxed);
+        if (prearm_log_enabled()) {
+            std::fprintf(stdout,
+                "[PREARM] prepare_target_now_failed kind=%s song=%s id=%s frame=%lld\n",
+                target_kind_label(kind), song_id.c_str(),
+                target_id.c_str(), static_cast<long long>(target_frame));
+            std::fflush(stdout);
+        }
+        return nullptr;
+    }
+    impl_->prepared_total.fetch_add(1, std::memory_order_relaxed);
+    if (prearm_log_enabled()) {
+        std::fprintf(stdout,
+            "[PREARM] prepare_target_now_ok kind=%s song=%s id=%s frame=%lld voices=%zu\n",
+            target_kind_label(kind), song_id.c_str(),
+            target_id.c_str(), static_cast<long long>(target_frame),
+            set->tracks.size());
+        std::fflush(stdout);
+    }
+    return set;
 }
 
 std::unique_ptr<PreparedJumpVoiceSet>
