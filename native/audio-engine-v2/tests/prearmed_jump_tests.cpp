@@ -372,6 +372,81 @@ TEST_CASE("PrearmedJumpManager prefeed: first post-jump block emits audio") {
     CHECK(rms > 0.05f);
 }
 
+// Spec test 9: prepare() with new dimensions clears stale prepared voices.
+//
+// Models the engine_impl device-change flow: when the audio device
+// renegotiates sample_rate or buffer_size, engine_impl calls
+// prearmed_jumps_->clear() then prepare(new_sr, ch, new_bs). The cache
+// must be empty afterwards.
+TEST_CASE("PrearmedJumpManager: prepare() with new dims clears stale voices") {
+    SourceManager sources;
+    Session       session;
+    init_fixture(sources, session, "src-d9", "clip-d9", "track-d9", "song-d9",
+                  "marker-d9", kMarkerFrame, /*transposed*/ true);
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+    prearm.prepare_all_targets(session, sources, 1);
+    REQUIRE(prearm.diagnostics().ready_count >= 1);
+
+    // Reconfigure with different buffer size — simulates SetBufferSize.
+    REQUIRE(prearm.prepare(kSR, kCh, 1024));
+    CHECK_EQ(prearm.diagnostics().ready_count, 0);
+}
+
+// Spec test 11: rapid jumps don't crash / desync. Models the user spamming
+// marker jumps quickly. Each "jump" is: take_ready → if hit, swap into BVM.
+// We loop, alternately preparing and taking, and assert no double-free /
+// no manager corruption / monotonic counters.
+TEST_CASE("PrearmedJumpManager: rapid prepare+take cycles are safe") {
+    SourceManager sources;
+    Session       session;
+    init_fixture(sources, session, "src-rj", "clip-rj", "track-rj", "song-rj",
+                  "marker-rj", kMarkerFrame, /*transposed*/ true);
+    // Add a few more markers so prepare has multiple targets per pass.
+    for (int i = 1; i < 4; ++i) {
+        Marker m;
+        m.id = std::string("marker-rj-") + std::to_string(i);
+        m.name = "M";
+        m.frame = 1024 + i * 1024;
+        session.songs[0].markers.push_back(m);
+    }
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+
+    BungeeVoiceManager bvm;
+    REQUIRE(bvm.prepare(kSR, kCh, kBlockFrames));
+
+    // 5 iterations of: bump revision, prepare, take all 4 markers.
+    for (int iter = 0; iter < 5; ++iter) {
+        const auto rev = static_cast<std::uint64_t>(iter + 1);
+        prearm.prepare_all_targets(session, sources, rev);
+
+        for (int i = 0; i < 4; ++i) {
+            PrearmTargetKey key;
+            key.kind             = PrearmTargetKind::Marker;
+            key.song_id          = "song-rj";
+            key.target_id        = (i == 0)
+                ? std::string("marker-rj")
+                : std::string("marker-rj-") + std::to_string(i);
+            key.timeline_frame   = (i == 0) ? kMarkerFrame : (1024 + i * 1024);
+            key.sample_rate      = kSR;
+            key.block_size       = kBlockFrames;
+            key.session_revision = rev;
+            auto prepared = prearm.take_ready(key);
+            REQUIRE(prepared);
+            REQUIRE(prepared->valid);
+            // Atomic swap — same call pattern as engine_impl on jump.
+            bvm.swap_in_prepared_voices(prepared->extract_voice_map());
+        }
+    }
+    // No crash and counters are sensible: 5 iter × 4 markers = 20 hits.
+    const auto d = prearm.diagnostics();
+    CHECK_EQ(d.take_hit_total, 20u);
+    CHECK_EQ(d.take_miss_total, 0u);
+}
+
 // Phase 7: max_prepared_targets cap evicts oldest when exceeded.
 TEST_CASE("PrearmedJumpManager: max_prepared_targets evicts oldest (FIFO)") {
     SourceManager sources;
