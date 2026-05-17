@@ -19,3 +19,4 @@ graphify-out/
 native/audio-engine-v2/build*
 build-rb-tests*
 build-rb-release*
+build*

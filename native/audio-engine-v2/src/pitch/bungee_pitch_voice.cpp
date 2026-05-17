@@ -35,6 +35,17 @@ struct BungeePitchVoice::Impl {
 
     std::unique_ptr<Stretcher> stretcher;
     std::unique_ptr<Stream>    stream;
+
+    // Post-construction fade-in: Bungee's first synthesised grain after
+    // construction starts at whatever phase the FFT happens to produce, so the
+    // audio thread sees a one-sample 0→nonzero jump that clicks. Voices are
+    // rebuilt on every seek (see BungeeVoiceManager::rebuild_for_seek), so
+    // "first frames of this voice" = "first frames after a seek." A short
+    // equal-power ramp on the first ~5 ms of output frames masks the pop
+    // without being audible as a fade. Counts OUTPUT frames the caller
+    // received, not input frames fed to Bungee.
+    int fade_total_frames    = 0;
+    int fade_frames_done     = 0;
 };
 
 BungeePitchVoice::BungeePitchVoice()
@@ -77,6 +88,9 @@ bool BungeePitchVoice::configure(int sample_rate,
         //   stretcher.maxInputFrameCount() + max_input_frames_per_block
         impl_->stream = std::make_unique<Impl::Stream>(
             *impl_->stretcher, max_input_frames_per_block, channel_count);
+        // 5 ms equal-power fade-in to mask Bungee's startup pop.
+        impl_->fade_total_frames = std::max(1, (sample_rate * 5) / 1000);
+        impl_->fade_frames_done  = 0;
     } catch (...) {
         impl_->stretcher.reset();
         impl_->stream.reset();
@@ -109,12 +123,35 @@ int BungeePitchVoice::render_block(const float* const* input,
     //           double outputFrameCount,
     //           double pitch = 1.0);
     // Returns the number of output frames actually produced.
-    return impl_->stream->process(
+    const int produced = impl_->stream->process(
         input,
         output,
         input_frames,
         static_cast<double>(output_frames),
         pitch_scale);
+
+    // Apply the post-construction fade-in to the first `fade_total_frames`
+    // output frames the caller ever receives from this voice. Skips cleanly
+    // once `fade_frames_done >= fade_total_frames`.
+    auto& I = *impl_;
+    if (produced > 0 && I.fade_frames_done < I.fade_total_frames) {
+        const int remaining = I.fade_total_frames - I.fade_frames_done;
+        const int n = std::min(produced, remaining);
+        const double inv_total = 1.0 / static_cast<double>(I.fade_total_frames);
+        const int ch_count = I.channel_count;
+        for (int i = 0; i < n; ++i) {
+            // Equal-power (sin²) ramp from 0 to 1 over fade_total_frames.
+            const double t = static_cast<double>(I.fade_frames_done + i) * inv_total;
+            const double s = std::sin(t * 1.5707963267948966); // π/2
+            const float gain = static_cast<float>(s * s);
+            for (int c = 0; c < ch_count; ++c) {
+                if (output[c]) output[c][i] *= gain;
+            }
+        }
+        I.fade_frames_done += n;
+    }
+
+    return produced;
 }
 
 long long BungeePitchVoice::input_position() const noexcept {
@@ -139,6 +176,18 @@ bool BungeePitchVoice::is_warm() const noexcept {
     return impl_->stream->latency() < static_cast<double>(impl_->max_in_frames);
 }
 
+void BungeePitchVoice::arm_fade_in(int fade_ms) noexcept {
+    if (!impl_) return;
+    const int sr = impl_->sample_rate;
+    if (sr <= 0 || fade_ms <= 0) {
+        impl_->fade_total_frames = 0;
+        impl_->fade_frames_done  = 0;
+        return;
+    }
+    impl_->fade_total_frames = std::max(1, (sr * fade_ms) / 1000);
+    impl_->fade_frames_done  = 0;
+}
+
 #else // !LT_ENGINE_HAVE_BUNGEE
 
 // ─── Stub when Bungee is not compiled in ────────────────────────────────
@@ -158,6 +207,7 @@ long long BungeePitchVoice::input_position() const noexcept { return 0; }
 double    BungeePitchVoice::output_position() const noexcept { return 0.0; }
 double    BungeePitchVoice::latency_frames() const noexcept  { return 0.0; }
 bool      BungeePitchVoice::is_warm() const noexcept         { return false; }
+void      BungeePitchVoice::arm_fade_in(int /*fade_ms*/) noexcept {}
 
 int BungeePitchVoice::render_block(const float* const* /*input*/,
                                     int /*input_frames*/,

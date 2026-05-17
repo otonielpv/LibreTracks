@@ -92,6 +92,13 @@ public:
     // latency_frames() < epsilon.
     bool   is_warm() const noexcept;
 
+    // Re-arm the post-construction fade-in so the next `fade_ms` of OUTPUT
+    // frames the caller receives are ramped from 0→1 (equal-power). Used by
+    // BungeeVoiceManager after warm_voice() has consumed the initial fade
+    // window with zero input — so the audio thread still gets the masking
+    // ramp when it first asks for real audio. Default 5 ms.
+    void arm_fade_in(int fade_ms = 5) noexcept;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

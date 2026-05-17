@@ -243,6 +243,10 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
         }
         warm_voice(*voice,
                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+        // warm_voice consumed the voice's initial fade window with zero
+        // input. Re-arm it so the audio thread's first real frames are
+        // ramped, masking Bungee's startup pop on seeks.
+        voice->arm_fade_in();
         (*next)[spec.clip_id] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
@@ -286,6 +290,10 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
         }
         warm_voice(*voice,
                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+        // warm_voice consumed the voice's initial fade window with zero
+        // input. Re-arm it so the audio thread's first real frames are
+        // ramped, masking Bungee's startup pop on seeks.
+        voice->arm_fade_in();
         (*next)[spec.clip_id] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
