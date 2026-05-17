@@ -191,14 +191,16 @@ void TrackRenderer::render_clip(const Clip&          clip,
         // (The repair path via RealtimePitchEngine will rebuild the stream.)
         int rendered = 0;
 
-        // Bungee-first path: when a primed Bungee voice exists for this
-        // (clip_id, effective_semitones), use it. Bungee is ~25x cheaper per
-        // voice than RubberBand on this hardware and supports gapless live
-        // pitch changes. Falls through to the legacy RubberBand path when no
-        // voice is found (e.g. the control thread hasn't built one yet).
+        // Bungee-first path: when a Bungee voice exists for this clip, use
+        // it. Voices are keyed per-clip and persist across pitch changes;
+        // the current effective semitones drives Bungee's per-grain pitch
+        // parameter (see render_block call below) so live transpose changes
+        // are gapless. Falls through to the legacy RubberBand path only when
+        // no voice exists for this clip (e.g. control thread hasn't built
+        // one yet, or the track is configured NeverTranspose).
         BungeePitchVoice* bv = nullptr;
         if (bungee_voices)
-            bv = bungee_voices->voice_for(clip.id, effective_semitones);
+            bv = bungee_voices->voice_for(clip.id);
         if (bv) {
             // Fetch planar source audio into the Bungee input scratch.
             // The render scratch (scratch_l_/scratch_r_) is reserved for output.

@@ -1074,12 +1074,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
-                // Bungee: rebuild voices at the current playhead so their pitch
-                // matches the new transpose decision (per-track enable can flip
-                // a voice's effective semitones to 0 / from 0).
+                // Bungee: refresh the voice set without destroying existing
+                // voices. A track flipping from NeverTranspose to
+                // FollowsSongOrRegion (or vice versa) changes which clips
+                // need voices; rebuild_for_session reuses any existing voice
+                // whose clip_id is unchanged, so we only pay the ~200 ms
+                // warm-up cost for clips that didn't have a voice before.
                 if (bungee_voices_ && bungee_voices_->is_available()) {
-                    bungee_voices_->rebuild_for_seek(
-                        clock_->position().frame, *next_session, *source_manager_);
+                    bungee_voices_->rebuild_for_session(
+                        *next_session, *source_manager_, clock_->position().frame);
                 }
                 // Prime at current playhead so published streams are aligned.
                 if (realtime_pitch_engine_) {
@@ -1102,12 +1105,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
-                // Bungee: rebuild voices fresh because the pitch key changes for
-                // every transposed clip in the affected song.
-                if (bungee_voices_ && bungee_voices_->is_available()) {
-                    bungee_voices_->rebuild_for_seek(
-                        clock_->position().frame, *next_session, *source_manager_);
-                }
+                // Bungee: do NOT rebuild voices on a song-transpose change.
+                // The audio thread picks up the new effective semitones on
+                // the next render block and Bungee handles the pitch change
+                // gaplessly via its per-grain Request::pitch parameter.
+                // Rebuilding here was the cause of the ~200 ms silence on
+                // every transpose adjustment.
+                //
                 // Prime at current playhead so published streams are aligned.
                 // Async rebuild — see CmdSeekAbsolute for rationale.
                 if (realtime_pitch_engine_) {
@@ -1138,12 +1142,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
-                // Bungee: rebuild voices fresh because the region pitch change
-                // alters the effective semitones key for affected clips.
-                if (bungee_voices_ && bungee_voices_->is_available()) {
-                    bungee_voices_->rebuild_for_seek(
-                        clock_->position().frame, *next_session, *source_manager_);
-                }
+                // Bungee: do NOT rebuild voices on a region-transpose change.
+                // The audio thread picks up the new effective semitones on
+                // the next render block; Bungee handles the change gaplessly
+                // via Request::pitch.  See CmdSetSongTranspose for the full
+                // rationale and the bug this avoids.
+                //
                 // Prime at current playhead so published streams are aligned.
                 // Async rebuild — see CmdSeekAbsolute for rationale.
                 if (realtime_pitch_engine_) {

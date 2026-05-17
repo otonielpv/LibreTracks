@@ -16,26 +16,12 @@ namespace lt {
 
 // ─── Key / map ───────────────────────────────────────────────────────────
 
-struct VoiceKey {
-    Id        clip_id;
-    Semitones semitones;
-    bool operator==(const VoiceKey& o) const noexcept {
-        return semitones == o.semitones && clip_id == o.clip_id;
-    }
-};
-
-struct VoiceKeyHash {
-    std::size_t operator()(const VoiceKey& k) const noexcept {
-        std::size_t h = std::hash<std::string>{}(k.clip_id);
-        h ^= std::hash<int>{}(static_cast<int>(k.semitones))
-             + 0x9e3779b9u + (h << 6) + (h >> 2);
-        return h;
-    }
-};
-
-using VoiceMap = std::unordered_map<VoiceKey,
-                                    std::shared_ptr<BungeePitchVoice>,
-                                    VoiceKeyHash>;
+// Voices are keyed on clip_id only. Pitch is supplied per render block via
+// Bungee's Request::pitch parameter, so a single voice carries a clip through
+// arbitrary live pitch changes gaplessly. Rebuilding when pitch changes was
+// the bug that caused ~200 ms of silence on every transpose adjustment.
+using VoiceMap = std::unordered_map<Id,
+                                    std::shared_ptr<BungeePitchVoice>>;
 
 // ─── Impl ────────────────────────────────────────────────────────────────
 
@@ -98,10 +84,12 @@ bool BungeeVoiceManager::is_available() const noexcept {
 
 namespace {
 
-// Iterate the session and collect (clip_id, semitones, source, source_frame)
-// tuples for every transposed-and-currently-playing voice at `playhead`.
+// Iterate the session and collect (clip_id, source, source_frame) tuples for
+// every transposed-and-currently-playing voice at `playhead`. We enumerate by
+// clip rather than by (clip, semitones) — the same voice handles arbitrary
+// live pitch changes via the per-block pitch_scale parameter.
 struct VoiceSpec {
-    VoiceKey             key;
+    Id                   clip_id;
     const DecodedSource* source = nullptr;
     Frame                source_frame = 0;  // where in the source we will start
 };
@@ -125,19 +113,22 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
                 const auto* src = sources.get(clip.source_id);
                 if (!src || !src->is_loaded()) continue;
 
-                const auto decision = resolve_pitch_render_decision(
-                    track, clip, song, playhead);
-                if (!decision.needs_pitch || decision.effective_semitones == 0)
+                // A clip needs a Bungee voice if pitch CAN be applied. We
+                // intentionally do NOT filter on the current effective
+                // semitones being non-zero: keeping the voice alive across
+                // a "set to zero, then change again" sequence avoids the
+                // ~200 ms rebuild gap. The audio thread skips the pitched
+                // path when effective_semitones==0 anyway.
+                if (track.transpose_behavior == TransposeBehavior::NeverTranspose)
                     continue;
 
                 VoiceSpec spec;
-                spec.key.clip_id      = clip.id;
-                spec.key.semitones    = decision.effective_semitones;
-                spec.source           = src;
+                spec.clip_id      = clip.id;
+                spec.source       = src;
                 // Source frame the audio thread will request first after the
                 // playhead lands here. We will prime up to this position.
-                spec.source_frame     = clip.source_start_frame
-                                        + (playhead - clip.timeline_start_frame);
+                spec.source_frame = clip.source_start_frame
+                                    + (playhead - clip.timeline_start_frame);
                 out.push_back(spec);
             }
         }
@@ -233,13 +224,13 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
     int reused = 0;
     int built  = 0;
     for (const auto& spec : specs) {
-        // Reuse the existing voice when its key is unchanged — saves the
-        // ~0.15 ms construct cost per voice and keeps Bungee's internal
-        // pipeline warm (no re-priming needed). When the effective pitch
-        // changed mid-clip, the key differs and we build a fresh voice.
-        auto it = current->find(spec.key);
+        // Reuse the existing voice whenever the clip is unchanged. Pitch
+        // changes are handled via the per-block pitch_scale parameter and
+        // do NOT require rebuilding — that was the bug causing 200 ms of
+        // silence on every transpose adjustment.
+        auto it = current->find(spec.clip_id);
         if (it != current->end()) {
-            (*next)[spec.key] = it->second;
+            (*next)[spec.clip_id] = it->second;
             ++reused;
             continue;
         }
@@ -252,7 +243,7 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
         }
         warm_voice(*voice,
                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
-        (*next)[spec.key] = std::move(voice);
+        (*next)[spec.clip_id] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
     }
@@ -295,7 +286,7 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
         }
         warm_voice(*voice,
                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
-        (*next)[spec.key] = std::move(voice);
+        (*next)[spec.clip_id] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
     }
@@ -320,15 +311,14 @@ void BungeeVoiceManager::clear() {
 
 // ─── Audio-thread lookup ─────────────────────────────────────────────────
 
-BungeePitchVoice* BungeeVoiceManager::voice_for(const Id& clip_id,
-                                                 Semitones semitones) noexcept {
+BungeePitchVoice* BungeeVoiceManager::voice_for(const Id& clip_id) noexcept {
     if (!impl_) return nullptr;
     auto snapshot = std::atomic_load(&impl_->active);
     if (!snapshot) {
         impl_->voice_lookups_miss.fetch_add(1, std::memory_order_relaxed);
         return nullptr;
     }
-    auto it = snapshot->find(VoiceKey{clip_id, semitones});
+    auto it = snapshot->find(clip_id);
     if (it == snapshot->end()) {
         impl_->voice_lookups_miss.fetch_add(1, std::memory_order_relaxed);
         return nullptr;

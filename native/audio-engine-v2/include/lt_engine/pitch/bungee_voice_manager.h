@@ -76,12 +76,17 @@ public:
 
     // ── Audio-thread lookup (must not allocate) ──────────────────────────
 
-    // Returns a non-owning pointer to the voice matching (clip_id, semitones).
-    // Returns nullptr if no voice exists yet — the caller should fall back to
-    // its legacy pitch path.
+    // Returns a non-owning pointer to the voice owning this clip. Returns
+    // nullptr if no voice exists yet — the caller should fall back to its
+    // legacy pitch path.
+    //
+    // Voices are keyed per-clip, NOT per-(clip, semitones), because Bungee's
+    // Request::pitch parameter is updated on every audio block. Live pitch
+    // changes do not require rebuilding the voice; only the playhead moving
+    // to a different position does (handled by rebuild_for_seek).
     //
     // Audio-thread safe: snapshots the current voice map via atomic_load.
-    BungeePitchVoice* voice_for(const Id& clip_id, Semitones semitones) noexcept;
+    BungeePitchVoice* voice_for(const Id& clip_id) noexcept;
 
     // ── Diagnostics (any thread) ─────────────────────────────────────────
     BungeeVoiceManagerDiagnostics diagnostics() const noexcept;

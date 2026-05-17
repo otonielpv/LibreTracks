@@ -74,15 +74,42 @@ TEST_CASE("rebuild_for_session creates a voice for a transposed clip") {
     auto session = make_one_transposed_clip_session(/*semitones=*/-2);
     mgr.rebuild_for_session(session, sm, /*playhead=*/0);
 
-    BungeePitchVoice* v = mgr.voice_for("clip1", -2);
+    BungeePitchVoice* v = mgr.voice_for("clip1");
 #if LT_ENGINE_HAVE_BUNGEE
     CHECK(v != nullptr);
     if (v) CHECK(v->is_ready());
 #endif
-    // Wrong semitones key — no voice.
-    CHECK(mgr.voice_for("clip1", +5) == nullptr);
     // Wrong clip id — no voice.
-    CHECK(mgr.voice_for("clip_other", -2) == nullptr);
+    CHECK(mgr.voice_for("clip_other") == nullptr);
+}
+
+TEST_CASE("voice pointer survives a transpose change (no rebuild)") {
+    // Voices are keyed per-clip, not per-(clip, semitones). A pitch change
+    // must NOT recreate the voice — the audio thread passes the new pitch
+    // via Bungee's per-grain pitch_scale parameter instead. This test
+    // protects against re-introducing the ~200 ms silence on transpose.
+    BungeeVoiceManager mgr;
+    if (!mgr.prepare(kSR, kChannels, kBlock)) return;
+
+    SourceManager sm;
+    REQUIRE(register_loaded_source(sm, "src1", kSR * 4));
+
+    auto session = make_one_transposed_clip_session(/*semitones=*/-2);
+    mgr.rebuild_for_session(session, sm, /*playhead=*/0);
+    BungeePitchVoice* before = mgr.voice_for("clip1");
+
+    // Mutate the session's transpose (simulating a region transpose change)
+    // and rebuild_for_session at the same playhead. The voice for "clip1"
+    // must be the same pointer — pitch parameter is handled at render time.
+    session.songs[0].transpose_semitones = +3;
+    mgr.rebuild_for_session(session, sm, /*playhead=*/0);
+    BungeePitchVoice* after = mgr.voice_for("clip1");
+
+#if LT_ENGINE_HAVE_BUNGEE
+    CHECK(before != nullptr);
+    CHECK(after  != nullptr);
+    CHECK(before == after);
+#endif
 }
 
 TEST_CASE("rebuild_for_seek replaces voices at the new playhead") {
@@ -94,11 +121,11 @@ TEST_CASE("rebuild_for_seek replaces voices at the new playhead") {
 
     auto session = make_one_transposed_clip_session(/*semitones=*/-2);
     mgr.rebuild_for_session(session, sm, /*playhead=*/0);
-    BungeePitchVoice* before = mgr.voice_for("clip1", -2);
+    BungeePitchVoice* before = mgr.voice_for("clip1");
 
     // Seek to 1 second into the clip.
     mgr.rebuild_for_seek(/*target*/kSR * 1, session, sm);
-    BungeePitchVoice* after = mgr.voice_for("clip1", -2);
+    BungeePitchVoice* after = mgr.voice_for("clip1");
 
 #if LT_ENGINE_HAVE_BUNGEE
     CHECK(before != nullptr);
@@ -112,7 +139,7 @@ TEST_CASE("rebuild_for_seek replaces voices at the new playhead") {
 #endif
 }
 
-TEST_CASE("rebuild_for_session keeps the same voice pointer when key is unchanged") {
+TEST_CASE("rebuild_for_session keeps the same voice pointer when clip is unchanged") {
     BungeeVoiceManager mgr;
     if (!mgr.prepare(kSR, kChannels, kBlock)) return;
 
@@ -121,11 +148,11 @@ TEST_CASE("rebuild_for_session keeps the same voice pointer when key is unchange
 
     auto session = make_one_transposed_clip_session(/*semitones=*/-2);
     mgr.rebuild_for_session(session, sm, /*playhead=*/0);
-    BungeePitchVoice* before = mgr.voice_for("clip1", -2);
+    BungeePitchVoice* before = mgr.voice_for("clip1");
 
-    // Same key on the next rebuild — voice should be reused, not recreated.
+    // Same session on the next rebuild — voice should be reused, not recreated.
     mgr.rebuild_for_session(session, sm, /*playhead=*/0);
-    BungeePitchVoice* after = mgr.voice_for("clip1", -2);
+    BungeePitchVoice* after = mgr.voice_for("clip1");
 
 #if LT_ENGINE_HAVE_BUNGEE
     CHECK(before != nullptr);
@@ -144,9 +171,9 @@ TEST_CASE("clear() drops all voices") {
     auto session = make_one_transposed_clip_session(-2);
     mgr.rebuild_for_session(session, sm, 0);
 #if LT_ENGINE_HAVE_BUNGEE
-    REQUIRE(mgr.voice_for("clip1", -2) != nullptr);
+    REQUIRE(mgr.voice_for("clip1") != nullptr);
 #endif
 
     mgr.clear();
-    CHECK(mgr.voice_for("clip1", -2) == nullptr);
+    CHECK(mgr.voice_for("clip1") == nullptr);
 }
