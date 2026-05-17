@@ -21,6 +21,7 @@
 #include <lt_engine/pitch/pitch_cache.h>
 #include <lt_engine/pitch/realtime_pitch_engine.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
+#include <lt_engine/pitch/prearmed_jump_manager.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -65,6 +66,11 @@ private:
     std::unique_ptr<PitchCache>         pitch_cache_;
     mutable std::unique_ptr<RealtimePitchEngine> realtime_pitch_engine_;
     std::unique_ptr<BungeeVoiceManager> bungee_voices_;
+    std::unique_ptr<PrearmedJumpManager> prearmed_jumps_;
+    // Bumped on any structural session change so PrearmedJumpManager
+    // invalidates its cache. Phase 6 will introduce finer-grained revisions
+    // (pitch_revision, source_revision, device_revision) per the spec.
+    std::atomic<std::uint64_t>          session_revision_{0};
     std::unique_ptr<Mixer>              mixer_;
     std::shared_ptr<const Session>      session_;
     DeviceOpenRequest                   current_device_request_;

@@ -169,7 +169,8 @@ Result<void> EngineImpl::initialize() {
     pitch_cache_    = std::make_unique<PitchCache>();
     pitch_cache_->set_realtime_fallback_enabled(false);
     realtime_pitch_engine_ = std::make_unique<RealtimePitchEngine>();
-    bungee_voices_ = std::make_unique<BungeeVoiceManager>();
+    bungee_voices_  = std::make_unique<BungeeVoiceManager>();
+    prearmed_jumps_ = std::make_unique<PrearmedJumpManager>();
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
     mixer_          = std::make_unique<Mixer>(
         std::shared_ptr<const Session>{},
@@ -208,6 +209,7 @@ Result<void> EngineImpl::initialize() {
                         ? device_manager_->actual_buffer_size()
                         : 1024;  // generous default; tracks the OS buffer size when available
         bungee_voices_->prepare(sr, /*channels=*/2, bs);
+        if (prearmed_jumps_) prearmed_jumps_->prepare(sr, /*channels=*/2, bs);
     }
 
     state_ = State::Initialized;
@@ -825,6 +827,20 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 bungee_voices_->rebuild_for_session(
                     *next_session, *source_manager_, clock_->position().frame);
 
+            // Prearm marker targets on session load. Bumps session_revision
+            // so any previous prepared sets are discarded. The prepare call
+            // is synchronous on the command thread — Phase 2 will move it to
+            // a worker; for the MVP we accept the (~80ms × markers × tracks)
+            // cost happening once at LoadSession time. Most sessions have
+            // ≤5 markers and ≤9 tracks → ~3.6 s worst case, no UI freeze
+            // because LoadSession isn't called during playback.
+            if (prearmed_jumps_) {
+                const auto rev = session_revision_.fetch_add(1,
+                    std::memory_order_relaxed) + 1;
+                prearmed_jumps_->prepare_all_markers(
+                    *next_session, *source_manager_, rev);
+            }
+
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdPlay>) {
@@ -977,6 +993,61 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (!session_) return Result<void>::err("No session loaded");
             JumpTarget target{ JumpTarget::Kind::Marker, c.marker_id, std::nullopt };
             Id jump_id = "jump-marker-" + c.marker_id;
+
+            // Prearmed-jump fast path: if PrearmedJumpManager has a fully
+            // ready voice set for this marker under the current session
+            // revision, atomically swap it into BungeeVoiceManager BEFORE
+            // scheduling the seek. The audio thread's next block will see
+            // the new voices, eliminating the ~80 ms control-thread voice-
+            // construction cost the reactive rebuild_for_seek path pays.
+            //
+            // Fallback: if no prepared set exists (e.g. revision changed,
+            // marker added after last LoadSession), fall through to the
+            // legacy reactive path — calling rebuild_for_seek synchronously
+            // so the jump still works, just slower.
+            if (prearmed_jumps_ && bungee_voices_ && bungee_voices_->is_available()) {
+                // Resolve marker frame to build the key.
+                Frame target_frame = 0;
+                Id song_id;
+                for (const auto& song : session_->songs) {
+                    for (const auto& m : song.markers) {
+                        if (m.id == c.marker_id) {
+                            target_frame = m.frame;
+                            song_id      = song.id;
+                        }
+                    }
+                }
+                if (!song_id.empty()) {
+                    PrearmTargetKey key;
+                    key.kind             = PrearmTargetKind::Marker;
+                    key.song_id          = song_id;
+                    key.marker_id        = c.marker_id;
+                    key.timeline_frame   = target_frame;
+                    key.sample_rate      = clock_->sample_rate();
+                    key.block_size       = device_manager_
+                        ? device_manager_->actual_buffer_size()
+                        : 1024;
+                    key.session_revision = session_revision_.load(
+                        std::memory_order_relaxed);
+
+                    if (auto prepared = prearmed_jumps_->take_ready(key)) {
+                        bungee_voices_->swap_in_prepared_voices(
+                            prepared->extract_voice_map());
+                        // Set transport to target immediately so the next
+                        // audio block reads from the new playhead with the
+                        // freshly-published voices.
+                        clock_->seek(target_frame);
+                        push_event(EvJumpScheduled{ jump_id, c.marker_id });
+                        return Result<void>::ok();
+                    }
+                    // Miss: fall through to scheduler path. Synchronous
+                    // rebuild_for_seek so audio doesn't break — the cost is
+                    // unchanged from the pre-prearm behaviour.
+                    bungee_voices_->rebuild_for_seek(
+                        target_frame, *session_, *source_manager_);
+                }
+            }
+
             auto r = scheduler_->schedule_immediate(jump_id, target, *session_, *clock_);
             if (r.is_err()) return Result<void>::err(r.error());
             push_event(EvJumpScheduled{ jump_id, c.marker_id });
