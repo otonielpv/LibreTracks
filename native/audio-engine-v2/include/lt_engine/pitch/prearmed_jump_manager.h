@@ -55,16 +55,20 @@ class BungeeVoiceManager;
 
 enum class PrearmTargetKind {
     Marker,
-    // Region, Song, Vamp, … — added in later phases. The enum is reserved
-    // so PrearmTargetKey users can match on it without growing later.
+    RegionStart,
+    SongStart,
+    // Vamp, … — added in later phases.
 };
 
 // Identifies a prearmed target. session_revision invalidates the entire map
 // when the user edits the project; the rest disambiguates which target.
+//
+// `target_id` is the marker_id / region_id / song_id depending on kind. For
+// SongStart it's the song's own id (redundant with song_id but kept uniform).
 struct PrearmTargetKey {
     PrearmTargetKind kind             = PrearmTargetKind::Marker;
     Id               song_id;
-    Id               marker_id;
+    Id               target_id;       // marker_id, region_id, or song_id
     Frame            timeline_frame   = 0;
     int              sample_rate      = 0;
     int              block_size       = 0;
@@ -73,7 +77,7 @@ struct PrearmTargetKey {
     bool operator==(const PrearmTargetKey& o) const noexcept {
         return kind == o.kind
             && song_id == o.song_id
-            && marker_id == o.marker_id
+            && target_id == o.target_id
             && timeline_frame == o.timeline_frame
             && sample_rate == o.sample_rate
             && block_size == o.block_size
@@ -85,10 +89,12 @@ struct PrearmTargetKeyHash {
     std::size_t operator()(const PrearmTargetKey& k) const noexcept {
         // Cheap mix — collisions are tolerable, we only have ≤8 keys live.
         std::size_t h = std::hash<Id>{}(k.song_id);
-        h ^= std::hash<Id>{}(k.marker_id) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<Id>{}(k.target_id) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
         h ^= std::hash<long long>{}(static_cast<long long>(k.timeline_frame))
              + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
         h ^= std::hash<std::uint64_t>{}(k.session_revision)
+             + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        h ^= std::hash<int>{}(static_cast<int>(k.kind))
              + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
         return h;
     }
@@ -132,16 +138,25 @@ public:
     // is dimensionally compatible.
     bool prepare(int sample_rate, int channel_count, int max_input_frames);
 
-    // Walk the session and prearm every marker target. Idempotent: targets
-    // that already have a valid prepared set under the current
-    // session_revision are skipped; stale targets (different revision) are
-    // discarded; new targets are built. Runs on the control thread.
+    // Walk the session and prearm every supported target (markers, region
+    // starts, song starts). Idempotent: targets already valid under the
+    // current session_revision are skipped; stale targets discarded; new
+    // targets built. Runs on the control thread.
     //
     // `session_revision` should be bumped by the caller on any structural
     // session change so this method invalidates the cache appropriately.
-    void prepare_all_markers(const Session& session,
+    void prepare_all_targets(const Session& session,
                               const SourceManager& sources,
                               std::uint64_t session_revision);
+
+    // Backwards-compat alias for the MVP wiring. Same behaviour as
+    // prepare_all_targets — kept so existing call sites and tests don't all
+    // have to change in one commit. New callers should use prepare_all_targets.
+    void prepare_all_markers(const Session& session,
+                              const SourceManager& sources,
+                              std::uint64_t session_revision) {
+        prepare_all_targets(session, sources, session_revision);
+    }
 
     // Lookup. Returns nullptr if no prepared set exists for the key OR if
     // the set is not valid (any voice not ready). Caller must check the

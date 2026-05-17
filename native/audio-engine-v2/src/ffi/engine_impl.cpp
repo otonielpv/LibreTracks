@@ -1021,7 +1021,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     PrearmTargetKey key;
                     key.kind             = PrearmTargetKind::Marker;
                     key.song_id          = song_id;
-                    key.marker_id        = c.marker_id;
+                    key.target_id        = c.marker_id;
                     key.timeline_frame   = target_frame;
                     key.sample_rate      = clock_->sample_rate();
                     key.block_size       = device_manager_
@@ -1057,6 +1057,42 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (!session_) return Result<void>::err("No session loaded");
             JumpTarget target{ JumpTarget::Kind::Region, c.region_id, std::nullopt };
             Id jump_id = "jump-region-" + c.region_id;
+
+            // Prearmed-jump fast path (see CmdJumpToMarker for rationale).
+            if (prearmed_jumps_ && bungee_voices_ && bungee_voices_->is_available()) {
+                Frame target_frame = 0;
+                Id song_id;
+                for (const auto& song : session_->songs) {
+                    for (const auto& reg : song.regions) {
+                        if (reg.id == c.region_id) {
+                            target_frame = reg.start_frame;
+                            song_id      = song.id;
+                        }
+                    }
+                }
+                if (!song_id.empty()) {
+                    PrearmTargetKey key;
+                    key.kind             = PrearmTargetKind::RegionStart;
+                    key.song_id          = song_id;
+                    key.target_id        = c.region_id;
+                    key.timeline_frame   = target_frame;
+                    key.sample_rate      = clock_->sample_rate();
+                    key.block_size       = device_manager_
+                        ? device_manager_->actual_buffer_size() : 1024;
+                    key.session_revision = session_revision_.load(
+                        std::memory_order_relaxed);
+                    if (auto prepared = prearmed_jumps_->take_ready(key)) {
+                        bungee_voices_->swap_in_prepared_voices(
+                            prepared->extract_voice_map());
+                        clock_->seek(target_frame);
+                        push_event(EvJumpScheduled{ jump_id, c.region_id });
+                        return Result<void>::ok();
+                    }
+                    bungee_voices_->rebuild_for_seek(
+                        target_frame, *session_, *source_manager_);
+                }
+            }
+
             auto r = scheduler_->schedule_immediate(jump_id, target, *session_, *clock_);
             if (r.is_err()) return Result<void>::err(r.error());
             push_event(EvJumpScheduled{ jump_id, c.region_id });
@@ -1066,6 +1102,40 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (!session_) return Result<void>::err("No session loaded");
             JumpTarget target{ JumpTarget::Kind::Song, c.song_id, std::nullopt };
             Id jump_id = "jump-song-" + c.song_id;
+
+            // Prearmed-jump fast path (see CmdJumpToMarker for rationale).
+            if (prearmed_jumps_ && bungee_voices_ && bungee_voices_->is_available()) {
+                Frame target_frame = 0;
+                bool found = false;
+                for (const auto& song : session_->songs) {
+                    if (song.id == c.song_id) {
+                        target_frame = song.start_frame;
+                        found = true;
+                    }
+                }
+                if (found) {
+                    PrearmTargetKey key;
+                    key.kind             = PrearmTargetKind::SongStart;
+                    key.song_id          = c.song_id;
+                    key.target_id        = c.song_id;
+                    key.timeline_frame   = target_frame;
+                    key.sample_rate      = clock_->sample_rate();
+                    key.block_size       = device_manager_
+                        ? device_manager_->actual_buffer_size() : 1024;
+                    key.session_revision = session_revision_.load(
+                        std::memory_order_relaxed);
+                    if (auto prepared = prearmed_jumps_->take_ready(key)) {
+                        bungee_voices_->swap_in_prepared_voices(
+                            prepared->extract_voice_map());
+                        clock_->seek(target_frame);
+                        push_event(EvJumpScheduled{ jump_id, c.song_id });
+                        return Result<void>::ok();
+                    }
+                    bungee_voices_->rebuild_for_seek(
+                        target_frame, *session_, *source_manager_);
+                }
+            }
+
             auto r = scheduler_->schedule_immediate(jump_id, target, *session_, *clock_);
             if (r.is_err()) return Result<void>::err(r.error());
             push_event(EvJumpScheduled{ jump_id, c.song_id });

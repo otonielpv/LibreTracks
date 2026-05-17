@@ -157,7 +157,7 @@ TEST_CASE("PrearmedJumpManager: prepared marker jump produces audio after warmup
     PrearmTargetKey key;
     key.kind             = PrearmTargetKind::Marker;
     key.song_id          = "song-1";
-    key.marker_id        = "marker-1";
+    key.target_id        = "marker-1";
     key.timeline_frame   = kMarkerFrame;
     key.sample_rate      = kSR;
     key.block_size       = kBlockFrames;
@@ -213,7 +213,7 @@ TEST_CASE("PrearmedJumpManager: prepared jump preserves alignment with unpitched
     PrearmTargetKey key;
     key.kind             = PrearmTargetKind::Marker;
     key.song_id          = "song-p";
-    key.marker_id        = "marker-p";
+    key.target_id        = "marker-p";
     key.timeline_frame   = kMarkerFrame;
     key.sample_rate      = kSR;
     key.block_size       = kBlockFrames;
@@ -261,7 +261,7 @@ TEST_CASE("PrearmedJumpManager: take_ready rejects invalid set (transactional)")
     PrearmTargetKey key;
     key.kind             = PrearmTargetKind::Marker;
     key.song_id          = "song-3";
-    key.marker_id        = "marker-3";
+    key.target_id        = "marker-3";
     key.timeline_frame   = kMarkerFrame;
     key.sample_rate      = kSR;
     key.block_size       = kBlockFrames;
@@ -294,7 +294,7 @@ TEST_CASE("PrearmedJumpManager: fallback path renders audio when prearm missed")
     PrearmTargetKey key;
     key.kind             = PrearmTargetKind::Marker;
     key.song_id          = "song-4";
-    key.marker_id        = "marker-4";
+    key.target_id        = "marker-4";
     key.timeline_frame   = kMarkerFrame;
     key.sample_rate      = kSR;
     key.block_size       = kBlockFrames;
@@ -347,7 +347,7 @@ TEST_CASE("PrearmedJumpManager prefeed: first post-jump block emits audio") {
     PrearmTargetKey key;
     key.kind             = PrearmTargetKind::Marker;
     key.song_id          = "song-pf1";
-    key.marker_id        = "marker-pf1";
+    key.target_id        = "marker-pf1";
     key.timeline_frame   = kMarkerFrame;
     key.sample_rate      = kSR;
     key.block_size       = kBlockFrames;
@@ -370,6 +370,62 @@ TEST_CASE("PrearmedJumpManager prefeed: first post-jump block emits audio") {
     // 0.05 = same threshold the silence-warm test uses for SETTLED audio.
     // If prefeed works, the first block already passes this bar.
     CHECK(rms > 0.05f);
+}
+
+// Phase 1 ext: Region + Song targets share the marker pipeline. We verify
+// that prepare_all_targets builds prepared sets for them and take_ready
+// returns valid sets.
+TEST_CASE("PrearmedJumpManager: region and song targets are prearmed alongside markers") {
+    SourceManager sources;
+    Session       session;
+    init_fixture(sources, session, "src-rt", "clip-rt", "track-rt", "song-rt",
+                  "marker-rt", kMarkerFrame, /*transposed*/ true);
+    // Add a region after init_fixture (which only seeds a marker).
+    session.songs[0].regions.push_back(
+        Region{"region-rt", "R1", 4096, 8192, /*transpose*/ 0});
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+    prearm.prepare_all_targets(session, sources, /*revision*/ 1);
+
+    // Marker (existing behaviour)
+    PrearmTargetKey marker_key;
+    marker_key.kind             = PrearmTargetKind::Marker;
+    marker_key.song_id          = "song-rt";
+    marker_key.target_id        = "marker-rt";
+    marker_key.timeline_frame   = kMarkerFrame;
+    marker_key.sample_rate      = kSR;
+    marker_key.block_size       = kBlockFrames;
+    marker_key.session_revision = 1;
+    auto marker_set = prearm.take_ready(marker_key);
+    CHECK(marker_set);
+    CHECK(marker_set && marker_set->valid);
+
+    // Region (new)
+    PrearmTargetKey region_key;
+    region_key.kind             = PrearmTargetKind::RegionStart;
+    region_key.song_id          = "song-rt";
+    region_key.target_id        = "region-rt";
+    region_key.timeline_frame   = 4096;
+    region_key.sample_rate      = kSR;
+    region_key.block_size       = kBlockFrames;
+    region_key.session_revision = 1;
+    auto region_set = prearm.take_ready(region_key);
+    CHECK(region_set);
+    CHECK(region_set && region_set->valid);
+
+    // Song start (new)
+    PrearmTargetKey song_key;
+    song_key.kind             = PrearmTargetKind::SongStart;
+    song_key.song_id          = "song-rt";
+    song_key.target_id        = "song-rt";
+    song_key.timeline_frame   = 0; // Song.start_frame from init_fixture
+    song_key.sample_rate      = kSR;
+    song_key.block_size       = kBlockFrames;
+    song_key.session_revision = 1;
+    auto song_set = prearm.take_ready(song_key);
+    CHECK(song_set);
+    CHECK(song_set && song_set->valid);
 }
 
 // Phase 2 Test B: pitched onset stays sample-aligned with unpitched onset
@@ -402,7 +458,7 @@ TEST_CASE("PrearmedJumpManager prefeed: pitched click onset aligned with unpitch
     PrearmTargetKey key;
     key.kind             = PrearmTargetKind::Marker;
     key.song_id          = "song-pf2p";
-    key.marker_id        = "marker-pf2p";
+    key.target_id        = "marker-pf2p";
     key.timeline_frame   = kMarkerFrame;
     key.sample_rate      = kSR;
     key.block_size       = kBlockFrames;
