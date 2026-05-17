@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace lt {
@@ -73,6 +74,29 @@ public:
 
     // Drop all voices (e.g. session unload).
     void clear();
+
+    // Atomically replace the active voice map with `prepared_voices`. Used by
+    // PrearmedJumpManager when the user triggers a marker/region/song/vamp
+    // jump and a fully prepared voice set is available — the audio thread's
+    // next voice_for() lookup sees the new map (or the old, never partial).
+    //
+    // Semantics:
+    //   - The full set is published in one atomic_store; no partial state is
+    //     ever visible. Either every voice in `prepared_voices` becomes
+    //     active or none does (if the manager isn't prepared).
+    //   - The previous active map's voices are released when their last
+    //     shared_ptr referent drops. The audio thread may still hold a
+    //     snapshot from before the swap for one block — that's fine, those
+    //     voices stay alive until the snapshot releases.
+    //   - Bumps `rebuilds_for_seek` so diagnostics counts this as a seek-
+    //     equivalent event (audio thread will start using new voices on the
+    //     next block).
+    //
+    // Caller must ensure every voice in `prepared_voices` was configured for
+    // the same (sample_rate, channel_count, max_input_frames) this manager
+    // was prepared with — otherwise audio thread behaviour is undefined.
+    void swap_in_prepared_voices(
+        std::unordered_map<Id, std::shared_ptr<BungeePitchVoice>> prepared_voices);
 
     // ── Audio-thread lookup (must not allocate) ──────────────────────────
 

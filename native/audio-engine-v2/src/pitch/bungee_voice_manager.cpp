@@ -317,6 +317,32 @@ void BungeeVoiceManager::clear() {
                       std::shared_ptr<const VoiceMap>(std::make_shared<const VoiceMap>()));
 }
 
+void BungeeVoiceManager::swap_in_prepared_voices(
+    std::unordered_map<Id, std::shared_ptr<BungeePitchVoice>> prepared_voices) {
+    if (!impl_) return;
+#if !LT_ENGINE_HAVE_BUNGEE
+    (void)prepared_voices;
+    return;
+#else
+    if (!impl_->prepared) return;
+
+    auto next = std::make_shared<VoiceMap>();
+    next->reserve(prepared_voices.size());
+    for (auto& kv : prepared_voices) {
+        if (kv.second) next->emplace(kv.first, std::move(kv.second));
+    }
+
+    const int active_count = static_cast<int>(next->size());
+    std::atomic_store(&impl_->active,
+                      std::shared_ptr<const VoiceMap>(std::move(next)));
+    impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
+    std::fprintf(stdout,
+        "[BUNGEE] swap_in_prepared_voices active=%d (prearmed)\n",
+        active_count);
+    std::fflush(stdout);
+#endif
+}
+
 // ─── Audio-thread lookup ─────────────────────────────────────────────────
 
 BungeePitchVoice* BungeeVoiceManager::voice_for(const Id& clip_id) noexcept {
