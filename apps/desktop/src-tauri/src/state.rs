@@ -2350,18 +2350,27 @@ impl DesktopSession {
             return Ok(());
         }
 
-        if playback_state == PlaybackState::Playing
-            && matches!(
-                impact,
-                AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild
-            )
-        {
-            let rebuild_reason = match impact {
-                AudioChangeImpact::TimelineWindow => "timeline_window",
-                AudioChangeImpact::StructureRebuild => "structure_rebuild",
-                _ => "unknown",
-            };
-            audio.replace_song_buffers(&song_dir, &song, rebuild_reason)?;
+        if matches!(
+            impact,
+            AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild
+        ) {
+            if playback_state == PlaybackState::Playing {
+                let rebuild_reason = match impact {
+                    AudioChangeImpact::TimelineWindow => "timeline_window",
+                    AudioChangeImpact::StructureRebuild => "structure_rebuild",
+                    _ => "unknown",
+                };
+                audio.replace_song_buffers(&song_dir, &song, rebuild_reason)?;
+            } else {
+                // Not playing: still push the updated session to the engine so
+                // it can decode the newly-added sources in the background
+                // while the user is busy (waveform analyzing, arranging clips,
+                // etc). Otherwise the first Play after dropping audio has to
+                // decode all clips synchronously — 3-4s for MP3 with ~7 tracks.
+                // sync_song is cheap when the signature hasn't changed (early
+                // return in ensure_song_loaded).
+                audio.sync_song(song.clone())?;
+            }
         }
 
         self.perf_metrics.song_save_millis = 0;
