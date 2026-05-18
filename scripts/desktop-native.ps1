@@ -39,7 +39,7 @@ $bungeeCandidates = @(
 $bungeeDir = $bungeeCandidates | Where-Object { Test-Path (Join-Path $_ "include\bungee\Bungee.h") } | Select-Object -First 1
 $useBungee = if ($useRubberBand -eq "ON" -and $bungeeDir) { "ON" } else { "OFF" }
 
-# ASIO SDK auto-detect — same pattern as Bungee. JUCE's ASIO module needs
+# ASIO SDK auto-detect - same pattern as Bungee. JUCE's ASIO module needs
 # iasiodrv.h from the Steinberg SDK at build time. The public mirror lives
 # at https://github.com/audiosdk/asio.git. Pass -DLT_ASIO_SDK_DIR=... to
 # CMake when found; otherwise build silently without ASIO support.
@@ -305,7 +305,7 @@ if ($bungeeDir) {
 if ($asioSdkDir) {
   Write-Host "LT_ASIO_SDK_DIR: $asioSdkDir"
 } else {
-  Write-Host "LT_ASIO_SDK_DIR: (not set — ASIO module disabled)"
+  Write-Host "LT_ASIO_SDK_DIR: (not set - ASIO module disabled)"
 }
 Write-Host "VCPKG_DEFAULT_TRIPLET: $env:VCPKG_DEFAULT_TRIPLET"
 if ($env:CMAKE_TOOLCHAIN_FILE) {
