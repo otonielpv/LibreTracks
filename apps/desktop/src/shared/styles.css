@@ -1862,35 +1862,6 @@ textarea {
   min-height: 6rem;
 }
 
-.lt-empty-arrangement-dropzone {
-  min-height: 16rem;
-  margin: 1rem 0;
-  border: 1px dashed rgb(87 241 219 / 0.22);
-  border-radius: 2px;
-  background:
-    linear-gradient(180deg, rgb(32 31 31 / 0.92), rgb(14 14 14 / 0.92));
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  text-align: center;
-  color: #e5e2e1;
-  position: relative;
-  overflow: hidden;
-}
-
-.lt-empty-arrangement-dropzone strong {
-  font: 800 1rem/1.2 "Space Grotesk", sans-serif;
-}
-
-.lt-empty-arrangement-dropzone p {
-  margin: 0;
-  max-width: 30rem;
-  color: rgb(229 226 225 / 0.68);
-  font: 500 0.92rem/1.5 "Space Grotesk", sans-serif;
-}
-
 .lt-library-clip-ghost {
   position: absolute;
   top: 0.65rem;

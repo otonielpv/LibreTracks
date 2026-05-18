@@ -49,11 +49,6 @@ const en = {
       emptyTitle: "Create or open a session",
       emptyDescription:
         "Start a new session or open an existing one. Import WAV assets later from the Library panel and drag them onto the timeline only when you want to arrange them.",
-      emptyArrangementDropzone: "Empty arrangement dropzone",
-      emptyArrangementTitle:
-        "Drop audio from the Library to create the first track",
-      emptyArrangementDescription:
-        "LibreTracks will create an audio track automatically and place the clip at the snapped timeline position.",
       pendingJump: "Armed: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Selection {{start}} - {{end}}",
       contextTimelineTitle: "Timeline {{time}}",

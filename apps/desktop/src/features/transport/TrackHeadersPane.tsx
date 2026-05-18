@@ -18,7 +18,6 @@ type TrackHeadersPaneProps = {
   collapsedFolders: Set<string>;
   previewTrackDensityClass: string;
   libraryPreviewRows: LibraryPreviewRow[];
-  shouldShowEmptyArrangementHint: boolean;
   onHeadersWheel: (event: ReactWheelEvent<HTMLDivElement>) => void;
   getTrackChildCount: (trackId: string) => number;
   onSelectTrack: (trackId: string, trackName: string, event: ReactMouseEvent<HTMLDivElement>) => void;
@@ -44,7 +43,6 @@ export function TrackHeadersPane({
   collapsedFolders,
   previewTrackDensityClass,
   libraryPreviewRows,
-  shouldShowEmptyArrangementHint,
   onHeadersWheel,
   getTrackChildCount,
   onSelectTrack,
@@ -151,34 +149,32 @@ export function TrackHeadersPane({
           );
         })}
 
-        {!shouldShowEmptyArrangementHint
-          ? libraryPreviewRows.map((previewRow) => (
-              <div
-                key={`library-preview-row-${previewRow.rowOffset}`}
-                className="lt-track-header-row"
-                style={{ height: trackHeight }}
-              >
-                <div
-                  className={`lt-track-header ${previewTrackDensityClass} is-library-preview`}
-                  style={{ height: trackHeight, paddingLeft: 16 }}
-                  aria-hidden="true"
-                >
-                  <div className="lt-track-header-body">
-                    <div className="lt-track-header-content">
-                      <div className="lt-track-header-summary">
-                        <div className="lt-track-header-main">
-                          <div className="lt-track-title-row">
-                            <strong>{previewRow.title}</strong>
-                          </div>
-                          <span className="lt-track-meta">{previewRow.meta}</span>
-                        </div>
+        {libraryPreviewRows.map((previewRow) => (
+          <div
+            key={`library-preview-row-${previewRow.rowOffset}`}
+            className="lt-track-header-row"
+            style={{ height: trackHeight }}
+          >
+            <div
+              className={`lt-track-header ${previewTrackDensityClass} is-library-preview`}
+              style={{ height: trackHeight, paddingLeft: 16 }}
+              aria-hidden="true"
+            >
+              <div className="lt-track-header-body">
+                <div className="lt-track-header-content">
+                  <div className="lt-track-header-summary">
+                    <div className="lt-track-header-main">
+                      <div className="lt-track-title-row">
+                        <strong>{previewRow.title}</strong>
                       </div>
+                      <span className="lt-track-meta">{previewRow.meta}</span>
                     </div>
                   </div>
                 </div>
               </div>
-            ))
-          : null}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

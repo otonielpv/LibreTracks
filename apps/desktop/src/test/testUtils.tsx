@@ -310,7 +310,7 @@ export async function renderApp() {
   await waitFor(() => {
     expect(
       document.querySelector(".lt-track-lane-row") ??
-      screen.queryByLabelText(textMatcher(en.transport.shell.emptyArrangementDropzone)),
+      document.querySelector(".lt-track-list"),
     ).toBeTruthy();
   });
   return view;

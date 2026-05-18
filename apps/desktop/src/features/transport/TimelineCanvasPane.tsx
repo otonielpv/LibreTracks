@@ -1,5 +1,4 @@
 import { useRef, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from "react";
-import { useTranslation } from "react-i18next";
 
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import type {
@@ -83,7 +82,6 @@ type TimelineCanvasPaneProps = {
   libraryClipPreview: LibraryClipPreviewState[];
   libraryPreviewRows: LibraryPreviewRow[];
   externalDropPreview: ExternalDropPreview | null;
-  shouldShowEmptyArrangementHint: boolean;
   normalizePositionSeconds: (positionSeconds: number) => number;
   resolveLibraryGhostLeft: (seconds: number) => number;
   onRulerMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
@@ -166,7 +164,6 @@ export function TimelineCanvasPane({
   libraryClipPreview,
   libraryPreviewRows,
   externalDropPreview,
-  shouldShowEmptyArrangementHint,
   normalizePositionSeconds,
   resolveLibraryGhostLeft,
   onRulerMouseDown,
@@ -195,7 +192,6 @@ export function TimelineCanvasPane({
   onExternalDropPreviewChange,
   onExternalDrop,
 }: TimelineCanvasPaneProps) {
-  const { t } = useTranslation();
   const trackLayersRef = useRef<HTMLDivElement | null>(null);
 
   const handleTimelineDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
@@ -626,36 +622,6 @@ export function TimelineCanvasPane({
             </div>
           ) : null}
 
-          {shouldShowEmptyArrangementHint ? (
-            <div
-              className="lt-empty-arrangement-dropzone"
-              aria-label={t("transport.shell.emptyArrangementDropzone")}
-              onDragEnter={handleTimelineDragEnter}
-            >
-              <strong>{t("transport.shell.emptyArrangementTitle")}</strong>
-              <p>
-                {t("transport.shell.emptyArrangementDescription")}
-              </p>
-              {libraryClipPreview
-                .filter((preview) => preview.trackId === null)
-                .map((preview) => (
-                  <div
-                    key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
-                    className="lt-library-clip-ghost is-floating"
-                    style={{
-                      left: resolveLibraryGhostLeft(preview.timelineStartSeconds),
-                      top: 16 + preview.rowOffset * 72,
-                      bottom: "auto",
-                      height: 56,
-                      width: Math.max(preview.durationSeconds * pixelsPerSecond, 36),
-                    }}
-                  >
-                    <span>{preview.label}</span>
-                  </div>
-                ))}
-            </div>
-          ) : null}
-
           {song?.tracks && visibleTracks.map((track) => {
             const trackClips = clipsByTrack[track.id] ?? [];
             const isPendingTrack = Boolean(track.isPending);
@@ -702,43 +668,39 @@ export function TimelineCanvasPane({
             );
           })}
 
-          {!shouldShowEmptyArrangementHint
-            ? libraryPreviewRows.map((previewRow) => (
-                <div
-                  key={`library-preview-lane-${previewRow.rowOffset}`}
-                  className="lt-track-lane-row is-library-preview"
-                  style={{ height: trackHeight }}
-                >
-                  <div
-                    className="lt-track-lane is-library-preview"
-                    style={{ height: trackHeight }}
-                    aria-label={`Preview lane ${previewRow.title}`}
-                    onDragEnter={handleTimelineDragEnter}
-                  >
-                    {previewRow.previews.map((preview) => (
-                      <div
-                        key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
-                        className="lt-library-clip-ghost"
-                        style={{
-                          left: resolveLibraryGhostLeft(preview.timelineStartSeconds),
-                          width: Math.max(preview.durationSeconds * pixelsPerSecond, 36),
-                        }}
-                      >
-                        <span>{preview.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))
-            : null}
-
-          {!shouldShowEmptyArrangementHint ? (
+          {libraryPreviewRows.map((previewRow) => (
             <div
-              className="lt-track-list-dropzone"
-              aria-label="Dropzone para nuevas pistas"
-              onDragEnter={handleTimelineDragEnter}
-            />
-          ) : null}
+              key={`library-preview-lane-${previewRow.rowOffset}`}
+              className="lt-track-lane-row is-library-preview"
+              style={{ height: trackHeight }}
+            >
+              <div
+                className="lt-track-lane is-library-preview"
+                style={{ height: trackHeight }}
+                aria-label={`Preview lane ${previewRow.title}`}
+                onDragEnter={handleTimelineDragEnter}
+              >
+                {previewRow.previews.map((preview) => (
+                  <div
+                    key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
+                    className="lt-library-clip-ghost"
+                    style={{
+                      left: resolveLibraryGhostLeft(preview.timelineStartSeconds),
+                      width: Math.max(preview.durationSeconds * pixelsPerSecond, 36),
+                    }}
+                  >
+                    <span>{preview.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div
+            className="lt-track-list-dropzone"
+            aria-label="Dropzone para nuevas pistas"
+            onDragEnter={handleTimelineDragEnter}
+          />
         </div>
       </div>
 

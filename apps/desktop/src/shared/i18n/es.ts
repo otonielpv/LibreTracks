@@ -49,11 +49,6 @@ const es = {
       emptyTitle: "Crea o abre una sesion",
       emptyDescription:
         "Inicia una sesion nueva o abre una existente. Importa assets WAV despues desde el panel Libreria y arrastralos al timeline solo cuando quieras organizarlos.",
-      emptyArrangementDropzone: "Zona vacia de arreglo",
-      emptyArrangementTitle:
-        "Suelta audio desde la libreria  para crear la primera pista",
-      emptyArrangementDescription:
-        "LibreTracks creara una pista de audio automaticamente y colocara el clip en la posicion ajustada del timeline.",
       pendingJump: "Armado: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Seleccion {{start}} - {{end}}",
       contextTimelineTitle: "Timeline {{time}}",

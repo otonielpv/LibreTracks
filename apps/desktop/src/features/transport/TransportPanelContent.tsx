@@ -2892,9 +2892,6 @@ export function TransportPanelContent() {
     () => [...libraryAssets, ...pendingAudioImports.map(toPendingLibraryAsset)],
     [libraryAssets, pendingAudioImports],
   );
-  const shouldShowEmptyArrangementHint = Boolean(
-    song && visibleTracks.length === 0,
-  );
   const previewTrackDensityClass =
     trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
   const libraryPreviewRows = useMemo(() => {
@@ -5111,7 +5108,7 @@ export function TransportPanelContent() {
     }
 
     return target.closest(
-      ".lt-track-lane, .lt-track-list, .lt-track-list-dropzone, .lt-empty-arrangement-dropzone",
+      ".lt-track-lane, .lt-track-list, .lt-track-list-dropzone",
     ) as HTMLDivElement | null;
   }
 
@@ -5156,10 +5153,7 @@ export function TransportPanelContent() {
     let score = 100;
     if (candidate.elementFromPoint?.includes(".lt-track-lane")) {
       score += 200;
-    } else if (
-      candidate.elementFromPoint?.includes(".lt-empty-arrangement-dropzone") ||
-      candidate.elementFromPoint?.includes(".lt-track-list-dropzone")
-    ) {
+    } else if (candidate.elementFromPoint?.includes(".lt-track-list-dropzone")) {
       score += 180;
     } else if (candidate.elementFromPoint?.includes(".lt-track-list")) {
       score += 140;
@@ -6783,9 +6777,6 @@ export function TransportPanelContent() {
                           collapsedFolders={collapsedFolders}
                           previewTrackDensityClass={previewTrackDensityClass}
                           libraryPreviewRows={libraryPreviewRows}
-                          shouldShowEmptyArrangementHint={
-                            shouldShowEmptyArrangementHint
-                          }
                           onHeadersWheel={handleTrackHeadersWheel}
                           getTrackChildCount={(trackId) =>
                             song ? trackChildrenCount(song, trackId) : 0
@@ -6840,9 +6831,6 @@ export function TransportPanelContent() {
                           libraryClipPreview={libraryClipPreview}
                           libraryPreviewRows={libraryPreviewRows}
                           externalDropPreview={externalDropPreview}
-                          shouldShowEmptyArrangementHint={
-                            shouldShowEmptyArrangementHint
-                          }
                           normalizePositionSeconds={(positionSeconds) =>
                             normalizeTimelineSeekSeconds(
                               positionSeconds,

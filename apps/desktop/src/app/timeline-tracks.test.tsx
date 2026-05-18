@@ -62,8 +62,6 @@ describe("App / timeline-tracks", () => {
     const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Narration");
     const { container } = await renderApp();
 
-    expect(screen.getByLabelText(textMatcher(en.transport.shell.emptyArrangementDropzone))).toBeTruthy();
-
     const trackList = container.querySelector(".lt-track-list") as HTMLElement | null;
     expect(trackList).toBeTruthy();
 

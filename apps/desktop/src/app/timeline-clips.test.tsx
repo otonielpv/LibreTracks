@@ -124,7 +124,7 @@ describe("App / timeline-clips", () => {
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(await screen.findByText(trackDeletedMatcher("Solo"))).toBeTruthy();
-    expect(screen.getByLabelText(textMatcher(en.transport.shell.emptyArrangementDropzone))).toBeTruthy();
+    expect(container.querySelector(".lt-track-list")).toBeTruthy();
     expect(container.querySelector(".lt-track-lane-row")).toBeNull();
     expect(container.querySelector(".lt-library-clip-ghost")).toBeNull();
   });
