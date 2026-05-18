@@ -1046,6 +1046,21 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSeekAbsolute>) {
             Frame from = clock_->position().frame;
+
+            // No-op seek short-circuit. The Rust play path unconditionally
+            // sends SeekAbsolute(current_position) before Play (see
+            // audio_engine.rs::play). When the target frame equals where the
+            // clock already is, none of the downstream work is needed: voices
+            // are already primed here, RubberBand streams are already at this
+            // position, pitch cache is already valid. Skipping it removes the
+            // ~700ms+ of warm_voice and stream rebuild that was making the
+            // play button feel laggy. Still emit EvSeekExecuted so listeners
+            // see a consistent event stream.
+            if (c.frame == from) {
+                push_event(EvSeekExecuted{ from, c.frame });
+                return Result<void>::ok();
+            }
+
             clock_->seek(c.frame);
             const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
             if (pitch_cache_) pitch_cache_->set_current_generation(generation);
@@ -1057,26 +1072,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                      forward - immediate, 1, "seek_forward_prebuffer");
             }
             if (mixer_) mixer_->trigger_crossfade();
-            // Bungee voice manager: rebuild voices for the seek target.
-            //
-            // - Real position change (from != c.frame): synchronous so the
-            //   audio thread immediately has voices primed at the new spot.
-            //   Construction at 9 voices is ~1.5 ms (per the bench).
-            //
-            // - No-op seek (from == c.frame): the UI's play sequence is
-            //   "SeekAbsolute(current) then Play", which would otherwise
-            //   block the play command behind ~600ms of warm_voice. Run
-            //   the rebuild on a worker thread; the previous voice map is
-            //   already correct for this position, so the audio thread can
-            //   keep rendering without a gap until the new map is published.
+            // Real position change: synchronous Bungee rebuild so the audio
+            // thread immediately has voices primed at the new spot.
             if (bungee_voices_ && bungee_voices_->is_available() && session_) {
-                if (c.frame == from) {
-                    bungee_voices_->rebuild_for_seek_async(
-                        clock_->position().frame, *session_, *source_manager_);
-                } else {
-                    bungee_voices_->rebuild_for_seek(
-                        clock_->position().frame, *session_, *source_manager_);
-                }
+                bungee_voices_->rebuild_for_seek(
+                    clock_->position().frame, *session_, *source_manager_);
             }
             if (realtime_pitch_engine_ && session_) {
                 // Launch only when the previous rebuild has completed; never
