@@ -15,6 +15,12 @@
 #include <thread>
 #include <unordered_set>
 
+#ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  define NOMINMAX  // prevent windows.h min/max macros from clobbering std::min/max
+#  include <windows.h>
+#endif
+
 namespace lt {
 
 // ─── PreparedJumpVoiceSet helpers ────────────────────────────────────────
@@ -34,6 +40,20 @@ bool prearm_log_enabled() {
     static const bool on = [] {
         const char* v = std::getenv("LIBRETRACKS_PREARM_LOG");
         return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
+    }();
+    return on;
+}
+
+// Kill switch: set LIBRETRACKS_PREARMED_JUMPS=0 to disable all prearming.
+// All prepare_* calls become no-ops, take_ready always misses, the engine
+// falls through to the legacy reactive seek path everywhere. Useful for
+// A/B testing and as an escape hatch if prearm causes a regression in
+// production. Read once at process start.
+bool prearm_globally_enabled() {
+    static const bool on = [] {
+        const char* v = std::getenv("LIBRETRACKS_PREARMED_JUMPS");
+        if (!v) return true; // default ON
+        return !(std::strcmp(v, "0") == 0 || std::strcmp(v, "false") == 0);
     }();
     return on;
 }
@@ -172,11 +192,16 @@ struct PrepSpec {
     Semitones            effective_semitones = 0;
 };
 
+// `out_unloaded_clips` is incremented when a clip at the target frame would
+// need a voice but its source isn't decoded yet. Caller uses this to decide
+// whether to mark the prepared set as valid (every audible clip primed) vs
+// "not ready yet" (some sources still loading — retry on source-ready).
 std::vector<PrepSpec> enumerate_prep_specs(const Song& song,
                                             const Track& track,
                                             const Clip& clip,
                                             const SourceManager& sources,
-                                            Frame target_timeline_frame) {
+                                            Frame target_timeline_frame,
+                                            int* out_unloaded_clips = nullptr) {
     std::vector<PrepSpec> out;
 
     const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
@@ -187,7 +212,10 @@ std::vector<PrepSpec> enumerate_prep_specs(const Song& song,
         return out;
 
     const auto* src = sources.get(clip.source_id);
-    if (!src || !src->is_loaded()) return out;
+    if (!src || !src->is_loaded()) {
+        if (out_unloaded_clips) ++*out_unloaded_clips;
+        return out;
+    }
 
     const auto decision = resolve_pitch_render_decision(
         track, clip, song, target_timeline_frame);
@@ -343,8 +371,18 @@ const char* target_kind_label(PrearmTargetKind k) {
 
 // Build a PreparedJumpVoiceSet for a single (song, target_frame). Pure
 // computation — no map mutation. Caller decides how to publish the result.
-// Returns an empty set with valid=false on configure failure for any voice.
-std::unique_ptr<PreparedJumpVoiceSet> build_prepared_set(
+//
+// Sets `set->valid = false` if (a) any voice failed to configure, OR
+// (b) any audible-at-target clip's source isn't decoded yet. The second
+// case means "retry once sources finish loading" — caller can detect it
+// via the `unloaded_clips_skipped` out-param to know whether to re-post
+// when source_ready fires.
+struct BuildResult {
+    std::unique_ptr<PreparedJumpVoiceSet> set;
+    int  unloaded_clips_skipped = 0;
+};
+
+BuildResult build_prepared_set(
         PrearmTargetKind kind,
         const Song& song,
         const Id& target_id,
@@ -354,7 +392,9 @@ std::unique_ptr<PreparedJumpVoiceSet> build_prepared_set(
         int channel_count,
         int max_in_frames,
         std::uint64_t session_revision) {
-    auto set = std::make_unique<PreparedJumpVoiceSet>();
+    BuildResult br;
+    br.set = std::make_unique<PreparedJumpVoiceSet>();
+    auto& set = br.set;
     set->key.kind             = kind;
     set->key.song_id          = song.id;
     set->key.target_id        = target_id;
@@ -368,7 +408,9 @@ std::unique_ptr<PreparedJumpVoiceSet> build_prepared_set(
     bool any_failed = false;
     for (const auto& track : song.tracks) {
         for (const auto& clip : track.clips) {
-            auto specs = enumerate_prep_specs(song, track, clip, sources, target_frame);
+            auto specs = enumerate_prep_specs(song, track, clip, sources,
+                                               target_frame,
+                                               &br.unloaded_clips_skipped);
             for (const auto& spec : specs) {
                 auto voice = std::make_shared<BungeePitchVoice>();
                 if (!voice->configure(sample_rate, channel_count, max_in_frames)) {
@@ -391,8 +433,11 @@ std::unique_ptr<PreparedJumpVoiceSet> build_prepared_set(
             }
         }
     }
-    set->valid = !any_failed;
-    return set;
+    // Set is valid ONLY if every audible-at-target clip got a voice.
+    // 0-voice sets where no clip is audible (e.g. all NeverTranspose) are
+    // still "valid" — the audio thread just doesn't need pitched voices.
+    set->valid = !any_failed && (br.unloaded_clips_skipped == 0);
+    return br;
 }
 
 } // namespace
@@ -401,6 +446,7 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
                                                 const SourceManager& sources,
                                                 std::uint64_t session_revision) {
     if (!impl_ || !impl_->prepared) return;
+    if (!prearm_globally_enabled()) return; // kill switch
 
     std::lock_guard<std::mutex> g(impl_->mtx);
 
@@ -439,10 +485,27 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
         if (it != impl_->prepared_map.end() && it->second && it->second->valid)
             return; // already prepared
 
-        auto set = build_prepared_set(kind, song, target_id, target_frame,
+        auto br  = build_prepared_set(kind, song, target_id, target_frame,
                                        sources, impl_->sample_rate,
                                        impl_->channel_count,
                                        impl_->max_in_frames, session_revision);
+        auto set = std::move(br.set);
+
+        // If sources weren't loaded for some audible clips, skip inserting
+        // this set entirely so source_ready can retry cleanly without a
+        // stale empty entry sitting in the cache. The user's jump will fall
+        // through to prepare_target_now (also misses) → reactive rebuild.
+        if (br.unloaded_clips_skipped > 0) {
+            if (prearm_log_enabled()) {
+                std::fprintf(stdout,
+                    "[PREARM] skip_unloaded kind=%s song=%s id=%s frame=%lld unloaded_clips=%d\n",
+                    target_kind_label(kind), song.id.c_str(),
+                    target_id.c_str(), static_cast<long long>(target_frame),
+                    br.unloaded_clips_skipped);
+                std::fflush(stdout);
+            }
+            return;
+        }
 
         if (!set->valid) {
             impl_->prepare_failed_total.fetch_add(1, std::memory_order_relaxed);
@@ -523,6 +586,7 @@ PrearmedJumpManager::prepare_target_now(const Session& session,
                                           Frame target_frame,
                                           std::uint64_t session_revision) {
     if (!impl_ || !impl_->prepared) return nullptr;
+    if (!prearm_globally_enabled()) return nullptr; // kill switch
 
     // Find the song in the session.
     const Song* song_ptr = nullptr;
@@ -540,8 +604,9 @@ PrearmedJumpManager::prepare_target_now(const Session& session,
         ch = impl_->channel_count;
         bs = impl_->max_in_frames;
     }
-    auto set = build_prepared_set(kind, *song_ptr, target_id, target_frame,
+    auto br  = build_prepared_set(kind, *song_ptr, target_id, target_frame,
                                    sources, sr, ch, bs, session_revision);
+    auto set = std::move(br.set);
 
     // Update diagnostics; do NOT insert into prepared_map (caller consumes it).
     if (!set->valid) {
@@ -630,10 +695,19 @@ void PrearmedJumpManager::prepare_all_targets_async(
         const SourceManager* sources,
         std::uint64_t session_revision) {
     if (!impl_ || !session || !sources) return;
+    if (!prearm_globally_enabled()) return; // kill switch
 
     // Lazy-start worker thread on first async call.
     if (!impl_->worker_started.exchange(true)) {
         impl_->worker_thread = std::thread([this] {
+#ifdef _WIN32
+            // Lower priority below normal so prearm priming (Bungee FFT, ~100ms
+            // per voice) does NOT compete with the audio thread for CPU. Was
+            // causing audible glitches + playhead/audio desync on real
+            // sessions where the worker grinds through several targets in the
+            // background while the user is seeking/transposing.
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#endif
             for (;;) {
                 std::optional<Impl::PendingJob> job;
                 {

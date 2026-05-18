@@ -165,6 +165,16 @@ Result<void> EngineImpl::initialize() {
         source_ready_pitch_prepare_count_.fetch_add(1, std::memory_order_relaxed);
         if (prepare_pitch_processors_for_source(source_id) > 0)
             pitch_prepare_on_source_ready_count_.fetch_add(1, std::memory_order_relaxed);
+        // Re-prearm: a source just finished decoding, so any prepared-set
+        // that was skipped (unloaded_clips > 0) on its first build can now
+        // succeed. Post a new revision so the async worker rebuilds the
+        // whole cache with the now-loaded source available.
+        if (prearmed_jumps_ && session_) {
+            const auto rev = prearm_revision_.fetch_add(1,
+                std::memory_order_relaxed) + 1;
+            prearmed_jumps_->prepare_all_targets_async(
+                session_, source_manager_.get(), rev);
+        }
     });
     pitch_cache_    = std::make_unique<PitchCache>();
     pitch_cache_->set_realtime_fallback_enabled(false);
