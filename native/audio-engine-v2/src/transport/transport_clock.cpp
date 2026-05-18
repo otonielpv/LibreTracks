@@ -9,26 +9,35 @@ TransportClock::TransportClock(int sample_rate)
 
 void TransportClock::play() {
     position_.state = TransportState::Playing;
+    pending_start_ = true;  // hold position until first audible output block.
 }
 
 void TransportClock::pause() {
     position_.state = TransportState::Paused;
+    pending_start_ = false;
 }
 
 void TransportClock::stop() {
     position_.state  = TransportState::Stopped;
     position_.frame  = 0;
     position_.seconds = 0.0;
+    pending_start_ = false;
 }
 
 void TransportClock::seek(Frame frame) {
     position_.frame   = frame;
     position_.seconds = static_cast<double>(frame) / sample_rate_;
+    // Re-arm if we're already playing: the seek will retrigger voice priming
+    // and we want the playhead to wait for first-audible again.
+    if (position_.state == TransportState::Playing)
+        pending_start_ = true;
 }
 
 void TransportClock::advance(int block_frames) {
     if (position_.state != TransportState::Playing)
         return;
+    if (pending_start_)
+        return;  // waiting for first audible block; hold the clock.
     position_.frame   += block_frames;
     position_.seconds  = static_cast<double>(position_.frame) / sample_rate_;
 }

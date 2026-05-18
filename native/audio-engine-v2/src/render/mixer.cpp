@@ -466,6 +466,16 @@ void Mixer::render(float** output_channels,
     meter_r_.store(peak_r, std::memory_order_relaxed);
     meter_l_rms_.store(static_cast<float>(std::sqrt(sum_l / std::max(1, num_frames))), std::memory_order_relaxed);
     meter_r_rms_.store(static_cast<float>(std::sqrt(sum_r / std::max(1, num_frames))), std::memory_order_relaxed);
+
+    // First-audible gate: while the clock is waiting for audio to actually
+    // emerge from Bungee priming, hold the playhead at the seek target. Once
+    // the mixer produces a non-silent block, release the gate so the next
+    // advance() ticks the clock forward — keeping playhead and audio aligned.
+    constexpr float kFirstAudibleEpsilon = 1.0e-5f;
+    if (clock_ && clock_->pending_start() &&
+        (peak_l > kFirstAudibleEpsilon || peak_r > kFirstAudibleEpsilon)) {
+        clock_->clear_pending_start();
+    }
     if (session) {
         int count = 0;
         for (const auto& song : session->songs) {
