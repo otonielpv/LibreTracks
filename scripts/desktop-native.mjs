@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,6 +37,7 @@ const buildDesktopNativeEnv = (rawEnv) => {
     LIBRETRACKS_AUDIO_ENGINE: "cpp-v2",
     CARGO_TARGET_DIR: defaultTargetDir,
     LIBRETRACKS_ENGINE_V2_RUBBERBAND: rawEnv.LIBRETRACKS_ENGINE_V2_RUBBERBAND ?? "1",
+    LIBRETRACKS_ENGINE_V2_FFMPEG: rawEnv.LIBRETRACKS_ENGINE_V2_FFMPEG ?? "1",
     VCPKG_DEFAULT_TRIPLET: rawEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows",
   };
 
@@ -89,13 +90,15 @@ const nativeEnv = buildDesktopNativeEnv(env);
 
 const ensureEngineV2 = (normalizedEnv) => {
   const useRubberBand = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_RUBBERBAND) ? "ON" : "OFF";
-  const buildName = useRubberBand === "ON" ? "build-rb-on" : "build-rb-off";
+  const useLibSndFile = "ON";
+  const useR8Brain = "ON";
+  const useFFmpeg = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_FFMPEG) ? "ON" : "OFF";
+  const buildName = useRubberBand === "ON"
+    ? (useFFmpeg === "ON" ? "build-rb-on-ffmpeg" : "build-rb-on")
+    : (useFFmpeg === "ON" ? "build-rb-off-ffmpeg" : "build-rb-off");
   const buildDir = path.join(repoRoot, "native", "audio-engine-v2", buildName);
   const buildArg = `native/audio-engine-v2/${buildName}`;
   const libDir = path.join(buildDir, "Debug");
-  const useLibSndFile = "ON";
-  const useR8Brain = "ON";
-  const useFFmpeg = "OFF";
 
   console.log(`Audio Engine v2 RubberBand: ${useRubberBand}`);
   console.log(`VCPKG_DEFAULT_TRIPLET: ${normalizedEnv.VCPKG_DEFAULT_TRIPLET}`);
@@ -120,6 +123,7 @@ const ensureEngineV2 = (normalizedEnv) => {
     "-DLT_ENGINE_BUILD_TESTS=OFF",
     "-DLT_ENGINE_USE_JUCE=ON",
     `-DLT_ENGINE_USE_RUBBERBAND=${useRubberBand}`,
+    `-DLT_ENGINE_USE_FFMPEG=${useFFmpeg}`,
     `-DLT_ENGINE_USE_LIBSNDFILE=${useLibSndFile}`,
     `-DLT_ENGINE_USE_R8BRAIN=${useR8Brain}`,
   ];
@@ -138,6 +142,16 @@ const ensureEngineV2 = (normalizedEnv) => {
     "--target",
     "lt_audio_engine_v2",
   ]);
+
+  if (useFFmpeg === "ON") {
+    const nativeVendorDir = path.join(repoRoot, "vendor", "bin", "native");
+    mkdirSync(nativeVendorDir, { recursive: true });
+    for (const fileName of readdirSync(libDir)) {
+      if (/^(av.*|swresample.*)\.dll$/i.test(fileName)) {
+        copyFileSync(path.join(libDir, fileName), path.join(nativeVendorDir, fileName));
+      }
+    }
+  }
 
   const pathSeparator = process.platform === "win32" ? ";" : ":";
   const vcpkgRoot = normalizedEnv.VCPKG_ROOT

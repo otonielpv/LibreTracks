@@ -43,6 +43,10 @@ public:
 // and magic bytes.
 std::unique_ptr<AudioDecoder> make_decoder(const std::string& file_path);
 
+#if LT_ENGINE_USE_FFMPEG
+std::unique_ptr<AudioDecoder> make_libav_decoder();
+#endif
+
 // Convenience: decode entire file to interleaved float32 in one call.
 // Resamples to `target_sample_rate` using r8brain/libsamplerate.
 Result<std::vector<float>> decode_file_to_float32(

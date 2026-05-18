@@ -981,7 +981,7 @@ impl DesktopSession {
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
                     if let Some(audio) = audio {
                         if let Ok(summary) =
-                            self.load_native_waveform_summary(&song_dir, waveform_key, audio, true)
+                            self.load_native_waveform_summary(&song_dir, waveform_key, audio)
                         {
                             summaries.push(waveform_summary_to_dto(waveform_key, summary));
                             continue;
@@ -1013,16 +1013,6 @@ impl DesktopSession {
         let valid_library_paths = collect_library_file_paths(&song_dir, self.engine.song())?
             .into_iter()
             .collect::<std::collections::HashSet<_>>();
-        let clip_waveform_keys = self
-            .engine
-            .song()
-            .map(|song| {
-                song.clips
-                    .iter()
-                    .map(|clip| waveform_key_for_file_path(&clip.file_path))
-                    .collect::<std::collections::HashSet<_>>()
-            })
-            .unwrap_or_default();
         let mut summaries = Vec::new();
 
         for file_path in file_paths {
@@ -1036,12 +1026,7 @@ impl DesktopSession {
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
                     if let Ok(summary) =
-                        self.load_native_waveform_summary(
-                            &song_dir,
-                            &normalized_path,
-                            audio,
-                            clip_waveform_keys.contains(&normalized_path),
-                        )
+                        self.load_native_waveform_summary(&song_dir, &normalized_path, audio)
                     {
                         summaries.push(waveform_summary_to_dto(&normalized_path, summary));
                         continue;
@@ -2921,19 +2906,8 @@ impl DesktopSession {
         song_dir: &Path,
         waveform_key: &str,
         audio: &AudioController,
-        wait_for_source: bool,
     ) -> Result<&WaveformSummary, DesktopError> {
-        let mut peaks_result = audio.source_peaks(song_dir, waveform_key);
-        if wait_for_source {
-            for _ in 0..30 {
-                if peaks_result.is_ok() {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(50));
-                peaks_result = audio.source_peaks(song_dir, waveform_key);
-            }
-        }
-        let peaks = peaks_result?;
+        let peaks = audio.source_peaks(song_dir, waveform_key)?;
         let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
         let summary = waveform_summary_from_peaks(
             peaks.sample_rate,

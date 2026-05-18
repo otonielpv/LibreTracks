@@ -108,16 +108,16 @@ if(LT_ENGINE_USE_LIBSNDFILE)
         target_include_directories(lt_deps_decoder INTERFACE ${dr_libs_SOURCE_DIR})
     endif()
 
-elseif(LT_ENGINE_USE_FFMPEG)
-    # FFmpeg is expected to be provided by the system, vcpkg, or conan.
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
-        libavformat
-        libavcodec
-        libavutil
-        libswresample
-    )
-    target_link_libraries(lt_deps_decoder INTERFACE PkgConfig::FFMPEG)
+endif()
+
+if(LT_ENGINE_USE_FFMPEG)
+    # FFmpeg/libav is expected from the system, vcpkg, or conan. vcpkg's
+    # ffmpeg port provides a FindFFMPEG module and variables rather than a
+    # stable config target, so consume the documented variable interface.
+    find_package(FFMPEG REQUIRED COMPONENTS libavformat libavcodec libavutil libswresample)
+    target_include_directories(lt_deps_decoder INTERFACE ${FFMPEG_INCLUDE_DIRS})
+    target_link_directories(lt_deps_decoder INTERFACE ${FFMPEG_LIBRARY_DIRS})
+    target_link_libraries(lt_deps_decoder INTERFACE ${FFMPEG_LIBRARIES})
 endif()
 
 # ── NLOHMANN JSON (header-only, used for JSON serialization in FFI) ───────

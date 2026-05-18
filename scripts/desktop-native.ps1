@@ -15,6 +15,9 @@ $toolchainCandidates = @(
 if (-not $env:LIBRETRACKS_ENGINE_V2_RUBBERBAND) {
   $env:LIBRETRACKS_ENGINE_V2_RUBBERBAND = "1"
 }
+if (-not $env:LIBRETRACKS_ENGINE_V2_FFMPEG) {
+  $env:LIBRETRACKS_ENGINE_V2_FFMPEG = "1"
+}
 if (-not $env:VCPKG_DEFAULT_TRIPLET) {
   $env:VCPKG_DEFAULT_TRIPLET = "x64-windows"
 }
@@ -27,7 +30,12 @@ if (-not $env:CMAKE_TOOLCHAIN_FILE) {
   }
 }
 $useRubberBand = if ($env:LIBRETRACKS_ENGINE_V2_RUBBERBAND -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
-$engineV2BuildName = if ($useRubberBand -eq "ON") { "build-rb-on" } else { "build-rb-off" }
+$useFFmpeg = if ($env:LIBRETRACKS_ENGINE_V2_FFMPEG -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
+$engineV2BuildName = if ($useRubberBand -eq "ON") {
+  if ($useFFmpeg -eq "ON") { "build-rb-on-ffmpeg" } else { "build-rb-on" }
+} else {
+  if ($useFFmpeg -eq "ON") { "build-rb-off-ffmpeg" } else { "build-rb-off" }
+}
 $engineV2BuildDir = Join-Path $repoRoot "native\audio-engine-v2\$engineV2BuildName"
 $engineV2LibDir = Join-Path $engineV2BuildDir "Debug"
 $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
@@ -168,6 +176,31 @@ function Resolve-WindowsSdkLibraryDirectories {
   return $directories | Select-Object -Unique
 }
 
+function Resolve-WindowsSdkBinaryDirectories {
+  $directories = @()
+
+  foreach ($kitsRoot in @(
+    (Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"),
+    (Join-Path ${env:ProgramFiles(x86)} "Windows Kits\8.1\bin")
+  )) {
+    if (-not (Test-Path $kitsRoot)) {
+      continue
+    }
+
+    $directories += Get-ChildItem -Path $kitsRoot -Directory -ErrorAction SilentlyContinue |
+      Sort-Object Name -Descending |
+      ForEach-Object {
+        @(
+          (Join-Path $_.FullName "x64"),
+          $_.FullName
+        )
+      } |
+      Where-Object { Test-Path (Join-Path $_ "rc.exe") }
+  }
+
+  return $directories | Select-Object -Unique
+}
+
 function Assert-NativeToolchainReady {
   if (-not (Get-Command link.exe -ErrorAction SilentlyContinue)) {
     throw "MSVC linker not found. Install Visual Studio Build Tools with Desktop development with C++."
@@ -179,8 +212,16 @@ function Assert-NativeToolchainReady {
     Add-LibSegment $directory
   }
 
+  foreach ($directory in Resolve-WindowsSdkBinaryDirectories) {
+    Add-PathSegment $directory
+  }
+
   if (-not (Test-LibraryAvailability "kernel32.lib") -or -not (Test-LibraryAvailability "ucrt.lib")) {
     throw "Windows SDK libraries were not found. Install the Windows 10/11 SDK and the Desktop development with C++ workload so `kernel32.lib` and `ucrt.lib` are available."
+  }
+
+  if (-not (Get-Command rc.exe -ErrorAction SilentlyContinue)) {
+    throw "Windows SDK resource compiler rc.exe was not found. Install the Windows 10/11 SDK."
   }
 }
 
@@ -237,7 +278,6 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
 
 $useLibSndFile = "ON"
 $useR8Brain = "ON"
-$useFFmpeg = "OFF"
 
 Write-Host "Audio Engine v2 RubberBand: $useRubberBand"
 Write-Host "VCPKG_DEFAULT_TRIPLET: $env:VCPKG_DEFAULT_TRIPLET"
@@ -262,6 +302,7 @@ $cmakeConfigureArgs = @(
   "-DLT_ENGINE_BUILD_TESTS=OFF",
   "-DLT_ENGINE_USE_JUCE=ON",
   "-DLT_ENGINE_USE_RUBBERBAND=$useRubberBand",
+  "-DLT_ENGINE_USE_FFMPEG=$useFFmpeg",
   "-DLT_ENGINE_USE_LIBSNDFILE=$useLibSndFile",
   "-DLT_ENGINE_USE_R8BRAIN=$useR8Brain"
 )
@@ -276,6 +317,17 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 cmake --build $engineV2BuildDir --config Debug --target lt_audio_engine_v2
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$nativeVendorDir = Join-Path $repoRoot "vendor\bin\native"
+if ($useFFmpeg -eq "ON") {
+  New-Item -ItemType Directory -Force -Path $nativeVendorDir | Out-Null
+  Get-ChildItem $engineV2LibDir -Filter "av*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+    Copy-Item $_.FullName $nativeVendorDir -Force
+  }
+  Get-ChildItem $engineV2LibDir -Filter "swresample*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+    Copy-Item $_.FullName $nativeVendorDir -Force
+  }
+}
 
 $env:LIBRETRACKS_AUDIO_ENGINE = "cpp-v2"
 $env:LT_ENGINE_V2_LIB_DIR = $engineV2LibDir

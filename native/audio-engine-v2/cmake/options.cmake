@@ -14,16 +14,17 @@ option(LT_ENGINE_ENABLE_ASAN
     "Enable AddressSanitizer for supported debug/development builds"
     OFF)
 
-# Decoder backend — exactly one must be ON.
+# Decoder backends. libsndfile can stay enabled for WAV/FLAC while FFmpeg/libav
+# handles MP3/M4A/OGG/Opus/etc.
 option(LT_ENGINE_USE_FFMPEG
-    "Use FFmpeg/libavformat/libavcodec for multi-format decoding (preferred)"
+    "Use FFmpeg/libavformat/libavcodec for multi-format decoding"
     OFF)
 
 option(LT_ENGINE_USE_LIBSNDFILE
-    "Use libsndfile + header-only decoders for WAV/FLAC/MP3/OGG decoding (alternative)"
+    "Use libsndfile + header-only decoders for WAV/FLAC/MP3/OGG decoding"
     ON)
 
-# Resampler backend — exactly one must be ON.
+# Resampler backend - exactly one must be ON.
 option(LT_ENGINE_USE_R8BRAIN
     "Use r8brain-free-src for high-quality resampling (preferred)"
     ON)
@@ -33,14 +34,8 @@ option(LT_ENGINE_USE_LIBSAMPLERATE
     OFF)
 
 # ---------------------------------------------------------------------------
-# Validate mutual-exclusion constraints
+# Validate backend constraints
 # ---------------------------------------------------------------------------
-if(LT_ENGINE_USE_FFMPEG AND LT_ENGINE_USE_LIBSNDFILE)
-    message(FATAL_ERROR
-        "LT_ENGINE_USE_FFMPEG and LT_ENGINE_USE_LIBSNDFILE are mutually exclusive. "
-        "Choose one decoder backend.")
-endif()
-
 if(NOT LT_ENGINE_USE_FFMPEG AND NOT LT_ENGINE_USE_LIBSNDFILE)
     message(FATAL_ERROR
         "No decoder backend selected. Enable LT_ENGINE_USE_FFMPEG or LT_ENGINE_USE_LIBSNDFILE.")

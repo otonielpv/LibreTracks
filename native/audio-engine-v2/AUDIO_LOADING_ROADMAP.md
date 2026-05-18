@@ -9,7 +9,7 @@ Status as of `dae0e60` (2026-05-18):
 - ✅ Pre-load sessions into engine on clip add (`dae0e60`) — covers the
   "first play is slow because nothing is decoded yet" problem.
 - ✅ Native waveform generation from already-loaded engine sources (`worktree`, 2026-05-18).
-- ⏳ libav-based decoder (this doc, section 2).
+- ✅ libav-based decoder behind `LT_ENGINE_USE_FFMPEG=ON` (`worktree`, 2026-05-18).
 
 ---
 

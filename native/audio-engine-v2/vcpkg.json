@@ -1,0 +1,15 @@
+{
+  "name": "libretracks-audio-engine-v2",
+  "version-string": "0.1.0",
+  "dependencies": [
+    {
+      "name": "ffmpeg",
+      "default-features": false,
+      "features": [
+        "avcodec",
+        "avformat",
+        "swresample"
+      ]
+    }
+  ]
+}
