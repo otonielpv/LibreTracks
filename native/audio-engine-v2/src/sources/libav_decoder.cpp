@@ -52,6 +52,7 @@ public:
 
     Result<void> open(const std::string& path) override {
         close();
+        av_log_set_level(AV_LOG_ERROR);
         info_ = {};
         info_.file_path = path;
 

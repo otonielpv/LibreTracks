@@ -1150,7 +1150,6 @@ fn session_signature(song: &Song) -> String {
     song.time_signature_markers.len().hash(&mut hasher);
     song.tracks.len().hash(&mut hasher);
     song.clips.len().hash(&mut hasher);
-    song.section_markers.len().hash(&mut hasher);
     song.regions.len().hash(&mut hasher);
     for track in &song.tracks {
         track.id.hash(&mut hasher);
@@ -1172,11 +1171,6 @@ fn session_signature(song: &Song) -> String {
         clip.gain.to_bits().hash(&mut hasher);
         clip.fade_in_seconds.map(f64::to_bits).hash(&mut hasher);
         clip.fade_out_seconds.map(f64::to_bits).hash(&mut hasher);
-    }
-    for marker in &song.section_markers {
-        marker.id.hash(&mut hasher);
-        marker.name.hash(&mut hasher);
-        marker.start_seconds.to_bits().hash(&mut hasher);
     }
     for marker in &song.tempo_markers {
         marker.id.hash(&mut hasher);

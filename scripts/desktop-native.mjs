@@ -31,6 +31,16 @@ const detectToolchainFile = (rawEnv) => {
   return candidates.find((candidate) => existsSync(candidate)) ?? "";
 };
 
+const detectBungeeDir = (rawEnv) => {
+  const candidates = [
+    rawEnv.LT_BUNGEE_DIR,
+    rawEnv.USERPROFILE ? path.join(rawEnv.USERPROFILE, "Downloads", "bungee-v2.4.24") : "",
+    path.join(repoRoot, "vendor", "bungee"),
+  ].filter(Boolean);
+
+  return candidates.find((candidate) => existsSync(path.join(candidate, "include", "bungee", "Bungee.h"))) ?? "";
+};
+
 const buildDesktopNativeEnv = (rawEnv) => {
   const env = {
     ...rawEnv,
@@ -93,6 +103,8 @@ const ensureEngineV2 = (normalizedEnv) => {
   const useLibSndFile = "ON";
   const useR8Brain = "ON";
   const useFFmpeg = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_FFMPEG) ? "ON" : "OFF";
+  const bungeeDir = detectBungeeDir(normalizedEnv);
+  const useBungee = useRubberBand === "ON" && bungeeDir ? "ON" : "OFF";
   const buildName = useRubberBand === "ON"
     ? (useFFmpeg === "ON" ? "build-rb-on-ffmpeg" : "build-rb-on")
     : (useFFmpeg === "ON" ? "build-rb-off-ffmpeg" : "build-rb-off");
@@ -101,6 +113,10 @@ const ensureEngineV2 = (normalizedEnv) => {
   const libDir = path.join(buildDir, "Debug");
 
   console.log(`Audio Engine v2 RubberBand: ${useRubberBand}`);
+  console.log(`Audio Engine v2 Bungee: ${useBungee}`);
+  if (bungeeDir) {
+    console.log(`LT_BUNGEE_DIR: ${bungeeDir}`);
+  }
   console.log(`VCPKG_DEFAULT_TRIPLET: ${normalizedEnv.VCPKG_DEFAULT_TRIPLET}`);
   if (normalizedEnv.CMAKE_TOOLCHAIN_FILE) {
     console.log(`CMAKE_TOOLCHAIN_FILE: ${normalizedEnv.CMAKE_TOOLCHAIN_FILE}`);
@@ -122,11 +138,14 @@ const ensureEngineV2 = (normalizedEnv) => {
     buildArg,
     "-DLT_ENGINE_BUILD_TESTS=OFF",
     "-DLT_ENGINE_USE_JUCE=ON",
-    `-DLT_ENGINE_USE_RUBBERBAND=${useRubberBand}`,
+    `-DLT_ENGINE_USE_BUNGEE=${useBungee}`,
     `-DLT_ENGINE_USE_FFMPEG=${useFFmpeg}`,
     `-DLT_ENGINE_USE_LIBSNDFILE=${useLibSndFile}`,
     `-DLT_ENGINE_USE_R8BRAIN=${useR8Brain}`,
   ];
+  if (useBungee === "ON") {
+    configureArgs.push(`-DLT_BUNGEE_DIR=${bungeeDir}`);
+  }
   if (normalizedEnv.CMAKE_TOOLCHAIN_FILE) {
     configureArgs.push(`-DCMAKE_TOOLCHAIN_FILE=${normalizedEnv.CMAKE_TOOLCHAIN_FILE}`);
   }

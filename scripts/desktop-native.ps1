@@ -31,6 +31,13 @@ if (-not $env:CMAKE_TOOLCHAIN_FILE) {
 }
 $useRubberBand = if ($env:LIBRETRACKS_ENGINE_V2_RUBBERBAND -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
 $useFFmpeg = if ($env:LIBRETRACKS_ENGINE_V2_FFMPEG -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
+$bungeeCandidates = @(
+  $env:LT_BUNGEE_DIR,
+  (Join-Path $env:USERPROFILE "Downloads\bungee-v2.4.24"),
+  (Join-Path $repoRoot "vendor\bungee")
+) | Where-Object { $_ }
+$bungeeDir = $bungeeCandidates | Where-Object { Test-Path (Join-Path $_ "include\bungee\Bungee.h") } | Select-Object -First 1
+$useBungee = if ($useRubberBand -eq "ON" -and $bungeeDir) { "ON" } else { "OFF" }
 $engineV2BuildName = if ($useRubberBand -eq "ON") {
   if ($useFFmpeg -eq "ON") { "build-rb-on-ffmpeg" } else { "build-rb-on" }
 } else {
@@ -280,6 +287,10 @@ $useLibSndFile = "ON"
 $useR8Brain = "ON"
 
 Write-Host "Audio Engine v2 RubberBand: $useRubberBand"
+Write-Host "Audio Engine v2 Bungee: $useBungee"
+if ($bungeeDir) {
+  Write-Host "LT_BUNGEE_DIR: $bungeeDir"
+}
 Write-Host "VCPKG_DEFAULT_TRIPLET: $env:VCPKG_DEFAULT_TRIPLET"
 if ($env:CMAKE_TOOLCHAIN_FILE) {
   Write-Host "CMAKE_TOOLCHAIN_FILE: $env:CMAKE_TOOLCHAIN_FILE"
@@ -301,11 +312,14 @@ $cmakeConfigureArgs = @(
   "-B", $engineV2BuildDir,
   "-DLT_ENGINE_BUILD_TESTS=OFF",
   "-DLT_ENGINE_USE_JUCE=ON",
-  "-DLT_ENGINE_USE_RUBBERBAND=$useRubberBand",
+  "-DLT_ENGINE_USE_BUNGEE=$useBungee",
   "-DLT_ENGINE_USE_FFMPEG=$useFFmpeg",
   "-DLT_ENGINE_USE_LIBSNDFILE=$useLibSndFile",
   "-DLT_ENGINE_USE_R8BRAIN=$useR8Brain"
 )
+if ($useBungee -eq "ON") {
+  $cmakeConfigureArgs += "-DLT_BUNGEE_DIR=$bungeeDir"
+}
 if ($env:CMAKE_TOOLCHAIN_FILE) {
   $cmakeConfigureArgs += "-DCMAKE_TOOLCHAIN_FILE=$env:CMAKE_TOOLCHAIN_FILE"
 }
