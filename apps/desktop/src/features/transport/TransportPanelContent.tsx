@@ -686,6 +686,7 @@ export function TransportPanelContent() {
   });
   const displayPositionSecondsRef = useRef(0);
   const suppressTrackClickRef = useRef(false);
+  const trackSelectionAnchorRef = useRef<string | null>(null);
   const renderMetricTimeoutRef = useRef<number | null>(null);
   const pendingRenderMetricRef = useRef(0);
   const nativeExternalDropPathsRef = useRef<string[]>([]);
@@ -3697,19 +3698,25 @@ export function TransportPanelContent() {
         nextSelection = currentSelection.includes(trackId)
           ? currentSelection.filter((id) => id !== trackId)
           : [...currentSelection, trackId];
-      } else if (event.shiftKey && currentSelection.length > 0) {
+        trackSelectionAnchorRef.current = trackId;
+      } else if (event.shiftKey) {
         const visibleTrackIds = visibleTracks.map((track) => track.id);
-        const lastSelectedIdx = visibleTrackIds.indexOf(
-          currentSelection[currentSelection.length - 1],
-        );
+        const anchor = trackSelectionAnchorRef.current;
+        const anchorIdx = anchor ? visibleTrackIds.indexOf(anchor) : -1;
         const currentIdx = visibleTrackIds.indexOf(trackId);
 
-        if (lastSelectedIdx !== -1 && currentIdx !== -1) {
-          const start = Math.min(lastSelectedIdx, currentIdx);
-          const end = Math.max(lastSelectedIdx, currentIdx);
-          const range = visibleTrackIds.slice(start, end + 1);
-          nextSelection = [...new Set([...currentSelection, ...range])];
+        if (anchorIdx !== -1 && currentIdx !== -1) {
+          const start = Math.min(anchorIdx, currentIdx);
+          const end = Math.max(anchorIdx, currentIdx);
+          nextSelection = visibleTrackIds.slice(start, end + 1);
+          // Anchor stays put across range extensions.
+        } else {
+          // No usable anchor — fall back to single-select and seed anchor.
+          nextSelection = [trackId];
+          trackSelectionAnchorRef.current = trackId;
         }
+      } else {
+        trackSelectionAnchorRef.current = trackId;
       }
 
       selectTrack(nextSelection);
