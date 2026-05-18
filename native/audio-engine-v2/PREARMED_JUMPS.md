@@ -22,6 +22,7 @@ Near-instant pitch-shifted audio after predictable musical jumps (markers, regio
 | 9 ext (device-reconfigure + rapid-jumps tests) | `0eea42d` | done |
 | 2 (async worker thread) | `3480291` | done |
 | 10 (prearm-vs-reactive benchmark) | `9aff527` | done |
+| 6b (sync prepare-one for first-jump-after-change) | `23c75f2` | done |
 
 ## Architecture
 
@@ -47,8 +48,10 @@ CmdJumpToMarker (or Region / Song)
         │         return                                        ↓
         │                                                        first render_block
         │                                                        emits target audio
-        └─ MISS ─► bvm.rebuild_for_seek (sync)
-                   scheduler->schedule_immediate (existing path)
+        └─ MISS ─► prepare_target_now(this key)  [Phase 6b: ~13ms sync]
+                ├─ HIT (built) ─► swap + seek + return (~13ms cost, instant audio)
+                └─ MISS ─► bvm.rebuild_for_seek (sync)
+                           scheduler->schedule_immediate (legacy fallback)
 
 CmdSetSongTranspose / CmdSetRegionTranspose / CmdSetTrackTransposeEnabled
   └─ prearm_revision_++
@@ -66,9 +69,12 @@ CmdSetOutputDevice / CmdSetSampleRate / CmdSetBufferSize
 | Path | User-visible jump cost | First audible block | Silence the listener hears |
 |---|---|---|---|
 | Reactive (today) | 51 ms (synchronous `rebuild_for_seek`) | block 8 (~80 ms latency) | ~131 ms |
-| Prearmed (this branch) | <1 ms (atomic swap) | block 0 (prefeed delivered) | ~0 ms |
+| Prearmed cache hit | <1 ms (atomic swap) | block 0 (prefeed delivered) | ~0 ms |
+| Prearmed cache miss + sync prepare-one (Phase 6b) | ~13 ms (prepare 1 target) | block 0 (prefeed delivered) | ~13 ms |
 
 Prearm build cost (paid ONCE at LoadSession, on worker thread): ~119 ms for 9 voices × 1 marker target.
+
+**Why three rows**: the async worker is the common case. The middle row (cache hit) is what you get when the worker has had time to build the target. The bottom row (Phase 6b) covers the edge case where the user triggers a jump immediately after a pitch change, before the async worker repopulates the cache — sync prepare-one for THIS one target still beats the reactive path by ~4× and still emits audio in block 0 (prefeed always runs).
 
 ## Files
 
@@ -125,10 +131,11 @@ Prearm build cost (paid ONCE at LoadSession, on worker thread): ~119 ms for 9 vo
 11. clear() drops all prepared sets
 12. prepare() with new dims clears stale voices (device-change flow)
 13. Rapid prepare+take cycles are safe (smoke test for ABA/double-free)
+14. **prepare_target_now builds one set immediately** (Phase 6b sync miss path)
 
 ## Known limitations
 
-1. **No vamps yet** (Phase 5 deferred). Vamps need bidirectional prearm + wrap-on-loop-end. Separate session of work.
+1. **No vamps yet** (Phase 5 deferred). See "Why vamps are deferred" below.
 2. **No priority scoring on eviction.** Spec proposes a weighted score (current vamp wrap, next region, MIDI-mapped > others); current impl is plain FIFO. Adequate for ≤8 targets per the default cap.
 3. **No per-target memory accounting.** Cap is by set count, not MB. At ~2 MB / voice × 9 voices × 8 sets = ~144 MB max.
 4. **Single combined `prearm_revision_`** rather than the spec's 5 separate revisions. Over-invalidates in edge cases (e.g. region transpose change clears unrelated song's marker sets). Acceptable since prearming is async and cheap.
@@ -138,12 +145,77 @@ Prearm build cost (paid ONCE at LoadSession, on worker thread): ~119 ms for 9 vo
 
 ## What was deferred per the no-manual-test scope
 
-- **Phase 5: Vamps** — high risk, semantics complex, can't validate without manual test.
+- **Phase 5: Vamps** — see below.
 - **Phase 11: UI/remote integration** — frontend changes need Tauri running.
 - **Phase 12: Manual QA** — by definition manual.
 
+## Why vamps are deferred
+
+A vamp is a *loop region*. The transport plays from `vamp_start` to `vamp_end`,
+then wraps back to `vamp_start` and plays again. The "jump" happens
+automatically on every wrap, not on user input.
+
+The MVP infrastructure (`PrearmedJumpManager`, `swap_in_prepared_voices`,
+prefeed) all transfers directly. What's NEW for vamps is the lifecycle pattern:
+
+```
+Marker:  prepare ahead → user triggers jump → take_ready (consumes) → done
+Vamp:    prepare ahead → transport wraps (auto) → take_ready (consumes)
+         → IMMEDIATELY post a new prepare for next wrap
+         → loop continues, repeat
+```
+
+What I want manual validation for before shipping vamps:
+
+- **Wrap timing**: the wrap is triggered by the audio thread (transport
+  reaches vamp_end). The swap has to happen in the SAME audio block as the
+  wrap or you hear a one-block gap. Hard to validate without listening.
+- **Re-prearm on wrap**: posting a new prepare from the audio thread is
+  forbidden (allocates). Has to route through the command thread or a
+  lock-free signal. Adds non-trivial complexity.
+- **Loop drift**: 10 vamp wraps should produce sample-aligned audio. Easy to
+  introduce a 1-sample drift per wrap that compounds. Detectable only with
+  careful listening / FFT analysis.
+
+Estimated effort once you can manual-test: ~4-6 hours implementation +
+~2 hours debugging the wrap timing on real audio. The existing 14 tests
+will all still pass; vamps need their own 3-4 tests.
+
+## Why first-jump-after-pitch-change isn't silent (Phase 6b)
+
+This was a real gap the user spotted. The flow that USED to happen:
+
+1. `CmdSetSongTranspose` bumps `prearm_revision_` and posts the new revision
+   to the async worker. Cache is invalidated.
+2. User triggers a jump BEFORE the worker finishes (worker takes ~120ms for
+   9 voices).
+3. `take_ready(new_revision_key)` misses (worker hasn't inserted yet).
+4. Falls back to `rebuild_for_seek` (51ms) + audio thread structural latency
+   (80ms) = ~131ms silence. The whole point of prearming is defeated for
+   this one jump.
+
+Phase 6b adds `prepare_target_now`: a synchronous fast path that builds
+ONE target's prepared set on the command thread (~13ms for 1 marker × 9
+voices). The jump handler now does:
+
+```
+take_ready hit            → swap + seek + return  (no silence)
+take_ready miss:
+  prepare_target_now hit  → swap + seek + return  (~13ms, no silence)
+  prepare_target_now miss → reactive rebuild      (legacy fallback)
+```
+
+The user-visible cost is now ~13ms instead of ~131ms for that edge case.
+Subsequent jumps to other targets still hit the async cache as it
+finishes building in the background.
+
+`prepare_target_now` does NOT insert the set into the cache — it's a
+one-shot consumed-immediately call. The async worker continues to populate
+the cache in the background, so later jumps to the same marker hit the
+fast path.
+
 ## Validation
 
-13/13 prearm tests + 9 Bungee/voice-manager tests = 22 tests pass on this branch. No regression in prior passing tests.
+14 prearm + 2 Bungee voice tests = 16 pass on `--test-case="PrearmedJump*,BungeeVoiceManager*,BungeePitchVoice*"`. No regression in prior passing tests.
 
 Bench validates the architecture: prepared marker jumps deliver audio in block 0 at 9 voices, vs reactive's block 8.
