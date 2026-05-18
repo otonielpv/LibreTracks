@@ -133,7 +133,7 @@ export function useTimelineKeyboardShortcuts({
         return;
       }
 
-      const keyDigit = keyboardDigit(event.code);
+      const keyDigit = keyboardDigit(event);
       if (keyDigit !== null) {
         event.preventDefault();
 

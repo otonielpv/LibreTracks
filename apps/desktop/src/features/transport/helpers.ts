@@ -322,10 +322,31 @@ export function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-export function keyboardDigit(eventCode: string) {
-  const match = eventCode.match(/^(?:Digit|Numpad)(\d)$/);
-  if (match) {
-    return Number(match[1]);
+export function keyboardDigit(
+  eventCodeOrEvent: string | KeyboardEvent,
+) {
+  // event.code path: "Digit1" / "Numpad1" — works for plain number keys but
+  // breaks for Shift+Numpad because Windows toggles NumLock under Shift and
+  // browsers then report "End"/"Home"/"ArrowDown" etc. as the code.
+  //
+  // event.key fallback: when given the whole KeyboardEvent we also accept
+  // the resolved key character, which is "1".."9" regardless of which
+  // physical key (main row or numpad) produced it and regardless of NumLock
+  // state. This covers Shift+Numpad on every layout we care about.
+  const code =
+    typeof eventCodeOrEvent === "string"
+      ? eventCodeOrEvent
+      : eventCodeOrEvent.code;
+  const codeMatch = code.match(/^(?:Digit|Numpad)(\d)$/);
+  if (codeMatch) {
+    return Number(codeMatch[1]);
+  }
+
+  if (typeof eventCodeOrEvent !== "string") {
+    const key = eventCodeOrEvent.key;
+    if (key.length === 1 && key >= "0" && key <= "9") {
+      return Number(key);
+    }
   }
 
   return null;
