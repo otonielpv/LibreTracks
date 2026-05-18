@@ -52,7 +52,7 @@ export function useTransportPolling({
       () => {
         void refreshSnapshot();
       },
-      playbackState === "playing" ? 120 : 500,
+      playbackState === "playing" ? 60 : 500,
     );
 
     return () => {

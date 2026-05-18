@@ -7,7 +7,7 @@ import type {
 import type { TimelineGrid } from "../timelineMath";
 import { screenXToSeconds, secondsToScreenX } from "../timelineMath";
 
-const MIN_LABEL_WIDTH_PX = 70;
+const MIN_LABEL_WIDTH_PX = 112;
 
 export const LANE_REGIONS = {
   top: 0,
@@ -215,9 +215,11 @@ export function drawRulerGridLabels(
     context.font = '600 9px "Space Grotesk", sans-serif';
     context.fillText(formatRulerMusicalPosition(marker.barNumber, marker.beatInBar), x, y);
 
-    context.fillStyle = marker.isBarStart ? "#57f1db" : "rgba(186, 202, 197, 0.68)";
-    context.font = '400 9px "Space Grotesk", sans-serif';
-    context.fillText(formatRulerTimecode(marker.seconds), x, GRID_LABEL_SECOND_LINE_TOP);
+    if (marker.isBarStart) {
+      context.fillStyle = "#57f1db";
+      context.font = '400 9px "Space Grotesk", sans-serif';
+      context.fillText(formatRulerTimecode(marker.seconds), x, GRID_LABEL_SECOND_LINE_TOP);
+    }
   }
 }
 

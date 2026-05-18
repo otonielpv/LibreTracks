@@ -309,7 +309,7 @@ export function buildVisibleTimelineGrid(params: TimelineGridParams): TimelineGr
   const barPixels = beatPixels * beatsPerBar;
   const subdivisionPerBeat = 1;
   const snapIntervalSeconds = beatDuration;
-  const showBeatLabels = beatPixels >= 78 && params.zoomLevel >= 6.5;
+  const showBeatLabels = beatPixels >= 120 && params.zoomLevel >= 9;
   const showBeatGridLines = beatPixels >= 16;
   const barLabelStep =
     showBeatLabels ? 1 : barPixels >= 240 ? 1 : barPixels >= 120 ? 2 : barPixels >= 64 ? 4 : 8;

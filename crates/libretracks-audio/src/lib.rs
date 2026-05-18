@@ -431,6 +431,23 @@ impl AudioEngine {
         Ok(Some(self.position_seconds))
     }
 
+    pub fn complete_pending_instant_jump(&mut self) -> Result<Option<f64>, AudioEngineError> {
+        let pending_jump = match self.pending_marker_jump.clone() {
+            Some(pending_jump) => pending_jump,
+            None => return Ok(None),
+        };
+
+        if pending_jump.transition != TransitionType::Instant {
+            return Ok(None);
+        }
+
+        let song = self.ensure_song_loaded()?;
+        self.position_seconds = resolve_pending_jump_target_start_seconds(song, &pending_jump)?;
+        self.pending_marker_jump = None;
+        self.pending_fade_jump = None;
+        Ok(Some(self.position_seconds))
+    }
+
     pub fn active_clips(&self) -> Result<Vec<ActiveClip>, AudioEngineError> {
         self.active_clips_at(self.position_seconds)
     }
@@ -1532,6 +1549,32 @@ mod tests {
 
         assert!((position - 1.0).abs() < 0.0001);
         assert!(jump_executed);
+        assert!(engine.pending_marker_jump().is_none());
+    }
+
+    #[test]
+    fn pending_instant_jump_can_be_completed_by_native_scheduler_signal() {
+        let mut engine = AudioEngine::new();
+        engine
+            .load_song(multi_region_song())
+            .expect("song should load");
+        engine.seek(7.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        engine
+            .schedule_region_jump(
+                "region_outro",
+                JumpTrigger::RegionEnd,
+                TransitionType::Instant,
+            )
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        let target_position = engine
+            .complete_pending_instant_jump()
+            .expect("native scheduler signal should complete jump");
+
+        assert_eq!(target_position, Some(14.0));
         assert!(engine.pending_marker_jump().is_none());
     }
 

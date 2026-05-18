@@ -458,6 +458,33 @@ impl AudioController {
         })
     }
 
+    pub fn schedule_region_end_jump(
+        &self,
+        jump_id: &str,
+        target_region_id: &str,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("schedule_region_end_jump", None, |engine, _state| {
+            engine.send_command(&EngineCommand::CancelAllScheduledJumps)?;
+            engine.send_command(&EngineCommand::ScheduleJump {
+                jump_id: jump_id.to_string(),
+                target: JumpTarget {
+                    kind: JumpTargetKind::Region,
+                    id: Some(target_region_id.to_string()),
+                    frame: None,
+                },
+                trigger: JumpTrigger::AtRegionEnd,
+            })?;
+            Ok(())
+        })
+    }
+
+    pub fn cancel_scheduled_jumps(&self) -> Result<(), DesktopError> {
+        self.with_engine_state("cancel_scheduled_jumps", None, |engine, _state| {
+            engine.send_command(&EngineCommand::CancelAllScheduledJumps)?;
+            Ok(())
+        })
+    }
+
     pub fn on_timeline_hover_or_drag(
         &self,
         song_dir: PathBuf,

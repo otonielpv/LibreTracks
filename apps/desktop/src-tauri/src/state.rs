@@ -112,6 +112,7 @@ pub struct DesktopSession {
     song_file_path: Option<PathBuf>,
     last_drift_sample: Option<TransportDriftSummary>,
     last_runtime_pitch: Option<PitchPrepareSummary>,
+    last_native_scheduled_jump_executed_count: u64,
     project_revision: u64,
     undo_stack: Vec<Song>,
     redo_stack: Vec<Song>,
@@ -151,6 +152,7 @@ impl Default for DesktopSession {
             song_file_path: None,
             last_drift_sample: None,
             last_runtime_pitch: None,
+            last_native_scheduled_jump_executed_count: 0,
             project_revision: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -1225,10 +1227,12 @@ impl DesktopSession {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
 
-        self.engine
+        let _scheduled_jump = self
+            .engine
             .schedule_marker_jump(target_marker_id, trigger.clone(), transition.clone())?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
+            audio.cancel_scheduled_jumps()?;
             if was_playing {
                 self.reposition_audio(audio, PlaybackStartReason::ImmediateJump)?;
                 self.transport_clock
@@ -1242,6 +1246,8 @@ impl DesktopSession {
                 self.current_position(),
                 self.engine.position_seconds(),
             );
+        } else {
+            audio.cancel_scheduled_jumps()?;
         }
 
         Ok(self.snapshot())
@@ -1257,10 +1263,12 @@ impl DesktopSession {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
 
-        self.engine
+        let scheduled_jump = self
+            .engine
             .schedule_region_jump(target_region_id, trigger.clone(), transition.clone())?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
+            audio.cancel_scheduled_jumps()?;
             if was_playing {
                 self.reposition_audio(audio, PlaybackStartReason::ImmediateJump)?;
                 self.transport_clock
@@ -1274,6 +1282,18 @@ impl DesktopSession {
                 self.current_position(),
                 self.engine.position_seconds(),
             );
+        } else if trigger == JumpTrigger::RegionEnd && transition == TransitionType::Instant {
+            if let Some(pending_jump) = scheduled_jump {
+                self.last_native_scheduled_jump_executed_count = audio
+                    .engine_snapshot()
+                    .map(|snapshot| snapshot.pitch.mixer_scheduled_jump_executed_count)
+                    .unwrap_or(self.last_native_scheduled_jump_executed_count);
+                audio.schedule_region_end_jump(&pending_jump.target_marker_id, target_region_id)?;
+            } else {
+                audio.cancel_scheduled_jumps()?;
+            }
+        } else if scheduled_jump.is_none() {
+            audio.cancel_scheduled_jumps()?;
         }
 
         Ok(self.snapshot())
@@ -1285,6 +1305,7 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         self.engine.cancel_section_jump();
+        audio.cancel_scheduled_jumps()?;
         Ok(self.snapshot())
     }
 
@@ -2635,6 +2656,10 @@ impl DesktopSession {
             return Ok(());
         }
 
+        if self.sync_native_scheduled_jump_if_needed(audio)? {
+            return Ok(());
+        }
+
         let elapsed = self.transport_clock.elapsed_since_anchor();
         let previous_position = self.engine.position_seconds();
         let wrapped_by_vamp = self
@@ -2690,6 +2715,38 @@ impl DesktopSession {
         }
 
         Ok(())
+    }
+
+    fn sync_native_scheduled_jump_if_needed(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<bool, DesktopError> {
+        let snapshot = match audio.engine_snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(_) => return Ok(false),
+        };
+        let executed_count = snapshot.pitch.mixer_scheduled_jump_executed_count;
+        if executed_count <= self.last_native_scheduled_jump_executed_count {
+            return Ok(false);
+        }
+
+        self.last_native_scheduled_jump_executed_count = executed_count;
+
+        let Some(pending_jump) = self.engine.pending_marker_jump().cloned() else {
+            return Ok(false);
+        };
+        if pending_jump.trigger != JumpTrigger::RegionEnd
+            || pending_jump.transition != TransitionType::Instant
+        {
+            return Ok(false);
+        }
+
+        let Some(target_position) = self.engine.complete_pending_instant_jump()? else {
+            return Ok(false);
+        };
+        self.transport_clock.note_jump_while_playing(target_position);
+        self.capture_transport_drift_sample(audio, "native_jump", target_position, target_position);
+        Ok(true)
     }
 
     fn capture_transport_drift_sample(
