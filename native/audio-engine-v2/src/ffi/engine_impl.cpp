@@ -769,11 +769,36 @@ void EngineImpl::resample_sources_for_new_sample_rate() {
     //
     // Bungee and the prearmed-jumps manager also need re-preparing because
     // their voice dimensions are tied to sample rate.
-    if (!session_ || !source_manager_ || !clock_) return;
+    if (!clock_) return;
     const int new_sr = clock_->sample_rate();
     if (new_sr <= 0) return;
 
-    debug_log("[LT_PITCH_DEBUG] resample_sources_for_new_sample_rate sr=%d\n", new_sr);
+    debug_log("[LT_PITCH_DEBUG] resample_sources_for_new_sample_rate sr=%d session=%d\n",
+        new_sr, session_ ? 1 : 0);
+
+    // ALWAYS re-prepare Bungee + prearmed-jumps with the new dimensions,
+    // even when no session is loaded yet. The Tauri startup flow runs:
+    //   engine init (opens default device at SR_A)
+    //   → apply_settings → SetOutputDevice (negotiates SR_B != SR_A)
+    //   → user loads project later
+    // Bungee was first prepared at SR_A in engine init. Without this
+    // re-prepare it stays at SR_A while the device is at SR_B and the
+    // audio thread feeds it samples that drift in time → desync.
+    if (bungee_voices_ && device_manager_) {
+        const int bs = device_manager_->actual_buffer_size() > 0
+            ? device_manager_->actual_buffer_size() : 1024;
+        bungee_voices_->prepare(new_sr, /*channels=*/2, bs);
+        bungee_voices_->clear(); // voices were built for old dims
+        if (prearmed_jumps_) {
+            prearmed_jumps_->clear();
+            prearmed_jumps_->prepare(new_sr, /*channels=*/2, bs);
+            prearm_revision_.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+
+    // The source re-decode step is only meaningful when a session exists.
+    // Without it there are no sources to re-decode.
+    if (!session_ || !source_manager_) return;
 
     // Cancel any in-flight decode jobs from the previous rate.
     if (prep_queue_) {
@@ -794,19 +819,6 @@ void EngineImpl::resample_sources_for_new_sample_rate() {
         [this](EngineEvent ev){ push_event(std::move(ev)); },
         new_sr);
     prep_queue_->enqueue_session(session_->sources, clock_->position().frame);
-
-    // Bungee voice manager: re-prepare with new (sr, max_in_frames).
-    if (bungee_voices_ && device_manager_) {
-        const int bs = device_manager_->actual_buffer_size() > 0
-            ? device_manager_->actual_buffer_size() : 1024;
-        bungee_voices_->prepare(new_sr, /*channels=*/2, bs);
-        bungee_voices_->clear(); // voices were built for old dims
-        if (prearmed_jumps_) {
-            prearmed_jumps_->clear();
-            prearmed_jumps_->prepare(new_sr, /*channels=*/2, bs);
-            prearm_revision_.fetch_add(1, std::memory_order_relaxed);
-        }
-    }
 }
 
 std::string EngineImpl::list_devices() const {
