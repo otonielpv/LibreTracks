@@ -1028,7 +1028,25 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdPlay>) {
-            prepare_pitch_processors_for_session();
+            // Kick the RubberBand stream-set prepare in the background. This
+            // used to run synchronously here, blocking the play command for
+            // ~700ms while it rebuilt N streams (build_stream_set_for_target +
+            // prepare_for_play). Bungee voices already serve the transposed
+            // clips for the audio thread, so blocking Play on this rebuild is
+            // dead weight — the user just hears nothing during it because the
+            // clock can't advance until the command returns.
+            //
+            // launch_pitch_rebuild_if_idle posts the rebuild to its async
+            // worker; the audio thread keeps using whatever streams existed
+            // before (or the Bungee voice map, which is the common case).
+            if (session_ && clock_) {
+                launch_pitch_rebuild_if_idle(
+                    clock_->position().frame, "play", session_);
+            }
+            // Also enqueue the rolling pitch-cache window so non-realtime
+            // pitch consumers warm up — this part is already work-queue based
+            // and returns quickly.
+            if (session_) prepare_pitch_processors_for_session(*session_);
             clock_->play();
             push_event(EvPlaybackStarted{ clock_->position().frame });
             return Result<void>::ok();
