@@ -120,6 +120,7 @@ export function PlayheadOverlay({
   useEffect(() => {
     let animationFrameId = 0;
     let lastTransform = "";
+    let lastSyncLogMs = 0;
 
     const render = () => {
       const activeDrag = dragStateRef.current;
@@ -148,6 +149,22 @@ export function PlayheadOverlay({
       if (playheadRef.current && nextTransform !== lastTransform) {
         playheadRef.current.style.transform = nextTransform;
         lastTransform = nextTransform;
+      }
+
+      // Sync instrumentation — log what the playhead is DISPLAYING. Rate-limit
+      // to 5/sec so the rAF loop doesn't flood the console.
+      if (
+        (window as unknown as { __LT_SYNC_DEBUG?: boolean }).__LT_SYNC_DEBUG &&
+        playbackRef.current.playbackState === "playing"
+      ) {
+        const nowMs = performance.now();
+        if (nowMs - lastSyncLogMs >= 200) {
+          lastSyncLogMs = nowMs;
+          // eslint-disable-next-line no-console
+          console.log(
+            `[PLAYHEAD_UI] wall_ms=${Date.now()} perf_ms=${nowMs.toFixed(1)} displayed_s=${nextSeconds.toFixed(4)}`,
+          );
+        }
       }
 
       animationFrameId = window.requestAnimationFrame(render);

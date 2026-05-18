@@ -32,6 +32,17 @@ export function useTransportPolling({
         }
 
         applyPlaybackSnapshot(nextSnapshot);
+
+        // Sync instrumentation — opt-in via window.__LT_SYNC_DEBUG = true.
+        if (
+          (window as unknown as { __LT_SYNC_DEBUG?: boolean }).__LT_SYNC_DEBUG &&
+          nextSnapshot?.playbackState === "playing"
+        ) {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[SNAP_UI] wall_ms=${Date.now()} perf_ms=${performance.now().toFixed(1)} pos_s=${nextSnapshot.positionSeconds.toFixed(4)} anchor_s=${nextSnapshot.transportClock?.anchorPositionSeconds ?? "n/a"}`,
+          );
+        }
       } finally {
         inFlight = false;
       }

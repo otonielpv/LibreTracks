@@ -363,15 +363,46 @@ std::string EngineImpl::get_snapshot() const {
         // user is currently hearing.
         Frame compensated = pos.frame;
         const int sr = clock_->sample_rate();
+        int dbg_latency = 0;
+        int dbg_buffer  = 0;
         if (pos.state == TransportState::Playing && device_manager_ && sr > 0) {
-            const int latency = device_manager_->actual_output_latency_samples();
-            const int buffer  = device_manager_->actual_buffer_size();
-            const Frame lead = static_cast<Frame>(latency + buffer);
+            dbg_latency = device_manager_->actual_output_latency_samples();
+            dbg_buffer  = device_manager_->actual_buffer_size();
+            const Frame lead = static_cast<Frame>(dbg_latency + dbg_buffer);
             compensated = pos.frame > lead ? pos.frame - lead : 0;
         }
         snap.current_frame   = compensated;
         snap.current_seconds = (sr > 0) ? static_cast<double>(compensated) / sr
                                         : pos.seconds;
+
+        // [SNAP_FRAME] sync instrumentation — only when LIBRETRACKS_SYNC_DEBUG=1.
+        // Rate-limited to ~5/sec to keep stdout sane.
+        if (pos.state == TransportState::Playing && sr > 0) {
+            static const bool sync_debug = []{
+                const char* v = std::getenv("LIBRETRACKS_SYNC_DEBUG");
+                return v && v[0] == '1';
+            }();
+            if (sync_debug) {
+                static auto last_log = std::chrono::steady_clock::time_point{};
+                auto now = std::chrono::steady_clock::now();
+                if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log).count() >= 200) {
+                    last_log = now;
+                    const auto wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now.time_since_epoch()).count();
+                    const double raw_s = static_cast<double>(pos.frame) / sr;
+                    const double comp_s = static_cast<double>(compensated) / sr;
+                    const double lead_ms =
+                        (static_cast<double>(dbg_latency + dbg_buffer) / sr) * 1000.0;
+                    std::printf("[SNAP_FRAME] wall_ms=%lld raw_frame=%lld comp_frame=%lld "
+                                "raw_s=%.4f comp_s=%.4f buf=%d lat=%d lead_ms=%.2f sr=%d\n",
+                                static_cast<long long>(wall_ms),
+                                static_cast<long long>(pos.frame),
+                                static_cast<long long>(compensated),
+                                raw_s, comp_s, dbg_buffer, dbg_latency, lead_ms, sr);
+                    std::fflush(stdout);
+                }
+            }
+        }
         snap.playback_state  = [&] {
             switch (pos.state) {
                 case TransportState::Playing: return PlaybackState::Playing;
