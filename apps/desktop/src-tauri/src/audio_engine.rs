@@ -1380,15 +1380,32 @@ fn devices_response(devices: Vec<DeviceInfo>) -> AudioOutputDevicesResponse {
 fn backend_from_str(value: &str) -> AudioBackendKind {
     match value.to_ascii_lowercase().as_str() {
         "asio" => AudioBackendKind::Asio,
-        "wasapi" | "windows audio" | "wasapi shared" | "wasapi exclusive" => {
-            AudioBackendKind::Wasapi
-        }
+        // JUCE 6+ on Windows exposes three WASAPI typenames depending on the
+        // shared/exclusive/low-latency mode it was opened in. All three are
+        // the same backend from the user's point of view.
+        "wasapi"
+        | "windows audio"
+        | "wasapi shared"
+        | "wasapi exclusive"
+        | "windows audio (low latency mode)"
+        | "windows audio (exclusive mode)" => AudioBackendKind::Wasapi,
         "coreaudio" | "core_audio" | "core audio" => AudioBackendKind::CoreAudio,
         "alsa" => AudioBackendKind::Alsa,
         "jack" => AudioBackendKind::Jack,
         "directsound" | "direct_sound" | "direct sound" => AudioBackendKind::DirectSound,
         "mme" => AudioBackendKind::Mme,
-        _ => AudioBackendKind::Unknown,
+        other => {
+            // Surface unknown backend typenames so we can extend the match
+            // arms above instead of silently hiding the backend behind
+            // "Unknown" in the UI dropdown. Logged only the first time per
+            // value via a static dedup set is overkill; this fires once per
+            // device-list refresh which is rare.
+            eprintln!(
+                "[audio] backend_from_str: unknown JUCE typename {:?}, mapping to Unknown",
+                other
+            );
+            AudioBackendKind::Unknown
+        }
     }
 }
 

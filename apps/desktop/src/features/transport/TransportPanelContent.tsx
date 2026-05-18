@@ -6308,7 +6308,15 @@ export function TransportPanelContent() {
   const audioBackendOptions = useMemo(
     () =>
       Array.from(
-        new Set(audioDeviceDescriptors.map((device) => device.backend)),
+        new Set(
+          audioDeviceDescriptors
+            .map((device) => device.backend)
+            // 'unknown' is a fallback for JUCE typenames Rust didn't recognise;
+            // exposing it as a selectable backend would surface the same
+            // devices under a misleading label. The Rust side logs the raw
+            // typename so we can extend backend_from_str when new ones appear.
+            .filter((backend) => backend !== "unknown"),
+        ),
       ).sort((left, right) => left.localeCompare(right)),
     [audioDeviceDescriptors],
   );

@@ -51,8 +51,18 @@ if(LT_ENGINE_USE_JUCE)
     # Optional: ASIO support on Windows.
     # Set JUCE_ASIO_SDK_DIR to the path of the Steinberg ASIO SDK if available.
     # cmake -DLT_ASIO_SDK_DIR=C:/ASIO_SDK ...
+    # The Steinberg SDK can't be redistributed by us under its license, so we
+    # only enable JUCE's ASIO module when the user explicitly points us at a
+    # local copy.
     if(WIN32 AND DEFINED LT_ASIO_SDK_DIR)
         set(JUCE_ASIO_SDK_DIR "${LT_ASIO_SDK_DIR}" CACHE PATH "" FORCE)
+        set(LT_JUCE_ASIO_ENABLED ON)
+        message(STATUS "JUCE ASIO module: ENABLED (SDK at ${LT_ASIO_SDK_DIR})")
+    else()
+        set(LT_JUCE_ASIO_ENABLED OFF)
+        if(WIN32)
+            message(STATUS "JUCE ASIO module: disabled (set LT_ASIO_SDK_DIR to enable)")
+        endif()
     endif()
 
     FetchContent_MakeAvailable(JUCE)
@@ -70,6 +80,13 @@ if(LT_ENGINE_USE_JUCE)
         JUCE_DISPLAY_SPLASH_SCREEN=0
         JUCE_REPORT_APP_USAGE=0
     )
+
+    # Enable ASIO at the preprocessor level too — JUCE only compiles its ASIO
+    # device type when JUCE_ASIO=1. Without this the SDK path is set but the
+    # module silently builds without ASIO support.
+    if(LT_JUCE_ASIO_ENABLED)
+        target_compile_definitions(lt_deps_juce INTERFACE JUCE_ASIO=1)
+    endif()
 endif()
 
 # ── DECODER ───────────────────────────────────────────────────────────────
