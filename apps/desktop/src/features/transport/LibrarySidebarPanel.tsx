@@ -77,9 +77,21 @@ export function LibrarySidebarPanel({
   const [selectedAssetPaths, setSelectedAssetPaths] = useState<string[]>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const selectionAnchorRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setSelectedAssetPaths((current) => current.filter((filePath) => assets.some((asset) => asset.filePath === filePath)));
+    setSelectedAssetPaths((current) => {
+      const filtered = current.filter((filePath) => assets.some((asset) => asset.filePath === filePath));
+      if (filtered.length === 0) {
+        selectionAnchorRef.current = null;
+      } else if (
+        selectionAnchorRef.current &&
+        !assets.some((asset) => asset.filePath === selectionAnchorRef.current)
+      ) {
+        selectionAnchorRef.current = null;
+      }
+      return filtered;
+    });
   }, [assets]);
 
   useEffect(() => {
@@ -149,9 +161,49 @@ export function LibrarySidebarPanel({
         ? current.filter((filePath) => filePath !== asset.filePath)
         : [...current, asset.filePath];
     });
+    selectionAnchorRef.current = asset.filePath;
   };
 
-  const handleAssetSelect = (event: MouseEvent<HTMLDivElement>, asset: PendingLibraryAssetSummary) => {
+  const applyRangeSelection = (
+    asset: PendingLibraryAssetSummary,
+    groupAssets: PendingLibraryAssetSummary[],
+  ) => {
+    const anchor = selectionAnchorRef.current;
+    const anchorIndex = anchor
+      ? groupAssets.findIndex((candidate) => candidate.filePath === anchor)
+      : -1;
+    const targetIndex = groupAssets.findIndex(
+      (candidate) => candidate.filePath === asset.filePath,
+    );
+
+    // If anchor is missing or in a different group, treat as plain single select
+    // and seed the anchor with the current click.
+    if (anchorIndex < 0 || targetIndex < 0) {
+      setSelectedAssetPaths([asset.filePath]);
+      selectionAnchorRef.current = asset.filePath;
+      return;
+    }
+
+    const [start, end] =
+      anchorIndex <= targetIndex
+        ? [anchorIndex, targetIndex]
+        : [targetIndex, anchorIndex];
+    const rangePaths = groupAssets
+      .slice(start, end + 1)
+      .map((candidate) => candidate.filePath);
+    setSelectedAssetPaths(rangePaths);
+    // Anchor stays put across range extensions.
+  };
+
+  const handleAssetSelect = (
+    event: MouseEvent<HTMLDivElement>,
+    asset: PendingLibraryAssetSummary,
+    groupAssets: PendingLibraryAssetSummary[],
+  ) => {
+    if (event.shiftKey) {
+      applyRangeSelection(asset, groupAssets);
+      return;
+    }
     updateAssetSelection(asset, event.ctrlKey || event.metaKey);
   };
 
@@ -312,7 +364,7 @@ export function LibrarySidebarPanel({
                 aria-label={asset.fileName}
                 aria-pressed={isSelected}
                 title={asset.fileName}
-                onClick={(event) => handleAssetSelect(event, asset)}
+                onClick={(event) => handleAssetSelect(event, asset, groupAssets)}
                 onMouseDown={(event) => handleAssetMouseDown(event, asset)}
                 onPointerDown={(event) => handleAssetPointerDown(event, asset)}
                 onContextMenu={(event) => {
