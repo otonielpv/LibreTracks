@@ -7,8 +7,9 @@
 #                   avoids packaging differences across platforms.  ASIO SDK must be
 #                   supplied separately on Windows (see JUCE_ASIO_SDK_DIR below).
 #
-# Rubber Band     — FetchContent (git tag).  The library has a CMake build since v3.
-#                   If a system installation is found first it will be preferred.
+# Pitch backend   — Bungee only (consumed via LT_ENGINE_USE_BUNGEE in the top-level
+#                   CMakeLists). RubberBand was removed; nothing in this engine
+#                   links against it any more.
 #
 # Decoder
 #   libsndfile    — find_package first, FetchContent fallback.  Header-only dr_libs
@@ -33,7 +34,6 @@ set(FETCHCONTENT_QUIET ON)
 # Define them up-front so subdirectory CMakeLists.txt can always link against
 # them unconditionally; real content is added below based on options.
 add_library(lt_deps_juce       INTERFACE)
-add_library(lt_deps_rubberband INTERFACE)
 add_library(lt_deps_decoder    INTERFACE)
 add_library(lt_deps_resampler  INTERFACE)
 
@@ -71,148 +71,6 @@ if(LT_ENGINE_USE_JUCE)
         JUCE_REPORT_APP_USAGE=0
     )
 endif()
-
-# ── RUBBER BAND ───────────────────────────────────────────────────────────
-if(LT_ENGINE_USE_RUBBERBAND)
-    find_package(RubberBand CONFIG QUIET)
-    if(RubberBand_FOUND)
-        if(TARGET RubberBand::rubberband)
-            target_link_libraries(lt_deps_rubberband INTERFACE RubberBand::rubberband)
-        elseif(TARGET RubberBand::RubberBand)
-            target_link_libraries(lt_deps_rubberband INTERFACE RubberBand::RubberBand)
-        elseif(TARGET rubberband)
-            target_link_libraries(lt_deps_rubberband INTERFACE rubberband)
-        else()
-            message(FATAL_ERROR "RubberBand was found, but no known CMake target was exported.")
-        endif()
-        target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_RUBBERBAND=1)
-        message(STATUS "Pitch backend: RubberBand package")
-    else()
-        find_path(RUBBERBAND_INCLUDE_DIR
-            NAMES rubberband/RubberBandStretcher.h
-            PATH_SUFFIXES include
-        )
-        find_library(RUBBERBAND_LIBRARY_RELEASE
-            NAMES rubberband
-            PATH_SUFFIXES lib
-        )
-        find_library(RUBBERBAND_LIBRARY_DEBUG
-            NAMES rubberband
-            PATH_SUFFIXES debug/lib
-        )
-        find_file(RUBBERBAND_DLL_RELEASE
-            NAMES rubberband-3.dll rubberband.dll
-            PATH_SUFFIXES bin
-        )
-        find_file(RUBBERBAND_DLL_DEBUG
-            NAMES rubberband-3.dll rubberband.dll
-            PATH_SUFFIXES debug/bin
-        )
-        if(RUBBERBAND_INCLUDE_DIR AND RUBBERBAND_LIBRARY_RELEASE)
-            add_library(RubberBand::rubberband SHARED IMPORTED)
-            set(_rubberband_debug_lib "${RUBBERBAND_LIBRARY_RELEASE}")
-            if(RUBBERBAND_LIBRARY_DEBUG)
-                set(_rubberband_debug_lib "${RUBBERBAND_LIBRARY_DEBUG}")
-            endif()
-            set(_rubberband_release_location "${RUBBERBAND_LIBRARY_RELEASE}")
-            if(RUBBERBAND_DLL_RELEASE)
-                set(_rubberband_release_location "${RUBBERBAND_DLL_RELEASE}")
-            elseif(RUBBERBAND_LIBRARY_RELEASE MATCHES "/debug/lib/" OR RUBBERBAND_LIBRARY_RELEASE MATCHES "\\\\debug\\\\lib\\\\")
-                get_filename_component(_rubberband_triplet_dir "${RUBBERBAND_LIBRARY_RELEASE}/../../.." ABSOLUTE)
-                find_file(_lt_inferred_rubberband_dll
-                    NAMES rubberband-3.dll rubberband.dll
-                    PATHS "${_rubberband_triplet_dir}/debug/bin"
-                    NO_DEFAULT_PATH
-                )
-                if(_lt_inferred_rubberband_dll)
-                    set(_rubberband_release_location "${_lt_inferred_rubberband_dll}")
-                endif()
-            endif()
-            set(_rubberband_debug_location "${_rubberband_release_location}")
-            if(RUBBERBAND_DLL_DEBUG)
-                set(_rubberband_debug_location "${RUBBERBAND_DLL_DEBUG}")
-            elseif(_lt_inferred_rubberband_dll)
-                set(_rubberband_debug_location "${_lt_inferred_rubberband_dll}")
-            endif()
-            if(_rubberband_debug_location)
-                get_filename_component(LT_RUBBERBAND_RUNTIME_DIR "${_rubberband_debug_location}" DIRECTORY)
-                set(LT_RUBBERBAND_RUNTIME_DIR "${LT_RUBBERBAND_RUNTIME_DIR}" CACHE INTERNAL
-                    "Directory containing RubberBand runtime DLLs")
-            endif()
-            set_target_properties(RubberBand::rubberband PROPERTIES
-                INTERFACE_INCLUDE_DIRECTORIES "${RUBBERBAND_INCLUDE_DIR}"
-                IMPORTED_LOCATION_RELEASE "${_rubberband_release_location}"
-                IMPORTED_IMPLIB_RELEASE "${RUBBERBAND_LIBRARY_RELEASE}"
-                IMPORTED_LOCATION_DEBUG "${_rubberband_debug_location}"
-                IMPORTED_IMPLIB_DEBUG "${_rubberband_debug_lib}"
-                MAP_IMPORTED_CONFIG_MINSIZEREL Release
-                MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
-            )
-            target_link_libraries(lt_deps_rubberband INTERFACE RubberBand::rubberband)
-            target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_RUBBERBAND=1)
-            message(STATUS "Pitch backend: RubberBand library/header")
-        endif()
-    endif()
-
-    get_target_property(_lt_rubberband_links lt_deps_rubberband INTERFACE_LINK_LIBRARIES)
-    if(NOT _lt_rubberband_links)
-        FetchContent_Declare(rubberband
-            GIT_REPOSITORY https://github.com/breakfastquay/rubberband.git
-            GIT_TAG        v3.3.0
-            GIT_SHALLOW    TRUE
-        )
-        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-        set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-        FetchContent_MakeAvailable(rubberband)
-        if(TARGET rubberband)
-            target_link_libraries(lt_deps_rubberband INTERFACE rubberband)
-            target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_RUBBERBAND=1)
-            message(STATUS "Pitch backend: RubberBand FetchContent (v3.3.0)")
-        elseif(LT_ENGINE_ALLOW_PITCH_STUB)
-            target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_STUB=1)
-            message(WARNING "Pitch backend: explicit stub because LT_ENGINE_ALLOW_PITCH_STUB=ON")
-            # Only error if this is a real runtime/app build (not a test stub build).
-            if(LT_ENGINE_REQUIRE_REAL_RUBBERBAND AND NOT LT_ENGINE_BUILD_TESTS)
-                message(FATAL_ERROR
-                    "LT_ENGINE_REQUIRE_REAL_RUBBERBAND=ON: runtime build requested real RubberBand "
-                    "but FetchContent target was not found and LT_ENGINE_ALLOW_PITCH_STUB=ON. "
-                    "To allow stub for runtime (not recommended), set LT_ENGINE_REQUIRE_REAL_RUBBERBAND=OFF.")
-            endif()
-        else()
-            message(FATAL_ERROR
-                "LT_ENGINE_USE_RUBBERBAND=ON requires a real RubberBand target. "
-                "Install RubberBand via vcpkg/conan/system packages, supply -DRUBBERBAND_ROOT=<path>, "
-                "or configure with -DLT_ENGINE_ALLOW_PITCH_STUB=ON for developer-only no-op pitch.")
-        endif()
-    endif()
-elseif(LT_ENGINE_ALLOW_PITCH_STUB)
-    target_compile_definitions(lt_deps_rubberband INTERFACE LT_ENGINE_PITCH_BACKEND_STUB=1)
-endif()
-
-# ── PITCH BACKEND STATUS SUMMARY ──────────────────────────────────────────────
-get_target_property(_lt_rb_final_defs lt_deps_rubberband INTERFACE_COMPILE_DEFINITIONS)
-message(STATUS "=== LibreTracks Pitch Backend Summary ===")
-message(STATUS "  LT_ENGINE_USE_RUBBERBAND                       = ${LT_ENGINE_USE_RUBBERBAND}")
-message(STATUS "  LT_ENGINE_ALLOW_PITCH_STUB                     = ${LT_ENGINE_ALLOW_PITCH_STUB}")
-message(STATUS "  LT_ENGINE_REQUIRE_REAL_RUBBERBAND              = ${LT_ENGINE_REQUIRE_REAL_RUBBERBAND}")
-message(STATUS "  LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH = ${LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH}")
-if(_lt_rb_final_defs MATCHES "RUBBERBAND")
-    message(STATUS "  Selected pitch backend: RubberBand (real pitch DSP)")
-elseif(_lt_rb_final_defs MATCHES "STUB")
-    message(STATUS "  Selected pitch backend: STUB (no real pitch — passthrough or blocked)")
-else()
-    message(STATUS "  Selected pitch backend: disabled")
-endif()
-if(RUBBERBAND_INCLUDE_DIR)
-    message(STATUS "  RubberBand include dir  = ${RUBBERBAND_INCLUDE_DIR}")
-endif()
-if(RUBBERBAND_LIBRARY_RELEASE)
-    message(STATUS "  RubberBand lib (release)= ${RUBBERBAND_LIBRARY_RELEASE}")
-endif()
-if(LT_RUBBERBAND_RUNTIME_DIR)
-    message(STATUS "  RubberBand runtime DLL  = ${LT_RUBBERBAND_RUNTIME_DIR}")
-endif()
-message(STATUS "===========================================")
 
 # ── DECODER ───────────────────────────────────────────────────────────────
 if(LT_ENGINE_USE_LIBSNDFILE)

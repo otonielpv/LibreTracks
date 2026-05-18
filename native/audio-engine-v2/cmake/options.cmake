@@ -10,22 +10,6 @@ option(LT_ENGINE_USE_JUCE
     "Use JUCE for audio device management (recommended)"
     ON)
 
-option(LT_ENGINE_USE_RUBBERBAND
-    "Use Rubber Band Library for pitch shifting"
-    ON)
-
-option(LT_ENGINE_ALLOW_PITCH_STUB
-    "Allow the pitch backend to compile as an explicit no-op developer stub"
-    OFF)
-
-option(LT_ENGINE_REQUIRE_REAL_RUBBERBAND
-    "Fail the build if real RubberBand is not found when LT_ENGINE_USE_RUBBERBAND=ON and LT_ENGINE_ALLOW_PITCH_STUB=OFF"
-    OFF)
-
-option(LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH
-    "Allow stub to pass original audio through ring buffer (ON only for explicit test builds)"
-    OFF)
-
 option(LT_ENGINE_ENABLE_ASAN
     "Enable AddressSanitizer for supported debug/development builds"
     OFF)

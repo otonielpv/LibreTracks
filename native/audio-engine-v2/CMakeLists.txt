@@ -57,24 +57,6 @@ else()
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_JUCE=0)
 endif()
 
-if(LT_ENGINE_USE_RUBBERBAND)
-    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_RUBBERBAND=1)
-else()
-    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_RUBBERBAND=0)
-endif()
-
-if(LT_ENGINE_ALLOW_PITCH_STUB)
-    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_ALLOW_PITCH_STUB=1)
-else()
-    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_ALLOW_PITCH_STUB=0)
-endif()
-
-if(LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH)
-    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH=1)
-else()
-    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH=0)
-endif()
-
 if(LT_ENGINE_USE_FFMPEG)
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_USE_FFMPEG=1)
 else()
@@ -110,7 +92,6 @@ endif()
 target_link_libraries(lt_audio_engine_v2
     PRIVATE
         lt_deps_juce
-        lt_deps_rubberband
         lt_deps_decoder
         lt_deps_resampler
         lt_deps_json
@@ -183,56 +164,7 @@ endif()
 option(LT_ENGINE_BUILD_BENCHES "Build developer benchmarks" OFF)
 option(LT_ENGINE_BENCH_BUNGEE  "Add Bungee backend to the pitch DSP benchmark" OFF)
 
-if(LT_ENGINE_BUILD_BENCHES AND LT_ENGINE_USE_RUBBERBAND)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_pitch_audio_thread.cpp")
-        add_executable(bench_pitch_audio_thread bench/bench_pitch_audio_thread.cpp)
-        target_compile_features(bench_pitch_audio_thread PRIVATE cxx_std_20)
-        target_link_libraries(bench_pitch_audio_thread PRIVATE lt_deps_rubberband)
-        target_include_directories(bench_pitch_audio_thread PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-        if(LT_ENGINE_BENCH_BUNGEE)
-            # Consume the prebuilt Bungee Windows binary release. Bungee's source
-            # uses GCC-specific attributes that don't compile under MSVC, so we use
-            # the upstream-published prebuilt DLL + import lib instead.
-            # Set LT_BUNGEE_DIR to the unpacked release folder (e.g. bungee-v2.4.24).
-            if(NOT DEFINED LT_BUNGEE_DIR OR NOT EXISTS "${LT_BUNGEE_DIR}/include/bungee/Bungee.h")
-                message(FATAL_ERROR
-                    "LT_ENGINE_BENCH_BUNGEE=ON requires -DLT_BUNGEE_DIR=<path> "
-                    "pointing at an unpacked Bungee release (must contain "
-                    "include/bungee/Bungee.h and a platform binary folder).")
-            endif()
-            if(WIN32)
-                set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/windows-x86_64")
-                set(_lt_bungee_lib    "${_lt_bungee_libdir}/bungee.lib")
-                set(_lt_bungee_dll    "${_lt_bungee_libdir}/bungee.dll")
-            else()
-                message(FATAL_ERROR "Bench Bungee wiring currently only set up for Windows x86_64.")
-            endif()
-            if(NOT EXISTS "${_lt_bungee_lib}")
-                message(FATAL_ERROR "Expected ${_lt_bungee_lib} not found.")
-            endif()
-            target_include_directories(bench_pitch_audio_thread PRIVATE "${LT_BUNGEE_DIR}/include")
-            target_link_libraries(bench_pitch_audio_thread PRIVATE "${_lt_bungee_lib}")
-            target_compile_definitions(bench_pitch_audio_thread PRIVATE HAVE_BUNGEE=1)
-            if(WIN32 AND EXISTS "${_lt_bungee_dll}")
-                add_custom_command(TARGET bench_pitch_audio_thread POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${_lt_bungee_dll}"
-                        "$<TARGET_FILE_DIR:bench_pitch_audio_thread>"
-                    COMMENT "Copying Bungee DLL for bench")
-            endif()
-            message(STATUS "Bench: Bungee backend enabled (prebuilt at ${LT_BUNGEE_DIR})")
-        endif()
-
-        if(WIN32 AND DEFINED LT_RUBBERBAND_RUNTIME_DIR)
-            add_custom_command(TARGET bench_pitch_audio_thread POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    "${LT_RUBBERBAND_RUNTIME_DIR}"
-                    "$<TARGET_FILE_DIR:bench_pitch_audio_thread>"
-                COMMENT "Copying RubberBand DLLs for bench")
-        endif()
-    endif()
-
+if(LT_ENGINE_BUILD_BENCHES)
     # Phase 10 prearm bench: measures end-to-end seek latency for prearmed
     # vs reactive paths. Links lt_audio_engine_v2 directly.
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_prearm_vs_reactive.cpp")
@@ -241,19 +173,15 @@ if(LT_ENGINE_BUILD_BENCHES AND LT_ENGINE_USE_RUBBERBAND)
         target_link_libraries(bench_prearm_vs_reactive PRIVATE lt_audio_engine_v2)
         target_include_directories(bench_prearm_vs_reactive PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include)
-        if(WIN32 AND DEFINED LT_RUBBERBAND_RUNTIME_DIR)
-            add_custom_command(TARGET bench_prearm_vs_reactive POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    "${LT_RUBBERBAND_RUNTIME_DIR}"
-                    "$<TARGET_FILE_DIR:bench_prearm_vs_reactive>"
-                COMMENT "Copying RubberBand DLLs for prearm bench")
-        endif()
-        if(WIN32 AND DEFINED _lt_bungee_dll AND EXISTS "${_lt_bungee_dll}")
-            add_custom_command(TARGET bench_prearm_vs_reactive POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${_lt_bungee_dll}"
-                    "$<TARGET_FILE_DIR:bench_prearm_vs_reactive>"
-                COMMENT "Copying Bungee DLL for prearm bench")
+        if(LT_ENGINE_USE_BUNGEE AND WIN32 AND DEFINED LT_BUNGEE_DIR)
+            set(_lt_prearm_bungee_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
+            if(EXISTS "${_lt_prearm_bungee_dll}")
+                add_custom_command(TARGET bench_prearm_vs_reactive POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_lt_prearm_bungee_dll}"
+                        "$<TARGET_FILE_DIR:bench_prearm_vs_reactive>"
+                    COMMENT "Copying Bungee DLL for prearm bench")
+            endif()
         endif()
     endif()
 endif()
