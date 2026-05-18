@@ -3,6 +3,7 @@
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <cctype>
@@ -252,6 +253,173 @@ void Mixer::rebuild_control_slots(std::shared_ptr<const Session> session, bool p
     }
 }
 
+void Mixer::render_timeline_span(float** output_channels,
+                                 int num_channels,
+                                 int num_frames,
+                                 int output_offset,
+                                 const std::shared_ptr<const Session>& session) noexcept {
+    if (num_frames <= 0 || !session || clock_->position().state != TransportState::Playing)
+        return;
+
+    const Frame timeline_frame = clock_->position().frame;
+    std::uint64_t rendered_this_block = 0;
+    std::uint64_t skipped_this_block = 0;
+
+    for (const auto& song : session->songs) {
+        if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
+            continue;
+
+        const bool solo_active = any_solo_active_in_slots();
+
+        for (std::size_t ti = 0; ti < song.tracks.size() && ti < kMaxTracks; ++ti) {
+            const Track& track = song.tracks[ti];
+
+            if (track.kind == TrackKind::Folder) {
+                ++skipped_this_block;
+                continue;
+            }
+
+            int slot_idx = control_index_for_track(track.id);
+            TrackControlState* control = (slot_idx >= 0) ? &controls_[static_cast<std::size_t>(slot_idx)] : nullptr;
+
+            if (!control) {
+                fallback_control_.track_id = track.id;
+                fallback_control_.parent_track_id = track.parent_track_id;
+                fallback_control_.parent_control_index = -1;
+                fallback_control_.is_folder = false;
+                fallback_control_.gain.store(track.gain, std::memory_order_relaxed);
+                fallback_control_.pan.store(std::clamp(track.pan, -1.0f, 1.0f), std::memory_order_relaxed);
+                fallback_control_.mute.store(track.mute, std::memory_order_relaxed);
+                fallback_control_.solo.store(track.solo, std::memory_order_relaxed);
+                fallback_control_.current_gain = track.gain;
+                fallback_control_.current_pan = std::clamp(track.pan, -1.0f, 1.0f);
+                fallback_control_.current_mute_gain = track.mute ? 0.0f : 1.0f;
+                fallback_control_.current_solo_gain = solo_active && !track.solo ? 0.0f : 1.0f;
+                fallback_control_.initialized = true;
+                control = &fallback_control_;
+                slot_idx = -1;
+            }
+
+            const EffectiveControls eff = (slot_idx >= 0)
+                ? compute_effective_controls(slot_idx, solo_active)
+                : EffectiveControls{
+                    control->gain.load(std::memory_order_relaxed),
+                    control->pan.load(std::memory_order_relaxed),
+                    control->mute.load(std::memory_order_relaxed),
+                    (solo_active && !control->solo.load(std::memory_order_relaxed)) ? 0.0f : 1.0f
+                  };
+
+            const float gain = eff.target_gain;
+            const float pan_target = eff.target_pan;
+            const float target_mute_gain = eff.target_muted ? 0.0f : 1.0f;
+            const float target_solo_gain = eff.target_solo_gain;
+
+            const float smooth_ms = 10.0f;
+            const float coeff = std::clamp(static_cast<float>(num_frames) /
+                std::max(1.0f, static_cast<float>(clock_->sample_rate()) * smooth_ms * 0.001f), 0.0f, 1.0f);
+            const float start_gain = control->current_gain;
+            const float start_pan = control->current_pan;
+            const float start_mute_gain = control->current_mute_gain;
+            const float start_solo_gain = control->current_solo_gain;
+            const float end_gain = start_gain + (gain - start_gain) * coeff;
+            const float end_pan = start_pan + (pan_target - start_pan) * coeff;
+            const float end_mute_gain = start_mute_gain + (target_mute_gain - start_mute_gain) * coeff;
+            const float end_solo_gain = start_solo_gain + (target_solo_gain - start_solo_gain) * coeff;
+            control->current_gain = end_gain;
+            control->current_pan = end_pan;
+            control->current_mute_gain = end_mute_gain;
+            control->current_solo_gain = end_solo_gain;
+            const bool settled_silent = std::abs(end_gain * end_mute_gain * end_solo_gain) <= 1.0e-6f
+                && std::abs(start_gain * start_mute_gain * start_solo_gain) <= 1.0e-6f
+                && std::abs(gain * target_mute_gain * target_solo_gain) <= 1.0e-6f;
+            if (settled_silent && track.clips.empty()) {
+                ++skipped_this_block;
+                continue;
+            }
+
+            std::fill(mix_l_, mix_l_ + num_frames, 0.f);
+            std::fill(mix_r_, mix_r_ + num_frames, 0.f);
+
+            Track patched = track;
+            patched.gain = 1.0f;
+            patched.mute = false;
+            patched.pan = 0.0f;
+
+            renderers_[ti].render(patched, timeline_frame, num_frames,
+                                   mix_, 2, *sources_, bungee_voices_,
+                                   clock_->sample_rate(), 0, &song);
+            ++rendered_this_block;
+
+            float track_peak_l = 0.f, track_peak_r = 0.f;
+            double track_sum_l = 0.0, track_sum_r = 0.0;
+            for (int f = 0; f < num_frames; ++f) {
+                track_peak_l = std::max(track_peak_l, std::abs(mix_l_[f]));
+                track_peak_r = std::max(track_peak_r, std::abs(mix_r_[f]));
+                track_sum_l += static_cast<double>(mix_l_[f]) * mix_l_[f];
+                track_sum_r += static_cast<double>(mix_r_[f]) * mix_r_[f];
+            }
+            track_meters_[ti].left_peak.store(track_peak_l, std::memory_order_relaxed);
+            track_meters_[ti].right_peak.store(track_peak_r, std::memory_order_relaxed);
+            track_meters_[ti].left_rms.store(static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames))), std::memory_order_relaxed);
+            track_meters_[ti].right_rms.store(static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames))), std::memory_order_relaxed);
+
+            auto route = route_channels(track.audio_to, num_channels);
+            const int left_channel = route.empty() ? 0 : route[0];
+            const int right_channel = route.size() > 1 ? route[1] : -1;
+            const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
+            const bool right_only_source = track_peak_r > 1.0e-7f && track_peak_l <= 1.0e-7f;
+
+            for (int f = 0; f < num_frames; ++f) {
+                const float t = static_cast<float>(f + 1) / static_cast<float>(std::max(1, num_frames));
+                const float sample_gain = start_gain + (end_gain - start_gain) * t;
+                const float sample_mute_gain = start_mute_gain + (end_mute_gain - start_mute_gain) * t;
+                const float sample_solo_gain = start_solo_gain + (end_solo_gain - start_solo_gain) * t;
+                const float effective_gain = sample_gain * sample_mute_gain * sample_solo_gain;
+                const float pan = clamp_pan(start_pan + (end_pan - start_pan) * t);
+                const float left_gain = pan > 0.0f ? 1.0f - pan : 1.0f;
+                const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
+                float source_l = mix_l_[f];
+                float source_r = mix_r_[f];
+                if (left_only_source)
+                    source_r = source_l;
+                else if (right_only_source)
+                    source_l = source_r;
+
+                float out_l = source_l * effective_gain * left_gain;
+                float out_r = source_r * effective_gain * right_gain;
+                if (right_channel < 0) {
+                    if (left_channel >= 0 && left_channel < num_channels)
+                        output_channels[left_channel][output_offset + f] += 0.5f * (out_l + out_r);
+                } else {
+                    if (left_channel >= 0 && left_channel < num_channels)
+                        output_channels[left_channel][output_offset + f] += out_l;
+                    if (right_channel >= 0 && right_channel < num_channels)
+                        output_channels[right_channel][output_offset + f] += out_r;
+                }
+            }
+        }
+        break;
+    }
+
+    rendered_track_count_.fetch_add(rendered_this_block, std::memory_order_relaxed);
+    skipped_track_count_.fetch_add(skipped_this_block, std::memory_order_relaxed);
+
+    std::array<float*, 64> shifted_channels{};
+    float** metronome_channels = output_channels;
+    if (num_channels <= static_cast<int>(shifted_channels.size())) {
+        for (int ch = 0; ch < num_channels; ++ch)
+            shifted_channels[static_cast<std::size_t>(ch)] = output_channels[ch] + output_offset;
+        metronome_channels = shifted_channels.data();
+    }
+    metronome_.render(metronome_channels, num_channels, num_frames,
+                      clock_->sample_rate(), timeline_frame, session.get());
+
+    const bool was_pending_start = clock_->pending_start();
+    clock_->advance(num_frames);
+    if (was_pending_start)
+        clock_->clear_pending_start();
+}
+
 void Mixer::render(float** output_channels,
                    int     num_channels,
                    int     num_frames,
@@ -263,21 +431,7 @@ void Mixer::render(float** output_channels,
     // Drain pending scheduler ops (at top of block, before clock advance).
     scheduler_->drain_pending();
 
-    // Check for due jumps.
-    auto due_frame = session ? scheduler_->check_due(*clock_, *session, num_frames) : std::nullopt;
-    if (due_frame) {
-        Frame from = clock_->position().frame;
-        clock_->seek(*due_frame);
-        scheduler_->mark_executed(from, *due_frame);
-        // Crossfade to hide the discontinuity (applied below).
-        fade_.trigger_crossfade();
-        // Notify the control thread that a scheduled jump executed so it can call
-        // prepare_for_transport_discontinuity() for pitch stream alignment.
-        // This is a single atomic store — realtime-safe.
-        // The control thread drains this via take_pending_scheduled_jump().
-        pending_scheduled_jump_frame_.store(*due_frame, std::memory_order_release);
-        scheduled_jump_executed_count_.fetch_add(1, std::memory_order_relaxed);
-    }
+    auto due_jump = session ? scheduler_->check_due(*clock_, *session, num_frames) : std::nullopt;
 
     // Zero output buses.
     for (int ch = 0; ch < num_channels; ++ch)
@@ -287,7 +441,35 @@ void Mixer::render(float** output_channels,
 
     reset_track_meters();
 
-    if (clock_->position().state == TransportState::Playing && session) {
+    bool fade_processed_in_split = false;
+    if (due_jump) {
+        const Frame block_start = clock_->position().frame;
+        const int pre_frames = static_cast<int>(std::clamp<Frame>(
+            due_jump->trigger_frame - block_start, 0, num_frames));
+
+        render_timeline_span(output_channels, num_channels, pre_frames, 0, session);
+
+        const Frame from = clock_->position().frame;
+        clock_->seek(due_jump->target_frame);
+        clock_->clear_pending_start();
+        scheduler_->mark_executed(from, due_jump->target_frame);
+        fade_.trigger_crossfade();
+        pending_scheduled_jump_frame_.store(due_jump->target_frame, std::memory_order_release);
+        scheduled_jump_executed_count_.fetch_add(1, std::memory_order_relaxed);
+
+        render_timeline_span(output_channels, num_channels, num_frames - pre_frames,
+                             pre_frames, session);
+        std::array<float*, 64> shifted_channels{};
+        float** fade_channels = output_channels;
+        const int post_frames = num_frames - pre_frames;
+        if (num_channels <= static_cast<int>(shifted_channels.size())) {
+            for (int ch = 0; ch < num_channels; ++ch)
+                shifted_channels[static_cast<std::size_t>(ch)] = output_channels[ch] + pre_frames;
+            fade_channels = shifted_channels.data();
+        }
+        fade_.process(fade_channels, num_channels, post_frames);
+        fade_processed_in_split = true;
+    } else if (clock_->position().state == TransportState::Playing && session) {
         std::uint64_t rendered_this_block = 0;
         std::uint64_t skipped_this_block = 0;
         // Find the current song.
@@ -442,7 +624,8 @@ void Mixer::render(float** output_channels,
     }
 
     // Apply crossfade ramp (Phase 7).
-    fade_.process(output_channels, num_channels, num_frames);
+    if (!fade_processed_in_split)
+        fade_.process(output_channels, num_channels, num_frames);
 
     // Peak meters.
     float peak_l = 0.f, peak_r = 0.f;

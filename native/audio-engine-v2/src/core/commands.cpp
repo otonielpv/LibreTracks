@@ -72,6 +72,8 @@ EngineCommand command_from_json(const std::string& raw) {
         cmd.jump_id = j.at("jump_id").get<Id>();
         cmd.target  = jump_target_from_json(j.at("target"));
         cmd.trigger = trigger_from_json(j.at("trigger"));
+        if (j.contains("trigger_frame"))
+            cmd.trigger_frame = j.at("trigger_frame").get<Frame>();
         return cmd;
     }
 

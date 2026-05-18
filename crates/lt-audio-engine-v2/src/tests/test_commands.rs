@@ -79,10 +79,37 @@ fn schedule_jump_immediate_round_trip() {
             frame: None,
         },
         trigger: JumpTrigger::Immediate,
+        trigger_frame: None,
     };
     let json = serde_json::to_string(&cmd).unwrap();
     assert!(json.contains("\"jump_id\":\"j1\""));
     assert!(json.contains("\"Immediate\""));
+    assert!(!json.contains("trigger_frame"));
+}
+
+#[test]
+fn schedule_jump_at_frame_round_trip() {
+    let cmd = EngineCommand::ScheduleJump {
+        jump_id: "j-at-frame".into(),
+        target: JumpTarget {
+            kind: JumpTargetKind::Region,
+            id: Some("r1".into()),
+            frame: None,
+        },
+        trigger: JumpTrigger::AtFrame,
+        trigger_frame: Some(288000),
+    };
+    let json = serde_json::to_string(&cmd).unwrap();
+    assert!(json.contains("\"trigger_frame\":288000"));
+    let rt: EngineCommand = serde_json::from_str(&json).unwrap();
+    assert!(matches!(
+        rt,
+        EngineCommand::ScheduleJump {
+            trigger: JumpTrigger::AtFrame,
+            trigger_frame: Some(288000),
+            ..
+        }
+    ));
 }
 
 #[test]

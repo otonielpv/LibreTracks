@@ -29,6 +29,7 @@ import {
   type LibraryAssetSummary,
   type LibraryImportProgressEvent,
   type MidiBinding,
+  type PendingJumpSummary,
   type PitchPrepareSummary,
   type RemoteServerInfo,
   type SectionMarkerSummary,
@@ -805,6 +806,7 @@ export function TransportPanelContent() {
       pendingJump.targetMarkerName,
       pendingJump.trigger,
       pendingJump.executeAtSeconds.toFixed(6),
+      pendingJump.transition,
     ].join("|");
   });
   const activeVampSignature = useTransportStore((state) => {
@@ -1541,6 +1543,54 @@ export function TransportPanelContent() {
     ].join("|");
   }
 
+  function resolvePendingJumpTargetSeconds(
+    pendingJump: PendingJumpSummary,
+    effectSong: SongView | null,
+  ) {
+    if (!effectSong) {
+      return null;
+    }
+
+    const targetRegion = effectSong.regions.find(
+      (region) => region.id === pendingJump.targetMarkerId,
+    );
+    if (targetRegion) {
+      return targetRegion.startSeconds;
+    }
+
+    const targetMarker = effectSong.sectionMarkers.find(
+      (marker) => marker.id === pendingJump.targetMarkerId,
+    );
+    return targetMarker?.startSeconds ?? null;
+  }
+
+  function resolveVisualPositionAcrossPendingJump(positionSeconds: number) {
+    const snapshot = snapshotRef.current;
+    const pendingJump = snapshot?.pendingMarkerJump;
+    if (
+      !snapshot ||
+      !pendingJump ||
+      snapshot.playbackState !== "playing" ||
+      positionSeconds < pendingJump.executeAtSeconds
+    ) {
+      return positionSeconds;
+    }
+
+    const targetSeconds = resolvePendingJumpTargetSeconds(
+      pendingJump,
+      songRef.current,
+    );
+    if (targetSeconds === null) {
+      return positionSeconds;
+    }
+
+    const overshootSeconds = Math.max(
+      0,
+      positionSeconds - pendingJump.executeAtSeconds,
+    );
+    return targetSeconds + overshootSeconds;
+  }
+
   function applyTransportVisualAnchor(
     nextSnapshot: TransportSnapshot,
     anchorMeta: TransportAnchorMeta | null = null,
@@ -2270,7 +2320,9 @@ export function TransportPanelContent() {
       const elapsedSeconds = anchor.running
         ? (performance.now() - anchor.anchorReceivedAtMs) / 1000
         : 0;
-      const nextPositionSeconds = anchor.anchorPositionSeconds + elapsedSeconds;
+      const nextPositionSeconds = resolveVisualPositionAcrossPendingJump(
+        anchor.anchorPositionSeconds + elapsedSeconds,
+      );
 
       syncLivePosition(nextPositionSeconds);
       animationFrameId = window.requestAnimationFrame(tick);

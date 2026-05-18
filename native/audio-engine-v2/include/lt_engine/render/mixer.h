@@ -175,6 +175,11 @@ private:
     // Check whether any track is soloed (scans control slots).
     bool any_solo_active_in_slots() const noexcept;
     void reset_track_meters() noexcept;
+    void render_timeline_span(float** output_channels,
+                              int num_channels,
+                              int num_frames,
+                              int output_offset,
+                              const std::shared_ptr<const Session>& session) noexcept;
     TrackControlState* control_for_track(const Id& track_id) noexcept;
     const TrackControlState* control_for_track(const Id& track_id) const noexcept;
     int control_index_for_track(const Id& track_id) const noexcept;

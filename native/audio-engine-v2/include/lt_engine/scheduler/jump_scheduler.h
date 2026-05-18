@@ -42,7 +42,13 @@ struct ScheduledJump {
     Frame       created_frame   = 0;
     Frame       executed_frame  = 0;
     Frame       cancelled_frame = 0;
+    std::optional<Frame> trigger_frame;
     std::string failure_reason;
+};
+
+struct DueJump {
+    Frame target_frame = 0;
+    Frame trigger_frame = 0;
 };
 
 // Callback fired by audio thread when a jump executes.
@@ -77,10 +83,10 @@ public:
     void drain_pending();
 
     // Check whether any armed jump should fire this block.
-    // Returns the target frame if a jump should execute now, else nullopt.
-    std::optional<Frame> check_due(const TransportClock& clock,
-                                   const Session& session,
-                                   int block_frames = 512);
+    // Returns the target frame and the exact trigger frame, else nullopt.
+    std::optional<DueJump> check_due(const TransportClock& clock,
+                                     const Session& session,
+                                     int block_frames = 512);
 
     // Mark the last due jump as executed.
     void mark_executed(Frame from_frame, Frame to_frame);

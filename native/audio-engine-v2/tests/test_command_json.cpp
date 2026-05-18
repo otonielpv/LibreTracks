@@ -57,6 +57,25 @@ TEST_CASE("parse CancelScheduledJump") {
     CHECK(std::get<CmdCancelScheduledJump>(cmd).jump_id == "j99");
 }
 
+TEST_CASE("parse ScheduleJump with explicit trigger frame") {
+    auto cmd = command_from_json(R"({
+        "type":"ScheduleJump",
+        "jump_id":"j-after-bars",
+        "target":{"kind":"Region","id":"r1"},
+        "trigger":"AtFrame",
+        "trigger_frame":288000
+    })");
+    REQUIRE(std::holds_alternative<CmdScheduleJump>(cmd));
+    auto& c = std::get<CmdScheduleJump>(cmd);
+    CHECK(c.jump_id == "j-after-bars");
+    CHECK(c.target.kind == JumpTarget::Kind::Region);
+    REQUIRE(c.target.id.has_value());
+    CHECK(*c.target.id == "r1");
+    CHECK(c.trigger == JumpTrigger::AtFrame);
+    REQUIRE(c.trigger_frame.has_value());
+    CHECK(*c.trigger_frame == 288000);
+}
+
 TEST_CASE("parse SetTrackGain") {
     auto cmd = command_from_json(R"({"type":"SetTrackGain","track_id":"t1","gain":0.75})");
     REQUIRE(std::holds_alternative<CmdSetTrackGain>(cmd));

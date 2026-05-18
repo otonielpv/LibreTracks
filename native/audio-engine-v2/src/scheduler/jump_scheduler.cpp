@@ -213,12 +213,13 @@ void JumpScheduler::drain_pending() {
     }
 }
 
-std::optional<Frame> JumpScheduler::check_due(const TransportClock& clock,
-                                               const Session& session,
-                                               int block_frames) {
+std::optional<DueJump> JumpScheduler::check_due(const TransportClock& clock,
+                                                const Session& session,
+                                                int block_frames) {
     std::lock_guard live_lock(impl_->live_mutex);
     impl_->due_index.reset();
     Frame cur = clock.position().frame;
+    const Frame block_end = cur + std::max(0, block_frames);
 
     for (std::size_t i = 0; i < impl_->jumps.size(); ++i) {
         auto& j = impl_->jumps[i];
@@ -226,28 +227,39 @@ std::optional<Frame> JumpScheduler::check_due(const TransportClock& clock,
             continue;
 
         bool fire = false;
+        Frame trigger_frame = cur;
         switch (j.trigger) {
             case JumpTrigger::Immediate:
                 fire = (j.status == JumpStatus::Armed);
+                trigger_frame = cur;
                 break;
             case JumpTrigger::AtSongEnd:
                 // Check if the current song ends within this block.
                 for (const auto& song : session.songs) {
-                    if (cur < song.end_frame && cur + block_frames >= song.end_frame) {
-                        fire = true; break;
+                    if (cur <= song.end_frame && block_end >= song.end_frame) {
+                        fire = true;
+                        trigger_frame = song.end_frame;
+                        break;
                     }
                 }
                 break;
             case JumpTrigger::AtRegionEnd:
-                for (const auto& song : session.songs)
-                    for (const auto& region : song.regions)
-                        if (cur < region.end_frame && cur + block_frames >= region.end_frame) {
-                            fire = true; break;
+                for (const auto& song : session.songs) {
+                    for (const auto& region : song.regions) {
+                        if (cur <= region.end_frame && block_end >= region.end_frame) {
+                            fire = true;
+                            trigger_frame = region.end_frame;
+                            break;
                         }
+                    }
+                    if (fire) break;
+                }
                 break;
             case JumpTrigger::AtFrame:
-                if (j.target.frame && cur >= *j.target.frame)
+                if (j.trigger_frame && cur <= *j.trigger_frame && block_end >= *j.trigger_frame) {
                     fire = true;
+                    trigger_frame = *j.trigger_frame;
+                }
                 break;
         }
 
@@ -256,7 +268,7 @@ std::optional<Frame> JumpScheduler::check_due(const TransportClock& clock,
             if (resolved.is_ok()) {
                 impl_->due_index = i;
                 j.status = JumpStatus::Armed;
-                return resolved.unwrap();
+                return DueJump{resolved.unwrap(), trigger_frame};
             }
             j.status         = JumpStatus::Failed;
             j.failure_reason = resolved.error();

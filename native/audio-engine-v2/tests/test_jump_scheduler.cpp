@@ -186,7 +186,8 @@ TEST_CASE("armed immediate jump is due on first check_due") {
 
     auto due = sched.check_due(clock, sess);
     CHECK(due.has_value());
-    CHECK(due.value() == 96000);
+    CHECK(due->target_frame == 96000);
+    CHECK(due->trigger_frame == 0);
 }
 
 TEST_CASE("mark_executed sets status to Executed") {
@@ -263,7 +264,8 @@ TEST_CASE("multiple immediate jumps coalesce to latest target") {
     CHECK(list[0].jump_id == "jump-99");
     auto due = sched.check_due(clock, sess, 128);
     REQUIRE(due.has_value());
-    CHECK(due.value() == 1099);
+    CHECK(due->target_frame == 1099);
+    CHECK(due->trigger_frame == 0);
 }
 
 TEST_CASE("region end trigger uses actual render block size") {
@@ -284,5 +286,29 @@ TEST_CASE("region end trigger uses actual render block size") {
     CHECK_FALSE(sched.check_due(clock, sess, 128).has_value());
     auto due = sched.check_due(clock, sess, 512);
     REQUIRE(due.has_value());
-    CHECK(due.value() == 1234);
+    CHECK(due->target_frame == 1234);
+    CHECK(due->trigger_frame == 96000);
+}
+
+TEST_CASE("at-frame trigger fires at trigger frame and resolves separate target") {
+    TransportClock clock(48000);
+    auto sess = make_session_with_marker();
+    JumpScheduler sched;
+    clock.seek(95600);
+    clock.play();
+
+    ScheduledJump jump;
+    jump.jump_id = "after-bars";
+    jump.target = frame_target(1234);
+    jump.trigger = JumpTrigger::AtFrame;
+    jump.status = JumpStatus::Pending;
+    jump.trigger_frame = 96000;
+    sched.schedule(jump);
+    sched.drain_pending();
+
+    CHECK_FALSE(sched.check_due(clock, sess, 128).has_value());
+    auto due = sched.check_due(clock, sess, 512);
+    REQUIRE(due.has_value());
+    CHECK(due->target_frame == 1234);
+    CHECK(due->trigger_frame == 96000);
 }

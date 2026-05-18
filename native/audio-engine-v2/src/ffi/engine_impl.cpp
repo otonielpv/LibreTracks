@@ -1105,6 +1105,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 jump.jump_id = c.jump_id;
                 jump.target = c.target;
                 jump.trigger = c.trigger;
+                jump.trigger_frame = c.trigger_frame;
                 jump.created_frame = clock_->position().frame;
                 auto r = scheduler_->schedule(jump);
                 if (r.is_err()) return r;

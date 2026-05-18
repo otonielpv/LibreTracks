@@ -473,6 +473,25 @@ impl AudioController {
                     frame: None,
                 },
                 trigger: JumpTrigger::AtRegionEnd,
+                trigger_frame: None,
+            })?;
+            Ok(())
+        })
+    }
+
+    pub fn schedule_jump_at_frame(
+        &self,
+        jump_id: &str,
+        target: JumpTarget,
+        trigger_seconds: f64,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("schedule_jump_at_frame", None, |engine, _state| {
+            engine.send_command(&EngineCommand::CancelAllScheduledJumps)?;
+            engine.send_command(&EngineCommand::ScheduleJump {
+                jump_id: jump_id.to_string(),
+                target,
+                trigger: JumpTrigger::AtFrame,
+                trigger_frame: Some(seconds_to_frame_for_engine(engine, trigger_seconds)),
             })?;
             Ok(())
         })

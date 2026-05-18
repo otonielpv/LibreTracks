@@ -59,6 +59,7 @@ struct CmdScheduleJump {
     Id          jump_id;   // caller-assigned, used to cancel/replace
     JumpTarget  target;
     JumpTrigger trigger;
+    std::optional<Frame> trigger_frame; // for AtFrame: exact frame where target should fire
 };
 
 struct CmdCancelScheduledJump      { Id jump_id; };

@@ -37,6 +37,8 @@ pub enum EngineCommand {
         jump_id: String,
         target: JumpTarget,
         trigger: JumpTrigger,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        trigger_frame: Option<i64>,
     },
     CancelScheduledJump {
         jump_id: String,

@@ -9,6 +9,7 @@ use std::{
 };
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
+use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 use libretracks_core::{
     Clip, Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track, TrackKind,
     MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
@@ -1227,7 +1228,7 @@ impl DesktopSession {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
 
-        let _scheduled_jump = self
+        let scheduled_jump = self
             .engine
             .schedule_marker_jump(target_marker_id, trigger.clone(), transition.clone())?;
 
@@ -1246,6 +1247,24 @@ impl DesktopSession {
                 self.current_position(),
                 self.engine.position_seconds(),
             );
+        } else if transition == TransitionType::Instant {
+            if let Some(pending_jump) = scheduled_jump {
+                self.last_native_scheduled_jump_executed_count = audio
+                    .engine_snapshot()
+                    .map(|snapshot| snapshot.pitch.mixer_scheduled_jump_executed_count)
+                    .unwrap_or(self.last_native_scheduled_jump_executed_count);
+                audio.schedule_jump_at_frame(
+                    &pending_jump.target_marker_id,
+                    NativeJumpTarget {
+                        kind: NativeJumpTargetKind::Marker,
+                        id: Some(target_marker_id.to_string()),
+                        frame: None,
+                    },
+                    pending_jump.execute_at_seconds,
+                )?;
+            } else {
+                audio.cancel_scheduled_jumps()?;
+            }
         } else {
             audio.cancel_scheduled_jumps()?;
         }
@@ -1289,6 +1308,24 @@ impl DesktopSession {
                     .map(|snapshot| snapshot.pitch.mixer_scheduled_jump_executed_count)
                     .unwrap_or(self.last_native_scheduled_jump_executed_count);
                 audio.schedule_region_end_jump(&pending_jump.target_marker_id, target_region_id)?;
+            } else {
+                audio.cancel_scheduled_jumps()?;
+            }
+        } else if transition == TransitionType::Instant {
+            if let Some(pending_jump) = scheduled_jump {
+                self.last_native_scheduled_jump_executed_count = audio
+                    .engine_snapshot()
+                    .map(|snapshot| snapshot.pitch.mixer_scheduled_jump_executed_count)
+                    .unwrap_or(self.last_native_scheduled_jump_executed_count);
+                audio.schedule_jump_at_frame(
+                    &pending_jump.target_marker_id,
+                    NativeJumpTarget {
+                        kind: NativeJumpTargetKind::Region,
+                        id: Some(target_region_id.to_string()),
+                        frame: None,
+                    },
+                    pending_jump.execute_at_seconds,
+                )?;
             } else {
                 audio.cancel_scheduled_jumps()?;
             }
@@ -2735,9 +2772,7 @@ impl DesktopSession {
         let Some(pending_jump) = self.engine.pending_marker_jump().cloned() else {
             return Ok(false);
         };
-        if pending_jump.trigger != JumpTrigger::RegionEnd
-            || pending_jump.transition != TransitionType::Instant
-        {
+        if pending_jump.transition != TransitionType::Instant {
             return Ok(false);
         }
 
