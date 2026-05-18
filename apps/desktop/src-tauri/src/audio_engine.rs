@@ -14,6 +14,7 @@ use libretracks_core::Song;
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     DeviceInfo, Engine, EngineCommand, EngineSnapshot, JumpTarget, JumpTargetKind, JumpTrigger,
+    SourcePeaks,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -23,6 +24,7 @@ use crate::{error::DesktopError, settings::AppSettings};
 
 const ENGINE_SAMPLE_RATE: f64 = 48_000.0;
 const ENGINE_V2_FALLBACK_OUTPUT_CHANNELS: usize = 2;
+pub(crate) const ENGINE_WAVEFORM_RESOLUTION_FRAMES: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -758,6 +760,22 @@ impl AudioController {
             .map_err(|e| DesktopError::AudioCommand(e.to_string()))
     }
 
+    pub fn source_peaks(
+        &self,
+        song_dir: &Path,
+        waveform_key: &str,
+    ) -> Result<SourcePeaks, DesktopError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))?;
+        state.song_dir = Some(song_dir.to_path_buf());
+        let source_id = resolve_engine_source_id(song_dir, waveform_key);
+        ensure_engine(&mut state)?
+            .source_peaks(&source_id, ENGINE_WAVEFORM_RESOLUTION_FRAMES)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+    }
+
     pub fn debug_snapshot(&self) -> Result<AudioDebugSnapshot, DesktopError> {
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
@@ -1087,6 +1105,20 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
         }
     }
     resolved
+}
+
+fn resolve_engine_source_id(song_dir: &Path, file_path: &str) -> String {
+    let normalized = normalize_engine_audio_path(file_path);
+    let raw_path = normalized.trim();
+    if raw_path.is_empty() {
+        return String::new();
+    }
+    let path = Path::new(raw_path);
+    if path.is_relative() {
+        song_dir.join(path).to_string_lossy().replace('\\', "/")
+    } else {
+        raw_path.replace('\\', "/")
+    }
 }
 
 fn normalize_engine_audio_path(path: &str) -> String {

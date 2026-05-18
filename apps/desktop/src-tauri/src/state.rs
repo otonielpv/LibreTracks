@@ -17,8 +17,9 @@ use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary,
     import_song_package as import_song_package_into_project, import_wav_files_to_library,
     load_song_from_file, load_waveform_summary, read_audio_metadata, save_song_to_file,
-    waveform_file_path, ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry,
-    ProjectError, WaveformSummary, SONG_FILE_NAME,
+    waveform_file_path, waveform_summary_from_peaks, write_waveform_summary,
+    ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry, ProjectError, WaveformSummary,
+    SONG_FILE_NAME,
 };
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
@@ -947,14 +948,16 @@ impl DesktopSession {
         waveform_keys: &[String],
         waveform_jobs: &WaveformGenerationQueue,
         app: &AppHandle,
+        audio: &AudioController,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
-        self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)))
+        self.load_waveforms_internal(waveform_keys, Some((waveform_jobs, app)), Some(audio))
     }
 
     fn load_waveforms_internal(
         &mut self,
         waveform_keys: &[String],
         background_generation: Option<(&WaveformGenerationQueue, &AppHandle)>,
+        audio: Option<&AudioController>,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_waveform_keys = self
@@ -976,6 +979,14 @@ impl DesktopSession {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(waveform_key, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
+                    if let Some(audio) = audio {
+                        if let Ok(summary) =
+                            self.load_native_waveform_summary(&song_dir, waveform_key, audio, true)
+                        {
+                            summaries.push(waveform_summary_to_dto(waveform_key, summary));
+                            continue;
+                        }
+                    }
                     if let Some((waveform_jobs, app)) = background_generation {
                         waveform_jobs.enqueue(
                             app.clone(),
@@ -996,11 +1007,22 @@ impl DesktopSession {
         file_paths: &[String],
         waveform_jobs: &WaveformGenerationQueue,
         app: &AppHandle,
+        audio: &AudioController,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_library_paths = collect_library_file_paths(&song_dir, self.engine.song())?
             .into_iter()
             .collect::<std::collections::HashSet<_>>();
+        let clip_waveform_keys = self
+            .engine
+            .song()
+            .map(|song| {
+                song.clips
+                    .iter()
+                    .map(|clip| waveform_key_for_file_path(&clip.file_path))
+                    .collect::<std::collections::HashSet<_>>()
+            })
+            .unwrap_or_default();
         let mut summaries = Vec::new();
 
         for file_path in file_paths {
@@ -1013,6 +1035,17 @@ impl DesktopSession {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(&normalized_path, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
+                    if let Ok(summary) =
+                        self.load_native_waveform_summary(
+                            &song_dir,
+                            &normalized_path,
+                            audio,
+                            clip_waveform_keys.contains(&normalized_path),
+                        )
+                    {
+                        summaries.push(waveform_summary_to_dto(&normalized_path, summary));
+                        continue;
+                    }
                     waveform_jobs.enqueue(
                         app.clone(),
                         song_dir.clone(),
@@ -2880,6 +2913,53 @@ impl DesktopSession {
             .entries
             .get(waveform_key)
             .expect("waveform cache entry should exist")
+            .summary)
+    }
+
+    fn load_native_waveform_summary(
+        &mut self,
+        song_dir: &Path,
+        waveform_key: &str,
+        audio: &AudioController,
+        wait_for_source: bool,
+    ) -> Result<&WaveformSummary, DesktopError> {
+        let mut peaks_result = audio.source_peaks(song_dir, waveform_key);
+        if wait_for_source {
+            for _ in 0..30 {
+                if peaks_result.is_ok() {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(50));
+                peaks_result = audio.source_peaks(song_dir, waveform_key);
+            }
+        }
+        let peaks = peaks_result?;
+        let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
+        let summary = waveform_summary_from_peaks(
+            peaks.sample_rate,
+            duration_frames,
+            peaks.resolution_frames,
+            peaks.min_peaks,
+            peaks.max_peaks,
+        )?;
+        let path = waveform_file_path(song_dir, waveform_key);
+        write_waveform_summary(path, &summary)?;
+        let refreshed_token = build_waveform_cache_token(song_dir, waveform_key)?;
+
+        self.waveform_cache.reset_if_song_changed(song_dir);
+        self.waveform_cache.entries.insert(
+            waveform_key.to_string(),
+            CachedWaveformSummary {
+                token: refreshed_token,
+                summary,
+            },
+        );
+
+        Ok(&self
+            .waveform_cache
+            .entries
+            .get(waveform_key)
+            .expect("native waveform cache entry should exist")
             .summary)
     }
 
@@ -5595,11 +5675,11 @@ mod tests {
 
         let perf_after_load = session.performance_snapshot();
         let first_waveform = session
-            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None, None)
             .expect("waveform should load");
         let perf_after_first_request = session.performance_snapshot();
         let second_waveform = session
-            .load_waveforms_internal(&["audio/test.wav".to_string()], None)
+            .load_waveforms_internal(&["audio/test.wav".to_string()], None, None)
             .expect("waveform should load from cache");
         let perf_after_second_request = session.performance_snapshot();
 

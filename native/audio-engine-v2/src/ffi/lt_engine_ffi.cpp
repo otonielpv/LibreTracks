@@ -88,4 +88,13 @@ LT_API const char* lt_audio_engine_list_devices(LtEngine* engine) {
     return buf.c_str();
 }
 
+LT_API const char* lt_audio_engine_get_source_peaks(LtEngine* engine,
+                                                    const char* source_id,
+                                                    int32_t resolution_frames) {
+    if (!engine || !source_id) return "{\"ok\":false,\"error\":\"invalid handle\"}";
+    thread_local std::string buf;
+    buf = as_impl(engine)->get_source_peaks(source_id, static_cast<int>(resolution_frames));
+    return buf.c_str();
+}
+
 } // extern "C"

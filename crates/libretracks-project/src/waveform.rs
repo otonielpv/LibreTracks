@@ -266,6 +266,38 @@ pub fn write_waveform_summary(
     Ok(())
 }
 
+pub fn waveform_summary_from_peaks(
+    sample_rate: u32,
+    duration_frames: u64,
+    resolution_frames: usize,
+    min_peaks: Vec<f32>,
+    max_peaks: Vec<f32>,
+) -> Result<WaveformSummary, ProjectError> {
+    if sample_rate == 0
+        || duration_frames == 0
+        || resolution_frames == 0
+        || min_peaks.is_empty()
+        || min_peaks.len() != max_peaks.len()
+    {
+        return Err(ProjectError::InvalidWaveformSummary("<native-waveform>".into()));
+    }
+
+    let base_lod = WaveformLod {
+        resolution_frames,
+        min_peaks,
+        max_peaks,
+    };
+    let summary = WaveformSummary {
+        version: WAVEFORM_FORMAT_VERSION,
+        duration_seconds: duration_frames as f64 / f64::from(sample_rate),
+        sample_rate,
+        lods: build_waveform_lods(base_lod),
+        seek_index: Vec::new(),
+    };
+    validate_waveform_summary(&summary, "<native-waveform>")?;
+    Ok(summary)
+}
+
 pub fn generate_waveform_summary(
     song_dir: impl AsRef<Path>,
     audio_relative_path: impl AsRef<Path>,

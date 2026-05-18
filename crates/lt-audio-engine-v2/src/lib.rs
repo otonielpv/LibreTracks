@@ -18,6 +18,7 @@ pub use events::*;
 pub use snapshot::*;
 
 use ffi::*;
+use serde::Deserialize;
 
 // ---------------------------------------------------------------------------
 // Safe wrapper
@@ -30,6 +31,32 @@ use ffi::*;
 /// single command thread (the Tauri async handler).
 pub struct Engine {
     handle: *mut LtEngine,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SourcePeaks {
+    pub sample_rate: u32,
+    pub duration_frames: i64,
+    pub resolution_frames: usize,
+    pub min_peaks: Vec<f32>,
+    pub max_peaks: Vec<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SourcePeaksResponse {
+    ok: bool,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
+    sample_rate: u32,
+    #[serde(default)]
+    duration_frames: i64,
+    #[serde(default)]
+    resolution_frames: usize,
+    #[serde(default)]
+    min_peaks: Vec<f32>,
+    #[serde(default)]
+    max_peaks: Vec<f32>,
 }
 
 // SAFETY: EngineImpl internally synchronises its state.  The Rust wrapper
@@ -123,6 +150,40 @@ impl Engine {
         }
         let s = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy() };
         serde_json::from_str(&s).map_err(|e| EngineError::Serialization(e.to_string()))
+    }
+
+    pub fn source_peaks(
+        &self,
+        source_id: &str,
+        resolution_frames: usize,
+    ) -> Result<SourcePeaks, EngineError> {
+        let source_id = std::ffi::CString::new(source_id)
+            .map_err(|e| EngineError::Serialization(e.to_string()))?;
+        let ptr = unsafe {
+            lt_audio_engine_get_source_peaks(
+                self.handle,
+                source_id.as_ptr(),
+                resolution_frames.min(i32::MAX as usize) as i32,
+            )
+        };
+        if ptr.is_null() {
+            return Err(EngineError::Internal("source peaks returned null".into()));
+        }
+        let s = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy() };
+        let response: SourcePeaksResponse =
+            serde_json::from_str(&s).map_err(|e| EngineError::Serialization(e.to_string()))?;
+        if !response.ok {
+            return Err(EngineError::Internal(
+                response.error.unwrap_or_else(|| "source peaks unavailable".into()),
+            ));
+        }
+        Ok(SourcePeaks {
+            sample_rate: response.sample_rate,
+            duration_frames: response.duration_frames,
+            resolution_frames: response.resolution_frames,
+            min_peaks: response.min_peaks,
+            max_peaks: response.max_peaks,
+        })
     }
 }
 

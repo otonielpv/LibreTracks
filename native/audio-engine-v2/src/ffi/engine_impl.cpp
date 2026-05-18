@@ -577,6 +577,32 @@ std::string EngineImpl::list_devices() const {
     return arr.dump();
 }
 
+std::string EngineImpl::get_source_peaks(const std::string& source_id,
+                                         int resolution_frames) const {
+    json out;
+    out["ok"] = false;
+
+    if (!source_manager_) {
+        out["error"] = "source manager is not available";
+        return out.dump();
+    }
+
+    auto source = source_manager_->get_shared(source_id);
+    if (!source || !source->is_loaded()) {
+        out["error"] = "source is not ready";
+        return out.dump();
+    }
+
+    const auto overview = source->peaks(resolution_frames);
+    out["ok"] = true;
+    out["sample_rate"] = overview.sample_rate;
+    out["duration_frames"] = overview.duration_frames;
+    out["resolution_frames"] = overview.resolution_frames;
+    out["min_peaks"] = overview.min_peaks;
+    out["max_peaks"] = overview.max_peaks;
+    return out.dump();
+}
+
 // ---------------------------------------------------------------------------
 // Command dispatch
 // ---------------------------------------------------------------------------

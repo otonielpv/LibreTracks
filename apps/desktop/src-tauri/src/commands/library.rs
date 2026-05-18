@@ -42,7 +42,7 @@ pub fn get_waveform_summaries(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .load_waveforms(&waveform_keys, &state.waveform_jobs, &app)
+        .load_waveforms(&waveform_keys, &state.waveform_jobs, &app, &state.audio)
         .map_err(|error| error.to_string())
 }
 
@@ -58,7 +58,7 @@ pub fn get_library_waveform_summaries(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .load_library_waveforms(&file_paths, &state.waveform_jobs, &app)
+        .load_library_waveforms(&file_paths, &state.waveform_jobs, &app, &state.audio)
         .map_err(|error| error.to_string())
 }
 

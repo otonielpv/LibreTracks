@@ -7,6 +7,14 @@
 
 namespace lt {
 
+struct SourcePeakOverview {
+    int sample_rate = 0;
+    Frame duration_frames = 0;
+    int resolution_frames = 0;
+    std::vector<float> min_peaks;
+    std::vector<float> max_peaks;
+};
+
 // ---------------------------------------------------------------------------
 // DecodedSource — fully decoded, resampled, float32 audio in engine memory.
 //
@@ -34,6 +42,8 @@ public:
     int    sample_rate()     const noexcept { return sample_rate_; }
     Frame  duration_frames() const noexcept { return duration_frames_; }
     bool   is_loaded()       const noexcept { return !samples_.empty(); }
+
+    SourcePeakOverview peaks(int resolution_frames) const;
 
 private:
     std::vector<float> samples_;
