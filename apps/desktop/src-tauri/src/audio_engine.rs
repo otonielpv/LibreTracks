@@ -1183,10 +1183,13 @@ fn session_signature(song: &Song) -> String {
         track.name.hash(&mut hasher);
         format!("{:?}", track.kind).hash(&mut hasher);
         track.parent_track_id.hash(&mut hasher);
-        // volume/pan/muted/solo/audio_to are sent via SetTrack* commands and
-        // must NOT change the signature — including them causes LoadSession
-        // (which rebuilds all pitch streams) on every fader/pan move.
-        track.transpose_enabled.hash(&mut hasher);
+        // volume/pan/muted/solo/audio_to/transpose_enabled are sent via
+        // SetTrack* realtime commands and must NOT change the signature.
+        // Including them causes ensure_song_loaded to re-fire LoadSession
+        // on the next seek/play, which tears down all 9 Bungee voices and
+        // rebuilds them serially (~600ms each = 5s freeze). The realtime
+        // command path already keeps the C++ engine state in sync, so
+        // skipping LoadSession here is safe and correct.
     }
     for clip in &song.clips {
         clip.id.hash(&mut hasher);
