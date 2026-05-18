@@ -2651,7 +2651,11 @@ impl DesktopSession {
         }
 
         if let Some(duration_seconds) = self.engine.pending_fade_duration_seconds() {
-            if elapsed >= duration_seconds {
+            if self
+                .engine
+                .pending_fade_elapsed_seconds()
+                .is_some_and(|elapsed_seconds| elapsed_seconds >= duration_seconds)
+            {
                 if let Some(target_position) = self.engine.complete_pending_fade_jump()? {
                     self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
                     audio.start_master_fade(1.0, duration_seconds)?;

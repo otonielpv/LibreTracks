@@ -31,6 +31,19 @@ import type {
 
 type TFunc = (key: string, options?: Record<string, unknown>) => string;
 
+const NUMPAD_NAVIGATION_DIGITS: Record<string, number> = {
+  Insert: 0,
+  End: 1,
+  ArrowDown: 2,
+  PageDown: 3,
+  ArrowLeft: 4,
+  Clear: 5,
+  ArrowRight: 6,
+  Home: 7,
+  ArrowUp: 8,
+  PageUp: 9,
+};
+
 const MIDI_NOTE_NAMES = [
   "C",
   "C#",
@@ -346,6 +359,14 @@ export function keyboardDigit(
     const key = eventCodeOrEvent.key;
     if (key.length === 1 && key >= "0" && key <= "9") {
       return Number(key);
+    }
+
+    if (eventCodeOrEvent.location === KeyboardEvent.DOM_KEY_LOCATION_NUMPAD) {
+      const navigationDigit =
+        NUMPAD_NAVIGATION_DIGITS[code] ?? NUMPAD_NAVIGATION_DIGITS[key];
+      if (navigationDigit !== undefined) {
+        return navigationDigit;
+      }
     }
   }
 

@@ -106,6 +106,26 @@ describe("App / marker-jumps", () => {
     });
   });
 
+  it("maps shift plus numpad navigation keys to song regions", async () => {
+    await renderApp();
+
+    await chooseSongJumpTrigger(en.transport.jumpMode.regionEnd);
+
+    await act(async () => {
+      fireEvent.keyDown(window, {
+        code: "Insert",
+        key: "Insert",
+        location: KeyboardEvent.DOM_KEY_LOCATION_NUMPAD,
+        shiftKey: true,
+      });
+    });
+
+    await waitFor(() => {
+      expect(useTransportStore.getState().playback?.pendingMarkerJump?.targetMarkerName).toBe("LibreTracks Session");
+      expect(useTransportStore.getState().playback?.pendingMarkerJump?.trigger).toBe("region_end");
+    });
+  });
+
   it("overwrites the armed marker on click and cancels when clicked again", async () => {
     await renderApp();
 

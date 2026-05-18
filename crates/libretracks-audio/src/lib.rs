@@ -63,6 +63,7 @@ pub struct PendingMarkerJump {
 #[derive(Debug, Clone, PartialEq)]
 struct PendingFadeJump {
     duration_seconds: f64,
+    elapsed_seconds: f64,
     fade_started: bool,
 }
 
@@ -334,6 +335,12 @@ impl AudioEngine {
         let mut next_position = self.position_seconds + delta_seconds;
         let mut jump_executed = false;
 
+        if let Some(pending_fade) = self.pending_fade_jump.as_mut() {
+            pending_fade.elapsed_seconds += delta_seconds;
+            self.position_seconds = next_position;
+            return Ok((self.position_seconds, false));
+        }
+
         if let Some(pending_jump) = self.pending_marker_jump.clone() {
             let execute_at = pending_jump.execute_at_seconds;
 
@@ -352,6 +359,7 @@ impl AudioEngine {
                         next_position = execute_at;
                         self.pending_fade_jump.get_or_insert(PendingFadeJump {
                             duration_seconds,
+                            elapsed_seconds: 0.0,
                             fade_started: false,
                         });
                     }
@@ -397,13 +405,22 @@ impl AudioEngine {
             .map(|pending_fade| pending_fade.duration_seconds)
     }
 
+    pub fn pending_fade_elapsed_seconds(&self) -> Option<f64> {
+        self.pending_fade_jump
+            .as_ref()
+            .map(|pending_fade| pending_fade.elapsed_seconds)
+    }
+
     pub fn complete_pending_fade_jump(&mut self) -> Result<Option<f64>, AudioEngineError> {
         let pending_jump = match self.pending_marker_jump.clone() {
             Some(pending_jump) => pending_jump,
             None => return Ok(None),
         };
 
-        if self.pending_fade_jump.is_none() {
+        let Some(pending_fade) = self.pending_fade_jump.as_ref() else {
+            return Ok(None);
+        };
+        if pending_fade.elapsed_seconds < pending_fade.duration_seconds {
             return Ok(None);
         }
 
@@ -1515,6 +1532,56 @@ mod tests {
 
         assert!((position - 1.0).abs() < 0.0001);
         assert!(jump_executed);
+        assert!(engine.pending_marker_jump().is_none());
+    }
+
+    #[test]
+    fn fade_out_jump_elapsed_time_accumulates_across_short_ticks() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(6.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        engine
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::NextMarker,
+                TransitionType::FadeOut {
+                    duration_seconds: 1.0,
+                },
+            )
+            .expect("jump should schedule");
+
+        engine
+            .advance_transport(2.0)
+            .expect("transport should reach fade point");
+        assert_eq!(engine.take_pending_fade_out_request(), Some(1.0));
+
+        engine
+            .advance_transport(0.4)
+            .expect("transport should advance during fade");
+        engine
+            .advance_transport(0.4)
+            .expect("transport should keep accumulating fade time");
+        assert!(engine
+            .pending_fade_elapsed_seconds()
+            .is_some_and(|elapsed| (elapsed - 0.8).abs() < 0.0001));
+        assert!(engine
+            .complete_pending_fade_jump()
+            .expect("fade should not complete early")
+            .is_none());
+
+        engine
+            .advance_transport(0.2)
+            .expect("transport should finish fade duration");
+        assert!(engine
+            .pending_fade_elapsed_seconds()
+            .is_some_and(|elapsed| (elapsed - 1.0).abs() < 0.0001));
+
+        let target_position = engine
+            .complete_pending_fade_jump()
+            .expect("fade jump should complete");
+        assert_eq!(target_position, Some(12.0));
         assert!(engine.pending_marker_jump().is_none());
     }
 
