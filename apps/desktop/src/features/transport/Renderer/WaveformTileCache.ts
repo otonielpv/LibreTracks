@@ -3,6 +3,8 @@ import { clamp } from "../timelineMath";
 
 export const WAVEFORM_TILE_WIDTH_PX = 1024;
 const TILE_HEIGHT_PX = 256;
+const WAVEFORM_ZOOM_CACHE_STEP = 1.5;
+const MAX_CACHED_TILES = 320;
 const decodedWaveformLodCache = new WeakMap<WaveformLodDto, ResolvedWaveformLod>();
 
 type ResolvedWaveformLod = {
@@ -19,6 +21,7 @@ type TileEntry = {
   canvas: TileSurface;
   width: number;
   height: number;
+  lastUsedAt: number;
 };
 
 export type WaveformTile = {
@@ -34,6 +37,15 @@ type TileRequest = {
   clipPixelWidth: number;
   tileIndex: number;
 };
+
+export function getWaveformRenderPixelsPerSecond(pixelsPerSecond: number) {
+  if (!Number.isFinite(pixelsPerSecond) || pixelsPerSecond <= 0) {
+    return 1;
+  }
+
+  const exponent = Math.round(Math.log(pixelsPerSecond) / Math.log(WAVEFORM_ZOOM_CACHE_STEP));
+  return Math.max(1, Math.pow(WAVEFORM_ZOOM_CACHE_STEP, exponent));
+}
 
 function decodeBase64ToBytes(base64: string) {
   if (typeof atob === "function") {
@@ -136,6 +148,7 @@ function getTileContext(surface: TileSurface) {
 }
 
 function tileNamespace(request: TileRequest) {
+  const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(request.pixelsPerSecond);
   return [
     request.clip.waveformKey,
     request.waveform.version,
@@ -144,7 +157,7 @@ function tileNamespace(request: TileRequest) {
     request.clip.sourceStartSeconds.toFixed(6),
     request.clip.sourceDurationSeconds.toFixed(6),
     request.clip.durationSeconds.toFixed(6),
-    request.pixelsPerSecond.toFixed(4),
+    renderPixelsPerSecond.toFixed(4),
   ].join(":");
 }
 
@@ -244,6 +257,8 @@ function renderWaveformTile(
 export class WaveformTileCache {
   private readonly tiles = new Map<string, TileEntry>();
 
+  private accessCounter = 0;
+
   getTile(request: TileRequest): WaveformTile | null {
     const namespace = tileNamespace(request);
     const tileStartPixel = request.tileIndex * WAVEFORM_TILE_WIDTH_PX;
@@ -274,8 +289,12 @@ export class WaveformTileCache {
         canvas: surface,
         width: tileWidth,
         height: TILE_HEIGHT_PX,
+        lastUsedAt: ++this.accessCounter,
       };
       this.tiles.set(key, entry);
+      this.pruneLeastRecentlyUsedTiles();
+    } else {
+      entry.lastUsedAt = ++this.accessCounter;
     }
 
     return {
@@ -294,12 +313,27 @@ export class WaveformTileCache {
   }
 
   buildNamespace(clip: ClipSummary, waveform: WaveformSummaryDto, pixelsPerSecond: number) {
+    const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(pixelsPerSecond);
     return tileNamespace({
       clip,
       waveform,
-      pixelsPerSecond,
-      clipPixelWidth: Math.max(1, clip.durationSeconds * pixelsPerSecond),
+      pixelsPerSecond: renderPixelsPerSecond,
+      clipPixelWidth: Math.max(1, clip.durationSeconds * renderPixelsPerSecond),
       tileIndex: 0,
     });
+  }
+
+  private pruneLeastRecentlyUsedTiles() {
+    if (this.tiles.size <= MAX_CACHED_TILES) {
+      return;
+    }
+
+    const entriesByAge = [...this.tiles.entries()].sort(
+      (left, right) => left[1].lastUsedAt - right[1].lastUsedAt,
+    );
+    const deleteCount = Math.max(1, this.tiles.size - MAX_CACHED_TILES);
+    for (const [key] of entriesByAge.slice(0, deleteCount)) {
+      this.tiles.delete(key);
+    }
   }
 }

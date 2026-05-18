@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("./WaveformTileCache", () => {
   return {
     WAVEFORM_TILE_WIDTH_PX: 1024,
+    getWaveformRenderPixelsPerSecond: (pixelsPerSecond: number) => pixelsPerSecond,
     WaveformTileCache: class {
       getTile() {
         return {

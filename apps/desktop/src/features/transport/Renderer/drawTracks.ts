@@ -2,7 +2,11 @@ import type { SongView } from "../desktopApi";
 import { getPendingClipLabel, type TimelineClipSummary, type TimelineTrackSummary } from "../pendingAudioImports";
 import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
 import { clamp, secondsToScreenX } from "../timelineMath";
-import { WaveformTileCache, WAVEFORM_TILE_WIDTH_PX } from "./WaveformTileCache";
+import {
+  getWaveformRenderPixelsPerSecond,
+  WaveformTileCache,
+  WAVEFORM_TILE_WIDTH_PX,
+} from "./WaveformTileCache";
 
 const waveformTileCache = new WaveformTileCache();
 
@@ -165,18 +169,23 @@ export function drawTrackClipsLayer(
         context.clip();
         const visiblePixelStart = Math.max(0, -left);
         const visiblePixelEnd = Math.min(width, snapshot.width - left);
-        const startTileIndex = Math.max(0, Math.floor(visiblePixelStart / WAVEFORM_TILE_WIDTH_PX));
+        const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(snapshot.zoomLevel);
+        const renderScale = snapshot.zoomLevel / renderPixelsPerSecond;
+        const renderClipPixelWidth = Math.max(1, clip.durationSeconds * renderPixelsPerSecond);
+        const visibleRenderPixelStart = visiblePixelStart / renderScale;
+        const visibleRenderPixelEnd = visiblePixelEnd / renderScale;
+        const startTileIndex = Math.max(0, Math.floor(visibleRenderPixelStart / WAVEFORM_TILE_WIDTH_PX));
         const endTileIndex = Math.max(
           startTileIndex,
-          Math.ceil(visiblePixelEnd / WAVEFORM_TILE_WIDTH_PX) - 1,
+          Math.ceil(visibleRenderPixelEnd / WAVEFORM_TILE_WIDTH_PX) - 1,
         );
 
         for (let tileIndex = startTileIndex; tileIndex <= endTileIndex; tileIndex += 1) {
           const tile = waveformTileCache.getTile({
             clip,
             waveform,
-            pixelsPerSecond: snapshot.zoomLevel,
-            clipPixelWidth: width,
+            pixelsPerSecond: renderPixelsPerSecond,
+            clipPixelWidth: renderClipPixelWidth,
             tileIndex,
           });
           if (!tile) {
@@ -185,9 +194,9 @@ export function drawTrackClipsLayer(
 
           context.drawImage(
             tile.canvas,
-            left + tile.tileStartPixel,
+            left + tile.tileStartPixel * renderScale,
             clipTop,
-            tile.tileWidth,
+            tile.tileWidth * renderScale,
             clipHeight,
           );
         }

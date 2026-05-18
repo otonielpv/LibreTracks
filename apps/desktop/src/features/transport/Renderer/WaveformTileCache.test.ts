@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ClipSummary, WaveformSummaryDto } from "../desktopApi";
 import {
+  getWaveformRenderPixelsPerSecond,
   WaveformTileCache,
   decodeFloat32Peaks,
   selectWaveformLod,
@@ -97,5 +98,14 @@ describe("WaveformTileCache", () => {
 
     expect(durationNamespace).not.toBe(baseNamespace);
     expect(waveformNamespace).not.toBe(baseNamespace);
+  });
+
+  it("quantizes nearby zoom levels to the same waveform render scale", () => {
+    expect(getWaveformRenderPixelsPerSecond(50)).toBe(
+      getWaveformRenderPixelsPerSecond(60),
+    );
+    expect(getWaveformRenderPixelsPerSecond(72)).toBe(
+      getWaveformRenderPixelsPerSecond(86),
+    );
   });
 });
