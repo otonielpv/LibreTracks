@@ -2,6 +2,7 @@
 #include <lt_engine/core/engine_core.h>
 #include <lt_engine/core/events.h>
 #include <lt_engine/render/pitch_resolution.h>
+#include <lt_engine/render/track_renderer.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -171,9 +172,12 @@ Result<void> EngineImpl::initialize() {
         if (!current_session || !session_contains_source(*current_session, source_id))
             return;
 
-        source_ready_pitch_prepare_count_.fetch_add(1, std::memory_order_relaxed);
-        if (prepare_pitch_processors_for_source(source_id) > 0)
-            pitch_prepare_on_source_ready_count_.fetch_add(1, std::memory_order_relaxed);
+        // A source just finished decoding. Rebuild Bungee voices so any clips
+        // that needed this source can now be played pitched.
+        if (bungee_voices_ && bungee_voices_->is_available() && clock_) {
+            bungee_voices_->rebuild_for_session(
+                *current_session, *source_manager_, clock_->position().frame);
+        }
         // Re-prearm: a source just finished decoding, so any prepared-set
         // that was skipped (unloaded_clips > 0) on its first build can now
         // succeed. Keep the current revision so multiple source-ready events
@@ -185,9 +189,6 @@ Result<void> EngineImpl::initialize() {
                 current_session, source_manager_.get(), rev);
         }
     });
-    pitch_cache_    = std::make_unique<PitchCache>();
-    pitch_cache_->set_realtime_fallback_enabled(false);
-    realtime_pitch_engine_ = std::make_unique<RealtimePitchEngine>();
     bungee_voices_  = std::make_unique<BungeeVoiceManager>();
     prearmed_jumps_ = std::make_unique<PrearmedJumpManager>();
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
@@ -195,9 +196,7 @@ Result<void> EngineImpl::initialize() {
         std::shared_ptr<const Session>{},
         source_manager_.get(),
         clock_.get(),
-        scheduler_.get(),
-        pitch_cache_.get(),
-        realtime_pitch_engine_.get());
+        scheduler_.get());
     mixer_->set_metronome_config(metronome_config_);
     mixer_->set_bungee_voice_manager(bungee_voices_.get());
 
@@ -236,14 +235,12 @@ Result<void> EngineImpl::initialize() {
     // Always log on startup so we can confirm the DLL version and backend regardless
     // of env var inheritance through Tauri's process chain.
     {
-        PitchStreamDiagnostics startup_diag = realtime_pitch_engine_
-            ? realtime_pitch_engine_->diagnostics()
-            : PitchStreamDiagnostics{};
         const char* debug_flag = std::getenv("LIBRETRACKS_AUDIO_DEBUG");
-        debug_log("[LT_PITCH_DEBUG] engine_initialized pitch_backend=%s runtime_enabled=%s "
-            "debug_flag=%s log=D:\\Repos\\LibreTracks\\lt_pitch_debug.log\n",
-            startup_diag.pitch_backend.empty() ? "(unknown)" : startup_diag.pitch_backend.c_str(),
-            startup_diag.pitch_runtime_enabled ? "true" : "false",
+        const bool bungee_ok = bungee_voices_ && bungee_voices_->is_available();
+        debug_log("[LT_PITCH_DEBUG] engine_initialized pitch_backend=bungee "
+            "bungee_available=%s debug_flag=%s "
+            "log=D:\\Repos\\LibreTracks\\lt_pitch_debug.log\n",
+            bungee_ok ? "true" : "false",
             debug_flag ? debug_flag : "(not set)");
     }
 
@@ -253,13 +250,6 @@ Result<void> EngineImpl::initialize() {
 Result<void> EngineImpl::shutdown() {
     if (state_ != State::Initialized)
         return Result<void>::ok();  // idempotent
-
-    // Drain any in-flight async pitch rebuild before destroying engine/sources —
-    // the lambda holds raw pointers to them.
-    {
-        std::lock_guard lk(pending_pitch_rebuild_mutex_);
-        if (pending_pitch_rebuild_.valid()) pending_pitch_rebuild_.wait();
-    }
 
     device_manager_->close_device();
     if (mixer_) {
@@ -271,13 +261,10 @@ Result<void> EngineImpl::shutdown() {
     if (prep_queue_) { prep_queue_->cancel_all(); prep_queue_.reset(); }
     if (worker_pool_) { worker_pool_->shutdown(); }
     source_manager_->clear();
-    if (pitch_cache_) pitch_cache_->clear();
     mixer_.reset();
     clock_.reset();
     scheduler_.reset();
     session_.reset();
-    pitch_cache_.reset();
-    realtime_pitch_engine_.reset();
     bungee_voices_.reset();
     state_ = State::ShutDown;
     return Result<void>::ok();
@@ -301,48 +288,19 @@ Result<void> EngineImpl::send_command(const std::string& cmd_json) {
 }
 
 void EngineImpl::service_control_thread_tasks() {
-    service_pitch_repair_requests();
-    service_pending_scheduled_jump_pitch();
-    maybe_enqueue_rolling_pitch_prepare();
-}
-
-void EngineImpl::service_pending_scheduled_jump_pitch() {
-    if (!mixer_ || !realtime_pitch_engine_ || !session_ || !source_manager_)
-        return;
-    const Frame jump_frame = mixer_->take_pending_scheduled_jump();
-    if (jump_frame == Mixer::kNoJumpPending)
-        return;
-    // Use the pre-built graph if it exists for this target frame (built when the jump was scheduled).
-    // This eliminates the rebuild latency gap — the audio thread gets a fully-primed ring immediately.
-    realtime_pitch_engine_->publish_pending_jump_graph(jump_frame, *session_, *source_manager_);
-}
-
-bool EngineImpl::launch_pitch_rebuild_if_idle(Frame target_frame,
-                                              std::string reason,
-                                              std::shared_ptr<const Session> session) {
-    if (!realtime_pitch_engine_ || !source_manager_ || !session)
-        return false;
-
-    std::lock_guard lk(pending_pitch_rebuild_mutex_);
-    if (pending_pitch_rebuild_.valid()) {
-        if (pending_pitch_rebuild_.wait_for(std::chrono::seconds(0)) !=
-            std::future_status::ready) {
-            return false;
-        }
-        pending_pitch_rebuild_.get();
+    // With RubberBand and PitchCache removed, the audio thread is exclusively
+    // served by BungeeVoiceManager. Bungee voices are built synchronously on
+    // the command thread (LoadSession / SeekAbsolute / etc.) and need no
+    // periodic repair or rolling prepare from the control thread. The
+    // mixer's pending scheduled-jump signal is now consumed implicitly by
+    // the next jump command's prearm path.
+    if (mixer_) {
+        // Drain the scheduled-jump signal so the latch resets; we no longer
+        // act on it because Bungee voices are already kept in sync by the
+        // prearmed-jump / rebuild_for_seek paths.
+        (void)mixer_->take_pending_scheduled_jump();
     }
-
-    auto* engine = realtime_pitch_engine_.get();
-    auto* sources = source_manager_.get();
-    pending_pitch_rebuild_ = std::async(
-        std::launch::async,
-        [engine, session = std::move(session), sources, target_frame, reason = std::move(reason)]() {
-            engine->prepare_for_transport_discontinuity(
-                target_frame, reason, *session, *sources);
-        });
-    return true;
 }
-
 
 std::string EngineImpl::poll_event() {
     return event_queue_->pop();
@@ -350,36 +308,6 @@ std::string EngineImpl::poll_event() {
 
 std::string EngineImpl::get_snapshot() const {
     EngineSnapshot snap;
-
-    // Backend identity is derived at runtime from the actual stream diagnostics,
-    // so it reflects what is truly compiled in — not just what the CMake flags say.
-    {
-        auto realtime_diag = realtime_pitch_engine_
-            ? realtime_pitch_engine_->diagnostics()
-            : PitchStreamDiagnostics{};
-        if (!realtime_diag.pitch_backend.empty()) {
-            snap.pitch.pitch_backend = realtime_diag.pitch_backend;
-            snap.pitch.pitch_runtime_enabled = realtime_diag.pitch_runtime_enabled;
-            snap.pitch.pitch_engine_available = realtime_diag.pitch_runtime_enabled;
-            if (!realtime_diag.pitch_muted_or_bypassed_reason.empty())
-                snap.pitch.pitch_muted_or_bypassed_reason = realtime_diag.pitch_muted_or_bypassed_reason;
-        } else {
-#if LT_ENGINE_USE_RUBBERBAND && LT_ENGINE_PITCH_BACKEND_RUBBERBAND
-            snap.pitch.pitch_engine_available = true;
-            snap.pitch.pitch_backend = "rubberband";
-            snap.pitch.pitch_runtime_enabled = true;
-#elif LT_ENGINE_ALLOW_PITCH_STUB || LT_ENGINE_PITCH_BACKEND_STUB
-            snap.pitch.pitch_engine_available = false;
-            snap.pitch.pitch_backend = "stub";
-            snap.pitch.pitch_runtime_enabled = false;
-            snap.pitch.pitch_muted_or_bypassed_reason = "pitch stub enabled explicitly";
-#else
-            snap.pitch.pitch_engine_available = false;
-            snap.pitch.pitch_backend = "disabled";
-            snap.pitch.pitch_runtime_enabled = false;
-#endif
-        }
-    }
 
     if (clock_) {
         auto pos = clock_->position();
@@ -489,7 +417,6 @@ std::string EngineImpl::get_snapshot() const {
         snap.cpu.callback_over_budget_count = mixer_->callback_over_budget_count();
         snap.cpu.mixer_rendered_track_count = mixer_->rendered_track_count();
         snap.cpu.mixer_skipped_track_count = mixer_->skipped_track_count();
-        snap.pitch.mixer_scheduled_jump_executed_count = mixer_->scheduled_jump_executed_count();
         auto tr = TrackRenderer::diagnostics();
         snap.cpu.track_renderer_prepare_count = tr.prepare_count;
         snap.cpu.track_renderer_scratch_resize_count = tr.scratch_resize_count;
@@ -524,175 +451,29 @@ std::string EngineImpl::get_snapshot() const {
             snap.source_states.push_back(std::move(info));
         }
     }
-    if (pitch_cache_) {
-        auto pitch = pitch_cache_->diagnostics();
-        auto realtime_pitch = realtime_pitch_engine_
-            ? realtime_pitch_engine_->diagnostics()
-            : PitchStreamDiagnostics{};
-        snap.pitch.pitch_processors_prepared = pitch.processors_prepared;
-        snap.pitch.pitch_processors_missing = pitch.processors_missing;
-        snap.pitch.pitch_missing_processor_count = pitch.missing_processor_count;
-        snap.pitch.pitch_prepare_on_source_ready_count =
-            pitch_prepare_on_source_ready_count_.load(std::memory_order_relaxed);
-        snap.pitch.source_ready_pitch_prepare_count =
-            source_ready_pitch_prepare_count_.load(std::memory_order_relaxed);
-        snap.pitch.pitch_latency_frames = pitch.max_latency_frames;
-        snap.pitch.active_pitch_keys = pitch.active_keys;
-        snap.pitch.pitch_jobs_queued = 0;
-        snap.pitch.pitch_jobs_pending = 0;
-        snap.pitch.pitch_jobs_running = pitch.jobs_running;
-        snap.pitch.pitch_jobs_completed = pitch.jobs_completed;
-        snap.pitch.pitch_jobs_failed = pitch.jobs_failed;
-        snap.pitch.seek_immediate_jobs_queued = pitch.seek_immediate_jobs_queued;
-        snap.pitch.seek_immediate_jobs_completed = pitch.seek_immediate_jobs_completed;
-        snap.pitch.pitch_proxy_blocks_ready = 0;
-        snap.pitch.pitch_proxy_blocks_missing = 0;
-        snap.pitch.pitch_proxy_blocks_pending = 0;
-        snap.pitch.pitch_prepare_queue_length = 0;
-        snap.pitch.pitch_prepare_pending = false;
-        snap.pitch.pitch_prepare_active = false;
-        snap.pitch.pitch_prepare_progress = snap.pitch.pitch_prepare_active ? 0.0 : 1.0;
-        snap.pitch.pitch_proxy_prepare_sync_count = pitch.prepare_sync_count;
-        snap.pitch.pitch_proxy_prepare_blocking_ms = pitch.prepare_blocking_ms;
-        snap.pitch.last_pitch_prepare_reason = pitch.last_prepare_reason;
-        snap.pitch.active_pitch_render_path = realtime_pitch.active_render_path;
-        snap.pitch.last_pitch_proxy_error = pitch.last_pitch_proxy_error;
-        snap.pitch.last_missing_proxy_key = pitch.last_missing_proxy_key;
-        snap.pitch.last_missing_proxy_block_index = pitch.last_missing_proxy_block_index;
-        snap.pitch.active_pitch_mode = "realtime_stream";
-        snap.pitch.realtime_seek_safe_resets = realtime_pitch.reset_count;
-        snap.pitch.realtime_pitch_underflow_count = realtime_pitch.underflow_count;
-        snap.pitch.realtime_pitch_discontinuities = realtime_pitch.reset_count;
-        snap.pitch.realtime_seek_safe_preroll_frames = realtime_pitch.preroll_frames;
-        snap.pitch.realtime_pitch_start_pad_frames = 0;
-        snap.pitch.realtime_pitch_start_delay_frames = realtime_pitch.start_delay_frames;
-        snap.pitch.realtime_pitch_preroll_frames = realtime_pitch.preroll_frames;
-        snap.pitch.realtime_pitch_discarded_frames = realtime_pitch.discarded_frames;
-        snap.pitch.realtime_seek_safe_render_count = realtime_pitch.render_count;
-        snap.pitch.prepared_proxy_render_count = 0;
-        snap.pitch.emergency_silence_render_count = realtime_pitch.emergency_silence_count;
-        snap.pitch.active_stream_set_generation = realtime_pitch.active_stream_set_generation;
-        snap.pitch.active_pitch_stream_count = realtime_pitch.active_pitch_stream_count;
-        snap.pitch.pitch_timeline_mismatch_count = realtime_pitch.pitch_timeline_mismatch_count;
-        snap.pitch.pitch_stream_not_aligned_count = realtime_pitch.pitch_stream_not_aligned_count;
-        snap.pitch.pitch_audio_thread_reset_count = realtime_pitch.pitch_audio_thread_reset_count;
-        snap.pitch.pitch_audio_thread_prime_count = realtime_pitch.pitch_audio_thread_prime_count;
-        snap.pitch.stream_generation = realtime_pitch.stream_generation;
-        snap.pitch.stream_reset_thread_id = realtime_pitch.stream_reset_thread_id;
-        snap.pitch.stream_render_thread_id = realtime_pitch.stream_render_thread_id;
-        snap.pitch.unsafe_cross_thread_reset_count = realtime_pitch.unsafe_cross_thread_reset_count;
-        snap.pitch.concurrent_stream_mutation_detected = realtime_pitch.concurrent_stream_mutation_detected;
-        snap.pitch.active_stream_swap_count = realtime_pitch.active_stream_swap_count;
-        snap.pitch.long_seek_count = realtime_pitch.long_seek_count;
-        snap.pitch.last_transport_discontinuity_target_frame =
-            realtime_pitch.last_transport_discontinuity_target_frame;
-        snap.pitch.last_transport_discontinuity_reason =
-            realtime_pitch.last_transport_discontinuity_reason;
-        snap.pitch.pitch_repair_requested_count = realtime_pitch.pitch_repair_requested_count;
-        snap.pitch.pitch_repair_completed_count = realtime_pitch.pitch_repair_completed_count;
-        snap.pitch.stale_proxy_jobs_skipped = pitch.stale_proxy_jobs_skipped;
-        snap.pitch.current_pitch_epoch = pitch.current_pitch_epoch;
-        snap.pitch.disk_cache_audio_thread_load_attempts =
-            pitch.disk_cache_audio_thread_load_attempts;
-        snap.pitch.offline_pitch_segments_rendered = pitch.offline_segments_rendered;
-        snap.pitch.offline_pitch_segment_failures = pitch.offline_segment_failures;
-        snap.pitch.offline_pitch_latency_frames = pitch.offline_latency_frames;
-        snap.pitch.offline_pitch_preroll_frames = pitch.offline_preroll_frames;
-        snap.pitch.offline_pitch_postroll_frames = pitch.offline_postroll_frames;
-        snap.pitch.offline_pitch_render_ms = pitch.offline_render_ms;
-        snap.pitch.last_offline_pitch_error = pitch.last_offline_error;
-        snap.pitch.pitch_disk_cache_enabled = pitch.disk_cache_enabled;
-        snap.pitch.pitch_disk_cache_dir = pitch.disk_cache_dir;
-        snap.pitch.pitch_disk_cache_hits = pitch.disk_cache_hits;
-        snap.pitch.pitch_disk_cache_misses = pitch.disk_cache_misses;
-        snap.pitch.pitch_disk_cache_writes = pitch.disk_cache_writes;
-        snap.pitch.pitch_disk_cache_invalidations = pitch.disk_cache_invalidations;
-        snap.pitch.pitch_disk_cache_size_bytes = pitch.disk_cache_size_bytes;
-        snap.pitch.last_pitch_disk_cache_error = pitch.last_disk_cache_error;
-        if (pitch.offline_segment_failures > 0 && !pitch.last_offline_error.empty()) {
-            snap.pitch.pitch_prepare_status = "failed";
-            snap.pitch.pitch_prepare_message = pitch.last_offline_error;
-        } else if (snap.pitch.pitch_prepare_active) {
-            snap.pitch.pitch_prepare_status = "preparing";
-            snap.pitch.pitch_prepare_message = "Preparing pitch-shifted audio";
-        } else {
-            snap.pitch.pitch_prepare_status = "idle";
-            snap.pitch.pitch_prepare_message.clear();
-        }
-        if (pitch.missing_processor_count > 0)
-            snap.pitch.pitch_muted_or_bypassed_reason = "Pitch processor missing; bypassed instead of muting.";
-        // Phase 1 new fields
-        auto tr_diag = TrackRenderer::diagnostics();
-        snap.pitch.pitch_missing_stream_silence_count = tr_diag.pitch_missing_stream_silence_count;
-        snap.pitch.pitch_requested_but_backend_unavailable_count = realtime_pitch.backend_unavailable_count;
-        snap.pitch.pitch_stub_passthrough_count = realtime_pitch.stub_passthrough_count;
-        snap.pitch.pitch_stub_passthrough_blocked_count = realtime_pitch.stub_passthrough_blocked_count;
-        // Backend-level reason from streams (may override the CMake-level reason above).
-        if (!realtime_pitch.pitch_muted_or_bypassed_reason.empty())
-            snap.pitch.pitch_muted_or_bypassed_reason = realtime_pitch.pitch_muted_or_bypassed_reason;
-        snap.pitch.pitch_backend_detail = snap.pitch.pitch_backend;
-        if (!snap.pitch.pitch_runtime_enabled && snap.pitch.pitch_stub_passthrough_blocked_count > 0)
-            snap.pitch.last_pitch_reason = "stub passthrough blocked — RubberBand unavailable at compile time";
-        else if (snap.pitch.pitch_stub_passthrough_count > 0)
-            snap.pitch.last_pitch_reason = "stub passthrough active — test/stub build, not real pitch";
-    }
+    // RubberBand / PitchCache diagnostics removed (Bungee-only pipeline; the
+    // PitchSnapshot fields are no longer populated and snapshot.cpp no longer
+    // emits a "pitch" object). The mixer scheduled-jump signal is drained by
+    // service_control_thread_tasks above; the prearmed-jump fast path keeps
+    // Bungee voices in sync after any seek.
 
-    // Phase 1 debug logging — enabled by LIBRETRACKS_AUDIO_DEBUG=1
-    if (env_flag_enabled("LIBRETRACKS_AUDIO_DEBUG")) {
+    // Bungee voice-manager diagnostics log — enabled by LIBRETRACKS_AUDIO_DEBUG=1.
+    if (env_flag_enabled("LIBRETRACKS_AUDIO_DEBUG") && bungee_voices_) {
         static std::chrono::steady_clock::time_point s_last_log;
         const auto now = std::chrono::steady_clock::now();
         if (now - s_last_log >= std::chrono::seconds(1)) {
             s_last_log = now;
-            auto _rb_diag = realtime_pitch_engine_
-                ? realtime_pitch_engine_->diagnostics()
-                : PitchStreamDiagnostics{};
-            debug_log("[LT_PITCH_DEBUG] pitch_backend=%s runtime_enabled=%s "
-                "active_streams=%llu last_st=%d "
-                "missing_stream=%llu mismatch=%llu not_aligned=%llu "
-                "missing_silence=%llu backend_unavailable=%llu "
-                "stub_pass=%llu stub_blocked=%llu "
-                "render=%llu underflow=%llu repair_req=%llu repair_done=%llu "
-                "ring=%d ring_cap=%d resets=%llu primes=%llu "
-                "muted_reason=%s\n",
-                snap.pitch.pitch_backend.c_str(),
-                snap.pitch.pitch_runtime_enabled ? "true" : "false",
-                static_cast<unsigned long long>(snap.pitch.active_pitch_stream_count),
-                static_cast<int>(snap.pitch.last_effective_semitones),
-                static_cast<unsigned long long>(_rb_diag.missing_stream_count),
-                static_cast<unsigned long long>(snap.pitch.pitch_timeline_mismatch_count),
-                static_cast<unsigned long long>(snap.pitch.pitch_stream_not_aligned_count),
-                static_cast<unsigned long long>(snap.pitch.pitch_missing_stream_silence_count),
-                static_cast<unsigned long long>(snap.pitch.pitch_requested_but_backend_unavailable_count),
-                static_cast<unsigned long long>(snap.pitch.pitch_stub_passthrough_count),
-                static_cast<unsigned long long>(snap.pitch.pitch_stub_passthrough_blocked_count),
-                static_cast<unsigned long long>(snap.pitch.realtime_seek_safe_render_count),
-                static_cast<unsigned long long>(snap.pitch.realtime_pitch_underflow_count),
-                static_cast<unsigned long long>(_rb_diag.pitch_repair_requested_count),
-                static_cast<unsigned long long>(_rb_diag.pitch_repair_completed_count),
-                static_cast<int>(_rb_diag.ring_available_frames),
-                static_cast<int>(_rb_diag.ring_capacity_frames),
-                static_cast<unsigned long long>(_rb_diag.reset_count),
-                static_cast<unsigned long long>(_rb_diag.prime_count),
-                snap.pitch.pitch_muted_or_bypassed_reason.empty()
-                    ? "(none)"
-                    : snap.pitch.pitch_muted_or_bypassed_reason.c_str());
-
-            // Bungee voice-manager diagnostics — tells us whether the audio
-            // thread is actually consuming Bungee voices or falling back to
-            // RubberBand. hit > 0 means Bungee is in the audio path.
-            if (bungee_voices_) {
-                const auto bd = bungee_voices_->diagnostics();
-                debug_log("[LT_PITCH_DEBUG] bungee available=%s active_voices=%d "
-                    "built=%llu rebuilds_session=%llu rebuilds_seek=%llu "
-                    "lookups_hit=%llu lookups_miss=%llu\n",
-                    bungee_voices_->is_available() ? "true" : "false",
-                    bd.active_voice_count,
-                    static_cast<unsigned long long>(bd.voices_built_total),
-                    static_cast<unsigned long long>(bd.rebuilds_for_session),
-                    static_cast<unsigned long long>(bd.rebuilds_for_seek),
-                    static_cast<unsigned long long>(bd.voice_lookups_hit),
-                    static_cast<unsigned long long>(bd.voice_lookups_miss));
-            }
+            const auto bd = bungee_voices_->diagnostics();
+            debug_log("[LT_PITCH_DEBUG] bungee available=%s active_voices=%d "
+                "built=%llu rebuilds_session=%llu rebuilds_seek=%llu "
+                "lookups_hit=%llu lookups_miss=%llu\n",
+                bungee_voices_->is_available() ? "true" : "false",
+                bd.active_voice_count,
+                static_cast<unsigned long long>(bd.voices_built_total),
+                static_cast<unsigned long long>(bd.rebuilds_for_session),
+                static_cast<unsigned long long>(bd.rebuilds_for_seek),
+                static_cast<unsigned long long>(bd.voice_lookups_hit),
+                static_cast<unsigned long long>(bd.voice_lookups_miss));
         }
     }
 
@@ -710,145 +491,6 @@ std::string EngineImpl::get_snapshot() const {
     }
 
     return snapshot_to_json(snap);
-}
-
-std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id) {
-    auto current_session = session_;
-    if (!current_session || !source_manager_ || !pitch_cache_ || !clock_)
-        return 0;
-    if (!session_contains_source(*current_session, source_id))
-        return 0;
-    if (!source_manager_->get(source_id))
-        return 0;
-    if (bungee_voices_ && bungee_voices_->is_available()) {
-        // Build/refresh Bungee voices now that this source has finished decoding.
-        // Existing voices keyed on (clip_id, semitones) are reused.
-        bungee_voices_->rebuild_for_session(*current_session, *source_manager_,
-                                             clock_->position().frame);
-        return prepare_pitch_processors_for_session(*current_session);
-    }
-    if (realtime_pitch_engine_) {
-        // Prime at the current playhead so the new source's stream is immediately aligned.
-        // Using prepare_for_transport_discontinuity instead of prepare_for_session(-1) avoids
-        // publishing unprimed streams that cause mismatch silence on the audio thread.
-        const Frame playhead = clock_->position().frame;
-        realtime_pitch_engine_->prepare_for_transport_discontinuity(
-            playhead, "source_ready", *current_session, *source_manager_);
-    }
-    return prepare_pitch_processors_for_session(*current_session);
-}
-
-std::size_t EngineImpl::enqueue_pitch_window(const Session& session,
-                                             Frame timeline_start,
-                                             Frame frame_count,
-                                             int priority,
-                                             const std::string& reason) const {
-    if (!source_manager_ || !pitch_cache_ || !clock_)
-        return 0;
-    if (frame_count <= 0)
-        return 0;
-
-    const int sample_rate = clock_->sample_rate();
-    const Frame timeline_end = timeline_start + frame_count;
-    std::size_t prepared = 0;
-    for (const auto& song : session.songs) {
-        if (timeline_end <= song.start_frame || timeline_start >= song.end_frame)
-            continue;
-        for (const auto& track : song.tracks) {
-            for (const auto& clip : track.clips) {
-                const auto* source = source_manager_->get(clip.source_id);
-                if (!source || !source->is_loaded())
-                    continue;
-                const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
-                if (timeline_end <= clip.timeline_start_frame || timeline_start >= clip_end)
-                    continue;
-                const Frame overlap_start = std::max(timeline_start, clip.timeline_start_frame);
-                const Frame overlap_end = std::min(timeline_end, clip_end);
-                Semitones semitones = resolve_effective_semitones(
-                    track, clip, song, overlap_start);
-                if (semitones == 0)
-                    continue;
-                (void)sample_rate;
-                (void)priority;
-                (void)reason;
-                ++prepared;
-            }
-        }
-    }
-    return prepared;
-}
-
-std::size_t EngineImpl::prepare_pitch_processors_for_session(const Session& session) {
-    if (!clock_)
-        return 0;
-    const int sample_rate = clock_->sample_rate();
-    const Frame playhead = clock_->position().frame;
-    const Frame immediate_frames = std::max<Frame>(PitchCache::kProxyBlockFrames, sample_rate);
-    const Frame rolling_frames = static_cast<Frame>(sample_rate) * 10;
-    std::size_t prepared = 0;
-    prepared += enqueue_pitch_window(session, playhead, immediate_frames, 0, "pitch_immediate");
-    prepared += enqueue_pitch_window(session, playhead + immediate_frames,
-                                     rolling_frames - immediate_frames, 1, "pitch_rolling");
-    return prepared;
-}
-
-void EngineImpl::prepare_pitch_processors_for_session() {
-    if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
-        return;
-    if (realtime_pitch_engine_) {
-        // Always prime at the current playhead so the published stream set is aligned.
-        const Frame playhead = clock_->position().frame;
-        if (device_manager_ && device_manager_->actual_buffer_size() > 0)
-            realtime_pitch_engine_->set_max_block_size_hint(device_manager_->actual_buffer_size());
-        realtime_pitch_engine_->prepare_for_session(*session_, *source_manager_, clock_->sample_rate());
-        realtime_pitch_engine_->prepare_for_play(playhead, *session_, *source_manager_);
-    }
-    prepare_pitch_processors_for_session(*session_);
-}
-
-void EngineImpl::service_pitch_repair_requests() {
-    if (!realtime_pitch_engine_ || !session_ || !source_manager_ || !clock_)
-        return;
-    Frame target_frame = -1;
-    if (realtime_pitch_engine_->take_repair_request(target_frame)) {
-        // Repair: rebuild and prime streams at the requested frame outside the audio callback.
-        realtime_pitch_engine_->prepare_for_pitch_repair(target_frame, *session_, *source_manager_);
-    }
-}
-
-void EngineImpl::maybe_enqueue_rolling_pitch_prepare() const {
-    if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
-        return;
-    if (clock_->position().state != TransportState::Playing)
-        return;
-
-    const int sample_rate = clock_->sample_rate();
-    const Frame playhead = clock_->position().frame;
-
-    // Extend the realtime pitch stream set for the upcoming lookahead window.
-    // This adds streams for clips that have entered the window since the last seek/extend,
-    // without disturbing existing playing streams. Cheap when nothing new is needed.
-    if (realtime_pitch_engine_)
-        realtime_pitch_engine_->extend_for_playhead(playhead, *session_, *source_manager_);
-
-    const Frame retrigger_distance = std::max<Frame>(PitchCache::kProxyBlockFrames, sample_rate / 2);
-    const auto now = std::chrono::steady_clock::now();
-    {
-        std::lock_guard lock(pitch_prepare_mutex_);
-        const Frame last = last_pitch_prepare_playhead_.load(std::memory_order_relaxed);
-        const bool moved_enough = last < 0 || std::llabs(playhead - last) >= retrigger_distance;
-        const bool time_elapsed = last_pitch_prepare_time_ == std::chrono::steady_clock::time_point{}
-            || now - last_pitch_prepare_time_ >= std::chrono::milliseconds(300);
-        if (!moved_enough && !time_elapsed)
-            return;
-        last_pitch_prepare_playhead_.store(playhead, std::memory_order_relaxed);
-        last_pitch_prepare_time_ = now;
-    }
-    const Frame immediate_frames = std::max<Frame>(PitchCache::kProxyBlockFrames, sample_rate);
-    const Frame rolling_frames = static_cast<Frame>(sample_rate) * 10;
-    enqueue_pitch_window(*session_, playhead, immediate_frames, 0, "pitch_immediate");
-    enqueue_pitch_window(*session_, playhead + immediate_frames,
-                         rolling_frames - immediate_frames, 1, "pitch_rolling");
 }
 
 void EngineImpl::resample_sources_for_new_sample_rate() {
@@ -981,8 +623,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     region_count, nonzero_regions);
             }
             session_ = next_session;
-            const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
-            if (pitch_cache_) pitch_cache_->set_current_generation(generation);
+            (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
 
             // Register all sources, then hand off to the async worker pool.
             source_manager_->clear();
@@ -1001,12 +642,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // of truth for gain/pan/mute/solo — always load from session, never keep
                 // stale Mixer atomics. This eliminates the need for sync_live_mix after load.
                 mixer_->set_session(next_session, /*preserve_realtime_state=*/false);
-                mixer_->set_pitch_cache(pitch_cache_.get());
-                mixer_->set_pitch_engine(realtime_pitch_engine_.get());
                 mixer_->set_bungee_voice_manager(bungee_voices_.get());
             }
-            if (realtime_pitch_engine_)
-                realtime_pitch_engine_->prepare_for_session(*next_session, *source_manager_, sr);
             // Build Bungee voices for whatever is currently transposed at playhead.
             // Source data may not be decoded yet — voices for unloaded sources are
             // skipped and rebuilt later when sources become ready.
@@ -1028,25 +665,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdPlay>) {
-            // Kick the RubberBand stream-set prepare in the background. This
-            // used to run synchronously here, blocking the play command for
-            // ~700ms while it rebuilt N streams (build_stream_set_for_target +
-            // prepare_for_play). Bungee voices already serve the transposed
-            // clips for the audio thread, so blocking Play on this rebuild is
-            // dead weight — the user just hears nothing during it because the
-            // clock can't advance until the command returns.
-            //
-            // launch_pitch_rebuild_if_idle posts the rebuild to its async
-            // worker; the audio thread keeps using whatever streams existed
-            // before (or the Bungee voice map, which is the common case).
-            if (session_ && clock_) {
-                launch_pitch_rebuild_if_idle(
-                    clock_->position().frame, "play", session_);
-            }
-            // Also enqueue the rolling pitch-cache window so non-realtime
-            // pitch consumers warm up — this part is already work-queue based
-            // and returns quickly.
-            if (session_) prepare_pitch_processors_for_session(*session_);
+            // Bungee is the sole pitch backend; voices for already-loaded
+            // clips were built at LoadSession / SeekAbsolute time, so Play
+            // is now a pure clock advance with no pitch-priming work.
             clock_->play();
             push_event(EvPlaybackStarted{ clock_->position().frame });
             return Result<void>::ok();
@@ -1080,27 +701,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             }
 
             clock_->seek(c.frame);
-            const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
-            if (pitch_cache_) pitch_cache_->set_current_generation(generation);
-            if (session_) {
-                const Frame immediate = std::max<Frame>(PitchCache::kProxyBlockFrames, clock_->sample_rate());
-                const Frame forward = static_cast<Frame>(clock_->sample_rate()) * 10;
-                enqueue_pitch_window(*session_, clock_->position().frame, immediate, 0, "seek_immediate");
-                enqueue_pitch_window(*session_, clock_->position().frame + immediate,
-                                     forward - immediate, 1, "seek_forward_prebuffer");
-            }
+            (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
             if (mixer_) mixer_->trigger_crossfade();
             // Real position change: synchronous Bungee rebuild so the audio
             // thread immediately has voices primed at the new spot.
             if (bungee_voices_ && bungee_voices_->is_available() && session_) {
                 bungee_voices_->rebuild_for_seek(
                     clock_->position().frame, *session_, *source_manager_);
-            }
-            if (realtime_pitch_engine_ && session_) {
-                // Launch only when the previous rebuild has completed; never
-                // block a fresh transport command behind stale pitch work.
-                const Frame seek_frame = clock_->position().frame;
-                launch_pitch_rebuild_if_idle(seek_frame, "seek_absolute", session_);
             }
             push_event(EvSeekExecuted{ from, c.frame });
             return Result<void>::ok();
@@ -1109,26 +716,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             Frame from = clock_->position().frame;
             Frame to   = from + c.delta_frames;
             clock_->seek(to);
-            const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
-            if (pitch_cache_) pitch_cache_->set_current_generation(generation);
-            if (session_) {
-                const Frame immediate = std::max<Frame>(PitchCache::kProxyBlockFrames, clock_->sample_rate());
-                const Frame forward = static_cast<Frame>(clock_->sample_rate()) * 10;
-                enqueue_pitch_window(*session_, clock_->position().frame, immediate, 0, "seek_immediate");
-                enqueue_pitch_window(*session_, clock_->position().frame + immediate,
-                                     forward - immediate, 1, "seek_forward_prebuffer");
-            }
+            (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
             if (mixer_) mixer_->trigger_crossfade();
             // Bungee voice manager: synchronous rebuild on the command thread.
             // See CmdSeekAbsolute for rationale.
             if (bungee_voices_ && bungee_voices_->is_available() && session_)
                 bungee_voices_->rebuild_for_seek(
                     clock_->position().frame, *session_, *source_manager_);
-            if (realtime_pitch_engine_ && session_) {
-                // Async rebuild — see CmdSeekAbsolute for rationale.
-                const Frame seek_frame = clock_->position().frame;
-                launch_pitch_rebuild_if_idle(seek_frame, "seek_relative", session_);
-            }
             push_event(EvSeekExecuted{ from, to });
             return Result<void>::ok();
         }
@@ -1516,29 +1110,14 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 jump.created_frame = clock_->position().frame;
                 auto r = scheduler_->schedule(jump);
                 if (r.is_err()) return r;
-
-                // Pre-build the pitch graph at the jump target frame so it's ready
-                // before the jump fires. This eliminates the rebuild gap that causes
-                // crackles on the block immediately after the jump.
-                if (realtime_pitch_engine_ && clock_) {
-                    auto resolved = resolve_jump_target(c.target, *session_, *clock_);
-                    if (resolved.is_ok())
-                        realtime_pitch_engine_->pre_prepare_for_scheduled_jump(
-                            resolved.unwrap(), *session_, *source_manager_);
-                }
+                // (RubberBand pre-prepare removed — Bungee voices are kept
+                // current by the prearmed-jump path / rebuild_for_seek.)
             }
             push_event(EvJumpScheduled{ c.jump_id, c.jump_id });
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdReplaceScheduledJump>) {
             auto r = scheduler_->replace(c.jump_id, c.new_target, c.new_trigger);
-            // Re-pre-prepare the pitch graph for the new target frame.
-            if (r.is_ok() && realtime_pitch_engine_ && session_ && clock_) {
-                auto resolved = resolve_jump_target(c.new_target, *session_, *clock_);
-                if (resolved.is_ok())
-                    realtime_pitch_engine_->pre_prepare_for_scheduled_jump(
-                        resolved.unwrap(), *session_, *source_manager_);
-            }
             return r;
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackTransposeEnabled>) {
@@ -1558,8 +1137,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             }
             if (changed) {
                 session_ = next_session;
-                const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
-                if (pitch_cache_) pitch_cache_->set_current_generation(generation);
+                (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 // Bungee: refresh the voice set without destroying existing
                 // voices. A track flipping from NeverTranspose to
@@ -1571,14 +1149,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     bungee_voices_->rebuild_for_session(
                         *next_session, *source_manager_, clock_->position().frame);
                 }
-                // Prime at current playhead so published streams are aligned.
-                if (realtime_pitch_engine_) {
-                    const Frame playhead = clock_->position().frame;
-                    realtime_pitch_engine_->prepare_for_transport_discontinuity(
-                        playhead, "set_transpose_enabled", *next_session, *source_manager_);
-                }
                 if (mixer_) mixer_->trigger_crossfade();
-                prepare_pitch_processors_for_session(*next_session);
                 // Prearm: pitch decision changed → re-prearm all targets
                 // under a new revision (auto-invalidates existing cache).
                 if (prearmed_jumps_) {
@@ -1597,8 +1168,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     if (song.id == c.song_id)
                         song.transpose_semitones = c.semitones;
                 session_ = next_session;
-                const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
-                if (pitch_cache_) pitch_cache_->set_current_generation(generation);
+                (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 // Bungee: do NOT rebuild voices on a song-transpose change.
                 // The audio thread picks up the new effective semitones on
@@ -1606,16 +1176,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // gaplessly via its per-grain Request::pitch parameter.
                 // Rebuilding here was the cause of the ~200 ms silence on
                 // every transpose adjustment.
-                //
-                // Prime at current playhead so published streams are aligned.
-                // Async rebuild — see CmdSeekAbsolute for rationale.
-                if (realtime_pitch_engine_) {
-                    const Frame playhead = clock_->position().frame;
-                    launch_pitch_rebuild_if_idle(
-                        playhead, "set_song_transpose", next_session);
-                }
                 if (mixer_) mixer_->trigger_crossfade();
-                prepare_pitch_processors_for_session(*next_session);
                 // Prearm: song transpose changed → re-prearm all targets.
                 if (prearmed_jumps_) {
                     const auto rev = prearm_revision_.fetch_add(1,
@@ -1634,24 +1195,14 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         if (region.id == c.region_id)
                             region.transpose_semitones = c.semitones;
                 session_ = next_session;
-                const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
-                if (pitch_cache_) pitch_cache_->set_current_generation(generation);
+                (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 // Bungee: do NOT rebuild voices on a region-transpose change.
                 // The audio thread picks up the new effective semitones on
                 // the next render block; Bungee handles the change gaplessly
                 // via Request::pitch.  See CmdSetSongTranspose for the full
                 // rationale and the bug this avoids.
-                //
-                // Prime at current playhead so published streams are aligned.
-                // Async rebuild — see CmdSeekAbsolute for rationale.
-                if (realtime_pitch_engine_) {
-                    const Frame playhead = clock_->position().frame;
-                    launch_pitch_rebuild_if_idle(
-                        playhead, "set_region_transpose", next_session);
-                }
                 if (mixer_) mixer_->trigger_crossfade();
-                prepare_pitch_processors_for_session(*next_session);
                 // Prearm: region transpose changed → re-prearm all targets.
                 if (prearmed_jumps_) {
                     const auto rev = prearm_revision_.fetch_add(1,
@@ -1680,8 +1231,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             current_device_request_ = req;
             if (clock_ && device_manager_->actual_sample_rate() > 0)
                 clock_->set_sample_rate(device_manager_->actual_sample_rate());
-            if (realtime_pitch_engine_ && device_manager_->actual_buffer_size() > 0)
-                realtime_pitch_engine_->set_max_block_size_hint(device_manager_->actual_buffer_size());
             if (was_playing && clock_) clock_->play();
             // If the new device negotiated a different sample rate than what
             // we had before, every already-decoded source is at the wrong
@@ -1728,8 +1277,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 current_device_request_ = req;
                 if (clock_ && device_manager_->actual_sample_rate() > 0)
                     clock_->set_sample_rate(device_manager_->actual_sample_rate());
-                const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
-                if (pitch_cache_) pitch_cache_->set_current_generation(generation);
+                (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 // Re-decode sources if SR actually changed. resample_sources_…
                 // also re-prepares Bungee + prearmed_jumps, so the explicit
                 // re-prepare code below is now subsumed when the SR diff hits.
@@ -1763,10 +1311,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 current_device_request_ = req;
                 if (clock_ && device_manager_->actual_sample_rate() > 0)
                     clock_->set_sample_rate(device_manager_->actual_sample_rate());
-                if (realtime_pitch_engine_ && device_manager_->actual_buffer_size() > 0)
-                    realtime_pitch_engine_->set_max_block_size_hint(device_manager_->actual_buffer_size());
-                const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
-                if (pitch_cache_) pitch_cache_->set_current_generation(generation);
+                (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 // Buffer-size change rarely affects SR but devices can
                 // renegotiate it; handle SR-change identically to SetSampleRate.
                 const int new_sr = clock_ ? clock_->sample_rate() : 0;

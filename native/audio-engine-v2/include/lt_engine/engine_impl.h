@@ -18,8 +18,6 @@
 #include <lt_engine/sources/worker_pool.h>
 #include <lt_engine/sources/preparation_queue.h>
 #include <lt_engine/render/mixer.h>
-#include <lt_engine/pitch/pitch_cache.h>
-#include <lt_engine/pitch/realtime_pitch_engine.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
 #include <lt_engine/pitch/prearmed_jump_manager.h>
 #include <lt_engine/devices/audio_device_manager.h>
@@ -27,9 +25,6 @@
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <memory>
 #include <atomic>
-#include <chrono>
-#include <future>
-#include <mutex>
 #include <string>
 
 namespace lt {
@@ -63,8 +58,6 @@ private:
     std::unique_ptr<SourceManager>      source_manager_;
     std::unique_ptr<DecodeWorkerPool>   worker_pool_;
     std::unique_ptr<SourcePreparationQueue> prep_queue_;
-    std::unique_ptr<PitchCache>         pitch_cache_;
-    mutable std::unique_ptr<RealtimePitchEngine> realtime_pitch_engine_;
     std::unique_ptr<BungeeVoiceManager> bungee_voices_;
     std::unique_ptr<PrearmedJumpManager> prearmed_jumps_;
     // Bumped on ANY change that could invalidate a prearmed voice set:
@@ -86,17 +79,6 @@ private:
     DeviceOpenRequest                   current_device_request_;
     MetronomeConfig                     metronome_config_;
     std::atomic<uint64_t>               session_generation_{0};
-    std::atomic<uint64_t>               pitch_prepare_on_source_ready_count_{0};
-    std::atomic<uint64_t>               source_ready_pitch_prepare_count_{0};
-    mutable std::atomic<Frame>          last_pitch_prepare_playhead_{-1};
-    mutable std::mutex                  pitch_prepare_mutex_;
-    mutable std::chrono::steady_clock::time_point last_pitch_prepare_time_{};
-
-    // Pending pitch rebuild launched off the command thread by seek/transpose
-    // handlers so the UI doesn't freeze for the ~700ms RubberBand priming cost.
-    // Serialized: each new rebuild waits for the previous future before launching.
-    std::mutex                          pending_pitch_rebuild_mutex_;
-    std::future<void>                   pending_pitch_rebuild_;
 
     // Cached snapshot string (rebuilt on snapshot request).
     mutable std::string snapshot_cache_;
@@ -110,15 +92,6 @@ private:
     // ── Internal helpers ─────────────────────────────────────────────────
     void push_event(EngineEvent ev);
     Result<void> dispatch_command(const EngineCommand& cmd);
-    void prepare_pitch_processors_for_session();
-    std::size_t prepare_pitch_processors_for_session(const Session& session);
-    std::size_t prepare_pitch_processors_for_source(const Id& source_id);
-    std::size_t enqueue_pitch_window(const Session& session,
-                                     Frame timeline_start,
-                                     Frame frame_count,
-                                     int priority,
-                                     const std::string& reason) const;
-    void maybe_enqueue_rolling_pitch_prepare() const;
 
     // Re-decode all loaded sources for a new sample rate. Called from device
     // / sample-rate / buffer-size command handlers when the negotiated rate
@@ -126,17 +99,6 @@ private:
     // the wrong speed (~9% slow when switching 48k → 44.1k device). Also
     // re-prepares Bungee + prearmed-jumps managers with the new dimensions.
     void resample_sources_for_new_sample_rate();
-
-    // Called from the control thread (not audio callback) to service any pending
-    // pitch stream repair requests posted by render_pitched_clip().
-    void service_pitch_repair_requests();
-
-    // Called from the control thread to detect scheduled jumps that fired in the audio
-    // callback and prepare pitch streams for the new position.
-    void service_pending_scheduled_jump_pitch();
-    bool launch_pitch_rebuild_if_idle(Frame target_frame,
-                                      std::string reason,
-                                      std::shared_ptr<const Session> session);
 
     // Silent audio render callback used during Phases 1-5.
     class SilentCallback;

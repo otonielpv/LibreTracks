@@ -89,15 +89,11 @@ std::vector<int> route_channels(const std::string& audio_to, int available_chann
 Mixer::Mixer(const Session*       session,
              const SourceManager* sources,
              TransportClock*      clock,
-             JumpScheduler*       scheduler,
-             PitchCache*          pitch_cache,
-             RealtimePitchEngine* pitch_engine)
+             JumpScheduler*       scheduler)
     : session_(session ? std::make_shared<Session>(*session) : nullptr)
     , sources_(sources)
     , clock_(clock)
     , scheduler_(scheduler)
-    , pitch_cache_(pitch_cache)
-    , pitch_engine_(pitch_engine)
 {
     rebuild_control_slots(session_, false);
     prepare_render_resources(kMaxBlockFrames);
@@ -106,15 +102,11 @@ Mixer::Mixer(const Session*       session,
 Mixer::Mixer(std::shared_ptr<const Session> session,
              const SourceManager* sources,
              TransportClock* clock,
-             JumpScheduler* scheduler,
-             PitchCache* pitch_cache,
-             RealtimePitchEngine* pitch_engine)
+             JumpScheduler* scheduler)
     : session_(std::move(session))
     , sources_(sources)
     , clock_(clock)
     , scheduler_(scheduler)
-    , pitch_cache_(pitch_cache)
-    , pitch_engine_(pitch_engine)
 {
     rebuild_control_slots(session_, false);
     prepare_render_resources(kMaxBlockFrames);
@@ -383,8 +375,7 @@ void Mixer::render(float** output_channels,
                 patched.pan = 0.0f;
 
                 renderers_[ti].render(patched, timeline_frame, num_frames,
-                                       mix_, 2, *sources_, pitch_cache_,
-                                       pitch_engine_, bungee_voices_,
+                                       mix_, 2, *sources_, bungee_voices_,
                                        clock_->sample_rate(), 0, &song);
                 ++rendered_this_block;
 
@@ -523,14 +514,6 @@ void Mixer::set_session(std::shared_ptr<const Session> session, bool preserve_re
     rebuild_control_slots(std::atomic_load(&session_), preserve_realtime_state);
     prepare_render_resources(kMaxBlockFrames);
     reset_track_meters();
-}
-
-void Mixer::set_pitch_cache(PitchCache* pitch_cache) noexcept {
-    pitch_cache_ = pitch_cache;
-}
-
-void Mixer::set_pitch_engine(RealtimePitchEngine* pitch_engine) noexcept {
-    pitch_engine_ = pitch_engine;
 }
 
 void Mixer::set_bungee_voice_manager(BungeeVoiceManager* mgr) noexcept {
