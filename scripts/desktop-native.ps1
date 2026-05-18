@@ -38,6 +38,17 @@ $bungeeCandidates = @(
 ) | Where-Object { $_ }
 $bungeeDir = $bungeeCandidates | Where-Object { Test-Path (Join-Path $_ "include\bungee\Bungee.h") } | Select-Object -First 1
 $useBungee = if ($useRubberBand -eq "ON" -and $bungeeDir) { "ON" } else { "OFF" }
+
+# ASIO SDK auto-detect — same pattern as Bungee. JUCE's ASIO module needs
+# iasiodrv.h from the Steinberg SDK at build time. The public mirror lives
+# at https://github.com/audiosdk/asio.git. Pass -DLT_ASIO_SDK_DIR=... to
+# CMake when found; otherwise build silently without ASIO support.
+$asioCandidates = @(
+  $env:LT_ASIO_SDK_DIR,
+  "D:\Repos\asiosdk",
+  (Join-Path $repoRoot "vendor\asiosdk")
+) | Where-Object { $_ }
+$asioSdkDir = $asioCandidates | Where-Object { Test-Path (Join-Path $_ "common\iasiodrv.h") } | Select-Object -First 1
 $engineV2BuildName = if ($useRubberBand -eq "ON") {
   if ($useFFmpeg -eq "ON") { "build-rb-on-ffmpeg" } else { "build-rb-on" }
 } else {
@@ -291,6 +302,11 @@ Write-Host "Audio Engine v2 Bungee: $useBungee"
 if ($bungeeDir) {
   Write-Host "LT_BUNGEE_DIR: $bungeeDir"
 }
+if ($asioSdkDir) {
+  Write-Host "LT_ASIO_SDK_DIR: $asioSdkDir"
+} else {
+  Write-Host "LT_ASIO_SDK_DIR: (not set — ASIO module disabled)"
+}
 Write-Host "VCPKG_DEFAULT_TRIPLET: $env:VCPKG_DEFAULT_TRIPLET"
 if ($env:CMAKE_TOOLCHAIN_FILE) {
   Write-Host "CMAKE_TOOLCHAIN_FILE: $env:CMAKE_TOOLCHAIN_FILE"
@@ -319,6 +335,9 @@ $cmakeConfigureArgs = @(
 )
 if ($useBungee -eq "ON") {
   $cmakeConfigureArgs += "-DLT_BUNGEE_DIR=$bungeeDir"
+}
+if ($asioSdkDir) {
+  $cmakeConfigureArgs += "-DLT_ASIO_SDK_DIR=$asioSdkDir"
 }
 if ($env:CMAKE_TOOLCHAIN_FILE) {
   $cmakeConfigureArgs += "-DCMAKE_TOOLCHAIN_FILE=$env:CMAKE_TOOLCHAIN_FILE"

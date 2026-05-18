@@ -41,6 +41,20 @@ const detectBungeeDir = (rawEnv) => {
   return candidates.find((candidate) => existsSync(path.join(candidate, "include", "bungee", "Bungee.h"))) ?? "";
 };
 
+const detectAsioSdkDir = (rawEnv) => {
+  // JUCE's ASIO device type needs iasiodrv.h from the Steinberg SDK at build
+  // time. Public mirror: https://github.com/audiosdk/asio.git. The header
+  // lives at <sdk>/common/iasiodrv.h; we use its presence as the validity
+  // check, matching what dependencies.cmake expects.
+  const candidates = [
+    rawEnv.LT_ASIO_SDK_DIR,
+    "D:/Repos/asiosdk",
+    path.join(repoRoot, "vendor", "asiosdk"),
+  ].filter(Boolean);
+
+  return candidates.find((candidate) => existsSync(path.join(candidate, "common", "iasiodrv.h"))) ?? "";
+};
+
 const buildDesktopNativeEnv = (rawEnv) => {
   const env = {
     ...rawEnv,
@@ -105,6 +119,7 @@ const ensureEngineV2 = (normalizedEnv) => {
   const useFFmpeg = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_FFMPEG) ? "ON" : "OFF";
   const bungeeDir = detectBungeeDir(normalizedEnv);
   const useBungee = useRubberBand === "ON" && bungeeDir ? "ON" : "OFF";
+  const asioSdkDir = detectAsioSdkDir(normalizedEnv);
   const buildName = useRubberBand === "ON"
     ? (useFFmpeg === "ON" ? "build-rb-on-ffmpeg" : "build-rb-on")
     : (useFFmpeg === "ON" ? "build-rb-off-ffmpeg" : "build-rb-off");
@@ -117,6 +132,11 @@ const ensureEngineV2 = (normalizedEnv) => {
   if (bungeeDir) {
     console.log(`LT_BUNGEE_DIR: ${bungeeDir}`);
   }
+  console.log(
+    asioSdkDir
+      ? `LT_ASIO_SDK_DIR: ${asioSdkDir}`
+      : "LT_ASIO_SDK_DIR: (not set — ASIO module disabled)",
+  );
   console.log(`VCPKG_DEFAULT_TRIPLET: ${normalizedEnv.VCPKG_DEFAULT_TRIPLET}`);
   if (normalizedEnv.CMAKE_TOOLCHAIN_FILE) {
     console.log(`CMAKE_TOOLCHAIN_FILE: ${normalizedEnv.CMAKE_TOOLCHAIN_FILE}`);
@@ -145,6 +165,9 @@ const ensureEngineV2 = (normalizedEnv) => {
   ];
   if (useBungee === "ON") {
     configureArgs.push(`-DLT_BUNGEE_DIR=${bungeeDir}`);
+  }
+  if (asioSdkDir) {
+    configureArgs.push(`-DLT_ASIO_SDK_DIR=${asioSdkDir}`);
   }
   if (normalizedEnv.CMAKE_TOOLCHAIN_FILE) {
     configureArgs.push(`-DCMAKE_TOOLCHAIN_FILE=${normalizedEnv.CMAKE_TOOLCHAIN_FILE}`);
