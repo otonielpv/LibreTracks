@@ -7,8 +7,6 @@
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/metronome_renderer.h>
-#include <lt_engine/pitch/pitch_cache.h>
-#include <lt_engine/pitch/realtime_pitch_engine.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -31,16 +29,12 @@ public:
     Mixer(const Session*       session,
           const SourceManager* sources,
           TransportClock*      clock,
-          JumpScheduler*       scheduler,
-          PitchCache*          pitch_cache = nullptr,
-          RealtimePitchEngine* pitch_engine = nullptr);
+          JumpScheduler*       scheduler);
 
     Mixer(std::shared_ptr<const Session> session,
           const SourceManager* sources,
           TransportClock* clock,
-          JumpScheduler* scheduler,
-          PitchCache* pitch_cache = nullptr,
-          RealtimePitchEngine* pitch_engine = nullptr);
+          JumpScheduler* scheduler);
 
     // Called by the JUCE audio thread.
     void render(float** output_channels,
@@ -59,8 +53,6 @@ public:
     // preserve_realtime_state=false: always load values from session
     //   (used after LoadSession — the session IS the source of truth for mixer values).
     void set_session(std::shared_ptr<const Session> session, bool preserve_realtime_state = true);
-    void set_pitch_cache(PitchCache* pitch_cache) noexcept;
-    void set_pitch_engine(RealtimePitchEngine* pitch_engine) noexcept;
     void set_bungee_voice_manager(class BungeeVoiceManager* mgr) noexcept;
     void clear_session();
     void prepare_render_resources(int max_block_frames) noexcept;
@@ -99,8 +91,6 @@ private:
     const SourceManager* sources_;
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
-    PitchCache*          pitch_cache_ = nullptr;
-    RealtimePitchEngine* pitch_engine_ = nullptr;
     class BungeeVoiceManager* bungee_voices_ = nullptr;
 
     // Per-track renderer pool (one per track, up to kMaxTracks).

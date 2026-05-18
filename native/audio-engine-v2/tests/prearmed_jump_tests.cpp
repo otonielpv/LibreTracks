@@ -116,8 +116,7 @@ std::vector<float> render_n_blocks(const Track& track,
         float* out[2] = {L.data(), R.data()};
         renderer.render(
             track, start_frame + Frame(b * kBlockFrames), kBlockFrames,
-            out, kCh, sources,
-            /*pitch_cache*/ nullptr, /*pitch_engine*/ nullptr, bvm,
+            out, kCh, sources, bvm,
             kSR, effective_semitones, /*active_song*/ nullptr);
         for (int i = 0; i < kBlockFrames; ++i) {
             all.push_back(L[static_cast<std::size_t>(i)]);

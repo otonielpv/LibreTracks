@@ -1,8 +1,8 @@
 #include "test_audio_fixtures.h"
 
 #include <doctest/doctest.h>
-#include <lt_engine/pitch/realtime_pitch_engine.h>
 #include <lt_engine/render/mixer.h>
+#include <lt_engine/render/track_renderer.h>
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -222,33 +222,6 @@ TEST_CASE("mixer_controls_are_track_id_based_not_index_based") {
     CHECK(a_level > 0.1);
 }
 
-TEST_CASE("mixer_control_changes_do_not_reset_pitch_stream") {
-    SourceManager sources;
-    add_source(sources, "source");
-    auto session = std::make_shared<Session>(one_track_session());
-    session->songs[0].transpose_semitones = 2;
-    RealtimePitchEngine pitch;
-    pitch.prepare_for_session(*session, sources, test::kFixtureSampleRate);
-    TransportClock clock(test::kFixtureSampleRate);
-    JumpScheduler scheduler;
-    Mixer mixer(session, &sources, &clock, &scheduler, nullptr, &pitch);
-    clock.play();
-
-    std::vector<float> left, right;
-    render_blocks(mixer, clock, 8, left, right);
-    const auto before = pitch.diagnostics();
-    for (int i = 0; i < 20; ++i) {
-        mixer.set_track_gain("track", i % 2 ? 0.2f : 0.9f);
-        mixer.set_track_pan("track", i % 2 ? -0.8f : 0.8f);
-        mixer.set_track_mute("track", i % 3 == 0);
-        mixer.set_track_solo("track", i % 4 == 0);
-        render_blocks(mixer, clock, 1, left, right);
-    }
-    const auto after = pitch.diagnostics();
-    CHECK(after.reset_count == before.reset_count);
-    CHECK(after.active_stream_swap_count == before.active_stream_swap_count);
-}
-
 TEST_CASE("mixer_control_spam_no_clicks_or_callback_spikes") {
     SourceManager sources;
     add_source(sources, "source");
@@ -296,66 +269,6 @@ TEST_CASE("track_renderer_no_scratch_allocation_in_render") {
     CHECK(after.block_too_large_count == 0);
 }
 
-TEST_CASE("mixer_eight_tracks_control_drag_no_glitch") {
-    TrackRenderer::reset_diagnostics();
-    SourceManager sources;
-    Session session;
-    session.id = "session";
-    session.sample_rate = test::kFixtureSampleRate;
-    Song song;
-    song.id = "song";
-    song.end_frame = 48000 * 8;
-    for (int i = 0; i < 8; ++i) {
-        const Id source_id = "source-" + std::to_string(i);
-        sources.register_source(source_id, "");
-        REQUIRE(sources.store_decoded_source(
-            source_id, test::make_stereo_sine(48000 * 8, 180.0 + i * 55.0, 0.12f),
-            2, test::kFixtureSampleRate, 48000 * 8).is_ok());
-        Track track;
-        track.id = "track-" + std::to_string(i);
-        track.clips.push_back(Clip{"clip-" + std::to_string(i), source_id, 0, 0, 48000 * 8});
-        song.tracks.push_back(track);
-    }
-    session.songs.push_back(song);
-    auto shared = std::make_shared<Session>(session);
-
-    RealtimePitchEngine pitch;
-    pitch.prepare_for_session(*shared, sources, test::kFixtureSampleRate);
-    TransportClock clock(test::kFixtureSampleRate);
-    JumpScheduler scheduler;
-    Mixer mixer(shared, &sources, &clock, &scheduler, nullptr, &pitch);
-    clock.play();
-
-    std::vector<float> left(kBlock), right(kBlock);
-    float* out[2] = {left.data(), right.data()};
-    float last = 0.0f;
-    float max_jump = 0.0f;
-    const auto pitch_before = pitch.diagnostics();
-    for (int block = 0; block < 300; ++block) {
-        const int track_index = block % 8;
-        const Id track_id = "track-" + std::to_string(track_index);
-        mixer.set_track_gain(track_id, 0.2f + 0.7f * static_cast<float>((block % 17) / 16.0f));
-        mixer.set_track_pan(track_id, (block % 2) ? -0.9f : 0.9f);
-        if (block % 53 == 0)
-            mixer.set_track_mute(track_id, (block / 53) % 2 == 0);
-        mixer.render(out, 2, kBlock, clock.sample_rate());
-        for (float sample : left) {
-            CHECK(std::isfinite(sample));
-            max_jump = std::max(max_jump, std::abs(sample - last));
-            last = sample;
-        }
-    }
-    const auto pitch_after = pitch.diagnostics();
-    const auto tr = TrackRenderer::diagnostics();
-    CHECK(max_jump < 2.0f);
-    CHECK(tr.scratch_resize_in_audio_thread_count == 0);
-    CHECK(tr.block_too_large_count == 0);
-    CHECK(pitch_after.reset_count == pitch_before.reset_count);
-    CHECK(pitch_after.active_stream_swap_count == pitch_before.active_stream_swap_count);
-    CHECK(pitch_after.pitch_audio_thread_reset_count == 0);
-    CHECK(pitch_after.pitch_audio_thread_prime_count == 0);
-}
-
 TEST_CASE("metronome_toggle_does_not_stop_existing_audio") {
     SourceManager sources;
     add_source(sources, "source");
@@ -375,28 +288,4 @@ TEST_CASE("metronome_toggle_does_not_stop_existing_audio") {
     CHECK(clock.position().frame > before_frame);
     CHECK(peak(left) > 0.01f);
     CHECK(peak(right) > 0.01f);
-}
-
-TEST_CASE("metronome_toggle_does_not_reset_pitch_stream") {
-    SourceManager sources;
-    add_source(sources, "source");
-    auto session = std::make_shared<Session>(one_track_session());
-    session->songs[0].transpose_semitones = 2;
-    RealtimePitchEngine pitch;
-    pitch.prepare_for_session(*session, sources, test::kFixtureSampleRate);
-    TransportClock clock(test::kFixtureSampleRate);
-    JumpScheduler scheduler;
-    Mixer mixer(session, &sources, &clock, &scheduler, nullptr, &pitch);
-    clock.play();
-    std::vector<float> left, right;
-    render_blocks(mixer, clock, 8, left, right);
-    const auto before = pitch.diagnostics();
-
-    for (int i = 0; i < 10; ++i) {
-        mixer.set_metronome_config({i % 2 == 0, 0.75f, "master", true});
-        render_blocks(mixer, clock, 1, left, right);
-    }
-    const auto after = pitch.diagnostics();
-    CHECK(after.reset_count == before.reset_count);
-    CHECK(after.active_stream_swap_count == before.active_stream_swap_count);
 }

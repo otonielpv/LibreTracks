@@ -86,37 +86,6 @@ void TrackRenderer::render(const Track&         track,
                             float**              out,
                             int                  num_out_channels,
                             const SourceManager& sources,
-                            PitchCache*          pitch_cache,
-                            int                  engine_sample_rate,
-                            Semitones            effective_semitones,
-                            const Song*          active_song) noexcept {
-    render(track, timeline_frame, block_frames, out, num_out_channels, sources,
-           pitch_cache, nullptr, nullptr, engine_sample_rate, effective_semitones, active_song);
-}
-
-void TrackRenderer::render(const Track&         track,
-                            Frame                timeline_frame,
-                            int                  block_frames,
-                            float**              out,
-                            int                  num_out_channels,
-                            const SourceManager& sources,
-                            PitchCache*          pitch_cache,
-                            RealtimePitchEngine* pitch_engine,
-                            int                  engine_sample_rate,
-                            Semitones            effective_semitones,
-                            const Song*          active_song) noexcept {
-    render(track, timeline_frame, block_frames, out, num_out_channels, sources,
-           pitch_cache, pitch_engine, nullptr, engine_sample_rate, effective_semitones, active_song);
-}
-
-void TrackRenderer::render(const Track&         track,
-                            Frame                timeline_frame,
-                            int                  block_frames,
-                            float**              out,
-                            int                  num_out_channels,
-                            const SourceManager& sources,
-                            PitchCache*          pitch_cache,
-                            RealtimePitchEngine* pitch_engine,
                             BungeeVoiceManager*  bungee_voices,
                             int                  engine_sample_rate,
                             Semitones            effective_semitones,
@@ -126,8 +95,6 @@ void TrackRenderer::render(const Track&         track,
     // Compute the authoritative pitch decision per clip using the canonical helper.
     // When active_song is provided, the per-clip decision is resolved from it;
     // otherwise fall back to the caller-provided effective_semitones value.
-    // Using resolve_pitch_render_decision ensures TrackRenderer and
-    // RealtimePitchEngine always agree on the semitone key for stream lookup.
     for (const auto& clip : track.clips) {
         Semitones clip_semitones;
         if (active_song) {
@@ -138,7 +105,7 @@ void TrackRenderer::render(const Track&         track,
         }
         render_clip(clip, timeline_frame, block_frames,
                     track.gain, out, num_out_channels,
-                    sources, pitch_cache, pitch_engine, bungee_voices, engine_sample_rate,
+                    sources, bungee_voices, engine_sample_rate,
                     track.id, clip_semitones);
     }
 }
@@ -150,11 +117,9 @@ void TrackRenderer::render_clip(const Clip&          clip,
                                  float**              out,
                                  int                  num_out_channels,
                                  const SourceManager& sources,
-                                 PitchCache*          pitch_cache,
-                                 RealtimePitchEngine* pitch_engine,
                                  BungeeVoiceManager*  bungee_voices,
                                  int                  engine_sample_rate,
-                                 const Id&            track_id,
+                                 const Id&            /*track_id*/,
                                  Semitones            effective_semitones) noexcept {
     // Does this clip overlap the current block?
     Frame clip_end = clip.timeline_start_frame + clip.length_frames;
@@ -187,17 +152,16 @@ void TrackRenderer::render_clip(const Clip&          clip,
 
     if (effective_semitones != 0) {
         // Pitch processing required — NEVER fall back to original audio on failure.
-        // Instead, count the miss and return silence for this block.
-        // (The repair path via RealtimePitchEngine will rebuild the stream.)
+        // Instead, count the miss and return silence for this block. Bungee is
+        // the sole pitch backend; voices are keyed per-clip and persist across
+        // pitch changes, with the current effective semitones driving Bungee's
+        // per-grain Request::pitch parameter so live transpose changes are
+        // gapless. When no voice exists for the clip (e.g. control thread
+        // hasn't built one yet, track is NeverTranspose, Bungee unavailable),
+        // we silence the block and bump the miss counter — the control thread
+        // path that builds voices is responsible for healing this.
         int rendered = 0;
 
-        // Bungee-first path: when a Bungee voice exists for this clip, use
-        // it. Voices are keyed per-clip and persist across pitch changes;
-        // the current effective semitones drives Bungee's per-grain pitch
-        // parameter (see render_block call below) so live transpose changes
-        // are gapless. Falls through to the legacy RubberBand path only when
-        // no voice exists for this clip (e.g. control thread hasn't built
-        // one yet, or the track is configured NeverTranspose).
         std::shared_ptr<BungeePitchVoice> bv;
         if (bungee_voices)
             bv = bungee_voices->voice_for_shared(clip.id);
@@ -266,28 +230,20 @@ void TrackRenderer::render_clip(const Clip&          clip,
                           scratch_r_.begin() + max_in, 0.0f);
             }
             rendered = max_in;
-        } else if (pitch_engine) {
-            rendered = pitch_engine->render_pitched_clip(
-                clip, track_id, *src, source_frame, timeline_frame + block_offset,
-                frames_to_read, static_cast<double>(effective_semitones), scratch_, 2);
-        } else if (pitch_cache) {
-            rendered = pitch_cache->render_realtime_seek_safe(
-                PitchCacheKey{clip.source_id, track_id, clip.id,
-                              static_cast<double>(effective_semitones),
-                              engine_sample_rate, src->channel_count(), "experimental_legacy_realtime_seek_safe"},
-                *src, source_frame, frames_to_read, scratch_, 2);
         } else {
-            // No pitch processor available at all — count as missing and return silence.
+            // No Bungee voice available for this clip — count as missing
+            // and return silence. The control-thread voice-build path
+            // (BungeeVoiceManager::rebuild_for_session / rebuild_for_seek)
+            // is responsible for healing this on subsequent blocks.
             pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
             return;
         }
         if (rendered <= 0) {
-            // Pitch engine had no stream or the stream is not aligned — silence this block.
-            // The missing_stream_count counter on RealtimePitchEngine tracks the root cause.
             pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
             return;
         }
         frames_to_read = rendered;
+        (void)engine_sample_rate;
     } else {
         int copied = 0;
         while (copied < frames_to_read) {
