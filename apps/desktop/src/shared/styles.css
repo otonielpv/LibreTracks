@@ -1289,6 +1289,15 @@ textarea {
   text-transform: uppercase;
 }
 
+/* Pin the selection hint to its own row so its width (which changes between
+   "Delete removes selection" and "{N} selected") never shifts the asset/
+   folder counters above it. Without this, swapping between hints reflowed
+   the meta bar and pushed the asset list up/down. */
+.lt-library-panel-meta > span:nth-child(3) {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
 .lt-library-progress {
   margin: 0 1rem;
   padding: 0.7rem 0.8rem;
