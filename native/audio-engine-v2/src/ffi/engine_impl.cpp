@@ -368,7 +368,13 @@ std::string EngineImpl::get_snapshot() const {
         if (pos.state == TransportState::Playing && device_manager_ && sr > 0) {
             dbg_latency = device_manager_->actual_output_latency_samples();
             dbg_buffer  = device_manager_->actual_buffer_size();
-            const Frame lead = static_cast<Frame>(dbg_latency + dbg_buffer);
+            // JUCE's getOutputLatencyInSamples() already represents the
+            // total samples-to-speaker for the queued audio (e.g. DirectSound
+            // returns bufferSize * 1.5, which BAKES IN the buffer-ahead term).
+            // Subtracting buffer_size again on top of it would overcompensate
+            // by one block, making the UI lag the true audio by ~20-50 ms.
+            // Trust the JUCE-reported latency only.
+            const Frame lead = static_cast<Frame>(dbg_latency);
             compensated = pos.frame > lead ? pos.frame - lead : 0;
         }
         snap.current_frame   = compensated;
