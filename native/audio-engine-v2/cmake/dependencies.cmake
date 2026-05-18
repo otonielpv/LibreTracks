@@ -84,8 +84,14 @@ if(LT_ENGINE_USE_JUCE)
     # Enable ASIO at the preprocessor level too — JUCE only compiles its ASIO
     # device type when JUCE_ASIO=1. Without this the SDK path is set but the
     # module silently builds without ASIO support.
+    #
+    # JUCE's juce_audio_devices.cpp does a plain `#include <iasiodrv.h>` so
+    # we ALSO need to add the SDK's header dir to the include path. The
+    # Steinberg SDK keeps the headers in `<sdk>/common/`, so that's what we
+    # point at — NOT the SDK root.
     if(LT_JUCE_ASIO_ENABLED)
         target_compile_definitions(lt_deps_juce INTERFACE JUCE_ASIO=1)
+        target_include_directories(lt_deps_juce INTERFACE "${LT_ASIO_SDK_DIR}/common")
     endif()
 endif()
 
