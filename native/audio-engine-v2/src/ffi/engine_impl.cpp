@@ -10,6 +10,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <queue>
 #include <stdexcept>
@@ -353,10 +354,16 @@ std::string EngineImpl::get_snapshot() const {
         // are HANDED to the device; the listener hears them this many samples
         // LATER (device buffer + driver / OS engine queue). Subtract so the
         // UI playhead / meters match what the user hears, not what the
-        // engine just queued. Pro DAWs (Ableton, REAPER, Pro Tools) all do
-        // this compensation. Only valid when transport is playing — when
-        // paused / stopped, pos.frame is the exact intended cursor.
-        const int latency_samples = device_manager_
+        // engine just queued.
+        //
+        // Disable via env LIBRETRACKS_DISABLE_LATENCY_COMPENSATION=1 if
+        // JUCE's getOutputLatencyInSamples is unreliable for your device
+        // and the compensation makes sync worse instead of better.
+        static const bool disable_comp = [] {
+            const char* v = std::getenv("LIBRETRACKS_DISABLE_LATENCY_COMPENSATION");
+            return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
+        }();
+        const int latency_samples = (device_manager_ && !disable_comp)
             ? device_manager_->actual_output_latency_samples() : 0;
         if (pos.state == TransportState::Playing && latency_samples > 0) {
             const Frame compensated = pos.frame

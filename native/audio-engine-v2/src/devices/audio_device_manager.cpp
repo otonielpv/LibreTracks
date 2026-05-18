@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <mutex>
 
 namespace lt {
@@ -217,6 +218,16 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     // through the DAC yet).
     impl_->output_latency_samples = dev->getOutputLatencyInSamples();
     if (impl_->output_latency_samples < 0) impl_->output_latency_samples = 0;
+    std::fprintf(stdout,
+        "[DEVICE_LATENCY] device=\"%s\" backend=\"%s\" sr=%d buffer=%d "
+        "output_latency_samples=%d (%.2f ms)\n",
+        impl_->device_name.c_str(), impl_->backend.c_str(),
+        impl_->sample_rate, impl_->buffer_size,
+        impl_->output_latency_samples,
+        impl_->sample_rate > 0
+            ? (1000.0 * impl_->output_latency_samples / impl_->sample_rate)
+            : 0.0);
+    std::fflush(stdout);
     impl_->output_channel_names.clear();
     auto names = dev->getOutputChannelNames();
     for (const auto& name : names)
