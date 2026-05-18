@@ -680,6 +680,17 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         else if constexpr (std::is_same_v<T, CmdStop>) {
             Frame f = clock_->position().frame;
             clock_->stop();
+            // Reposition Bungee voices to frame 0 so the next play emits
+            // audio aligned with the clock instead of a brief blip from the
+            // grain buffers left over by the pre-stop render. Done async so
+            // the stop command returns instantly; the mixer outputs silence
+            // while state != Playing, so it doesn't matter that the rebuild
+            // takes ~600ms — by the time the user presses play the new
+            // voice map is already published.
+            if (bungee_voices_ && bungee_voices_->is_available() && session_) {
+                bungee_voices_->rebuild_for_seek_async(
+                    0, *session_, *source_manager_);
+            }
             push_event(EvPlaybackStopped{ f });
             return Result<void>::ok();
         }
