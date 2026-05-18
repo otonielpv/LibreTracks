@@ -1575,6 +1575,7 @@ impl DesktopSession {
         };
 
         replace_song_region_range(&mut song, region);
+        audio.update_live_song_regions(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
         Ok(self.snapshot())
@@ -1617,6 +1618,7 @@ impl DesktopSession {
         };
 
         replace_song_region_range(&mut song, updated_region);
+        audio.update_live_song_regions(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
         Ok(self.snapshot())
@@ -1650,6 +1652,7 @@ impl DesktopSession {
             self.should_record_transpose_history(TransposeHistoryTarget::Region(region.id.clone()));
 
         region.transpose_semitones = transpose_semitones;
+        audio.update_live_song_regions(&song)?;
 
         // Send the realtime command first — C++ does the session clone + pitch rebuild
         // internally via CmdSetRegionTranspose. MixerOnly then updates the Rust model

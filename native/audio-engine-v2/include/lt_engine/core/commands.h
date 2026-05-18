@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace lt {
 
@@ -93,6 +94,18 @@ struct CmdSetMetronomeConfig      { bool enabled; float volume; std::string rout
 struct CmdSetSongTranspose    { Id song_id;    Semitones semitones; };
 struct CmdSetRegionTranspose  { Id region_id;  Semitones semitones; };
 
+struct CmdSetSongRegions {
+    struct RegionUpdate {
+        Id          id;
+        std::string name;
+        Frame       start_frame = 0;
+        Frame       end_frame = 0;
+        Semitones   transpose_semitones = 0;
+    };
+    Id song_id;
+    std::vector<RegionUpdate> regions;
+};
+
 // ---------------------------------------------------------------------------
 // Session management
 // ---------------------------------------------------------------------------
@@ -124,7 +137,7 @@ using EngineCommand = std::variant<
     CmdSetTrackTransposeEnabled,
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
     CmdSetMetronomeConfig,
-    CmdSetSongTranspose, CmdSetRegionTranspose,
+    CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetSongRegions,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize
 >;
 

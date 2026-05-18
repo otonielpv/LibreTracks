@@ -129,6 +129,22 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "SetRegionTranspose")
         return CmdSetRegionTranspose{ j.at("region_id").get<Id>(), j.at("semitones").get<Semitones>() };
 
+    if (type == "SetSongRegions") {
+        CmdSetSongRegions cmd;
+        cmd.song_id = j.at("song_id").get<Id>();
+        for (const auto& item : j.at("regions")) {
+            CmdSetSongRegions::RegionUpdate region;
+            region.id = item.at("id").get<Id>();
+            region.name = item.value("name", std::string{});
+            region.start_frame = item.at("start_frame").get<Frame>();
+            region.end_frame = item.at("end_frame").get<Frame>();
+            region.transpose_semitones =
+                item.value("transpose_semitones", static_cast<Semitones>(0));
+            cmd.regions.push_back(std::move(region));
+        }
+        return cmd;
+    }
+
     if (type == "SetOutputDevice")
         return CmdSetOutputDevice{ j.at("device_id").get<std::string>() };
 

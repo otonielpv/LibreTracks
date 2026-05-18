@@ -96,6 +96,10 @@ pub enum EngineCommand {
         region_id: String,
         semitones: i32,
     },
+    SetSongRegions {
+        song_id: String,
+        regions: Vec<RegionUpdate>,
+    },
 
     SetOutputDevice {
         device_id: String,
@@ -106,6 +110,15 @@ pub enum EngineCommand {
     SetBufferSize {
         buffer_size: i32,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegionUpdate {
+    pub id: String,
+    pub name: String,
+    pub start_frame: i64,
+    pub end_frame: i64,
+    pub transpose_semitones: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

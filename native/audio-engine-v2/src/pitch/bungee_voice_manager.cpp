@@ -159,17 +159,13 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
                 auto src = sources.get_shared(clip.source_id);
                 if (!src || !src->is_loaded()) continue;
 
-                // A clip needs a Bungee voice if pitch CAN be applied. We
-                // intentionally do NOT filter on the current effective
-                // semitones being non-zero: keeping the voice alive across
-                // a "set to zero, then change again" sequence avoids the
-                // ~200 ms rebuild gap. The audio thread skips the pitched
-                // path when effective_semitones==0 anyway.
                 if (track.transpose_behavior == TransposeBehavior::NeverTranspose)
                     continue;
 
                 const auto decision = resolve_pitch_render_decision(
                     track, clip, song, playhead);
+                if (decision.effective_semitones == 0)
+                    continue;
 
                 VoiceSpec spec;
                 spec.clip_id      = clip.id;
@@ -205,7 +201,7 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
 // Worst-case bound for safety: at most kMaxWarmFramesAt48k input frames
 // before we give up (in case Bungee never reports "warm" with the configured
 // ratios). At 200 ms documented latency this is ~3x the expected need.
-constexpr int kMaxWarmFramesAt48k = 28800;  // 600 ms at 48 kHz
+constexpr int kMaxWarmFramesAt48k = 8192;  // ~170 ms at 48 kHz
 
 void warm_voice(BungeePitchVoice& voice,
                 int sample_rate,
@@ -246,10 +242,11 @@ void warm_voice(BungeePitchVoice& voice,
     const double final_latency = voice.latency_frames();
     const long long final_input = voice.input_position();
     const bool warm = voice.is_warm();
-    std::fprintf(stdout,
-        "[BUNGEE] warm_voice fed=%d max=%d input_pos=%lld latency=%.1f warm=%d\n",
-        fed, max_warm_frames, final_input, final_latency, warm ? 1 : 0);
-    std::fflush(stdout);
+    (void)fed;
+    (void)max_warm_frames;
+    (void)final_input;
+    (void)final_latency;
+    (void)warm;
 }
 
 double semitones_to_pitch_scale(Semitones semitones) {

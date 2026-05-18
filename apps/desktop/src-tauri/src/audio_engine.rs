@@ -14,7 +14,7 @@ use libretracks_core::Song;
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     DeviceInfo, Engine, EngineCommand, EngineSnapshot, JumpTarget, JumpTargetKind, JumpTrigger,
-    SourcePeaks,
+    RegionUpdate, SourcePeaks,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -506,6 +506,34 @@ impl AudioController {
                 region_id: region_id.into(),
                 semitones,
             })?;
+            Ok(())
+        })
+    }
+
+    pub fn update_live_song_regions(&self, song: &Song) -> Result<(), DesktopError> {
+        self.with_engine_state("set_song_regions", None, |engine, state| {
+            let regions = song
+                .regions
+                .iter()
+                .map(|region| RegionUpdate {
+                    id: region.id.clone(),
+                    name: region.name.clone(),
+                    start_frame: seconds_to_frame_for_engine(engine, region.start_seconds),
+                    end_frame: seconds_to_frame_for_engine(engine, region.end_seconds),
+                    transpose_semitones: region.transpose_semitones,
+                })
+                .collect();
+            engine.send_command(&EngineCommand::SetSongRegions {
+                song_id: song.id.clone(),
+                regions,
+            })?;
+            state.last_sync = Some(AudioOperationSummary {
+                reason: Some("set_song_regions".into()),
+                elapsed_ms: 0.0,
+                scheduled_clips: song.clips.len(),
+                active_sinks: song.tracks.len(),
+                opened_files: 0,
+            });
             Ok(())
         })
     }
@@ -1150,7 +1178,6 @@ fn session_signature(song: &Song) -> String {
     song.time_signature_markers.len().hash(&mut hasher);
     song.tracks.len().hash(&mut hasher);
     song.clips.len().hash(&mut hasher);
-    song.regions.len().hash(&mut hasher);
     for track in &song.tracks {
         track.id.hash(&mut hasher);
         track.name.hash(&mut hasher);
@@ -1181,13 +1208,6 @@ fn session_signature(song: &Song) -> String {
         marker.id.hash(&mut hasher);
         marker.start_seconds.to_bits().hash(&mut hasher);
         marker.signature.hash(&mut hasher);
-    }
-    for region in &song.regions {
-        region.id.hash(&mut hasher);
-        region.name.hash(&mut hasher);
-        region.start_seconds.to_bits().hash(&mut hasher);
-        region.end_seconds.to_bits().hash(&mut hasher);
-        region.transpose_semitones.hash(&mut hasher);
     }
     format!("{:016x}", hasher.finish())
 }

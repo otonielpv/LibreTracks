@@ -740,10 +740,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             clock_->seek(c.frame);
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
             if (mixer_) mixer_->trigger_crossfade();
-            // Real position change: synchronous Bungee rebuild so the audio
-            // thread immediately has voices primed at the new spot.
             if (bungee_voices_ && bungee_voices_->is_available() && session_) {
-                bungee_voices_->rebuild_for_seek(
+                bungee_voices_->clear();
+                bungee_voices_->rebuild_for_seek_async(
                     clock_->position().frame, *session_, *source_manager_);
             }
             push_event(EvSeekExecuted{ from, c.frame });
@@ -755,11 +754,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             clock_->seek(to);
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
             if (mixer_) mixer_->trigger_crossfade();
-            // Bungee voice manager: synchronous rebuild on the command thread.
-            // See CmdSeekAbsolute for rationale.
-            if (bungee_voices_ && bungee_voices_->is_available() && session_)
-                bungee_voices_->rebuild_for_seek(
+            if (bungee_voices_ && bungee_voices_->is_available() && session_) {
+                bungee_voices_->clear();
+                bungee_voices_->rebuild_for_seek_async(
                     clock_->position().frame, *session_, *source_manager_);
+            }
             push_event(EvSeekExecuted{ from, to });
             return Result<void>::ok();
         }
@@ -870,28 +869,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         push_event(EvJumpScheduled{ jump_id, c.marker_id });
                         return Result<void>::ok();
                     }
-                    // Miss: try the sync prepare-one fast path. This handles
-                    // the case where the user triggers a jump before the
-                    // async worker finishes building the cache (e.g. first
-                    // jump immediately after a pitch change).
-                    if (auto prepared = prearmed_jumps_->prepare_target_now(
-                            *session_, *source_manager_,
-                            PrearmTargetKind::Marker, song_id,
-                            c.marker_id, target_frame,
-                            prearm_revision_.load(std::memory_order_relaxed))) {
-                        bungee_voices_->swap_in_prepared_voices(
-                            prepared->extract_voice_map());
-                        clock_->seek(target_frame);
-                        if (mixer_) mixer_->trigger_crossfade();
-                        prearmed_jumps_->prepare_all_targets_async(
-                            session_, source_manager_.get(), key.session_revision);
-                        push_event(EvJumpScheduled{ jump_id, c.marker_id });
-                        return Result<void>::ok();
-                    }
-                    // Both fast paths exhausted: fall through to the legacy
-                    // reactive rebuild + scheduler. Audio still works but
-                    // the listener gets the structural Bungee silence.
-                    bungee_voices_->rebuild_for_seek(
+                    bungee_voices_->clear();
+                    bungee_voices_->rebuild_for_seek_async(
                         target_frame, *session_, *source_manager_);
                 }
             }
@@ -939,22 +918,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         push_event(EvJumpScheduled{ jump_id, c.region_id });
                         return Result<void>::ok();
                     }
-                    // Sync prepare-one fast path (see CmdJumpToMarker comment).
-                    if (auto prepared = prearmed_jumps_->prepare_target_now(
-                            *session_, *source_manager_,
-                            PrearmTargetKind::RegionStart, song_id,
-                            c.region_id, target_frame,
-                            prearm_revision_.load(std::memory_order_relaxed))) {
-                        bungee_voices_->swap_in_prepared_voices(
-                            prepared->extract_voice_map());
-                        clock_->seek(target_frame);
-                        if (mixer_) mixer_->trigger_crossfade();
-                        prearmed_jumps_->prepare_all_targets_async(
-                            session_, source_manager_.get(), key.session_revision);
-                        push_event(EvJumpScheduled{ jump_id, c.region_id });
-                        return Result<void>::ok();
-                    }
-                    bungee_voices_->rebuild_for_seek(
+                    bungee_voices_->clear();
+                    bungee_voices_->rebuild_for_seek_async(
                         target_frame, *session_, *source_manager_);
                 }
             }
@@ -1000,22 +965,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         push_event(EvJumpScheduled{ jump_id, c.song_id });
                         return Result<void>::ok();
                     }
-                    // Sync prepare-one fast path (see CmdJumpToMarker comment).
-                    if (auto prepared = prearmed_jumps_->prepare_target_now(
-                            *session_, *source_manager_,
-                            PrearmTargetKind::SongStart, c.song_id,
-                            c.song_id, target_frame,
-                            prearm_revision_.load(std::memory_order_relaxed))) {
-                        bungee_voices_->swap_in_prepared_voices(
-                            prepared->extract_voice_map());
-                        clock_->seek(target_frame);
-                        if (mixer_) mixer_->trigger_crossfade();
-                        prearmed_jumps_->prepare_all_targets_async(
-                            session_, source_manager_.get(), key.session_revision);
-                        push_event(EvJumpScheduled{ jump_id, c.song_id });
-                        return Result<void>::ok();
-                    }
-                    bungee_voices_->rebuild_for_seek(
+                    bungee_voices_->clear();
+                    bungee_voices_->rebuild_for_seek_async(
                         target_frame, *session_, *source_manager_);
                 }
             }
@@ -1122,17 +1073,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                 return Result<void>::ok();
                             }
 
-                            if (auto prepared = prearmed_jumps_->prepare_target_now(
-                                    *session_, *source_manager_, *prearm_kind,
-                                    song_id, target_id, target_frame, rev)) {
-                                bungee_voices_->swap_in_prepared_voices(
-                                    prepared->extract_voice_map());
-                                clock_->seek(target_frame);
-                                if (mixer_) mixer_->trigger_crossfade();
-                                refill_prearm_cache();
-                                push_event(EvJumpScheduled{ c.jump_id, c.jump_id });
-                                return Result<void>::ok();
-                            }
+                            bungee_voices_->clear();
+                            bungee_voices_->rebuild_for_seek_async(
+                                target_frame, *session_, *source_manager_);
                         }
                     }
                 }
@@ -1176,17 +1119,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 session_ = next_session;
                 (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
-                // Bungee: refresh the voice set without destroying existing
-                // voices. A track flipping from NeverTranspose to
-                // FollowsSongOrRegion (or vice versa) changes which clips
-                // need voices; rebuild_for_session reuses any existing voice
-                // whose clip_id is unchanged, so we only pay the ~200 ms
-                // warm-up cost for clips that didn't have a voice before.
-                if (bungee_voices_ && bungee_voices_->is_available()) {
-                    bungee_voices_->rebuild_for_session(
-                        *next_session, *source_manager_, clock_->position().frame);
-                }
                 if (mixer_) mixer_->trigger_crossfade();
+                if (bungee_voices_ && bungee_voices_->is_available() && clock_) {
+                    bungee_voices_->rebuild_for_seek_async(
+                        clock_->position().frame, *next_session, *source_manager_);
+                }
                 // Prearm: pitch decision changed → re-prearm all targets
                 // under a new revision (auto-invalidates existing cache).
                 if (prearmed_jumps_) {
@@ -1207,13 +1144,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 session_ = next_session;
                 (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
-                // Bungee: do NOT rebuild voices on a song-transpose change.
-                // The audio thread picks up the new effective semitones on
-                // the next render block and Bungee handles the pitch change
-                // gaplessly via its per-grain Request::pitch parameter.
-                // Rebuilding here was the cause of the ~200 ms silence on
-                // every transpose adjustment.
                 if (mixer_) mixer_->trigger_crossfade();
+                if (bungee_voices_ && bungee_voices_->is_available() && clock_) {
+                    bungee_voices_->rebuild_for_seek_async(
+                        clock_->position().frame, *next_session, *source_manager_);
+                }
                 // Prearm: song transpose changed → re-prearm all targets.
                 if (prearmed_jumps_) {
                     const auto rev = prearm_revision_.fetch_add(1,
@@ -1234,18 +1169,51 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 session_ = next_session;
                 (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
-                // Bungee: do NOT rebuild voices on a region-transpose change.
-                // The audio thread picks up the new effective semitones on
-                // the next render block; Bungee handles the change gaplessly
-                // via Request::pitch.  See CmdSetSongTranspose for the full
-                // rationale and the bug this avoids.
                 if (mixer_) mixer_->trigger_crossfade();
+                if (bungee_voices_ && bungee_voices_->is_available() && clock_) {
+                    bungee_voices_->rebuild_for_seek_async(
+                        clock_->position().frame, *next_session, *source_manager_);
+                }
                 // Prearm: region transpose changed → re-prearm all targets.
                 if (prearmed_jumps_) {
                     const auto rev = prearm_revision_.fetch_add(1,
                         std::memory_order_relaxed) + 1;
                     prearmed_jumps_->prepare_all_targets_async(
                         next_session, source_manager_.get(), rev);
+                }
+            }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetSongRegions>) {
+            if (session_) {
+                auto next_session = std::make_shared<Session>(*session_);
+                bool changed = false;
+                for (auto& song : next_session->songs) {
+                    if (song.id != c.song_id) continue;
+                    song.regions.clear();
+                    song.regions.reserve(c.regions.size());
+                    for (const auto& update : c.regions) {
+                        Region region;
+                        region.id = update.id;
+                        region.name = update.name;
+                        region.start_frame = update.start_frame;
+                        region.end_frame = update.end_frame;
+                        region.transpose_semitones = update.transpose_semitones;
+                        song.regions.push_back(std::move(region));
+                    }
+                    changed = true;
+                    break;
+                }
+                if (changed) {
+                    session_ = next_session;
+                    (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+                    if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                    if (prearmed_jumps_) {
+                        const auto rev = prearm_revision_.fetch_add(1,
+                            std::memory_order_relaxed) + 1;
+                        prearmed_jumps_->prepare_all_targets_async(
+                            next_session, source_manager_.get(), rev);
+                    }
                 }
             }
             return Result<void>::ok();
