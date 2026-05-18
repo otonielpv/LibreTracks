@@ -349,8 +349,27 @@ std::string EngineImpl::get_snapshot() const {
 
     if (clock_) {
         auto pos = clock_->position();
-        snap.current_frame   = pos.frame;
-        snap.current_seconds = pos.seconds;
+        // Output latency compensation: the engine clock advances when blocks
+        // are HANDED to the device; the listener hears them this many samples
+        // LATER (device buffer + driver / OS engine queue). Subtract so the
+        // UI playhead / meters match what the user hears, not what the
+        // engine just queued. Pro DAWs (Ableton, REAPER, Pro Tools) all do
+        // this compensation. Only valid when transport is playing — when
+        // paused / stopped, pos.frame is the exact intended cursor.
+        const int latency_samples = device_manager_
+            ? device_manager_->actual_output_latency_samples() : 0;
+        if (pos.state == TransportState::Playing && latency_samples > 0) {
+            const Frame compensated = pos.frame
+                - static_cast<Frame>(latency_samples);
+            snap.current_frame = compensated > 0 ? compensated : 0;
+            const int sr = clock_->sample_rate();
+            snap.current_seconds = sr > 0
+                ? static_cast<double>(snap.current_frame) / sr
+                : pos.seconds;
+        } else {
+            snap.current_frame   = pos.frame;
+            snap.current_seconds = pos.seconds;
+        }
         snap.playback_state  = [&] {
             switch (pos.state) {
                 case TransportState::Playing: return PlaybackState::Playing;

@@ -75,6 +75,12 @@ public:
     // Actual negotiated values (valid after open_device succeeds).
     int    actual_sample_rate() const;
     int    actual_buffer_size() const;
+    // Total output latency in samples (device buffer + driver / OS engine
+    // queuing). The engine's clock advances when samples are HANDED to the
+    // device, but the listener hears them this many samples LATER. UI code
+    // subtracts this from the displayed playhead / meter position so what
+    // the user sees matches what they hear.
+    int    actual_output_latency_samples() const;
     std::string actual_device_name() const;
     std::string actual_backend() const;
 
