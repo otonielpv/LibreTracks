@@ -647,27 +647,67 @@ impl AudioController {
 
     pub fn apply_settings_with_stream_rebuild(
         &self,
-        settings: AppSettings,
+        mut settings: AppSettings,
         _rebuild_stream: bool,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("apply_settings", None, |engine, state| {
+            // Device-open errors must NOT abort apply_settings: the saved
+            // device may have been unplugged (Razer/USB), renamed, or
+            // disabled since last launch. Treating that as fatal kept the
+            // whole app from starting. Log + clear the stale device fields
+            // + fall back to the system default device. Subsequent settings
+            // (sample rate / buffer / metronome) MUST still apply.
             if let Some(device_id) = settings
                 .selected_output_device_id
                 .clone()
                 .or_else(|| settings.selected_output_device.clone())
             {
-                engine.send_command(&EngineCommand::SetOutputDevice { device_id })?;
+                if let Err(error) = engine.send_command(&EngineCommand::SetOutputDevice {
+                    device_id: device_id.clone(),
+                }) {
+                    if audio_debug_logging_enabled() {
+                        eprintln!(
+                            "[libretracks-audio] saved output device '{device_id}' \
+                             failed to open ({error}); falling back to system default \
+                             and clearing the saved selection so subsequent launches \
+                             don't re-hit this error."
+                        );
+                    }
+                    settings.selected_output_device = None;
+                    settings.selected_output_device_id = None;
+                    settings.selected_output_device_name = None;
+                }
             }
+            // Sample rate / buffer size are also best-effort — bad combos
+            // shouldn't kill startup either.
             if let Some(sample_rate) = settings.output_sample_rate {
-                engine.send_command(&EngineCommand::SetSampleRate {
+                if let Err(error) = engine.send_command(&EngineCommand::SetSampleRate {
                     sample_rate: sample_rate as i32,
-                })?;
+                }) {
+                    if audio_debug_logging_enabled() {
+                        eprintln!(
+                            "[libretracks-audio] sample rate {sample_rate} \
+                             rejected ({error}); using device default."
+                        );
+                    }
+                    settings.output_sample_rate = None;
+                }
             }
             if let AudioBufferSizeRequest::Fixed(buffer_size) = settings.output_buffer_size {
-                engine.send_command(&EngineCommand::SetBufferSize {
+                if let Err(error) = engine.send_command(&EngineCommand::SetBufferSize {
                     buffer_size: buffer_size as i32,
-                })?;
+                }) {
+                    if audio_debug_logging_enabled() {
+                        eprintln!(
+                            "[libretracks-audio] buffer size {buffer_size} \
+                             rejected ({error}); using device default."
+                        );
+                    }
+                    settings.output_buffer_size = AudioBufferSizeRequest::Default;
+                }
             }
+            // Metronome config is a pure state setter; if THIS fails it's a
+            // genuine engine bug, so we DO propagate.
             engine.send_command(&EngineCommand::SetMetronomeConfig {
                 enabled: settings.metronome_enabled,
                 volume: settings.metronome_volume.clamp(0.0, 1.0) as f32,

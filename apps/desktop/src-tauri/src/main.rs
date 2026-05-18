@@ -43,10 +43,32 @@ fn main() {
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
+            let initial_device = initial_settings.selected_output_device_id.clone();
             state
                 .audio
                 .apply_settings(initial_settings)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
+            // If apply_settings nulled out the saved output device (because
+            // the device couldn't be opened — see apply_settings_with_stream_rebuild
+            // in audio_engine.rs), persist the cleaned-up settings to disk so
+            // the next launch doesn't hit the same failure and we don't keep
+            // showing a stale device name to the user.
+            if let Ok(after) = state.audio.current_settings() {
+                if initial_device.is_some() && after.selected_output_device_id.is_none() {
+                    if let Err(e) = settings::save_app_settings(&app.handle(), &after) {
+                        if audio_engine::audio_debug_logging_enabled() {
+                            eprintln!(
+                                "[libretracks-settings] could not persist cleaned-up \
+                                 audio settings after fallback to default device: {e}"
+                            );
+                        }
+                    }
+                    // Also update the in-memory AppSettingsStore so commands
+                    // that read it (e.g. get_settings) reflect the fallback.
+                    let store = app.state::<AppSettingsStore>();
+                    let _ = store.set(after);
+                }
+            }
             state
                 .midi
                 .restart(
