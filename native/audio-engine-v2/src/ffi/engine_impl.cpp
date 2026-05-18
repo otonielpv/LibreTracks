@@ -10,7 +10,6 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <mutex>
 #include <queue>
 #include <stdexcept>
@@ -350,33 +349,8 @@ std::string EngineImpl::get_snapshot() const {
 
     if (clock_) {
         auto pos = clock_->position();
-        // Output latency compensation: the engine clock advances when blocks
-        // are HANDED to the device; the listener hears them this many samples
-        // LATER (device buffer + driver / OS engine queue). Subtract so the
-        // UI playhead / meters match what the user hears, not what the
-        // engine just queued.
-        //
-        // Disable via env LIBRETRACKS_DISABLE_LATENCY_COMPENSATION=1 if
-        // JUCE's getOutputLatencyInSamples is unreliable for your device
-        // and the compensation makes sync worse instead of better.
-        static const bool disable_comp = [] {
-            const char* v = std::getenv("LIBRETRACKS_DISABLE_LATENCY_COMPENSATION");
-            return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0);
-        }();
-        const int latency_samples = (device_manager_ && !disable_comp)
-            ? device_manager_->actual_output_latency_samples() : 0;
-        if (pos.state == TransportState::Playing && latency_samples > 0) {
-            const Frame compensated = pos.frame
-                - static_cast<Frame>(latency_samples);
-            snap.current_frame = compensated > 0 ? compensated : 0;
-            const int sr = clock_->sample_rate();
-            snap.current_seconds = sr > 0
-                ? static_cast<double>(snap.current_frame) / sr
-                : pos.seconds;
-        } else {
-            snap.current_frame   = pos.frame;
-            snap.current_seconds = pos.seconds;
-        }
+        snap.current_frame   = pos.frame;
+        snap.current_seconds = pos.seconds;
         snap.playback_state  = [&] {
             switch (pos.state) {
                 case TransportState::Playing: return PlaybackState::Playing;
