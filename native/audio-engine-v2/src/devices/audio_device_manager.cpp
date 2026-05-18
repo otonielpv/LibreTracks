@@ -90,6 +90,7 @@ struct AudioDeviceManager::Impl {
     std::string  backend;
     int          sample_rate = 0;
     int          buffer_size = 0;
+    int          output_latency_samples = 0;
     int          output_channel_count = 2;
     std::vector<std::string> output_channel_names;
     std::string  last_error;
@@ -204,6 +205,7 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     impl_->backend      = dev->getTypeName().toStdString();
     impl_->sample_rate  = static_cast<int>(dev->getCurrentSampleRate());
     impl_->buffer_size  = dev->getCurrentBufferSizeSamples();
+    impl_->output_latency_samples = dev->getOutputLatencyInSamples();
     impl_->output_channel_names.clear();
     auto names = dev->getOutputChannelNames();
     for (const auto& name : names)
@@ -243,6 +245,7 @@ Result<void> AudioDeviceManager::stop() {
 
 int AudioDeviceManager::actual_sample_rate()  const { return impl_->sample_rate; }
 int AudioDeviceManager::actual_buffer_size()  const { return impl_->buffer_size; }
+int AudioDeviceManager::actual_output_latency_samples() const { return impl_->output_latency_samples; }
 std::string AudioDeviceManager::actual_device_name() const { return impl_->device_name; }
 std::string AudioDeviceManager::actual_backend()      const { return impl_->backend; }
 
@@ -302,6 +305,7 @@ Result<void> AudioDeviceManager::stop()         { return Result<void>::ok(); }
 
 int         AudioDeviceManager::actual_sample_rate()  const { return impl_->request.sample_rate > 0 ? impl_->request.sample_rate : 48000; }
 int         AudioDeviceManager::actual_buffer_size()  const { return impl_->request.buffer_size > 0 ? impl_->request.buffer_size : 512; }
+int         AudioDeviceManager::actual_output_latency_samples() const { return 0; }
 std::string AudioDeviceManager::actual_device_name()  const { return impl_->request.device_id.empty() ? "C++ v2 stub output" : impl_->request.device_id; }
 std::string AudioDeviceManager::actual_backend()      const { return "stub"; }
 DeviceInfo AudioDeviceManager::device_info() const {

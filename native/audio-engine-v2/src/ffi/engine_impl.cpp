@@ -349,8 +349,29 @@ std::string EngineImpl::get_snapshot() const {
 
     if (clock_) {
         auto pos = clock_->position();
-        snap.current_frame   = pos.frame;
-        snap.current_seconds = pos.seconds;
+        // Compensate the snapshot frame so the UI playhead / meters reflect
+        // what the listener HEARS, not what was last queued.
+        //
+        // TransportClock::advance() bumps position_.frame by the WHOLE block
+        // at the end of each callback, so pos.frame already points to the end
+        // of the most-recently-queued block (~one buffer ahead of real time).
+        // On top of that the device adds output_latency_samples of driver/OS
+        // queuing before samples reach the speakers. Total lead the UI would
+        // otherwise display = buffer_size + output_latency_samples.
+        //
+        // Subtract both during Playing so the displayed frame == the frame the
+        // user is currently hearing.
+        Frame compensated = pos.frame;
+        const int sr = clock_->sample_rate();
+        if (pos.state == TransportState::Playing && device_manager_ && sr > 0) {
+            const int latency = device_manager_->actual_output_latency_samples();
+            const int buffer  = device_manager_->actual_buffer_size();
+            const Frame lead = static_cast<Frame>(latency + buffer);
+            compensated = pos.frame > lead ? pos.frame - lead : 0;
+        }
+        snap.current_frame   = compensated;
+        snap.current_seconds = (sr > 0) ? static_cast<double>(compensated) / sr
+                                        : pos.seconds;
         snap.playback_state  = [&] {
             switch (pos.state) {
                 case TransportState::Playing: return PlaybackState::Playing;
