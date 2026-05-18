@@ -754,6 +754,61 @@ void EngineImpl::maybe_enqueue_rolling_pitch_prepare() const {
                          rolling_frames - immediate_frames, 1, "pitch_rolling");
 }
 
+void EngineImpl::resample_sources_for_new_sample_rate() {
+    // When the audio device's sample rate changes (user switches device or
+    // explicitly sets a different rate), sources already decoded at the OLD
+    // rate would play back at the wrong speed: they'd be consumed at the
+    // new device rate while having been resampled to the old rate at
+    // decode time. Symptom users see: "audio is slow / fast / desync".
+    //
+    // The fix is to re-decode every source at the new rate. We re-trigger
+    // the existing prep_queue with the new sample rate so the worker pool
+    // does the work off the command thread — the UI keeps responding.
+    // Pitched / unpitched playback resumes at correct speed once decoding
+    // finishes (sub-second per source on typical hardware).
+    //
+    // Bungee and the prearmed-jumps manager also need re-preparing because
+    // their voice dimensions are tied to sample rate.
+    if (!session_ || !source_manager_ || !clock_) return;
+    const int new_sr = clock_->sample_rate();
+    if (new_sr <= 0) return;
+
+    debug_log("[LT_PITCH_DEBUG] resample_sources_for_new_sample_rate sr=%d\n", new_sr);
+
+    // Cancel any in-flight decode jobs from the previous rate.
+    if (prep_queue_) {
+        prep_queue_->cancel_all();
+        prep_queue_.reset();
+    }
+    // Drop the cached decoded samples; the renderer will silence the
+    // affected clips until they're re-decoded.
+    source_manager_->clear();
+    // Re-register sources from the live session and enqueue all of them
+    // for decode at the new rate.
+    for (const auto& src : session_->sources) {
+        source_manager_->register_source(src.id, src.file_path);
+    }
+    prep_queue_ = std::make_unique<SourcePreparationQueue>(
+        source_manager_.get(),
+        worker_pool_.get(),
+        [this](EngineEvent ev){ push_event(std::move(ev)); },
+        new_sr);
+    prep_queue_->enqueue_session(session_->sources, clock_->position().frame);
+
+    // Bungee voice manager: re-prepare with new (sr, max_in_frames).
+    if (bungee_voices_ && device_manager_) {
+        const int bs = device_manager_->actual_buffer_size() > 0
+            ? device_manager_->actual_buffer_size() : 1024;
+        bungee_voices_->prepare(new_sr, /*channels=*/2, bs);
+        bungee_voices_->clear(); // voices were built for old dims
+        if (prearmed_jumps_) {
+            prearmed_jumps_->clear();
+            prearmed_jumps_->prepare(new_sr, /*channels=*/2, bs);
+            prearm_revision_.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+}
+
 std::string EngineImpl::list_devices() const {
     json arr = json::array();
     for (const auto& d : device_manager_->list_devices()) {
@@ -1395,6 +1450,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             req.sample_rate = current_device_request_.sample_rate;
             req.buffer_size = current_device_request_.buffer_size;
             bool was_playing = clock_ && clock_->position().state == TransportState::Playing;
+            const int prev_sr = clock_ ? clock_->sample_rate() : 0;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
             auto r = device_manager_->open_device(req, callback);
@@ -1409,6 +1465,14 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (realtime_pitch_engine_ && device_manager_->actual_buffer_size() > 0)
                 realtime_pitch_engine_->set_max_block_size_hint(device_manager_->actual_buffer_size());
             if (was_playing && clock_) clock_->play();
+            // If the new device negotiated a different sample rate than what
+            // we had before, every already-decoded source is at the wrong
+            // rate. Re-decode them — see resample_sources_for_new_sample_rate.
+            // Without this, switching 48k → 44.1k makes audio play ~9% slow.
+            const int new_sr = clock_ ? clock_->sample_rate() : 0;
+            if (prev_sr > 0 && new_sr > 0 && new_sr != prev_sr) {
+                resample_sources_for_new_sample_rate();
+            }
             // Prearm: device change can alter the negotiated sample rate /
             // buffer size, which changes prepared voice dimensions. Clear
             // the cache and reconfigure with new params; the next prearm
@@ -1438,6 +1502,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             req.device_id = current_device_request_.device_id;
             req.sample_rate = c.sample_rate;
             req.buffer_size = current_device_request_.buffer_size;
+            const int prev_sr = clock_ ? clock_->sample_rate() : 0;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
             auto r = device_manager_->open_device(req, callback);
@@ -1447,8 +1512,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     clock_->set_sample_rate(device_manager_->actual_sample_rate());
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
-                // Prearm: sample rate changed → voice dimensions invalid.
-                if (prearmed_jumps_) {
+                // Re-decode sources if SR actually changed. resample_sources_…
+                // also re-prepares Bungee + prearmed_jumps, so the explicit
+                // re-prepare code below is now subsumed when the SR diff hits.
+                const int new_sr = clock_ ? clock_->sample_rate() : 0;
+                if (prev_sr > 0 && new_sr > 0 && new_sr != prev_sr) {
+                    resample_sources_for_new_sample_rate();
+                } else if (prearmed_jumps_) {
+                    // SR didn't actually change; just keep the existing
+                    // prearm-clear behaviour for safety.
                     prearmed_jumps_->clear();
                     const int sr = device_manager_->actual_sample_rate() > 0
                         ? device_manager_->actual_sample_rate() : 48000;
@@ -1465,6 +1537,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             req.device_id = current_device_request_.device_id;
             req.sample_rate = current_device_request_.sample_rate;
             req.buffer_size = c.buffer_size;
+            const int prev_sr = clock_ ? clock_->sample_rate() : 0;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
             auto r = device_manager_->open_device(req, callback);
@@ -1476,8 +1549,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     realtime_pitch_engine_->set_max_block_size_hint(device_manager_->actual_buffer_size());
                 const auto generation = session_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (pitch_cache_) pitch_cache_->set_current_generation(generation);
-                // Prearm: buffer size changed → voice max_in_frames invalid.
-                if (prearmed_jumps_) {
+                // Buffer-size change rarely affects SR but devices can
+                // renegotiate it; handle SR-change identically to SetSampleRate.
+                const int new_sr = clock_ ? clock_->sample_rate() : 0;
+                if (prev_sr > 0 && new_sr > 0 && new_sr != prev_sr) {
+                    resample_sources_for_new_sample_rate();
+                } else if (prearmed_jumps_) {
                     prearmed_jumps_->clear();
                     const int sr = device_manager_->actual_sample_rate() > 0
                         ? device_manager_->actual_sample_rate() : 48000;

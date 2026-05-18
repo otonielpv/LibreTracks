@@ -120,6 +120,13 @@ private:
                                      const std::string& reason) const;
     void maybe_enqueue_rolling_pitch_prepare() const;
 
+    // Re-decode all loaded sources for a new sample rate. Called from device
+    // / sample-rate / buffer-size command handlers when the negotiated rate
+    // changes. Sources stored at the old rate would otherwise play back at
+    // the wrong speed (~9% slow when switching 48k → 44.1k device). Also
+    // re-prepares Bungee + prearmed-jumps managers with the new dimensions.
+    void resample_sources_for_new_sample_rate();
+
     // Called from the control thread (not audio callback) to service any pending
     // pitch stream repair requests posted by render_pitched_clip().
     void service_pitch_repair_requests();
