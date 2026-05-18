@@ -20,6 +20,7 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
     j["current_frame"]   = snap.current_frame;
     j["current_seconds"] = snap.current_seconds;
     j["playback_state"]  = playback_state_str(snap.playback_state);
+    j["transport_pending_start"] = snap.transport_pending_start;
 
     j["current_song_id"]   = snap.current_song_id.value_or("");
     j["current_region_id"] = snap.current_region_id.value_or("");

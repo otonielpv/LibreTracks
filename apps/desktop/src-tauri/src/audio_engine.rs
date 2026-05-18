@@ -7,7 +7,7 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 use libretracks_core::Song;
@@ -416,7 +416,6 @@ impl AudioController {
             engine.send_command(&EngineCommand::SeekAbsolute {
                 frame: seconds_to_frame_for_engine(engine, position_seconds),
             })?;
-            wait_for_playback_sources(engine)?;
             engine.send_command(&EngineCommand::Play)?;
             state.running = true;
             state.anchor_position_seconds = Some(position_seconds);
@@ -676,6 +675,16 @@ impl AudioController {
                     settings.selected_output_device = None;
                     settings.selected_output_device_id = None;
                     settings.selected_output_device_name = None;
+                    if let Err(fallback_error) = engine.send_command(&EngineCommand::SetOutputDevice {
+                        device_id: String::new(),
+                    }) {
+                        if audio_debug_logging_enabled() {
+                            eprintln!(
+                                "[libretracks-audio] fallback output device failed to open after \
+                                 rejecting '{device_id}' ({fallback_error})."
+                            );
+                        }
+                    }
                 }
             }
             // Sample rate / buffer size are also best-effort — bad combos
@@ -951,9 +960,20 @@ impl AudioController {
             .engine
             .take()
             .expect("engine should be initialized before command dispatch");
-        // Service pitch repair and other control-thread tasks once per batch,
-        // not inside every individual send_command call.
-        engine.service_control_thread();
+        let should_service_control = !matches!(
+            kind,
+            "play"
+                | "seek"
+                | "stop"
+                | "update_live_track_mix"
+                | "set_track_transpose_enabled_realtime"
+                | "set_region_transpose"
+                | "set_metronome_enabled_realtime"
+                | "set_metronome_volume_realtime"
+        );
+        if should_service_control {
+            engine.service_control_thread();
+        }
         let result = f(&engine, &mut state);
         state.engine = Some(engine);
         result
@@ -1155,54 +1175,6 @@ fn seconds_to_frame_for_engine(engine: &Engine, seconds: f64) -> i64 {
         .map(f64::from)
         .unwrap_or(ENGINE_SAMPLE_RATE);
     (seconds.max(0.0) * sample_rate).round() as i64
-}
-
-fn wait_for_playback_sources(engine: &Engine) -> Result<(), DesktopError> {
-    let timeout_ms = std::env::var("LIBRETRACKS_PREBUFFER_MS")
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-        .unwrap_or(5_000)
-        .clamp(0, 5_000);
-    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-
-    loop {
-        let snapshot = engine
-            .get_snapshot()
-            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
-        if snapshot.source_states.is_empty() {
-            return Ok(());
-        }
-
-        let failed = snapshot
-            .source_states
-            .iter()
-            .find(|state| state.status == "failed");
-        if let Some(failed) = failed {
-            let reason = if failed.error_message.trim().is_empty() {
-                "decode failed".to_string()
-            } else {
-                failed.error_message.clone()
-            };
-            return Err(DesktopError::AudioCommand(format!(
-                "audio source '{}' is not playable: {}",
-                failed.source_id, reason
-            )));
-        }
-
-        let pending = snapshot.source_states.iter().any(|state| {
-            matches!(
-                state.status.as_str(),
-                "queued" | "loading" | "running" | "unloaded"
-            )
-        });
-        if !pending {
-            return Ok(());
-        }
-        if Instant::now() >= deadline {
-            return Ok(());
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
 }
 
 #[cfg(test)]

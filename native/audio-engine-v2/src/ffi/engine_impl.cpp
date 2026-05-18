@@ -294,6 +294,7 @@ Result<void> EngineImpl::send_command(const std::string& cmd_json) {
 void EngineImpl::service_control_thread_tasks() {
     service_pitch_repair_requests();
     service_pending_scheduled_jump_pitch();
+    maybe_enqueue_rolling_pitch_prepare();
 }
 
 void EngineImpl::service_pending_scheduled_jump_pitch() {
@@ -307,14 +308,38 @@ void EngineImpl::service_pending_scheduled_jump_pitch() {
     realtime_pitch_engine_->publish_pending_jump_graph(jump_frame, *session_, *source_manager_);
 }
 
+bool EngineImpl::launch_pitch_rebuild_if_idle(Frame target_frame,
+                                              std::string reason,
+                                              std::shared_ptr<const Session> session) {
+    if (!realtime_pitch_engine_ || !source_manager_ || !session)
+        return false;
+
+    std::lock_guard lk(pending_pitch_rebuild_mutex_);
+    if (pending_pitch_rebuild_.valid()) {
+        if (pending_pitch_rebuild_.wait_for(std::chrono::seconds(0)) !=
+            std::future_status::ready) {
+            return false;
+        }
+        pending_pitch_rebuild_.get();
+    }
+
+    auto* engine = realtime_pitch_engine_.get();
+    auto* sources = source_manager_.get();
+    pending_pitch_rebuild_ = std::async(
+        std::launch::async,
+        [engine, session = std::move(session), sources, target_frame, reason = std::move(reason)]() {
+            engine->prepare_for_transport_discontinuity(
+                target_frame, reason, *session, *sources);
+        });
+    return true;
+}
+
 
 std::string EngineImpl::poll_event() {
     return event_queue_->pop();
 }
 
 std::string EngineImpl::get_snapshot() const {
-    maybe_enqueue_rolling_pitch_prepare();
-
     EngineSnapshot snap;
 
     // Backend identity is derived at runtime from the actual stream diagnostics,
@@ -380,6 +405,7 @@ std::string EngineImpl::get_snapshot() const {
         snap.current_frame   = compensated;
         snap.current_seconds = (sr > 0) ? static_cast<double>(compensated) / sr
                                         : pos.seconds;
+        snap.transport_pending_start = clock_->pending_start();
 
         // [SNAP_FRAME] sync instrumentation — only when LIBRETRACKS_SYNC_DEBUG=1.
         // Rate-limited to ~5/sec to keep stdout sane.
@@ -398,7 +424,7 @@ std::string EngineImpl::get_snapshot() const {
                     const double raw_s = static_cast<double>(pos.frame) / sr;
                     const double comp_s = static_cast<double>(compensated) / sr;
                     const double lead_ms =
-                        (static_cast<double>(dbg_latency + dbg_buffer) / sr) * 1000.0;
+                        (static_cast<double>(dbg_latency) / sr) * 1000.0;
                     std::printf("[SNAP_FRAME] wall_ms=%lld raw_frame=%lld comp_frame=%lld "
                                 "raw_s=%.4f comp_s=%.4f buf=%d lat=%d lead_ms=%.2f sr=%d\n",
                                 static_cast<long long>(wall_ms),
@@ -1027,20 +1053,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 bungee_voices_->rebuild_for_seek(
                     clock_->position().frame, *session_, *source_manager_);
             if (realtime_pitch_engine_ && session_) {
-                // Launch the rebuild off the command thread so the UI doesn't freeze
-                // for ~700ms while RubberBand primes. Serialize via the pending future
-                // so two seeks in quick succession don't race.
+                // Launch only when the previous rebuild has completed; never
+                // block a fresh transport command behind stale pitch work.
                 const Frame seek_frame = clock_->position().frame;
-                auto* engine = realtime_pitch_engine_.get();
-                auto session_snapshot = session_;
-                auto* sources = source_manager_.get();
-                std::lock_guard lk(pending_pitch_rebuild_mutex_);
-                if (pending_pitch_rebuild_.valid()) pending_pitch_rebuild_.wait();
-                pending_pitch_rebuild_ = std::async(std::launch::async,
-                    [engine, session_snapshot, sources, seek_frame]() {
-                        engine->prepare_for_transport_discontinuity(
-                            seek_frame, "seek_absolute", *session_snapshot, *sources);
-                    });
+                launch_pitch_rebuild_if_idle(seek_frame, "seek_absolute", session_);
             }
             push_event(EvSeekExecuted{ from, c.frame });
             return Result<void>::ok();
@@ -1067,16 +1083,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (realtime_pitch_engine_ && session_) {
                 // Async rebuild — see CmdSeekAbsolute for rationale.
                 const Frame seek_frame = clock_->position().frame;
-                auto* engine = realtime_pitch_engine_.get();
-                auto session_snapshot = session_;
-                auto* sources = source_manager_.get();
-                std::lock_guard lk(pending_pitch_rebuild_mutex_);
-                if (pending_pitch_rebuild_.valid()) pending_pitch_rebuild_.wait();
-                pending_pitch_rebuild_ = std::async(std::launch::async,
-                    [engine, session_snapshot, sources, seek_frame]() {
-                        engine->prepare_for_transport_discontinuity(
-                            seek_frame, "seek_relative", *session_snapshot, *sources);
-                    });
+                launch_pitch_rebuild_if_idle(seek_frame, "seek_relative", session_);
             }
             push_event(EvSeekExecuted{ from, to });
             return Result<void>::ok();
@@ -1449,15 +1456,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // Async rebuild — see CmdSeekAbsolute for rationale.
                 if (realtime_pitch_engine_) {
                     const Frame playhead = clock_->position().frame;
-                    auto* engine = realtime_pitch_engine_.get();
-                    auto* sources = source_manager_.get();
-                    std::lock_guard lk(pending_pitch_rebuild_mutex_);
-                    if (pending_pitch_rebuild_.valid()) pending_pitch_rebuild_.wait();
-                    pending_pitch_rebuild_ = std::async(std::launch::async,
-                        [engine, next_session, sources, playhead]() {
-                            engine->prepare_for_transport_discontinuity(
-                                playhead, "set_song_transpose", *next_session, *sources);
-                        });
+                    launch_pitch_rebuild_if_idle(
+                        playhead, "set_song_transpose", next_session);
                 }
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);
@@ -1492,15 +1492,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // Async rebuild — see CmdSeekAbsolute for rationale.
                 if (realtime_pitch_engine_) {
                     const Frame playhead = clock_->position().frame;
-                    auto* engine = realtime_pitch_engine_.get();
-                    auto* sources = source_manager_.get();
-                    std::lock_guard lk(pending_pitch_rebuild_mutex_);
-                    if (pending_pitch_rebuild_.valid()) pending_pitch_rebuild_.wait();
-                    pending_pitch_rebuild_ = std::async(std::launch::async,
-                        [engine, next_session, sources, playhead]() {
-                            engine->prepare_for_transport_discontinuity(
-                                playhead, "set_region_transpose", *next_session, *sources);
-                        });
+                    launch_pitch_rebuild_if_idle(
+                        playhead, "set_region_transpose", next_session);
                 }
                 if (mixer_) mixer_->trigger_crossfade();
                 prepare_pitch_processors_for_session(*next_session);

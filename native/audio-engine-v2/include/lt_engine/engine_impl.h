@@ -134,6 +134,9 @@ private:
     // Called from the control thread to detect scheduled jumps that fired in the audio
     // callback and prepare pitch streams for the new position.
     void service_pending_scheduled_jump_pitch();
+    bool launch_pitch_rebuild_if_idle(Frame target_frame,
+                                      std::string reason,
+                                      std::shared_ptr<const Session> session);
 
     // Silent audio render callback used during Phases 1-5.
     class SilentCallback;

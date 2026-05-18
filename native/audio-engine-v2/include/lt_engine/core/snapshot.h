@@ -196,6 +196,7 @@ struct EngineSnapshot {
     Frame              current_frame   = 0;
     double             current_seconds = 0.0;
     PlaybackState      playback_state  = PlaybackState::Stopped;
+    bool               transport_pending_start = false;
 
     // Session context
     std::optional<Id>  current_song_id;

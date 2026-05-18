@@ -6,8 +6,11 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_core/juce_core.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
+#include <limits>
 #include <mutex>
 
 namespace lt {
@@ -99,6 +102,7 @@ struct AudioDeviceManager::Impl {
 namespace {
 
 constexpr const char* kDeviceIdSeparator = "::";
+constexpr int kDefaultLowLatencyBufferSize = 512;
 
 std::string make_device_id(const std::string& backend, const std::string& name) {
     return backend + kDeviceIdSeparator + name;
@@ -109,6 +113,50 @@ std::pair<std::string, std::string> split_device_id(const std::string& id) {
     if (pos == std::string::npos)
         return { {}, id };
     return { id.substr(0, pos), id.substr(pos + 2) };
+}
+
+std::string lower_copy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
+
+int preferred_type_score(const std::string& backend) {
+    const auto name = lower_copy(backend);
+    if (name.find("wasapi") != std::string::npos ||
+        name.find("windows audio") != std::string::npos)
+        return 0;
+    if (name.find("coreaudio") != std::string::npos ||
+        name.find("core audio") != std::string::npos)
+        return 0;
+    if (name.find("jack") != std::string::npos)
+        return 1;
+    if (name.find("alsa") != std::string::npos)
+        return 2;
+    if (name.find("asio") != std::string::npos)
+        return 3;
+    if (name.find("directsound") != std::string::npos)
+        return 50;
+    if (name.find("mme") != std::string::npos)
+        return 60;
+    return 20;
+}
+
+void select_preferred_default_device_type(juce::AudioDeviceManager& manager) {
+    juce::AudioIODeviceType* best_type = nullptr;
+    int best_score = std::numeric_limits<int>::max();
+    for (auto* type : manager.getAvailableDeviceTypes()) {
+        if (!type) continue;
+        type->scanForDevices();
+        if (type->getDeviceNames(false).isEmpty()) continue;
+        const int score = preferred_type_score(type->getTypeName().toStdString());
+        if (score < best_score) {
+            best_type = type;
+            best_score = score;
+        }
+    }
+    if (best_type)
+        manager.setCurrentAudioDeviceType(best_type->getTypeName(), true);
 }
 
 template <typename ImplT>
@@ -175,12 +223,17 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     impl_->user_callback = callback;
     impl_->adaptor = std::make_unique<JuceCallbackAdaptor>(callback);
 
-    auto setup = impl_->juce_manager.getAudioDeviceSetup();
     if (!request.device_id.empty()) {
         auto [backend, device_name] = split_device_id(request.device_id);
         if (!backend.empty())
             impl_->juce_manager.setCurrentAudioDeviceType(juce::String(backend), true);
-        setup = impl_->juce_manager.getAudioDeviceSetup();
+    } else {
+        select_preferred_default_device_type(impl_->juce_manager);
+    }
+
+    auto setup = impl_->juce_manager.getAudioDeviceSetup();
+    if (!request.device_id.empty()) {
+        auto [_backend, device_name] = split_device_id(request.device_id);
         setup.outputDeviceName = juce::String(device_name);
     }
     setup.outputChannels.clear();
@@ -188,10 +241,15 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         setup.outputChannels.setBit(ch);
     if (request.sample_rate > 0)
         setup.sampleRate = request.sample_rate;
-    if (request.buffer_size > 0)
-        setup.bufferSize = request.buffer_size;
+    setup.bufferSize = request.buffer_size > 0
+        ? request.buffer_size
+        : kDefaultLowLatencyBufferSize;
 
     juce::String err = impl_->juce_manager.setAudioDeviceSetup(setup, true);
+    if (err.isNotEmpty() && request.buffer_size <= 0) {
+        setup.bufferSize = 0;
+        err = impl_->juce_manager.setAudioDeviceSetup(setup, true);
+    }
     if (err.isNotEmpty()) {
         impl_->last_error = err.toStdString();
         return Result<void>::err(impl_->last_error);

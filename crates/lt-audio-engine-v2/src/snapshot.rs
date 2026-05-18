@@ -14,6 +14,8 @@ pub struct EngineSnapshot {
     pub current_frame: i64,
     pub current_seconds: f64,
     pub playback_state: PlaybackState,
+    #[serde(default)]
+    pub transport_pending_start: bool,
 
     #[serde(default)]
     pub current_song_id: String,

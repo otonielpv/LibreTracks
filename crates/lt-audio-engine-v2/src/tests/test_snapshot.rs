@@ -11,6 +11,7 @@ fn default_snapshot_round_trips() {
     let rt = round_trip(&snap);
     assert_eq!(rt.current_frame, 0);
     assert_eq!(rt.current_seconds, 0.0);
+    assert!(!rt.transport_pending_start);
     assert!(matches!(rt.playback_state, PlaybackState::Stopped));
 }
 
@@ -20,10 +21,12 @@ fn playing_state_round_trips() {
     snap.playback_state = PlaybackState::Playing;
     snap.current_frame = 96000;
     snap.current_seconds = 2.0;
+    snap.transport_pending_start = true;
     let rt = round_trip(&snap);
     assert!(matches!(rt.playback_state, PlaybackState::Playing));
     assert_eq!(rt.current_frame, 96000);
     assert!((rt.current_seconds - 2.0).abs() < 1e-9);
+    assert!(rt.transport_pending_start);
 }
 
 #[test]

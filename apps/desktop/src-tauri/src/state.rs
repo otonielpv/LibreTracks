@@ -1128,7 +1128,7 @@ impl DesktopSession {
             self.engine.position_seconds(),
         );
 
-        Ok(self.snapshot())
+        Ok(self.snapshot_with_runtime_transport(audio))
     }
 
     pub fn pause(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
@@ -1169,7 +1169,7 @@ impl DesktopSession {
                 self.current_position(),
                 self.engine.position_seconds(),
             );
-            return Ok(self.snapshot());
+            return Ok(self.snapshot_with_runtime_transport(audio));
         }
 
         self.transport_clock.seek_to(self.engine.position_seconds());
@@ -2244,7 +2244,7 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
-        Ok(self.snapshot())
+        Ok(self.snapshot_with_runtime_transport(audio))
     }
 
     #[allow(dead_code)]
@@ -2581,6 +2581,25 @@ impl DesktopSession {
             .current_position(self.engine.playback_state())
     }
 
+    fn runtime_transport_position(&self, audio: &AudioController) -> Option<(f64, bool)> {
+        if self.engine.playback_state() != PlaybackState::Playing {
+            return None;
+        }
+
+        let snapshot = audio.engine_snapshot().ok()?;
+        if !matches!(
+            snapshot.playback_state,
+            lt_audio_engine_v2::PlaybackState::Playing
+        ) {
+            return None;
+        }
+
+        Some((
+            snapshot.current_seconds.max(0.0),
+            !snapshot.transport_pending_start,
+        ))
+    }
+
     fn sync_position(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
         if self.engine.playback_state() != PlaybackState::Playing {
             return Ok(());
@@ -2680,11 +2699,30 @@ impl DesktopSession {
         });
     }
 
+    fn snapshot_with_runtime_transport(&mut self, audio: &AudioController) -> TransportSnapshot {
+        self.snapshot_with_transport_override(self.runtime_transport_position(audio))
+    }
+
     fn snapshot(&mut self) -> TransportSnapshot {
+        self.snapshot_with_transport_override(None)
+    }
+
+    fn snapshot_with_transport_override(
+        &mut self,
+        runtime_transport: Option<(f64, bool)>,
+    ) -> TransportSnapshot {
         let started_at = Instant::now();
+        let position_seconds = runtime_transport
+            .map(|(position_seconds, _)| position_seconds)
+            .unwrap_or_else(|| self.current_position());
+        let mut transport_clock = self.transport_clock.summary();
+        if let Some((position_seconds, running)) = runtime_transport {
+            transport_clock.anchor_position_seconds = position_seconds;
+            transport_clock.running = running;
+        }
         let snapshot = TransportSnapshot {
             playback_state: playback_state_label(self.engine.playback_state()).to_string(),
-            position_seconds: self.current_position(),
+            position_seconds,
             current_marker: self
                 .engine
                 .current_marker()
@@ -2699,9 +2737,9 @@ impl DesktopSession {
             musical_position: self
                 .engine
                 .song()
-                .map(|song| musical_position_summary(song, self.current_position()))
+                .map(|song| musical_position_summary(song, position_seconds))
                 .unwrap_or_else(empty_musical_position_summary),
-            transport_clock: self.transport_clock.summary(),
+            transport_clock,
             pitch: self.last_runtime_pitch.clone().unwrap_or_default(),
             last_drift_sample: self.last_drift_sample.clone(),
             project_revision: self.project_revision,
