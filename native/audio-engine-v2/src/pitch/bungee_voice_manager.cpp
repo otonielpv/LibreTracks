@@ -6,13 +6,23 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
+
+#ifdef _WIN32
+  #ifndef NOMINMAX
+  #define NOMINMAX
+  #endif
+  #include <windows.h>
+#endif
 
 namespace lt {
 
@@ -50,12 +60,39 @@ struct BungeeVoiceManager::Impl {
     std::atomic<std::uint64_t> rebuilds_for_seek{0};
     std::atomic<std::uint64_t> voice_lookups_hit{0};
     std::atomic<std::uint64_t> voice_lookups_miss{0};
+
+    // ── Async rebuild worker ────────────────────────────────────────────────
+    // Single dedicated thread that processes the "latest" rebuild_for_seek_async
+    // request. If a new request arrives before the previous one starts, the
+    // pending slot is overwritten — the audio thread cares about the freshest
+    // target, not the queue. Captures Session by value so the caller may mutate
+    // session state while the worker runs.
+    struct AsyncJob {
+        Frame                          target_frame = 0;
+        std::shared_ptr<const Session> session;     // owned snapshot
+        const SourceManager*           sources = nullptr;
+    };
+    std::mutex                  worker_mutex;
+    std::condition_variable     worker_cv;
+    std::optional<AsyncJob>     pending_job;
+    bool                        worker_shutdown = false;
+    std::thread                 worker_thread;
 };
 
 BungeeVoiceManager::BungeeVoiceManager()
     : impl_(std::make_unique<Impl>()) {}
 
-BungeeVoiceManager::~BungeeVoiceManager() = default;
+BungeeVoiceManager::~BungeeVoiceManager() {
+    if (!impl_) return;
+    {
+        std::lock_guard lock(impl_->worker_mutex);
+        impl_->worker_shutdown = true;
+        impl_->pending_job.reset();
+    }
+    impl_->worker_cv.notify_all();
+    if (impl_->worker_thread.joinable())
+        impl_->worker_thread.join();
+}
 
 // ─── prepare / availability ──────────────────────────────────────────────
 
@@ -386,6 +423,56 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
     std::fflush(stdout);
 #else
     (void)target_frame; (void)session; (void)sources;
+#endif
+}
+
+void BungeeVoiceManager::rebuild_for_seek_async(Frame target_frame,
+                                                 const Session& session,
+                                                 const SourceManager& sources) {
+    if (!is_available()) return;
+#if !LT_ENGINE_HAVE_BUNGEE
+    (void)target_frame; (void)session; (void)sources;
+#else
+    // Spawn the worker on first use. Single thread, runs at BELOW_NORMAL on
+    // Windows so it never starves the audio callback during the ~600ms warm.
+    {
+        std::lock_guard lock(impl_->worker_mutex);
+        if (!impl_->worker_thread.joinable() && !impl_->worker_shutdown) {
+            impl_->worker_thread = std::thread([this] {
+              #ifdef _WIN32
+                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+              #endif
+                for (;;) {
+                    Impl::AsyncJob job;
+                    {
+                        std::unique_lock lk(impl_->worker_mutex);
+                        impl_->worker_cv.wait(lk, [this] {
+                            return impl_->worker_shutdown || impl_->pending_job.has_value();
+                        });
+                        if (impl_->worker_shutdown) return;
+                        job = std::move(*impl_->pending_job);
+                        impl_->pending_job.reset();
+                    }
+                    if (!job.session || !job.sources) continue;
+                    // Reuse the sync path; it serializes via build_mutex so a
+                    // concurrent sync rebuild from another thread is safe.
+                    rebuild_for_seek(job.target_frame, *job.session, *job.sources);
+                }
+            });
+        }
+
+        // Latest-wins: overwrite any pending job rather than queueing.
+        impl_->pending_job = Impl::AsyncJob{
+            target_frame,
+            std::make_shared<const Session>(session),
+            &sources,
+        };
+    }
+    impl_->worker_cv.notify_one();
+    std::fprintf(stdout,
+        "[BUNGEE] rebuild_for_seek_async target=%lld scheduled\n",
+        static_cast<long long>(target_frame));
+    std::fflush(stdout);
 #endif
 }
 

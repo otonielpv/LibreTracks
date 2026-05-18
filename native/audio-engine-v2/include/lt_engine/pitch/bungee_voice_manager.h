@@ -72,6 +72,23 @@ public:
                           const Session& session,
                           const SourceManager& sources);
 
+    // Same as rebuild_for_seek but runs the build (~600 ms warm + prefeed)
+    // on a dedicated worker thread. The previous voice map stays active so
+    // the audio thread keeps rendering without a gap; the new map is
+    // published via atomic_store the moment it's ready.
+    //
+    // Safe to use ONLY when the previous voice map is still musically
+    // correct for `target_frame` — i.e. play after pause, or the no-op
+    // seek the UI sends as part of its play sequence. For a real seek to
+    // a different position the previous voices play the wrong audio for
+    // the build duration; use the synchronous variant instead.
+    //
+    // Captures a copy of the Session so callers can mutate session state
+    // without racing the worker.
+    void rebuild_for_seek_async(Frame target_frame,
+                                const Session& session,
+                                const SourceManager& sources);
+
     // Drop all voices (e.g. session unload).
     void clear();
 

@@ -1057,14 +1057,27 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                      forward - immediate, 1, "seek_forward_prebuffer");
             }
             if (mixer_) mixer_->trigger_crossfade();
-            // Bungee voice manager: synchronous rebuild on the command thread.
-            // Construction at 9 voices is ~1.5 ms (per the bench), so this stays
-            // visually instant. When a Bungee voice exists track_renderer uses it;
-            // otherwise it falls back to the RubberBand path rebuilt asynchronously
-            // below.
-            if (bungee_voices_ && bungee_voices_->is_available() && session_)
-                bungee_voices_->rebuild_for_seek(
-                    clock_->position().frame, *session_, *source_manager_);
+            // Bungee voice manager: rebuild voices for the seek target.
+            //
+            // - Real position change (from != c.frame): synchronous so the
+            //   audio thread immediately has voices primed at the new spot.
+            //   Construction at 9 voices is ~1.5 ms (per the bench).
+            //
+            // - No-op seek (from == c.frame): the UI's play sequence is
+            //   "SeekAbsolute(current) then Play", which would otherwise
+            //   block the play command behind ~600ms of warm_voice. Run
+            //   the rebuild on a worker thread; the previous voice map is
+            //   already correct for this position, so the audio thread can
+            //   keep rendering without a gap until the new map is published.
+            if (bungee_voices_ && bungee_voices_->is_available() && session_) {
+                if (c.frame == from) {
+                    bungee_voices_->rebuild_for_seek_async(
+                        clock_->position().frame, *session_, *source_manager_);
+                } else {
+                    bungee_voices_->rebuild_for_seek(
+                        clock_->position().frame, *session_, *source_manager_);
+                }
+            }
             if (realtime_pitch_engine_ && session_) {
                 // Launch only when the previous rebuild has completed; never
                 // block a fresh transport command behind stale pitch work.
