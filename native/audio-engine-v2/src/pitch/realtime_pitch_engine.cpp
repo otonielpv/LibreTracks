@@ -26,6 +26,7 @@ void RealtimePitchEngine::publish_stream_set(std::shared_ptr<ActivePitchStreamSe
 }
 
 void RealtimePitchEngine::prepare_for_session(const Session& session, const SourceManager& sources, int sample_rate) {
+    std::lock_guard lock(control_mutex_);
     sample_rate_ = sample_rate > 0 ? sample_rate : 48000;
     // On session load, publish an empty set — streams will be primed on first play/seek.
     // This avoids blocking construction of dozens of RubberBand instances upfront.
@@ -95,7 +96,7 @@ RealtimePitchEngine::build_stream_set_for_target(Frame target_frame,
                 if (clip_end <= window_start || clip.timeline_start_frame >= window_end)
                     continue;
 
-                const auto* source = sources.get(clip.source_id);
+                auto source = sources.get_shared(clip.source_id);
                 if (!source || !source->is_loaded())
                     continue;
 
@@ -193,6 +194,7 @@ void RealtimePitchEngine::prepare_window(Frame target_frame,
 }
 
 void RealtimePitchEngine::prepare_for_play(Frame playhead_frame, const Session& session, const SourceManager& sources) {
+    std::lock_guard lock(control_mutex_);
     prepare_window(playhead_frame, session, sources, true, max_block_size_hint_);
 }
 
@@ -200,6 +202,7 @@ void RealtimePitchEngine::prepare_for_transport_discontinuity(Frame target_frame
                                                               const std::string& reason,
                                                               const Session& session,
                                                               const SourceManager& sources) {
+    std::lock_guard lock(control_mutex_);
     // Debounce only exact-same-frame + same-reason calls within kDebounceMs.
     // Seeks always go through even if the frame happens to match (different reason).
     // Never debounce seek_absolute / seek_relative — they need immediate alignment.
@@ -268,7 +271,7 @@ void RealtimePitchEngine::prepare_for_transport_discontinuity(Frame target_frame
         const Frame extra_frames = static_cast<Frame>(t_rebuild_ms * sample_rate_ / 1000) + 1024;
         for (auto& handle : new_set->streams) {
             if (!handle.stream) continue;
-            const auto* source = sources.get(handle.key.source_id);
+            auto source = sources.get_shared(handle.key.source_id);
             if (!source || !source->is_loaded()) continue;
             handle.stream->prime(*source, target_frame, static_cast<int>(extra_frames));
         }
@@ -346,6 +349,7 @@ int RealtimePitchEngine::render_pitched_clip(const Clip& clip,
 int RealtimePitchEngine::extend_for_playhead(Frame playhead_frame,
                                               const Session& session,
                                               const SourceManager& sources) {
+    std::lock_guard lock(control_mutex_);
     // Retrigger threshold: extend when playhead has advanced at least 1 second past the
     // last extend point. This keeps the lookahead window at [playhead, playhead+2s] while
     // allowing the control thread to call us on every snapshot poll without doing work.
@@ -387,7 +391,7 @@ int RealtimePitchEngine::extend_for_playhead(Frame playhead_frame,
                 if (clip_end <= window_start || clip.timeline_start_frame >= window_end)
                     continue;
 
-                const auto* source = sources.get(clip.source_id);
+                auto source = sources.get_shared(clip.source_id);
                 if (!source || !source->is_loaded())
                     continue;
 
@@ -479,6 +483,7 @@ int RealtimePitchEngine::extend_for_playhead(Frame playhead_frame,
 void RealtimePitchEngine::pre_prepare_for_scheduled_jump(Frame jump_target_frame,
                                                           const Session& session,
                                                           const SourceManager& sources) {
+    std::lock_guard lock(control_mutex_);
     std::fprintf(stdout, "[PITCH_ENGINE] pre_prepare_for_scheduled_jump frame=%lld\n",
         (long long)jump_target_frame);
     std::fflush(stdout);
@@ -493,6 +498,7 @@ void RealtimePitchEngine::pre_prepare_for_scheduled_jump(Frame jump_target_frame
 void RealtimePitchEngine::publish_pending_jump_graph(Frame jump_target_frame,
                                                       const Session& session,
                                                       const SourceManager& sources) {
+    std::lock_guard lock(control_mutex_);
     // Suppress repair requests for a grace period — the new graph is already aligned.
     post_seek_repair_suppression_remaining_.store(kPostSeekRepairSuppressionBlocks,
                                                   std::memory_order_release);
@@ -540,6 +546,7 @@ bool RealtimePitchEngine::take_repair_request(Frame& out_target_frame) noexcept 
 void RealtimePitchEngine::prepare_for_pitch_repair(Frame target_frame,
                                                    const Session& session,
                                                    const SourceManager& sources) {
+    std::lock_guard lock(control_mutex_);
     prepare_window(target_frame, session, sources, true, max_block_size_hint_);
     pitch_repair_completed_count_.fetch_add(1, std::memory_order_relaxed);
     // Clear all per-slot mismatch counters since we have a fresh primed set.

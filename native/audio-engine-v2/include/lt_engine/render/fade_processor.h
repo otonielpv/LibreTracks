@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <lt_engine/core/types.h>
 
@@ -26,6 +27,10 @@ private:
     int processed_ = 0;
     int remaining_ = 0;
     std::atomic<bool> triggered_{false};
+
+    static constexpr int kMaxChannels = 8;
+    std::array<float, kMaxChannels> previous_sample_{};
+    int previous_channels_ = 0;
 };
 
 } // namespace lt

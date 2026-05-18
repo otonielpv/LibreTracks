@@ -39,6 +39,8 @@ void FadeProcessor::clear() noexcept {
     triggered_.store(false, std::memory_order_release);
     processed_ = 0;
     remaining_ = 0;
+    previous_sample_.fill(0.0f);
+    previous_channels_ = 0;
 }
 
 bool FadeProcessor::is_active() const noexcept {
@@ -46,26 +48,41 @@ bool FadeProcessor::is_active() const noexcept {
 }
 
 void FadeProcessor::process(float** channels, int num_channels, int num_frames) noexcept {
+    if (num_channels <= 0 || num_frames <= 0)
+        return;
+
+    const int channel_count = std::clamp(num_channels, 0, kMaxChannels);
+    std::array<float, kMaxChannels> old_sample = previous_sample_;
+    const int old_channels = previous_channels_;
+
     if (triggered_.exchange(false, std::memory_order_acq_rel)) {
         processed_ = 0;
         remaining_ = ramp_frames_;
     }
-
-    if (remaining_ <= 0 || num_channels <= 0 || num_frames <= 0)
-        return;
 
     for (int f = 0; f < num_frames && remaining_ > 0; ++f) {
         const float progress = ramp_frames_ <= 1
             ? 1.0f
             : static_cast<float>(processed_) / static_cast<float>(ramp_frames_ - 1);
         const float gain = smoothstep(progress);
+        const float old_gain = 1.0f - gain;
 
-        for (int ch = 0; ch < num_channels; ++ch)
-            channels[ch][f] *= gain;
+        for (int ch = 0; ch < num_channels; ++ch) {
+            const float old = (ch < old_channels && ch < kMaxChannels)
+                ? old_sample[static_cast<std::size_t>(ch)]
+                : 0.0f;
+            channels[ch][f] = channels[ch][f] * gain + old * old_gain;
+        }
 
         ++processed_;
         --remaining_;
     }
+
+    for (int ch = 0; ch < channel_count; ++ch) {
+        previous_sample_[static_cast<std::size_t>(ch)] =
+            channels[ch] ? channels[ch][num_frames - 1] : 0.0f;
+    }
+    previous_channels_ = channel_count;
 }
 
 } // namespace lt

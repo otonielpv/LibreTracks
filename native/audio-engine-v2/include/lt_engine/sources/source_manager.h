@@ -4,6 +4,7 @@
 #include <lt_engine/core/result.h>
 #include <lt_engine/sources/decoded_source.h>
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -56,6 +57,11 @@ public:
     // Safe to call from audio thread (read-only once loaded).
     const DecodedSource* get(const Id& source_id) const noexcept;
 
+    // Get a loaded source while retaining ownership for long-running control
+    // work. Use this from async/prearm builders that may outlive a session
+    // reload; `get()` is only a borrowed pointer.
+    std::shared_ptr<const DecodedSource> get_shared(const Id& source_id) const noexcept;
+
     // Diagnostics for snapshot.
     std::vector<SourceDiagnostics> diagnostics() const;
 
@@ -74,6 +80,7 @@ private:
 
     mutable std::mutex              write_mutex_;
     std::shared_ptr<const EntryMap> entries_;
+    std::deque<std::shared_ptr<const EntryMap>> retired_entries_;
     SourceReadyCallback             source_ready_callback_;
 
     void publish_locked(EntryMap entries);

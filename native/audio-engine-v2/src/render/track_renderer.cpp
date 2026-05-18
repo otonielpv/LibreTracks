@@ -198,9 +198,9 @@ void TrackRenderer::render_clip(const Clip&          clip,
         // are gapless. Falls through to the legacy RubberBand path only when
         // no voice exists for this clip (e.g. control thread hasn't built
         // one yet, or the track is configured NeverTranspose).
-        BungeePitchVoice* bv = nullptr;
+        std::shared_ptr<BungeePitchVoice> bv;
         if (bungee_voices)
-            bv = bungee_voices->voice_for(clip.id);
+            bv = bungee_voices->voice_for_shared(clip.id);
         if (bv) {
             // Fetch planar source audio into the Bungee input scratch.
             // The render scratch (scratch_l_/scratch_r_) is reserved for output.

@@ -7,6 +7,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -115,6 +116,7 @@ private:
 
     int sample_rate_ = 48000;
     int max_block_size_hint_ = 512;
+    std::mutex control_mutex_;
     std::shared_ptr<const ActivePitchStreamSet> active_;
     SourceReadAheadCache source_cache_;
     std::atomic<std::uint64_t> active_stream_set_generation_{0};

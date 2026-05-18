@@ -24,6 +24,21 @@ TEST_CASE("source ready callback fires after delayed decoded source is stored") 
     CHECK(ready_id == "source");
 }
 
+TEST_CASE("SourceManager shared source survives session clear") {
+    SourceManager sources;
+    sources.register_source("source", "");
+    auto samples = test::make_stereo_sine(4096, 440.0, 0.25f);
+    REQUIRE(sources.store_decoded_source("source", samples, 2, test::kFixtureSampleRate, 4096).is_ok());
+
+    auto held = sources.get_shared("source");
+    REQUIRE(held != nullptr);
+    sources.clear();
+
+    CHECK(sources.get("source") == nullptr);
+    CHECK(held->is_loaded());
+    CHECK(held->duration_frames() == 4096);
+}
+
 TEST_CASE("missing prepared pitch proxy falls back to realtime seek-safe") {
     SourceManager sources;
     sources.register_source("source", "");

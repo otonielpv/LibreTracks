@@ -11,9 +11,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <cmath>
+#include <mutex>
 #include <optional>
 #include <thread>
 #include <unordered_set>
+#include <vector>
 
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
@@ -56,6 +59,10 @@ bool prearm_globally_enabled() {
         return !(std::strcmp(v, "0") == 0 || std::strcmp(v, "false") == 0);
     }();
     return on;
+}
+
+double semitones_to_pitch_scale(Semitones semitones) {
+    return std::pow(2.0, static_cast<double>(semitones) / 12.0);
 }
 
 // Warm a freshly-constructed voice by feeding zero input on the control
@@ -126,15 +133,15 @@ void warm_voice_silence(BungeePitchVoice& voice,
 // We pad with silence if `target_source_frame` is near the source end or before
 // the source start (matches what TrackRenderer does on the audio thread).
 //
-// Pitch_scale = 1.0 for prefeed (identity); the audio thread sets the real
-// pitch on its first call via render_block(pitch_scale=…) and Bungee picks
-// it up on the next grain.
+// Prefeed with the same pitch scale the audio thread will use after the jump,
+// so Bungee's first audible grain is already in the target transpose state.
 void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
                                       const DecodedSource& source,
                                       Frame target_source_frame,
                                       int sample_rate,
                                       int channel_count,
-                                      int max_in_frames) {
+                                      int max_in_frames,
+                                      double pitch_scale) {
     if (!voice.is_ready()) return;
     const int latency_frames = static_cast<int>(voice.latency_frames());
     if (latency_frames <= 0) return; // nothing to prefeed; voice not warm
@@ -178,7 +185,7 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
 
         (void)voice.render_block(in_ptrs.data(), chunk,
                                   out_ptrs.data(), chunk,
-                                  /*pitch_scale*/ 1.0);
+                                  pitch_scale);
         read_cursor += chunk;
         fed         += chunk;
     }
@@ -187,7 +194,7 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
 // Per-clip prep spec for a single prearmed target.
 struct PrepSpec {
     Id                   clip_id;
-    const DecodedSource* source = nullptr;
+    std::shared_ptr<const DecodedSource> source;
     Frame                target_source_frame = 0;
     Semitones            effective_semitones = 0;
 };
@@ -211,7 +218,7 @@ std::vector<PrepSpec> enumerate_prep_specs(const Song& song,
     if (track.transpose_behavior == TransposeBehavior::NeverTranspose)
         return out;
 
-    const auto* src = sources.get(clip.source_id);
+    auto src = sources.get_shared(clip.source_id);
     if (!src || !src->is_loaded()) {
         if (out_unloaded_clips) ++*out_unloaded_clips;
         return out;
@@ -222,7 +229,7 @@ std::vector<PrepSpec> enumerate_prep_specs(const Song& song,
 
     PrepSpec spec;
     spec.clip_id              = clip.id;
-    spec.source               = src;
+    spec.source               = std::move(src);
     spec.target_source_frame  = clip.source_start_frame
                                 + (target_timeline_frame - clip.timeline_start_frame);
     spec.effective_semitones  = decision.effective_semitones;
@@ -336,7 +343,7 @@ bool PrearmedJumpManager::prepare(int sample_rate,
     if (!impl_) return false;
     if (sample_rate <= 0 || channel_count <= 0 || max_input_frames <= 0)
         return false;
-    std::lock_guard<std::mutex> g(impl_->mtx);
+    std::unique_lock<std::mutex> g(impl_->mtx);
     impl_->sample_rate   = sample_rate;
     impl_->channel_count = channel_count;
     impl_->max_in_frames = max_input_frames;
@@ -347,7 +354,7 @@ bool PrearmedJumpManager::prepare(int sample_rate,
 
 void PrearmedJumpManager::clear() {
     if (!impl_) return;
-    std::lock_guard<std::mutex> g(impl_->mtx);
+    std::unique_lock<std::mutex> g(impl_->mtx);
     const std::size_t before = impl_->prepared_map.size();
     impl_->clear_prepared_map_locked();
     if (prearm_log_enabled() && before > 0) {
@@ -421,9 +428,10 @@ BuildResult build_prepared_set(
                 if (spec.source) {
                     prefeed_voice_with_target_audio(
                         *voice, *spec.source, spec.target_source_frame,
-                        sample_rate, channel_count, max_in_frames);
+                        sample_rate, channel_count, max_in_frames,
+                        semitones_to_pitch_scale(spec.effective_semitones));
                 }
-                voice->arm_fade_in();
+                voice->arm_fade_in(2);
                 PreparedTrackVoice ptv;
                 ptv.clip_id             = spec.clip_id;
                 ptv.voice               = std::move(voice);
@@ -448,7 +456,7 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
     if (!impl_ || !impl_->prepared) return;
     if (!prearm_globally_enabled()) return; // kill switch
 
-    std::lock_guard<std::mutex> g(impl_->mtx);
+    std::unique_lock<std::mutex> g(impl_->mtx);
 
     if (session_revision != impl_->current_revision) {
         const std::size_t before = impl_->prepared_map.size();
@@ -461,6 +469,10 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
             std::fflush(stdout);
         }
     }
+
+    const int sample_rate = impl_->sample_rate;
+    const int channel_count = impl_->channel_count;
+    const int max_in_frames = impl_->max_in_frames;
 
     std::unordered_set<PrearmTargetKey, PrearmTargetKeyHash> kept;
     kept.reserve(32);
@@ -476,8 +488,8 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
         key.song_id          = song.id;
         key.target_id        = target_id;
         key.timeline_frame   = target_frame;
-        key.sample_rate      = impl_->sample_rate;
-        key.block_size       = impl_->max_in_frames;
+        key.sample_rate      = sample_rate;
+        key.block_size       = max_in_frames;
         key.session_revision = session_revision;
         kept.insert(key);
 
@@ -485,10 +497,17 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
         if (it != impl_->prepared_map.end() && it->second && it->second->valid)
             return; // already prepared
 
+        g.unlock();
         auto br  = build_prepared_set(kind, song, target_id, target_frame,
-                                       sources, impl_->sample_rate,
-                                       impl_->channel_count,
-                                       impl_->max_in_frames, session_revision);
+                                       sources, sample_rate,
+                                       channel_count,
+                                       max_in_frames, session_revision);
+        g.lock();
+        if (session_revision != impl_->current_revision)
+            return;
+        it = impl_->prepared_map.find(key);
+        if (it != impl_->prepared_map.end() && it->second && it->second->valid)
+            return;
         auto set = std::move(br.set);
 
         // If sources weren't loaded for some audible clips, skip inserting

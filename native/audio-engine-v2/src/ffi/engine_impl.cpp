@@ -103,6 +103,11 @@ bool update_track_session(std::shared_ptr<const Session>& session,
     return true;
 }
 
+bool session_contains_source(const Session& session, const Id& source_id) {
+    return std::any_of(session.sources.begin(), session.sources.end(),
+        [&](const Source& source) { return source.id == source_id; });
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -162,18 +167,22 @@ Result<void> EngineImpl::initialize() {
     scheduler_      = std::make_unique<JumpScheduler>();
     source_manager_ = std::make_unique<SourceManager>();
     source_manager_->set_source_ready_callback([this](const Id& source_id) {
+        auto current_session = session_;
+        if (!current_session || !session_contains_source(*current_session, source_id))
+            return;
+
         source_ready_pitch_prepare_count_.fetch_add(1, std::memory_order_relaxed);
         if (prepare_pitch_processors_for_source(source_id) > 0)
             pitch_prepare_on_source_ready_count_.fetch_add(1, std::memory_order_relaxed);
         // Re-prearm: a source just finished decoding, so any prepared-set
         // that was skipped (unloaded_clips > 0) on its first build can now
-        // succeed. Post a new revision so the async worker rebuilds the
-        // whole cache with the now-loaded source available.
-        if (prearmed_jumps_ && session_) {
-            const auto rev = prearm_revision_.fetch_add(1,
-                std::memory_order_relaxed) + 1;
+        // succeed. Keep the current revision so multiple source-ready events
+        // for a multitrack song fill the same cache instead of discarding
+        // each other and rebuilding the whole prearm set repeatedly.
+        if (prearmed_jumps_) {
+            const auto rev = prearm_revision_.load(std::memory_order_relaxed);
             prearmed_jumps_->prepare_all_targets_async(
-                session_, source_manager_.get(), rev);
+                current_session, source_manager_.get(), rev);
         }
     });
     pitch_cache_    = std::make_unique<PitchCache>();
@@ -704,15 +713,19 @@ std::string EngineImpl::get_snapshot() const {
 }
 
 std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id) {
-    if (!session_ || !source_manager_ || !pitch_cache_ || !clock_)
+    auto current_session = session_;
+    if (!current_session || !source_manager_ || !pitch_cache_ || !clock_)
+        return 0;
+    if (!session_contains_source(*current_session, source_id))
         return 0;
     if (!source_manager_->get(source_id))
         return 0;
     if (bungee_voices_ && bungee_voices_->is_available()) {
         // Build/refresh Bungee voices now that this source has finished decoding.
         // Existing voices keyed on (clip_id, semitones) are reused.
-        bungee_voices_->rebuild_for_session(*session_, *source_manager_,
+        bungee_voices_->rebuild_for_session(*current_session, *source_manager_,
                                              clock_->position().frame);
+        return prepare_pitch_processors_for_session(*current_session);
     }
     if (realtime_pitch_engine_) {
         // Prime at the current playhead so the new source's stream is immediately aligned.
@@ -720,9 +733,9 @@ std::size_t EngineImpl::prepare_pitch_processors_for_source(const Id& source_id)
         // publishing unprimed streams that cause mismatch silence on the audio thread.
         const Frame playhead = clock_->position().frame;
         realtime_pitch_engine_->prepare_for_transport_discontinuity(
-            playhead, "source_ready", *session_, *source_manager_);
+            playhead, "source_ready", *current_session, *source_manager_);
     }
-    return prepare_pitch_processors_for_session(*session_);
+    return prepare_pitch_processors_for_session(*current_session);
 }
 
 std::size_t EngineImpl::enqueue_pitch_window(const Session& session,
@@ -1189,6 +1202,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         // audio block reads from the new playhead with the
                         // freshly-published voices.
                         clock_->seek(target_frame);
+                        if (mixer_) mixer_->trigger_crossfade();
+                        prearmed_jumps_->prepare_all_targets_async(
+                            session_, source_manager_.get(), key.session_revision);
                         push_event(EvJumpScheduled{ jump_id, c.marker_id });
                         return Result<void>::ok();
                     }
@@ -1204,6 +1220,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
                         clock_->seek(target_frame);
+                        if (mixer_) mixer_->trigger_crossfade();
+                        prearmed_jumps_->prepare_all_targets_async(
+                            session_, source_manager_.get(), key.session_revision);
                         push_event(EvJumpScheduled{ jump_id, c.marker_id });
                         return Result<void>::ok();
                     }
@@ -1252,6 +1271,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
                         clock_->seek(target_frame);
+                        if (mixer_) mixer_->trigger_crossfade();
+                        prearmed_jumps_->prepare_all_targets_async(
+                            session_, source_manager_.get(), key.session_revision);
                         push_event(EvJumpScheduled{ jump_id, c.region_id });
                         return Result<void>::ok();
                     }
@@ -1264,6 +1286,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
                         clock_->seek(target_frame);
+                        if (mixer_) mixer_->trigger_crossfade();
+                        prearmed_jumps_->prepare_all_targets_async(
+                            session_, source_manager_.get(), key.session_revision);
                         push_event(EvJumpScheduled{ jump_id, c.region_id });
                         return Result<void>::ok();
                     }
@@ -1307,6 +1332,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
                         clock_->seek(target_frame);
+                        if (mixer_) mixer_->trigger_crossfade();
+                        prearmed_jumps_->prepare_all_targets_async(
+                            session_, source_manager_.get(), key.session_revision);
                         push_event(EvJumpScheduled{ jump_id, c.song_id });
                         return Result<void>::ok();
                     }
@@ -1319,6 +1347,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
                         clock_->seek(target_frame);
+                        if (mixer_) mixer_->trigger_crossfade();
+                        prearmed_jumps_->prepare_all_targets_async(
+                            session_, source_manager_.get(), key.session_revision);
                         push_event(EvJumpScheduled{ jump_id, c.song_id });
                         return Result<void>::ok();
                     }
@@ -1351,6 +1382,99 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         else if constexpr (std::is_same_v<T, CmdScheduleJump>) {
             if (!session_) return Result<void>::err("No session loaded");
             if (c.trigger == JumpTrigger::Immediate) {
+                if (prearmed_jumps_ && bungee_voices_ && bungee_voices_->is_available()
+                    && source_manager_ && clock_) {
+                    auto resolved = resolve_jump_target(c.target, *session_, *clock_);
+                    if (resolved.is_ok()) {
+                        const Frame target_frame = resolved.unwrap();
+                        std::optional<PrearmTargetKind> prearm_kind;
+                        Id song_id;
+                        Id target_id;
+
+                        switch (c.target.kind) {
+                            case JumpTarget::Kind::Marker:
+                                if (c.target.id) {
+                                    target_id = *c.target.id;
+                                    prearm_kind = PrearmTargetKind::Marker;
+                                    for (const auto& song : session_->songs) {
+                                        for (const auto& marker : song.markers) {
+                                            if (marker.id == target_id) {
+                                                song_id = song.id;
+                                                break;
+                                            }
+                                        }
+                                        if (!song_id.empty()) break;
+                                    }
+                                }
+                                break;
+                            case JumpTarget::Kind::Region:
+                                if (c.target.id) {
+                                    target_id = *c.target.id;
+                                    prearm_kind = PrearmTargetKind::RegionStart;
+                                    for (const auto& song : session_->songs) {
+                                        for (const auto& region : song.regions) {
+                                            if (region.id == target_id) {
+                                                song_id = song.id;
+                                                break;
+                                            }
+                                        }
+                                        if (!song_id.empty()) break;
+                                    }
+                                }
+                                break;
+                            case JumpTarget::Kind::Song:
+                                if (c.target.id) {
+                                    target_id = *c.target.id;
+                                    song_id = target_id;
+                                    prearm_kind = PrearmTargetKind::SongStart;
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+
+                        if (prearm_kind && !song_id.empty() && !target_id.empty()) {
+                            const auto rev = prearm_revision_.load(std::memory_order_relaxed);
+                            PrearmTargetKey key;
+                            key.kind             = *prearm_kind;
+                            key.song_id          = song_id;
+                            key.target_id        = target_id;
+                            key.timeline_frame   = target_frame;
+                            key.sample_rate      = clock_->sample_rate();
+                            key.block_size       = device_manager_
+                                ? device_manager_->actual_buffer_size() : 1024;
+                            key.session_revision = rev;
+
+                            auto refill_prearm_cache = [&] {
+                                prearmed_jumps_->prepare_all_targets_async(
+                                    session_, source_manager_.get(), rev);
+                            };
+
+                            if (auto prepared = prearmed_jumps_->take_ready(key)) {
+                                bungee_voices_->swap_in_prepared_voices(
+                                    prepared->extract_voice_map());
+                                clock_->seek(target_frame);
+                                if (mixer_) mixer_->trigger_crossfade();
+                                refill_prearm_cache();
+                                push_event(EvJumpScheduled{ c.jump_id, c.jump_id });
+                                return Result<void>::ok();
+                            }
+
+                            if (auto prepared = prearmed_jumps_->prepare_target_now(
+                                    *session_, *source_manager_, *prearm_kind,
+                                    song_id, target_id, target_frame, rev)) {
+                                bungee_voices_->swap_in_prepared_voices(
+                                    prepared->extract_voice_map());
+                                clock_->seek(target_frame);
+                                if (mixer_) mixer_->trigger_crossfade();
+                                refill_prearm_cache();
+                                push_event(EvJumpScheduled{ c.jump_id, c.jump_id });
+                                return Result<void>::ok();
+                            }
+                        }
+                    }
+                }
+
                 auto r = scheduler_->schedule_immediate(c.jump_id, c.target, *session_, *clock_);
                 if (r.is_err()) return Result<void>::err(r.error());
             } else {

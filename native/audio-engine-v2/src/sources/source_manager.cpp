@@ -14,6 +14,17 @@ void SourceManager::set_source_ready_callback(SourceReadyCallback callback) {
 }
 
 void SourceManager::publish_locked(EntryMap entries) {
+    auto previous = std::atomic_load(&entries_);
+    if (previous) {
+        retired_entries_.push_back(std::move(previous));
+        // Audio-thread get() returns a borrowed pointer, so keep recent
+        // snapshots alive across rapid clear/register/store publish bursts.
+        // Async builders use get_shared(); this retention is just for one
+        // render block worth of borrowed raw pointers.
+        constexpr std::size_t kMaxRetiredSnapshots = 32;
+        while (retired_entries_.size() > kMaxRetiredSnapshots)
+            retired_entries_.pop_front();
+    }
     std::atomic_store(&entries_, std::make_shared<const EntryMap>(std::move(entries)));
 }
 
@@ -95,6 +106,14 @@ const DecodedSource* SourceManager::get(const Id& source_id) const noexcept {
     if (it == entries->end()) return nullptr;
     auto source = it->second.source;
     return source ? source.get() : nullptr;
+}
+
+std::shared_ptr<const DecodedSource>
+SourceManager::get_shared(const Id& source_id) const noexcept {
+    auto entries = std::atomic_load(&entries_);
+    auto it = entries->find(source_id);
+    if (it == entries->end()) return {};
+    return it->second.source;
 }
 
 std::vector<SourceDiagnostics> SourceManager::diagnostics() const {

@@ -110,6 +110,7 @@ public:
     // to a different position does (handled by rebuild_for_seek).
     //
     // Audio-thread safe: snapshots the current voice map via atomic_load.
+    std::shared_ptr<BungeePitchVoice> voice_for_shared(const Id& clip_id) noexcept;
     BungeePitchVoice* voice_for(const Id& clip_id) noexcept;
 
     // ── Diagnostics (any thread) ─────────────────────────────────────────
