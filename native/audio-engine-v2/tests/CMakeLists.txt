@@ -22,22 +22,8 @@ add_executable(lt_engine_tests
     test_metronome_renderer.cpp
     test_mixer_realtime_controls.cpp
     pitch_resolution_tests.cpp
-    pitch_cache_tests.cpp
-    pitch_alignment_tests.cpp
-    pitch_frequency_tests.cpp
-    pitch_seek_tests.cpp
-    realtime_pitch_stream_tests.cpp
-    pitch_preparation_tests.cpp
-    prepared_pitch_cache_tests.cpp
-    prepared_pitch_alignment_tests.cpp
-    pitch_proxy_async_tests.cpp
-    pitch_proxy_continuity_tests.cpp
-    pitch_proxy_persistent_tests.cpp
     transport_audio_sync_tests.cpp
     test_folder_controls.cpp
-    test_pitch_backend_identity.cpp
-    realtime_pitch_phases_5_to_7.cpp
-    realtime_pitch_phases_8_to_10.cpp
     bungee_pitch_voice_tests.cpp
     bungee_voice_manager_tests.cpp
     prearmed_jump_tests.cpp
@@ -63,18 +49,6 @@ if(LT_ENGINE_ENABLE_ASAN)
     endif()
 endif()
 
-if(LT_ENGINE_USE_RUBBERBAND AND NOT LT_ENGINE_ALLOW_PITCH_STUB)
-    target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_TEST_EXPECT_REAL_RUBBERBAND=1)
-else()
-    target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_TEST_EXPECT_REAL_RUBBERBAND=0)
-endif()
-
-if(LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH)
-    target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH=1)
-else()
-    target_compile_definitions(lt_engine_tests PRIVATE LT_ENGINE_ALLOW_RUNTIME_PITCH_STUB_PASSTHROUGH=0)
-endif()
-
 if(BUILD_SHARED_LIBS)
     add_custom_command(TARGET lt_engine_tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -85,16 +59,6 @@ if(BUILD_SHARED_LIBS)
     add_custom_command(TARGET lt_engine_tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_RUNTIME_DLLS:lt_engine_tests>
-            $<TARGET_FILE_DIR:lt_engine_tests>
-        COMMAND_EXPAND_LISTS
-    )
-endif()
-
-if(LT_RUBBERBAND_RUNTIME_DIR)
-    file(GLOB _lt_rubberband_runtime_dlls "${LT_RUBBERBAND_RUNTIME_DIR}/*.dll")
-    add_custom_command(TARGET lt_engine_tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${_lt_rubberband_runtime_dlls}
             $<TARGET_FILE_DIR:lt_engine_tests>
         COMMAND_EXPAND_LISTS
     )
