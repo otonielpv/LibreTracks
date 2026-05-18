@@ -8,6 +8,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -25,6 +26,23 @@
 #endif
 
 namespace lt {
+
+namespace {
+
+// Mirror of the LIBRETRACKS_AUDIO_DEBUG flag used in engine_impl.cpp. Cached
+// on first call. Used to gate all [BUNGEE] stdout traces — they're useful in
+// dev but pure noise in production where stdout may be a real terminal.
+bool bungee_debug_enabled() {
+    static const bool on = [] {
+        const char* raw = std::getenv("LIBRETRACKS_AUDIO_DEBUG");
+        if (!raw) return false;
+        return raw[0] == '1' || raw[0] == 't' || raw[0] == 'T'
+            || raw[0] == 'y' || raw[0] == 'Y' || raw[0] == 'o' || raw[0] == 'O';
+    }();
+    return on;
+}
+
+} // namespace
 
 // ─── Key / map ───────────────────────────────────────────────────────────
 
@@ -358,10 +376,12 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
     const int active_count = static_cast<int>(next->size());
     std::atomic_store(&impl_->active,
                       std::shared_ptr<const VoiceMap>(std::move(next)));
-    std::fprintf(stdout,
-        "[BUNGEE] rebuild_for_session playhead=%lld active=%d built=%d reused=%d\n",
-        static_cast<long long>(playhead), active_count, built, reused);
-    std::fflush(stdout);
+    if (bungee_debug_enabled()) {
+        std::fprintf(stdout,
+            "[BUNGEE] rebuild_for_session playhead=%lld active=%d built=%d reused=%d\n",
+            static_cast<long long>(playhead), active_count, built, reused);
+        std::fflush(stdout);
+    }
 #else
     (void)session; (void)sources; (void)playhead;
 #endif
@@ -414,10 +434,12 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
     const int active_count = static_cast<int>(next->size());
     std::atomic_store(&impl_->active,
                       std::shared_ptr<const VoiceMap>(std::move(next)));
-    std::fprintf(stdout,
-        "[BUNGEE] rebuild_for_seek target=%lld active=%d built=%d\n",
-        static_cast<long long>(target_frame), active_count, built);
-    std::fflush(stdout);
+    if (bungee_debug_enabled()) {
+        std::fprintf(stdout,
+            "[BUNGEE] rebuild_for_seek target=%lld active=%d built=%d\n",
+            static_cast<long long>(target_frame), active_count, built);
+        std::fflush(stdout);
+    }
 #else
     (void)target_frame; (void)session; (void)sources;
 #endif
@@ -466,10 +488,12 @@ void BungeeVoiceManager::rebuild_for_seek_async(Frame target_frame,
         };
     }
     impl_->worker_cv.notify_one();
-    std::fprintf(stdout,
-        "[BUNGEE] rebuild_for_seek_async target=%lld scheduled\n",
-        static_cast<long long>(target_frame));
-    std::fflush(stdout);
+    if (bungee_debug_enabled()) {
+        std::fprintf(stdout,
+            "[BUNGEE] rebuild_for_seek_async target=%lld scheduled\n",
+            static_cast<long long>(target_frame));
+        std::fflush(stdout);
+    }
 #endif
 }
 
@@ -500,10 +524,12 @@ void BungeeVoiceManager::swap_in_prepared_voices(
     std::atomic_store(&impl_->active,
                       std::shared_ptr<const VoiceMap>(std::move(next)));
     impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
-    std::fprintf(stdout,
-        "[BUNGEE] swap_in_prepared_voices active=%d (prearmed)\n",
-        active_count);
-    std::fflush(stdout);
+    if (bungee_debug_enabled()) {
+        std::fprintf(stdout,
+            "[BUNGEE] swap_in_prepared_voices active=%d (prearmed)\n",
+            active_count);
+        std::fflush(stdout);
+    }
 #endif
 }
 

@@ -53,7 +53,24 @@ static FILE* debug_log_file() {
     return s_file;
 }
 
+// Single source of truth for LIBRETRACKS_AUDIO_DEBUG. Cached on first call so
+// we don't getenv() per log line. Anything that wants to print engine internals
+// to stdout in dev should check this first; in production builds (no env var)
+// the entire diagnostic stream stays silent.
+static bool audio_debug_enabled() {
+    static const bool on = [] {
+        const char* raw = std::getenv("LIBRETRACKS_AUDIO_DEBUG");
+        if (!raw) return false;
+        std::string value = raw;
+        std::transform(value.begin(), value.end(), value.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return value == "1" || value == "true" || value == "yes" || value == "on";
+    }();
+    return on;
+}
+
 static void debug_log(const char* fmt, ...) {
+    if (!audio_debug_enabled()) return;
     va_list args1, args2;
     va_start(args1, fmt);
     va_copy(args2, args1);
@@ -71,6 +88,7 @@ static void debug_log(const char* fmt, ...) {
 // Fires the moment the DLL is loaded by Windows, before any exported function is called.
 struct DllLoadProbe {
     DllLoadProbe() {
+        if (!audio_debug_enabled()) return;
         FILE* f = debug_log_file();
         if (f) {
             std::fprintf(f, "[LT_PITCH_DEBUG] DLL_LOADED lt_audio_engine_v2\n");
