@@ -187,13 +187,16 @@ const ensureEngineV2 = (normalizedEnv) => {
     "lt_audio_engine_v2",
   ]);
 
-  if (useFFmpeg === "ON") {
-    const nativeVendorDir = path.join(repoRoot, "vendor", "bin", "native");
-    mkdirSync(nativeVendorDir, { recursive: true });
-    for (const fileName of readdirSync(libDir)) {
-      if (/^(av.*|swresample.*)\.dll$/i.test(fileName)) {
-        copyFileSync(path.join(libDir, fileName), path.join(nativeVendorDir, fileName));
-      }
+  const nativeVendorDir = path.join(repoRoot, "vendor", "bin", "native");
+  mkdirSync(nativeVendorDir, { recursive: true });
+  for (const fileName of readdirSync(nativeVendorDir)) {
+    if (/\.(dll|dylib|so)$/i.test(fileName)) {
+      rmSync(path.join(nativeVendorDir, fileName), { force: true });
+    }
+  }
+  for (const fileName of readdirSync(libDir)) {
+    if (/\.(dll|dylib|so)$/i.test(fileName)) {
+      copyFileSync(path.join(libDir, fileName), path.join(nativeVendorDir, fileName));
     }
   }
 

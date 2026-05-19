@@ -356,14 +356,16 @@ cmake --build $engineV2BuildDir --config $engineV2Config --target lt_audio_engin
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $nativeVendorDir = Join-Path $repoRoot "vendor\bin\native"
-if ($useFFmpeg -eq "ON") {
-  New-Item -ItemType Directory -Force -Path $nativeVendorDir | Out-Null
-  Get-ChildItem $engineV2LibDir -Filter "av*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+New-Item -ItemType Directory -Force -Path $nativeVendorDir | Out-Null
+Get-ChildItem $nativeVendorDir -File -ErrorAction SilentlyContinue | Where-Object {
+  $_.Extension -in @(".dll", ".dylib", ".so")
+} | ForEach-Object {
+  Remove-Item -LiteralPath $_.FullName -Force
+}
+Get-ChildItem $engineV2LibDir -File -ErrorAction SilentlyContinue | Where-Object {
+  $_.Extension -in @(".dll", ".dylib", ".so")
+} | ForEach-Object {
     Copy-Item $_.FullName $nativeVendorDir -Force
-  }
-  Get-ChildItem $engineV2LibDir -Filter "swresample*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
-    Copy-Item $_.FullName $nativeVendorDir -Force
-  }
 }
 
 $env:LIBRETRACKS_AUDIO_ENGINE = "cpp-v2"
@@ -404,9 +406,6 @@ $windowsVendorBin = Join-Path $vendorBinRoot "win"
 $nativeVendorBin = Join-Path $vendorBinRoot "native"
 
 if (Test-Path $windowsVendorBin) {
-  New-Item -ItemType Directory -Force -Path $nativeVendorBin | Out-Null
-  Copy-Item -Path (Join-Path $windowsVendorBin "*") -Destination $nativeVendorBin -Force
-
   $env:PATH = "$windowsVendorBin;$nativeVendorBin;" + $env:PATH
 }
 
