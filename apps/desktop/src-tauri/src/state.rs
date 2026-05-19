@@ -1709,13 +1709,24 @@ impl DesktopSession {
         let (start_seconds, end_seconds) =
             sanitize_region_bounds(&song, start_seconds, end_seconds)?;
         let updated_region = SongRegion {
-            id: existing_region.id,
+            id: existing_region.id.clone(),
             name: trimmed_name.to_string(),
             start_seconds,
             end_seconds,
             transpose_semitones: existing_region.transpose_semitones,
         };
 
+        // Drop the OLD copy of this region before delegating to
+        // replace_song_region_range. That helper fragments any pre-existing
+        // region that overlaps the replacement — useful when CREATING a new
+        // region that carves through existing ones, but wrong when editing
+        // the same region in place. Without this step, shrinking a region
+        // makes the helper see the old (larger) version "overlapping" the
+        // new (smaller) one and emits a spurious fragment for the cut-off
+        // tail (reproduced as: "drag the end handle inward → a phantom
+        // duplicate region appears with the trimmed name and the cut-off
+        // span").
+        song.regions.retain(|region| region.id != existing_region.id);
         replace_song_region_range(&mut song, updated_region);
         audio.update_live_song_regions(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
