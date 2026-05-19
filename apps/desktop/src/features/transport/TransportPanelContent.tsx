@@ -1042,8 +1042,8 @@ export function TransportPanelContent() {
 
   const applyPlaybackSnapshot = useCallback(
     (nextSnapshot: TransportSnapshot | null) => {
-      snapshotRef.current = nextSnapshot;
       useTransportStore.getState().setPlaybackState(nextSnapshot);
+      snapshotRef.current = nextSnapshot;
       applyPitchPrepareSnapshot(nextSnapshot?.pitch);
     },
     [applyPitchPrepareSnapshot],
@@ -1685,6 +1685,10 @@ export function TransportPanelContent() {
         previousSnapshot?.playbackState === "playing" &&
         nextSnapshot.playbackState === "playing" &&
         previousSnapshot.projectRevision === nextSnapshot.projectRevision &&
+        previousSnapshot.transportClock?.lastJumpPositionSeconds ===
+          nextSnapshot.transportClock?.lastJumpPositionSeconds &&
+        previousSnapshot.transportClock?.lastSeekPositionSeconds ===
+          nextSnapshot.transportClock?.lastSeekPositionSeconds &&
         playbackVisualAnchorRef.current.running &&
         Boolean(nextSnapshot.transportClock?.running);
 
@@ -1889,6 +1893,7 @@ export function TransportPanelContent() {
     selectedRegionId,
     setSelectedRegionId,
     applyPlaybackSnapshot,
+    forcePlaybackVisualAnchor: applyTransportVisualAnchor,
     setStatus,
     t,
     handleSelectedRegionTransposeChange,

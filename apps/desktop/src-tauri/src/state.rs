@@ -1241,6 +1241,7 @@ impl DesktopSession {
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
             audio.cancel_scheduled_jumps()?;
             if was_playing {
+                audio.start_master_fade(1.0, 0.0)?;
                 self.reposition_audio(audio, PlaybackStartReason::ImmediateJump)?;
                 self.transport_clock
                     .note_jump_while_playing(self.engine.position_seconds());
@@ -1307,6 +1308,7 @@ impl DesktopSession {
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
             audio.cancel_scheduled_jumps()?;
             if was_playing {
+                audio.start_master_fade(1.0, 0.0)?;
                 self.reposition_audio(audio, PlaybackStartReason::ImmediateJump)?;
                 self.transport_clock
                     .note_jump_while_playing(self.engine.position_seconds());

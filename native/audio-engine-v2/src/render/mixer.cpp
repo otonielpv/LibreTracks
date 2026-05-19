@@ -797,8 +797,15 @@ void Mixer::apply_master_gain(float** output_channels, int num_channels, int num
         master_gain_target_ = master_fade_target_gain_.load(std::memory_order_relaxed);
         const double duration = master_fade_duration_seconds_.load(std::memory_order_relaxed);
         const int sr = clock_ ? std::max(1, clock_->sample_rate()) : 48000;
-        master_fade_total_frames_ = std::max(1, static_cast<int>(std::ceil(duration * sr)));
-        master_fade_processed_frames_ = 0;
+        if (duration <= 0.0) {
+            master_gain_current_ = master_gain_target_;
+            master_gain_start_ = master_gain_target_;
+            master_fade_total_frames_ = 0;
+            master_fade_processed_frames_ = 0;
+        } else {
+            master_fade_total_frames_ = std::max(1, static_cast<int>(std::ceil(duration * sr)));
+            master_fade_processed_frames_ = 0;
+        }
         jump_debug_log(
             "[LT_JUMP_DEBUG][mixer] start_master_fade current=%.6f target=%.6f duration=%.9f frames=%d\n",
             static_cast<double>(master_gain_start_),

@@ -15,6 +15,7 @@ type UseTimelineActionsProps = {
   selectedRegionId: string | null;
   setSelectedRegionId: (id: string | null) => void;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
+  forcePlaybackVisualAnchor?: (snapshot: TransportSnapshot) => void;
   setStatus: (status: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
   handleSelectedRegionTransposeChange: (semitones: number) => void;
@@ -28,6 +29,7 @@ export function useTimelineActions({
   selectedRegionId,
   setSelectedRegionId,
   applyPlaybackSnapshot,
+  forcePlaybackVisualAnchor,
   setStatus,
   t,
   handleSelectedRegionTransposeChange,
@@ -40,6 +42,10 @@ export function useTimelineActions({
     const bars = Math.max(1, Math.floor(appSettings.globalJumpBars));
     const nextSnapshot = await scheduleMarkerJump(markerId);
     applyPlaybackSnapshot(nextSnapshot);
+    if (trigger === "immediate") {
+      displayPositionSecondsRef.current = nextSnapshot.positionSeconds;
+      forcePlaybackVisualAnchor?.(nextSnapshot);
+    }
 
     if (trigger === "next_marker" && !nextSnapshot.pendingMarkerJump) {
       setStatus(t("transport.status.noMarkersAhead"));
