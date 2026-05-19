@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type MutableRefObject, type ReactNode, type RefObject } from "react";
 
 import type {
   ActiveVampSummary,
@@ -296,7 +296,7 @@ export function TimelineRulerCanvas({
     width,
   ]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const container = interactionContainerRef.current;
     if (!container) {
       return;
@@ -547,7 +547,7 @@ export function TimelineTrackCanvas({
     [waveformCache],
   );
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const container = interactionContainerRef.current;
     if (!container) {
       return;
