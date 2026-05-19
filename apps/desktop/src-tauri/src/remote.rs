@@ -168,13 +168,11 @@ async fn run_remote_command_bridge(
                 target_marker_id,
                 trigger,
                 bars,
-                transition,
-                duration_seconds,
+                ..
             } => session.schedule_marker_jump(
                 target_marker_id,
                 parse_jump_trigger(trigger, *bars).unwrap_or(JumpTrigger::Immediate),
-                parse_transition_type(transition.as_deref(), *duration_seconds)
-                    .unwrap_or(TransitionType::Instant),
+                TransitionType::Instant,
                 &state.audio,
             ),
             RemoteCommand::ScheduleRegionJump {

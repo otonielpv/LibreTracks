@@ -314,14 +314,12 @@ fn dispatch_midi_action(
         let jump_trigger =
             parse_jump_trigger(&settings.global_jump_mode, Some(settings.global_jump_bars))
                 .map_err(|error| error.to_string())?;
-        let transition = parse_transition_type(Some(&settings.song_transition_mode), None)
-            .map_err(|error| error.to_string())?;
+        let transition = libretracks_audio::TransitionType::Instant;
         if jump_debug_logging_enabled() {
             eprintln!(
-                "[LT_JUMP_DEBUG][midi] jump_marker action={action_key} target_marker={target_marker_id} global_mode={} global_bars={} transition={} parsed_trigger={jump_trigger:?} parsed_transition={transition:?}",
+                "[LT_JUMP_DEBUG][midi] jump_marker action={action_key} target_marker={target_marker_id} global_mode={} global_bars={} transition=marker_instant parsed_trigger={jump_trigger:?} parsed_transition={transition:?}",
                 settings.global_jump_mode,
-                settings.global_jump_bars,
-                settings.song_transition_mode
+                settings.global_jump_bars
             );
         }
         let snapshot = session
