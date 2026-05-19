@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 
 import {
+  clearRecording,
+  downloadRecording,
   isPerfHudEnabled,
   readPerfSnapshot,
+  recordingTick,
   setPerfHudEnabled,
   startPerfMetrics,
   stopPerfMetrics,
@@ -53,6 +56,10 @@ export function PerfHud() {
     }
     startPerfMetrics();
     const id = window.setInterval(() => {
+      // Two things every 250ms: refresh the visible HUD state, AND drop a
+      // sample into the recording buffer so the user can export the whole
+      // session afterwards (see Download button below).
+      recordingTick();
       setSnapshot(readPerfSnapshot());
     }, 250);
     return () => {
@@ -136,7 +143,53 @@ export function PerfHud() {
         </div>
       ) : null}
 
-      <div style={{ opacity: 0.4, marginTop: 6 }}>Ctrl+Shift+F to toggle</div>
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          marginTop: 8,
+          paddingTop: 6,
+          borderTop: "1px solid rgba(255,255,255,0.12)",
+          pointerEvents: "auto",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => downloadRecording()}
+          style={{
+            flex: 1,
+            padding: "3px 6px",
+            background: "rgba(126, 192, 224, 0.18)",
+            color: "#cfe7f5",
+            border: "1px solid rgba(126, 192, 224, 0.4)",
+            borderRadius: 3,
+            cursor: "pointer",
+            font: "inherit",
+          }}
+        >
+          download
+        </button>
+        <button
+          type="button"
+          onClick={() => clearRecording()}
+          style={{
+            flex: 1,
+            padding: "3px 6px",
+            background: "rgba(224, 192, 126, 0.18)",
+            color: "#f5e1cf",
+            border: "1px solid rgba(224, 192, 126, 0.4)",
+            borderRadius: 3,
+            cursor: "pointer",
+            font: "inherit",
+          }}
+        >
+          clear
+        </button>
+      </div>
+
+      <div style={{ opacity: 0.4, marginTop: 6 }}>
+        Ctrl+Shift+F toggle · window.__lt_perf.mark('label')
+      </div>
     </div>
   );
 }
