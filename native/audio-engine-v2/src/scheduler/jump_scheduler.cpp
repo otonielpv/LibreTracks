@@ -69,6 +69,8 @@ Result<Frame> resolve_jump_target(const JumpTarget& target,
                 for (const auto& m : song.markers)
                     if (m.id == *target.id)
                         return Result<Frame>::ok(m.frame);
+            if (target.frame)
+                return Result<Frame>::ok(*target.frame);
             return Result<Frame>::err("Marker not found: " + *target.id);
         }
 
@@ -79,6 +81,8 @@ Result<Frame> resolve_jump_target(const JumpTarget& target,
                 for (const auto& r : song.regions)
                     if (r.id == *target.id)
                         return Result<Frame>::ok(r.start_frame);
+            if (target.frame)
+                return Result<Frame>::ok(*target.frame);
             return Result<Frame>::err("Region not found: " + *target.id);
         }
 

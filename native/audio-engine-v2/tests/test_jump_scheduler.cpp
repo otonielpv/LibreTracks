@@ -64,6 +64,16 @@ TEST_CASE("resolve unknown Marker returns error") {
     CHECK(r.is_err());
 }
 
+TEST_CASE("resolve marker target can use exact fallback frame") {
+    TransportClock clock(48000);
+    auto sess = make_session_with_marker();
+    auto target = marker_target("rust-only-section");
+    target.frame = 123456;
+    auto r = resolve_jump_target(target, sess, clock);
+    CHECK(r.is_ok());
+    CHECK(r.unwrap() == 123456);
+}
+
 TEST_CASE("resolve NextSong from inside song-1") {
     TransportClock clock(48000);
     clock.seek(10000);  // inside song-1

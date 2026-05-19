@@ -187,6 +187,8 @@ TEST_CASE("snapshot has required top-level keys") {
     CHECK(json.find("\"pending_jumps\"")  != std::string::npos);
     CHECK(json.find("\"meters\"")         != std::string::npos);
     CHECK(json.find("\"metronome\"")      != std::string::npos);
+    CHECK(json.find("\"pitch\"")          != std::string::npos);
+    CHECK(json.find("\"mixer_scheduled_jump_executed_count\"") != std::string::npos);
 }
 
 TEST_CASE("snapshot serializes pending jumps array") {

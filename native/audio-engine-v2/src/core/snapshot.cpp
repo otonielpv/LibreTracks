@@ -123,6 +123,11 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"toggle_count", snap.metronome.toggle_count},
     };
 
+    j["pitch"] = {
+        {"mixer_scheduled_jump_executed_count",
+         snap.mixer_scheduled_jump_executed_count},
+    };
+
     return j.dump();
 }
 

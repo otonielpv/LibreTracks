@@ -483,6 +483,8 @@ std::string EngineImpl::get_snapshot() const {
         snap.metronome.current_gain = metro.current_gain;
         snap.metronome.target_gain = metro.target_gain;
         snap.metronome.toggle_count = metro.toggle_count;
+        snap.mixer_scheduled_jump_executed_count =
+            mixer_->scheduled_jump_executed_count();
     }
 
     if (prep_queue_) {
@@ -1073,6 +1075,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                         }
                                         if (!song_id.empty()) break;
                                     }
+                                    if (song_id.empty()) {
+                                        for (const auto& song : session_->songs) {
+                                            if (target_frame >= song.start_frame
+                                                && target_frame < song.end_frame) {
+                                                song_id = song.id;
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                                 break;
                             case JumpTarget::Kind::Region:
@@ -1087,6 +1098,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                             }
                                         }
                                         if (!song_id.empty()) break;
+                                    }
+                                    if (song_id.empty()) {
+                                        for (const auto& song : session_->songs) {
+                                            if (target_frame >= song.start_frame
+                                                && target_frame < song.end_frame) {
+                                                song_id = song.id;
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                                 break;
@@ -1173,6 +1193,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                         }
                                         if (!song_id.empty()) break;
                                     }
+                                    if (song_id.empty()) {
+                                        for (const auto& song : session_->songs) {
+                                            if (target_frame >= song.start_frame
+                                                && target_frame < song.end_frame) {
+                                                song_id = song.id;
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                                 break;
                             case JumpTarget::Kind::Region:
@@ -1187,6 +1216,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                             }
                                         }
                                         if (!song_id.empty()) break;
+                                    }
+                                    if (song_id.empty()) {
+                                        for (const auto& song : session_->songs) {
+                                            if (target_frame >= song.start_frame
+                                                && target_frame < song.end_frame) {
+                                                song_id = song.id;
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                                 break;

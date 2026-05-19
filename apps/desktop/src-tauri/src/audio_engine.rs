@@ -489,17 +489,23 @@ impl AudioController {
     pub fn schedule_jump_at_frame(
         &self,
         jump_id: &str,
-        target: JumpTarget,
+        mut target: JumpTarget,
         trigger_seconds: f64,
+        target_seconds: Option<f64>,
         suppress_seek_fade: bool,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("schedule_jump_at_frame", None, |engine, _state| {
             let trigger_frame = seconds_to_frame_for_engine(engine, trigger_seconds);
+            if target.frame.is_none() {
+                target.frame =
+                    target_seconds.map(|seconds| seconds_to_frame_for_engine(engine, seconds));
+            }
             if jump_debug_logging_enabled() {
                 eprintln!(
-                    "[LT_JUMP_DEBUG][rust-command] schedule_at_frame jump_id={jump_id} target_kind={:?} target_id={:?} trigger_seconds={:.9} trigger_frame={trigger_frame} suppress_seek_fade={suppress_seek_fade}",
+                    "[LT_JUMP_DEBUG][rust-command] schedule_at_frame jump_id={jump_id} target_kind={:?} target_id={:?} target_frame={:?} trigger_seconds={:.9} trigger_frame={trigger_frame} suppress_seek_fade={suppress_seek_fade}",
                     target.kind,
                     target.id,
+                    target.frame,
                     trigger_seconds
                 );
             }

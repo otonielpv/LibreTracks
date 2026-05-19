@@ -119,6 +119,8 @@ struct EngineSnapshot {
     // Internal metronome
     MetronomeSnapshot metronome;
 
+    std::uint64_t mixer_scheduled_jump_executed_count = 0;
+
     // Phase 8: prearmed-jump manager diagnostics. All counters monotonic
     // since engine init; ready_count is the live cache size.
     struct PrearmedJumps {

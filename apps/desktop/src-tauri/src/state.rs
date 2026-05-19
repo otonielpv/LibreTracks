@@ -1279,7 +1279,11 @@ impl DesktopSession {
                         frame: None,
                     },
                     pending_jump.execute_at_seconds,
-                    matches!(pending_jump.transition, TransitionType::FadeOut { .. }),
+                    self.engine
+                        .song()
+                        .and_then(|song| song.marker_by_id(&pending_jump.target_marker_id))
+                        .map(|marker| marker.start_seconds),
+                    true,
                 )?;
             } else {
                 audio.cancel_scheduled_jumps()?;
@@ -1373,6 +1377,14 @@ impl DesktopSession {
                         frame: None,
                     },
                     pending_jump.execute_at_seconds,
+                    self.engine
+                        .song()
+                        .and_then(|song| {
+                            song.regions
+                                .iter()
+                                .find(|region| region.id == pending_jump.target_marker_id)
+                        })
+                        .map(|region| region.start_seconds),
                     matches!(pending_jump.transition, TransitionType::FadeOut { .. }),
                 )?;
             } else {
