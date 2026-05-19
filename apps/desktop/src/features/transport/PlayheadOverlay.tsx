@@ -17,7 +17,10 @@ type PlayheadOverlayProps = {
   cameraXRef?: MutableRefObject<number>;
   dragStateRef: MutableRefObject<PlayheadDragState>;
   positionSecondsRef?: MutableRefObject<number>;
-  normalizePositionSeconds?: (positionSeconds: number) => number;
+  normalizePositionSeconds?: (
+    positionSeconds: number,
+    options?: { allowSnap?: boolean },
+  ) => number;
   onPreviewPositionChange?: (positionSeconds: number) => void;
   onSeekIntent?: (positionSeconds: number) => void;
   onSeekCommit?: (positionSeconds: number) => void | Promise<void>;
@@ -206,8 +209,13 @@ export function PlayheadOverlay({
       0,
       Math.max(0, latestPropsRef.current.durationSeconds),
     );
+    // Alt held while dragging suppresses snap-to-grid for the playhead,
+    // matching the convention used by clip-drag and region-resize.
+    const startAllowSnap = !event.altKey;
     const startSeconds = latestPropsRef.current.normalizePositionSeconds
-      ? latestPropsRef.current.normalizePositionSeconds(rawStartSeconds)
+      ? latestPropsRef.current.normalizePositionSeconds(rawStartSeconds, {
+          allowSnap: startAllowSnap,
+        })
       : rawStartSeconds;
     dragStateRef.current = {
       pointerId: event.pointerId,
@@ -233,8 +241,13 @@ export function PlayheadOverlay({
         0,
         Math.max(0, latestPropsRef.current.durationSeconds),
       );
+      // Re-evaluate Alt on every move so the user can hold/release it
+      // mid-drag to toggle snap behaviour live.
+      const moveAllowSnap = !pointerEvent.altKey;
       const normalizedSeconds = latestPropsRef.current.normalizePositionSeconds
-        ? latestPropsRef.current.normalizePositionSeconds(nextSeconds)
+        ? latestPropsRef.current.normalizePositionSeconds(nextSeconds, {
+            allowSnap: moveAllowSnap,
+          })
         : nextSeconds;
 
       dragStateRef.current = {

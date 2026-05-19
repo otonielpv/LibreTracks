@@ -2777,10 +2777,31 @@ export function TransportPanelContent() {
 
   function normalizeTimelineSeekSeconds(
     positionSeconds: number,
-    durationSeconds = timelineDurationSecondsRef.current ||
-      song?.durationSeconds ||
-      0,
+    durationSecondsOrOptions?:
+      | number
+      | { durationSeconds?: number; allowSnap?: boolean },
+    legacyOptions?: { allowSnap?: boolean },
   ) {
+    // Backwards-compatible signature:
+    //   normalizeTimelineSeekSeconds(pos)
+    //   normalizeTimelineSeekSeconds(pos, durationSeconds)
+    //   normalizeTimelineSeekSeconds(pos, { durationSeconds?, allowSnap? })
+    //   normalizeTimelineSeekSeconds(pos, durationSeconds, { allowSnap })
+    let durationSeconds: number;
+    let allowSnap = true;
+    if (typeof durationSecondsOrOptions === "number") {
+      durationSeconds = durationSecondsOrOptions;
+      if (legacyOptions?.allowSnap === false) allowSnap = false;
+    } else if (durationSecondsOrOptions) {
+      durationSeconds =
+        durationSecondsOrOptions.durationSeconds ??
+        (timelineDurationSecondsRef.current || song?.durationSeconds || 0);
+      if (durationSecondsOrOptions.allowSnap === false) allowSnap = false;
+    } else {
+      durationSeconds =
+        timelineDurationSecondsRef.current || song?.durationSeconds || 0;
+    }
+
     const clampedPosition = clamp(
       positionSeconds,
       0,
@@ -2788,7 +2809,7 @@ export function TransportPanelContent() {
     );
     const timingRegion = getSongTempoRegionAtPosition(song, clampedPosition);
 
-    return snapEnabled
+    return snapEnabled && allowSnap
       ? clamp(
           snapToTimelineGrid(
             clampedPosition,
@@ -6898,10 +6919,11 @@ export function TransportPanelContent() {
                           libraryClipPreview={libraryClipPreview}
                           libraryPreviewRows={libraryPreviewRows}
                           externalDropPreview={externalDropPreview}
-                          normalizePositionSeconds={(positionSeconds) =>
+                          normalizePositionSeconds={(positionSeconds, options) =>
                             normalizeTimelineSeekSeconds(
                               positionSeconds,
                               workspaceDurationSeconds,
+                              { allowSnap: options?.allowSnap ?? true },
                             )
                           }
                           resolveLibraryGhostLeft={resolveLibraryGhostLeft}

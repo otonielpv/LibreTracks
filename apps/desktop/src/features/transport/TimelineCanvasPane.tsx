@@ -82,7 +82,10 @@ type TimelineCanvasPaneProps = {
   libraryClipPreview: LibraryClipPreviewState[];
   libraryPreviewRows: LibraryPreviewRow[];
   externalDropPreview: ExternalDropPreview | null;
-  normalizePositionSeconds: (positionSeconds: number) => number;
+  normalizePositionSeconds: (
+    positionSeconds: number,
+    options?: { allowSnap?: boolean },
+  ) => number;
   resolveLibraryGhostLeft: (seconds: number) => number;
   onRulerMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onRulerContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
