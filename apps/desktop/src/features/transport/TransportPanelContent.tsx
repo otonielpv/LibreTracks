@@ -7216,6 +7216,25 @@ export function TransportPanelContent() {
                               songRegionContextMenu(region),
                             );
                           }}
+                          onRegionResizeCommit={(regionId, startSeconds, endSeconds) => {
+                            const region = song?.regions.find(
+                              (candidate) => candidate.id === regionId,
+                            );
+                            if (!region) return;
+                            // Commit through the same code path as the inline
+                            // rename modal so the snapshot/event flow stays
+                            // identical to other region edits.
+                            void runAction(async () => {
+                              const nextSnapshot = await updateSongRegion(
+                                regionId,
+                                region.name,
+                                startSeconds,
+                                endSeconds,
+                              );
+                              applyPlaybackSnapshot(nextSnapshot);
+                            });
+                          }}
+                          snapEnabled={snapEnabled}
                           canNativeZoom={Boolean(song)}
                           onNativeCameraXPreview={(nextCameraX) =>
                             updateCameraX(nextCameraX, {

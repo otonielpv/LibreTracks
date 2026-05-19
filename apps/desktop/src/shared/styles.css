@@ -2637,6 +2637,35 @@ textarea {
   outline-offset: 1px;
 }
 
+/* Resize handles overlaid on each end of a region hotspot. Wide enough to
+   grab comfortably (6px) but only visible on hover/selection so the
+   region UI stays clean at rest. Sit above the button background so the
+   ew-resize cursor wins over the parent's pointer cursor. */
+.lt-region-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 3;
+  /* No pointer events at rest so the region's click-to-select still wins
+     on the body; the hover style below re-enables them and makes the
+     handle subtly visible so users discover it. */
+  opacity: 0;
+  transition: opacity 80ms ease-out;
+}
+
+.lt-region-resize-handle.is-start { left: -3px; }
+.lt-region-resize-handle.is-end   { right: -3px; }
+
+.lt-region-hotspot:hover .lt-region-resize-handle,
+.lt-region-hotspot.is-selected .lt-region-resize-handle,
+.lt-region-resize-handle.is-active {
+  opacity: 1;
+  background: rgb(255 226 171 / 0.55);
+}
+
 .lt-marker-hotspot:focus-visible {
   outline: 1px solid rgb(255 226 171 / 0.88);
   outline-offset: 1px;

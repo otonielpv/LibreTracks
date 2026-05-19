@@ -1,4 +1,4 @@
-import { useRef, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from "react";
+import { useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import type {
@@ -94,6 +94,23 @@ type TimelineCanvasPaneProps = {
     markerId: string,
   ) => void;
   onRegionContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, regionId: string) => void;
+  /**
+   * Commit a region resize. Called once on pointer-up with the final
+   * start/end seconds after snap + clamp have already been applied. The
+   * component drives the optimistic UI locally during the drag and only
+   * fires this once when the user releases the mouse, so consumers can
+   * forward straight to updateSongRegion without throttling.
+   */
+  onRegionResizeCommit?: (
+    regionId: string,
+    startSeconds: number,
+    endSeconds: number,
+  ) => void;
+  /**
+   * Snap state used during resize drag (matches the snap behaviour of
+   * clip drag). Holding Alt during the drag temporarily disables snap.
+   */
+  snapEnabled?: boolean;
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => boolean;
   canNativeZoom: boolean;
@@ -173,6 +190,8 @@ export function TimelineCanvasPane({
   onTempoMarkerContextMenu,
   onTimeSignatureMarkerContextMenu,
   onRegionContextMenu,
+  onRegionResizeCommit,
+  snapEnabled,
   midiLearnMode,
   onMidiLearnTarget,
   canNativeZoom,
@@ -193,6 +212,168 @@ export function TimelineCanvasPane({
   onExternalDrop,
 }: TimelineCanvasPaneProps) {
   const trackLayersRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Region resize drag ──────────────────────────────────────────────────
+  // Local-only state for the in-flight resize. Backend is touched once on
+  // pointer-up via onRegionResizeCommit; everything else is optimistic. Kept
+  // in useRef + useState pair because the rAF-style move handler needs the
+  // stable initial values via ref while React still has to re-render to
+  // reflect the live preview width.
+  type RegionResizeDrag = {
+    regionId: string;
+    edge: "start" | "end";
+    pointerId: number;
+    pointerStartClientX: number;
+    initialStartSeconds: number;
+    initialEndSeconds: number;
+    minStartSeconds: number; // lower clamp for the moving edge (left neighbour end or 0)
+    maxEndSeconds: number;   // upper clamp for the moving edge (right neighbour start or duration)
+    previewStartSeconds: number;
+    previewEndSeconds: number;
+  };
+  const regionResizeDragRef = useRef<RegionResizeDrag | null>(null);
+  const [regionResizePreview, setRegionResizePreview] = useState<{
+    regionId: string;
+    startSeconds: number;
+    endSeconds: number;
+  } | null>(null);
+
+  const MIN_REGION_DURATION_SECONDS = 0.1;
+
+  function beginRegionResize(
+    event: ReactPointerEvent<HTMLDivElement>,
+    region: SongRegionSummary,
+    edge: "start" | "end",
+  ) {
+    if (!song) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Build sorted neighbours to compute clamp bounds. Neighbour-end is the
+    // lower bound for our start edge; neighbour-start is the upper bound
+    // for our end edge.
+    const sorted = [...song.regions].sort(
+      (left, right) => left.startSeconds - right.startSeconds,
+    );
+    const idx = sorted.findIndex((entry) => entry.id === region.id);
+    const leftNeighbour = idx > 0 ? sorted[idx - 1] : null;
+    const rightNeighbour = idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
+    const minStart = leftNeighbour ? leftNeighbour.endSeconds : 0;
+    const maxEnd = rightNeighbour
+      ? rightNeighbour.startSeconds
+      : Math.max(song.durationSeconds, region.endSeconds);
+
+    regionResizeDragRef.current = {
+      regionId: region.id,
+      edge,
+      pointerId: event.pointerId,
+      pointerStartClientX: event.clientX,
+      initialStartSeconds: region.startSeconds,
+      initialEndSeconds: region.endSeconds,
+      minStartSeconds: minStart,
+      maxEndSeconds: maxEnd,
+      previewStartSeconds: region.startSeconds,
+      previewEndSeconds: region.endSeconds,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.classList.add("is-active");
+    setRegionResizePreview({
+      regionId: region.id,
+      startSeconds: region.startSeconds,
+      endSeconds: region.endSeconds,
+    });
+  }
+
+  function updateRegionResize(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = regionResizeDragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId || !song) return;
+
+    const effectivePixelsPerSecond =
+      livePixelsPerSecondRef.current ?? pixelsPerSecond;
+    if (effectivePixelsPerSecond <= 0) return;
+
+    const deltaSeconds =
+      (event.clientX - drag.pointerStartClientX) / effectivePixelsPerSecond;
+
+    let nextStart = drag.initialStartSeconds;
+    let nextEnd = drag.initialEndSeconds;
+    if (drag.edge === "start") {
+      nextStart = drag.initialStartSeconds + deltaSeconds;
+    } else {
+      nextEnd = drag.initialEndSeconds + deltaSeconds;
+    }
+
+    // Snap (respects Alt to temporarily disable).
+    const shouldSnap = Boolean(snapEnabled) && !event.altKey;
+    if (shouldSnap) {
+      const songBpm = song.bpm;
+      const songTs = song.timeSignature;
+      const zoom = 1;
+      if (drag.edge === "start") {
+        nextStart = snapToTimelineGrid(
+          nextStart,
+          songBpm,
+          songTs,
+          zoom,
+          effectivePixelsPerSecond,
+        );
+      } else {
+        nextEnd = snapToTimelineGrid(
+          nextEnd,
+          songBpm,
+          songTs,
+          zoom,
+          effectivePixelsPerSecond,
+        );
+      }
+    }
+
+    // Clamp to neighbours and minimum duration.
+    if (drag.edge === "start") {
+      nextStart = Math.max(
+        drag.minStartSeconds,
+        Math.min(nextStart, drag.initialEndSeconds - MIN_REGION_DURATION_SECONDS),
+      );
+    } else {
+      nextEnd = Math.min(
+        drag.maxEndSeconds,
+        Math.max(nextEnd, drag.initialStartSeconds + MIN_REGION_DURATION_SECONDS),
+      );
+    }
+
+    drag.previewStartSeconds = nextStart;
+    drag.previewEndSeconds = nextEnd;
+    setRegionResizePreview({
+      regionId: drag.regionId,
+      startSeconds: nextStart,
+      endSeconds: nextEnd,
+    });
+  }
+
+  function endRegionResize(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = regionResizeDragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+
+    event.currentTarget.classList.remove("is-active");
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer was already released by the browser; ignore.
+    }
+
+    const finalStart = drag.previewStartSeconds;
+    const finalEnd = drag.previewEndSeconds;
+    const changed =
+      finalStart !== drag.initialStartSeconds ||
+      finalEnd !== drag.initialEndSeconds;
+
+    regionResizeDragRef.current = null;
+    setRegionResizePreview(null);
+
+    if (changed && onRegionResizeCommit) {
+      onRegionResizeCommit(drag.regionId, finalStart, finalEnd);
+    }
+  }
 
   const handleTimelineDragEnter = (event: ReactDragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -317,47 +498,74 @@ export function TimelineCanvasPane({
             onNativeZoomCommit={onNativeZoomCommit}
             onNativeTrackHeightChange={onNativeTrackHeightChange}
           >
-            {song?.regions.map((region) => (
-              <button
-                key={region.id}
-                type="button"
-                className={`lt-region-hotspot ${selectedRegionId === region.id ? "is-selected" : ""}`}
-                aria-label={`Carril superior: región ${region.name}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`}
-                title={`Carril superior: región ${region.name}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`}
-                style={{
-                  left: region.startSeconds * pixelsPerSecond,
-                  top: LANE_REGIONS.top,
-                  height: LANE_REGIONS.height,
-                  width: Math.max(24, (region.endSeconds - region.startSeconds) * pixelsPerSecond),
-                }}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (midiLearnMode !== null) {
-                    const chronologicalRegions = [...(song?.regions ?? [])].sort((left, right) => (
-                      left.startSeconds - right.startSeconds
-                    ));
-                    const regionIndex = chronologicalRegions.findIndex((candidate) => candidate.id === region.id);
-                    if (regionIndex >= 0) {
-                      onMidiLearnTarget(`action:jump_song_${regionIndex + 1}`);
+            {song?.regions.map((region) => {
+              // Live preview during resize: drag updates this single in-flight
+              // region's bounds optimistically; everyone else renders as-is.
+              const isResizing = regionResizePreview?.regionId === region.id;
+              const renderStart = isResizing
+                ? regionResizePreview.startSeconds
+                : region.startSeconds;
+              const renderEnd = isResizing
+                ? regionResizePreview.endSeconds
+                : region.endSeconds;
+              return (
+                <button
+                  key={region.id}
+                  type="button"
+                  className={`lt-region-hotspot ${selectedRegionId === region.id ? "is-selected" : ""}`}
+                  aria-label={`Carril superior: región ${region.name}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`}
+                  title={`Carril superior: región ${region.name}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`}
+                  style={{
+                    left: renderStart * pixelsPerSecond,
+                    top: LANE_REGIONS.top,
+                    height: LANE_REGIONS.height,
+                    width: Math.max(24, (renderEnd - renderStart) * pixelsPerSecond),
+                  }}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (midiLearnMode !== null) {
+                      const chronologicalRegions = [...(song?.regions ?? [])].sort((left, right) => (
+                        left.startSeconds - right.startSeconds
+                      ));
+                      const regionIndex = chronologicalRegions.findIndex((candidate) => candidate.id === region.id);
+                      if (regionIndex >= 0) {
+                        onMidiLearnTarget(`action:jump_song_${regionIndex + 1}`);
+                      }
+                      return;
                     }
-                    return;
-                  }
 
-                  onSelectRegion(region.id);
-                }}
-                onContextMenu={(event) => {
-                  event.stopPropagation();
-                  onRegionContextMenu(event, region.id);
-                }}
-              >
-                <span className="lt-sr-only">{region.name}</span>
-              </button>
-            ))}
+                    onSelectRegion(region.id);
+                  }}
+                  onContextMenu={(event) => {
+                    event.stopPropagation();
+                    onRegionContextMenu(event, region.id);
+                  }}
+                >
+                  <span className="lt-sr-only">{region.name}</span>
+                  <div
+                    className="lt-region-resize-handle is-start"
+                    role="presentation"
+                    onPointerDown={(event) => beginRegionResize(event, region, "start")}
+                    onPointerMove={updateRegionResize}
+                    onPointerUp={endRegionResize}
+                    onPointerCancel={endRegionResize}
+                  />
+                  <div
+                    className="lt-region-resize-handle is-end"
+                    role="presentation"
+                    onPointerDown={(event) => beginRegionResize(event, region, "end")}
+                    onPointerMove={updateRegionResize}
+                    onPointerUp={endRegionResize}
+                    onPointerCancel={endRegionResize}
+                  />
+                </button>
+              );
+            })}
 
             {selectedTimelineRange ? (
               <div
