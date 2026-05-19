@@ -143,10 +143,25 @@ if(LT_ENGINE_USE_LIBSNDFILE)
 endif()
 
 if(LT_ENGINE_USE_FFMPEG)
-    # FFmpeg/libav is expected from the system, vcpkg, or conan. vcpkg's
-    # ffmpeg port provides a FindFFMPEG module and variables rather than a
-    # stable config target, so consume the documented variable interface.
-    find_package(FFMPEG REQUIRED COMPONENTS libavformat libavcodec libavutil libswresample)
+    # FFmpeg/libav is expected from the system, vcpkg, or conan. The discovery
+    # path is platform-shaped:
+    #   - vcpkg ships a FindFFMPEG.cmake module and the matching variables,
+    #     so find_package works out of the box on Windows.
+    #   - Homebrew (macOS) and apt (Linux) install FFmpeg with a pkg-config
+    #     manifest only — there is no upstream FFmpegConfig.cmake — so a plain
+    #     find_package fails. Fall back to pkg-config and synthesise the same
+    #     variable interface (FFMPEG_INCLUDE_DIRS / LIBRARY_DIRS / LIBRARIES)
+    #     so the linkage below works identically.
+    find_package(FFMPEG QUIET COMPONENTS libavformat libavcodec libavutil libswresample)
+    if(NOT FFMPEG_FOUND)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
+            libavformat
+            libavcodec
+            libavutil
+            libswresample
+        )
+    endif()
     target_include_directories(lt_deps_decoder INTERFACE ${FFMPEG_INCLUDE_DIRS})
     target_link_directories(lt_deps_decoder INTERFACE ${FFMPEG_LIBRARY_DIRS})
     target_link_libraries(lt_deps_decoder INTERFACE ${FFMPEG_LIBRARIES})
