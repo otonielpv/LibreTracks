@@ -251,25 +251,72 @@ export function stopRecording() {
   recordingStartedAt = 0;
 }
 
-export function downloadRecording(filename = "lt-perf-recording.json") {
-  const payload = {
+function buildRecordingPayload() {
+  return {
     capturedAt: new Date().toISOString(),
     sampleCount: recordedSamples.length,
     markerCount: recordedMarkers.length,
     samples: recordedSamples,
     markers: recordedMarkers,
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+}
+
+/**
+ * Try several strategies to surface the recorded JSON. We do all of them
+ * because the Tauri webview blocks <a download> on Windows (file never
+ * appears in the Downloads folder) but clipboard + console always work.
+ *
+ * Order of attempts:
+ *   1. Copy to clipboard via the async Clipboard API. This is the most
+ *      useful path — the user can paste the JSON straight into chat.
+ *   2. Print the full payload to the console with `console.log`. The
+ *      user can right-click → "Copy object" / "Copy string" from DevTools
+ *      if the clipboard write failed (e.g. focus issues).
+ *   3. Trigger an <a download> click as a best-effort browser fallback.
+ *
+ * Returns a label describing what actually happened so the HUD button
+ * can show a brief confirmation.
+ */
+export async function downloadRecording(): Promise<string> {
+  const payload = buildRecordingPayload();
+  const json = JSON.stringify(payload, null, 2);
+
+  // Always log first — guaranteed to surface in DevTools and the user can
+  // copy from there as a last resort.
+  // eslint-disable-next-line no-console
+  console.log(
+    `[perf] recording (${payload.sampleCount} samples, ${payload.markerCount} markers):`,
+    payload,
+  );
+
+  // Clipboard path. Requires the document to be focused; in Tauri's
+  // webview this is usually the case but we still catch and fall through.
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(json);
+      return `copied ${payload.sampleCount} samples to clipboard`;
+    } catch {
+      // fall through
+    }
+  }
+
+  // Best-effort download fallback. Tauri 2 on Windows ignores this in
+  // most configurations but it doesn't hurt to try.
+  try {
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "lt-perf-recording.json";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } catch {
+    // ignore
+  }
+
+  return `${payload.sampleCount} samples printed to console`;
 }
 
 export function dumpRecordingSummary() {

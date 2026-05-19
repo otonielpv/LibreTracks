@@ -25,6 +25,7 @@ import {
 export function PerfHud() {
   const [enabled, setEnabled] = useState<boolean>(() => isPerfHudEnabled());
   const [snapshot, setSnapshot] = useState<PerfSnapshot | null>(null);
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
 
   // Keybinding toggle. Lives at the window level so it works regardless of
   // focus inside the app.
@@ -155,7 +156,16 @@ export function PerfHud() {
       >
         <button
           type="button"
-          onClick={() => downloadRecording()}
+          onClick={async () => {
+            // downloadRecording tries clipboard → console → <a download>
+            // and tells us which one stuck. Bubble that to the user as a
+            // brief HUD message so they aren't left wondering whether the
+            // button did anything (the <a download> path silently no-ops
+            // inside Tauri's webview).
+            const status = await downloadRecording();
+            setDownloadStatus(status);
+            window.setTimeout(() => setDownloadStatus(null), 3500);
+          }}
           style={{
             flex: 1,
             padding: "3px 6px",
@@ -167,7 +177,7 @@ export function PerfHud() {
             font: "inherit",
           }}
         >
-          download
+          copy / log
         </button>
         <button
           type="button"
@@ -186,6 +196,12 @@ export function PerfHud() {
           clear
         </button>
       </div>
+
+      {downloadStatus ? (
+        <div style={{ marginTop: 4, color: "#cfe7f5", opacity: 0.95 }}>
+          ✓ {downloadStatus}
+        </div>
+      ) : null}
 
       <div style={{ opacity: 0.4, marginTop: 6 }}>
         Ctrl+Shift+F toggle · window.__lt_perf.mark('label')
