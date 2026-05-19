@@ -46,5 +46,7 @@ TEST_CASE("committed audio playhead advances only after successful render") {
     clock.play();
     Frame before = clock.position().frame;
     mixer->render(out, 2, 256, test::kFixtureSampleRate);
+    CHECK(clock.position().frame == before);
+    mixer->render(out, 2, 256, test::kFixtureSampleRate);
     CHECK(clock.position().frame == before + 256);
 }

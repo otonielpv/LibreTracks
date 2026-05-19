@@ -8,9 +8,17 @@ on:
 permissions:
   contents: read
 
+env:
+  BUNGEE_VERSION: v2.4.24
+  BUNGEE_ARCHIVE: https://github.com/bungee-audio-stretch/bungee/releases/download/v2.4.24/bungee-v2.4.24.tgz
+
 jobs:
   test:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout repository
@@ -25,21 +33,14 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install LLVM for ASIO bindings
-        if: runner.os == 'Windows'
-        run: choco install llvm -y
-
-      - name: Prepare Steinberg ASIO SDK
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $asioDir = Join-Path $env:RUNNER_TEMP "asio_sdk"
-          git clone https://github.com/audiosdk/asio.git $asioDir
-          "CPAL_ASIO_DIR=$asioDir" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
-
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build
 
       - name: Install dependencies
         run: npm install
@@ -49,21 +50,25 @@ jobs:
 
       - name: Run frontend tests
         run: npm test
-      
-      - name: Setup RubberBand DLLs for Windows tests
-        shell: pwsh
-        run: echo "${{ github.workspace }}\vendor\bin\win" | Out-File -FilePath $env:GITHUB_PATH -Append
 
-      - name: Run backend Rust tests
-        run: cargo test --locked -p libretracks-core -p libretracks-project -p libretracks-audio
+      - name: Run Rust tests without native engine link
+        run: cargo test --locked -p libretracks-core -p libretracks-project -p libretracks-audio -p lt-audio-engine-v2 --features lt-audio-engine-v2/no-link
 
-      - name: Run desktop Rust tests
-        env:
-          LIBRETRACKS_DUMMY_AUDIO: "1"
-          RUBBERBAND_LIBRARY: "vendor/bin/win/rubberband-3.dll"
-        run: |
-          $env:PATH = "${{ github.workspace }}\vendor\bin\win;" + $env:PATH
-          cargo test --locked -p libretracks-desktop -- --test-threads=1
+      - name: Configure native engine tests
+        run: >
+          cmake -S native/audio-engine-v2 -B build/engine-ci-tests
+          -DLT_ENGINE_BUILD_TESTS=ON
+          -DLT_ENGINE_USE_JUCE=OFF
+          -DLT_ENGINE_USE_BUNGEE=OFF
+          -DLT_ENGINE_USE_FFMPEG=OFF
+          -DLT_ENGINE_USE_LIBSNDFILE=ON
+          -DLT_ENGINE_USE_R8BRAIN=ON
+
+      - name: Build native engine tests
+        run: cmake --build build/engine-ci-tests --config Debug --target lt_engine_tests --parallel
+
+      - name: Run native engine tests
+        run: ctest --test-dir build/engine-ci-tests -C Debug --output-on-failure
 
   release:
     needs: test
@@ -98,26 +103,6 @@ jobs:
         if: matrix.platform == 'macos'
         run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
 
-      - name: Install LLVM for ASIO bindings
-        if: matrix.platform == 'windows'
-        run: choco install llvm -y
-
-      - name: Prepare Steinberg ASIO SDK
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          $asioDir = Join-Path $env:RUNNER_TEMP "asio_sdk"
-          git clone https://github.com/audiosdk/asio.git $asioDir
-          "CPAL_ASIO_DIR=$asioDir" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - name: Prepare Windows RubberBand resources
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path vendor\bin\native | Out-Null
-          Copy-Item -Path vendor\bin\win\* -Destination vendor\bin\native\ -Force
-
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
 
@@ -125,25 +110,63 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf librubberband-dev
-          mkdir -p vendor/bin/linux
-          cp /usr/lib/x86_64-linux-gnu/librubberband.so.2 vendor/bin/linux/
-          rm -rf vendor/bin/native
-          mkdir -p vendor/bin/native
-          cp vendor/bin/linux/* vendor/bin/native/
+          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libavformat-dev libavcodec-dev libavutil-dev libswresample-dev libsndfile1-dev
 
       - name: Install macOS system dependencies
         if: matrix.platform == 'macos'
+        run: brew install ffmpeg libsndfile
+
+      - name: Configure Windows vcpkg
+        if: matrix.platform == 'windows'
+        shell: pwsh
         run: |
-          brew install rubberband
-          mkdir -p vendor/bin/mac
-          cp $(brew --prefix)/lib/librubberband.dylib vendor/bin/mac/
-          rm -rf vendor/bin/native
-          mkdir -p vendor/bin/native
-          cp vendor/bin/mac/* vendor/bin/native/
+          "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VCPKG_DEFAULT_TRIPLET=x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Download Bungee runtime
+        shell: bash
+        run: |
+          mkdir -p vendor/bungee
+          curl -L "$BUNGEE_ARCHIVE" | tar -xz -C vendor/bungee
 
       - name: Install dependencies
         run: npm install
+
+      - name: Build native engine release
+        shell: pwsh
+        run: |
+          $bungeeEnabled = "ON"
+          $configureArgs = @(
+            "-S", "native/audio-engine-v2",
+            "-B", "build/engine-release",
+            "-DLT_ENGINE_BUILD_TESTS=OFF",
+            "-DLT_ENGINE_USE_JUCE=ON",
+            "-DLT_ENGINE_USE_BUNGEE=$bungeeEnabled",
+            "-DLT_BUNGEE_DIR=$PWD/vendor/bungee",
+            "-DLT_ENGINE_USE_FFMPEG=ON",
+            "-DLT_ENGINE_USE_LIBSNDFILE=ON",
+            "-DLT_ENGINE_USE_R8BRAIN=ON"
+          )
+          if ($env:CMAKE_TOOLCHAIN_FILE) {
+            $configureArgs += "-DCMAKE_TOOLCHAIN_FILE=$env:CMAKE_TOOLCHAIN_FILE"
+          }
+          if ($env:VCPKG_DEFAULT_TRIPLET) {
+            $configureArgs += "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_DEFAULT_TRIPLET"
+          }
+          cmake @configureArgs
+          cmake --build build/engine-release --config Release --target lt_audio_engine_v2 --parallel
+
+          $libDir = if ("${{ matrix.platform }}" -eq "windows") { "$PWD/build/engine-release/Release" } else { "$PWD/build/engine-release" }
+          "LT_ENGINE_V2_LIB_DIR=$libDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          New-Item -ItemType Directory -Force -Path vendor/bin/native | Out-Null
+          Get-ChildItem -Path $libDir -Include "*.dll","*.so","*.dylib" -File -Recurse | Copy-Item -Destination vendor/bin/native -Force
+          if ("${{ matrix.platform }}" -eq "linux") {
+            Copy-Item vendor/bungee/linux-x86_64/libbungee.so vendor/bin/native -Force
+          }
+          if ("${{ matrix.platform }}" -eq "macos") {
+            Copy-Item vendor/bungee/apple-mac/bungee.framework vendor/bin/native -Recurse -Force
+          }
 
       - name: Build remote frontend
         run: npm run build:remote
@@ -152,6 +175,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LT_ENGINE_V2_LIB_DIR: ${{ env.LT_ENGINE_V2_LIB_DIR }}
         with:
           projectPath: 'apps/desktop'
           args: ${{ matrix.platform == 'macos' && '--target universal-apple-darwin' || '' }}
@@ -186,7 +210,7 @@ jobs:
 
   notify-website:
     name: Trigger Website Rebuild
-    needs: update-release-notes # Esto obliga a esperar a que toda la matriz de release termine
+    needs: update-release-notes
     runs-on: ubuntu-latest
     steps:
       - name: Send Deploy Hook to Cloudflare

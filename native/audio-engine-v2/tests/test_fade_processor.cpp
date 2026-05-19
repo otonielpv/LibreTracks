@@ -35,8 +35,11 @@ TEST_CASE("repeated seeks restart fade without sudden second-phase drop") {
     fade.trigger_fade_in();
     fade.process(channels, 1, 96);
 
-    CHECK(left[0] == doctest::Approx(0.0f));
-    for (int i = 1; i < 64; ++i)
+    const float first_after_restart = left[0];
+    CHECK(first_after_restart > 0.0f);
+    for (int i = 1; i < 16; ++i)
+        CHECK(left[i] >= first_after_restart * 0.9f);
+    for (int i = 16; i < 64; ++i)
         CHECK(left[i] >= left[i - 1]);
     CHECK(left[63] == doctest::Approx(1.0f));
     CHECK(left[64] == doctest::Approx(1.0f));

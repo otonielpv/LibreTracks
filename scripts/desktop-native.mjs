@@ -60,7 +60,8 @@ const buildDesktopNativeEnv = (rawEnv) => {
     ...rawEnv,
     LIBRETRACKS_AUDIO_ENGINE: "cpp-v2",
     CARGO_TARGET_DIR: defaultTargetDir,
-    LIBRETRACKS_ENGINE_V2_RUBBERBAND: rawEnv.LIBRETRACKS_ENGINE_V2_RUBBERBAND ?? "1",
+    LIBRETRACKS_ENGINE_V2_BUNGEE:
+      rawEnv.LIBRETRACKS_ENGINE_V2_BUNGEE ?? rawEnv.LIBRETRACKS_ENGINE_V2_RUBBERBAND ?? "1",
     LIBRETRACKS_ENGINE_V2_FFMPEG: rawEnv.LIBRETRACKS_ENGINE_V2_FFMPEG ?? "1",
     VCPKG_DEFAULT_TRIPLET: rawEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows",
   };
@@ -113,21 +114,22 @@ const env = {
 const nativeEnv = buildDesktopNativeEnv(env);
 
 const ensureEngineV2 = (normalizedEnv) => {
-  const useRubberBand = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_RUBBERBAND) ? "ON" : "OFF";
+  const useBungeeRequested = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_BUNGEE) ? "ON" : "OFF";
   const useLibSndFile = "ON";
   const useR8Brain = "ON";
   const useFFmpeg = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_FFMPEG) ? "ON" : "OFF";
   const bungeeDir = detectBungeeDir(normalizedEnv);
-  const useBungee = useRubberBand === "ON" && bungeeDir ? "ON" : "OFF";
+  const useBungee = useBungeeRequested === "ON" && bungeeDir ? "ON" : "OFF";
   const asioSdkDir = detectAsioSdkDir(normalizedEnv);
-  const buildName = useRubberBand === "ON"
-    ? (useFFmpeg === "ON" ? "build-rb-on-ffmpeg" : "build-rb-on")
-    : (useFFmpeg === "ON" ? "build-rb-off-ffmpeg" : "build-rb-off");
+  const buildName = useBungeeRequested === "ON"
+    ? (useFFmpeg === "ON" ? "build-bungee-on-ffmpeg" : "build-bungee-on")
+    : (useFFmpeg === "ON" ? "build-bungee-off-ffmpeg" : "build-bungee-off");
   const buildDir = path.join(repoRoot, "native", "audio-engine-v2", buildName);
   const buildArg = `native/audio-engine-v2/${buildName}`;
-  const libDir = path.join(buildDir, "Debug");
+  const buildConfig = mode === "build" ? "Release" : "Debug";
+  const libDir = process.platform === "win32" ? path.join(buildDir, buildConfig) : buildDir;
 
-  console.log(`Audio Engine v2 RubberBand: ${useRubberBand}`);
+  console.log(`Audio Engine v2 Bungee requested: ${useBungeeRequested}`);
   console.log(`Audio Engine v2 Bungee: ${useBungee}`);
   if (bungeeDir) {
     console.log(`LT_BUNGEE_DIR: ${bungeeDir}`);
@@ -180,7 +182,7 @@ const ensureEngineV2 = (normalizedEnv) => {
     "--build",
     buildArg,
     "--config",
-    "Debug",
+    buildConfig,
     "--target",
     "lt_audio_engine_v2",
   ]);

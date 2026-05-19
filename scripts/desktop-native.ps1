@@ -12,8 +12,11 @@ $toolchainCandidates = @(
   (Join-Path $repoRoot "vcpkg\scripts\buildsystems\vcpkg.cmake"),
   "D:\Repos\vcpkg\scripts\buildsystems\vcpkg.cmake"
 )
-if (-not $env:LIBRETRACKS_ENGINE_V2_RUBBERBAND) {
-  $env:LIBRETRACKS_ENGINE_V2_RUBBERBAND = "1"
+if (-not $env:LIBRETRACKS_ENGINE_V2_BUNGEE -and $env:LIBRETRACKS_ENGINE_V2_RUBBERBAND) {
+  $env:LIBRETRACKS_ENGINE_V2_BUNGEE = $env:LIBRETRACKS_ENGINE_V2_RUBBERBAND
+}
+if (-not $env:LIBRETRACKS_ENGINE_V2_BUNGEE) {
+  $env:LIBRETRACKS_ENGINE_V2_BUNGEE = "1"
 }
 if (-not $env:LIBRETRACKS_ENGINE_V2_FFMPEG) {
   $env:LIBRETRACKS_ENGINE_V2_FFMPEG = "1"
@@ -29,7 +32,7 @@ if (-not $env:CMAKE_TOOLCHAIN_FILE) {
     }
   }
 }
-$useRubberBand = if ($env:LIBRETRACKS_ENGINE_V2_RUBBERBAND -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
+$useBungeeRequested = if ($env:LIBRETRACKS_ENGINE_V2_BUNGEE -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
 $useFFmpeg = if ($env:LIBRETRACKS_ENGINE_V2_FFMPEG -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
 $bungeeCandidates = @(
   $env:LT_BUNGEE_DIR,
@@ -37,7 +40,7 @@ $bungeeCandidates = @(
   (Join-Path $repoRoot "vendor\bungee")
 ) | Where-Object { $_ }
 $bungeeDir = $bungeeCandidates | Where-Object { Test-Path (Join-Path $_ "include\bungee\Bungee.h") } | Select-Object -First 1
-$useBungee = if ($useRubberBand -eq "ON" -and $bungeeDir) { "ON" } else { "OFF" }
+$useBungee = if ($useBungeeRequested -eq "ON" -and $bungeeDir) { "ON" } else { "OFF" }
 
 # ASIO SDK auto-detect - same pattern as Bungee. JUCE's ASIO module needs
 # iasiodrv.h from the Steinberg SDK at build time. The public mirror lives
@@ -49,13 +52,14 @@ $asioCandidates = @(
   (Join-Path $repoRoot "vendor\asiosdk")
 ) | Where-Object { $_ }
 $asioSdkDir = $asioCandidates | Where-Object { Test-Path (Join-Path $_ "common\iasiodrv.h") } | Select-Object -First 1
-$engineV2BuildName = if ($useRubberBand -eq "ON") {
-  if ($useFFmpeg -eq "ON") { "build-rb-on-ffmpeg" } else { "build-rb-on" }
+$engineV2BuildName = if ($useBungeeRequested -eq "ON") {
+  if ($useFFmpeg -eq "ON") { "build-bungee-on-ffmpeg" } else { "build-bungee-on" }
 } else {
-  if ($useFFmpeg -eq "ON") { "build-rb-off-ffmpeg" } else { "build-rb-off" }
+  if ($useFFmpeg -eq "ON") { "build-bungee-off-ffmpeg" } else { "build-bungee-off" }
 }
 $engineV2BuildDir = Join-Path $repoRoot "native\audio-engine-v2\$engineV2BuildName"
-$engineV2LibDir = Join-Path $engineV2BuildDir "Debug"
+$engineV2Config = if ($Mode -eq "build") { "Release" } else { "Debug" }
+$engineV2LibDir = Join-Path $engineV2BuildDir $engineV2Config
 $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
 $toolchainRoot = Join-Path $env:USERPROFILE ".rustup\toolchains"
 $toolchainBin = $null
@@ -297,7 +301,7 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
 $useLibSndFile = "ON"
 $useR8Brain = "ON"
 
-Write-Host "Audio Engine v2 RubberBand: $useRubberBand"
+Write-Host "Audio Engine v2 Bungee requested: $useBungeeRequested"
 Write-Host "Audio Engine v2 Bungee: $useBungee"
 if ($bungeeDir) {
   Write-Host "LT_BUNGEE_DIR: $bungeeDir"
@@ -348,7 +352,7 @@ if ($env:VCPKG_DEFAULT_TRIPLET) {
 cmake @cmakeConfigureArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-cmake --build $engineV2BuildDir --config Debug --target lt_audio_engine_v2
+cmake --build $engineV2BuildDir --config $engineV2Config --target lt_audio_engine_v2
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $nativeVendorDir = Join-Path $repoRoot "vendor\bin\native"

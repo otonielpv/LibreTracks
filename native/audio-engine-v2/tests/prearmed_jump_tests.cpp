@@ -30,6 +30,12 @@
 
 using namespace lt;
 
+#ifndef LT_ENGINE_HAVE_BUNGEE
+#define LT_ENGINE_HAVE_BUNGEE 0
+#endif
+
+#if LT_ENGINE_HAVE_BUNGEE
+
 namespace {
 
 // All MVP tests use the same 1-pitched + 1-unpitched fixture: a 4096-frame
@@ -758,3 +764,5 @@ TEST_CASE("PrearmedJumpManager prefeed: pitched click onset aligned with unpitch
     // enough to allow Bungee's natural transient smear.
     CHECK(std::llabs(p_onset - u_onset) <= 32);
 }
+
+#endif // LT_ENGINE_HAVE_BUNGEE

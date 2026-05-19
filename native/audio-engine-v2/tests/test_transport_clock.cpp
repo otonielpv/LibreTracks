@@ -89,6 +89,8 @@ TEST_CASE("advance does not move clock when paused") {
 TEST_CASE("advance moves clock when playing") {
     TransportClock clock(48000);
     clock.play();
+    CHECK(clock.pending_start());
+    clock.clear_pending_start();
     clock.advance(512);
     CHECK(clock.position().frame == 512);
     clock.advance(512);
@@ -98,8 +100,19 @@ TEST_CASE("advance moves clock when playing") {
 TEST_CASE("seconds are correct after advance") {
     TransportClock clock(48000);
     clock.play();
+    clock.clear_pending_start();
     clock.advance(48000);
     CHECK(clock.position().seconds == doctest::Approx(1.0));
+}
+
+TEST_CASE("play holds clock until first audible block is confirmed") {
+    TransportClock clock(48000);
+    clock.play();
+    clock.advance(512);
+    CHECK(clock.position().frame == 0);
+    clock.clear_pending_start();
+    clock.advance(512);
+    CHECK(clock.position().frame == 512);
 }
 
 // ── Context resolution ───────────────────────────────────────────────────────

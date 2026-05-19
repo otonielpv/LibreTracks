@@ -102,7 +102,7 @@ target_link_libraries(lt_audio_engine_v2
 #
 # Bungee (https://github.com/bungee-audio-stretch/bungee, MPL-2.0) is a phase-
 # vocoder library with much lower per-voice CPU than RubberBand. We consume the
-# upstream-published Windows prebuilt because Bungee's source uses GCC-only
+# upstream-published prebuilt archives because Bungee's source uses GCC-only
 # attributes that MSVC cannot compile.
 #
 # Enable with:
@@ -123,8 +123,18 @@ if(LT_ENGINE_USE_BUNGEE)
         set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/windows-x86_64")
         set(_lt_bungee_lib    "${_lt_bungee_libdir}/bungee.lib")
         set(_lt_bungee_dll    "${_lt_bungee_libdir}/bungee.dll")
+    elseif(APPLE)
+        set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/apple-mac")
+        set(_lt_bungee_lib    "${_lt_bungee_libdir}/bungee.framework")
+        set(_lt_bungee_dll    "${_lt_bungee_lib}")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+        set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/linux-aarch64")
+        set(_lt_bungee_lib    "${_lt_bungee_libdir}/libbungee.so")
+        set(_lt_bungee_dll    "${_lt_bungee_lib}")
     else()
-        message(FATAL_ERROR "LT_ENGINE_USE_BUNGEE: only Windows x86_64 wiring is in place.")
+        set(_lt_bungee_libdir "${LT_BUNGEE_DIR}/linux-x86_64")
+        set(_lt_bungee_lib    "${_lt_bungee_libdir}/libbungee.so")
+        set(_lt_bungee_dll    "${_lt_bungee_lib}")
     endif()
     if(NOT EXISTS "${_lt_bungee_lib}")
         message(FATAL_ERROR "Expected ${_lt_bungee_lib} not found.")
@@ -132,12 +142,29 @@ if(LT_ENGINE_USE_BUNGEE)
     target_include_directories(lt_audio_engine_v2 PRIVATE "${LT_BUNGEE_DIR}/include")
     target_link_libraries(lt_audio_engine_v2 PRIVATE "${_lt_bungee_lib}")
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HAVE_BUNGEE=1)
-    if(WIN32 AND EXISTS "${_lt_bungee_dll}")
+    if(APPLE)
+        set_target_properties(lt_audio_engine_v2 PROPERTIES
+            BUILD_RPATH "@loader_path"
+            INSTALL_RPATH "@loader_path"
+        )
+    elseif(UNIX)
+        set_target_properties(lt_audio_engine_v2 PROPERTIES
+            BUILD_RPATH "$ORIGIN"
+            INSTALL_RPATH "$ORIGIN"
+        )
+    endif()
+    if(APPLE AND EXISTS "${_lt_bungee_dll}")
+        add_custom_command(TARGET lt_audio_engine_v2 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${_lt_bungee_dll}"
+                "$<TARGET_FILE_DIR:lt_audio_engine_v2>/bungee.framework"
+            COMMENT "Copying Bungee framework next to lt_audio_engine_v2")
+    elseif(EXISTS "${_lt_bungee_dll}")
         add_custom_command(TARGET lt_audio_engine_v2 POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${_lt_bungee_dll}"
                 "$<TARGET_FILE_DIR:lt_audio_engine_v2>"
-            COMMENT "Copying Bungee DLL next to lt_audio_engine_v2")
+            COMMENT "Copying Bungee runtime next to lt_audio_engine_v2")
     endif()
     message(STATUS "Pitch backend (optional): Bungee enabled from ${LT_BUNGEE_DIR}")
 else()

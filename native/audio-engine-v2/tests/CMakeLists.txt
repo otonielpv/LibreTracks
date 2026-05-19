@@ -66,14 +66,28 @@ endif()
 
 # When the engine was built with Bungee support, make sure bungee.dll sits next
 # to the test executable so the tests can load it.
-if(LT_ENGINE_USE_BUNGEE AND WIN32 AND DEFINED LT_BUNGEE_DIR)
-    set(_lt_bungee_test_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
-    if(EXISTS "${_lt_bungee_test_dll}")
+if(LT_ENGINE_USE_BUNGEE AND DEFINED LT_BUNGEE_DIR)
+    if(WIN32)
+        set(_lt_bungee_test_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
+    elseif(APPLE)
+        set(_lt_bungee_test_dll "${LT_BUNGEE_DIR}/apple-mac/bungee.framework")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+        set(_lt_bungee_test_dll "${LT_BUNGEE_DIR}/linux-aarch64/libbungee.so")
+    else()
+        set(_lt_bungee_test_dll "${LT_BUNGEE_DIR}/linux-x86_64/libbungee.so")
+    endif()
+    if(APPLE AND EXISTS "${_lt_bungee_test_dll}")
+        add_custom_command(TARGET lt_engine_tests POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${_lt_bungee_test_dll}"
+                "$<TARGET_FILE_DIR:lt_engine_tests>/bungee.framework"
+            COMMENT "Copying Bungee framework next to lt_engine_tests")
+    elseif(EXISTS "${_lt_bungee_test_dll}")
         add_custom_command(TARGET lt_engine_tests POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${_lt_bungee_test_dll}"
                 "$<TARGET_FILE_DIR:lt_engine_tests>"
-            COMMENT "Copying Bungee DLL next to lt_engine_tests")
+            COMMENT "Copying Bungee runtime next to lt_engine_tests")
     endif()
 endif()
 
