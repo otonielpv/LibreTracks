@@ -131,6 +131,9 @@ export function PerfHud() {
           ? `  worst: ${snapshot.canvasRenderWorstMs.toFixed(1)} ms`
           : ""}
       </div>
+      <div style={{ opacity: 0.6 }}>
+        canvas paints total: {snapshot.canvasPaintCount}
+      </div>
 
       {snapshot.renderCounts.length > 0 ? (
         <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(255,255,255,0.12)" }}>

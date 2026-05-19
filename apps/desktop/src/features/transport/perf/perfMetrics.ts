@@ -49,6 +49,7 @@ let canvasRenderEma = 0;
 let canvasRenderWorstThisSecond = 0;
 let canvasRenderWorstLastSecond = 0;
 let canvasRenderWindowStart = 0;
+let canvasPaintCount = 0; // monotonic; lets the HUD distinguish "0 because idle" from "0 because instrumentation is broken"
 
 export function isPerfHudEnabled(): boolean {
   if (typeof window === "undefined") return false;
@@ -105,6 +106,7 @@ export function stopPerfMetrics() {
   canvasRenderWorstThisSecond = 0;
   canvasRenderWorstLastSecond = 0;
   canvasRenderWindowStart = 0;
+  canvasPaintCount = 0;
   stopRecording();
   uninstallAutoMarkers();
 }
@@ -161,10 +163,12 @@ export type PerfSnapshot = {
   snapshotCommitGapEma: number;
   canvasRenderEma: number;
   canvasRenderWorstMs: number;
+  canvasPaintCount: number;
 };
 
 export function recordCanvasRender(ms: number) {
   if (!started) return;
+  canvasPaintCount += 1;
   canvasRenderEma = canvasRenderEma === 0 ? ms : canvasRenderEma * 0.85 + ms * 0.15;
   if (ms > canvasRenderWorstThisSecond) canvasRenderWorstThisSecond = ms;
   const now = performance.now();
@@ -193,6 +197,7 @@ type RecordedSample = {
   snapshotCommitGapEma: number;
   canvasRenderEma: number;
   canvasRenderWorstMs: number;
+  canvasPaintCount: number;
   renderCounts: Record<string, number>;
 };
 
@@ -220,6 +225,7 @@ function appendRecordedSample() {
     snapshotCommitGapEma: snap.snapshotCommitGapEma,
     canvasRenderEma: snap.canvasRenderEma,
     canvasRenderWorstMs: snap.canvasRenderWorstMs,
+    canvasPaintCount: snap.canvasPaintCount,
     renderCounts: Object.fromEntries(snap.renderCounts),
   });
   if (recordedSamples.length > MAX_RECORDED_SAMPLES) {
@@ -522,5 +528,6 @@ export function readPerfSnapshot(): PerfSnapshot {
     snapshotCommitGapEma,
     canvasRenderEma,
     canvasRenderWorstMs: canvasRenderWorstLastSecond,
+    canvasPaintCount,
   };
 }
