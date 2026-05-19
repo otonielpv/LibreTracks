@@ -110,6 +110,7 @@ import {
 } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
+import { useRenderCounter } from "./perf/useRenderCounter";
 import { TimelineToolbar } from "./TimelineToolbar";
 import { TimelineTopbar } from "./TimelineTopbar";
 import { TrackHeadersPane } from "./TrackHeadersPane";
@@ -263,6 +264,7 @@ export type {
 } from "./types";
 
 export function TransportPanelContent() {
+  useRenderCounter("TransportPanelContent");
   const { t, i18n } = useTranslation();
   const [song, setSong] = useState<SongView | null>(null);
   const [waveformCache, setWaveformCache] = useState<

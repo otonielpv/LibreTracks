@@ -1,6 +1,7 @@
 import { useEffect, useRef, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 
 import type { TransportClock, TransportSnapshot } from "./desktopApi";
+import { useRenderCounter } from "./perf/useRenderCounter";
 import { useTransportStore } from "./store";
 import { clamp, clientXToTimelineSeconds, secondsToAbsoluteX } from "./timelineMath";
 
@@ -69,6 +70,7 @@ export function PlayheadOverlay({
   positionBoundsRef,
   scrollContainerRef,
 }: PlayheadOverlayProps) {
+  useRenderCounter("PlayheadOverlay");
   const playheadRef = useRef<HTMLDivElement | null>(null);
   const playbackRef = useRef<PlaybackSnapshotState>({
     playbackState: "empty",

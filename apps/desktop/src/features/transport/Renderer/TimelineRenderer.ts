@@ -2,6 +2,7 @@ import type { MutableRefObject } from "react";
 
 import type { SongView, WaveformSummaryDto } from "../desktopApi";
 import type { TimelineClipSummary, TimelineTrackSummary } from "../pendingAudioImports";
+import { recordCanvasRender } from "../perf/perfMetrics";
 import type { TimelineGrid } from "../timelineMath";
 
 export type TrackSceneSnapshot = {
@@ -212,6 +213,12 @@ export class TimelineRenderer {
       }
 
       if (isRenderableCanvasSize(snapshot.width) && isRenderableCanvasSize(snapshot.height)) {
+        // Measure only frames where we actually paint at least one layer,
+        // so we don't dilute the metric with cheap "all clean" rAF ticks.
+        const willPaint =
+          this.dirtyBackground || this.dirtyTracks || this.dirtyForeground;
+        const paintStartedAt = willPaint ? performance.now() : 0;
+
         if (this.dirtyBackground) {
           this.renderLayer(
             this.backgroundCanvas,
@@ -243,6 +250,10 @@ export class TimelineRenderer {
             viewport,
           );
           this.dirtyForeground = false;
+        }
+
+        if (willPaint) {
+          recordCanvasRender(performance.now() - paintStartedAt);
         }
       }
     }

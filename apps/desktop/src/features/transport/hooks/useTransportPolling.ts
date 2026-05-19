@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { TransportSnapshot } from "@libretracks/shared/models";
 import { getTransportSnapshot, isTauriApp } from "../desktopApi";
+import { recordSnapshotCommitGap, recordSnapshotIpc } from "../perf/perfMetrics";
 
 type UseTransportPollingProps = {
   playbackState: string;
@@ -25,13 +26,21 @@ export function useTransportPolling({
       }
 
       inFlight = true;
+      const ipcStartedAt = performance.now();
       try {
         const nextSnapshot = await getTransportSnapshot();
+        const ipcEndedAt = performance.now();
+        recordSnapshotIpc(ipcEndedAt - ipcStartedAt);
         if (!active) {
           return;
         }
 
         applyPlaybackSnapshot(nextSnapshot);
+        // Measured from the moment the snapshot landed in JS to right
+        // after the synchronous setState call returns. Doesn't account
+        // for the React commit phase, but everything beyond that is
+        // visible in the frame-time metric instead.
+        recordSnapshotCommitGap(performance.now() - ipcEndedAt);
 
         // Sync instrumentation — opt-in via window.__LT_SYNC_DEBUG = true.
         if (

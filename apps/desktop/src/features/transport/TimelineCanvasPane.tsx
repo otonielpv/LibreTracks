@@ -14,6 +14,7 @@ import type { TimelineClipSummary, TimelineTrackSummary } from "./pendingAudioIm
 import {
   formatTransposeSemitones,
 } from "./desktopApi";
+import { useRenderCounter } from "./perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import {
   LANE_REGIONS,
@@ -214,6 +215,7 @@ export function TimelineCanvasPane({
   onExternalDropPreviewChange,
   onExternalDrop,
 }: TimelineCanvasPaneProps) {
+  useRenderCounter("TimelineCanvasPane");
   const trackLayersRef = useRef<HTMLDivElement | null>(null);
 
   // ── Region resize drag ──────────────────────────────────────────────────
