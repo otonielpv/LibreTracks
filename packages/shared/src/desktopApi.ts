@@ -373,6 +373,12 @@ export async function duplicateClip(
   return invokeCommand<TransportSnapshot>("duplicate_clip", { clipId, timelineStartSeconds });
 }
 
+export async function duplicateClips(
+  placements: Array<{ clipId: string; timelineStartSeconds: number }>,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("duplicate_clips", { placements });
+}
+
 export async function splitClip(
   clipId: string,
   splitSeconds: number,

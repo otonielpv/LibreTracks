@@ -135,12 +135,8 @@ pub fn get_ownership_diagnostics(
             .map(|p| p.pitch_audio_thread_prime_count)
             .unwrap_or(0),
 
-        pitch_repair_requested_count: pitch
-            .map(|p| p.pitch_repair_requested_count)
-            .unwrap_or(0),
-        pitch_repair_completed_count: pitch
-            .map(|p| p.pitch_repair_completed_count)
-            .unwrap_or(0),
+        pitch_repair_requested_count: pitch.map(|p| p.pitch_repair_requested_count).unwrap_or(0),
+        pitch_repair_completed_count: pitch.map(|p| p.pitch_repair_completed_count).unwrap_or(0),
         mixer_scheduled_jump_executed_count: pitch
             .map(|p| p.mixer_scheduled_jump_executed_count)
             .unwrap_or(0),

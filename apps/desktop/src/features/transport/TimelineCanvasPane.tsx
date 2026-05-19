@@ -68,6 +68,7 @@ type TimelineCanvasPaneProps = {
   timelineGrid: TimelineGrid;
   selectedTimelineRange: { startSeconds: number; endSeconds: number } | null;
   selectedClipId: string | null;
+  selectedClipIds: string[];
   selectedRegionId: string | null;
   onSelectRegion: (regionId: string) => void;
   selectedSectionId: string | null;
@@ -170,6 +171,7 @@ export function TimelineCanvasPane({
   timelineGrid,
   selectedTimelineRange,
   selectedClipId,
+  selectedClipIds,
   selectedRegionId,
   onSelectRegion,
   selectedSectionId,
@@ -723,6 +725,7 @@ export function TimelineCanvasPane({
               interactionContainerRef={laneAreaRef}
               timelineGrid={timelineGrid}
               selectedClipId={selectedClipId}
+              selectedClipIds={selectedClipIds}
               clipPreviewSecondsRef={clipPreviewSecondsRef}
               trackHeightForInput={trackHeight}
               canNativeZoom={canNativeZoom}

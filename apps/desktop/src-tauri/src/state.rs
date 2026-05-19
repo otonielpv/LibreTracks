@@ -9,7 +9,6 @@ use std::{
 };
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
-use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 use libretracks_core::{
     Clip, Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track, TrackKind,
     MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
@@ -22,6 +21,7 @@ use libretracks_project::{
     ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry, ProjectError, WaveformSummary,
     SONG_FILE_NAME,
 };
+use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::to_vec;
@@ -1234,9 +1234,11 @@ impl DesktopSession {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
 
-        let scheduled_jump = self
-            .engine
-            .schedule_marker_jump(target_marker_id, trigger.clone(), transition.clone())?;
+        let scheduled_jump = self.engine.schedule_marker_jump(
+            target_marker_id,
+            trigger.clone(),
+            transition.clone(),
+        )?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
             audio.cancel_scheduled_jumps()?;
@@ -1305,9 +1307,11 @@ impl DesktopSession {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
 
-        let scheduled_jump = self
-            .engine
-            .schedule_region_jump(target_region_id, trigger.clone(), transition.clone())?;
+        let scheduled_jump = self.engine.schedule_region_jump(
+            target_region_id,
+            trigger.clone(),
+            transition.clone(),
+        )?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
             audio.cancel_scheduled_jumps()?;
@@ -1543,25 +1547,47 @@ impl DesktopSession {
         timeline_start_seconds: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        self.duplicate_clips(&[(clip_id.to_string(), timeline_start_seconds)], audio)
+    }
+
+    pub fn duplicate_clips(
+        &mut self,
+        placements: &[(String, f64)],
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if placements.is_empty() {
+            return Ok(self.snapshot());
+        }
+
         let mut song = self
             .engine
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let source_clip = song
-            .clips
-            .iter()
-            .find(|clip| clip.id == clip_id)
-            .cloned()
-            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
 
-        let mut duplicated_clip = source_clip;
-        duplicated_clip.id = format!("clip_{}", timestamp_suffix());
-        duplicated_clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
-        song.clips.push(duplicated_clip);
+        let source_clips = placements
+            .iter()
+            .map(|(clip_id, timeline_start_seconds)| {
+                let source_clip = song
+                    .clips
+                    .iter()
+                    .find(|clip| clip.id == *clip_id)
+                    .cloned()
+                    .ok_or_else(|| DesktopError::ClipNotFound(clip_id.clone()))?;
+                Ok((source_clip, *timeline_start_seconds))
+            })
+            .collect::<Result<Vec<_>, DesktopError>>()?;
+
+        let timestamp = timestamp_suffix();
+        for (index, (source_clip, timeline_start_seconds)) in source_clips.into_iter().enumerate() {
+            let mut duplicated_clip = source_clip;
+            duplicated_clip.id = format!("clip_{timestamp}_{index}");
+            duplicated_clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
+            song.clips.push(duplicated_clip);
+        }
         refresh_song_duration(&mut song);
 
-        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
 
         Ok(self.snapshot())
     }
@@ -1746,7 +1772,8 @@ impl DesktopSession {
         // tail (reproduced as: "drag the end handle inward → a phantom
         // duplicate region appears with the trimmed name and the cut-off
         // span").
-        song.regions.retain(|region| region.id != existing_region.id);
+        song.regions
+            .retain(|region| region.id != existing_region.id);
         replace_song_region_range(&mut song, updated_region);
         audio.update_live_song_regions(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
@@ -2502,8 +2529,12 @@ impl DesktopSession {
             // load_song resets playback_state to Stopped — restore it so snapshot()
             // returns the correct state and the UI doesn't briefly show "detenido".
             match playback_state {
-                PlaybackState::Playing => { let _ = self.engine.play(); }
-                PlaybackState::Paused  => { let _ = self.engine.pause(); }
+                PlaybackState::Playing => {
+                    let _ = self.engine.play();
+                }
+                PlaybackState::Paused => {
+                    let _ = self.engine.pause();
+                }
                 _ => {}
             }
             if bump_revision {
@@ -2511,8 +2542,15 @@ impl DesktopSession {
             }
             self.engine.seek(position_seconds)?;
             if let Some(pending_jump) = pending_jump {
-                let loaded_song = self.engine.song().cloned().ok_or(DesktopError::NoSongLoaded)?;
-                if loaded_song.marker_by_id(&pending_jump.target_marker_id).is_some() {
+                let loaded_song = self
+                    .engine
+                    .song()
+                    .cloned()
+                    .ok_or(DesktopError::NoSongLoaded)?;
+                if loaded_song
+                    .marker_by_id(&pending_jump.target_marker_id)
+                    .is_some()
+                {
                     if position_seconds < pending_jump.execute_at_seconds {
                         self.engine.schedule_marker_jump(
                             &pending_jump.target_marker_id,
@@ -2525,27 +2563,31 @@ impl DesktopSession {
             return Ok(());
         }
 
-        if matches!(
-            impact,
-            AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild
-        ) {
-            if playback_state == PlaybackState::Playing {
-                let rebuild_reason = match impact {
-                    AudioChangeImpact::TimelineWindow => "timeline_window",
-                    AudioChangeImpact::StructureRebuild => "structure_rebuild",
-                    _ => "unknown",
-                };
-                audio.replace_song_buffers(&song_dir, &song, rebuild_reason)?;
-            } else {
-                // Not playing: still push the updated session to the engine so
-                // it can decode the newly-added sources in the background
-                // while the user is busy (waveform analyzing, arranging clips,
-                // etc). Otherwise the first Play after dropping audio has to
-                // decode all clips synchronously — 3-4s for MP3 with ~7 tracks.
-                // sync_song is cheap when the signature hasn't changed (early
-                // return in ensure_song_loaded).
-                audio.sync_song(song.clone())?;
+        match impact {
+            AudioChangeImpact::TimelineWindow if playback_state != PlaybackState::Playing => {
+                // Timeline-only edits with already-known sources can stay Rust-side while idle.
+                // The native engine will receive the current song on the next Play/Seek.
             }
+            AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {
+                if playback_state == PlaybackState::Playing {
+                    let rebuild_reason = match impact {
+                        AudioChangeImpact::TimelineWindow => "timeline_window",
+                        AudioChangeImpact::StructureRebuild => "structure_rebuild",
+                        _ => "unknown",
+                    };
+                    audio.replace_song_buffers(&song_dir, &song, rebuild_reason)?;
+                } else {
+                    // Not playing: still push the updated session to the engine so
+                    // it can decode the newly-added sources in the background
+                    // while the user is busy (waveform analyzing, arranging clips,
+                    // etc). Otherwise the first Play after dropping audio has to
+                    // decode all clips synchronously — 3-4s for MP3 with ~7 tracks.
+                    // sync_song is cheap when the signature hasn't changed (early
+                    // return in ensure_song_loaded).
+                    audio.sync_song(song.clone())?;
+                }
+            }
+            AudioChangeImpact::MixerOnly | AudioChangeImpact::TransportOnly => {}
         }
 
         self.perf_metrics.song_save_millis = 0;
@@ -2903,7 +2945,8 @@ impl DesktopSession {
         if let Some(duration_seconds) = fade_in_duration_seconds {
             audio.start_master_fade(1.0, duration_seconds)?;
         }
-        self.transport_clock.note_jump_while_playing(target_position);
+        self.transport_clock
+            .note_jump_while_playing(target_position);
         self.capture_transport_drift_sample(audio, "native_jump", target_position, target_position);
         Ok(true)
     }
@@ -5075,7 +5118,14 @@ mod tests {
 
         // Category A: bridge-only, no model mutation, no undo, no revision bump.
         audio
-            .update_live_track_mix("track_1", Some(0.61), Some(-0.22), Some(true), Some(true), None)
+            .update_live_track_mix(
+                "track_1",
+                Some(0.61),
+                Some(-0.22),
+                Some(true),
+                Some(true),
+                None,
+            )
             .expect("live mix update should succeed");
 
         let diagnostics = audio.realtime_control_diagnostics();
@@ -5172,7 +5222,14 @@ mod tests {
 
         // Category A bridge: realtime command only, no model mutation, no undo entry.
         audio
-            .update_live_track_mix("track_1", Some(0.61), Some(-0.22), Some(true), Some(true), None)
+            .update_live_track_mix(
+                "track_1",
+                Some(0.61),
+                Some(-0.22),
+                Some(true),
+                Some(true),
+                None,
+            )
             .expect("live mix update should succeed");
         assert_eq!(session.undo_stack.len(), 0);
 
@@ -6074,6 +6131,18 @@ mod tests {
             .clips
             .iter()
             .any(|clip| clip.id != "clip_1" && clip.timeline_start_seconds == 6.0));
+        let duplicated_clip = snapshot_song
+            .clips
+            .iter()
+            .find(|clip| clip.id != "clip_1")
+            .expect("duplicated clip should exist");
+        assert_eq!(duplicated_clip.file_path, "audio/test.wav");
+        assert_eq!(
+            fs::read_dir(song_dir.join("audio"))
+                .expect("audio dir should be readable")
+                .count(),
+            0
+        );
 
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.clips.len(), 1);
@@ -6751,8 +6820,7 @@ mod tests {
 
     #[test]
     fn section_marker_assign_digit_does_not_trigger_session_rebuild() {
-        let mut session =
-            session_with_song_dir("section-digit-demo", demo_song_with_section());
+        let mut session = session_with_song_dir("section-digit-demo", demo_song_with_section());
         let audio = crate::audio_engine::AudioController::default();
 
         session
@@ -6774,8 +6842,7 @@ mod tests {
 
     #[test]
     fn transpose_enabled_toggle_sends_realtime_command_not_load_session() {
-        let mut session =
-            session_with_song_dir("transpose-enabled-demo", demo_song());
+        let mut session = session_with_song_dir("transpose-enabled-demo", demo_song());
         let audio = crate::audio_engine::AudioController::default();
         let initial_revision = session.snapshot().project_revision;
 
@@ -6876,7 +6943,11 @@ mod tests {
                 .expect("realtime update should succeed");
         }
 
-        assert_eq!(session.undo_stack.len(), undo_before, "undo stack must not grow from realtime commands");
+        assert_eq!(
+            session.undo_stack.len(),
+            undo_before,
+            "undo stack must not grow from realtime commands"
+        );
     }
 
     /// Category A: realtime bridge must not increment the project revision.
@@ -6893,8 +6964,11 @@ mod tests {
                 .expect("realtime update should succeed");
         }
 
-        assert_eq!(session.snapshot().project_revision, revision_before,
-            "project revision must not change from Category A commands");
+        assert_eq!(
+            session.snapshot().project_revision,
+            revision_before,
+            "project revision must not change from Category A commands"
+        );
     }
 
     /// Commit path (pointer-up): must bump revision and send exactly one realtime command.
@@ -6907,22 +6981,39 @@ mod tests {
         let diag_before = audio.realtime_control_diagnostics();
 
         session
-            .commit_track_mix_model_and_command("track_1", Some(0.75), None, None, None, None, &audio)
+            .commit_track_mix_model_and_command(
+                "track_1",
+                Some(0.75),
+                None,
+                None,
+                None,
+                None,
+                &audio,
+            )
             .expect("commit should succeed");
 
         let revision_after = session.snapshot().project_revision;
         let diag_after = audio.realtime_control_diagnostics();
 
-        assert!(revision_after > revision_before, "commit must bump project revision");
+        assert!(
+            revision_after > revision_before,
+            "commit must bump project revision"
+        );
         assert_eq!(
-            diag_after.live_mix_realtime_command_count - diag_before.live_mix_realtime_command_count,
+            diag_after.live_mix_realtime_command_count
+                - diag_before.live_mix_realtime_command_count,
             1,
             "commit must send exactly one targeted realtime command"
         );
-        assert_eq!(diag_after.commit_mix_command_count, diag_before.commit_mix_command_count + 1,
-            "commit must increment commit_mix_command_count");
-        assert_eq!(diag_after.session_rebuild_count, 0,
-            "commit must not trigger a session rebuild");
+        assert_eq!(
+            diag_after.commit_mix_command_count,
+            diag_before.commit_mix_command_count + 1,
+            "commit must increment commit_mix_command_count"
+        );
+        assert_eq!(
+            diag_after.session_rebuild_count, 0,
+            "commit must not trigger a session rebuild"
+        );
     }
 
     /// Commit path: must create one undo entry.
@@ -6934,14 +7025,33 @@ mod tests {
         let undo_before = session.undo_stack.len();
 
         session
-            .commit_track_mix_model_and_command("track_1", Some(0.5), None, None, None, None, &audio)
+            .commit_track_mix_model_and_command(
+                "track_1",
+                Some(0.5),
+                None,
+                None,
+                None,
+                None,
+                &audio,
+            )
             .expect("commit should succeed");
         session
-            .commit_track_mix_model_and_command("track_1", Some(0.6), None, None, None, None, &audio)
+            .commit_track_mix_model_and_command(
+                "track_1",
+                Some(0.6),
+                None,
+                None,
+                None,
+                None,
+                &audio,
+            )
             .expect("commit should succeed");
 
-        assert_eq!(session.undo_stack.len(), undo_before + 2,
-            "each commit must create exactly one undo entry");
+        assert_eq!(
+            session.undo_stack.len(),
+            undo_before + 2,
+            "each commit must create exactly one undo entry"
+        );
     }
 
     /// Track name change must not send any audio command.
@@ -6960,8 +7070,7 @@ mod tests {
         let diag_after = audio.realtime_control_diagnostics();
 
         assert_eq!(
-            diag_after.live_mix_realtime_command_count,
-            diag_before.live_mix_realtime_command_count,
+            diag_after.live_mix_realtime_command_count, diag_before.live_mix_realtime_command_count,
             "name-only change must not send any audio command"
         );
         assert_eq!(diag_after.session_rebuild_count, 0);
@@ -6970,7 +7079,11 @@ mod tests {
             .song_view()
             .expect("song view should build")
             .expect("song view should exist");
-        let track = song_view.tracks.into_iter().find(|t| t.id == "track_1").expect("track");
+        let track = song_view
+            .tracks
+            .into_iter()
+            .find(|t| t.id == "track_1")
+            .expect("track");
         assert_eq!(track.name, "New Name");
     }
 
@@ -6988,8 +7101,10 @@ mod tests {
 
         let diag = audio.realtime_control_diagnostics();
         assert_eq!(diag.live_mix_realtime_command_count, 100);
-        assert_eq!(diag.session_rebuild_count, 0,
-            "realtime slider drags must never trigger a session rebuild");
+        assert_eq!(
+            diag.session_rebuild_count, 0,
+            "realtime slider drags must never trigger a session rebuild"
+        );
     }
 
     /// session_rebuild_count must increment only for structural changes, not for mixer changes.
@@ -7011,8 +7126,11 @@ mod tests {
             .set_track_transpose_enabled_realtime("track_1", false)
             .expect("transpose enabled should succeed");
 
-        assert_eq!(audio.realtime_control_diagnostics().session_rebuild_count, 0,
-            "Category A commands must never trigger a session rebuild");
+        assert_eq!(
+            audio.realtime_control_diagnostics().session_rebuild_count,
+            0,
+            "Category A commands must never trigger a session rebuild"
+        );
     }
 
     /// Metronome toggle must use realtime commands, not session rebuild.
@@ -7032,8 +7150,10 @@ mod tests {
         let diag = audio.realtime_control_diagnostics();
         assert_eq!(diag.metronome_realtime_toggle_count, 10);
         assert_eq!(diag.metronome_realtime_volume_count, 1);
-        assert_eq!(diag.session_rebuild_count, 0,
-            "metronome commands must never rebuild the session");
+        assert_eq!(
+            diag.session_rebuild_count, 0,
+            "metronome commands must never rebuild the session"
+        );
     }
 
     /// Folder track volume change must use realtime command, not session rebuild.
@@ -7048,18 +7168,30 @@ mod tests {
             .expect("folder track realtime update should succeed");
 
         let diag = audio.realtime_control_diagnostics();
-        assert_eq!(diag.session_rebuild_count, 0,
-            "folder track Category A command must not rebuild session");
+        assert_eq!(
+            diag.session_rebuild_count, 0,
+            "folder track Category A command must not rebuild session"
+        );
         assert_eq!(diag.live_mix_realtime_command_count, 1);
 
         // Commit the folder track volume change — Category B (commit), still no rebuild.
         session
-            .commit_track_mix_model_and_command("folder_1", Some(0.6), None, None, None, None, &audio)
+            .commit_track_mix_model_and_command(
+                "folder_1",
+                Some(0.6),
+                None,
+                None,
+                None,
+                None,
+                &audio,
+            )
             .expect("folder track commit should succeed");
 
         let diag = audio.realtime_control_diagnostics();
-        assert_eq!(diag.session_rebuild_count, 0,
-            "folder track commit must not rebuild session");
+        assert_eq!(
+            diag.session_rebuild_count, 0,
+            "folder track commit must not rebuild session"
+        );
     }
 
     // ── Phase 10: new commit classification tests ─────────────────────────────
@@ -7070,16 +7202,37 @@ mod tests {
         let mut session = session_with_song_dir("commit-mix-count-demo", demo_song());
         let audio = crate::audio_engine::AudioController::default();
 
-        assert_eq!(audio.realtime_control_diagnostics().commit_mix_command_count, 0);
+        assert_eq!(
+            audio
+                .realtime_control_diagnostics()
+                .commit_mix_command_count,
+            0
+        );
 
         session
-            .commit_track_mix_model_and_command("track_1", Some(0.8), None, None, None, None, &audio)
+            .commit_track_mix_model_and_command(
+                "track_1",
+                Some(0.8),
+                None,
+                None,
+                None,
+                None,
+                &audio,
+            )
             .expect("commit should succeed");
 
-        assert_eq!(audio.realtime_control_diagnostics().commit_mix_command_count, 1,
-            "commit_mix must increment commit_mix_command_count");
-        assert_eq!(audio.realtime_control_diagnostics().commit_model_only_count, 0,
-            "commit_mix must not increment commit_model_only_count");
+        assert_eq!(
+            audio
+                .realtime_control_diagnostics()
+                .commit_mix_command_count,
+            1,
+            "commit_mix must increment commit_mix_command_count"
+        );
+        assert_eq!(
+            audio.realtime_control_diagnostics().commit_model_only_count,
+            0,
+            "commit_mix must not increment commit_model_only_count"
+        );
     }
 
     /// update_track_metadata must increment commit_model_only_count and send no audio command.
@@ -7088,19 +7241,28 @@ mod tests {
         let mut session = session_with_song_dir("metadata-count-demo", demo_song());
         let audio = crate::audio_engine::AudioController::default();
 
-        assert_eq!(audio.realtime_control_diagnostics().commit_model_only_count, 0);
+        assert_eq!(
+            audio.realtime_control_diagnostics().commit_model_only_count,
+            0
+        );
 
         session
             .update_track_metadata("track_1", "Renamed", &audio)
             .expect("metadata update should succeed");
 
         let diag = audio.realtime_control_diagnostics();
-        assert_eq!(diag.commit_model_only_count, 1,
-            "update_track_metadata must increment commit_model_only_count");
-        assert_eq!(diag.commit_mix_command_count, 0,
-            "update_track_metadata must not increment commit_mix_command_count");
-        assert_eq!(diag.live_mix_realtime_command_count, 0,
-            "update_track_metadata must not send any realtime audio command");
+        assert_eq!(
+            diag.commit_model_only_count, 1,
+            "update_track_metadata must increment commit_model_only_count"
+        );
+        assert_eq!(
+            diag.commit_mix_command_count, 0,
+            "update_track_metadata must not increment commit_mix_command_count"
+        );
+        assert_eq!(
+            diag.live_mix_realtime_command_count, 0,
+            "update_track_metadata must not send any realtime audio command"
+        );
     }
 
     /// Mute commit uses Category B (targeted command), never a full session reload.
@@ -7110,12 +7272,26 @@ mod tests {
         let audio = crate::audio_engine::AudioController::default();
 
         session
-            .commit_track_mix_model_and_command("track_1", None, None, Some(true), None, None, &audio)
+            .commit_track_mix_model_and_command(
+                "track_1",
+                None,
+                None,
+                Some(true),
+                None,
+                None,
+                &audio,
+            )
             .expect("mute commit should succeed");
 
         let diag = audio.realtime_control_diagnostics();
-        assert_eq!(diag.session_rebuild_count, 0, "mute commit must not rebuild session");
-        assert_eq!(diag.live_mix_realtime_command_count, 1, "mute commit must send exactly one command");
+        assert_eq!(
+            diag.session_rebuild_count, 0,
+            "mute commit must not rebuild session"
+        );
+        assert_eq!(
+            diag.live_mix_realtime_command_count, 1,
+            "mute commit must send exactly one command"
+        );
         assert_eq!(diag.commit_mix_command_count, 1);
     }
 
@@ -7126,12 +7302,26 @@ mod tests {
         let audio = crate::audio_engine::AudioController::default();
 
         session
-            .commit_track_mix_model_and_command("track_1", None, None, None, Some(true), None, &audio)
+            .commit_track_mix_model_and_command(
+                "track_1",
+                None,
+                None,
+                None,
+                Some(true),
+                None,
+                &audio,
+            )
             .expect("solo commit should succeed");
 
         let diag = audio.realtime_control_diagnostics();
-        assert_eq!(diag.session_rebuild_count, 0, "solo commit must not rebuild session");
-        assert_eq!(diag.live_mix_realtime_command_count, 1, "solo commit must send exactly one command");
+        assert_eq!(
+            diag.session_rebuild_count, 0,
+            "solo commit must not rebuild session"
+        );
+        assert_eq!(
+            diag.live_mix_realtime_command_count, 1,
+            "solo commit must send exactly one command"
+        );
         assert_eq!(diag.commit_mix_command_count, 1);
     }
 
@@ -7142,12 +7332,26 @@ mod tests {
         let audio = crate::audio_engine::AudioController::default();
 
         session
-            .commit_track_mix_model_and_command("track_1", None, Some(-0.5), None, None, None, &audio)
+            .commit_track_mix_model_and_command(
+                "track_1",
+                None,
+                Some(-0.5),
+                None,
+                None,
+                None,
+                &audio,
+            )
             .expect("pan commit should succeed");
 
         let diag = audio.realtime_control_diagnostics();
-        assert_eq!(diag.session_rebuild_count, 0, "pan commit must not rebuild session");
-        assert_eq!(diag.live_mix_realtime_command_count, 1, "pan commit must send exactly one command");
+        assert_eq!(
+            diag.session_rebuild_count, 0,
+            "pan commit must not rebuild session"
+        );
+        assert_eq!(
+            diag.live_mix_realtime_command_count, 1,
+            "pan commit must send exactly one command"
+        );
         assert_eq!(diag.commit_mix_command_count, 1);
     }
 
@@ -7160,12 +7364,27 @@ mod tests {
         for i in 1..=5 {
             session
                 .commit_track_mix_model_and_command(
-                    "track_1", Some(i as f64 / 10.0), None, None, None, None, &audio)
+                    "track_1",
+                    Some(i as f64 / 10.0),
+                    None,
+                    None,
+                    None,
+                    None,
+                    &audio,
+                )
                 .expect("commit should succeed");
         }
 
-        assert_eq!(audio.realtime_control_diagnostics().commit_mix_command_count, 5);
-        assert_eq!(audio.realtime_control_diagnostics().session_rebuild_count, 0);
+        assert_eq!(
+            audio
+                .realtime_control_diagnostics()
+                .commit_mix_command_count,
+            5
+        );
+        assert_eq!(
+            audio.realtime_control_diagnostics().session_rebuild_count,
+            0
+        );
     }
 
     /// commit_model_only_count and commit_mix_command_count are independent counters.
@@ -7178,7 +7397,15 @@ mod tests {
             .update_track_metadata("track_1", "Renamed", &audio)
             .expect("name update should succeed");
         session
-            .commit_track_mix_model_and_command("track_1", Some(0.5), None, None, None, None, &audio)
+            .commit_track_mix_model_and_command(
+                "track_1",
+                Some(0.5),
+                None,
+                None,
+                None,
+                None,
+                &audio,
+            )
             .expect("mix commit should succeed");
         session
             .update_track_metadata("track_1", "Renamed Again", &audio)

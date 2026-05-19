@@ -662,24 +662,30 @@ impl AudioController {
         self.live_mix_realtime_command_count
             .fetch_add(1, Ordering::Relaxed);
         let track_id = track_id.to_owned();
-        self.with_engine_state("set_track_transpose_enabled_realtime", None, |engine, _state| {
-            engine.send_command(&EngineCommand::SetTrackTransposeEnabled {
-                track_id: track_id.clone(),
-                enabled,
-            })?;
-            Ok(())
-        })
+        self.with_engine_state(
+            "set_track_transpose_enabled_realtime",
+            None,
+            |engine, _state| {
+                engine.send_command(&EngineCommand::SetTrackTransposeEnabled {
+                    track_id: track_id.clone(),
+                    enabled,
+                })?;
+                Ok(())
+            },
+        )
     }
 
     /// Record that a mixer commit (volume/pan/muted/solo/audioTo) was completed.
     /// Called by commit paths in state.rs after model update + targeted command.
     pub fn record_commit_mix(&self) {
-        self.commit_mix_command_count.fetch_add(1, Ordering::Relaxed);
+        self.commit_mix_command_count
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     /// Record that a pitch commit (transpose_enabled, region_transpose) was completed.
     pub fn record_commit_pitch(&self) {
-        self.commit_pitch_command_count.fetch_add(1, Ordering::Relaxed);
+        self.commit_pitch_command_count
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     /// Record that a model-only commit (name, visual metadata) was completed.
@@ -775,9 +781,11 @@ impl AudioController {
                     settings.selected_output_device = None;
                     settings.selected_output_device_id = None;
                     settings.selected_output_device_name = None;
-                    if let Err(fallback_error) = engine.send_command(&EngineCommand::SetOutputDevice {
-                        device_id: String::new(),
-                    }) {
+                    if let Err(fallback_error) =
+                        engine.send_command(&EngineCommand::SetOutputDevice {
+                            device_id: String::new(),
+                        })
+                    {
                         if audio_debug_logging_enabled() {
                             eprintln!(
                                 "[libretracks-audio] fallback output device failed to open after \
@@ -862,7 +870,11 @@ impl AudioController {
     pub fn engine_snapshot(&self) -> Result<EngineSnapshot, DesktopError> {
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(DesktopError::AudioCommand("engine_snapshot: state locked".into())),
+            Err(_) => {
+                return Err(DesktopError::AudioCommand(
+                    "engine_snapshot: state locked".into(),
+                ))
+            }
         };
         ensure_engine(&mut state)?
             .get_snapshot()
@@ -889,10 +901,14 @@ impl AudioController {
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
             Err(std::sync::TryLockError::WouldBlock) => {
-                return Err(DesktopError::AudioCommand("debug_snapshot: state locked".into()))
+                return Err(DesktopError::AudioCommand(
+                    "debug_snapshot: state locked".into(),
+                ))
             }
             Err(std::sync::TryLockError::Poisoned(_)) => {
-                return Err(DesktopError::AudioCommand("audio v2 state lock poisoned".into()))
+                return Err(DesktopError::AudioCommand(
+                    "audio v2 state lock poisoned".into(),
+                ))
             }
         };
         let snapshot = ensure_engine(&mut state)?.get_snapshot().ok();

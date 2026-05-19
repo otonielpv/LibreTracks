@@ -58,7 +58,7 @@ import {
   deleteSongTempoMarker,
   deleteSongTimeSignatureMarker,
   deleteTrack,
-  duplicateClip,
+  duplicateClips,
   exportRegionAsPackage,
   getAudioOutputDevices,
   getLibraryAssets,
@@ -346,6 +346,7 @@ export function TransportPanelContent() {
   const [optimisticClipOperations, setOptimisticClipOperations] = useState<
     OptimisticClipOperation[]
   >([]);
+  const copiedClipsRef = useRef<ClipSummary[]>([]);
   const [missingMidiDeviceWarning, setMissingMidiDeviceWarning] = useState<
     string | null
   >(null);
@@ -651,6 +652,7 @@ export function TransportPanelContent() {
     (state) => state.selectedTrackIds,
   );
   const selectedClipId = useTimelineUIStore((state) => state.selectedClipId);
+  const selectedClipIds = useTimelineUIStore((state) => state.selectedClipIds);
   const selectedSectionId = useTimelineUIStore(
     (state) => state.selectedSectionId,
   );
@@ -663,6 +665,12 @@ export function TransportPanelContent() {
   );
   const setSelectedClipId = useTimelineUIStore(
     (state) => state.setSelectedClipId,
+  );
+  const setSelectedClipIds = useTimelineUIStore(
+    (state) => state.setSelectedClipIds,
+  );
+  const toggleClipSelection = useTimelineUIStore(
+    (state) => state.toggleClipSelection,
   );
   const setSelectedSectionId = useTimelineUIStore(
     (state) => state.setSelectedSectionId,
@@ -730,6 +738,9 @@ export function TransportPanelContent() {
   const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
   const clipDragRef = useRef<ClipDragState>(null);
   const clipMoveLiveStatesRef = useRef<Record<string, LiveClipMoveState>>({});
+  const clipMoveCommitPendingRef = useRef<Set<string>>(new Set());
+  const clipPreviewClearAfterRevisionRef = useRef<Record<string, number>>({});
+  const duplicateClipCursorRef = useRef<Record<string, number>>({});
   const trackMixRequestIdsRef = useRef<Record<string, number>>({});
   const trackMixLiveStatesRef = useRef<
     Record<string, LiveTrackMixRequestState>
@@ -1169,6 +1180,132 @@ export function TransportPanelContent() {
     );
   }, []);
 
+  const selectedClipSummaries = useMemo(() => {
+    if (!song || !selectedClipIds.length) {
+      return [];
+    }
+    const selectedIds = new Set(selectedClipIds);
+    return song.clips
+      .filter((clip) => selectedIds.has(clip.id))
+      .sort(
+        (left, right) =>
+          left.timelineStartSeconds - right.timelineStartSeconds ||
+          left.trackId.localeCompare(right.trackId),
+      );
+  }, [selectedClipIds, song]);
+
+  const duplicateClipGroup = useCallback(
+    async (sourceClips: ClipSummary[], targetStartSeconds?: number) => {
+      const currentSong = songRef.current;
+      if (!currentSong || !sourceClips.length) {
+        return;
+      }
+
+      const sortedSourceClips = [...sourceClips].sort(
+        (left, right) =>
+          left.timelineStartSeconds - right.timelineStartSeconds ||
+          left.trackId.localeCompare(right.trackId),
+      );
+      const sourceStartSeconds = Math.min(
+        ...sortedSourceClips.map((clip) => clip.timelineStartSeconds),
+      );
+      const sourceEndSeconds = Math.max(
+        ...sortedSourceClips.map(
+          (clip) => clip.timelineStartSeconds + clip.durationSeconds,
+        ),
+      );
+      const groupDurationSeconds = Math.max(
+        0,
+        sourceEndSeconds - sourceStartSeconds,
+      );
+      const duplicateCursorKey = sortedSourceClips
+        .map(
+          (clip) =>
+            `${clip.id}:${clip.timelineStartSeconds.toFixed(6)}:${clip.durationSeconds.toFixed(6)}`,
+        )
+        .join("|");
+      const previousDuplicateCursor =
+        duplicateClipCursorRef.current[duplicateCursorKey];
+      const insertionStartSeconds = Math.max(
+        0,
+        targetStartSeconds ?? sourceEndSeconds,
+        previousDuplicateCursor ?? sourceEndSeconds,
+      );
+      const placements = sortedSourceClips.map((clip) => ({
+        clipId: clip.id,
+        timelineStartSeconds:
+          insertionStartSeconds + (clip.timelineStartSeconds - sourceStartSeconds),
+      }));
+      const optimisticClips = sortedSourceClips.map((clip, index) => ({
+        ...clip,
+        id: `optimistic-duplicate-${Date.now()}-${index}`,
+        timelineStartSeconds: placements[index].timelineStartSeconds,
+      }));
+      const optimisticOperationId =
+        startOptimisticClipOperation(optimisticClips);
+
+      try {
+        const nextSnapshot = await duplicateClips(placements);
+        completeOptimisticClipOperation(
+          optimisticOperationId,
+          nextSnapshot.projectRevision,
+        );
+        duplicateClipCursorRef.current[duplicateCursorKey] =
+          insertionStartSeconds + groupDurationSeconds;
+        applyPlaybackSnapshot(nextSnapshot);
+      } catch (error) {
+        discardOptimisticClipOperation(optimisticOperationId);
+        throw error;
+      }
+    },
+    [
+      applyPlaybackSnapshot,
+      completeOptimisticClipOperation,
+      discardOptimisticClipOperation,
+      startOptimisticClipOperation,
+    ],
+  );
+
+  const copySelectedClips = useCallback(() => {
+    if (!selectedClipSummaries.length) {
+      return false;
+    }
+    copiedClipsRef.current = selectedClipSummaries;
+    return true;
+  }, [selectedClipSummaries]);
+
+  const duplicateSelectedClips = useCallback(async () => {
+    if (!selectedClipSummaries.length) {
+      return false;
+    }
+    await duplicateClipGroup(selectedClipSummaries);
+    return true;
+  }, [duplicateClipGroup, selectedClipSummaries]);
+
+  const pasteCopiedClips = useCallback(async () => {
+    const copiedClips = copiedClipsRef.current;
+    if (!copiedClips.length) {
+      return false;
+    }
+    const sourceIds = new Set(copiedClips.map((clip) => clip.id));
+    const currentCopies = (songRef.current?.clips ?? []).filter((clip) =>
+      sourceIds.has(clip.id),
+    );
+    if (!currentCopies.length) {
+      return false;
+    }
+    const targetGroup = selectedClipSummaries.length
+      ? selectedClipSummaries
+      : currentCopies;
+    const targetStartSeconds = Math.max(
+      ...targetGroup.map(
+        (clip) => clip.timelineStartSeconds + clip.durationSeconds,
+      ),
+    );
+    await duplicateClipGroup(currentCopies, targetStartSeconds);
+    return true;
+  }, [duplicateClipGroup, selectedClipSummaries]);
+
   const resolveTrackMix = useCallback(
     (track: TrackSummary, trackId: string) => {
       const optimisticMix = getTrackOptimisticMix(trackId);
@@ -1374,7 +1511,10 @@ export function TransportPanelContent() {
       }
 
       delete liveStates[clipId];
-      if (clipDragRef.current?.clipId !== clipId) {
+      if (
+        clipDragRef.current?.clipId !== clipId &&
+        !clipMoveCommitPendingRef.current.has(clipId)
+      ) {
         clipPreviewSecondsRef.current = {};
       }
     }
@@ -1393,7 +1533,10 @@ export function TransportPanelContent() {
 
       void flushClipMoveLiveUpdates(clipId).catch((error) => {
         delete clipMoveLiveStatesRef.current[clipId];
-        if (clipDragRef.current?.clipId !== clipId) {
+        if (
+          clipDragRef.current?.clipId !== clipId &&
+          !clipMoveCommitPendingRef.current.has(clipId)
+        ) {
           clipPreviewSecondsRef.current = {};
         }
         setStatus(formatErrorStatus(error));
@@ -2120,6 +2263,19 @@ export function TransportPanelContent() {
       return;
     }
 
+    const clearAfterRevision = clipPreviewClearAfterRevisionRef.current;
+    const clearedClipIds = Object.entries(clearAfterRevision)
+      .filter(([, revision]) => revision <= song.projectRevision)
+      .map(([clipId]) => clipId);
+    if (clearedClipIds.length) {
+      const nextPreviewSeconds = { ...clipPreviewSecondsRef.current };
+      for (const clipId of clearedClipIds) {
+        delete nextPreviewSeconds[clipId];
+        delete clearAfterRevision[clipId];
+      }
+      clipPreviewSecondsRef.current = nextPreviewSeconds;
+    }
+
     setOptimisticClipOperations((current) =>
       current.filter((operation) => {
         if (operation.clearAfterProjectRevision === null) {
@@ -2406,6 +2562,9 @@ export function TransportPanelContent() {
     setSelectedClipId,
     clearSelection,
     clearSelections,
+    copySelectedClips,
+    duplicateSelectedClips,
+    pasteCopiedClips,
     handleSaveProjectClick,
     handleSaveProjectAsClick,
     scheduleMarkerJumpWithGlobalMode,
@@ -2494,23 +2653,35 @@ export function TransportPanelContent() {
           Math.abs(event.clientX - activeClipDrag.startClientX) >
             DRAG_THRESHOLD_PX;
         if (movedEnough) {
+          clipMoveCommitPendingRef.current.add(activeClipDrag.clipId);
           queueClipMoveLiveUpdate(
             activeClipDrag.clipId,
             activeClipDrag.previewSeconds,
           );
           void runAction(async () => {
-            await waitForClipMoveLiveIdle(activeClipDrag.clipId);
-            const nextSnapshot = await moveClip(
-              activeClipDrag.clipId,
-              activeClipDrag.previewSeconds,
-            );
-            applyPlaybackSnapshot(nextSnapshot);
-            const clip = findClip(songRef.current, activeClipDrag.clipId);
-            setStatus(
-              t("transport.status.clipMoved", {
-                name: clip?.trackName ?? activeClipDrag.clipId,
-              }),
-            );
+            try {
+              await waitForClipMoveLiveIdle(activeClipDrag.clipId);
+              const nextSnapshot = await moveClip(
+                activeClipDrag.clipId,
+                activeClipDrag.previewSeconds,
+              );
+              clipPreviewClearAfterRevisionRef.current[activeClipDrag.clipId] =
+                nextSnapshot.projectRevision;
+              applyPlaybackSnapshot(nextSnapshot);
+              const clip = findClip(songRef.current, activeClipDrag.clipId);
+              setStatus(
+                t("transport.status.clipMoved", {
+                  name: clip?.trackName ?? activeClipDrag.clipId,
+                }),
+              );
+            } finally {
+              clipMoveCommitPendingRef.current.delete(activeClipDrag.clipId);
+              if (
+                !clipPreviewClearAfterRevisionRef.current[activeClipDrag.clipId]
+              ) {
+                clipPreviewSecondsRef.current = {};
+              }
+            }
           });
         } else {
           clipPreviewSecondsRef.current = {};
@@ -2544,10 +2715,11 @@ export function TransportPanelContent() {
 
         trackDragRef.current = null;
         suppressTrackClickRef.current = shouldTreatAsDrag;
-        clearTrackDragVisuals();
 
         if (dropState) {
           void handleTrackDrop(activeTrackDrag.trackId, dropState);
+        } else {
+          clearTrackDragVisuals();
         }
       }
 
@@ -2567,8 +2739,12 @@ export function TransportPanelContent() {
     clearTrackDragVisuals,
     handleTrackDrop,
     performSeek,
+    queueClipMoveLiveUpdate,
     runAction,
+    selectClip,
+    selectedClipIds,
     snapEnabled,
+    toggleClipSelection,
     waitForClipMoveLiveIdle,
     zoomLevel,
   ]);
@@ -3545,6 +3721,7 @@ export function TransportPanelContent() {
   ) {
     const targetTrack = tracksById[dropState.targetTrackId] ?? null;
     if (!song || !targetTrack || draggedTrackId === targetTrack.id) {
+      clearTrackDragVisuals();
       return;
     }
 
@@ -3554,44 +3731,48 @@ export function TransportPanelContent() {
         : [draggedTrackId];
 
     await runAction(async () => {
-      let lastSnapshot: TransportSnapshot | null = null;
-      for (const trackId of tracksToMove) {
-        if (trackId === targetTrack.id) {
-          continue;
-        }
+      try {
+        let lastSnapshot: TransportSnapshot | null = null;
+        for (const trackId of tracksToMove) {
+          if (trackId === targetTrack.id) {
+            continue;
+          }
 
-        const moveArgs =
-          dropState.mode === "inside-folder"
-            ? {
-                trackId,
-                insertAfterTrackId: null,
-                insertBeforeTrackId: null,
-                parentTrackId: targetTrack.id,
-              }
-            : dropState.mode === "before"
+          const moveArgs =
+            dropState.mode === "inside-folder"
               ? {
                   trackId,
                   insertAfterTrackId: null,
-                  insertBeforeTrackId: targetTrack.id,
-                  parentTrackId: targetTrack.parentTrackId ?? null,
-                }
-              : {
-                  trackId,
-                  insertAfterTrackId: targetTrack.id,
                   insertBeforeTrackId: null,
-                  parentTrackId: targetTrack.parentTrackId ?? null,
-                };
+                  parentTrackId: targetTrack.id,
+                }
+              : dropState.mode === "before"
+                ? {
+                    trackId,
+                    insertAfterTrackId: null,
+                    insertBeforeTrackId: targetTrack.id,
+                    parentTrackId: targetTrack.parentTrackId ?? null,
+                  }
+                : {
+                    trackId,
+                    insertAfterTrackId: targetTrack.id,
+                    insertBeforeTrackId: null,
+                    parentTrackId: targetTrack.parentTrackId ?? null,
+                  };
 
-        lastSnapshot = await moveTrack(moveArgs);
-      }
+          lastSnapshot = await moveTrack(moveArgs);
+        }
 
-      if (lastSnapshot) {
-        applyPlaybackSnapshot(lastSnapshot);
+        if (lastSnapshot) {
+          applyPlaybackSnapshot(lastSnapshot);
+        }
+        await refreshSongView();
+        setStatus(
+          t("transport.status.tracksReordered", { count: tracksToMove.length }),
+        );
+      } finally {
+        clearTrackDragVisuals();
       }
-      await refreshSongView();
-      setStatus(
-        t("transport.status.tracksReordered", { count: tracksToMove.length }),
-      );
     });
   }
 
@@ -4008,11 +4189,17 @@ export function TransportPanelContent() {
         label: t("transport.menu.duplicateClip"),
         onSelect: async () => {
           await runAction(async () => {
-            const nextSnapshot = await duplicateClip(
-              clip.id,
-              clip.timelineStartSeconds + clip.durationSeconds + 1,
+            const sourceClips =
+              selectedClipIds.includes(clip.id) && selectedClipSummaries.length
+                ? selectedClipSummaries
+                : [clip];
+            const sourceEndSeconds = Math.max(
+              ...sourceClips.map(
+                (sourceClip) =>
+                  sourceClip.timelineStartSeconds + sourceClip.durationSeconds,
+              ),
             );
-            applyPlaybackSnapshot(nextSnapshot);
+            await duplicateClipGroup(sourceClips, sourceEndSeconds);
             setStatus(
               t("transport.status.clipDuplicated", { name: clip.trackName }),
             );
@@ -4065,7 +4252,11 @@ export function TransportPanelContent() {
         songRef.current?.durationSeconds ?? 0,
       );
       previewSeek(clickSeekSeconds);
-      selectClip(hitClip.id, track.id);
+      if (event.ctrlKey || event.metaKey) {
+        toggleClipSelection(hitClip.id);
+      } else if (!selectedClipIds.includes(hitClip.id)) {
+        selectClip(hitClip.id, track.id);
+      }
       setContextMenu(null);
       clipDragRef.current = {
         clipId: hitClip.id,
@@ -6905,6 +7096,7 @@ export function TransportPanelContent() {
                           timelineGrid={timelineGrid}
                           selectedTimelineRange={selectedTimelineRange}
                           selectedClipId={selectedClipId}
+                          selectedClipIds={selectedClipIds}
                           selectedRegionId={selectedRegionId}
                           onSelectRegion={(regionId) => {
                             setSelectedRegionId(regionId);

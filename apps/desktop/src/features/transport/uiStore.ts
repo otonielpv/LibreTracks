@@ -16,6 +16,7 @@ type TimelineUIState = {
   trackHeight: number;
   selectedTrackIds: string[];
   selectedClipId: string | null;
+  selectedClipIds: string[];
   selectedSectionId: string | null;
   snapEnabled: boolean;
   midiLearnMode: string | null;
@@ -24,6 +25,8 @@ type TimelineUIState = {
   setTrackHeight: (trackHeight: number | ((currentTrackHeight: number) => number)) => void;
   setSelectedTrackIds: (trackIds: string[]) => void;
   setSelectedClipId: (clipId: string | null) => void;
+  setSelectedClipIds: (clipIds: string[]) => void;
+  toggleClipSelection: (clipId: string) => void;
   setSelectedSectionId: (sectionId: string | null) => void;
   clearSelection: () => void;
   selectTrack: (trackIds: string[]) => void;
@@ -41,6 +44,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     trackHeight: TIMELINE_DEFAULT_TRACK_HEIGHT,
     selectedTrackIds: [],
     selectedClipId: null,
+    selectedClipIds: [],
     selectedSectionId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     midiLearnMode: null,
@@ -60,10 +64,31 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       }));
     },
     setSelectedTrackIds: (selectedTrackIds) => {
-      set({ selectedTrackIds });
+      set({ selectedTrackIds, selectedClipId: null, selectedClipIds: [] });
     },
     setSelectedClipId: (selectedClipId) => {
-      set({ selectedClipId });
+      set({ selectedClipId, selectedClipIds: selectedClipId ? [selectedClipId] : [] });
+    },
+    setSelectedClipIds: (selectedClipIds) => {
+      set({
+        selectedTrackIds: [],
+        selectedClipId: selectedClipIds.at(-1) ?? null,
+        selectedClipIds,
+        selectedSectionId: null,
+      });
+    },
+    toggleClipSelection: (clipId) => {
+      set((state) => {
+        const selectedClipIds = state.selectedClipIds.includes(clipId)
+          ? state.selectedClipIds.filter((id) => id !== clipId)
+          : [...state.selectedClipIds, clipId];
+        return {
+          selectedTrackIds: [],
+          selectedClipId: selectedClipIds.at(-1) ?? null,
+          selectedClipIds,
+          selectedSectionId: null,
+        };
+      });
     },
     setSelectedSectionId: (selectedSectionId) => {
       set({ selectedSectionId });
@@ -72,6 +97,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       set({
         selectedTrackIds: [],
         selectedClipId: null,
+        selectedClipIds: [],
         selectedSectionId: null,
       });
     },
@@ -79,6 +105,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       set({
         selectedTrackIds,
         selectedClipId: null,
+        selectedClipIds: [],
         selectedSectionId: null,
       });
     },
@@ -86,6 +113,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       set({
         selectedTrackIds: [],
         selectedClipId: clipId,
+        selectedClipIds: clipId ? [clipId] : [],
         selectedSectionId: null,
       });
     },
@@ -93,6 +121,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       set({
         selectedTrackIds: [],
         selectedClipId: null,
+        selectedClipIds: [],
         selectedSectionId: sectionId,
       });
     },

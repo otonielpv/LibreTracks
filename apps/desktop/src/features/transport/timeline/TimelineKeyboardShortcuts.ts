@@ -31,6 +31,9 @@ type TimelineKeyboardShortcutsProps = {
   setSelectedClipId: (id: string | null) => void;
   clearSelection: () => void;
   clearSelections: (message: string) => void;
+  copySelectedClips: () => boolean;
+  duplicateSelectedClips: () => Promise<boolean>;
+  pasteCopiedClips: () => Promise<boolean>;
   handleSaveProjectClick: () => void;
   handleSaveProjectAsClick: () => void;
   scheduleMarkerJumpWithGlobalMode: (
@@ -57,6 +60,9 @@ export function useTimelineKeyboardShortcuts({
   setSelectedClipId,
   clearSelection,
   clearSelections,
+  copySelectedClips,
+  duplicateSelectedClips,
+  pasteCopiedClips,
   handleSaveProjectClick,
   handleSaveProjectAsClick,
   scheduleMarkerJumpWithGlobalMode,
@@ -104,6 +110,43 @@ export function useTimelineKeyboardShortcuts({
         }
 
         handleSaveProjectClick();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        if (copySelectedClips()) {
+          setStatus(t("transport.status.clipsCopied"));
+        }
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        void runAction(async () => {
+          if (await pasteCopiedClips()) {
+            setStatus(t("transport.status.clipsPasted"));
+          }
+        });
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        void runAction(async () => {
+          if (await duplicateSelectedClips()) {
+            setStatus(t("transport.status.clipsDuplicated"));
+          }
+        });
         return;
       }
 
@@ -256,6 +299,9 @@ export function useTimelineKeyboardShortcuts({
     setOpenTopMenu,
     setSelectedClipId,
     setStatus,
+    copySelectedClips,
+    duplicateSelectedClips,
+    pasteCopiedClips,
     snapshotRef,
     t,
   ]);

@@ -142,6 +142,7 @@ fn main() {
             commands::timeline::delete_clip,
             commands::timeline::update_clip_window,
             commands::timeline::duplicate_clip,
+            commands::timeline::duplicate_clips,
             commands::timeline::split_clip,
             commands::timeline::undo_action,
             commands::timeline::redo_action,

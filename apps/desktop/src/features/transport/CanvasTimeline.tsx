@@ -76,6 +76,7 @@ type TrackCanvasProps = {
   interactionContainerRef: RefObject<HTMLDivElement | null>;
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
+  selectedClipIds: string[];
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
   trackHeightForInput: number;
   canNativeZoom: boolean;
@@ -509,6 +510,7 @@ export function TimelineTrackCanvas({
   interactionContainerRef,
   timelineGrid,
   selectedClipId,
+  selectedClipIds,
   clipPreviewSecondsRef,
   trackHeightForInput,
   canNativeZoom,
@@ -534,6 +536,7 @@ export function TimelineTrackCanvas({
     zoomLevel: livePixelsPerSecondRef.current,
     timelineGrid,
     selectedClipId,
+    selectedClipIds,
     clipPreviewSecondsRef,
     cameraX: cameraXRef.current,
   });
@@ -603,6 +606,7 @@ export function TimelineTrackCanvas({
     zoomLevel: livePixelsPerSecondRef.current,
     timelineGrid,
     selectedClipId,
+    selectedClipIds,
     clipPreviewSecondsRef,
     cameraX: cameraXRef.current,
   };
@@ -674,6 +678,7 @@ export function TimelineTrackCanvas({
       pixelsPerSecond,
       timelineGrid,
       selectedClipId,
+      selectedClipIds,
       clipPreviewSecondsRef,
     };
     rendererRef.current?.updateState(snapshotRef.current);
@@ -683,6 +688,7 @@ export function TimelineTrackCanvas({
     height,
     pixelsPerSecond,
     selectedClipId,
+    selectedClipIds,
     song,
     timelineGrid,
     trackHeight,

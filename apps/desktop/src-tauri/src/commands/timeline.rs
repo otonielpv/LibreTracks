@@ -4,6 +4,14 @@ use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
 use crate::state::DesktopState;
 use libretracks_core::TrackKind;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateClipPlacement {
+    clip_id: String,
+    timeline_start_seconds: f64,
+}
 
 #[tauri::command]
 pub fn move_clip(
@@ -89,6 +97,25 @@ pub fn duplicate_clip(
 
     session
         .duplicate_clip(&clip_id, timeline_start_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn duplicate_clips(
+    placements: Vec<DuplicateClipPlacement>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    let placements = placements
+        .into_iter()
+        .map(|placement| (placement.clip_id, placement.timeline_start_seconds))
+        .collect::<Vec<_>>();
+
+    session
+        .duplicate_clips(&placements, &state.audio)
         .map_err(|error| error.to_string())
 }
 

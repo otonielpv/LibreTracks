@@ -8,7 +8,12 @@ use thiserror::Error;
 fn jump_debug_enabled() -> bool {
     std::env::var("LIBRETRACKS_JUMP_DEBUG")
         .or_else(|_| std::env::var("LIBRETRACKS_AUDIO_DEBUG"))
-        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON"))
+        .map(|value| {
+            matches!(
+                value.as_str(),
+                "1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -709,42 +714,60 @@ struct ResolvedSongRegion {
 }
 
 fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEngineError> {
-    let mut markers = song
+    let mut boundaries = song
         .tempo_markers
         .iter()
         .filter(|marker| marker.start_seconds > 0.0)
+        .map(|marker| (marker.start_seconds, Some(marker.bpm), None))
+        .chain(
+            song.time_signature_markers
+                .iter()
+                .filter(|marker| marker.start_seconds > 0.0)
+                .map(|marker| (marker.start_seconds, None, Some(marker.signature.as_str()))),
+        )
         .collect::<Vec<_>>();
-    markers.sort_by(|left, right| {
-        left.start_seconds
-            .partial_cmp(&right.start_seconds)
+    boundaries.sort_by(|left, right| {
+        left.0
+            .partial_cmp(&right.0)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let mut resolved_regions = Vec::with_capacity(markers.len() + 1);
+    let mut resolved_regions = Vec::with_capacity(boundaries.len() + 1);
     let mut cumulative_bars_start = 0.0;
     let mut start_seconds = 0.0;
     let mut bpm = song.bpm;
+    let mut time_signature = song.time_signature.as_str();
 
-    for marker in markers {
-        if marker.start_seconds <= start_seconds {
-            bpm = marker.bpm;
+    for (boundary_seconds, boundary_bpm, boundary_time_signature) in boundaries {
+        if boundary_seconds <= start_seconds {
+            if let Some(next_bpm) = boundary_bpm {
+                bpm = next_bpm;
+            }
+            if let Some(next_time_signature) = boundary_time_signature {
+                time_signature = next_time_signature;
+            }
             continue;
         }
 
-        let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, &song.time_signature)?;
-        let duration_seconds = (marker.start_seconds - start_seconds).max(0.0);
+        let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, time_signature)?;
+        let duration_seconds = (boundary_seconds - start_seconds).max(0.0);
         resolved_regions.push(ResolvedSongRegion {
             start_seconds,
-            end_seconds: marker.start_seconds,
+            end_seconds: boundary_seconds,
             bar_duration_seconds,
             cumulative_bars_start,
         });
         cumulative_bars_start += duration_seconds / bar_duration_seconds;
-        start_seconds = marker.start_seconds;
-        bpm = marker.bpm;
+        start_seconds = boundary_seconds;
+        if let Some(next_bpm) = boundary_bpm {
+            bpm = next_bpm;
+        }
+        if let Some(next_time_signature) = boundary_time_signature {
+            time_signature = next_time_signature;
+        }
     }
 
-    let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, &song.time_signature)?;
+    let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, time_signature)?;
     resolved_regions.push(ResolvedSongRegion {
         start_seconds,
         end_seconds: f64::MAX,
@@ -1367,6 +1390,41 @@ mod tests {
             .expect("jump should remain pending");
 
         assert!((scheduled.execute_at_seconds - 2.75).abs() < 0.0001);
+    }
+
+    #[test]
+    fn jump_after_bars_uses_time_signature_markers() {
+        let mut song = demo_song();
+        song.bpm = 120.0;
+        song.duration_seconds = 12.0;
+        song.time_signature = "4/4".into();
+        song.time_signature_markers = vec![libretracks_core::TimeSignatureMarker {
+            id: "sig_3_4".into(),
+            start_seconds: 4.0,
+            signature: "3/4".into(),
+        }];
+        song.section_markers = vec![Marker {
+            id: "section_target".into(),
+            name: "Target".into(),
+            start_seconds: 10.0,
+            digit: None,
+        }];
+
+        let mut engine = AudioEngine::new();
+        engine.load_song(song).expect("song should load");
+        engine.seek(4.1).expect("seek should work");
+        engine.play().expect("play should work");
+
+        let scheduled = engine
+            .schedule_marker_jump(
+                "section_target",
+                JumpTrigger::AfterBars(2),
+                TransitionType::Instant,
+            )
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        assert!((scheduled.execute_at_seconds - 7.0).abs() < 0.0001);
     }
 
     #[test]

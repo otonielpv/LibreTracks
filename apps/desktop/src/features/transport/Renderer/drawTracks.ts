@@ -140,11 +140,13 @@ export function drawTrackClipsLayer(
       const visibleWidth = Math.max(2, clippedRight - clippedLeft);
       const clipTop = trackTop;
       const clipHeight = snapshot.trackHeight;
+      const isSelected =
+        snapshot.selectedClipId === clip.id || snapshot.selectedClipIds.includes(clip.id);
 
       context.fillStyle = "rgba(210, 212, 209, 0.92)";
       context.strokeStyle =
-        snapshot.selectedClipId === clip.id ? "rgba(87, 241, 219, 0.9)" : "rgba(12, 12, 12, 0.28)";
-      context.lineWidth = snapshot.selectedClipId === clip.id ? 1.5 : 1;
+        isSelected ? "rgba(87, 241, 219, 0.9)" : "rgba(12, 12, 12, 0.28)";
+      context.lineWidth = isSelected ? 1.5 : 1;
       context.beginPath();
       context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
       context.fill();

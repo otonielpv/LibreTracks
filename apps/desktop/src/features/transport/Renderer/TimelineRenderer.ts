@@ -17,6 +17,7 @@ export type TrackSceneSnapshot = {
   zoomLevel: number;
   timelineGrid: TimelineGrid;
   selectedClipId: string | null;
+  selectedClipIds: string[];
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
   cameraX: number;
 };
@@ -132,6 +133,7 @@ export class TimelineRenderer {
       previousSnapshot.trackHeight !== nextSnapshot.trackHeight ||
       previousSnapshot.timelineGrid !== nextSnapshot.timelineGrid ||
       previousSnapshot.selectedClipId !== nextSnapshot.selectedClipId ||
+      previousSnapshot.selectedClipIds.join("|") !== nextSnapshot.selectedClipIds.join("|") ||
       previousSnapshot.pixelsPerSecond !== nextSnapshot.pixelsPerSecond;
 
     this.snapshot = nextSnapshot;
