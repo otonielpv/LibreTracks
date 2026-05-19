@@ -177,6 +177,10 @@ const ensureEngineV2 = (normalizedEnv) => {
   if (normalizedEnv.VCPKG_DEFAULT_TRIPLET) {
     configureArgs.push(`-DVCPKG_TARGET_TRIPLET=${normalizedEnv.VCPKG_DEFAULT_TRIPLET}`);
   }
+  if (process.platform === "darwin") {
+    configureArgs.push(`-DCMAKE_OSX_ARCHITECTURES=${normalizedEnv.CMAKE_OSX_ARCHITECTURES ?? "x86_64;arm64"}`);
+    configureArgs.push(`-DCMAKE_OSX_DEPLOYMENT_TARGET=${normalizedEnv.MACOSX_DEPLOYMENT_TARGET ?? "10.13"}`);
+  }
   run("cmake", configureArgs);
   run("cmake", [
     "--build",

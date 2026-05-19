@@ -175,6 +175,11 @@ jobs:
           if ($env:VCPKG_DEFAULT_TRIPLET) {
             $configureArgs += "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_DEFAULT_TRIPLET"
           }
+          if ("${{ matrix.platform }}" -eq "macos") {
+            $env:MACOSX_DEPLOYMENT_TARGET = "10.13"
+            $configureArgs += "-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64"
+            $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.13"
+          }
           cmake @configureArgs
           cmake --build build/engine-release --config Release --target lt_audio_engine_v2 --parallel
 
