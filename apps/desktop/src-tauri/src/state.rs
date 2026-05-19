@@ -1332,7 +1332,11 @@ impl DesktopSession {
                         self.last_native_scheduled_jump_executed_count
                     );
                 }
-                audio.schedule_region_end_jump(&pending_jump.target_marker_id, target_region_id)?;
+                audio.schedule_region_end_jump(
+                    &pending_jump.target_marker_id,
+                    target_region_id,
+                    matches!(pending_jump.transition, TransitionType::FadeOut { .. }),
+                )?;
             } else {
                 audio.cancel_scheduled_jumps()?;
             }

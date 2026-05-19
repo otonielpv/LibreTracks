@@ -207,6 +207,24 @@ fn set_track_transpose_enabled_false_round_trip() {
 }
 
 #[test]
+fn start_master_fade_round_trip() {
+    let cmd = EngineCommand::StartMasterFade {
+        target_gain: 0.0,
+        duration_seconds: 0.35,
+    };
+    let json = serde_json::to_string(&cmd).unwrap();
+    assert!(json.contains("\"StartMasterFade\""));
+    let rt = round_trip(&cmd);
+    assert!(matches!(
+        rt,
+        EngineCommand::StartMasterFade {
+            target_gain,
+            duration_seconds,
+        } if (target_gain - 0.0).abs() < 1e-6 && (duration_seconds - 0.35).abs() < 1e-9
+    ));
+}
+
+#[test]
 fn set_metronome_config_round_trip() {
     let cmd = EngineCommand::SetMetronomeConfig {
         enabled: true,

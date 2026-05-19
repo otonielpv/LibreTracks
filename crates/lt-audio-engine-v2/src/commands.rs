@@ -76,6 +76,10 @@ pub enum EngineCommand {
         track_id: String,
         enabled: bool,
     },
+    StartMasterFade {
+        target_gain: f32,
+        duration_seconds: f64,
+    },
 
     SetMetronomeEnabled {
         enabled: bool,

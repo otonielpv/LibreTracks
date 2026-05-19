@@ -355,3 +355,27 @@ TEST_CASE("scheduled jump can suppress seek fade for external fade transitions")
     CHECK(mixer.scheduled_jump_executed_count() == 1);
     CHECK(mixer.take_pending_scheduled_jump() == 1234);
 }
+
+TEST_CASE("master fade ramps output gain in the audio callback") {
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, 48000 * 4);
+    auto session = std::make_shared<Session>(one_track_session(0, 48000 * 4));
+
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+
+    clock.play();
+    mixer.start_master_fade(0.0f, static_cast<double>(kBlock) / clock.sample_rate());
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    mixer.render(out, 2, kBlock, clock.sample_rate());
+
+    const std::vector<float> left_head(left.begin(), left.begin() + kBlock / 4);
+    const std::vector<float> left_tail(left.end() - kBlock / 4, left.end());
+    const std::vector<float> right_head(right.begin(), right.begin() + kBlock / 4);
+    const std::vector<float> right_tail(right.end() - kBlock / 4, right.end());
+    CHECK(rms(left_head) > rms(left_tail));
+    CHECK(rms(right_head) > rms(right_tail));
+}

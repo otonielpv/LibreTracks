@@ -685,6 +685,8 @@ void Mixer::render(float** output_channels,
     if (!fade_processed_in_split)
         fade_.process(output_channels, num_channels, num_frames);
 
+    apply_master_gain(output_channels, num_channels, num_frames);
+
     // Peak meters.
     float peak_l = 0.f, peak_r = 0.f;
     double sum_l = 0.0, sum_r = 0.0;
@@ -750,6 +752,14 @@ void Mixer::set_track_solo(const Id& track_id, bool solo) {
         control->solo.store(solo, std::memory_order_relaxed);
 }
 
+void Mixer::start_master_fade(float target_gain, double duration_seconds) noexcept {
+    master_fade_target_gain_.store(std::clamp(target_gain, 0.0f, 1.0f),
+                                   std::memory_order_relaxed);
+    master_fade_duration_seconds_.store(std::max(0.0, duration_seconds),
+                                        std::memory_order_relaxed);
+    master_fade_request_seq_.fetch_add(1, std::memory_order_release);
+}
+
 void Mixer::set_session(std::shared_ptr<const Session> session, bool preserve_realtime_state) {
     std::atomic_store(&session_, std::move(session));
     rebuild_control_slots(std::atomic_load(&session_), preserve_realtime_state);
@@ -774,6 +784,50 @@ void Mixer::prepare_render_resources(int max_block_frames) noexcept {
 
 void Mixer::trigger_crossfade() noexcept {
     fade_.trigger_crossfade();
+}
+
+void Mixer::apply_master_gain(float** output_channels, int num_channels, int num_frames) noexcept {
+    if (num_channels <= 0 || num_frames <= 0)
+        return;
+
+    const auto seq = master_fade_request_seq_.load(std::memory_order_acquire);
+    if (seq != master_fade_applied_seq_) {
+        master_fade_applied_seq_ = seq;
+        master_gain_start_ = master_gain_current_;
+        master_gain_target_ = master_fade_target_gain_.load(std::memory_order_relaxed);
+        const double duration = master_fade_duration_seconds_.load(std::memory_order_relaxed);
+        const int sr = clock_ ? std::max(1, clock_->sample_rate()) : 48000;
+        master_fade_total_frames_ = std::max(1, static_cast<int>(std::ceil(duration * sr)));
+        master_fade_processed_frames_ = 0;
+        jump_debug_log(
+            "[LT_JUMP_DEBUG][mixer] start_master_fade current=%.6f target=%.6f duration=%.9f frames=%d\n",
+            static_cast<double>(master_gain_start_),
+            static_cast<double>(master_gain_target_),
+            duration,
+            master_fade_total_frames_);
+    }
+
+    for (int f = 0; f < num_frames; ++f) {
+        if (master_fade_processed_frames_ < master_fade_total_frames_) {
+            const float t = master_fade_total_frames_ <= 1
+                ? 1.0f
+                : static_cast<float>(master_fade_processed_frames_)
+                    / static_cast<float>(master_fade_total_frames_ - 1);
+            const float eased = t * t * (3.0f - 2.0f * t);
+            master_gain_current_ =
+                master_gain_start_ + (master_gain_target_ - master_gain_start_) * eased;
+            ++master_fade_processed_frames_;
+            if (master_fade_processed_frames_ >= master_fade_total_frames_)
+                master_gain_current_ = master_gain_target_;
+        }
+
+        if (std::abs(master_gain_current_ - 1.0f) <= 0.000001f)
+            continue;
+        for (int ch = 0; ch < num_channels; ++ch) {
+            if (output_channels[ch])
+                output_channels[ch][f] *= master_gain_current_;
+        }
+    }
 }
 
 void Mixer::set_metronome_config(const MetronomeConfig& config) {

@@ -111,6 +111,12 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "SetTrackTransposeEnabled")
         return CmdSetTrackTransposeEnabled{ j.at("track_id").get<Id>(), j.at("enabled").get<bool>() };
 
+    if (type == "StartMasterFade")
+        return CmdStartMasterFade{
+            j.at("target_gain").get<float>(),
+            j.at("duration_seconds").get<double>()
+        };
+
     if (type == "SetMetronomeEnabled")
         return CmdSetMetronomeEnabled{ j.at("enabled").get<bool>() };
 

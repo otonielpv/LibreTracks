@@ -100,6 +100,14 @@ TEST_CASE("parse SetTrackMute true") {
     CHECK(std::get<CmdSetTrackMute>(cmd).mute == true);
 }
 
+TEST_CASE("parse StartMasterFade") {
+    auto cmd = command_from_json(R"({"type":"StartMasterFade","target_gain":0.0,"duration_seconds":0.35})");
+    REQUIRE(std::holds_alternative<CmdStartMasterFade>(cmd));
+    auto& c = std::get<CmdStartMasterFade>(cmd);
+    CHECK(c.target_gain == doctest::Approx(0.0f));
+    CHECK(c.duration_seconds == doctest::Approx(0.35));
+}
+
 TEST_CASE("parse SetTrackAudioRoute") {
     auto cmd = command_from_json(R"({"type":"SetTrackAudioRoute","track_id":"t1","audio_to":"ext:2-3"})");
     REQUIRE(std::holds_alternative<CmdSetTrackAudioRoute>(cmd));

@@ -832,6 +832,16 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (mixer_) mixer_->set_track_solo(c.track_id, c.solo);
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdStartMasterFade>) {
+            if (jump_debug_enabled()) {
+                debug_log(
+                    "[LT_JUMP_DEBUG][native-command] start_master_fade target=%.6f duration=%.9f\n",
+                    static_cast<double>(c.target_gain),
+                    c.duration_seconds);
+            }
+            if (mixer_) mixer_->start_master_fade(c.target_gain, c.duration_seconds);
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdSetTrackAudioRoute>) {
             update_track_session(session_, mixer_.get(), c.track_id, [route = c.audio_to](Track& track) {
                 track.audio_to = route.empty() ? std::string("master") : route;

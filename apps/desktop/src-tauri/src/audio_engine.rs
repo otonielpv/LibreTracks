@@ -462,11 +462,12 @@ impl AudioController {
         &self,
         jump_id: &str,
         target_region_id: &str,
+        suppress_seek_fade: bool,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("schedule_region_end_jump", None, |engine, _state| {
             if jump_debug_logging_enabled() {
                 eprintln!(
-                    "[LT_JUMP_DEBUG][rust-command] schedule_region_end jump_id={jump_id} target_region={target_region_id}"
+                    "[LT_JUMP_DEBUG][rust-command] schedule_region_end jump_id={jump_id} target_region={target_region_id} suppress_seek_fade={suppress_seek_fade}"
                 );
             }
             engine.send_command(&EngineCommand::CancelAllScheduledJumps)?;
@@ -479,7 +480,7 @@ impl AudioController {
                 },
                 trigger: JumpTrigger::AtRegionEnd,
                 trigger_frame: None,
-                suppress_seek_fade: false,
+                suppress_seek_fade,
             })?;
             Ok(())
         })
@@ -835,10 +836,21 @@ impl AudioController {
 
     pub fn start_master_fade(
         &self,
-        _target_gain: f32,
-        _duration_seconds: f64,
+        target_gain: f32,
+        duration_seconds: f64,
     ) -> Result<(), DesktopError> {
-        Ok(())
+        self.with_engine_state("start_master_fade", None, |engine, _state| {
+            if jump_debug_logging_enabled() {
+                eprintln!(
+                    "[LT_JUMP_DEBUG][rust-command] start_master_fade target_gain={target_gain:.6} duration_seconds={duration_seconds:.9}"
+                );
+            }
+            engine.send_command(&EngineCommand::StartMasterFade {
+                target_gain: target_gain.clamp(0.0, 1.0),
+                duration_seconds: duration_seconds.max(0.0),
+            })?;
+            Ok(())
+        })
     }
 
     pub fn engine_snapshot(&self) -> Result<EngineSnapshot, DesktopError> {

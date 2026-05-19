@@ -48,6 +48,7 @@ public:
     void set_track_pan(const Id& track_id, float pan);
     void set_track_mute(const Id& track_id, bool mute);
     void set_track_solo(const Id& track_id, bool solo);
+    void start_master_fade(float target_gain, double duration_seconds) noexcept;
     // preserve_realtime_state=true: keep existing gain/pan/mute/solo atomics for known tracks
     //   (used for session pointer swaps during transpose/region changes — slider state survives).
     // preserve_realtime_state=false: always load values from session
@@ -163,6 +164,16 @@ private:
     std::atomic<std::uint64_t> skipped_track_count_{0};
     std::atomic<std::uint64_t> scheduled_jump_executed_count_{0};
 
+    std::atomic<std::uint64_t> master_fade_request_seq_{0};
+    std::atomic<float> master_fade_target_gain_{1.0f};
+    std::atomic<double> master_fade_duration_seconds_{0.0};
+    std::uint64_t master_fade_applied_seq_ = 0;
+    float master_gain_current_ = 1.0f;
+    float master_gain_start_ = 1.0f;
+    float master_gain_target_ = 1.0f;
+    int master_fade_total_frames_ = 0;
+    int master_fade_processed_frames_ = 0;
+
     // When a scheduled jump fires inside the audio callback, the target frame is written here
     // so the control thread can call prepare_for_transport_discontinuity() for pitch.
     // Sentinel: -1 means no pending jump. Written from audio thread, read from control thread.
@@ -180,6 +191,7 @@ private:
                               int num_frames,
                               int output_offset,
                               const std::shared_ptr<const Session>& session) noexcept;
+    void apply_master_gain(float** output_channels, int num_channels, int num_frames) noexcept;
     TrackControlState* control_for_track(const Id& track_id) noexcept;
     const TrackControlState* control_for_track(const Id& track_id) const noexcept;
     int control_index_for_track(const Id& track_id) const noexcept;
