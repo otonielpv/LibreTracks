@@ -45,6 +45,8 @@ use crate::settings::AppSettings;
 const LIBRARY_MANIFEST_FILE_NAME: &str = "library.json";
 const LIBRARY_IMPORT_PROGRESS_EVENT: &str = "library:import-progress";
 pub const WAVEFORM_READY_EVENT: &str = "waveform:ready";
+const TRANSPORT_RUNTIME_SYNC_INTERVAL: Duration = Duration::from_millis(250);
+const TRANSPORT_PITCH_SYNC_INTERVAL: Duration = Duration::from_millis(800);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,6 +115,8 @@ pub struct DesktopSession {
     song_file_path: Option<PathBuf>,
     last_drift_sample: Option<TransportDriftSummary>,
     last_runtime_pitch: Option<PitchPrepareSummary>,
+    last_transport_runtime_sync_at: Option<Instant>,
+    last_transport_pitch_sync_at: Option<Instant>,
     last_native_scheduled_jump_executed_count: u64,
     project_revision: u64,
     undo_stack: Vec<Song>,
@@ -153,6 +157,8 @@ impl Default for DesktopSession {
             song_file_path: None,
             last_drift_sample: None,
             last_runtime_pitch: None,
+            last_transport_runtime_sync_at: None,
+            last_transport_pitch_sync_at: None,
             last_native_scheduled_jump_executed_count: 0,
             project_revision: 0,
             undo_stack: Vec::new(),
@@ -2373,9 +2379,33 @@ impl DesktopSession {
         &mut self,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        self.sync_position(audio)?;
-        self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
-        Ok(self.snapshot_with_runtime_transport(audio))
+        let now = Instant::now();
+        let playback_is_running = self.engine.playback_state() == PlaybackState::Playing;
+        let sync_interval = if playback_is_running {
+            TRANSPORT_RUNTIME_SYNC_INTERVAL
+        } else {
+            TRANSPORT_PITCH_SYNC_INTERVAL
+        };
+        let should_sync_runtime = self
+            .last_transport_runtime_sync_at
+            .map(|last_sync| now.duration_since(last_sync) >= sync_interval)
+            .unwrap_or(true);
+        let should_sync_pitch = self
+            .last_transport_pitch_sync_at
+            .map(|last_sync| now.duration_since(last_sync) >= TRANSPORT_PITCH_SYNC_INTERVAL)
+            .unwrap_or(true);
+
+        if should_sync_runtime {
+            self.sync_position(audio)?;
+            self.last_transport_runtime_sync_at = Some(now);
+        }
+
+        if should_sync_pitch {
+            self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
+            self.last_transport_pitch_sync_at = Some(now);
+        }
+
+        Ok(self.snapshot())
     }
 
     #[allow(dead_code)]

@@ -2,7 +2,10 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
 import type { AudioMeterLevel, TransportSnapshot } from "./desktopApi";
-import type { PendingAudioImport, PendingAudioImportStatus } from "./pendingAudioImports";
+import type {
+  PendingAudioImport,
+  PendingAudioImportStatus,
+} from "./pendingAudioImports";
 
 export type TrackMeterState = {
   leftPeak: number;
@@ -36,7 +39,9 @@ type TransportStore = {
   markPendingAudioImportsFailed: (ids: string[], error: string) => void;
 };
 
-export function meterDictionaryFromLevels(levels: AudioMeterLevel[]): MeterDictionary {
+export function meterDictionaryFromLevels(
+  levels: AudioMeterLevel[],
+): MeterDictionary {
   const meters: MeterDictionary = {};
 
   for (const level of levels) {
@@ -49,6 +54,74 @@ export function meterDictionaryFromLevels(levels: AudioMeterLevel[]): MeterDicti
   return meters;
 }
 
+function jumpSignature(playback: TransportSnapshot | null) {
+  const jump = playback?.pendingMarkerJump;
+  if (!jump) {
+    return "";
+  }
+
+  return [
+    jump.targetMarkerId,
+    jump.targetMarkerName,
+    jump.trigger,
+    jump.executeAtSeconds.toFixed(6),
+    jump.transition,
+  ].join("|");
+}
+
+function vampSignature(playback: TransportSnapshot | null) {
+  const vamp = playback?.activeVamp;
+  if (!vamp) {
+    return "";
+  }
+
+  return [vamp.startSeconds.toFixed(6), vamp.endSeconds.toFixed(6)].join("|");
+}
+
+function pitchPrepareSignature(playback: TransportSnapshot | null) {
+  const pitch = playback?.pitch;
+  if (!pitch) {
+    return "";
+  }
+
+  return [
+    pitch.pitchPrepareActive ? "1" : "0",
+    pitch.pitchPreparePending ? "1" : "0",
+    pitch.pitchPrepareStatus,
+    pitch.pitchPrepareMessage,
+    pitch.pitchPrepareProgress.toFixed(3),
+    String(pitch.pitchProxyBlocksPending),
+    String(pitch.pitchProxyBlocksMissing),
+    String(pitch.pitchJobsPending),
+    String(pitch.pitchJobsRunning),
+    String(pitch.pitchJobsFailed),
+  ].join("|");
+}
+
+function shouldPublishPlaybackSnapshot(
+  current: TransportSnapshot | null,
+  next: TransportSnapshot | null,
+) {
+  if (current === next) {
+    return false;
+  }
+  if (!current || !next) {
+    return true;
+  }
+
+  return (
+    current.playbackState !== next.playbackState ||
+    current.projectRevision !== next.projectRevision ||
+    current.songDir !== next.songDir ||
+    current.songFilePath !== next.songFilePath ||
+    current.isNativeRuntime !== next.isNativeRuntime ||
+    current.transportClock?.running !== next.transportClock?.running ||
+    jumpSignature(current) !== jumpSignature(next) ||
+    vampSignature(current) !== vampSignature(next) ||
+    pitchPrepareSignature(current) !== pitchPrepareSignature(next)
+  );
+}
+
 export const useTransportStore = create<TransportStore>()(
   subscribeWithSelector((set) => ({
     meters: {},
@@ -59,7 +132,11 @@ export const useTransportStore = create<TransportStore>()(
       set({ meters });
     },
     setPlaybackState: (playback) => {
-      set({ playback });
+      set((state) =>
+        shouldPublishPlaybackSnapshot(state.playback, playback)
+          ? { playback }
+          : state,
+      );
     },
     setOptimisticMix: (trackId, mix) => {
       set((state) => {
@@ -115,7 +192,9 @@ export const useTransportStore = create<TransportStore>()(
 
       const idSet = new Set(ids);
       set((state) => ({
-        pendingAudioImports: state.pendingAudioImports.filter((item) => !idSet.has(item.id)),
+        pendingAudioImports: state.pendingAudioImports.filter(
+          (item) => !idSet.has(item.id),
+        ),
       }));
     },
     markPendingAudioImportsFailed: (ids, error) => {

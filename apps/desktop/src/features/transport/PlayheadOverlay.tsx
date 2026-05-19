@@ -1,9 +1,25 @@
-import { useEffect, useRef, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import type { TransportClock, TransportSnapshot } from "./desktopApi";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { useTransportStore } from "./store";
-import { clamp, clientXToTimelineSeconds, secondsToAbsoluteX } from "./timelineMath";
+import {
+  clamp,
+  clientXToTimelineSeconds,
+  secondsToAbsoluteX,
+} from "./timelineMath";
+
+function isSyncDebugAvailable() {
+  if (import.meta.env.DEV) return true;
+  return Boolean(
+    (window as unknown as { __LT_DEBUG_BUILD?: boolean }).__LT_DEBUG_BUILD,
+  );
+}
 
 type PlayheadDragState = {
   pointerId: number;
@@ -41,13 +57,16 @@ function resolveClockPositionSeconds(
   durationSeconds: number,
 ) {
   const safeDuration = Math.max(0, durationSeconds);
-  const isRunning = playback.playbackState === "playing" && Boolean(playback.transportClock?.running);
+  const isRunning =
+    playback.playbackState === "playing" &&
+    Boolean(playback.transportClock?.running);
 
   if (!isRunning || !playback.transportClock) {
     return clamp(playback.positionSeconds, 0, safeDuration);
   }
 
-  const elapsedSeconds = (performance.now() - playback.anchorReceivedAtMs) / 1000;
+  const elapsedSeconds =
+    (performance.now() - playback.anchorReceivedAtMs) / 1000;
   return clamp(
     playback.transportClock.anchorPositionSeconds + elapsedSeconds,
     0,
@@ -130,8 +149,10 @@ export function PlayheadOverlay({
     const render = () => {
       const activeDrag = dragStateRef.current;
       const effectivePixelsPerSecond =
-        latestPropsRef.current.livePixelsPerSecondRef?.current ?? latestPropsRef.current.pixelsPerSecond;
-      const sharedPositionSeconds = latestPropsRef.current.positionSecondsRef?.current;
+        latestPropsRef.current.livePixelsPerSecondRef?.current ??
+        latestPropsRef.current.pixelsPerSecond;
+      const sharedPositionSeconds =
+        latestPropsRef.current.positionSecondsRef?.current;
       const nextSeconds = activeDrag
         ? activeDrag.currentSeconds
         : typeof sharedPositionSeconds === "number"
@@ -140,14 +161,22 @@ export function PlayheadOverlay({
               0,
               Math.max(0, latestPropsRef.current.durationSeconds),
             )
-        : playbackRef.current.playbackState === "playing" && playbackRef.current.transportClock?.running
-          ? resolveClockPositionSeconds(playbackRef.current, latestPropsRef.current.durationSeconds)
-          : clamp(
-              latestPropsRef.current.positionSecondsRef?.current ?? playbackRef.current.positionSeconds,
-              0,
-              Math.max(0, latestPropsRef.current.durationSeconds),
-            );
-      const absoluteX = secondsToAbsoluteX(nextSeconds, effectivePixelsPerSecond);
+          : playbackRef.current.playbackState === "playing" &&
+              playbackRef.current.transportClock?.running
+            ? resolveClockPositionSeconds(
+                playbackRef.current,
+                latestPropsRef.current.durationSeconds,
+              )
+            : clamp(
+                latestPropsRef.current.positionSecondsRef?.current ??
+                  playbackRef.current.positionSeconds,
+                0,
+                Math.max(0, latestPropsRef.current.durationSeconds),
+              );
+      const absoluteX = secondsToAbsoluteX(
+        nextSeconds,
+        effectivePixelsPerSecond,
+      );
       const cameraX = latestPropsRef.current.cameraXRef?.current ?? 0;
       const nextTransform = `translate3d(${absoluteX - cameraX}px, 0, 0)`;
 
@@ -159,6 +188,7 @@ export function PlayheadOverlay({
       // Sync instrumentation — log what the playhead is DISPLAYING. Rate-limit
       // to 5/sec so the rAF loop doesn't flood the console.
       if (
+        isSyncDebugAvailable() &&
         (window as unknown as { __LT_SYNC_DEBUG?: boolean }).__LT_SYNC_DEBUG &&
         playbackRef.current.playbackState === "playing"
       ) {
@@ -206,7 +236,8 @@ export function PlayheadOverlay({
         event.clientX,
         boundsElement,
         latestPropsRef.current.scrollContainerRef?.current ?? null,
-        latestPropsRef.current.livePixelsPerSecondRef?.current ?? latestPropsRef.current.pixelsPerSecond,
+        latestPropsRef.current.livePixelsPerSecondRef?.current ??
+          latestPropsRef.current.pixelsPerSecond,
       ),
       0,
       Math.max(0, latestPropsRef.current.durationSeconds),
@@ -238,7 +269,8 @@ export function PlayheadOverlay({
           pointerEvent.clientX,
           boundsElement,
           latestPropsRef.current.scrollContainerRef?.current ?? null,
-          latestPropsRef.current.livePixelsPerSecondRef?.current ?? latestPropsRef.current.pixelsPerSecond,
+          latestPropsRef.current.livePixelsPerSecondRef?.current ??
+            latestPropsRef.current.pixelsPerSecond,
         ),
         0,
         Math.max(0, latestPropsRef.current.durationSeconds),

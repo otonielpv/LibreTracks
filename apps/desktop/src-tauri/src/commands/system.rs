@@ -20,6 +20,11 @@ pub fn healthcheck() -> &'static str {
     "libretracks-ready"
 }
 
+#[tauri::command]
+pub fn is_debug_build() -> bool {
+    cfg!(debug_assertions)
+}
+
 /// Combined diagnostic snapshot for the audio runtime ownership contract.
 ///
 /// Surfaces both the Rust-side realtime command counters (Category A vs legacy sync) and

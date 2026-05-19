@@ -1,7 +1,22 @@
 import { useEffect } from "react";
 import type { TransportSnapshot } from "@libretracks/shared/models";
 import { getTransportSnapshot, isTauriApp } from "../desktopApi";
-import { recordSnapshotCommitGap, recordSnapshotIpc } from "../perf/perfMetrics";
+import {
+  recordSnapshotCommitGap,
+  recordSnapshotIpc,
+} from "../perf/perfMetrics";
+
+const PLAYING_POLL_INTERVAL_MS = 250;
+const IDLE_POLL_INTERVAL_MS = 800;
+const SLOW_POLL_THRESHOLD_MS = 120;
+const SLOW_POLL_BACKOFF_MS = 750;
+
+function isSyncDebugAvailable() {
+  if (import.meta.env.DEV) return true;
+  return Boolean(
+    (window as unknown as { __LT_DEBUG_BUILD?: boolean }).__LT_DEBUG_BUILD,
+  );
+}
 
 type UseTransportPollingProps = {
   playbackState: string;
@@ -19,6 +34,31 @@ export function useTransportPolling({
 
     let active = true;
     let inFlight = false;
+    let timeoutId: number | null = null;
+
+    const clearScheduledRefresh = () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    const scheduleRefresh = (delayMs: number) => {
+      clearScheduledRefresh();
+      if (!active) {
+        return;
+      }
+
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        void refreshSnapshot();
+      }, delayMs);
+    };
+
+    const basePollInterval =
+      playbackState === "playing"
+        ? PLAYING_POLL_INTERVAL_MS
+        : IDLE_POLL_INTERVAL_MS;
 
     const refreshSnapshot = async () => {
       if (!active || inFlight) {
@@ -30,7 +70,8 @@ export function useTransportPolling({
       try {
         const nextSnapshot = await getTransportSnapshot();
         const ipcEndedAt = performance.now();
-        recordSnapshotIpc(ipcEndedAt - ipcStartedAt);
+        const ipcDurationMs = ipcEndedAt - ipcStartedAt;
+        recordSnapshotIpc(ipcDurationMs);
         if (!active) {
           return;
         }
@@ -44,7 +85,9 @@ export function useTransportPolling({
 
         // Sync instrumentation — opt-in via window.__LT_SYNC_DEBUG = true.
         if (
-          (window as unknown as { __LT_SYNC_DEBUG?: boolean }).__LT_SYNC_DEBUG &&
+          isSyncDebugAvailable() &&
+          (window as unknown as { __LT_SYNC_DEBUG?: boolean })
+            .__LT_SYNC_DEBUG &&
           nextSnapshot?.playbackState === "playing"
         ) {
           // eslint-disable-next-line no-console
@@ -52,21 +95,24 @@ export function useTransportPolling({
             `[SNAP_UI] wall_ms=${Date.now()} perf_ms=${performance.now().toFixed(1)} pos_s=${nextSnapshot.positionSeconds.toFixed(4)} anchor_s=${nextSnapshot.transportClock?.anchorPositionSeconds ?? "n/a"}`,
           );
         }
+        const nextDelayMs =
+          ipcDurationMs >= SLOW_POLL_THRESHOLD_MS
+            ? Math.max(basePollInterval, SLOW_POLL_BACKOFF_MS)
+            : basePollInterval;
+        scheduleRefresh(nextDelayMs);
       } finally {
         inFlight = false;
+        if (active && timeoutId === null) {
+          scheduleRefresh(basePollInterval);
+        }
       }
     };
 
-    const intervalId = window.setInterval(
-      () => {
-        void refreshSnapshot();
-      },
-      playbackState === "playing" ? 60 : 500,
-    );
+    void refreshSnapshot();
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
+      clearScheduledRefresh();
     };
   }, [applyPlaybackSnapshot, playbackState]);
 }

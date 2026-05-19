@@ -91,6 +91,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::system::healthcheck,
+            commands::system::is_debug_build,
             commands::system::get_remote_server_info,
             commands::system::get_midi_inputs,
             commands::transport::get_transport_snapshot,

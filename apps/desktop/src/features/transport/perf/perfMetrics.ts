@@ -22,6 +22,14 @@
 
 const STORAGE_KEY = "lt:perf:hud";
 
+function isPerfInstrumentationAvailable() {
+  if (import.meta.env.DEV) return true;
+  if (typeof window === "undefined") return false;
+  return Boolean(
+    (window as unknown as { __LT_DEBUG_BUILD?: boolean }).__LT_DEBUG_BUILD,
+  );
+}
+
 let started = false;
 let rafId = 0;
 let lastFrameTime = 0;
@@ -52,6 +60,7 @@ let canvasRenderWindowStart = 0;
 let canvasPaintCount = 0; // monotonic; lets the HUD distinguish "0 because idle" from "0 because instrumentation is broken"
 
 export function isPerfHudEnabled(): boolean {
+  if (!isPerfInstrumentationAvailable()) return false;
   if (typeof window === "undefined") return false;
   try {
     return window.localStorage.getItem(STORAGE_KEY) === "1";
@@ -61,6 +70,7 @@ export function isPerfHudEnabled(): boolean {
 }
 
 export function setPerfHudEnabled(enabled: boolean) {
+  if (!isPerfInstrumentationAvailable()) return;
   if (typeof window === "undefined") return;
   try {
     if (enabled) {
@@ -79,6 +89,7 @@ export function setPerfHudEnabled(enabled: boolean) {
  * via stopPerfMetrics().
  */
 export function startPerfMetrics() {
+  if (!isPerfInstrumentationAvailable()) return;
   if (started || typeof window === "undefined") return;
   started = true;
   lastFrameTime = performance.now();
@@ -143,7 +154,8 @@ export function recordRender(componentName: string) {
 export function recordSnapshotIpc(ms: number) {
   if (!started) return;
   snapshotIpcSamples.push(ms);
-  if (snapshotIpcSamples.length > SNAPSHOT_SAMPLE_SIZE) snapshotIpcSamples.shift();
+  if (snapshotIpcSamples.length > SNAPSHOT_SAMPLE_SIZE)
+    snapshotIpcSamples.shift();
   snapshotIpcEma = snapshotIpcEma === 0 ? ms : snapshotIpcEma * 0.8 + ms * 0.2;
 }
 
@@ -169,7 +181,8 @@ export type PerfSnapshot = {
 export function recordCanvasRender(ms: number) {
   if (!started) return;
   canvasPaintCount += 1;
-  canvasRenderEma = canvasRenderEma === 0 ? ms : canvasRenderEma * 0.85 + ms * 0.15;
+  canvasRenderEma =
+    canvasRenderEma === 0 ? ms : canvasRenderEma * 0.85 + ms * 0.15;
   if (ms > canvasRenderWorstThisSecond) canvasRenderWorstThisSecond = ms;
   const now = performance.now();
   if (canvasRenderWindowStart === 0) canvasRenderWindowStart = now;
@@ -418,9 +431,10 @@ function describeTarget(target: EventTarget | null): string {
     ].join(","),
   );
   if (interesting) {
-    return interesting.className
-      .split(/\s+/)
-      .find((cls) => cls.startsWith("lt-")) ?? interesting.tagName.toLowerCase();
+    return (
+      interesting.className.split(/\s+/).find((cls) => cls.startsWith("lt-")) ??
+      interesting.tagName.toLowerCase()
+    );
   }
   return target.tagName.toLowerCase();
 }
@@ -477,8 +491,12 @@ function installAutoMarkers() {
   };
 
   window.addEventListener("wheel", listeners.onWheel, { passive: true });
-  window.addEventListener("pointerdown", listeners.onPointerDown, { passive: true });
-  window.addEventListener("pointerup", listeners.onPointerUp, { passive: true });
+  window.addEventListener("pointerdown", listeners.onPointerDown, {
+    passive: true,
+  });
+  window.addEventListener("pointerup", listeners.onPointerUp, {
+    passive: true,
+  });
   window.addEventListener("keydown", listeners.onKeyDown, { passive: true });
   autoMarkerListeners = listeners;
 }
@@ -522,7 +540,9 @@ export function readPerfSnapshot(): PerfSnapshot {
     fps: fpsEma,
     frameMs: frameTimeWindow[frameTimeWindow.length - 1] ?? 0,
     worstFrameMs: worstFrameMsLastSecond,
-    renderCounts: [...renderCounts.entries()].sort((left, right) => right[1] - left[1]),
+    renderCounts: [...renderCounts.entries()].sort(
+      (left, right) => right[1] - left[1],
+    ),
     snapshotIpcEma,
     snapshotIpcP99: sortedIpc[p99Index] ?? 0,
     snapshotCommitGapEma,
