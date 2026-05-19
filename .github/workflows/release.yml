@@ -127,7 +127,29 @@ jobs:
         shell: bash
         run: |
           mkdir -p vendor/bungee
-          curl -L "$BUNGEE_ARCHIVE" | tar -xz -C vendor/bungee
+          # Extract only the headers + the current platform's runtime.
+          # Extracting the whole archive on Windows fails because the
+          # apple-mac/bungee.framework/* entries are symlinks (Versions/
+          # Current/...) and bsdtar on the Windows runner can't create
+          # symlinks without dev-mode / admin → tar exits 2 and aborts
+          # the job. Restricting the extraction to the bits we actually
+          # need on each platform side-steps that and also keeps the
+          # working tree slim.
+          case "${{ matrix.platform }}" in
+            linux)
+              curl -L "$BUNGEE_ARCHIVE" | tar -xz -C vendor/bungee include linux-x86_64
+              ;;
+            macos)
+              curl -L "$BUNGEE_ARCHIVE" | tar -xz -C vendor/bungee include apple-mac
+              ;;
+            windows)
+              curl -L "$BUNGEE_ARCHIVE" | tar -xz -C vendor/bungee include windows-x86_64
+              ;;
+            *)
+              echo "Unknown platform '${{ matrix.platform }}'" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Install dependencies
         run: npm install
