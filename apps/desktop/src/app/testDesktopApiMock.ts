@@ -1339,10 +1339,10 @@ export const testDesktopApiMock = {
     return clone(buildSnapshot());
   },
   setMetronomeEnabledRealtime: async (enabled: boolean) => {
-    state.settings = { ...state.settings, metronomeEnabled: enabled };
+    state.appSettings = { ...state.appSettings, metronomeEnabled: enabled };
   },
   setMetronomeVolumeRealtime: async (volume: number) => {
-    state.settings = { ...state.settings, metronomeVolume: volume };
+    state.appSettings = { ...state.appSettings, metronomeVolume: volume };
   },
   deleteTrack: async (trackId: string) => {
     const track = getTrack(trackId);
