@@ -30,6 +30,15 @@ include(FetchContent)
 # Silence FetchContent "Populating ..." noise during configure if not needed.
 set(FETCHCONTENT_QUIET ON)
 
+# CMake 4 removed support for projects declaring cmake_minimum_required(VERSION <3.5).
+# Several of our FetchContent'd upstreams (libsndfile 1.2.2, doctest, libsamplerate)
+# still ship with the old floor and refuse to configure out of the box on macOS CI
+# runners that now default to CMake 4.x. Pinning the minimum policy floor here
+# applies to every FetchContent_MakeAvailable below without us having to fork the
+# upstream CMakeLists.txt files. Harmless on CMake 3.x (the variable is ignored
+# when the requested floor is already satisfied by the project's own declaration).
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+
 # ── INTERFACE TARGETS ──────────────────────────────────────────────────────
 # Define them up-front so subdirectory CMakeLists.txt can always link against
 # them unconditionally; real content is added below based on options.
