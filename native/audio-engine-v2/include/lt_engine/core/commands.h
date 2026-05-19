@@ -60,6 +60,7 @@ struct CmdScheduleJump {
     JumpTarget  target;
     JumpTrigger trigger;
     std::optional<Frame> trigger_frame; // for AtFrame: exact frame where target should fire
+    bool suppress_seek_fade = false;
 };
 
 struct CmdCancelScheduledJump      { Id jump_id; };

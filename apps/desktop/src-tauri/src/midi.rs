@@ -14,7 +14,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
-    audio_engine::AudioCommand,
+    audio_engine::{jump_debug_logging_enabled, AudioCommand},
     commands::events::emit_transport_lifecycle_event,
     commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
     settings::{save_app_settings, AppSettings, AppSettingsStore, MidiBinding},
@@ -316,6 +316,14 @@ fn dispatch_midi_action(
                 .map_err(|error| error.to_string())?;
         let transition = parse_transition_type(Some(&settings.song_transition_mode), None)
             .map_err(|error| error.to_string())?;
+        if jump_debug_logging_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][midi] jump_marker action={action_key} target_marker={target_marker_id} global_mode={} global_bars={} transition={} parsed_trigger={jump_trigger:?} parsed_transition={transition:?}",
+                settings.global_jump_mode,
+                settings.global_jump_bars,
+                settings.song_transition_mode
+            );
+        }
         let snapshot = session
             .schedule_marker_jump(&target_marker_id, jump_trigger, transition, &state.audio)
             .map_err(|error| error.to_string())?;
@@ -346,6 +354,14 @@ fn dispatch_midi_action(
                 .map_err(|error| error.to_string())?;
         let transition = parse_transition_type(Some(&settings.song_transition_mode), None)
             .map_err(|error| error.to_string())?;
+        if jump_debug_logging_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][midi] jump_region action={action_key} target_region={target_region_id} song_trigger={} song_bars={} transition={} parsed_trigger={jump_trigger:?} parsed_transition={transition:?}",
+                settings.song_jump_trigger,
+                settings.song_jump_bars,
+                settings.song_transition_mode
+            );
+        }
         let snapshot = session
             .schedule_region_jump(&target_region_id, jump_trigger, transition, &state.audio)
             .map_err(|error| error.to_string())?;

@@ -80,6 +80,7 @@ fn schedule_jump_immediate_round_trip() {
         },
         trigger: JumpTrigger::Immediate,
         trigger_frame: None,
+        suppress_seek_fade: false,
     };
     let json = serde_json::to_string(&cmd).unwrap();
     assert!(json.contains("\"jump_id\":\"j1\""));
@@ -98,15 +99,18 @@ fn schedule_jump_at_frame_round_trip() {
         },
         trigger: JumpTrigger::AtFrame,
         trigger_frame: Some(288000),
+        suppress_seek_fade: true,
     };
     let json = serde_json::to_string(&cmd).unwrap();
     assert!(json.contains("\"trigger_frame\":288000"));
+    assert!(json.contains("\"suppress_seek_fade\":true"));
     let rt: EngineCommand = serde_json::from_str(&json).unwrap();
     assert!(matches!(
         rt,
         EngineCommand::ScheduleJump {
             trigger: JumpTrigger::AtFrame,
             trigger_frame: Some(288000),
+            suppress_seek_fade: true,
             ..
         }
     ));

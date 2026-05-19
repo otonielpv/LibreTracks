@@ -50,8 +50,7 @@ bool bungee_debug_enabled() {
 // Bungee's Request::pitch parameter, so a single voice carries a clip through
 // arbitrary live pitch changes gaplessly. Rebuilding when pitch changes was
 // the bug that caused ~200 ms of silence on every transpose adjustment.
-using VoiceMap = std::unordered_map<Id,
-                                    std::shared_ptr<BungeePitchVoice>>;
+using VoiceMap = PreparedVoiceMap;
 
 // ─── Impl ────────────────────────────────────────────────────────────────
 
@@ -504,8 +503,7 @@ void BungeeVoiceManager::clear() {
                       std::shared_ptr<const VoiceMap>(std::make_shared<const VoiceMap>()));
 }
 
-void BungeeVoiceManager::swap_in_prepared_voices(
-    std::unordered_map<Id, std::shared_ptr<BungeePitchVoice>> prepared_voices) {
+void BungeeVoiceManager::swap_in_prepared_voices(PreparedVoiceMap prepared_voices) {
     if (!impl_) return;
 #if !LT_ENGINE_HAVE_BUNGEE
     (void)prepared_voices;
@@ -513,16 +511,11 @@ void BungeeVoiceManager::swap_in_prepared_voices(
 #else
     if (!impl_->prepared) return;
     std::lock_guard build_lock(impl_->build_mutex);
-
-    auto next = std::make_shared<VoiceMap>();
-    next->reserve(prepared_voices.size());
-    for (auto& kv : prepared_voices) {
-        if (kv.second) next->emplace(kv.first, std::move(kv.second));
-    }
+    auto next = build_prepared_voice_map(std::move(prepared_voices));
+    if (!next) return;
 
     const int active_count = static_cast<int>(next->size());
-    std::atomic_store(&impl_->active,
-                      std::shared_ptr<const VoiceMap>(std::move(next)));
+    std::atomic_store(&impl_->active, std::move(next));
     impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
     if (bungee_debug_enabled()) {
         std::fprintf(stdout,
@@ -530,6 +523,36 @@ void BungeeVoiceManager::swap_in_prepared_voices(
             active_count);
         std::fflush(stdout);
     }
+#endif
+}
+
+std::shared_ptr<const PreparedVoiceMap>
+BungeeVoiceManager::build_prepared_voice_map(PreparedVoiceMap prepared_voices) const {
+    if (!impl_) return {};
+#if !LT_ENGINE_HAVE_BUNGEE
+    (void)prepared_voices;
+    return {};
+#else
+    if (!impl_->prepared) return {};
+    auto next = std::make_shared<VoiceMap>();
+    next->reserve(prepared_voices.size());
+    for (auto& kv : prepared_voices) {
+        if (kv.second) next->emplace(kv.first, std::move(kv.second));
+    }
+    return next;
+#endif
+}
+
+void BungeeVoiceManager::publish_prepared_voice_map_realtime(
+    std::shared_ptr<const PreparedVoiceMap> prepared_voices) noexcept {
+    if (!impl_ || !prepared_voices) return;
+#if !LT_ENGINE_HAVE_BUNGEE
+    (void)prepared_voices;
+    return;
+#else
+    if (!impl_->prepared) return;
+    std::atomic_store(&impl_->active, std::move(prepared_voices));
+    impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
 #endif
 }
 

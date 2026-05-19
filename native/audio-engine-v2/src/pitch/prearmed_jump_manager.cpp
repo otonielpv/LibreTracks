@@ -28,9 +28,8 @@ namespace lt {
 
 // ─── PreparedJumpVoiceSet helpers ────────────────────────────────────────
 
-std::unordered_map<Id, std::shared_ptr<BungeePitchVoice>>
-PreparedJumpVoiceSet::extract_voice_map() {
-    std::unordered_map<Id, std::shared_ptr<BungeePitchVoice>> out;
+PreparedVoiceMap PreparedJumpVoiceSet::extract_voice_map() {
+    PreparedVoiceMap out;
     out.reserve(tracks.size());
     for (auto& t : tracks)
         if (t.voice) out.emplace(t.clip_id, std::move(t.voice));

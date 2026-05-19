@@ -321,3 +321,37 @@ TEST_CASE("scheduled region-end jump splits render block at exact trigger frame"
     CHECK(clock.position().frame == 1234 + (kBlock - 400));
     CHECK(mixer.scheduled_jump_executed_count() == 1);
 }
+
+TEST_CASE("scheduled jump can suppress seek fade for external fade transitions") {
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, 48000 * 4);
+    auto session = std::make_shared<Session>(one_track_session(0, 48000 * 4));
+    session->songs[0].regions.push_back(
+        Region{"region-a", "A", 0, 96000, 0});
+
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+
+    ScheduledJump jump;
+    jump.jump_id = "region-end";
+    JumpTarget target;
+    target.kind = JumpTarget::Kind::Frame;
+    target.frame = 1234;
+    jump.target = target;
+    jump.trigger = JumpTrigger::AtRegionEnd;
+    jump.status = JumpStatus::Pending;
+    jump.suppress_seek_fade = true;
+    REQUIRE(scheduler.schedule(jump).is_ok());
+
+    clock.seek(95600);
+    clock.play();
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    mixer.render(out, 2, kBlock, clock.sample_rate());
+
+    CHECK(clock.position().frame == 1234 + (kBlock - 400));
+    CHECK(mixer.scheduled_jump_executed_count() == 1);
+    CHECK(mixer.take_pending_scheduled_jump() == 1234);
+}

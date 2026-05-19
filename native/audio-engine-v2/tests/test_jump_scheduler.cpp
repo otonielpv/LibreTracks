@@ -312,3 +312,29 @@ TEST_CASE("at-frame trigger fires at trigger frame and resolves separate target"
     CHECK(due->target_frame == 1234);
     CHECK(due->trigger_frame == 96000);
 }
+
+TEST_CASE("at-frame due jump carries prepared voice map payload") {
+    TransportClock clock(48000);
+    auto sess = make_session_with_marker();
+    JumpScheduler sched;
+    clock.seek(95600);
+    clock.play();
+
+    auto prepared = std::make_shared<const PreparedVoiceMap>();
+
+    ScheduledJump jump;
+    jump.jump_id = "after-bars";
+    jump.target = frame_target(1234);
+    jump.trigger = JumpTrigger::AtFrame;
+    jump.status = JumpStatus::Pending;
+    jump.trigger_frame = 96000;
+    jump.suppress_seek_fade = true;
+    jump.prepared_voice_map = prepared;
+    sched.schedule(jump);
+    sched.drain_pending();
+
+    auto due = sched.check_due(clock, sess, 512);
+    REQUIRE(due.has_value());
+    CHECK(due->prepared_voice_map.get() == prepared.get());
+    CHECK(due->suppress_seek_fade);
+}

@@ -15,6 +15,7 @@
 #include <lt_engine/core/commands.h>
 #include <lt_engine/core/events.h>
 #include <lt_engine/core/result.h>
+#include <lt_engine/pitch/prepared_voice_map.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/session/session.h>
 #include <functional>
@@ -43,12 +44,16 @@ struct ScheduledJump {
     Frame       executed_frame  = 0;
     Frame       cancelled_frame = 0;
     std::optional<Frame> trigger_frame;
+    std::shared_ptr<const PreparedVoiceMap> prepared_voice_map;
+    bool suppress_seek_fade = false;
     std::string failure_reason;
 };
 
 struct DueJump {
     Frame target_frame = 0;
     Frame trigger_frame = 0;
+    std::shared_ptr<const PreparedVoiceMap> prepared_voice_map;
+    bool suppress_seek_fade = false;
 };
 
 // Callback fired by audio thread when a jump executes.

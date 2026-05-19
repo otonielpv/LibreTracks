@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::to_vec;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::audio_engine::{AudioController, PlaybackStartReason};
+use crate::audio_engine::{jump_debug_logging_enabled, AudioController, PlaybackStartReason};
 use crate::error::DesktopError;
 use crate::midi::MidiManager;
 use crate::models::view::{
@@ -1247,12 +1247,23 @@ impl DesktopSession {
                 self.current_position(),
                 self.engine.position_seconds(),
             );
-        } else if transition == TransitionType::Instant {
+        } else if matches!(
+            transition,
+            TransitionType::Instant | TransitionType::FadeOut { .. }
+        ) {
             if let Some(pending_jump) = scheduled_jump {
                 self.last_native_scheduled_jump_executed_count = audio
                     .engine_snapshot()
                     .map(|snapshot| snapshot.pitch.mixer_scheduled_jump_executed_count)
                     .unwrap_or(self.last_native_scheduled_jump_executed_count);
+                if jump_debug_logging_enabled() {
+                    eprintln!(
+                        "[LT_JUMP_DEBUG][state] marker_pending target_marker={target_marker_id} transition={transition:?} execute_at_seconds={:.9} current_position={:.9} native_count_baseline={}",
+                        pending_jump.execute_at_seconds,
+                        self.engine.position_seconds(),
+                        self.last_native_scheduled_jump_executed_count
+                    );
+                }
                 audio.schedule_jump_at_frame(
                     &pending_jump.target_marker_id,
                     NativeJumpTarget {
@@ -1261,6 +1272,7 @@ impl DesktopSession {
                         frame: None,
                     },
                     pending_jump.execute_at_seconds,
+                    matches!(pending_jump.transition, TransitionType::FadeOut { .. }),
                 )?;
             } else {
                 audio.cancel_scheduled_jumps()?;
@@ -1301,22 +1313,46 @@ impl DesktopSession {
                 self.current_position(),
                 self.engine.position_seconds(),
             );
-        } else if trigger == JumpTrigger::RegionEnd && transition == TransitionType::Instant {
+        } else if trigger == JumpTrigger::RegionEnd
+            && matches!(
+                transition,
+                TransitionType::Instant | TransitionType::FadeOut { .. }
+            )
+        {
             if let Some(pending_jump) = scheduled_jump {
                 self.last_native_scheduled_jump_executed_count = audio
                     .engine_snapshot()
                     .map(|snapshot| snapshot.pitch.mixer_scheduled_jump_executed_count)
                     .unwrap_or(self.last_native_scheduled_jump_executed_count);
+                if jump_debug_logging_enabled() {
+                    eprintln!(
+                        "[LT_JUMP_DEBUG][state] region_end_pending target_region={target_region_id} transition={transition:?} execute_at_seconds={:.9} current_position={:.9} native_count_baseline={}",
+                        pending_jump.execute_at_seconds,
+                        self.engine.position_seconds(),
+                        self.last_native_scheduled_jump_executed_count
+                    );
+                }
                 audio.schedule_region_end_jump(&pending_jump.target_marker_id, target_region_id)?;
             } else {
                 audio.cancel_scheduled_jumps()?;
             }
-        } else if transition == TransitionType::Instant {
+        } else if matches!(
+            transition,
+            TransitionType::Instant | TransitionType::FadeOut { .. }
+        ) {
             if let Some(pending_jump) = scheduled_jump {
                 self.last_native_scheduled_jump_executed_count = audio
                     .engine_snapshot()
                     .map(|snapshot| snapshot.pitch.mixer_scheduled_jump_executed_count)
                     .unwrap_or(self.last_native_scheduled_jump_executed_count);
+                if jump_debug_logging_enabled() {
+                    eprintln!(
+                        "[LT_JUMP_DEBUG][state] region_pending target_region={target_region_id} trigger={trigger:?} transition={transition:?} execute_at_seconds={:.9} current_position={:.9} native_count_baseline={}",
+                        pending_jump.execute_at_seconds,
+                        self.engine.position_seconds(),
+                        self.last_native_scheduled_jump_executed_count
+                    );
+                }
                 audio.schedule_jump_at_frame(
                     &pending_jump.target_marker_id,
                     NativeJumpTarget {
@@ -1325,6 +1361,7 @@ impl DesktopSession {
                         frame: None,
                     },
                     pending_jump.execute_at_seconds,
+                    matches!(pending_jump.transition, TransitionType::FadeOut { .. }),
                 )?;
             } else {
                 audio.cancel_scheduled_jumps()?;
@@ -2767,18 +2804,46 @@ impl DesktopSession {
             return Ok(false);
         }
 
+        if jump_debug_logging_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][state] native_count_advanced previous_count={} executed_count={} rust_position={:.9}",
+                self.last_native_scheduled_jump_executed_count,
+                executed_count,
+                self.engine.position_seconds()
+            );
+        }
         self.last_native_scheduled_jump_executed_count = executed_count;
 
         let Some(pending_jump) = self.engine.pending_marker_jump().cloned() else {
+            if jump_debug_logging_enabled() {
+                eprintln!("[LT_JUMP_DEBUG][state] native_count_without_pending_jump");
+            }
             return Ok(false);
         };
-        if pending_jump.transition != TransitionType::Instant {
-            return Ok(false);
-        }
+        let fade_in_duration_seconds = match pending_jump.transition {
+            TransitionType::Instant => None,
+            TransitionType::FadeOut { duration_seconds } => Some(duration_seconds),
+        };
 
-        let Some(target_position) = self.engine.complete_pending_instant_jump()? else {
+        let Some(target_position) = self.engine.complete_pending_native_jump()? else {
+            if jump_debug_logging_enabled() {
+                eprintln!(
+                    "[LT_JUMP_DEBUG][state] native_count_complete_returned_none pending_target={} execute_at_seconds={:.9}",
+                    pending_jump.target_marker_id,
+                    pending_jump.execute_at_seconds
+                );
+            }
             return Ok(false);
         };
+        if jump_debug_logging_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][state] native_jump_completed target_position={target_position:.9} pending_execute_at_seconds={:.9}",
+                pending_jump.execute_at_seconds
+            );
+        }
+        if let Some(duration_seconds) = fade_in_duration_seconds {
+            audio.start_master_fade(1.0, duration_seconds)?;
+        }
         self.transport_clock.note_jump_while_playing(target_position);
         self.capture_transport_drift_sample(audio, "native_jump", target_position, target_position);
         Ok(true)

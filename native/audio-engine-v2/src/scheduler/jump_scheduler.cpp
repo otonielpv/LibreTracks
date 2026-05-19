@@ -1,12 +1,53 @@
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <algorithm>
+#include <cctype>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
 #include <mutex>
 #include <queue>
+#include <string>
 #include <type_traits>
 #include <variant>
 #include <vector>
 
 namespace lt {
+
+namespace {
+
+bool jump_debug_enabled() {
+    static const bool on = [] {
+        const char* raw = std::getenv("LIBRETRACKS_JUMP_DEBUG");
+        if (!raw) raw = std::getenv("LIBRETRACKS_AUDIO_DEBUG");
+        if (!raw) return false;
+        std::string value = raw;
+        std::transform(value.begin(), value.end(), value.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return value == "1" || value == "true" || value == "yes" || value == "on";
+    }();
+    return on;
+}
+
+const char* trigger_name(JumpTrigger trigger) noexcept {
+    switch (trigger) {
+        case JumpTrigger::Immediate: return "Immediate";
+        case JumpTrigger::AtRegionEnd: return "AtRegionEnd";
+        case JumpTrigger::AtSongEnd: return "AtSongEnd";
+        case JumpTrigger::AtFrame: return "AtFrame";
+    }
+    return "Unknown";
+}
+
+void jump_debug_log(const char* fmt, ...) {
+    if (!jump_debug_enabled()) return;
+    va_list args;
+    va_start(args, fmt);
+    std::vfprintf(stdout, fmt, args);
+    std::fflush(stdout);
+    va_end(args);
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // resolve_jump_target — pure function, callable from both threads (read-only)
@@ -133,6 +174,14 @@ Result<Frame> JumpScheduler::schedule_immediate(const Id& jump_id,
 }
 
 Result<void> JumpScheduler::schedule(const ScheduledJump& jump) {
+    jump_debug_log(
+        "[LT_JUMP_DEBUG][scheduler] enqueue jump_id=%s trigger=%s created_frame=%lld trigger_frame=%lld prepared=%d suppress_seek_fade=%d\n",
+        jump.jump_id.c_str(),
+        trigger_name(jump.trigger),
+        static_cast<long long>(jump.created_frame),
+        static_cast<long long>(jump.trigger_frame.value_or(-1)),
+        jump.prepared_voice_map ? 1 : 0,
+        jump.suppress_seek_fade ? 1 : 0);
     std::lock_guard lock(impl_->pending_mutex);
     impl_->pending_ops.push(OpSchedule{jump});
     return Result<void>::ok();
@@ -172,6 +221,15 @@ void JumpScheduler::drain_pending() {
         std::visit([this](auto&& o) {
             using T = std::decay_t<decltype(o)>;
             if constexpr (std::is_same_v<T, OpSchedule>) {
+                jump_debug_log(
+                    "[LT_JUMP_DEBUG][scheduler] drain_schedule jump_id=%s trigger=%s status=%d trigger_frame=%lld prepared=%d suppress_seek_fade=%d live_before=%zu\n",
+                    o.jump.jump_id.c_str(),
+                    trigger_name(o.jump.trigger),
+                    static_cast<int>(o.jump.status),
+                    static_cast<long long>(o.jump.trigger_frame.value_or(-1)),
+                    o.jump.prepared_voice_map ? 1 : 0,
+                    o.jump.suppress_seek_fade ? 1 : 0,
+                    impl_->jumps.size());
                 if (o.jump.trigger == JumpTrigger::Immediate) {
                     impl_->jumps.erase(
                         std::remove_if(impl_->jumps.begin(), impl_->jumps.end(),
@@ -266,9 +324,20 @@ std::optional<DueJump> JumpScheduler::check_due(const TransportClock& clock,
         if (fire) {
             auto resolved = resolve_jump_target(j.target, session, clock);
             if (resolved.is_ok()) {
+                const Frame target_frame = resolved.unwrap();
                 impl_->due_index = i;
                 j.status = JumpStatus::Armed;
-                return DueJump{resolved.unwrap(), trigger_frame};
+                jump_debug_log(
+                    "[LT_JUMP_DEBUG][scheduler] due jump_id=%s trigger=%s block_start=%lld block_end=%lld trigger_frame=%lld target_frame=%lld prepared=%d suppress_seek_fade=%d\n",
+                    j.jump_id.c_str(),
+                    trigger_name(j.trigger),
+                    static_cast<long long>(cur),
+                    static_cast<long long>(block_end),
+                    static_cast<long long>(trigger_frame),
+                    static_cast<long long>(target_frame),
+                    j.prepared_voice_map ? 1 : 0,
+                    j.suppress_seek_fade ? 1 : 0);
+                return DueJump{target_frame, trigger_frame, j.prepared_voice_map, j.suppress_seek_fade};
             }
             j.status         = JumpStatus::Failed;
             j.failure_reason = resolved.error();

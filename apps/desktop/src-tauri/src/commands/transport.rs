@@ -1,6 +1,7 @@
 use tauri::{AppHandle, State};
 
 use crate::commands::events::emit_transport_lifecycle_event;
+use crate::audio_engine::jump_debug_logging_enabled;
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
 use crate::settings::AppSettingsStore;
@@ -122,6 +123,14 @@ pub fn schedule_marker_jump(
             .map_err(|error| error.to_string())?;
     let transition = parse_transition_type(Some(&settings.song_transition_mode), None)
         .map_err(|error| error.to_string())?;
+    if jump_debug_logging_enabled() {
+        eprintln!(
+            "[LT_JUMP_DEBUG][tauri-command] schedule_marker_jump target_marker={target_marker_id} global_mode={} global_bars={} transition={} parsed_trigger={jump_trigger:?} parsed_transition={transition:?}",
+            settings.global_jump_mode,
+            settings.global_jump_bars,
+            settings.song_transition_mode
+        );
+    }
 
     session
         .schedule_marker_jump(&target_marker_id, jump_trigger, transition, &state.audio)
@@ -147,6 +156,14 @@ pub fn schedule_region_jump(
             .map_err(|error| error.to_string())?;
     let transition = parse_transition_type(Some(&settings.song_transition_mode), None)
         .map_err(|error| error.to_string())?;
+    if jump_debug_logging_enabled() {
+        eprintln!(
+            "[LT_JUMP_DEBUG][tauri-command] schedule_region_jump target_region={target_region_id} song_trigger={} song_bars={} transition={} parsed_trigger={jump_trigger:?} parsed_transition={transition:?}",
+            settings.song_jump_trigger,
+            settings.song_jump_bars,
+            settings.song_transition_mode
+        );
+    }
 
     session
         .schedule_region_jump(&target_region_id, jump_trigger, transition, &state.audio)
@@ -177,6 +194,11 @@ pub fn toggle_vamp(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     let vamp_mode = parse_vamp_mode(&mode, bars).map_err(|error| error.to_string())?;
+    if jump_debug_logging_enabled() {
+        eprintln!(
+            "[LT_JUMP_DEBUG][tauri-command] toggle_vamp mode={mode} bars={bars:?} parsed={vamp_mode:?}"
+        );
+    }
 
     session
         .toggle_vamp(vamp_mode, &state.audio)

@@ -464,6 +464,11 @@ impl AudioController {
         target_region_id: &str,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("schedule_region_end_jump", None, |engine, _state| {
+            if jump_debug_logging_enabled() {
+                eprintln!(
+                    "[LT_JUMP_DEBUG][rust-command] schedule_region_end jump_id={jump_id} target_region={target_region_id}"
+                );
+            }
             engine.send_command(&EngineCommand::CancelAllScheduledJumps)?;
             engine.send_command(&EngineCommand::ScheduleJump {
                 jump_id: jump_id.to_string(),
@@ -474,6 +479,7 @@ impl AudioController {
                 },
                 trigger: JumpTrigger::AtRegionEnd,
                 trigger_frame: None,
+                suppress_seek_fade: false,
             })?;
             Ok(())
         })
@@ -484,14 +490,25 @@ impl AudioController {
         jump_id: &str,
         target: JumpTarget,
         trigger_seconds: f64,
+        suppress_seek_fade: bool,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("schedule_jump_at_frame", None, |engine, _state| {
+            let trigger_frame = seconds_to_frame_for_engine(engine, trigger_seconds);
+            if jump_debug_logging_enabled() {
+                eprintln!(
+                    "[LT_JUMP_DEBUG][rust-command] schedule_at_frame jump_id={jump_id} target_kind={:?} target_id={:?} trigger_seconds={:.9} trigger_frame={trigger_frame} suppress_seek_fade={suppress_seek_fade}",
+                    target.kind,
+                    target.id,
+                    trigger_seconds
+                );
+            }
             engine.send_command(&EngineCommand::CancelAllScheduledJumps)?;
             engine.send_command(&EngineCommand::ScheduleJump {
                 jump_id: jump_id.to_string(),
                 target,
                 trigger: JumpTrigger::AtFrame,
-                trigger_frame: Some(seconds_to_frame_for_engine(engine, trigger_seconds)),
+                trigger_frame: Some(trigger_frame),
+                suppress_seek_fade,
             })?;
             Ok(())
         })
@@ -1108,6 +1125,13 @@ pub fn audio_debug_logging_enabled() -> bool {
     std::env::var("LIBRETRACKS_AUDIO_DEBUG")
         .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
         .unwrap_or(false)
+}
+
+pub fn jump_debug_logging_enabled() -> bool {
+    audio_debug_logging_enabled()
+        || std::env::var("LIBRETRACKS_JUMP_DEBUG")
+            .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+            .unwrap_or(false)
 }
 
 fn ensure_engine(state: &mut ControllerState) -> Result<&Engine, DesktopError> {

@@ -69,8 +69,13 @@ static bool audio_debug_enabled() {
     return on;
 }
 
+static bool jump_debug_enabled() {
+    static const bool on = audio_debug_enabled() || env_flag_enabled("LIBRETRACKS_JUMP_DEBUG");
+    return on;
+}
+
 static void debug_log(const char* fmt, ...) {
-    if (!audio_debug_enabled()) return;
+    if (!audio_debug_enabled() && !jump_debug_enabled()) return;
     va_list args1, args2;
     va_start(args1, fmt);
     va_copy(args2, args1);
@@ -83,6 +88,28 @@ static void debug_log(const char* fmt, ...) {
         std::fflush(f);
     }
     va_end(args2);
+}
+
+const char* jump_target_kind_name(JumpTarget::Kind kind) noexcept {
+    switch (kind) {
+        case JumpTarget::Kind::Marker: return "Marker";
+        case JumpTarget::Kind::Region: return "Region";
+        case JumpTarget::Kind::Song: return "Song";
+        case JumpTarget::Kind::NextSong: return "NextSong";
+        case JumpTarget::Kind::PreviousSong: return "PreviousSong";
+        case JumpTarget::Kind::Frame: return "Frame";
+    }
+    return "Unknown";
+}
+
+const char* jump_trigger_name(JumpTrigger trigger) noexcept {
+    switch (trigger) {
+        case JumpTrigger::Immediate: return "Immediate";
+        case JumpTrigger::AtRegionEnd: return "AtRegionEnd";
+        case JumpTrigger::AtSongEnd: return "AtSongEnd";
+        case JumpTrigger::AtFrame: return "AtFrame";
+    }
+    return "Unknown";
 }
 
 // Fires the moment the DLL is loaded by Windows, before any exported function is called.
@@ -1106,7 +1133,106 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 jump.target = c.target;
                 jump.trigger = c.trigger;
                 jump.trigger_frame = c.trigger_frame;
+                jump.suppress_seek_fade = c.suppress_seek_fade;
                 jump.created_frame = clock_->position().frame;
+                Frame resolved_target_frame_for_log = -1;
+                auto resolved_for_schedule_log = resolve_jump_target(c.target, *session_, *clock_);
+                if (resolved_for_schedule_log.is_ok())
+                    resolved_target_frame_for_log = resolved_for_schedule_log.unwrap();
+                if (prearmed_jumps_ && bungee_voices_ && bungee_voices_->is_available()
+                    && source_manager_ && clock_) {
+                    auto resolved = resolved_for_schedule_log;
+                    if (resolved.is_ok()) {
+                        const Frame target_frame = resolved.unwrap();
+                        resolved_target_frame_for_log = target_frame;
+                        std::optional<PrearmTargetKind> prearm_kind;
+                        Id song_id;
+                        Id target_id;
+
+                        switch (c.target.kind) {
+                            case JumpTarget::Kind::Marker:
+                                if (c.target.id) {
+                                    target_id = *c.target.id;
+                                    prearm_kind = PrearmTargetKind::Marker;
+                                    for (const auto& song : session_->songs) {
+                                        for (const auto& marker : song.markers) {
+                                            if (marker.id == target_id) {
+                                                song_id = song.id;
+                                                break;
+                                            }
+                                        }
+                                        if (!song_id.empty()) break;
+                                    }
+                                }
+                                break;
+                            case JumpTarget::Kind::Region:
+                                if (c.target.id) {
+                                    target_id = *c.target.id;
+                                    prearm_kind = PrearmTargetKind::RegionStart;
+                                    for (const auto& song : session_->songs) {
+                                        for (const auto& region : song.regions) {
+                                            if (region.id == target_id) {
+                                                song_id = song.id;
+                                                break;
+                                            }
+                                        }
+                                        if (!song_id.empty()) break;
+                                    }
+                                }
+                                break;
+                            case JumpTarget::Kind::Song:
+                                if (c.target.id) {
+                                    target_id = *c.target.id;
+                                    song_id = target_id;
+                                    prearm_kind = PrearmTargetKind::SongStart;
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+
+                        if (prearm_kind && !song_id.empty() && !target_id.empty()) {
+                            const auto rev = prearm_revision_.load(std::memory_order_relaxed);
+                            PrearmTargetKey key;
+                            key.kind             = *prearm_kind;
+                            key.song_id          = song_id;
+                            key.target_id        = target_id;
+                            key.timeline_frame   = target_frame;
+                            key.sample_rate      = clock_->sample_rate();
+                            key.block_size       = device_manager_
+                                ? device_manager_->actual_buffer_size() : 1024;
+                            key.session_revision = rev;
+
+                            std::unique_ptr<PreparedJumpVoiceSet> prepared =
+                                prearmed_jumps_->take_ready(key);
+                            if (!prepared) {
+                                prepared = prearmed_jumps_->prepare_target_now(
+                                    *session_, *source_manager_, *prearm_kind, song_id,
+                                    target_id, target_frame, rev);
+                            }
+                            if (prepared) {
+                                jump.prepared_voice_map =
+                                    bungee_voices_->build_prepared_voice_map(
+                                        prepared->extract_voice_map());
+                                prearmed_jumps_->prepare_all_targets_async(
+                                    session_, source_manager_.get(), rev);
+                            }
+                        }
+                    }
+                }
+                if (jump_debug_enabled()) {
+                    debug_log(
+                        "[LT_JUMP_DEBUG][native-command] schedule jump_id=%s trigger=%s target_kind=%s target_id=%s target_frame=%lld trigger_frame=%lld current_frame=%lld prepared=%d suppress_seek_fade=%d\n",
+                        c.jump_id.c_str(),
+                        jump_trigger_name(c.trigger),
+                        jump_target_kind_name(c.target.kind),
+                        c.target.id ? c.target.id->c_str() : "",
+                        static_cast<long long>(resolved_target_frame_for_log),
+                        static_cast<long long>(jump.trigger_frame.value_or(-1)),
+                        static_cast<long long>(clock_->position().frame),
+                        jump.prepared_voice_map ? 1 : 0,
+                        jump.suppress_seek_fade ? 1 : 0);
+                }
                 auto r = scheduler_->schedule(jump);
                 if (r.is_err()) return r;
                 // (RubberBand pre-prepare removed — Bungee voices are kept

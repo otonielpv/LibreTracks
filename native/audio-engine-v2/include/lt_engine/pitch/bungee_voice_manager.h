@@ -14,6 +14,7 @@
 
 #include <lt_engine/core/types.h>
 #include <lt_engine/pitch/bungee_pitch_voice.h>
+#include <lt_engine/pitch/prepared_voice_map.h>
 #include <lt_engine/session/session.h>
 
 #include <cstdint>
@@ -112,8 +113,13 @@ public:
     // Caller must ensure every voice in `prepared_voices` was configured for
     // the same (sample_rate, channel_count, max_input_frames) this manager
     // was prepared with — otherwise audio thread behaviour is undefined.
-    void swap_in_prepared_voices(
-        std::unordered_map<Id, std::shared_ptr<BungeePitchVoice>> prepared_voices);
+    void swap_in_prepared_voices(PreparedVoiceMap prepared_voices);
+
+    std::shared_ptr<const PreparedVoiceMap>
+    build_prepared_voice_map(PreparedVoiceMap prepared_voices) const;
+
+    void publish_prepared_voice_map_realtime(
+        std::shared_ptr<const PreparedVoiceMap> prepared_voices) noexcept;
 
     // ── Audio-thread lookup (must not allocate) ──────────────────────────
 

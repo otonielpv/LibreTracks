@@ -39,6 +39,8 @@ pub enum EngineCommand {
         trigger: JumpTrigger,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         trigger_frame: Option<i64>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        suppress_seek_fade: bool,
     },
     CancelScheduledJump {
         jump_id: String,

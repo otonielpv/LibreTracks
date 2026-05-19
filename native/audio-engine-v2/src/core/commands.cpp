@@ -74,6 +74,8 @@ EngineCommand command_from_json(const std::string& raw) {
         cmd.trigger = trigger_from_json(j.at("trigger"));
         if (j.contains("trigger_frame"))
             cmd.trigger_frame = j.at("trigger_frame").get<Frame>();
+        if (j.contains("suppress_seek_fade"))
+            cmd.suppress_seek_fade = j.at("suppress_seek_fade").get<bool>();
         return cmd;
     }
 

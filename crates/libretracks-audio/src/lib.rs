@@ -5,6 +5,13 @@ use libretracks_core::{
 };
 use thiserror::Error;
 
+fn jump_debug_enabled() -> bool {
+    std::env::var("LIBRETRACKS_JUMP_DEBUG")
+        .or_else(|_| std::env::var("LIBRETRACKS_AUDIO_DEBUG"))
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON"))
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackState {
     Empty,
@@ -199,6 +206,13 @@ impl AudioEngine {
         let target_marker = find_marker(song, target_marker_id)?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
+            if jump_debug_enabled() {
+                eprintln!(
+                    "[LT_JUMP_DEBUG][audio-model] marker_immediate target_marker={target_marker_id} from={:.9} to={:.9}",
+                    self.position_seconds,
+                    target_marker.start_seconds
+                );
+            }
             self.position_seconds = target_marker.start_seconds;
             self.pending_marker_jump = None;
             self.pending_fade_jump = None;
@@ -207,9 +221,22 @@ impl AudioEngine {
 
         let Some(execute_at_seconds) = jump_execute_at(song, self.position_seconds, &trigger)?
         else {
+            if jump_debug_enabled() {
+                eprintln!(
+                    "[LT_JUMP_DEBUG][audio-model] marker_schedule_none target_marker={target_marker_id} trigger={trigger:?} position={:.9}",
+                    self.position_seconds
+                );
+            }
             self.pending_marker_jump = None;
             return Ok(None);
         };
+
+        if jump_debug_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][audio-model] marker_scheduled target_marker={target_marker_id} trigger={trigger:?} transition={transition:?} position={:.9} execute_at={execute_at_seconds:.9}",
+                self.position_seconds
+            );
+        }
 
         let pending_jump = PendingMarkerJump {
             target_marker_id: target_marker.id.clone(),
@@ -235,6 +262,13 @@ impl AudioEngine {
         let target_region = find_region(song, target_region_id)?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
+            if jump_debug_enabled() {
+                eprintln!(
+                    "[LT_JUMP_DEBUG][audio-model] region_immediate target_region={target_region_id} from={:.9} to={:.9}",
+                    self.position_seconds,
+                    target_region.start_seconds
+                );
+            }
             self.position_seconds = target_region.start_seconds;
             self.pending_marker_jump = None;
             self.pending_fade_jump = None;
@@ -243,9 +277,22 @@ impl AudioEngine {
 
         let Some(execute_at_seconds) = jump_execute_at(song, self.position_seconds, &trigger)?
         else {
+            if jump_debug_enabled() {
+                eprintln!(
+                    "[LT_JUMP_DEBUG][audio-model] region_schedule_none target_region={target_region_id} trigger={trigger:?} position={:.9}",
+                    self.position_seconds
+                );
+            }
             self.pending_marker_jump = None;
             return Ok(None);
         };
+
+        if jump_debug_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][audio-model] region_scheduled target_region={target_region_id} trigger={trigger:?} transition={transition:?} position={:.9} execute_at={execute_at_seconds:.9}",
+                self.position_seconds
+            );
+        }
 
         let pending_jump = PendingMarkerJump {
             target_marker_id: target_region.id.clone(),
@@ -319,6 +366,14 @@ impl AudioEngine {
             return Err(AudioEngineError::InvalidVampRange);
         }
 
+        if jump_debug_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][audio-model] vamp_enabled mode={mode:?} position={:.9} start={:.9} end={:.9}",
+                self.position_seconds,
+                active_vamp.start_seconds,
+                active_vamp.end_seconds
+            );
+        }
         self.active_vamp = Some(active_vamp.clone());
         Ok(Some(active_vamp))
     }
@@ -343,25 +398,51 @@ impl AudioEngine {
 
         if let Some(pending_jump) = self.pending_marker_jump.clone() {
             let execute_at = pending_jump.execute_at_seconds;
+            let should_process_jump = match pending_jump.transition {
+                TransitionType::Instant => execute_at <= next_position,
+                TransitionType::FadeOut { duration_seconds } => {
+                    let fade_start = (execute_at - duration_seconds).max(self.position_seconds);
+                    fade_start <= next_position
+                }
+            };
 
-            if execute_at <= next_position {
+            if should_process_jump {
                 match pending_jump.transition {
                     TransitionType::Instant => {
                         let target_position =
                             resolve_pending_jump_target_start_seconds(&song, &pending_jump)?;
                         let overshoot = next_position - execute_at;
+                        if jump_debug_enabled() {
+                            eprintln!(
+                                "[LT_JUMP_DEBUG][audio-model] pending_jump_due target={} previous={:.9} next_before={:.9} execute_at={execute_at:.9} target={target_position:.9} overshoot={overshoot:.9}",
+                                pending_jump.target_marker_id,
+                                self.position_seconds,
+                                next_position
+                            );
+                        }
                         next_position = target_position + overshoot;
                         self.pending_marker_jump = None;
                         self.pending_fade_jump = None;
                         jump_executed = true;
                     }
                     TransitionType::FadeOut { duration_seconds } => {
-                        next_position = execute_at;
-                        self.pending_fade_jump.get_or_insert(PendingFadeJump {
-                            duration_seconds,
-                            elapsed_seconds: 0.0,
-                            fade_started: false,
-                        });
+                        let fade_start = (execute_at - duration_seconds).max(self.position_seconds);
+                        if fade_start <= next_position {
+                            let elapsed_seconds = (next_position - fade_start).max(0.0);
+                            if jump_debug_enabled() {
+                                eprintln!(
+                                    "[LT_JUMP_DEBUG][audio-model] pending_fade_start target={} previous={:.9} next_before={:.9} fade_start={fade_start:.9} execute_at={execute_at:.9} duration={duration_seconds:.9} elapsed={elapsed_seconds:.9}",
+                                    pending_jump.target_marker_id,
+                                    self.position_seconds,
+                                    next_position
+                                );
+                            }
+                            self.pending_fade_jump.get_or_insert(PendingFadeJump {
+                                duration_seconds,
+                                elapsed_seconds,
+                                fade_started: false,
+                            });
+                        }
                     }
                 }
             }
@@ -380,6 +461,15 @@ impl AudioEngine {
                 }
 
                 let overshoot = next_position - active_vamp.end_seconds;
+                if jump_debug_enabled() {
+                    eprintln!(
+                        "[LT_JUMP_DEBUG][audio-model] vamp_wrap previous={:.9} next_before={:.9} start={:.9} end={:.9} overshoot={overshoot:.9}",
+                        self.position_seconds,
+                        next_position,
+                        active_vamp.start_seconds,
+                        active_vamp.end_seconds
+                    );
+                }
                 next_position = active_vamp.start_seconds + overshoot.rem_euclid(vamp_duration);
             }
         }
@@ -396,7 +486,7 @@ impl AudioEngine {
         }
 
         pending_fade.fade_started = true;
-        Some(pending_fade.duration_seconds)
+        Some((pending_fade.duration_seconds - pending_fade.elapsed_seconds).max(0.0))
     }
 
     pub fn pending_fade_duration_seconds(&self) -> Option<f64> {
@@ -443,6 +533,18 @@ impl AudioEngine {
 
         let song = self.ensure_song_loaded()?;
         self.position_seconds = resolve_pending_jump_target_start_seconds(song, &pending_jump)?;
+        self.pending_marker_jump = None;
+        self.pending_fade_jump = None;
+        Ok(Some(self.position_seconds))
+    }
+
+    pub fn complete_pending_native_jump(&mut self) -> Result<Option<f64>, AudioEngineError> {
+        let pending_jump = match self.pending_marker_jump.clone() {
+            Some(pending_jump) => pending_jump,
+            None => return Ok(None),
+        };
+        let song = self.ensure_song_loaded()?.clone();
+        self.position_seconds = resolve_pending_jump_target_start_seconds(&song, &pending_jump)?;
         self.pending_marker_jump = None;
         self.pending_fade_jump = None;
         Ok(Some(self.position_seconds))
@@ -1596,8 +1698,13 @@ mod tests {
             .expect("jump should schedule");
 
         engine
-            .advance_transport(2.0)
-            .expect("transport should reach fade point");
+            .advance_transport(0.5)
+            .expect("transport should advance before fade point");
+        assert_eq!(engine.take_pending_fade_out_request(), None);
+
+        engine
+            .advance_transport(0.5)
+            .expect("transport should reach fade point before jump mark");
         assert_eq!(engine.take_pending_fade_out_request(), Some(1.0));
 
         engine
@@ -1626,6 +1733,38 @@ mod tests {
             .expect("fade jump should complete");
         assert_eq!(target_position, Some(12.0));
         assert!(engine.pending_marker_jump().is_none());
+    }
+
+    #[test]
+    fn native_signal_completes_fade_out_jump_at_scheduled_mark() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(6.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        engine
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::NextMarker,
+                TransitionType::FadeOut {
+                    duration_seconds: 1.0,
+                },
+            )
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        engine
+            .advance_transport(1.0)
+            .expect("transport should reach fade start");
+        assert_eq!(engine.take_pending_fade_out_request(), Some(1.0));
+
+        let target_position = engine
+            .complete_pending_native_jump()
+            .expect("native scheduler signal should complete fade jump");
+
+        assert_eq!(target_position, Some(12.0));
+        assert!(engine.pending_marker_jump().is_none());
+        assert!(engine.pending_fade_duration_seconds().is_none());
     }
 
     #[test]

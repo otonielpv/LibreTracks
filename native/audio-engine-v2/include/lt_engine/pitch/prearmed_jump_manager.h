@@ -40,6 +40,7 @@
 
 #include <lt_engine/core/types.h>
 #include <lt_engine/pitch/bungee_pitch_voice.h>
+#include <lt_engine/pitch/prepared_voice_map.h>
 #include <lt_engine/session/session.h>
 
 #include <cstdint>
@@ -121,8 +122,7 @@ struct PreparedJumpVoiceSet {
     // can hand to BungeeVoiceManager::swap_in_prepared_voices(). Voices are
     // moved out, so calling this consumes the set's `voice` pointers — the
     // set itself becomes unusable afterwards.
-    std::unordered_map<Id, std::shared_ptr<BungeePitchVoice>>
-    extract_voice_map();
+    PreparedVoiceMap extract_voice_map();
 };
 
 class PrearmedJumpManager {

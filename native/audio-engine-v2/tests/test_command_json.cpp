@@ -63,7 +63,8 @@ TEST_CASE("parse ScheduleJump with explicit trigger frame") {
         "jump_id":"j-after-bars",
         "target":{"kind":"Region","id":"r1"},
         "trigger":"AtFrame",
-        "trigger_frame":288000
+        "trigger_frame":288000,
+        "suppress_seek_fade":true
     })");
     REQUIRE(std::holds_alternative<CmdScheduleJump>(cmd));
     auto& c = std::get<CmdScheduleJump>(cmd);
@@ -74,6 +75,7 @@ TEST_CASE("parse ScheduleJump with explicit trigger frame") {
     CHECK(c.trigger == JumpTrigger::AtFrame);
     REQUIRE(c.trigger_frame.has_value());
     CHECK(*c.trigger_frame == 288000);
+    CHECK(c.suppress_seek_fade == true);
 }
 
 TEST_CASE("parse SetTrackGain") {
