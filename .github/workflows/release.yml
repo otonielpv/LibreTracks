@@ -70,7 +70,7 @@ jobs:
       - name: Run native engine tests
         run: ctest --test-dir build/engine-ci-tests -C Debug --output-on-failure
 
-  release:
+  build-release-assets:
     needs: test
     strategy:
       fail-fast: false
@@ -83,8 +83,6 @@ jobs:
           - os: ubuntu-latest
             platform: linux
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout repository
@@ -111,10 +109,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libavformat-dev libavcodec-dev libavutil-dev libswresample-dev libsndfile1-dev
-
-      - name: Install macOS system dependencies
-        if: matrix.platform == 'macos'
-        run: brew install ffmpeg libsndfile
+          sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
 
       - name: Configure Windows vcpkg
         if: matrix.platform == 'windows'
@@ -158,6 +153,7 @@ jobs:
         shell: pwsh
         run: |
           $bungeeEnabled = "ON"
+          $ffmpegEnabled = if ("${{ matrix.platform }}" -eq "macos") { "OFF" } else { "ON" }
           $configureArgs = @(
             "-S", "native/audio-engine-v2",
             "-B", "build/engine-release",
@@ -165,7 +161,7 @@ jobs:
             "-DLT_ENGINE_USE_JUCE=ON",
             "-DLT_ENGINE_USE_BUNGEE=$bungeeEnabled",
             "-DLT_BUNGEE_DIR=$PWD/vendor/bungee",
-            "-DLT_ENGINE_USE_FFMPEG=ON",
+            "-DLT_ENGINE_USE_FFMPEG=$ffmpegEnabled",
             "-DLT_ENGINE_USE_LIBSNDFILE=ON",
             "-DLT_ENGINE_USE_R8BRAIN=ON"
           )
@@ -179,6 +175,7 @@ jobs:
             $env:MACOSX_DEPLOYMENT_TARGET = "10.13"
             $configureArgs += "-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64"
             $configureArgs += "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.13"
+            $configureArgs += "-DCMAKE_DISABLE_FIND_PACKAGE_SndFile=ON"
           }
           cmake @configureArgs
           cmake --build build/engine-release --config Release --target lt_audio_engine_v2 --parallel
@@ -198,23 +195,25 @@ jobs:
       - name: Build remote frontend
         run: npm run build:remote
 
-      - name: Build and publish Tauri release
+      - name: Build Tauri bundles
         uses: tauri-apps/tauri-action@v0.5
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPIMAGE_EXTRACT_AND_RUN: 1
           LT_ENGINE_V2_LIB_DIR: ${{ env.LT_ENGINE_V2_LIB_DIR }}
         with:
           projectPath: 'apps/desktop'
           args: ${{ matrix.platform == 'macos' && '--target universal-apple-darwin' || '' }}
-          tagName: ${{ github.ref_name }}
-          releaseName: LibreTracks ${{ github.ref_name }}
-          releaseBody: See the Assets section to download this version.
-          releaseDraft: false
-          prerelease: false
 
-  update-release-notes:
-    name: Update release notes
-    needs: release
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: libretracks-${{ matrix.platform }}-assets
+          path: target-desktop-native/**/bundle/**/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish release
+    needs: build-release-assets
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -223,21 +222,54 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Update GitHub release notes
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/release-assets
+          pattern: libretracks-*-assets
+          merge-multiple: true
+
+      - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
           NOTES_FILE="docs/releases/${GITHUB_REF_NAME}.md"
+          NOTES_ARGS=(--notes "See the Assets section to download this version.")
 
           if [ -f "$NOTES_FILE" ]; then
-            gh release edit "$GITHUB_REF_NAME" --notes-file "$NOTES_FILE"
-          else
-            gh release edit "$GITHUB_REF_NAME" --notes "See the Assets section to download this version."
+            NOTES_ARGS=(--notes-file "$NOTES_FILE")
           fi
+
+          mapfile -d '' ASSETS < <(
+            find dist/release-assets -type f \( \
+              -name '*.AppImage' -o \
+              -name '*.deb' -o \
+              -name '*.dmg' -o \
+              -name '*.exe' -o \
+              -name '*.msi' -o \
+              -name '*.tar.gz' -o \
+              -name '*.zip' -o \
+              -name '*.sig' \
+            \) -print0
+          )
+
+          if [ "${#ASSETS[@]}" -eq 0 ]; then
+            echo "No release assets found." >&2
+            exit 1
+          fi
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release delete "$GITHUB_REF_NAME" --yes
+          fi
+
+          gh release create "$GITHUB_REF_NAME" "${ASSETS[@]}" \
+            --title "LibreTracks $GITHUB_REF_NAME" \
+            "${NOTES_ARGS[@]}"
 
   notify-website:
     name: Trigger Website Rebuild
-    needs: update-release-notes
+    needs: publish-release
     runs-on: ubuntu-latest
     steps:
       - name: Send Deploy Hook to Cloudflare
