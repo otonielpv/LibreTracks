@@ -414,6 +414,14 @@ h1 {
   margin: 0.5rem 0;
 }
 
+.release-notes-body ul {
+  list-style: disc;
+}
+
+.release-notes-body ol {
+  list-style: decimal;
+}
+
 .release-notes-body li {
   margin: 0.3rem 0;
 }

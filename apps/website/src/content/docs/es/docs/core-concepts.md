@@ -26,6 +26,10 @@ Usa folder tracks para stems relacionados como bateria, tracks de banda, coros, 
 
 Los clips son referencias no destructivas a archivos de audio. Puedes arrastrar assets desde Biblioteca, soltar audio externo directamente en el timeline, mover clips, duplicar secciones repetidas y cortar en el cursor sin reescribir el WAV original.
 
+Selecciona clips y usa `Ctrl + C` / `Ctrl + V` para copiarlos y pegarlos. Usa `Ctrl + D` cuando quieras duplicar los clips seleccionados directamente en la siguiente posicion del timeline.
+
+Arrastra el borde de un clip para redimensionar su region sin cambiar el archivo de audio original. Cuando `Snap to Grid` esta activado, manten `Alt` mientras mueves el playhead para colocarlo libremente sin ajustar a la rejilla.
+
 ![Duplicar un clip](/screenshots/DuplicateTrack.png)
 
 `Snap to Grid` mantiene cursor, clips y ediciones alineados a divisiones musicales. Desactivalo solo cuando necesites una colocacion libre.

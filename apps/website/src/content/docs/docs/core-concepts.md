@@ -26,6 +26,10 @@ Use folder tracks for related stems such as drums, band tracks, choirs, backing 
 
 Clips are non-destructive timeline references to source audio. You can drag assets from the Library, drop external audio directly onto the timeline, move clips, duplicate repeated sections, and split clips at the cursor without rewriting the original WAV.
 
+Select clips and use `Ctrl + C` / `Ctrl + V` to copy and paste them. Use `Ctrl + D` when you want to duplicate the selected clips directly at the next timeline position.
+
+Drag a clip edge to resize its region without changing the original audio file. When `Snap to Grid` is enabled, hold `Alt` while moving the playhead to place it freely without snapping to the grid.
+
 ![Duplicate a clip](/screenshots/DuplicateTrack.png)
 
 `Snap to Grid` keeps cursor movement, clips, and edits aligned to musical divisions. Disable it only when a free placement is needed.
