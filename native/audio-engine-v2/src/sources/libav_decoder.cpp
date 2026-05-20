@@ -22,6 +22,12 @@ namespace lt {
 
 namespace {
 
+#if LIBAVUTIL_VERSION_MAJOR >= 57
+#define LT_LIBAV_HAS_CHANNEL_LAYOUT_API 1
+#else
+#define LT_LIBAV_HAS_CHANNEL_LAYOUT_API 0
+#endif
+
 struct AvPacketDeleter {
     void operator()(AVPacket* packet) const noexcept {
         if (packet) av_packet_free(&packet);
@@ -89,13 +95,16 @@ public:
         if (rc < 0)
             return Result<void>::err("libav: codec open failed: " + av_error(rc));
 
-        if (codec_ctx_->ch_layout.nb_channels <= 0)
-            return Result<void>::err("libav: missing channel layout");
+        const int channel_count = codec_channel_count();
+        if (channel_count <= 0)
+            return Result<void>::err("libav: missing channel count");
         if (codec_ctx_->sample_rate <= 0)
             return Result<void>::err("libav: missing sample rate");
 
-        channels_ = codec_ctx_->ch_layout.nb_channels;
+        channels_ = channel_count;
         sample_rate_ = codec_ctx_->sample_rate;
+
+#if LT_LIBAV_HAS_CHANNEL_LAYOUT_API
         av_channel_layout_default(&output_layout_, channels_);
 
         rc = swr_alloc_set_opts2(
@@ -108,6 +117,25 @@ public:
             sample_rate_,
             0,
             nullptr);
+#else
+        output_channel_layout_ = av_get_default_channel_layout(channels_);
+        const uint64_t input_channel_layout =
+            codec_ctx_->channel_layout != 0
+                ? codec_ctx_->channel_layout
+                : av_get_default_channel_layout(channels_);
+
+        swr_ = swr_alloc_set_opts(
+            nullptr,
+            static_cast<int64_t>(output_channel_layout_),
+            AV_SAMPLE_FMT_FLT,
+            sample_rate_,
+            static_cast<int64_t>(input_channel_layout),
+            codec_ctx_->sample_fmt,
+            sample_rate_,
+            0,
+            nullptr);
+        rc = swr_ ? 0 : AVERROR(ENOMEM);
+#endif
         if (rc < 0 || !swr_)
             return Result<void>::err("libav: swr allocation failed: " + av_error(rc));
 
@@ -164,7 +192,11 @@ public:
         if (swr_) {
             swr_free(&swr_);
         }
+#if LT_LIBAV_HAS_CHANNEL_LAYOUT_API
         av_channel_layout_uninit(&output_layout_);
+#else
+        output_channel_layout_ = 0;
+#endif
         if (codec_ctx_) {
             avcodec_free_context(&codec_ctx_);
         }
@@ -250,13 +282,25 @@ private:
     AVFormatContext* format_ = nullptr;
     AVCodecContext* codec_ctx_ = nullptr;
     SwrContext* swr_ = nullptr;
+#if LT_LIBAV_HAS_CHANNEL_LAYOUT_API
     AVChannelLayout output_layout_{};
+#else
+    uint64_t output_channel_layout_ = 0;
+#endif
     AudioFileInfo info_;
     std::vector<float> samples_;
     int stream_index_ = -1;
     int channels_ = 0;
     int sample_rate_ = 0;
     Frame cursor_frame_ = 0;
+
+    int codec_channel_count() const {
+#if LT_LIBAV_HAS_CHANNEL_LAYOUT_API
+        return codec_ctx_ ? codec_ctx_->ch_layout.nb_channels : 0;
+#else
+        return codec_ctx_ ? codec_ctx_->channels : 0;
+#endif
+    }
 };
 
 } // namespace
