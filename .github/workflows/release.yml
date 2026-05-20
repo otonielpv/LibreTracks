@@ -11,6 +11,8 @@ permissions:
 env:
   BUNGEE_VERSION: v2.4.24
   BUNGEE_ARCHIVE: https://github.com/bungee-audio-stretch/bungee/releases/download/v2.4.24/bungee-v2.4.24.tgz
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: sccache
 
 jobs:
   test:
@@ -33,6 +35,9 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup compiler cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
 
@@ -43,7 +48,7 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build remote frontend
         run: npm run build:remote
@@ -63,6 +68,8 @@ jobs:
           -DLT_ENGINE_USE_FFMPEG=OFF
           -DLT_ENGINE_USE_LIBSNDFILE=ON
           -DLT_ENGINE_USE_R8BRAIN=ON
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       - name: Build native engine tests
         run: cmake --build build/engine-ci-tests --config Debug --target lt_engine_tests --parallel
@@ -101,6 +108,9 @@ jobs:
         if: matrix.platform == 'macos'
         run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
 
+      - name: Setup compiler cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
 
@@ -117,6 +127,15 @@ jobs:
         run: |
           "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VCPKG_DEFAULT_TRIPLET=x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Cache Windows vcpkg binary packages
+        if: matrix.platform == 'windows'
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\vcpkg\archives
+          key: release-windows-vcpkg-${{ env.BUNGEE_VERSION }}-${{ hashFiles('native/audio-engine-v2/CMakeLists.txt', 'native/audio-engine-v2/cmake/**/*.cmake') }}
+          restore-keys: |
+            release-windows-vcpkg-${{ env.BUNGEE_VERSION }}-
 
       - name: Download Bungee runtime
         shell: bash
@@ -147,7 +166,7 @@ jobs:
           esac
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build native engine release
         shell: pwsh
@@ -171,6 +190,10 @@ jobs:
           if ($env:VCPKG_DEFAULT_TRIPLET) {
             $configureArgs += "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_DEFAULT_TRIPLET"
           }
+          if (Get-Command sccache -ErrorAction SilentlyContinue) {
+            $configureArgs += "-DCMAKE_C_COMPILER_LAUNCHER=sccache"
+            $configureArgs += "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+          }
           if ("${{ matrix.platform }}" -eq "macos") {
             $env:MACOSX_DEPLOYMENT_TARGET = "10.13"
             $configureArgs += "-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64"
@@ -191,9 +214,6 @@ jobs:
           if ("${{ matrix.platform }}" -eq "macos") {
             Copy-Item vendor/bungee/apple-mac/bungee.framework vendor/bin/native -Recurse -Force
           }
-
-      - name: Build remote frontend
-        run: npm run build:remote
 
       - name: Build Tauri bundles
         uses: tauri-apps/tauri-action@v0.5
