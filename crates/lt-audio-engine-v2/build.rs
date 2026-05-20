@@ -33,6 +33,10 @@ fn main() {
     if lib_dir.exists() {
         println!("cargo:rustc-link-search=native={}", lib_dir.display());
         println!("cargo:rustc-link-lib=dylib=lt_audio_engine_v2");
+        if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
+            println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+            println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib/libretracks-desktop");
+        }
     } else {
         println!(
             "cargo:warning=lt-audio-engine-v2: C++ library not found at {}. \
