@@ -219,6 +219,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0.5
         env:
           APPIMAGE_EXTRACT_AND_RUN: 1
+          LD_LIBRARY_PATH: ${{ env.LT_ENGINE_V2_LIB_DIR }}
           LT_ENGINE_V2_LIB_DIR: ${{ env.LT_ENGINE_V2_LIB_DIR }}
         with:
           projectPath: 'apps/desktop'
