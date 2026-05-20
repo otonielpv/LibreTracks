@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -31,6 +32,7 @@ constexpr std::uint64_t kRevision = 11;
 struct Config {
     int songs = 3;
     int stems_per_song = 6;
+    std::vector<int> stems_by_song{12, 12, 9};
     int seconds_per_song = 45;
     int simultaneous_tracks = 18;
     int render_blocks = 600;
@@ -46,6 +48,27 @@ int env_int(const char* name, int fallback) {
     return fallback;
 }
 
+std::vector<int> env_int_list(const char* name, const std::vector<int>& fallback) {
+    const char* raw = std::getenv(name);
+    if (!raw || !*raw)
+        return fallback;
+
+    std::vector<int> result;
+    std::stringstream ss(raw);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        try {
+            const int value = std::stoi(item);
+            if (value > 0)
+                result.push_back(value);
+        } catch (...) {
+            result.clear();
+            break;
+        }
+    }
+    return result.empty() ? fallback : result;
+}
+
 Config read_config() {
     Config c;
     if (const char* full = std::getenv("LT_LIVE_READINESS_FULL")) {
@@ -54,16 +77,41 @@ Config read_config() {
     if (c.full) {
         c.songs = 6;
         c.stems_per_song = 12;
+        c.stems_by_song.clear();
         c.seconds_per_song = 300;
         c.simultaneous_tracks = 30;
         c.render_blocks = 2400;
     }
     c.songs = env_int("LT_LIVE_READINESS_SONGS", c.songs);
     c.stems_per_song = env_int("LT_LIVE_READINESS_STEMS", c.stems_per_song);
+    c.stems_by_song = env_int_list("LT_LIVE_READINESS_STEMS_BY_SONG", c.stems_by_song);
+    if (!c.stems_by_song.empty()) {
+        c.songs = static_cast<int>(c.stems_by_song.size());
+        c.stems_per_song = *std::max_element(c.stems_by_song.begin(), c.stems_by_song.end());
+    }
     c.seconds_per_song = env_int("LT_LIVE_READINESS_SECONDS", c.seconds_per_song);
     c.simultaneous_tracks = env_int("LT_LIVE_READINESS_SIMULTANEOUS", c.simultaneous_tracks);
     c.render_blocks = env_int("LT_LIVE_READINESS_BLOCKS", c.render_blocks);
     return c;
+}
+
+int stems_for_song(const Config& config, int song_index) {
+    if (song_index >= 0 && song_index < static_cast<int>(config.stems_by_song.size()))
+        return config.stems_by_song[static_cast<std::size_t>(song_index)];
+    return config.stems_per_song;
+}
+
+std::string stems_description(const Config& config) {
+    if (config.stems_by_song.empty())
+        return std::to_string(config.stems_per_song);
+
+    std::string out;
+    for (std::size_t i = 0; i < config.stems_by_song.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += std::to_string(config.stems_by_song[i]);
+    }
+    return out;
 }
 
 std::vector<float> make_source_audio(Frame frames, int source_index) {
@@ -135,7 +183,8 @@ BuildMetrics build_session(const Config& config, SourceManager& sources, Session
                                       song.end_frame,
                                       song.transpose_semitones});
 
-        for (int t = 0; t < config.stems_per_song; ++t) {
+        const int song_stems = stems_for_song(config, s);
+        for (int t = 0; t < song_stems; ++t) {
             const Id source_id = "source-" + std::to_string(s) + "-" + std::to_string(t);
             sources.register_source(
                 source_id,
@@ -153,7 +202,7 @@ BuildMetrics build_session(const Config& config, SourceManager& sources, Session
 
             Track track;
             track.id = "track-" + std::to_string(s) + "-" + std::to_string(t);
-            track.gain = 1.0f / static_cast<float>(std::max(1, config.stems_per_song));
+            track.gain = 1.0f / static_cast<float>(std::max(1, song_stems));
             track.transpose_behavior = (t % 3 == 0)
                 ? TransposeBehavior::FollowsSongOrRegion
                 : TransposeBehavior::NeverTranspose;
@@ -271,6 +320,7 @@ struct JumpMetrics {
     bool at_frame_exact = false;
     bool region_end_exact = false;
     bool prearmed_payload = false;
+    bool prearm_pcm_ready = false;
     bool bungee_available = false;
     double marker_schedule_us = 0.0;
     double at_frame_check_us = 0.0;
@@ -351,6 +401,12 @@ JumpMetrics exercise_jumps(const SourceManager& sources, const Session& session)
     PrearmedJumpManager prearm;
     prearm.prepare(kSampleRate, kChannels, kBlockFrames);
     prearm.set_max_prepared_targets(1024);
+    metrics.prearm_pcm_ready = wait_ready_range(
+        sources,
+        song,
+        marker.frame,
+        kSampleRate / 4,
+        static_cast<int>(song.tracks.size()));
     metrics.prearm_ms = measure_us([&] {
         prearm.prepare_all_targets(session, sources, kRevision);
     }) / 1000.0;
@@ -389,10 +445,11 @@ int main() {
     Session session;
 
     std::puts("LibreTracks live-readiness benchmark");
-    std::printf("mode=%s songs=%d stems_per_song=%d seconds_per_song=%d simultaneous_tracks=%d render_blocks=%d\n",
+    const auto stems = stems_description(config);
+    std::printf("mode=%s songs=%d stems_per_song=%s seconds_per_song=%d simultaneous_tracks=%d render_blocks=%d\n",
                 config.full ? "full" : "default",
                 config.songs,
-                config.stems_per_song,
+                stems.c_str(),
                 config.seconds_per_song,
                 config.simultaneous_tracks,
                 config.render_blocks);
@@ -435,7 +492,8 @@ int main() {
                 jumps.region_end_exact ? "yes" : "NO",
                 jumps.region_end_check_us);
     if (jumps.bungee_available) {
-        std::printf("prearm bungee=yes prearm_ms=%.2f take_publish_us=%.2f prepared_payload=%s\n",
+        std::printf("prearm bungee=yes pcm_ready=%s prearm_ms=%.2f take_publish_us=%.2f prepared_payload=%s\n",
+                    jumps.prearm_pcm_ready ? "yes" : "NO",
                     jumps.prearm_ms,
                     jumps.take_publish_us,
                     jumps.prearmed_payload ? "yes" : "NO");
@@ -448,6 +506,6 @@ int main() {
         && jumps.marker_exact
         && jumps.at_frame_exact
         && jumps.region_end_exact
-        && (!jumps.bungee_available || jumps.prearmed_payload);
+        && (!jumps.bungee_available || (jumps.prearm_pcm_ready && jumps.prearmed_payload));
     return ok ? 0 : 5;
 }
