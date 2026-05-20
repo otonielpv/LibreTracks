@@ -83,7 +83,7 @@ describe("App / timeline-tracks", () => {
 
   it("pans the timeline by dragging over an empty lane", async () => {
     const { container } = await renderApp();
-    const shell = mockTimelineShellMetrics(container, 1500);
+    const shell = mockTimelineShellMetrics(container, 600);
     const firstLane = container.querySelector(".lt-track-lane") as HTMLElement | null;
     expect(firstLane).toBeTruthy();
 
