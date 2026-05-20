@@ -87,7 +87,7 @@ jobs:
             platform: windows
           - os: macos-latest
             platform: macos
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             platform: linux
     runs-on: ${{ matrix.os }}
 
@@ -222,7 +222,7 @@ jobs:
           LT_ENGINE_V2_LIB_DIR: ${{ env.LT_ENGINE_V2_LIB_DIR }}
         with:
           projectPath: 'apps/desktop'
-          args: ${{ matrix.platform == 'macos' && '--target universal-apple-darwin' || matrix.platform == 'linux' && '--bundles deb' || '' }}
+          args: ${{ matrix.platform == 'macos' && '--target universal-apple-darwin' || matrix.platform == 'linux' && '--bundles deb,appimage' || '' }}
 
       - name: Upload release assets
         uses: actions/upload-artifact@v4
