@@ -1,0 +1,166 @@
+---
+import SiteLayout from "../../layouts/SiteLayout.astro";
+---
+
+<SiteLayout title="LibreTracks Release Stats" description="Fresh GitHub release download counters for LibreTracks." lang="en">
+  <main class="site-shell band">
+    <div class="section-heading">
+      <p class="eyebrow">Release stats</p>
+      <h2>Download counters.</h2>
+      <p>This view fetches GitHub release data in the browser each time the page opens, so counters are not fixed at deploy time.</p>
+    </div>
+
+    <section class="stats-panel" data-release-stats>
+      <div class="stats-toolbar">
+        <div>
+          <p class="eyebrow">GitHub Releases</p>
+          <p class="stats-muted" data-stats-status>Loading current counters...</p>
+        </div>
+        <button class="button-link" type="button" data-refresh-stats>Refresh</button>
+      </div>
+      <div class="stats-summary" data-stats-summary aria-live="polite"></div>
+      <div class="stats-list" data-stats-list></div>
+    </section>
+  </main>
+
+  <script>
+    type ReleaseAsset = {
+      name: string;
+      browser_download_url: string;
+      download_count: number;
+      size: number;
+    };
+
+    type Release = {
+      tag_name: string;
+      name: string | null;
+      published_at: string | null;
+      html_url: string;
+      assets: ReleaseAsset[];
+    };
+
+    const endpoint = "https://api.github.com/repos/otonielpv/LibreTracks/releases?per_page=100";
+    const root = document.querySelector<HTMLElement>("[data-release-stats]");
+    const status = document.querySelector<HTMLElement>("[data-stats-status]");
+    const summary = document.querySelector<HTMLElement>("[data-stats-summary]");
+    const list = document.querySelector<HTMLElement>("[data-stats-list]");
+    const refreshButton = document.querySelector<HTMLButtonElement>("[data-refresh-stats]");
+    const formatter = new Intl.NumberFormat("en");
+    const dateFormatter = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
+
+    function formatBytes(bytes: number): string {
+      const mib = bytes / 1024 / 1024;
+      return `${Math.max(1, Math.round(mib))} MB`;
+    }
+
+    function escapeHtml(value: string): string {
+      return value.replace(/[&<>"']/g, (character) => {
+        const entities: Record<string, string> = {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        };
+        return entities[character] ?? character;
+      });
+    }
+
+    function setLoading(isLoading: boolean): void {
+      root?.toggleAttribute("aria-busy", isLoading);
+      if (refreshButton) refreshButton.disabled = isLoading;
+    }
+
+    function renderError(message: string): void {
+      if (status) status.textContent = message;
+      if (summary) summary.innerHTML = "";
+      if (list) list.innerHTML = "";
+    }
+
+    function renderReleases(releases: Release[]): void {
+      const releaseTotals = releases.map((release) =>
+        release.assets.reduce((total, asset) => total + asset.download_count, 0),
+      );
+      const totalDownloads = releaseTotals.reduce((total, count) => total + count, 0);
+      const totalAssets = releases.reduce((total, release) => total + release.assets.length, 0);
+
+      if (status) {
+        status.textContent = `Updated ${dateFormatter.format(new Date())}`;
+      }
+
+      if (summary) {
+        summary.innerHTML = `
+          <div><strong>${formatter.format(totalDownloads)}</strong><span>Total downloads</span></div>
+          <div><strong>${formatter.format(releases.length)}</strong><span>Releases</span></div>
+          <div><strong>${formatter.format(totalAssets)}</strong><span>Assets</span></div>
+        `;
+      }
+
+      if (!list) return;
+
+      list.innerHTML = releases
+        .map((release, index) => {
+          const total = releaseTotals[index] ?? 0;
+          const published = release.published_at ? dateFormatter.format(new Date(release.published_at)) : "Unpublished";
+          const releaseName = escapeHtml(release.name || release.tag_name);
+          const releaseTag = escapeHtml(release.tag_name);
+          const assets = release.assets.length
+            ? release.assets
+                .map(
+                  (asset) => `
+                    <a class="stats-asset-row" href="${asset.browser_download_url}">
+                      <span>
+                        <strong>${escapeHtml(asset.name)}</strong>
+                        <small>${formatBytes(asset.size)}</small>
+                      </span>
+                      <b>${formatter.format(asset.download_count)}</b>
+                    </a>
+                  `,
+                )
+                .join("")
+            : `<p class="stats-muted">No downloadable assets in this release.</p>`;
+
+          return `
+            <article class="stats-release-card">
+              <header>
+                <div>
+                  <h3>${releaseName}</h3>
+                  <p>${releaseTag} · ${published}</p>
+                </div>
+                <a href="${release.html_url}">${formatter.format(total)} downloads</a>
+              </header>
+              <div class="stats-assets">${assets}</div>
+            </article>
+          `;
+        })
+        .join("");
+    }
+
+    async function loadStats(): Promise<void> {
+      setLoading(true);
+      renderError("Loading current counters...");
+
+      try {
+        const response = await fetch(`${endpoint}&_=${Date.now()}`, {
+          cache: "no-store",
+          headers: { Accept: "application/vnd.github+json" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`GitHub returned ${response.status}`);
+        }
+
+        const releases = (await response.json()) as Release[];
+        renderReleases(releases);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        renderError(`Could not load GitHub counters: ${message}`);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    refreshButton?.addEventListener("click", loadStats);
+    loadStats();
+  </script>
+</SiteLayout>
