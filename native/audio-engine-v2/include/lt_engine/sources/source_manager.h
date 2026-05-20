@@ -2,13 +2,17 @@
 
 #include <lt_engine/core/types.h>
 #include <lt_engine/core/result.h>
+#include <lt_engine/sources/block_cache.h>
 #include <lt_engine/sources/decoded_source.h>
 #include <atomic>
+#include <condition_variable>
 #include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <string>
+#include <thread>
 #include <unordered_map>
 
 namespace lt {
@@ -22,6 +26,9 @@ struct SourceDiagnostics {
     int         sample_rate     = 0;
     Frame       duration_frames = 0;
     size_t      memory_bytes    = 0;
+    size_t      cache_bytes     = 0;
+    size_t      disk_cache_bytes = 0;
+    std::string storage_kind;
 };
 
 using SourceReadyCallback = std::function<void(const Id&)>;
@@ -53,6 +60,10 @@ public:
                                       int sample_rate,
                                       Frame duration_frames);
 
+    void request_block(const Id& source_id, int block_index) const noexcept;
+    void request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept;
+    CacheDiagnostics cache_diagnostics() const;
+
     // Get a loaded source.  Returns nullptr if not loaded.
     // Safe to call from audio thread (read-only once loaded).
     const DecodedSource* get(const Id& source_id) const noexcept;
@@ -71,9 +82,14 @@ public:
 private:
     struct Entry {
         std::string              file_path;
+        std::string              cache_file_path;
         std::shared_ptr<DecodedSource> source;
         std::string              status;
         std::string              error_message;
+        int                      channel_count = 0;
+        int                      sample_rate = 0;
+        Frame                    duration_frames = 0;
+        size_t                   disk_cache_bytes = 0;
     };
 
     using EntryMap = std::unordered_map<Id, Entry>;
@@ -82,8 +98,18 @@ private:
     std::shared_ptr<const EntryMap> entries_;
     std::deque<std::shared_ptr<const EntryMap>> retired_entries_;
     SourceReadyCallback             source_ready_callback_;
+    mutable BlockCache              block_cache_;
+    mutable std::mutex              fill_mtx_;
+    mutable std::condition_variable fill_cv_;
+    mutable std::queue<CacheKey>    fill_queue_;
+    mutable std::unordered_map<CacheKey, bool, CacheKeyHash> queued_blocks_;
+    mutable bool                    fill_stop_ = false;
+    mutable std::thread             fill_thread_;
 
     void publish_locked(EntryMap entries);
+    void fill_worker_loop() const;
+    void fill_block_from_disk(const CacheKey& key) const;
+    std::string cache_file_for(const Id& source_id, const std::string& file_path, int sample_rate) const;
 };
 
 } // namespace lt

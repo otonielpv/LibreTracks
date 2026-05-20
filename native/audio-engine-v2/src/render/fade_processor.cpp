@@ -9,7 +9,7 @@ namespace lt {
 namespace {
 
 int configured_ramp_frames(int requested) noexcept {
-    int value = requested > 0 ? requested : 1024;
+    int value = requested > 0 ? requested : 128;
     if (requested <= 0) {
         if (const char* env = std::getenv("LIBRETRACKS_SEEK_FADE_FRAMES")) {
             char* end = nullptr;
@@ -33,6 +33,16 @@ FadeProcessor::FadeProcessor(int ramp_frames)
 
 void FadeProcessor::trigger_fade_in() noexcept {
     triggered_.store(true, std::memory_order_release);
+}
+
+void FadeProcessor::capture_previous_sample(float** channels, int num_channels, int frame_index) noexcept {
+    if (!channels || num_channels <= 0 || frame_index < 0)
+        return;
+    const int channel_count = std::clamp(num_channels, 0, kMaxChannels);
+    for (int ch = 0; ch < channel_count; ++ch)
+        previous_sample_[static_cast<std::size_t>(ch)] =
+            channels[ch] ? channels[ch][frame_index] : 0.0f;
+    previous_channels_ = channel_count;
 }
 
 void FadeProcessor::clear() noexcept {

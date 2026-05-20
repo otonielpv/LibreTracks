@@ -44,6 +44,18 @@ float clamp_pan(float pan) noexcept {
     return std::max(-1.0f, std::min(1.0f, pan));
 }
 
+float soft_limit_output(float x) noexcept {
+    constexpr float threshold = 0.98f;
+    constexpr float ceiling = 0.999f;
+    const float ax = std::abs(x);
+    if (ax <= threshold)
+        return x;
+    const float over = ax - threshold;
+    const float shaped = threshold
+        + (ceiling - threshold) * (over / (over + (ceiling - threshold)));
+    return std::copysign(std::min(shaped, ceiling), x);
+}
+
 std::vector<int> route_channels(const std::string& audio_to, int available_channels) {
     const int channels = std::max(1, available_channels);
     std::string normalized = audio_to;
@@ -484,6 +496,8 @@ void Mixer::render(float** output_channels,
             clock_->pending_start() ? 1 : 0);
 
         render_timeline_span(output_channels, num_channels, pre_frames, 0, session);
+        if (pre_frames > 0)
+            fade_.capture_previous_sample(output_channels, num_channels, pre_frames - 1);
 
         const Frame from = clock_->position().frame;
         if (bungee_voices_ && due_jump->prepared_voice_map) {
@@ -496,10 +510,10 @@ void Mixer::render(float** output_channels,
         clock_->seek(due_jump->target_frame);
         clock_->clear_pending_start();
         scheduler_->mark_executed(from, due_jump->target_frame);
-        if (!due_jump->suppress_seek_fade) {
-            fade_.trigger_crossfade();
-        }
+        fade_.trigger_crossfade();
         if (!due_jump->prepared_voice_map) {
+            if (bungee_voices_)
+                bungee_voices_->publish_empty_voice_map_realtime();
             pending_scheduled_jump_frame_.store(due_jump->target_frame, std::memory_order_release);
             jump_debug_log(
                 "[LT_JUMP_DEBUG][mixer] scheduled_jump_needs_control_repair target_frame=%lld\n",
@@ -523,10 +537,8 @@ void Mixer::render(float** output_channels,
                 shifted_channels[static_cast<std::size_t>(ch)] = output_channels[ch] + pre_frames;
             fade_channels = shifted_channels.data();
         }
-        if (!due_jump->suppress_seek_fade) {
-            fade_.process(fade_channels, num_channels, post_frames);
-            fade_processed_in_split = true;
-        }
+        fade_.process(fade_channels, num_channels, post_frames);
+        fade_processed_in_split = true;
     } else if (clock_->position().state == TransportState::Playing && session) {
         std::uint64_t rendered_this_block = 0;
         std::uint64_t skipped_this_block = 0;
@@ -834,6 +846,13 @@ void Mixer::apply_master_gain(float** output_channels, int num_channels, int num
             if (output_channels[ch])
                 output_channels[ch][f] *= master_gain_current_;
         }
+    }
+
+    for (int ch = 0; ch < num_channels; ++ch) {
+        if (!output_channels[ch])
+            continue;
+        for (int f = 0; f < num_frames; ++f)
+            output_channels[ch][f] = soft_limit_output(output_channels[ch][f]);
     }
 }
 

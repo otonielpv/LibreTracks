@@ -49,6 +49,7 @@ LT_API const char* lt_audio_engine_get_version(LtEngine* engine) {
 
 LT_API const char* lt_audio_engine_get_diagnostics(LtEngine* engine) {
     if (!engine) return "{}";
+    as_impl(engine)->service_control_thread_tasks();
     thread_local std::string buf;
     buf = as_impl(engine)->diagnostics();
     return buf.c_str();
@@ -69,6 +70,7 @@ LT_API void lt_audio_engine_service_control_thread(LtEngine* engine) {
 
 LT_API const char* lt_audio_engine_poll_event(LtEngine* engine) {
     if (!engine) return nullptr;
+    as_impl(engine)->service_control_thread_tasks();
     thread_local std::string buf;
     buf = as_impl(engine)->poll_event();
     return buf.empty() ? nullptr : buf.c_str();
@@ -76,6 +78,7 @@ LT_API const char* lt_audio_engine_poll_event(LtEngine* engine) {
 
 LT_API const char* lt_audio_engine_get_snapshot(LtEngine* engine) {
     if (!engine) return "{}";
+    as_impl(engine)->service_control_thread_tasks();
     thread_local std::string buf;
     buf = as_impl(engine)->get_snapshot();
     return buf.c_str();

@@ -29,6 +29,18 @@ namespace lt {
 
 namespace {
 
+void request_source_range(const SourceManager& sources,
+                          const Id& source_id,
+                          Frame start,
+                          int frames) {
+    if (frames <= 0) return;
+    const int first = static_cast<int>(std::max<Frame>(0, start) / kDefaultBlockFrames);
+    const int last = static_cast<int>(
+        std::max<Frame>(0, start + frames - 1) / kDefaultBlockFrames);
+    for (int block = first; block <= last; ++block)
+        sources.request_block(source_id, block);
+}
+
 // Mirror of the LIBRETRACKS_AUDIO_DEBUG flag used in engine_impl.cpp. Cached
 // on first call. Used to gate all [BUNGEE] stdout traces — they're useful in
 // dev but pure noise in production where stdout may be a real terminal.
@@ -62,7 +74,8 @@ struct BungeeVoiceManager::Impl {
 
     // Published voice map. Audio thread reads via std::atomic_load; control
     // thread builds a new map and swaps via std::atomic_store.
-    std::shared_ptr<const VoiceMap> active{std::make_shared<const VoiceMap>()};
+    std::shared_ptr<const VoiceMap> empty{std::make_shared<const VoiceMap>()};
+    std::shared_ptr<const VoiceMap> active{empty};
 
     // Source-ready callbacks and explicit seeks can ask for rebuilds from
     // different control threads. Building/warming Bungee streams is expensive
@@ -77,6 +90,7 @@ struct BungeeVoiceManager::Impl {
     std::atomic<std::uint64_t> rebuilds_for_seek{0};
     std::atomic<std::uint64_t> voice_lookups_hit{0};
     std::atomic<std::uint64_t> voice_lookups_miss{0};
+    std::atomic<std::uint64_t> publish_generation{0};
 
     // ── Async rebuild worker ────────────────────────────────────────────────
     // Single dedicated thread that processes the "latest" rebuild_for_seek_async
@@ -88,6 +102,7 @@ struct BungeeVoiceManager::Impl {
         Frame                          target_frame = 0;
         std::shared_ptr<const Session> session;     // owned snapshot
         const SourceManager*           sources = nullptr;
+        std::uint64_t                  expected_generation = 0;
     };
     std::mutex                  worker_mutex;
     std::condition_variable     worker_cv;
@@ -128,8 +143,7 @@ bool BungeeVoiceManager::prepare(int sample_rate,
     impl_->max_in_frames = max_input_frames;
     impl_->prepared      = true;
     // Start with an empty map — voices are built on the first rebuild_*.
-    std::atomic_store(&impl_->active,
-                      std::shared_ptr<const VoiceMap>(std::make_shared<const VoiceMap>()));
+    std::atomic_store(&impl_->active, impl_->empty);
     return true;
 #endif
 }
@@ -192,6 +206,12 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
                 spec.source_frame = clip.source_start_frame
                                     + (playhead - clip.timeline_start_frame);
                 spec.effective_semitones = decision.effective_semitones;
+                const int required_frames = std::max(1, spec.source->sample_rate() / 4);
+                if (!spec.source->is_range_ready(spec.source_frame, required_frames)) {
+                    request_source_range(sources, clip.source_id,
+                                         spec.source_frame, required_frames);
+                    continue;
+                }
                 out.push_back(spec);
             }
         }
@@ -279,6 +299,7 @@ void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
     if (!voice.is_ready()) return;
     const int latency_frames = static_cast<int>(voice.latency_frames());
     if (latency_frames <= 0) return;
+    const int compensation_frames = voice.alignment_compensation_frames(pitch_scale);
 
     std::vector<float> read_l(static_cast<std::size_t>(max_in_frames), 0.0f);
     std::vector<float> read_r(static_cast<std::size_t>(max_in_frames), 0.0f);
@@ -294,23 +315,30 @@ void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
     }
 
     const Frame src_end = source.duration_frames();
-    Frame read_cursor = source_frame;
+    Frame read_cursor = source_frame + static_cast<Frame>(compensation_frames);
     int fed = 0;
     while (fed < latency_frames) {
         const int chunk = std::min(max_in_frames, latency_frames - fed);
 
         std::fill(read_l.begin(), read_l.begin() + chunk, 0.0f);
         std::fill(read_r.begin(), read_r.begin() + chunk, 0.0f);
-        const int available = (read_cursor >= src_end || read_cursor < 0)
+        const int dst_offset = read_cursor < 0
+            ? static_cast<int>(std::min<Frame>(chunk, -read_cursor))
+            : 0;
+        const Frame read_start = std::max<Frame>(0, read_cursor);
+        const int available = (dst_offset >= chunk || read_start >= src_end)
             ? 0
             : static_cast<int>(std::min<long long>(
-                chunk, static_cast<long long>(src_end - read_cursor)));
+                chunk - dst_offset, static_cast<long long>(src_end - read_start)));
         if (available > 0) {
-            float* read_into[2] = {read_l.data(), read_r.data()};
-            const int got = source.read(read_cursor, available, read_into,
+            float* read_into[2] = {
+                read_l.data() + dst_offset,
+                read_r.data() + dst_offset};
+            const int got = source.read(read_start, available, read_into,
                                          std::min(2, source.channel_count()));
             if (got > 0 && source.channel_count() == 1)
-                std::copy_n(read_l.begin(), got, read_r.begin());
+                std::copy_n(read_l.begin() + dst_offset, got,
+                            read_r.begin() + dst_offset);
         }
 
         (void)voice.render_block(in_ptrs.data(), chunk,
@@ -332,6 +360,7 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
     if (!is_available()) return;
 
 #if LT_ENGINE_HAVE_BUNGEE
+    impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
     std::lock_guard build_lock(impl_->build_mutex);
     impl_->rebuilds_for_session.fetch_add(1, std::memory_order_relaxed);
 
@@ -389,6 +418,16 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
 void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
                                            const Session& session,
                                            const SourceManager& sources) {
+    if (impl_)
+        impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
+    rebuild_for_seek_guarded(target_frame, session, sources,
+                             impl_ ? impl_->publish_generation.load(std::memory_order_acquire) : 0);
+}
+
+void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
+                                                   const Session& session,
+                                                   const SourceManager& sources,
+                                                   std::uint64_t expected_generation) {
     if (!is_available()) return;
 
 #if LT_ENGINE_HAVE_BUNGEE
@@ -422,15 +461,29 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
                 impl_->channel_count, impl_->max_in_frames,
                 semitones_to_pitch_scale(spec.effective_semitones));
         }
-        // Keep a tiny ramp as a last guard against arbitrary waveform
-        // discontinuity at the seek boundary without making the seek feel late.
-        voice->arm_fade_in(2);
+        // This voice has already been prefed to the seek target; the mixer's
+        // seek de-click ramp handles the boundary. Avoid an extra per-voice
+        // gain ramp here because it can roughen transposed post-seek audio.
+        voice->arm_fade_in(0);
         (*next)[spec.clip_id] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
     }
 
     const int active_count = static_cast<int>(next->size());
+    if (expected_generation != 0
+        && impl_->publish_generation.load(std::memory_order_acquire) != expected_generation) {
+        if (bungee_debug_enabled()) {
+            std::fprintf(stdout,
+                "[BUNGEE] discard_stale_rebuild_for_seek target=%lld expected_generation=%llu current_generation=%llu\n",
+                static_cast<long long>(target_frame),
+                static_cast<unsigned long long>(expected_generation),
+                static_cast<unsigned long long>(
+                    impl_->publish_generation.load(std::memory_order_acquire)));
+            std::fflush(stdout);
+        }
+        return;
+    }
     std::atomic_store(&impl_->active,
                       std::shared_ptr<const VoiceMap>(std::move(next)));
     if (bungee_debug_enabled()) {
@@ -472,9 +525,9 @@ void BungeeVoiceManager::rebuild_for_seek_async(Frame target_frame,
                         impl_->pending_job.reset();
                     }
                     if (!job.session || !job.sources) continue;
-                    // Reuse the sync path; it serializes via build_mutex so a
-                    // concurrent sync rebuild from another thread is safe.
-                    rebuild_for_seek(job.target_frame, *job.session, *job.sources);
+                    rebuild_for_seek_guarded(
+                        job.target_frame, *job.session, *job.sources,
+                        job.expected_generation);
                 }
             });
         }
@@ -484,6 +537,7 @@ void BungeeVoiceManager::rebuild_for_seek_async(Frame target_frame,
             target_frame,
             std::make_shared<const Session>(session),
             &sources,
+            impl_->publish_generation.load(std::memory_order_acquire),
         };
     }
     impl_->worker_cv.notify_one();
@@ -498,9 +552,9 @@ void BungeeVoiceManager::rebuild_for_seek_async(Frame target_frame,
 
 void BungeeVoiceManager::clear() {
     if (!impl_) return;
+    impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
     std::lock_guard build_lock(impl_->build_mutex);
-    std::atomic_store(&impl_->active,
-                      std::shared_ptr<const VoiceMap>(std::make_shared<const VoiceMap>()));
+    std::atomic_store(&impl_->active, impl_->empty);
 }
 
 void BungeeVoiceManager::swap_in_prepared_voices(PreparedVoiceMap prepared_voices) {
@@ -515,6 +569,7 @@ void BungeeVoiceManager::swap_in_prepared_voices(PreparedVoiceMap prepared_voice
     if (!next) return;
 
     const int active_count = static_cast<int>(next->size());
+    impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
     std::atomic_store(&impl_->active, std::move(next));
     impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
     if (bungee_debug_enabled()) {
@@ -551,12 +606,22 @@ void BungeeVoiceManager::publish_prepared_voice_map_realtime(
     return;
 #else
     if (!impl_->prepared) return;
+    impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
     std::atomic_store(&impl_->active, std::move(prepared_voices));
     impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
 #endif
 }
 
 // ─── Audio-thread lookup ─────────────────────────────────────────────────
+
+void BungeeVoiceManager::publish_empty_voice_map_realtime() noexcept {
+    if (!impl_) return;
+#if LT_ENGINE_HAVE_BUNGEE
+    if (!impl_->prepared) return;
+    impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
+    std::atomic_store(&impl_->active, impl_->empty);
+#endif
+}
 
 std::shared_ptr<BungeePitchVoice> BungeeVoiceManager::voice_for_shared(const Id& clip_id) noexcept {
     if (!impl_) return nullptr;

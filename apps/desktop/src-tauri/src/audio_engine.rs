@@ -415,10 +415,12 @@ impl AudioController {
         self.with_engine_state("play", Some(reason), |engine, state| {
             state.song_dir = Some(song_dir);
             ensure_song_loaded(engine, state, &song)?;
-            engine.send_command(&EngineCommand::SeekAbsolute {
-                frame: seconds_to_frame_for_engine(engine, position_seconds),
-            })?;
-            engine.send_command(&EngineCommand::Play)?;
+            if !state.running {
+                engine.send_command(&EngineCommand::SeekAbsolute {
+                    frame: seconds_to_frame_for_engine(engine, position_seconds),
+                })?;
+                engine.send_command(&EngineCommand::Play)?;
+            }
             state.running = true;
             state.anchor_position_seconds = Some(position_seconds);
             state.anchor_started_at = Some(Instant::now());
@@ -919,6 +921,16 @@ impl AudioController {
             .map(|snapshot| snapshot.current_seconds)
             .or_else(|| estimate_position(&state));
 
+        let mut runtime_state = AudioRuntimeStateSummary::default();
+        if let Some(snapshot) = snapshot.as_ref() {
+            runtime_state.ram_cache_used_mb =
+                (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
+            runtime_state.disk_cache_used_mb =
+                (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
+            runtime_state.cached_audio_buffers = snapshot.source_cache.blocks_cached as usize;
+            runtime_state.cached_audio_preload_bytes = snapshot.source_cache.ram_bytes_used as usize;
+        }
+
         Ok(AudioDebugSnapshot {
             enabled: true,
             log_commands: false,
@@ -927,7 +939,7 @@ impl AudioController {
             last_restart: state.last_restart.clone(),
             last_sync: state.last_sync.clone(),
             last_stop: state.last_stop.clone(),
-            runtime_state: AudioRuntimeStateSummary::default(),
+            runtime_state,
             playhead: AudioPlayheadEstimate {
                 running: state.running,
                 anchor_position_seconds: state.anchor_position_seconds,

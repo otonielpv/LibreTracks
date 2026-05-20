@@ -11,6 +11,8 @@
 #include <lt_engine/sources/source_manager.h>
 
 #include <vector>
+#include <thread>
+#include <chrono>
 
 using namespace lt;
 
@@ -175,5 +177,46 @@ TEST_CASE("clear() drops all voices") {
 #endif
 
     mgr.clear();
+    CHECK(mgr.voice_for("clip1") == nullptr);
+}
+
+TEST_CASE("publish_empty_voice_map_realtime drops stale voices after unprepared scheduled jump") {
+    BungeeVoiceManager mgr;
+    if (!mgr.prepare(kSR, kChannels, kBlock)) return;
+
+    SourceManager sm;
+    REQUIRE(register_loaded_source(sm, "src1", kSR * 4));
+
+    auto session = make_one_transposed_clip_session(-2);
+    mgr.rebuild_for_session(session, sm, 0);
+#if LT_ENGINE_HAVE_BUNGEE
+    REQUIRE(mgr.voice_for("clip1") != nullptr);
+#endif
+
+    mgr.publish_empty_voice_map_realtime();
+    CHECK(mgr.voice_for("clip1") == nullptr);
+}
+
+TEST_CASE("async seek rebuild cannot overwrite a newer realtime publish") {
+    BungeeVoiceManager mgr;
+    if (!mgr.prepare(kSR, kChannels, kBlock)) return;
+
+    SourceManager sm;
+    REQUIRE(register_loaded_source(sm, "src1", kSR * 4));
+
+    auto session = make_one_transposed_clip_session(-2);
+    mgr.rebuild_for_session(session, sm, 0);
+#if LT_ENGINE_HAVE_BUNGEE
+    REQUIRE(mgr.voice_for("clip1") != nullptr);
+#endif
+
+    mgr.rebuild_for_seek_async(kSR, session, sm);
+    mgr.publish_empty_voice_map_realtime();
+
+    for (int i = 0; i < 200; ++i) {
+        if (mgr.diagnostics().rebuilds_for_seek > 0)
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
     CHECK(mgr.voice_for("clip1") == nullptr);
 }

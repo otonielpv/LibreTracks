@@ -1,6 +1,7 @@
 #include "test_audio_fixtures.h"
 
 #include <doctest/doctest.h>
+#include <lt_engine/pitch/bungee_voice_manager.h>
 #include <lt_engine/render/mixer.h>
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/sources/source_manager.h>
@@ -12,6 +13,10 @@
 #include <vector>
 
 using namespace lt;
+
+#ifndef LT_ENGINE_HAVE_BUNGEE
+#define LT_ENGINE_HAVE_BUNGEE 0
+#endif
 
 namespace {
 
@@ -71,7 +76,90 @@ void add_source(SourceManager& sources, const Id& id, float amplitude = 0.5f, Fr
         2, test::kFixtureSampleRate, duration).is_ok());
 }
 
+JumpTarget frame_target(Frame frame) {
+    JumpTarget target;
+    target.kind = JumpTarget::Kind::Frame;
+    target.frame = frame;
+    return target;
+}
+
 } // namespace
+
+#if LT_ENGINE_HAVE_BUNGEE
+TEST_CASE("scheduled jump without prepared voices clears stale Bungee voice and latches repair target") {
+    constexpr Frame kDuration = 48000 * 90;
+    constexpr Frame kTrigger = 48000 * 10 + 325;
+    constexpr Frame kTarget = 48000 * 44 + 117;
+
+    SourceManager sources;
+    sources.register_source("source", "");
+    REQUIRE(sources.store_decoded_source(
+        "source",
+        test::make_stereo_sine(kDuration, 440.0, 0.5f),
+        2,
+        test::kFixtureSampleRate,
+        kDuration).is_ok());
+
+    auto session = std::make_shared<Session>();
+    session->id = "ab";
+    session->sample_rate = test::kFixtureSampleRate;
+    Song song;
+    song.id = "song";
+    song.start_frame = 0;
+    song.end_frame = kDuration;
+    song.transpose_semitones = -2;
+    song.markers.push_back(Marker{"target", "Target", kTarget});
+
+    Track unpitched;
+    unpitched.id = "unpitched";
+    unpitched.transpose_behavior = TransposeBehavior::NeverTranspose;
+    unpitched.clips.push_back(Clip{"clip-u", "source", 0, 0, kDuration});
+    song.tracks.push_back(unpitched);
+
+    Track pitched;
+    pitched.id = "pitched";
+    pitched.transpose_behavior = TransposeBehavior::FollowsSongOrRegion;
+    pitched.clips.push_back(Clip{"clip-p", "source", 0, 0, kDuration});
+    song.tracks.push_back(pitched);
+    session->songs.push_back(song);
+
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    mixer.prepare_render_resources(kBlock);
+
+    BungeeVoiceManager bvm;
+    REQUIRE(bvm.prepare(test::kFixtureSampleRate, 2, kBlock));
+    bvm.rebuild_for_session(*session, sources, 0);
+    REQUIRE(bvm.voice_for("clip-p") != nullptr);
+    mixer.set_bungee_voice_manager(&bvm);
+
+    clock.seek(kTrigger - 325);
+    clock.play();
+    clock.clear_pending_start();
+
+    ScheduledJump jump;
+    jump.jump_id = "jump-unprepared";
+    jump.target = frame_target(kTarget);
+    jump.trigger = JumpTrigger::AtFrame;
+    jump.status = JumpStatus::Pending;
+    jump.trigger_frame = kTrigger;
+    jump.suppress_seek_fade = true;
+    REQUIRE(scheduler.schedule(jump).is_ok());
+
+    std::vector<float> left(kBlock, 0.0f);
+    std::vector<float> right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    mixer.render(out, 2, kBlock, test::kFixtureSampleRate);
+
+    CHECK(mixer.scheduled_jump_executed_count() == 1);
+    CHECK(mixer.take_pending_scheduled_jump() == kTarget);
+    CHECK(bvm.voice_for("clip-p") == nullptr);
+
+    bvm.rebuild_for_seek(kTarget, *session, sources);
+    CHECK(bvm.voice_for("clip-p") != nullptr);
+}
+#endif
 
 TEST_CASE("mixer_gain_override_changes_rendered_level") {
     SourceManager sources;

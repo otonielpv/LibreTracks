@@ -86,6 +86,7 @@ public:
     // is alive (stub build). May be 0 until the first render_block() returns
     // a non-zero frame count.
     double latency_frames() const noexcept;
+    int    alignment_compensation_frames(double pitch_scale) const noexcept;
 
     // Convenience: true when the next render_block() should produce useful,
     // timeline-aligned audio (i.e. latency has caught up). Equivalent to

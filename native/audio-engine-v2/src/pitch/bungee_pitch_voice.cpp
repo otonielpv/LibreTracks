@@ -70,20 +70,11 @@ bool BungeePitchVoice::configure(int sample_rate,
 
     try {
         Bungee::SampleRates rates{sample_rate, sample_rate};
-        // log2SynthesisHopAdjust = -1 halves Bungee's grain size, which halves
-        // the structural latency baked into Bungee::Stream (the wrapper
-        // positions every grain maxInputFrameCount/2 frames behind the input
-        // cursor). At 48 kHz this drops latency from ~170 ms to ~85 ms.
-        // Per the maintainer's docs (Bungee.h::Stretcher ctor):
-        //   "Non-zero values are likely to result in degraded audio quality"
-        //   "-1 doubles granular frequency (lower latency, may help weak
-        //    transients), +1 halves granular frequency (may benefit dense
-        //    tones). Values other than -1, 0, and +1 are unsupported."
-        // We're trading the warned quality cost against the live-performance
-        // benefit of a shorter post-seek silence. If the audio quality
-        // degradation is unacceptable on real material, revert this to 0.
+        // Keep Bungee's default synthesis hop. The lower-latency -1 mode was
+        // measurably rougher on real acoustic material after prepared jumps;
+        // prearmed voices hide the extra latency, so quality wins here.
         impl_->stretcher = std::make_unique<Impl::Stretcher>(
-            rates, channel_count, /*log2SynthesisHopAdjust=*/-1);
+            rates, channel_count, /*log2SynthesisHopAdjust=*/0);
         // Stream allocates an internal overlap buffer sized to:
         //   stretcher.maxInputFrameCount() + max_input_frames_per_block
         impl_->stream = std::make_unique<Impl::Stream>(
@@ -169,6 +160,17 @@ double BungeePitchVoice::latency_frames() const noexcept {
     return impl_->stream->latency();
 }
 
+int BungeePitchVoice::alignment_compensation_frames(double pitch_scale) const noexcept {
+    if (!impl_ || impl_->sample_rate <= 0 || pitch_scale <= 0.0) return 0;
+    // Bungee Basic's reported Stream::latency() is correct for the structural
+    // stream delay, but pitch scaling leaves a deterministic source-position
+    // skew. With the default synthesis hop, the measured constant is 32 ms,
+    // and the skew follows (1 / pitch_scale - 1). Applying it before the
+    // Stream keeps pitched and unpitched stems aligned at the musical target.
+    const double base = static_cast<double>(impl_->sample_rate) * 0.032;
+    return static_cast<int>(std::lround(base * ((1.0 / pitch_scale) - 1.0)));
+}
+
 bool BungeePitchVoice::is_warm() const noexcept {
     if (!impl_ || !impl_->stream) return false;
     // Stream::latency() reports input-rate frames. "Warm" = output has caught
@@ -206,6 +208,7 @@ const char* BungeePitchVoice::backend_name() const noexcept { return "unavailabl
 long long BungeePitchVoice::input_position() const noexcept { return 0; }
 double    BungeePitchVoice::output_position() const noexcept { return 0.0; }
 double    BungeePitchVoice::latency_frames() const noexcept  { return 0.0; }
+int       BungeePitchVoice::alignment_compensation_frames(double /*pitch_scale*/) const noexcept { return 0; }
 bool      BungeePitchVoice::is_warm() const noexcept         { return false; }
 void      BungeePitchVoice::arm_fade_in(int /*fade_ms*/) noexcept {}
 

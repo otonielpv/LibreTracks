@@ -36,6 +36,8 @@ pub struct EngineSnapshot {
 
     #[serde(default)]
     pub source_states: Vec<SourcePreparationInfo>,
+    #[serde(default)]
+    pub source_cache: SourceCacheSnapshot,
 
     #[serde(default)]
     pub metronome: MetronomeSnapshot,
@@ -121,6 +123,22 @@ pub struct SourcePreparationInfo {
     pub progress_percent: i32,
     #[serde(default)]
     pub error_message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SourceCacheSnapshot {
+    #[serde(default)]
+    pub ram_bytes_used: u64,
+    #[serde(default)]
+    pub ram_bytes_capacity: u64,
+    #[serde(default)]
+    pub disk_bytes_used: u64,
+    #[serde(default)]
+    pub blocks_cached: u64,
+    #[serde(default)]
+    pub blocks_hit: u64,
+    #[serde(default)]
+    pub blocks_miss: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

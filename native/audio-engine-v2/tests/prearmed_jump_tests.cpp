@@ -63,7 +63,8 @@ void init_fixture(SourceManager& sources,
                    const std::string& marker_id,
                    Frame marker_frame,
                    bool transposed,
-                   const std::vector<float>& samples_override = {}) {
+                   const std::vector<float>& samples_override = {},
+                   Semitones transpose_amount = kSemitones) {
     // Continuous sine so any output block has measurable energy regardless
     // of where the marker lands.
     auto samples = samples_override.empty()
@@ -85,7 +86,7 @@ void init_fixture(SourceManager& sources,
     song.id          = song_id;
     song.start_frame = 0;
     song.end_frame   = kClipLen;
-    song.transpose_semitones = transposed ? kSemitones : 0;
+    song.transpose_semitones = transposed ? transpose_amount : 0;
     song.tracks.push_back(track);
     song.markers.push_back(Marker{marker_id, "M1", marker_frame});
 
@@ -128,6 +129,37 @@ std::vector<float> render_n_blocks(const Track& track,
             all.push_back(L[static_cast<std::size_t>(i)]);
             all.push_back(R[static_cast<std::size_t>(i)]);
         }
+    }
+    return all;
+}
+
+std::vector<float> render_chunk_sequence(const Track& track,
+                                         Frame start_frame,
+                                         const std::vector<int>& chunks,
+                                         const SourceManager& sources,
+                                         BungeeVoiceManager* bvm,
+                                         Semitones effective_semitones) {
+    int max_chunk = 0;
+    for (int chunk : chunks)
+        max_chunk = std::max(max_chunk, chunk);
+
+    std::vector<float> all;
+    TrackRenderer renderer;
+    renderer.prepare(std::max(1, max_chunk));
+
+    Frame cursor = start_frame;
+    for (int chunk : chunks) {
+        std::vector<float> L(static_cast<std::size_t>(chunk), 0.f);
+        std::vector<float> R(static_cast<std::size_t>(chunk), 0.f);
+        float* out[2] = {L.data(), R.data()};
+        renderer.render(
+            track, cursor, chunk, out, kCh, sources, bvm,
+            kSR, effective_semitones, /*active_song*/ nullptr);
+        for (int i = 0; i < chunk; ++i) {
+            all.push_back(L[static_cast<std::size_t>(i)]);
+            all.push_back(R[static_cast<std::size_t>(i)]);
+        }
+        cursor += chunk;
     }
     return all;
 }
@@ -763,6 +795,169 @@ TEST_CASE("PrearmedJumpManager prefeed: pitched click onset aligned with unpitch
     // — tight enough to prove prefeed delivers the alignment win, loose
     // enough to allow Bungee's natural transient smear.
     CHECK(std::llabs(p_onset - u_onset) <= 32);
+}
+
+TEST_CASE("PrearmedJumpManager prefeed: pitched click alignment is stable across transpose values") {
+    constexpr Frame click_offset = 1024;
+    auto click_samples = test::make_stereo_click(
+        kClipLen, kMarkerFrame + click_offset, 1.0f);
+
+    SourceManager u_sources;
+    Session       u_session;
+    init_fixture(u_sources, u_session, "src-align-u", "clip-align-u", "track-align-u",
+                  "song-align-u", "marker-align-u", kMarkerFrame, /*transposed*/ false,
+                  click_samples);
+    constexpr int n_blocks = 8;
+    auto unpitched_il = render_n_blocks(u_session.songs[0].tracks[0],
+                                         kMarkerFrame, n_blocks, u_sources,
+                                         /*bvm*/ nullptr, 0);
+    const Frame u_onset = test::first_onset_frame(unpitched_il, 0.2f);
+    REQUIRE(u_onset >= 0);
+
+    for (Semitones semitones : {-7, -2, 2, 7}) {
+        SourceManager p_sources;
+        Session       p_session;
+        const auto suffix = std::to_string(semitones);
+        init_fixture(p_sources, p_session,
+                      "src-align-p-" + suffix,
+                      "clip-align-p-" + suffix,
+                      "track-align-p-" + suffix,
+                      "song-align-p-" + suffix,
+                      "marker-align-p-" + suffix,
+                      kMarkerFrame,
+                      /*transposed*/ true,
+                      click_samples,
+                      semitones);
+
+        BungeeVoiceManager bvm;
+        REQUIRE(bvm.prepare(kSR, kCh, kBlockFrames));
+
+        PrearmedJumpManager prearm;
+        REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+        prearm.prepare_all_markers(p_session, p_sources, 1);
+
+        PrearmTargetKey key;
+        key.kind             = PrearmTargetKind::Marker;
+        key.song_id          = "song-align-p-" + suffix;
+        key.target_id        = "marker-align-p-" + suffix;
+        key.timeline_frame   = kMarkerFrame;
+        key.sample_rate      = kSR;
+        key.block_size       = kBlockFrames;
+        key.session_revision = 1;
+
+        auto prepared = prearm.take_ready(key);
+        REQUIRE(prepared);
+        bvm.swap_in_prepared_voices(prepared->extract_voice_map());
+
+        auto pitched_il = render_n_blocks(p_session.songs[0].tracks[0],
+                                           kMarkerFrame, n_blocks, p_sources,
+                                           &bvm, semitones);
+        const Frame p_onset = test::first_onset_frame(pitched_il, 0.2f);
+        INFO("semitones=", semitones,
+             " pitched onset=", p_onset,
+             " unpitched onset=", u_onset);
+        REQUIRE(p_onset >= 0);
+        CHECK(std::llabs(p_onset - u_onset) <= 32);
+    }
+}
+
+TEST_CASE("PrearmedJumpManager prefeed: scheduled mid-callback jump keeps pitched track aligned") {
+    constexpr Frame click_offset = 1024;
+    auto click_samples = test::make_stereo_click(
+        kClipLen, kMarkerFrame + click_offset, 1.0f);
+
+    SourceManager p_sources, u_sources;
+    Session       p_session, u_session;
+    init_fixture(p_sources, p_session, "src-mid-p", "clip-mid-p", "track-mid-p",
+                  "song-mid-p", "marker-mid-p", kMarkerFrame, /*transposed*/ true,
+                  click_samples);
+    init_fixture(u_sources, u_session, "src-mid-u", "clip-mid-u", "track-mid-u",
+                  "song-mid-u", "marker-mid-u", kMarkerFrame, /*transposed*/ false,
+                  click_samples);
+
+    BungeeVoiceManager bvm;
+    REQUIRE(bvm.prepare(kSR, kCh, kBlockFrames));
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+    prearm.prepare_all_markers(p_session, p_sources, 1);
+
+    PrearmTargetKey key;
+    key.kind             = PrearmTargetKind::Marker;
+    key.song_id          = "song-mid-p";
+    key.target_id        = "marker-mid-p";
+    key.timeline_frame   = kMarkerFrame;
+    key.sample_rate      = kSR;
+    key.block_size       = kBlockFrames;
+    key.session_revision = 1;
+
+    auto prepared = prearm.take_ready(key);
+    REQUIRE(prepared);
+    bvm.swap_in_prepared_voices(prepared->extract_voice_map());
+
+    const std::vector<int> chunks = {
+        177, kBlockFrames, kBlockFrames, kBlockFrames, kBlockFrames};
+    auto pitched_il = render_chunk_sequence(p_session.songs[0].tracks[0],
+                                             kMarkerFrame, chunks, p_sources,
+                                             &bvm, kSemitones);
+    auto unpitched_il = render_chunk_sequence(u_session.songs[0].tracks[0],
+                                               kMarkerFrame, chunks, u_sources,
+                                               /*bvm*/ nullptr, 0);
+
+    const Frame p_onset = test::first_onset_frame(pitched_il, 0.2f);
+    const Frame u_onset = test::first_onset_frame(unpitched_il, 0.2f);
+    INFO("pitched onset=", p_onset, " unpitched onset=", u_onset);
+    REQUIRE(u_onset >= 0);
+    REQUIRE(p_onset >= 0);
+    CHECK(std::llabs(p_onset - u_onset) <= 32);
+}
+
+TEST_CASE("PrearmedJumpManager prepare_target_now waits for streaming target blocks beyond eager cache") {
+    constexpr Frame marker_frame = kDefaultBlockFrames * 300;
+    constexpr Frame clip_len = marker_frame + kDefaultBlockFrames * 4;
+    SourceManager sources;
+    sources.register_source("src-stream-prearm", "stream-prearm-far-marker.wav");
+    REQUIRE(sources.store_decoded_source(
+        "src-stream-prearm",
+        test::make_stereo_sine(clip_len, 440.0, 0.5f),
+        kCh,
+        kSR,
+        clip_len).is_ok());
+
+    Session session;
+    Track track;
+    track.id = "track-stream-prearm";
+    track.transpose_behavior = TransposeBehavior::FollowsSongOrRegion;
+    track.clips.push_back(Clip{"clip-stream-prearm", "src-stream-prearm", 0, 0, clip_len});
+
+    Song song;
+    song.id = "song-stream-prearm";
+    song.start_frame = 0;
+    song.end_frame = clip_len;
+    song.transpose_semitones = kSemitones;
+    song.tracks.push_back(track);
+    song.markers.push_back(Marker{"marker-stream-prearm", "Far", marker_frame});
+    session.songs.push_back(song);
+
+    auto source = sources.get_shared("src-stream-prearm");
+    REQUIRE(source);
+    REQUIRE(source->is_streaming());
+    REQUIRE_FALSE(source->is_range_ready(marker_frame, kSR / 4));
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+    auto prepared = prearm.prepare_target_now(
+        session,
+        sources,
+        PrearmTargetKind::Marker,
+        "song-stream-prearm",
+        "marker-stream-prearm",
+        marker_frame,
+        1);
+
+    REQUIRE(prepared);
+    CHECK(prepared->valid);
+    CHECK(source->is_range_ready(marker_frame, kSR / 4));
 }
 
 #endif // LT_ENGINE_HAVE_BUNGEE

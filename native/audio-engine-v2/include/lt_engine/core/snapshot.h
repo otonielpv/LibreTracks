@@ -72,6 +72,15 @@ struct SourcePreparationInfo {
     std::string error_message;
 };
 
+struct SourceCacheSnapshot {
+    std::size_t ram_bytes_used = 0;
+    std::size_t ram_bytes_capacity = 0;
+    std::size_t disk_bytes_used = 0;
+    std::size_t blocks_cached = 0;
+    std::size_t blocks_hit = 0;
+    std::size_t blocks_miss = 0;
+};
+
 struct MetronomeSnapshot {
     bool        enabled = false;
     float       volume = 0.f;
@@ -115,6 +124,7 @@ struct EngineSnapshot {
 
     // Source preparation
     std::vector<SourcePreparationInfo> source_states;
+    SourceCacheSnapshot source_cache;
 
     // Internal metronome
     MetronomeSnapshot metronome;

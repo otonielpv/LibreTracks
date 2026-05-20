@@ -121,6 +121,10 @@ public:
     void publish_prepared_voice_map_realtime(
         std::shared_ptr<const PreparedVoiceMap> prepared_voices) noexcept;
 
+    // Audio-thread safe: publish the preallocated empty voice map so pitched
+    // tracks do not keep rendering stale voices after an unprepared jump.
+    void publish_empty_voice_map_realtime() noexcept;
+
     // ── Audio-thread lookup (must not allocate) ──────────────────────────
 
     // Returns a non-owning pointer to the voice owning this clip. Returns
@@ -141,6 +145,10 @@ public:
 
 private:
     struct Impl;
+    void rebuild_for_seek_guarded(Frame target_frame,
+                                  const Session& session,
+                                  const SourceManager& sources,
+                                  std::uint64_t expected_generation);
     std::unique_ptr<Impl> impl_;
 };
 

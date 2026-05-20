@@ -94,6 +94,14 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         });
     }
     j["source_states"] = sources;
+    j["source_cache"] = {
+        {"ram_bytes_used", snap.source_cache.ram_bytes_used},
+        {"ram_bytes_capacity", snap.source_cache.ram_bytes_capacity},
+        {"disk_bytes_used", snap.source_cache.disk_bytes_used},
+        {"blocks_cached", snap.source_cache.blocks_cached},
+        {"blocks_hit", snap.source_cache.blocks_hit},
+        {"blocks_miss", snap.source_cache.blocks_miss},
+    };
 
     // Phase 8: prearmed-jumps diagnostics for the UI.
     j["prearmed_jumps"] = {

@@ -2,7 +2,10 @@
 
 #include <lt_engine/core/types.h>
 #include <lt_engine/session/session.h>
+#include <lt_engine/sources/block_cache.h>
+#include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace lt {
@@ -32,6 +35,13 @@ public:
                   int                sample_rate,
                   Frame              duration_frames);
 
+    DecodedSource(Id                 source_id,
+                  int                channel_count,
+                  int                sample_rate,
+                  Frame              duration_frames,
+                  BlockCache*        cache,
+                  std::function<void(const Id&, int)> request_block);
+
     // Read `frame_count` frames starting at `offset_frames` into `out`.
     // `out` is pre-allocated: out[ch] points to a buffer of frame_count floats.
     // Returns the number of frames actually read (may be < frame_count at EOF).
@@ -41,12 +51,18 @@ public:
     int    channel_count()   const noexcept { return channel_count_; }
     int    sample_rate()     const noexcept { return sample_rate_; }
     Frame  duration_frames() const noexcept { return duration_frames_; }
-    bool   is_loaded()       const noexcept { return !samples_.empty(); }
+    bool   is_loaded()       const noexcept { return !samples_.empty() || cache_ != nullptr; }
+    bool   is_streaming()    const noexcept { return cache_ != nullptr; }
+    size_t memory_bytes()    const noexcept { return samples_.size() * sizeof(float); }
+    bool   is_range_ready(Frame offset_frames, int frame_count) const noexcept;
 
     SourcePeakOverview peaks(int resolution_frames) const;
 
 private:
+    Id                 source_id_;
     std::vector<float> samples_;
+    BlockCache*        cache_ = nullptr;
+    std::function<void(const Id&, int)> request_block_;
     int    channel_count_   = 0;
     int    sample_rate_      = 0;
     Frame  duration_frames_  = 0;

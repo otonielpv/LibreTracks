@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
@@ -37,6 +38,18 @@ PreparedVoiceMap PreparedJumpVoiceSet::extract_voice_map() {
 }
 
 namespace {
+
+void request_source_range(const SourceManager& sources,
+                          const Id& source_id,
+                          Frame start,
+                          int frames) {
+    if (frames <= 0) return;
+    const int first = static_cast<int>(std::max<Frame>(0, start) / kDefaultBlockFrames);
+    const int last = static_cast<int>(
+        std::max<Frame>(0, start + frames - 1) / kDefaultBlockFrames);
+    for (int block = first; block <= last; ++block)
+        sources.request_block(source_id, block);
+}
 
 bool prearm_log_enabled() {
     static const bool on = [] {
@@ -144,6 +157,7 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
     if (!voice.is_ready()) return;
     const int latency_frames = static_cast<int>(voice.latency_frames());
     if (latency_frames <= 0) return; // nothing to prefeed; voice not warm
+    const int compensation_frames = voice.alignment_compensation_frames(pitch_scale);
 
     // Buffers reused across iterations.
     std::vector<float> read_l(static_cast<std::size_t>(max_in_frames), 0.0f);
@@ -160,7 +174,8 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
     }
 
     const Frame src_end  = source.duration_frames();
-    Frame  read_cursor   = target_source_frame; // absolute source frame to read next
+    Frame  read_cursor   = target_source_frame
+        + static_cast<Frame>(compensation_frames); // absolute source frame to read next
     int    fed           = 0;                   // count of real frames fed
     while (fed < latency_frames) {
         const int chunk = std::min(max_in_frames, latency_frames - fed);
@@ -169,16 +184,23 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
         // past src_end is zero-padded (matches track_renderer's pad-on-EOF).
         std::fill(read_l.begin(), read_l.begin() + chunk, 0.0f);
         std::fill(read_r.begin(), read_r.begin() + chunk, 0.0f);
-        const int available = (read_cursor >= src_end || read_cursor < 0)
+        const int dst_offset = read_cursor < 0
+            ? static_cast<int>(std::min<Frame>(chunk, -read_cursor))
+            : 0;
+        const Frame read_start = std::max<Frame>(0, read_cursor);
+        const int available = (dst_offset >= chunk || read_start >= src_end)
             ? 0
             : static_cast<int>(std::min<long long>(
-                chunk, static_cast<long long>(src_end - read_cursor)));
+                chunk - dst_offset, static_cast<long long>(src_end - read_start)));
         if (available > 0) {
-            float* read_into[2] = {read_l.data(), read_r.data()};
-            const int got = source.read(read_cursor, available, read_into,
+            float* read_into[2] = {
+                read_l.data() + dst_offset,
+                read_r.data() + dst_offset};
+            const int got = source.read(read_start, available, read_into,
                                          std::min(2, source.channel_count()));
             if (got > 0 && source.channel_count() == 1) {
-                std::copy_n(read_l.begin(), got, read_r.begin());
+                std::copy_n(read_l.begin() + dst_offset, got,
+                            read_r.begin() + dst_offset);
             }
         }
 
@@ -232,6 +254,13 @@ std::vector<PrepSpec> enumerate_prep_specs(const Song& song,
     spec.target_source_frame  = clip.source_start_frame
                                 + (target_timeline_frame - clip.timeline_start_frame);
     spec.effective_semitones  = decision.effective_semitones;
+    const int required_frames = std::max(1, spec.source->sample_rate() / 4);
+    if (!spec.source->is_range_ready(spec.target_source_frame, required_frames)) {
+        request_source_range(sources, clip.source_id,
+                             spec.target_source_frame, required_frames);
+        if (out_unloaded_clips) ++*out_unloaded_clips;
+        return out;
+    }
     out.push_back(spec);
     return out;
 }
@@ -430,7 +459,11 @@ BuildResult build_prepared_set(
                         sample_rate, channel_count, max_in_frames,
                         semitones_to_pitch_scale(spec.effective_semitones));
                 }
-                voice->arm_fade_in(2);
+                // The voice has already been warmed and prefed up to the
+                // target. A second per-voice fade here re-shapes the prepared
+                // audio after the mixer has already applied the seek de-click
+                // ramp, which shows up as roughness on transposed jumps.
+                voice->arm_fade_in(0);
                 PreparedTrackVoice ptv;
                 ptv.clip_id             = spec.clip_id;
                 ptv.voice               = std::move(voice);
@@ -624,6 +657,11 @@ PrearmedJumpManager::prepare_target_now(const Session& session,
     }
     auto br  = build_prepared_set(kind, *song_ptr, target_id, target_frame,
                                    sources, sr, ch, bs, session_revision);
+    for (int attempt = 0; br.unloaded_clips_skipped > 0 && attempt < 10; ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        br = build_prepared_set(kind, *song_ptr, target_id, target_frame,
+                                sources, sr, ch, bs, session_revision);
+    }
     auto set = std::move(br.set);
 
     // Update diagnostics; do NOT insert into prepared_map (caller consumes it).

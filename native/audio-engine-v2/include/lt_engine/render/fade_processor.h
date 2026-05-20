@@ -15,6 +15,7 @@ public:
 
     void trigger_fade_in() noexcept;
     void trigger_crossfade() noexcept { trigger_fade_in(); }
+    void capture_previous_sample(float** channels, int num_channels, int frame_index) noexcept;
     void clear() noexcept;
 
     void process(float** channels, int num_channels, int num_frames) noexcept;

@@ -112,6 +112,29 @@ const char* jump_trigger_name(JumpTrigger trigger) noexcept {
     return "Unknown";
 }
 
+void request_jump_target_audio(SourceManager& sources,
+                               const Session& session,
+                               Frame target_frame,
+                               int window_frames) noexcept {
+    for (const auto& song : session.songs) {
+        if (target_frame < song.start_frame || target_frame >= song.end_frame)
+            continue;
+        for (const auto& track : song.tracks) {
+            if (track.kind != TrackKind::Audio)
+                continue;
+            for (const auto& clip : track.clips) {
+                const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
+                if (target_frame < clip.timeline_start_frame || target_frame >= clip_end)
+                    continue;
+                const Frame source_frame = clip.source_start_frame
+                    + (target_frame - clip.timeline_start_frame);
+                sources.request_range(clip.source_id, source_frame, window_frames);
+            }
+        }
+        return;
+    }
+}
+
 // Fires the moment the DLL is loaded by Windows, before any exported function is called.
 struct DllLoadProbe {
     DllLoadProbe() {
@@ -333,17 +356,14 @@ Result<void> EngineImpl::send_command(const std::string& cmd_json) {
 }
 
 void EngineImpl::service_control_thread_tasks() {
-    // With RubberBand and PitchCache removed, the audio thread is exclusively
-    // served by BungeeVoiceManager. Bungee voices are built synchronously on
-    // the command thread (LoadSession / SeekAbsolute / etc.) and need no
-    // periodic repair or rolling prepare from the control thread. The
-    // mixer's pending scheduled-jump signal is now consumed implicitly by
-    // the next jump command's prearm path.
     if (mixer_) {
-        // Drain the scheduled-jump signal so the latch resets; we no longer
-        // act on it because Bungee voices are already kept in sync by the
-        // prearmed-jump / rebuild_for_seek paths.
-        (void)mixer_->take_pending_scheduled_jump();
+        const Frame target = mixer_->take_pending_scheduled_jump();
+        if (target != Mixer::kNoJumpPending
+            && bungee_voices_ && bungee_voices_->is_available()
+            && session_ && source_manager_) {
+            bungee_voices_->rebuild_for_seek_async(
+                target, *session_, *source_manager_);
+        }
     }
 }
 
@@ -497,6 +517,18 @@ std::string EngineImpl::get_snapshot() const {
             info.error_message = d.error_message;
             snap.source_states.push_back(std::move(info));
         }
+    }
+    if (source_manager_) {
+        auto cd = source_manager_->cache_diagnostics();
+        snap.source_cache.ram_bytes_used = cd.bytes_used;
+        snap.source_cache.ram_bytes_capacity = cd.bytes_capacity;
+        snap.source_cache.blocks_cached = cd.blocks_cached;
+        snap.source_cache.blocks_hit = cd.blocks_hit;
+        snap.source_cache.blocks_miss = cd.blocks_miss;
+        std::size_t disk_bytes = 0;
+        for (const auto& d : source_manager_->diagnostics())
+            disk_bytes += d.disk_cache_bytes;
+        snap.source_cache.disk_bytes_used = disk_bytes;
     }
     // RubberBand / PitchCache diagnostics removed (Bungee-only pipeline; the
     // PitchSnapshot fields are no longer populated and snapshot.cpp no longer
@@ -1167,8 +1199,16 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 jump.created_frame = clock_->position().frame;
                 Frame resolved_target_frame_for_log = -1;
                 auto resolved_for_schedule_log = resolve_jump_target(c.target, *session_, *clock_);
-                if (resolved_for_schedule_log.is_ok())
+                if (resolved_for_schedule_log.is_ok()) {
                     resolved_target_frame_for_log = resolved_for_schedule_log.unwrap();
+                    if (source_manager_) {
+                        const int window = std::max(
+                            4096,
+                            (device_manager_ ? device_manager_->actual_buffer_size() : 1024) * 8);
+                        request_jump_target_audio(
+                            *source_manager_, *session_, resolved_target_frame_for_log, window);
+                    }
+                }
                 if (prearmed_jumps_ && bungee_voices_ && bungee_voices_->is_available()
                     && source_manager_ && clock_) {
                     auto resolved = resolved_for_schedule_log;

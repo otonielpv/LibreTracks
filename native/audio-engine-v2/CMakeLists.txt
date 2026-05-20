@@ -15,7 +15,7 @@ include(cmake/dependencies.cmake)
 # ---------------------------------------------------------------------------
 # Engine library
 # ---------------------------------------------------------------------------
-if(LT_ENGINE_BUILD_TESTS)
+if(LT_ENGINE_BUILD_TESTS OR LT_ENGINE_BUILD_BENCHES)
     add_library(lt_audio_engine_v2 STATIC)
 else()
     add_library(lt_audio_engine_v2 SHARED)
@@ -209,6 +209,70 @@ if(LT_ENGINE_BUILD_BENCHES)
                         "${_lt_prearm_bungee_dll}"
                         "$<TARGET_FILE_DIR:bench_prearm_vs_reactive>"
                     COMMENT "Copying Bungee DLL for prearm bench")
+            endif()
+        endif()
+    endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_source_streaming_architectures.cpp")
+        add_executable(bench_source_streaming_architectures
+            bench/bench_source_streaming_architectures.cpp)
+        target_compile_features(bench_source_streaming_architectures PRIVATE cxx_std_20)
+        target_link_libraries(bench_source_streaming_architectures PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_source_streaming_architectures PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_jump_paths.cpp")
+        add_executable(bench_jump_paths bench/bench_jump_paths.cpp)
+        target_compile_features(bench_jump_paths PRIVATE cxx_std_20)
+        target_link_libraries(bench_jump_paths PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_jump_paths PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        if(LT_ENGINE_USE_BUNGEE AND WIN32 AND DEFINED LT_BUNGEE_DIR)
+            set(_lt_jump_bungee_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
+            if(EXISTS "${_lt_jump_bungee_dll}")
+                add_custom_command(TARGET bench_jump_paths POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_lt_jump_bungee_dll}"
+                        "$<TARGET_FILE_DIR:bench_jump_paths>"
+                    COMMENT "Copying Bungee DLL for jump bench")
+            endif()
+        endif()
+    endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_live_readiness.cpp")
+        add_executable(bench_live_readiness bench/bench_live_readiness.cpp)
+        target_compile_features(bench_live_readiness PRIVATE cxx_std_20)
+        target_link_libraries(bench_live_readiness PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_live_readiness PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        if(LT_ENGINE_USE_BUNGEE AND WIN32 AND DEFINED LT_BUNGEE_DIR)
+            set(_lt_live_bungee_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
+            if(EXISTS "${_lt_live_bungee_dll}")
+                add_custom_command(TARGET bench_live_readiness POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_lt_live_bungee_dll}"
+                        "$<TARGET_FILE_DIR:bench_live_readiness>"
+                    COMMENT "Copying Bungee DLL for live-readiness bench")
+            endif()
+        endif()
+    endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_real_sample_jump_stability.cpp")
+        add_executable(bench_real_sample_jump_stability
+            bench/bench_real_sample_jump_stability.cpp)
+        target_compile_features(bench_real_sample_jump_stability PRIVATE cxx_std_20)
+        target_link_libraries(bench_real_sample_jump_stability PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_real_sample_jump_stability PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        if(LT_ENGINE_USE_BUNGEE AND WIN32 AND DEFINED LT_BUNGEE_DIR)
+            set(_lt_real_sample_bungee_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
+            if(EXISTS "${_lt_real_sample_bungee_dll}")
+                add_custom_command(TARGET bench_real_sample_jump_stability POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_lt_real_sample_bungee_dll}"
+                        "$<TARGET_FILE_DIR:bench_real_sample_jump_stability>"
+                    COMMENT "Copying Bungee DLL for real-sample jump bench")
             endif()
         endif()
     endif()
