@@ -141,6 +141,33 @@ TEST_CASE("rebuild_for_seek replaces voices at the new playhead") {
 #endif
 }
 
+TEST_CASE("build_seek_voice_map does not publish before the transport seek commits") {
+    BungeeVoiceManager mgr;
+    if (!mgr.prepare(kSR, kChannels, kBlock)) return;
+
+    SourceManager sm;
+    REQUIRE(register_loaded_source(sm, "src1", kSR * 4));
+
+    auto session = make_one_transposed_clip_session(/*semitones=*/-2);
+    mgr.rebuild_for_session(session, sm, /*playhead=*/0);
+    BungeePitchVoice* before = mgr.voice_for("clip1");
+
+    auto prepared = mgr.build_seek_voice_map(/*target*/kSR * 1, session, sm);
+    BungeePitchVoice* still_active = mgr.voice_for("clip1");
+
+#if LT_ENGINE_HAVE_BUNGEE
+    REQUIRE(prepared != nullptr);
+    CHECK(before != nullptr);
+    CHECK(still_active == before);
+    mgr.publish_prepared_voice_map_realtime(prepared);
+    CHECK(mgr.voice_for("clip1") != before);
+#else
+    CHECK(prepared == nullptr);
+    CHECK(before == nullptr);
+    CHECK(still_active == nullptr);
+#endif
+}
+
 TEST_CASE("rebuild_for_session keeps the same voice pointer when clip is unchanged") {
     BungeeVoiceManager mgr;
     if (!mgr.prepare(kSR, kChannels, kBlock)) return;

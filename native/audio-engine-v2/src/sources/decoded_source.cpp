@@ -1,4 +1,5 @@
 #include <lt_engine/sources/decoded_source.h>
+#include <lt_engine/debug/logging.h>
 #include <algorithm>
 #include <cstring>
 #include <limits>
@@ -40,19 +41,6 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
     int ch_copy = std::min(out_channels, channel_count_);
 
     if (cache_) {
-        if (!is_range_ready(offset_frames, readable)) {
-            if (request_block_) {
-                const int first = cache_->block_index_for(std::max<Frame>(0, offset_frames));
-                const int last = cache_->block_index_for(
-                    std::max<Frame>(0, offset_frames + readable - 1));
-                for (int block = first; block <= last; ++block)
-                    request_block_(source_id_, block);
-            }
-            for (int ch = 0; ch < out_channels; ++ch)
-                std::fill(out[ch], out[ch] + readable, 0.f);
-            return 0;
-        }
-
         int copied = 0;
         while (copied < readable) {
             const Frame absolute = offset_frames + copied;
@@ -66,9 +54,30 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
                 shifted[ch] = out[ch] + copied;
             if (!cache_->read(source_id_, block_index, block_offset, chunk,
                               shifted, channels)) {
+                if (lt_env_flag_enabled("LIBRETRACKS_JUMP_DEBUG")) {
+                    lt_debug_log(
+                        "[LT_JUMP_DEBUG][source] cache_miss source=%s frame=%lld block=%d offset=%d frames=%d\n",
+                        source_id_.c_str(),
+                        static_cast<long long>(absolute),
+                        block_index,
+                        block_offset,
+                        chunk);
+                }
+                if (request_block_)
+                    request_block_(source_id_, block_index);
                 for (int ch = 0; ch < out_channels; ++ch)
                     std::fill(out[ch] + copied, out[ch] + copied + chunk, 0.f);
-                return copied;
+            }
+            if (request_block_) {
+                constexpr int kReadAheadBlocks = 2;
+                for (int ahead = 1; ahead <= kReadAheadBlocks; ++ahead) {
+                    const int next_block = block_index + ahead;
+                    const Frame next_start =
+                        static_cast<Frame>(next_block) * cache_->block_frames();
+                    if (next_start >= duration_frames_)
+                        break;
+                    request_block_(source_id_, next_block);
+                }
             }
             copied += chunk;
         }

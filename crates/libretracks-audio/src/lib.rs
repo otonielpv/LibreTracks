@@ -319,6 +319,8 @@ impl AudioEngine {
     }
 
     pub fn toggle_vamp(&mut self, mode: VampMode) -> Result<Option<ActiveVamp>, AudioEngineError> {
+        self.pending_marker_jump = None;
+        self.pending_fade_jump = None;
         let song = self.ensure_song_loaded()?;
 
         if self.active_vamp.is_some() {
@@ -1481,6 +1483,31 @@ mod tests {
 
         assert!(active_vamp.is_none());
         assert!(engine.active_vamp().is_none());
+    }
+
+    #[test]
+    fn toggle_vamp_clears_pending_section_jump() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(6.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        engine
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::AfterBars(1),
+                TransitionType::Instant,
+            )
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+        assert!(engine.pending_marker_jump().is_some());
+
+        engine
+            .toggle_vamp(VampMode::Bars(2))
+            .expect("vamp should activate");
+
+        assert!(engine.pending_marker_jump().is_none());
+        assert!(engine.active_vamp().is_some());
     }
 
     #[test]

@@ -60,6 +60,7 @@ const buildDesktopNativeEnv = (rawEnv) => {
     ...rawEnv,
     LIBRETRACKS_AUDIO_ENGINE: "cpp-v2",
     CARGO_TARGET_DIR: defaultTargetDir,
+    LIBRETRACKS_AUDIO_DEBUG_LOG: rawEnv.LIBRETRACKS_AUDIO_DEBUG_LOG ?? path.join(repoRoot, "lt_audio_debug.log"),
     LIBRETRACKS_ENGINE_V2_BUNGEE:
       rawEnv.LIBRETRACKS_ENGINE_V2_BUNGEE ?? rawEnv.LIBRETRACKS_ENGINE_V2_RUBBERBAND ?? "1",
     LIBRETRACKS_ENGINE_V2_FFMPEG: rawEnv.LIBRETRACKS_ENGINE_V2_FFMPEG ?? "1",

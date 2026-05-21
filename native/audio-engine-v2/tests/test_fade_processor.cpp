@@ -25,6 +25,27 @@ TEST_CASE("seek fade starts near zero and rises monotonically") {
     CHECK(left[128] == doctest::Approx(1.0f));
 }
 
+TEST_CASE("seek fade keeps the same anchor across callback boundaries") {
+    FadeProcessor fade(4);
+    float previous[] = {0.25f};
+    float* previous_channels[] = {previous};
+    fade.capture_previous_sample(previous_channels, 1, 0);
+
+    std::vector<float> first(2, 1.0f);
+    std::vector<float> second(2, 1.0f);
+    float* first_channels[] = {first.data()};
+    float* second_channels[] = {second.data()};
+
+    fade.trigger_fade_in();
+    fade.process(first_channels, 1, static_cast<int>(first.size()));
+    fade.process(second_channels, 1, static_cast<int>(second.size()));
+
+    CHECK(first[0] == doctest::Approx(0.25f));
+    CHECK(first[1] == doctest::Approx(0.444444f));
+    CHECK(second[0] == doctest::Approx(0.805556f));
+    CHECK(second[1] == doctest::Approx(1.0f));
+}
+
 TEST_CASE("repeated seeks restart fade without sudden second-phase drop") {
     FadeProcessor fade(64);
     std::vector<float> left(96, 1.0f);

@@ -1196,7 +1196,7 @@ impl DesktopSession {
                 self.current_position(),
                 self.engine.position_seconds(),
             );
-            return Ok(self.snapshot_with_runtime_transport(audio));
+            return Ok(self.snapshot());
         }
 
         self.transport_clock.seek_to(self.engine.position_seconds());
@@ -1417,6 +1417,8 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
+        self.engine.cancel_section_jump();
+        audio.cancel_scheduled_jumps()?;
         self.engine.toggle_vamp(mode)?;
         Ok(self.snapshot())
     }
@@ -1616,7 +1618,7 @@ impl DesktopSession {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        // MixerOnly: section markers are Rust-model-only. C++ does not read them.
+        audio.update_live_section_markers(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
 
         Ok(self.snapshot())
@@ -1657,7 +1659,7 @@ impl DesktopSession {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        // MixerOnly: section markers are Rust-model-only. C++ does not read them.
+        audio.update_live_section_markers(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
 
         Ok(self.snapshot())
@@ -1681,7 +1683,7 @@ impl DesktopSession {
             return Err(DesktopError::SectionNotFound(section_id.to_string()));
         }
 
-        // MixerOnly: section markers are Rust-model-only. C++ does not read them.
+        audio.update_live_section_markers(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
 
         Ok(self.snapshot())
@@ -1883,6 +1885,7 @@ impl DesktopSession {
 
         song.regions.remove(region_index);
         sort_song_regions(&mut song.regions);
+        audio.update_live_song_regions(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
         Ok(self.snapshot())
@@ -4780,6 +4783,30 @@ mod tests {
         assert_eq!(drift.transport_position_seconds, 2.75);
         assert_eq!(drift.engine_position_seconds, 2.75);
         assert_eq!(drift.transport_minus_engine_seconds, 0.0);
+    }
+
+    #[test]
+    fn snapshot_after_playing_seek_keeps_visual_clock_running() {
+        let mut session = DesktopSession::default();
+        session
+            .engine
+            .load_song(demo_song())
+            .expect("song should load into engine");
+        session.engine.play().expect("engine should enter playback");
+        session.engine.seek(3.5).expect("engine seek should work");
+        session.transport_clock.seek_while_playing(3.5);
+
+        let snapshot = session.snapshot();
+
+        assert_eq!(snapshot.playback_state, "playing");
+        assert!(snapshot.position_seconds >= 3.5);
+        assert!(snapshot.position_seconds < 3.55);
+        assert_eq!(snapshot.transport_clock.anchor_position_seconds, 3.5);
+        assert_eq!(
+            snapshot.transport_clock.last_seek_position_seconds,
+            Some(3.5)
+        );
+        assert!(snapshot.transport_clock.running);
     }
 
     #[test]

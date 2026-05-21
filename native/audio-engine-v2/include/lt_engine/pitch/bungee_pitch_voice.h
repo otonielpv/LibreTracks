@@ -62,6 +62,19 @@ public:
                      int output_frames,
                      double pitch_scale) noexcept;
 
+    // Control-thread prefill used by prepared jumps. It feeds source input to
+    // Bungee and stores the produced output in the realtime FIFO without
+    // delivering it yet, so tiny post-jump spans can be served without doing
+    // the first synthesis call on the audio thread.
+    int prime_output_fifo(const float* const* input,
+                          int input_frames,
+                          double pitch_scale) noexcept;
+
+    // Output frames already produced by Bungee and waiting in the realtime
+    // FIFO. TrackRenderer uses this to advance the next source read so partial
+    // post-jump renders keep Bungee's input stream continuous.
+    int queued_output_frames() const noexcept;
+
     // ── Latency / position introspection (per Bungee issue #38) ─────────
     //
     // Per the Bungee maintainer, the correct way to know the current

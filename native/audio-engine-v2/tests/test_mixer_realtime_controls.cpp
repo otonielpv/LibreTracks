@@ -444,6 +444,92 @@ TEST_CASE("scheduled jump can suppress seek fade for external fade transitions")
     CHECK(mixer.take_pending_scheduled_jump() == 1234);
 }
 
+TEST_CASE("scheduled jump suppress_seek_fade leaves first post-jump sample untouched") {
+    constexpr Frame kDuration = 48000 * 2;
+    constexpr Frame kTrigger = 300;
+    constexpr Frame kTarget = 24000;
+
+    std::vector<float> pcm(static_cast<std::size_t>(kDuration * 2), 0.0f);
+    for (Frame f = 0; f < kDuration; ++f) {
+        const float value = f < kTarget ? 0.25f : 0.75f;
+        pcm[static_cast<std::size_t>(f * 2)] = value;
+        pcm[static_cast<std::size_t>(f * 2 + 1)] = value;
+    }
+
+    SourceManager sources;
+    sources.register_source("source", "");
+    REQUIRE(sources.store_decoded_source("source", pcm, 2,
+        test::kFixtureSampleRate, kDuration).is_ok());
+
+    auto session = std::make_shared<Session>(one_track_session(0, kDuration));
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+
+    ScheduledJump jump;
+    jump.jump_id = "marker-instant";
+    jump.target = frame_target(kTarget);
+    jump.trigger = JumpTrigger::AtFrame;
+    jump.status = JumpStatus::Pending;
+    jump.trigger_frame = kTrigger;
+    jump.suppress_seek_fade = true;
+    REQUIRE(scheduler.schedule(jump).is_ok());
+
+    clock.seek(0);
+    clock.play();
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    mixer.render(out, 2, kBlock, clock.sample_rate());
+
+    CHECK(mixer.scheduled_jump_executed_count() == 1);
+    CHECK(left[static_cast<std::size_t>(kTrigger)] == doctest::Approx(0.75f));
+}
+
+TEST_CASE("prepared scheduled jump still de-clicks the post-jump boundary") {
+    constexpr Frame kDuration = 48000 * 2;
+    constexpr Frame kTrigger = 300;
+    constexpr Frame kTarget = 24000;
+
+    std::vector<float> pcm(static_cast<std::size_t>(kDuration * 2), 0.0f);
+    for (Frame f = 0; f < kDuration; ++f) {
+        const float value = f < kTarget ? 0.25f : 0.75f;
+        pcm[static_cast<std::size_t>(f * 2)] = value;
+        pcm[static_cast<std::size_t>(f * 2 + 1)] = value;
+    }
+
+    SourceManager sources;
+    sources.register_source("source", "");
+    REQUIRE(sources.store_decoded_source("source", pcm, 2,
+        test::kFixtureSampleRate, kDuration).is_ok());
+
+    auto session = std::make_shared<Session>(one_track_session(0, kDuration));
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+
+    ScheduledJump jump;
+    jump.jump_id = "prepared-marker";
+    jump.target = frame_target(kTarget);
+    jump.trigger = JumpTrigger::AtFrame;
+    jump.status = JumpStatus::Pending;
+    jump.trigger_frame = kTrigger;
+    jump.suppress_seek_fade = true;
+    jump.prepared_voice_map = std::make_shared<PreparedVoiceMap>();
+    REQUIRE(scheduler.schedule(jump).is_ok());
+
+    clock.seek(0);
+    clock.play();
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    mixer.render(out, 2, kBlock, clock.sample_rate());
+
+    CHECK(mixer.scheduled_jump_executed_count() == 1);
+    CHECK(left[static_cast<std::size_t>(kTrigger)] == doctest::Approx(0.25f));
+    CHECK(left[static_cast<std::size_t>(kTrigger + 127)] == doctest::Approx(0.75f));
+}
+
 TEST_CASE("master fade ramps output gain in the audio callback") {
     SourceManager sources;
     add_source(sources, "source", 0.5f, 48000 * 4);

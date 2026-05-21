@@ -108,6 +108,10 @@ pub enum EngineCommand {
         song_id: String,
         regions: Vec<RegionUpdate>,
     },
+    SetSongMarkers {
+        song_id: String,
+        markers: Vec<MarkerUpdate>,
+    },
 
     SetOutputDevice {
         device_id: String,
@@ -127,6 +131,13 @@ pub struct RegionUpdate {
     pub start_frame: i64,
     pub end_frame: i64,
     pub transpose_semitones: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarkerUpdate {
+    pub id: String,
+    pub name: String,
+    pub frame: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

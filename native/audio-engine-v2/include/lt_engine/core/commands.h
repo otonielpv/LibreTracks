@@ -109,6 +109,16 @@ struct CmdSetSongRegions {
     std::vector<RegionUpdate> regions;
 };
 
+struct CmdSetSongMarkers {
+    struct MarkerUpdate {
+        Id          id;
+        std::string name;
+        Frame       frame = 0;
+    };
+    Id song_id;
+    std::vector<MarkerUpdate> markers;
+};
+
 // ---------------------------------------------------------------------------
 // Session management
 // ---------------------------------------------------------------------------
@@ -141,6 +151,7 @@ using EngineCommand = std::variant<
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
     CmdSetMetronomeConfig,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetSongRegions,
+    CmdSetSongMarkers,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize
 >;
 

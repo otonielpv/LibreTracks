@@ -78,6 +78,21 @@ TEST_CASE("parse ScheduleJump with explicit trigger frame") {
     CHECK(c.suppress_seek_fade == true);
 }
 
+TEST_CASE("parse SetSongMarkers") {
+    auto cmd = command_from_json(R"({
+        "type":"SetSongMarkers",
+        "song_id":"song1",
+        "markers":[{"id":"section_a","name":"Verse","frame":2025472}]
+    })");
+    REQUIRE(std::holds_alternative<CmdSetSongMarkers>(cmd));
+    auto& c = std::get<CmdSetSongMarkers>(cmd);
+    CHECK(c.song_id == "song1");
+    REQUIRE(c.markers.size() == 1);
+    CHECK(c.markers[0].id == "section_a");
+    CHECK(c.markers[0].name == "Verse");
+    CHECK(c.markers[0].frame == 2025472);
+}
+
 TEST_CASE("parse SetTrackGain") {
     auto cmd = command_from_json(R"({"type":"SetTrackGain","track_id":"t1","gain":0.75})");
     REQUIRE(std::holds_alternative<CmdSetTrackGain>(cmd));

@@ -50,7 +50,9 @@ void FadeProcessor::clear() noexcept {
     processed_ = 0;
     remaining_ = 0;
     previous_sample_.fill(0.0f);
+    fade_anchor_sample_.fill(0.0f);
     previous_channels_ = 0;
+    fade_anchor_channels_ = 0;
 }
 
 bool FadeProcessor::is_active() const noexcept {
@@ -62,13 +64,15 @@ void FadeProcessor::process(float** channels, int num_channels, int num_frames) 
         return;
 
     const int channel_count = std::clamp(num_channels, 0, kMaxChannels);
-    std::array<float, kMaxChannels> old_sample = previous_sample_;
-    const int old_channels = previous_channels_;
-
     if (triggered_.exchange(false, std::memory_order_acq_rel)) {
         processed_ = 0;
         remaining_ = ramp_frames_;
+        fade_anchor_sample_ = previous_sample_;
+        fade_anchor_channels_ = previous_channels_;
     }
+
+    const auto old_sample = fade_anchor_sample_;
+    const int old_channels = fade_anchor_channels_;
 
     for (int f = 0; f < num_frames && remaining_ > 0; ++f) {
         const float progress = ramp_frames_ <= 1

@@ -1,5 +1,6 @@
 #include <lt_engine/pitch/prearmed_jump_manager.h>
 
+#include <lt_engine/debug/logging.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/sources/source_manager.h>
@@ -13,6 +14,7 @@
 #include <cstring>
 #include <deque>
 #include <cmath>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -71,6 +73,16 @@ bool prearm_globally_enabled() {
         return !(std::strcmp(v, "0") == 0 || std::strcmp(v, "false") == 0);
     }();
     return on;
+}
+
+int prearm_source_wait_ms() {
+    static const int value = [] {
+        const char* v = std::getenv("LIBRETRACKS_PREARM_SOURCE_WAIT_MS");
+        if (!v) return 750;
+        const int parsed = std::atoi(v);
+        return parsed >= 0 && parsed <= 10000 ? parsed : 750;
+    }();
+    return value;
 }
 
 double semitones_to_pitch_scale(Semitones semitones) {
@@ -210,11 +222,56 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
         read_cursor += chunk;
         fed         += chunk;
     }
+
+    // Prepared jumps must not ask Bungee to synthesize the first audible
+    // target block on the realtime thread. If the scheduled trigger lands near
+    // the end of the callback, the post-jump span can be only 60-100 frames;
+    // serving that from an already-queued Bungee block avoids the first-jump
+    // roughness while preserving sample-exact transport.
+    const int prime_target_frames = std::max(
+        max_in_frames,
+        std::min(max_in_frames * 4, std::max(max_in_frames, sample_rate / 20)));
+    int primed_total = voice.queued_output_frames();
+    int prime_budget = prime_target_frames * 2;
+    while (max_in_frames > 0
+           && primed_total < prime_target_frames
+           && prime_budget > 0) {
+        const int prime_frames = std::min(max_in_frames, prime_budget);
+        std::fill(read_l.begin(), read_l.begin() + prime_frames, 0.0f);
+        std::fill(read_r.begin(), read_r.begin() + prime_frames, 0.0f);
+        const int dst_offset = read_cursor < 0
+            ? static_cast<int>(std::min<Frame>(prime_frames, -read_cursor))
+            : 0;
+        const Frame read_start = std::max<Frame>(0, read_cursor);
+        const int available = (dst_offset >= prime_frames || read_start >= src_end)
+            ? 0
+            : static_cast<int>(std::min<long long>(
+                prime_frames - dst_offset, static_cast<long long>(src_end - read_start)));
+        if (available > 0) {
+            float* read_into[2] = {
+                read_l.data() + dst_offset,
+                read_r.data() + dst_offset};
+            const int got = source.read(read_start, available, read_into,
+                                         std::min(2, source.channel_count()));
+            if (got > 0 && source.channel_count() == 1) {
+                std::copy_n(read_l.begin() + dst_offset, got,
+                            read_r.begin() + dst_offset);
+            }
+        }
+        const int before = voice.queued_output_frames();
+        (void)voice.prime_output_fifo(in_ptrs.data(), prime_frames, pitch_scale);
+        primed_total = voice.queued_output_frames();
+        read_cursor += prime_frames;
+        prime_budget -= prime_frames;
+        if (primed_total <= before)
+            break;
+    }
 }
 
 // Per-clip prep spec for a single prearmed target.
 struct PrepSpec {
     Id                   clip_id;
+    Id                   source_id;
     std::shared_ptr<const DecodedSource> source;
     Frame                target_source_frame = 0;
     Semitones            effective_semitones = 0;
@@ -250,19 +307,107 @@ std::vector<PrepSpec> enumerate_prep_specs(const Song& song,
 
     PrepSpec spec;
     spec.clip_id              = clip.id;
+    spec.source_id            = clip.source_id;
     spec.source               = std::move(src);
     spec.target_source_frame  = clip.source_start_frame
                                 + (target_timeline_frame - clip.timeline_start_frame);
     spec.effective_semitones  = decision.effective_semitones;
-    const int required_frames = std::max(1, spec.source->sample_rate() / 4);
-    if (!spec.source->is_range_ready(spec.target_source_frame, required_frames)) {
-        request_source_range(sources, clip.source_id,
-                             spec.target_source_frame, required_frames);
-        if (out_unloaded_clips) ++*out_unloaded_clips;
-        return out;
-    }
     out.push_back(spec);
     return out;
+}
+
+bool ensure_bungee_jump_read_window_ready(const SourceManager& sources,
+                                          const PrepSpec& spec,
+                                          int max_in_frames,
+                                          int latency_frames,
+                                          int compensation_frames) {
+    if (!spec.source)
+        return false;
+
+    const Frame src_end = spec.source->duration_frames();
+    if (src_end <= 0 || spec.target_source_frame >= src_end)
+        return false;
+
+    const Frame compensation_start =
+        spec.target_source_frame + std::min<Frame>(0, compensation_frames);
+    const Frame read_start =
+        spec.target_source_frame
+        + static_cast<Frame>(latency_frames)
+        + static_cast<Frame>(compensation_frames);
+
+    // The prepared FIFO covers the first output block, but the next audio
+    // callback immediately feeds Bungee from read_start. Make that future
+    // input window part of the readiness contract, otherwise a prepared jump
+    // can still feed zeros on the first real post-jump Bungee process().
+    const Frame required_start = std::min(compensation_start, read_start);
+    const int prepared_read_ahead = std::max(
+        std::max(1, max_in_frames) * 2,
+        std::max(1, spec.source->sample_rate() / 2));
+    const Frame required_end =
+        read_start + static_cast<Frame>(prepared_read_ahead);
+
+    const Frame clamped_start = std::max<Frame>(0, required_start);
+    const Frame clamped_end = std::min<Frame>(
+        src_end, std::max<Frame>(clamped_start, required_end));
+    if (clamped_end <= clamped_start)
+        return true;
+
+    const int required_frames = static_cast<int>(std::min<Frame>(
+        clamped_end - clamped_start,
+        static_cast<Frame>(std::numeric_limits<int>::max())));
+
+    if (spec.source->is_range_ready(clamped_start, required_frames))
+        return true;
+
+    request_source_range(sources, spec.source_id, clamped_start, required_frames);
+    const int wait_ms = prearm_source_wait_ms();
+    if (lt_env_flag_enabled("LIBRETRACKS_JUMP_DEBUG")) {
+        lt_debug_log(
+            "[LT_JUMP_DEBUG][prearm] wait_source_window clip=%s source=%s target_source_frame=%lld ready_start=%lld ready_frames=%d latency=%d compensation=%d max_in=%d wait_ms=%d\n",
+            spec.clip_id.c_str(),
+            spec.source_id.c_str(),
+            static_cast<long long>(spec.target_source_frame),
+            static_cast<long long>(clamped_start),
+            required_frames,
+            latency_frames,
+            compensation_frames,
+            max_in_frames,
+            wait_ms);
+    }
+    if (wait_ms <= 0)
+        return false;
+
+    const auto start = std::chrono::steady_clock::now();
+    const auto deadline = start + std::chrono::milliseconds(wait_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (spec.source->is_range_ready(clamped_start, required_frames)) {
+            if (lt_env_flag_enabled("LIBRETRACKS_JUMP_DEBUG")) {
+                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - start).count();
+                lt_debug_log(
+                    "[LT_JUMP_DEBUG][prearm] source_window_ready clip=%s source=%s ready_start=%lld ready_frames=%d elapsed_ms=%lld\n",
+                    spec.clip_id.c_str(),
+                    spec.source_id.c_str(),
+                    static_cast<long long>(clamped_start),
+                    required_frames,
+                    static_cast<long long>(elapsed));
+            }
+            return true;
+        }
+        request_source_range(sources, spec.source_id, clamped_start, required_frames);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    if (lt_env_flag_enabled("LIBRETRACKS_JUMP_DEBUG")) {
+        lt_debug_log(
+            "[LT_JUMP_DEBUG][prearm] source_window_timeout clip=%s source=%s ready_start=%lld ready_frames=%d wait_ms=%d\n",
+            spec.clip_id.c_str(),
+            spec.source_id.c_str(),
+            static_cast<long long>(clamped_start),
+            required_frames,
+            wait_ms);
+    }
+    return spec.source->is_range_ready(clamped_start, required_frames);
 }
 
 } // namespace
@@ -289,14 +434,16 @@ struct PrearmedJumpManager::Impl {
     // the whole cache. Phase 6 adds finer-grained revisions.
     std::uint64_t current_revision = 0;
 
-    // Phase 7: max prepared sets retained. Initial default reads env var
-    // LIBRETRACKS_PREARM_MAX_TARGETS, falling back to 8 (spec default).
+    // Max prepared sets retained. Live use needs marks and region starts to be
+    // genuinely prearmed before the performer asks for them; a tiny cap causes
+    // older marks to be evicted and then rebuilt just-in-time on first use.
+    // Keep the manual env override, but default high enough for real setlists.
     int max_prepared_targets = [] {
         if (const char* v = std::getenv("LIBRETRACKS_PREARM_MAX_TARGETS")) {
             const int n = std::atoi(v);
             if (n > 0 && n < 1024) return n;
         }
-        return 8;
+        return 128;
     }();
 
     std::atomic<std::uint64_t> prepared_total       {0};
@@ -386,8 +533,7 @@ void PrearmedJumpManager::clear() {
     const std::size_t before = impl_->prepared_map.size();
     impl_->clear_prepared_map_locked();
     if (prearm_log_enabled() && before > 0) {
-        std::fprintf(stdout, "[PREARM] clear discarded=%zu\n", before);
-        std::fflush(stdout);
+        lt_debug_log("[PREARM] clear discarded=%zu\n", before);
     }
 }
 
@@ -453,11 +599,23 @@ BuildResult build_prepared_set(
                     continue;
                 }
                 warm_voice_silence(*voice, sample_rate, channel_count, max_in_frames);
+                const double pitch_scale =
+                    semitones_to_pitch_scale(spec.effective_semitones);
+                const int latency_frames =
+                    static_cast<int>(voice->latency_frames());
+                const int compensation_frames =
+                    voice->alignment_compensation_frames(pitch_scale);
+                if (!ensure_bungee_jump_read_window_ready(
+                        sources, spec, max_in_frames,
+                        latency_frames, compensation_frames)) {
+                    ++br.unloaded_clips_skipped;
+                    continue;
+                }
                 if (spec.source) {
                     prefeed_voice_with_target_audio(
                         *voice, *spec.source, spec.target_source_frame,
                         sample_rate, channel_count, max_in_frames,
-                        semitones_to_pitch_scale(spec.effective_semitones));
+                        pitch_scale);
                 }
                 // The voice has already been warmed and prefed up to the
                 // target. A second per-voice fade here re-shapes the prepared
@@ -495,10 +653,9 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
         impl_->clear_prepared_map_locked();
         impl_->current_revision = session_revision;
         if (prearm_log_enabled()) {
-            std::fprintf(stdout,
+            lt_debug_log(
                 "[PREARM] revision_changed new=%llu discarded=%zu\n",
                 static_cast<unsigned long long>(session_revision), before);
-            std::fflush(stdout);
         }
     }
 
@@ -548,12 +705,11 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
         // through to prepare_target_now (also misses) → reactive rebuild.
         if (br.unloaded_clips_skipped > 0) {
             if (prearm_log_enabled()) {
-                std::fprintf(stdout,
+                lt_debug_log(
                     "[PREARM] skip_unloaded kind=%s song=%s id=%s frame=%lld unloaded_clips=%d\n",
                     target_kind_label(kind), song.id.c_str(),
                     target_id.c_str(), static_cast<long long>(target_frame),
                     br.unloaded_clips_skipped);
-                std::fflush(stdout);
             }
             return;
         }
@@ -561,21 +717,19 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
         if (!set->valid) {
             impl_->prepare_failed_total.fetch_add(1, std::memory_order_relaxed);
             if (prearm_log_enabled()) {
-                std::fprintf(stdout,
+                lt_debug_log(
                     "[PREARM] prepare_failed kind=%s song=%s id=%s frame=%lld\n",
                     target_kind_label(kind), song.id.c_str(),
                     target_id.c_str(), static_cast<long long>(target_frame));
-                std::fflush(stdout);
             }
         } else {
             impl_->prepared_total.fetch_add(1, std::memory_order_relaxed);
             if (prearm_log_enabled()) {
-                std::fprintf(stdout,
+                lt_debug_log(
                     "[PREARM] prepared kind=%s song=%s id=%s frame=%lld voices=%zu\n",
                     target_kind_label(kind), song.id.c_str(),
                     target_id.c_str(), static_cast<long long>(target_frame),
                     set->tracks.size());
-                std::fflush(stdout);
             }
         }
 
@@ -589,10 +743,9 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
             impl_->evict_one_oldest_locked();
             if (impl_->prepared_map.size() == before) break; // safety
             if (prearm_log_enabled()) {
-                std::fprintf(stdout,
+                lt_debug_log(
                     "[PREARM] evicted_oldest (over cap=%d, now=%zu)\n",
                     impl_->max_prepared_targets, impl_->prepared_map.size());
-                std::fflush(stdout);
             }
         }
     };
@@ -668,22 +821,20 @@ PrearmedJumpManager::prepare_target_now(const Session& session,
     if (!set->valid) {
         impl_->prepare_failed_total.fetch_add(1, std::memory_order_relaxed);
         if (prearm_log_enabled()) {
-            std::fprintf(stdout,
+            lt_debug_log(
                 "[PREARM] prepare_target_now_failed kind=%s song=%s id=%s frame=%lld\n",
                 target_kind_label(kind), song_id.c_str(),
                 target_id.c_str(), static_cast<long long>(target_frame));
-            std::fflush(stdout);
         }
         return nullptr;
     }
     impl_->prepared_total.fetch_add(1, std::memory_order_relaxed);
     if (prearm_log_enabled()) {
-        std::fprintf(stdout,
+        lt_debug_log(
             "[PREARM] prepare_target_now_ok kind=%s song=%s id=%s frame=%lld voices=%zu\n",
             target_kind_label(kind), song_id.c_str(),
             target_id.c_str(), static_cast<long long>(target_frame),
             set->tracks.size());
-        std::fflush(stdout);
     }
     return set;
 }
@@ -783,17 +934,15 @@ void PrearmedJumpManager::prepare_all_targets_async(
                 // sync path, current_revision moved. Run anyway; the sync
                 // clear will discard our results on next revision bump.
                 if (prearm_log_enabled()) {
-                    std::fprintf(stdout,
+                    lt_debug_log(
                         "[PREARM] worker_start revision=%llu\n",
                         static_cast<unsigned long long>(job->revision));
-                    std::fflush(stdout);
                 }
                 prepare_all_targets(*job->session, *job->sources, job->revision);
                 if (prearm_log_enabled()) {
-                    std::fprintf(stdout,
+                    lt_debug_log(
                         "[PREARM] worker_done revision=%llu\n",
                         static_cast<unsigned long long>(job->revision));
-                    std::fflush(stdout);
                 }
             }
         });

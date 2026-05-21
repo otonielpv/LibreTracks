@@ -1,6 +1,7 @@
 #include <lt_engine/engine_impl.h>
 #include <lt_engine/core/engine_core.h>
 #include <lt_engine/core/events.h>
+#include <lt_engine/debug/logging.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
@@ -11,10 +12,12 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <mutex>
 #include <queue>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_set>
 
 namespace lt {
@@ -30,27 +33,6 @@ bool env_flag_enabled(const char* name) {
     std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value == "1" || value == "true" || value == "yes" || value == "on";
-}
-
-// Debug log: writes to both stdout AND a temp file so output survives Tauri's stdio routing.
-// File: %TEMP%\lt_pitch_debug.log  (or /tmp/lt_pitch_debug.log on non-Windows)
-static FILE* debug_log_file() {
-    static FILE* s_file = nullptr;
-    static bool  s_tried = false;
-    if (!s_tried) {
-        s_tried = true;
-        // Try several locations in order so at least one succeeds.
-        const char* candidates[] = {
-            "D:\\Repos\\LibreTracks\\lt_pitch_debug.log",
-            "C:\\lt_pitch_debug.log",
-            nullptr
-        };
-        for (int i = 0; candidates[i] != nullptr; ++i) {
-            s_file = std::fopen(candidates[i], "w");
-            if (s_file) break;
-        }
-    }
-    return s_file;
 }
 
 // Single source of truth for LIBRETRACKS_AUDIO_DEBUG. Cached on first call so
@@ -76,18 +58,36 @@ static bool jump_debug_enabled() {
 
 static void debug_log(const char* fmt, ...) {
     if (!audio_debug_enabled() && !jump_debug_enabled()) return;
-    va_list args1, args2;
-    va_start(args1, fmt);
-    va_copy(args2, args1);
-    std::vfprintf(stdout, fmt, args1);
-    std::fflush(stdout);
-    va_end(args1);
-    FILE* f = debug_log_file();
-    if (f) {
-        std::vfprintf(f, fmt, args2);
-        std::fflush(f);
+    va_list args;
+    va_start(args, fmt);
+    lt_debug_vlog(fmt, args);
+    va_end(args);
+}
+
+struct PreparedVoiceDebugSummary {
+    int voices = 0;
+    int queued_min = 0;
+    int queued_max = 0;
+    int queued_total = 0;
+};
+
+PreparedVoiceDebugSummary summarize_prepared_voice_map(
+    const std::shared_ptr<const PreparedVoiceMap>& voices) {
+    PreparedVoiceDebugSummary out;
+    if (!voices || voices->empty())
+        return out;
+    out.queued_min = std::numeric_limits<int>::max();
+    for (const auto& kv : *voices) {
+        if (!kv.second) continue;
+        const int queued = kv.second->queued_output_frames();
+        ++out.voices;
+        out.queued_total += queued;
+        out.queued_min = std::min(out.queued_min, queued);
+        out.queued_max = std::max(out.queued_max, queued);
     }
-    va_end(args2);
+    if (out.voices == 0)
+        out.queued_min = 0;
+    return out;
 }
 
 const char* jump_target_kind_name(JumpTarget::Kind kind) noexcept {
@@ -135,17 +135,91 @@ void request_jump_target_audio(SourceManager& sources,
     }
 }
 
+int seek_source_wait_ms() {
+    static const int value = [] {
+        const char* v = std::getenv("LIBRETRACKS_SEEK_SOURCE_WAIT_MS");
+        if (!v) return 750;
+        const int parsed = std::atoi(v);
+        return parsed >= 0 && parsed <= 10000 ? parsed : 750;
+    }();
+    return value;
+}
+
+bool jump_target_audio_ready(SourceManager& sources,
+                             const Session& session,
+                             Frame target_frame,
+                             int window_frames) noexcept {
+    for (const auto& song : session.songs) {
+        if (target_frame < song.start_frame || target_frame >= song.end_frame)
+            continue;
+        for (const auto& track : song.tracks) {
+            if (track.kind != TrackKind::Audio)
+                continue;
+            for (const auto& clip : track.clips) {
+                const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
+                if (target_frame < clip.timeline_start_frame || target_frame >= clip_end)
+                    continue;
+                const auto source = sources.get_shared(clip.source_id);
+                if (!source || !source->is_streaming())
+                    continue;
+                const Frame source_frame = clip.source_start_frame
+                    + (target_frame - clip.timeline_start_frame);
+                const Frame read_start = std::max<Frame>(0, source_frame);
+                if (read_start >= source->duration_frames())
+                    continue;
+                const int frames = std::max(1, static_cast<int>(std::min<Frame>(
+                    std::min<Frame>(
+                        static_cast<Frame>(std::max(1, window_frames)),
+                        source->duration_frames() - read_start),
+                    static_cast<Frame>(std::numeric_limits<int>::max()))));
+                if (!source->is_range_ready(read_start, frames))
+                    return false;
+            }
+        }
+        break;
+    }
+    return true;
+}
+
+void wait_jump_target_audio_ready(SourceManager& sources,
+                                  const Session& session,
+                                  Frame target_frame,
+                                  int window_frames) noexcept {
+    request_jump_target_audio(sources, session, target_frame, window_frames);
+    if (jump_target_audio_ready(sources, session, target_frame, window_frames))
+        return;
+
+    const int wait_ms = seek_source_wait_ms();
+    if (wait_ms <= 0)
+        return;
+
+    const auto start = std::chrono::steady_clock::now();
+    const auto deadline = start + std::chrono::milliseconds(wait_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (jump_target_audio_ready(sources, session, target_frame, window_frames))
+            return;
+        request_jump_target_audio(sources, session, target_frame, window_frames);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    if (jump_debug_enabled()) {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start).count();
+        debug_log(
+            "[LT_JUMP_DEBUG][native-command] seek_source_window_timeout target_frame=%lld window_frames=%d wait_ms=%d elapsed_ms=%lld\n",
+            static_cast<long long>(target_frame),
+            window_frames,
+            wait_ms,
+            static_cast<long long>(elapsed));
+    }
+}
+
 // Fires the moment the DLL is loaded by Windows, before any exported function is called.
 struct DllLoadProbe {
     DllLoadProbe() {
         if (!audio_debug_enabled()) return;
-        FILE* f = debug_log_file();
-        if (f) {
-            std::fprintf(f, "[LT_PITCH_DEBUG] DLL_LOADED lt_audio_engine_v2\n");
-            std::fflush(f);
-        }
-        std::fprintf(stdout, "[LT_PITCH_DEBUG] DLL_LOADED lt_audio_engine_v2\n");
-        std::fflush(stdout);
+        lt_reset_debug_log_file();
+        lt_debug_log("[LT_PITCH_DEBUG] DLL_LOADED lt_audio_engine_v2\n");
     }
 };
 static DllLoadProbe s_dll_load_probe;
@@ -427,13 +501,12 @@ std::string EngineImpl::get_snapshot() const {
                     const double comp_s = static_cast<double>(compensated) / sr;
                     const double lead_ms =
                         (static_cast<double>(dbg_latency) / sr) * 1000.0;
-                    std::printf("[SNAP_FRAME] wall_ms=%lld raw_frame=%lld comp_frame=%lld "
-                                "raw_s=%.4f comp_s=%.4f buf=%d lat=%d lead_ms=%.2f sr=%d\n",
-                                static_cast<long long>(wall_ms),
-                                static_cast<long long>(pos.frame),
-                                static_cast<long long>(compensated),
-                                raw_s, comp_s, dbg_buffer, dbg_latency, lead_ms, sr);
-                    std::fflush(stdout);
+                    lt_debug_log("[SNAP_FRAME] wall_ms=%lld raw_frame=%lld comp_frame=%lld "
+                                 "raw_s=%.4f comp_s=%.4f buf=%d lat=%d lead_ms=%.2f sr=%d\n",
+                                 static_cast<long long>(wall_ms),
+                                 static_cast<long long>(pos.frame),
+                                 static_cast<long long>(compensated),
+                                 raw_s, comp_s, dbg_buffer, dbg_latency, lead_ms, sr);
                 }
             }
         }
@@ -763,6 +836,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (prearmed_jumps_) {
                 const auto rev = prearm_revision_.fetch_add(1,
                     std::memory_order_relaxed) + 1;
+                if (jump_debug_enabled()) {
+                    debug_log(
+                        "[LT_JUMP_DEBUG][prearm] request_all reason=load_session revision=%llu\n",
+                        static_cast<unsigned long long>(rev));
+                }
                 prearmed_jumps_->prepare_all_targets_async(
                     next_session, source_manager_.get(), rev);
             }
@@ -816,28 +894,46 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 return Result<void>::ok();
             }
 
+            const int seek_window = std::max(
+                4096,
+                (device_manager_ ? device_manager_->actual_buffer_size() : 1024) * 8);
+            if (source_manager_ && session_)
+                request_jump_target_audio(*source_manager_, *session_, c.frame, seek_window);
+            std::shared_ptr<const PreparedVoiceMap> seek_voice_map;
+            if (bungee_voices_ && bungee_voices_->is_available() && session_ && source_manager_) {
+                seek_voice_map = bungee_voices_->build_seek_voice_map(
+                    c.frame, *session_, *source_manager_);
+            }
+            if (source_manager_ && session_)
+                wait_jump_target_audio_ready(*source_manager_, *session_, c.frame, seek_window);
             clock_->seek(c.frame);
+            if (bungee_voices_ && seek_voice_map)
+                bungee_voices_->publish_prepared_voice_map_realtime(std::move(seek_voice_map));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
             if (mixer_) mixer_->trigger_crossfade();
-            if (bungee_voices_ && bungee_voices_->is_available() && session_) {
-                bungee_voices_->clear();
-                bungee_voices_->rebuild_for_seek_async(
-                    clock_->position().frame, *session_, *source_manager_);
-            }
             push_event(EvSeekExecuted{ from, c.frame });
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSeekRelative>) {
             Frame from = clock_->position().frame;
             Frame to   = from + c.delta_frames;
+            const int seek_window = std::max(
+                4096,
+                (device_manager_ ? device_manager_->actual_buffer_size() : 1024) * 8);
+            if (source_manager_ && session_)
+                request_jump_target_audio(*source_manager_, *session_, to, seek_window);
+            std::shared_ptr<const PreparedVoiceMap> seek_voice_map;
+            if (bungee_voices_ && bungee_voices_->is_available() && session_ && source_manager_) {
+                seek_voice_map = bungee_voices_->build_seek_voice_map(
+                    to, *session_, *source_manager_);
+            }
+            if (source_manager_ && session_)
+                wait_jump_target_audio_ready(*source_manager_, *session_, to, seek_window);
             clock_->seek(to);
+            if (bungee_voices_ && seek_voice_map)
+                bungee_voices_->publish_prepared_voice_map_realtime(std::move(seek_voice_map));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
             if (mixer_) mixer_->trigger_crossfade();
-            if (bungee_voices_ && bungee_voices_->is_available() && session_) {
-                bungee_voices_->clear();
-                bungee_voices_->rebuild_for_seek_async(
-                    clock_->position().frame, *session_, *source_manager_);
-            }
             push_event(EvSeekExecuted{ from, to });
             return Result<void>::ok();
         }
@@ -1153,6 +1249,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                 break;
                         }
 
+                        const char* prearm_source = "none";
+                        int prearm_set_voices = 0;
+                        bool prearm_set_valid = false;
                         if (prearm_kind && !song_id.empty() && !target_id.empty()) {
                             const auto rev = prearm_revision_.load(std::memory_order_relaxed);
                             PrearmTargetKey key;
@@ -1209,6 +1308,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             *source_manager_, *session_, resolved_target_frame_for_log, window);
                     }
                 }
+                const char* prearm_source = "none";
+                int prearm_set_voices = 0;
+                bool prearm_set_valid = false;
                 if (prearmed_jumps_ && bungee_voices_ && bungee_voices_->is_available()
                     && source_manager_ && clock_) {
                     auto resolved = resolved_for_schedule_log;
@@ -1293,12 +1395,18 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
 
                             std::unique_ptr<PreparedJumpVoiceSet> prepared =
                                 prearmed_jumps_->take_ready(key);
+                            if (prepared) {
+                                prearm_source = "take_ready";
+                            }
                             if (!prepared) {
                                 prepared = prearmed_jumps_->prepare_target_now(
                                     *session_, *source_manager_, *prearm_kind, song_id,
                                     target_id, target_frame, rev);
+                                prearm_source = prepared ? "prepare_now" : "miss";
                             }
                             if (prepared) {
+                                prearm_set_valid = prepared->valid;
+                                prearm_set_voices = static_cast<int>(prepared->tracks.size());
                                 jump.prepared_voice_map =
                                     bungee_voices_->build_prepared_voice_map(
                                         prepared->extract_voice_map());
@@ -1309,8 +1417,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     }
                 }
                 if (jump_debug_enabled()) {
+                    const auto prepared_summary =
+                        summarize_prepared_voice_map(jump.prepared_voice_map);
                     debug_log(
-                        "[LT_JUMP_DEBUG][native-command] schedule jump_id=%s trigger=%s target_kind=%s target_id=%s target_frame=%lld trigger_frame=%lld current_frame=%lld prepared=%d suppress_seek_fade=%d\n",
+                        "[LT_JUMP_DEBUG][native-command] schedule jump_id=%s trigger=%s target_kind=%s target_id=%s target_frame=%lld trigger_frame=%lld current_frame=%lld prepared=%d suppress_seek_fade=%d prearm_source=%s prearm_set_valid=%d prearm_set_voices=%d prepared_voices=%d prepared_fifo_min=%d prepared_fifo_max=%d prepared_fifo_total=%d\n",
                         c.jump_id.c_str(),
                         jump_trigger_name(c.trigger),
                         jump_target_kind_name(c.target.kind),
@@ -1319,7 +1429,14 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         static_cast<long long>(jump.trigger_frame.value_or(-1)),
                         static_cast<long long>(clock_->position().frame),
                         jump.prepared_voice_map ? 1 : 0,
-                        jump.suppress_seek_fade ? 1 : 0);
+                        jump.suppress_seek_fade ? 1 : 0,
+                        prearm_source,
+                        prearm_set_valid ? 1 : 0,
+                        prearm_set_voices,
+                        prepared_summary.voices,
+                        prepared_summary.queued_min,
+                        prepared_summary.queued_max,
+                        prepared_summary.queued_total);
                 }
                 auto r = scheduler_->schedule(jump);
                 if (r.is_err()) return r;
@@ -1444,6 +1561,44 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     if (prearmed_jumps_) {
                         const auto rev = prearm_revision_.fetch_add(1,
                             std::memory_order_relaxed) + 1;
+                        prearmed_jumps_->prepare_all_targets_async(
+                            next_session, source_manager_.get(), rev);
+                    }
+                }
+            }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetSongMarkers>) {
+            if (session_) {
+                auto next_session = std::make_shared<Session>(*session_);
+                bool changed = false;
+                for (auto& song : next_session->songs) {
+                    if (song.id != c.song_id) continue;
+                    song.markers.clear();
+                    song.markers.reserve(c.markers.size());
+                    for (const auto& update : c.markers) {
+                        Marker marker;
+                        marker.id = update.id;
+                        marker.name = update.name;
+                        marker.frame = update.frame;
+                        song.markers.push_back(std::move(marker));
+                    }
+                    changed = true;
+                    break;
+                }
+                if (changed) {
+                    session_ = next_session;
+                    (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+                    if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                    if (prearmed_jumps_) {
+                        const auto rev = prearm_revision_.fetch_add(1,
+                            std::memory_order_relaxed) + 1;
+                        if (jump_debug_enabled()) {
+                            debug_log(
+                                "[LT_JUMP_DEBUG][prearm] request_all reason=set_song_markers revision=%llu markers=%zu\n",
+                                static_cast<unsigned long long>(rev),
+                                c.markers.size());
+                        }
                         prearmed_jumps_->prepare_all_targets_async(
                             next_session, source_manager_.get(), rev);
                     }

@@ -294,6 +294,10 @@ Assert-NativeToolchainReady
 
 Set-Location $repoRoot
 
+if (-not $env:LIBRETRACKS_AUDIO_DEBUG_LOG) {
+  $env:LIBRETRACKS_AUDIO_DEBUG_LOG = Join-Path $repoRoot "lt_audio_debug.log"
+}
+
 if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
   throw "CMake is required to build Audio Engine v2. Install CMake or build native/audio-engine-v2 manually."
 }
@@ -320,6 +324,9 @@ Write-Host "Audio Engine v2 lib dir: $engineV2LibDir"
 Write-Host "LT_ENGINE_USE_LIBSNDFILE: $useLibSndFile"
 Write-Host "LT_ENGINE_USE_R8BRAIN: $useR8Brain"
 Write-Host "LT_ENGINE_USE_FFMPEG: $useFFmpeg"
+if ($env:LIBRETRACKS_AUDIO_DEBUG -or $env:LIBRETRACKS_JUMP_DEBUG) {
+  Write-Host "LIBRETRACKS_AUDIO_DEBUG_LOG: $env:LIBRETRACKS_AUDIO_DEBUG_LOG"
+}
 
 if ($env:LIBRETRACKS_ENGINE_V2_CLEAN -match '^(1|true|TRUE|yes|YES|on|ON)$') {
   if (Test-Path $engineV2BuildDir) {

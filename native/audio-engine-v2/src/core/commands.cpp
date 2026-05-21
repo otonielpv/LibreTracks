@@ -155,6 +155,19 @@ EngineCommand command_from_json(const std::string& raw) {
         return cmd;
     }
 
+    if (type == "SetSongMarkers") {
+        CmdSetSongMarkers cmd;
+        cmd.song_id = j.at("song_id").get<Id>();
+        for (const auto& item : j.at("markers")) {
+            CmdSetSongMarkers::MarkerUpdate marker;
+            marker.id = item.at("id").get<Id>();
+            marker.name = item.value("name", std::string{});
+            marker.frame = item.at("frame").get<Frame>();
+            cmd.markers.push_back(std::move(marker));
+        }
+        return cmd;
+    }
+
     if (type == "SetOutputDevice")
         return CmdSetOutputDevice{ j.at("device_id").get<std::string>() };
 

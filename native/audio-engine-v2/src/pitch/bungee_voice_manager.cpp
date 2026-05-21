@@ -1,15 +1,18 @@
 #include <lt_engine/pitch/bungee_voice_manager.h>
 
+#include <lt_engine/debug/logging.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/sources/source_manager.h>
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -166,6 +169,7 @@ namespace {
 // live pitch changes via the per-block pitch_scale parameter.
 struct VoiceSpec {
     Id                   clip_id;
+    Id                   source_id;
     std::shared_ptr<const DecodedSource> source;
     Frame                source_frame = 0;  // where in the source we will start
     Semitones            effective_semitones = 0;
@@ -200,18 +204,13 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
 
                 VoiceSpec spec;
                 spec.clip_id      = clip.id;
+                spec.source_id    = clip.source_id;
                 spec.source       = std::move(src);
                 // Source frame the audio thread will request first after the
                 // playhead lands here. We will prime up to this position.
                 spec.source_frame = clip.source_start_frame
                                     + (playhead - clip.timeline_start_frame);
                 spec.effective_semitones = decision.effective_semitones;
-                const int required_frames = std::max(1, spec.source->sample_rate() / 4);
-                if (!spec.source->is_range_ready(spec.source_frame, required_frames)) {
-                    request_source_range(sources, clip.source_id,
-                                         spec.source_frame, required_frames);
-                    continue;
-                }
                 out.push_back(spec);
             }
         }
@@ -290,9 +289,85 @@ double semitones_to_pitch_scale(Semitones semitones) {
     return std::pow(2.0, static_cast<double>(semitones) / 12.0);
 }
 
+int seek_source_wait_ms() {
+    static const int value = [] {
+        const char* v = std::getenv("LIBRETRACKS_SEEK_SOURCE_WAIT_MS");
+        if (!v) return 750;
+        const int parsed = std::atoi(v);
+        return parsed >= 0 && parsed <= 10000 ? parsed : 750;
+    }();
+    return value;
+}
+
+bool ensure_seek_read_window_ready(const SourceManager& sources,
+                                   const VoiceSpec& spec,
+                                   int max_in_frames,
+                                   int latency_frames,
+                                   int compensation_frames) {
+    if (!spec.source)
+        return false;
+
+    const Frame src_end = spec.source->duration_frames();
+    if (src_end <= 0 || spec.source_frame >= src_end)
+        return false;
+
+    const Frame compensation_start =
+        spec.source_frame + std::min<Frame>(0, compensation_frames);
+    const Frame read_start =
+        spec.source_frame
+        + static_cast<Frame>(latency_frames)
+        + static_cast<Frame>(compensation_frames);
+    const int read_ahead = std::max(
+        std::max(1, max_in_frames) * 2,
+        std::max(1, spec.source->sample_rate() / 2));
+    const Frame required_start = std::min(compensation_start, read_start);
+    const Frame required_end = read_start + static_cast<Frame>(read_ahead);
+
+    const Frame clamped_start = std::max<Frame>(0, required_start);
+    const Frame clamped_end = std::min<Frame>(
+        src_end, std::max<Frame>(clamped_start, required_end));
+    if (clamped_end <= clamped_start)
+        return true;
+
+    const int required_frames = static_cast<int>(std::min<Frame>(
+        clamped_end - clamped_start,
+        static_cast<Frame>(std::numeric_limits<int>::max())));
+    if (spec.source->is_range_ready(clamped_start, required_frames))
+        return true;
+
+    request_source_range(sources, spec.source_id, clamped_start, required_frames);
+    const int wait_ms = seek_source_wait_ms();
+    if (lt_env_flag_enabled("LIBRETRACKS_JUMP_DEBUG")) {
+        lt_debug_log(
+            "[LT_JUMP_DEBUG][bungee] wait_seek_source clip=%s source=%s source_frame=%lld ready_start=%lld ready_frames=%d latency=%d compensation=%d max_in=%d wait_ms=%d\n",
+            spec.clip_id.c_str(),
+            spec.source_id.c_str(),
+            static_cast<long long>(spec.source_frame),
+            static_cast<long long>(clamped_start),
+            required_frames,
+            latency_frames,
+            compensation_frames,
+            max_in_frames,
+            wait_ms);
+    }
+    if (wait_ms <= 0)
+        return false;
+
+    const auto start = std::chrono::steady_clock::now();
+    const auto deadline = start + std::chrono::milliseconds(wait_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (spec.source->is_range_ready(clamped_start, required_frames))
+            return true;
+        request_source_range(sources, spec.source_id, clamped_start, required_frames);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return spec.source->is_range_ready(clamped_start, required_frames);
+}
+
 void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
                                      const DecodedSource& source,
                                      Frame source_frame,
+                                     int sample_rate,
                                      int channel_count,
                                      int max_in_frames,
                                      double pitch_scale) {
@@ -346,6 +421,44 @@ void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
                                   pitch_scale);
         read_cursor += chunk;
         fed += chunk;
+    }
+
+    const int prime_target_frames = std::max(
+        max_in_frames,
+        std::min(max_in_frames * 4, std::max(max_in_frames, sample_rate / 20)));
+    int primed_total = voice.queued_output_frames();
+    int prime_budget = prime_target_frames * 2;
+    while (max_in_frames > 0
+           && primed_total < prime_target_frames
+           && prime_budget > 0) {
+        const int prime_frames = std::min(max_in_frames, prime_budget);
+        std::fill(read_l.begin(), read_l.begin() + prime_frames, 0.0f);
+        std::fill(read_r.begin(), read_r.begin() + prime_frames, 0.0f);
+        const int dst_offset = read_cursor < 0
+            ? static_cast<int>(std::min<Frame>(prime_frames, -read_cursor))
+            : 0;
+        const Frame read_start = std::max<Frame>(0, read_cursor);
+        const int available = (dst_offset >= prime_frames || read_start >= src_end)
+            ? 0
+            : static_cast<int>(std::min<long long>(
+                prime_frames - dst_offset, static_cast<long long>(src_end - read_start)));
+        if (available > 0) {
+            float* read_into[2] = {
+                read_l.data() + dst_offset,
+                read_r.data() + dst_offset};
+            const int got = source.read(read_start, available, read_into,
+                                         std::min(2, source.channel_count()));
+            if (got > 0 && source.channel_count() == 1)
+                std::copy_n(read_l.begin() + dst_offset, got,
+                            read_r.begin() + dst_offset);
+        }
+        const int before = voice.queued_output_frames();
+        (void)voice.prime_output_fifo(in_ptrs.data(), prime_frames, pitch_scale);
+        primed_total = voice.queued_output_frames();
+        read_cursor += prime_frames;
+        prime_budget -= prime_frames;
+        if (primed_total <= before)
+            break;
     }
 }
 #endif // LT_ENGINE_HAVE_BUNGEE
@@ -405,10 +518,9 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
     std::atomic_store(&impl_->active,
                       std::shared_ptr<const VoiceMap>(std::move(next)));
     if (bungee_debug_enabled()) {
-        std::fprintf(stdout,
+        lt_debug_log(
             "[BUNGEE] rebuild_for_session playhead=%lld active=%d built=%d reused=%d\n",
             static_cast<long long>(playhead), active_count, built, reused);
-        std::fflush(stdout);
     }
 #else
     (void)session; (void)sources; (void)playhead;
@@ -418,10 +530,72 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
 void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
                                            const Session& session,
                                            const SourceManager& sources) {
+    auto next = build_seek_voice_map(target_frame, session, sources);
+    publish_prepared_voice_map_realtime(std::move(next));
+}
+
+std::shared_ptr<const PreparedVoiceMap>
+BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
+                                          const Session& session,
+                                          const SourceManager& sources) {
+    if (!is_available()) return {};
+
+#if LT_ENGINE_HAVE_BUNGEE
     if (impl_)
         impl_->publish_generation.fetch_add(1, std::memory_order_acq_rel);
-    rebuild_for_seek_guarded(target_frame, session, sources,
-                             impl_ ? impl_->publish_generation.load(std::memory_order_acquire) : 0);
+    std::lock_guard build_lock(impl_->build_mutex);
+
+    // Per Bungee issue #16: the recommended reset model is destroy + rebuild.
+    // Build fresh voices for every audible clip at the seek target, but do not
+    // publish them here. The caller owns the atomicity of clock seek + publish.
+    const auto specs = enumerate_voices(session, sources, target_frame);
+
+    auto next = std::make_shared<VoiceMap>();
+    next->reserve(specs.size());
+
+    int built = 0;
+    for (const auto& spec : specs) {
+        auto voice = std::make_shared<BungeePitchVoice>();
+        if (!voice->configure(impl_->sample_rate,
+                              impl_->channel_count,
+                              impl_->max_in_frames)) {
+            continue;
+        }
+        warm_voice(*voice,
+                   impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+        const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
+        const int latency_frames = static_cast<int>(voice->latency_frames());
+        const int compensation_frames =
+            voice->alignment_compensation_frames(pitch_scale);
+        if (!ensure_seek_read_window_ready(
+                sources, spec, impl_->max_in_frames,
+                latency_frames, compensation_frames)) {
+            continue;
+        }
+        if (spec.source) {
+            prefeed_voice_with_source_audio(
+                *voice, *spec.source, spec.source_frame,
+                impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
+                pitch_scale);
+        }
+        voice->arm_fade_in(0);
+        (*next)[spec.clip_id] = std::move(voice);
+        ++built;
+        impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    if (bungee_debug_enabled()) {
+        lt_debug_log(
+            "[BUNGEE] build_seek_voice_map target=%lld voices=%d built=%d\n",
+            static_cast<long long>(target_frame),
+            static_cast<int>(next->size()),
+            built);
+    }
+    return std::shared_ptr<const VoiceMap>(std::move(next));
+#else
+    (void)target_frame; (void)session; (void)sources;
+    return {};
+#endif
 }
 
 void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
@@ -455,11 +629,20 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
         // warm_voice consumed the voice's initial fade window with zero
         // input. Prefeed target audio and discard Bungee's silence->audio
         // transition so the audio thread starts on an already-stable grain.
+        const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
+        const int latency_frames = static_cast<int>(voice->latency_frames());
+        const int compensation_frames =
+            voice->alignment_compensation_frames(pitch_scale);
+        if (!ensure_seek_read_window_ready(
+                sources, spec, impl_->max_in_frames,
+                latency_frames, compensation_frames)) {
+            continue;
+        }
         if (spec.source) {
             prefeed_voice_with_source_audio(
                 *voice, *spec.source, spec.source_frame,
-                impl_->channel_count, impl_->max_in_frames,
-                semitones_to_pitch_scale(spec.effective_semitones));
+                impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
+                pitch_scale);
         }
         // This voice has already been prefed to the seek target; the mixer's
         // seek de-click ramp handles the boundary. Avoid an extra per-voice
@@ -474,23 +657,21 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
     if (expected_generation != 0
         && impl_->publish_generation.load(std::memory_order_acquire) != expected_generation) {
         if (bungee_debug_enabled()) {
-            std::fprintf(stdout,
+            lt_debug_log(
                 "[BUNGEE] discard_stale_rebuild_for_seek target=%lld expected_generation=%llu current_generation=%llu\n",
                 static_cast<long long>(target_frame),
                 static_cast<unsigned long long>(expected_generation),
                 static_cast<unsigned long long>(
                     impl_->publish_generation.load(std::memory_order_acquire)));
-            std::fflush(stdout);
         }
         return;
     }
     std::atomic_store(&impl_->active,
                       std::shared_ptr<const VoiceMap>(std::move(next)));
     if (bungee_debug_enabled()) {
-        std::fprintf(stdout,
+        lt_debug_log(
             "[BUNGEE] rebuild_for_seek target=%lld active=%d built=%d\n",
             static_cast<long long>(target_frame), active_count, built);
-        std::fflush(stdout);
     }
 #else
     (void)target_frame; (void)session; (void)sources;
@@ -542,10 +723,9 @@ void BungeeVoiceManager::rebuild_for_seek_async(Frame target_frame,
     }
     impl_->worker_cv.notify_one();
     if (bungee_debug_enabled()) {
-        std::fprintf(stdout,
+        lt_debug_log(
             "[BUNGEE] rebuild_for_seek_async target=%lld scheduled\n",
             static_cast<long long>(target_frame));
-        std::fflush(stdout);
     }
 #endif
 }
@@ -573,10 +753,9 @@ void BungeeVoiceManager::swap_in_prepared_voices(PreparedVoiceMap prepared_voice
     std::atomic_store(&impl_->active, std::move(next));
     impl_->rebuilds_for_seek.fetch_add(1, std::memory_order_relaxed);
     if (bungee_debug_enabled()) {
-        std::fprintf(stdout,
+        lt_debug_log(
             "[BUNGEE] swap_in_prepared_voices active=%d (prearmed)\n",
             active_count);
-        std::fflush(stdout);
     }
 #endif
 }

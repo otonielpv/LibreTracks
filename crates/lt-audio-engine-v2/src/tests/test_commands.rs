@@ -149,6 +149,29 @@ fn replace_jump_round_trip() {
     assert!(matches!(rt, EngineCommand::ReplaceScheduledJump { .. }));
 }
 
+#[test]
+fn set_song_markers_round_trip() {
+    let cmd = EngineCommand::SetSongMarkers {
+        song_id: "song1".into(),
+        markers: vec![MarkerUpdate {
+            id: "section_a".into(),
+            name: "Verse".into(),
+            frame: 2025472,
+        }],
+    };
+    let json = serde_json::to_string(&cmd).unwrap();
+    assert!(json.contains("\"type\":\"SetSongMarkers\""));
+    let rt: EngineCommand = serde_json::from_str(&json).unwrap();
+    assert!(matches!(
+        rt,
+        EngineCommand::SetSongMarkers { song_id, markers }
+            if song_id == "song1"
+                && markers.len() == 1
+                && markers[0].id == "section_a"
+                && markers[0].frame == 2025472
+    ));
+}
+
 // ── Track / mix ─────────────────────────────────────────────────────────────
 
 #[test]

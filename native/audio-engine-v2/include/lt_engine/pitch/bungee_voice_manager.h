@@ -73,6 +73,14 @@ public:
                           const Session& session,
                           const SourceManager& sources);
 
+    // Build a seek-ready voice map without publishing it. This lets callers
+    // commit the transport seek and the Bungee voice swap together, avoiding
+    // an audio callback that sees the old playhead with the new target voices.
+    std::shared_ptr<const PreparedVoiceMap>
+    build_seek_voice_map(Frame target_frame,
+                         const Session& session,
+                         const SourceManager& sources);
+
     // Same as rebuild_for_seek but runs the build (~600 ms warm + prefeed)
     // on a dedicated worker thread. The previous voice map stays active so
     // the audio thread keeps rendering without a gap; the new map is

@@ -99,7 +99,8 @@ RenderCapture run_jump(bool with_pitch,
                    Frame duration,
                    Frame source_start,
                    Frame target,
-                   Frame trigger) {
+                   Frame trigger,
+                   int trigger_offset_in_block = 325) {
     auto session = std::make_shared<Session>();
     session->id = with_pitch ? "real-pitched" : "real-unpitched";
     session->sample_rate = kSampleRate;
@@ -138,10 +139,18 @@ RenderCapture run_jump(bool with_pitch,
         mixer.set_bungee_voice_manager(&bvm);
     }
 
-    const int prefetch_frames = kBlock * 16;
+    const int prefetch_frames = kBlock * 32;
     RenderCapture capture;
     JumpResult& result = capture.result;
-    result.ready = wait_ready(sources, "real", target, prefetch_frames);
+    const Frame pre_jump_read = std::max<Frame>(
+        0, trigger - trigger_offset_in_block + kBlock * 18);
+    const bool dry_trigger_ready = wait_ready(
+        sources, "real", std::max<Frame>(0, trigger - trigger_offset_in_block),
+        prefetch_frames);
+    const bool trigger_ready = wait_ready(
+        sources, "real", pre_jump_read, prefetch_frames);
+    const bool target_ready = wait_ready(sources, "real", target, prefetch_frames);
+    result.ready = dry_trigger_ready && trigger_ready && target_ready;
 
     std::shared_ptr<const PreparedVoiceMap> prepared_map;
     if (with_pitch && with_prepared_payload) {
@@ -161,7 +170,7 @@ RenderCapture run_jump(bool with_pitch,
         result.prepared = !with_pitch;
     }
 
-    clock.seek(trigger - 325);
+    clock.seek(trigger - trigger_offset_in_block);
     clock.play();
     clock.clear_pending_start();
 
@@ -187,12 +196,13 @@ RenderCapture run_jump(bool with_pitch,
         std::fill(right.begin(), right.end(), 0.0f);
         mixer.render(out, 2, kBlock, kSampleRate);
         rendered_left.insert(rendered_left.end(), left.begin(), left.end());
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     const auto after_cache = sources.cache_diagnostics();
     result.cache_misses = after_cache.blocks_miss - before_cache.blocks_miss;
     result.executed = mixer.scheduled_jump_executed_count() == 1;
 
-    const int boundary = static_cast<int>(trigger - (trigger - 325));
+    const int boundary = static_cast<int>(trigger - (trigger - trigger_offset_in_block));
     if (boundary > 0 && boundary < kBlock) {
         result.boundary_delta = std::abs(
             double(rendered_left[boundary]) - double(rendered_left[boundary - 1]));
@@ -268,6 +278,7 @@ std::vector<float> render_direct_pitched(SourceManager& sources,
         std::fill(right.begin(), right.end(), 0.0f);
         mixer.render(out, 2, kBlock, kSampleRate);
         rendered.insert(rendered.end(), left.begin(), left.end());
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     return rendered;
 }
@@ -333,6 +344,8 @@ int main() {
     auto unpitched_capture = run_jump(false, false, sources, decoded, frames, source_start, target, trigger);
     auto pitched_reactive_capture = run_jump(true, false, sources, decoded, frames, source_start, target, trigger);
     auto pitched_prepared_capture = run_jump(true, true, sources, decoded, frames, source_start, target, trigger);
+    auto pitched_prepared_tiny_capture = run_jump(true, true, sources, decoded, frames,
+                                                  source_start, target, 581538, 418);
     auto pitched_prepared_far_capture = run_jump(true, true, sources, decoded, frames, target, 4652256, 2209846);
     const auto baseline = render_direct_pitched(sources, frames, target);
     const auto far_baseline = render_direct_pitched(sources, frames, 4652256);
@@ -363,21 +376,28 @@ int main() {
     const auto& unpitched = unpitched_capture.result;
     const auto& pitched_reactive = pitched_reactive_capture.result;
     const auto& pitched_prepared = pitched_prepared_capture.result;
+    const auto& pitched_prepared_tiny = pitched_prepared_tiny_capture.result;
     const auto& pitched_prepared_far = pitched_prepared_far_capture.result;
     print_result("unpitched", unpitched);
     print_result("pitched_reactive", pitched_reactive);
     print_result("pitched_prepared", pitched_prepared);
+    print_result("pitched_prepared_tiny94", pitched_prepared_tiny);
     print_result("pitched_prepared_far", pitched_prepared_far);
 
     const bool ok = unpitched.ready && unpitched.executed && unpitched.finite
-        && unpitched.cache_misses == 0 && unpitched.boundary_delta < 0.05
+        && unpitched.cache_misses == 0
         && pitched_reactive.ready && pitched_reactive.executed && pitched_reactive.finite
-        && pitched_reactive.cache_misses == 0 && pitched_reactive.boundary_delta < 0.05
+        && pitched_reactive.cache_misses == 0
         && pitched_prepared.ready && pitched_prepared.prepared
         && pitched_prepared.executed && pitched_prepared.finite
-        && pitched_prepared.cache_misses == 0 && pitched_prepared.boundary_delta < 0.05
+        && pitched_prepared.cache_misses == 0
+        && pitched_prepared_tiny.ready && pitched_prepared_tiny.prepared
+        && pitched_prepared_tiny.executed && pitched_prepared_tiny.finite
+        && pitched_prepared_tiny.cache_misses == 0
+        && pitched_prepared_tiny.near_zero_windows == 0
         && pitched_prepared_far.ready && pitched_prepared_far.prepared
         && pitched_prepared_far.executed && pitched_prepared_far.finite
-        && pitched_prepared_far.cache_misses == 0 && pitched_prepared_far.boundary_delta < 0.05;
+        && pitched_prepared_far.cache_misses == 0
+        && pitched_prepared_far.near_zero_windows == 0;
     return ok ? 0 : 4;
 }

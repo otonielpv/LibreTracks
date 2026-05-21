@@ -1,4 +1,5 @@
 #include <lt_engine/render/mixer.h>
+#include <lt_engine/debug/logging.h>
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
@@ -12,6 +13,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 namespace lt {
@@ -35,9 +37,34 @@ void jump_debug_log(const char* fmt, ...) {
     if (!jump_debug_enabled()) return;
     va_list args;
     va_start(args, fmt);
-    std::vfprintf(stdout, fmt, args);
-    std::fflush(stdout);
+    lt_debug_vlog(fmt, args);
     va_end(args);
+}
+
+struct PreparedVoiceDebugSummary {
+    int voices = 0;
+    int queued_min = 0;
+    int queued_max = 0;
+    int queued_total = 0;
+};
+
+PreparedVoiceDebugSummary summarize_prepared_voice_map(
+    const std::shared_ptr<const PreparedVoiceMap>& voices) {
+    PreparedVoiceDebugSummary out;
+    if (!voices || voices->empty())
+        return out;
+    out.queued_min = std::numeric_limits<int>::max();
+    for (const auto& kv : *voices) {
+        if (!kv.second) continue;
+        const int queued = kv.second->queued_output_frames();
+        ++out.voices;
+        out.queued_total += queued;
+        out.queued_min = std::min(out.queued_min, queued);
+        out.queued_max = std::max(out.queued_max, queued);
+    }
+    if (out.voices == 0)
+        out.queued_min = 0;
+    return out;
 }
 
 float clamp_pan(float pan) noexcept {
@@ -484,33 +511,50 @@ void Mixer::render(float** output_channels,
         const Frame block_start = clock_->position().frame;
         const int pre_frames = static_cast<int>(std::clamp<Frame>(
             due_jump->trigger_frame - block_start, 0, num_frames));
+        const auto prepared_summary =
+            summarize_prepared_voice_map(due_jump->prepared_voice_map);
         jump_debug_log(
-            "[LT_JUMP_DEBUG][mixer] due block_start=%lld block_frames=%d trigger_frame=%lld pre_frames=%d target_frame=%lld prepared=%d suppress_seek_fade=%d pending_start=%d\n",
+            "[LT_JUMP_DEBUG][mixer] due block_start=%lld block_frames=%d trigger_frame=%lld pre_frames=%d post_frames=%d target_frame=%lld prepared=%d prepared_voices=%d prepared_fifo_min=%d prepared_fifo_max=%d prepared_fifo_total=%d suppress_seek_fade=%d pending_start=%d\n",
             static_cast<long long>(block_start),
             num_frames,
             static_cast<long long>(due_jump->trigger_frame),
             pre_frames,
+            num_frames - pre_frames,
             static_cast<long long>(due_jump->target_frame),
             due_jump->prepared_voice_map ? 1 : 0,
+            prepared_summary.voices,
+            prepared_summary.queued_min,
+            prepared_summary.queued_max,
+            prepared_summary.queued_total,
             due_jump->suppress_seek_fade ? 1 : 0,
             clock_->pending_start() ? 1 : 0);
 
+        const bool apply_seek_fade =
+            !due_jump->suppress_seek_fade || static_cast<bool>(due_jump->prepared_voice_map);
+
         render_timeline_span(output_channels, num_channels, pre_frames, 0, session);
-        if (pre_frames > 0)
+        if (apply_seek_fade && pre_frames > 0)
             fade_.capture_previous_sample(output_channels, num_channels, pre_frames - 1);
 
         const Frame from = clock_->position().frame;
         if (bungee_voices_ && due_jump->prepared_voice_map) {
+            const auto publish_summary =
+                summarize_prepared_voice_map(due_jump->prepared_voice_map);
             jump_debug_log(
-                "[LT_JUMP_DEBUG][mixer] publish_prepared target_frame=%lld from_frame=%lld\n",
+                "[LT_JUMP_DEBUG][mixer] publish_prepared target_frame=%lld from_frame=%lld voices=%d fifo_min=%d fifo_max=%d fifo_total=%d\n",
                 static_cast<long long>(due_jump->target_frame),
-                static_cast<long long>(from));
+                static_cast<long long>(from),
+                publish_summary.voices,
+                publish_summary.queued_min,
+                publish_summary.queued_max,
+                publish_summary.queued_total);
             bungee_voices_->publish_prepared_voice_map_realtime(due_jump->prepared_voice_map);
         }
         clock_->seek(due_jump->target_frame);
         clock_->clear_pending_start();
         scheduler_->mark_executed(from, due_jump->target_frame);
-        fade_.trigger_crossfade();
+        if (apply_seek_fade)
+            fade_.trigger_crossfade();
         if (!due_jump->prepared_voice_map) {
             if (bungee_voices_)
                 bungee_voices_->publish_empty_voice_map_realtime();
@@ -524,20 +568,23 @@ void Mixer::render(float** output_channels,
         render_timeline_span(output_channels, num_channels, num_frames - pre_frames,
                              pre_frames, session);
         jump_debug_log(
-            "[LT_JUMP_DEBUG][mixer] rendered_post_jump post_frames=%d clock_frame_after=%lld executed_count=%llu\n",
+            "[LT_JUMP_DEBUG][mixer] rendered_post_jump post_frames=%d clock_frame_after=%lld executed_count=%llu applied_seek_fade=%d\n",
             num_frames - pre_frames,
             static_cast<long long>(clock_->position().frame),
             static_cast<unsigned long long>(
-                scheduled_jump_executed_count_.load(std::memory_order_relaxed)));
-        std::array<float*, 64> shifted_channels{};
-        float** fade_channels = output_channels;
+                scheduled_jump_executed_count_.load(std::memory_order_relaxed)),
+            apply_seek_fade ? 1 : 0);
         const int post_frames = num_frames - pre_frames;
-        if (num_channels <= static_cast<int>(shifted_channels.size())) {
-            for (int ch = 0; ch < num_channels; ++ch)
-                shifted_channels[static_cast<std::size_t>(ch)] = output_channels[ch] + pre_frames;
-            fade_channels = shifted_channels.data();
+        if (apply_seek_fade) {
+            std::array<float*, 64> shifted_channels{};
+            float** fade_channels = output_channels;
+            if (num_channels <= static_cast<int>(shifted_channels.size())) {
+                for (int ch = 0; ch < num_channels; ++ch)
+                    shifted_channels[static_cast<std::size_t>(ch)] = output_channels[ch] + pre_frames;
+                fade_channels = shifted_channels.data();
+            }
+            fade_.process(fade_channels, num_channels, post_frames);
         }
-        fade_.process(fade_channels, num_channels, post_frames);
         fade_processed_in_split = true;
     } else if (clock_->position().state == TransportState::Playing && session) {
         std::uint64_t rendered_this_block = 0;

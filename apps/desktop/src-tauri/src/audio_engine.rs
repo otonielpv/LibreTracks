@@ -14,7 +14,7 @@ use libretracks_core::Song;
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     DeviceInfo, Engine, EngineCommand, EngineSnapshot, JumpTarget, JumpTargetKind, JumpTrigger,
-    RegionUpdate, SourcePeaks,
+    MarkerUpdate, RegionUpdate, SourcePeaks,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -601,6 +601,32 @@ impl AudioController {
             })?;
             state.last_sync = Some(AudioOperationSummary {
                 reason: Some("set_song_regions".into()),
+                elapsed_ms: 0.0,
+                scheduled_clips: song.clips.len(),
+                active_sinks: song.tracks.len(),
+                opened_files: 0,
+            });
+            Ok(())
+        })
+    }
+
+    pub fn update_live_section_markers(&self, song: &Song) -> Result<(), DesktopError> {
+        self.with_engine_state("set_song_markers", None, |engine, state| {
+            let markers = song
+                .section_markers
+                .iter()
+                .map(|marker| MarkerUpdate {
+                    id: marker.id.clone(),
+                    name: marker.name.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                })
+                .collect();
+            engine.send_command(&EngineCommand::SetSongMarkers {
+                song_id: song.id.clone(),
+                markers,
+            })?;
+            state.last_sync = Some(AudioOperationSummary {
+                reason: Some("set_song_markers".into()),
                 elapsed_ms: 0.0,
                 scheduled_clips: song.clips.len(),
                 active_sinks: song.tracks.len(),

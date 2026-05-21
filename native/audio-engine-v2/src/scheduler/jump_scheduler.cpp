@@ -1,4 +1,5 @@
 #include <lt_engine/scheduler/jump_scheduler.h>
+#include <lt_engine/debug/logging.h>
 #include <algorithm>
 #include <cctype>
 #include <cstdarg>
@@ -42,8 +43,7 @@ void jump_debug_log(const char* fmt, ...) {
     if (!jump_debug_enabled()) return;
     va_list args;
     va_start(args, fmt);
-    std::vfprintf(stdout, fmt, args);
-    std::fflush(stdout);
+    lt_debug_vlog(fmt, args);
     va_end(args);
 }
 

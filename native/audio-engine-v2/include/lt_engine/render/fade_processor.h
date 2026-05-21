@@ -31,7 +31,9 @@ private:
 
     static constexpr int kMaxChannels = 8;
     std::array<float, kMaxChannels> previous_sample_{};
+    std::array<float, kMaxChannels> fade_anchor_sample_{};
     int previous_channels_ = 0;
+    int fade_anchor_channels_ = 0;
 };
 
 } // namespace lt
