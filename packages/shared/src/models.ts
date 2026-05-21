@@ -588,6 +588,15 @@ export type LibraryImportProgressEvent = {
   message: string;
 };
 
+export type ProjectLoadProgressEvent = {
+  percent: number;
+  message: string;
+  sourcesReady: number;
+  sourcesTotal: number;
+  ramCacheMb: number;
+  diskCacheMb: number;
+};
+
 export type WaveformReadyEvent = {
   songDir: string;
   waveformKey: string;

@@ -412,7 +412,7 @@ fn dispatch_midi_action(
         }
         "action:open_project" => {
             let Some(snapshot) = session
-                .open_project_from_dialog(&state.audio)
+                .open_project_from_dialog(app, &state.audio)
                 .map_err(|error| error.to_string())?
             else {
                 return Ok(());

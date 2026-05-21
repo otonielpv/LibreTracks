@@ -44,6 +44,7 @@ use crate::settings::AppSettings;
 
 const LIBRARY_MANIFEST_FILE_NAME: &str = "library.json";
 const LIBRARY_IMPORT_PROGRESS_EVENT: &str = "library:import-progress";
+const PROJECT_LOAD_PROGRESS_EVENT: &str = "project:load-progress";
 pub const WAVEFORM_READY_EVENT: &str = "waveform:ready";
 const TRANSPORT_RUNTIME_SYNC_INTERVAL: Duration = Duration::from_millis(250);
 const TRANSPORT_PITCH_SYNC_INTERVAL: Duration = Duration::from_millis(800);
@@ -53,6 +54,17 @@ const TRANSPORT_PITCH_SYNC_INTERVAL: Duration = Duration::from_millis(800);
 struct LibraryImportProgressEvent {
     percent: u8,
     message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectLoadProgressEvent {
+    percent: u8,
+    message: String,
+    sources_ready: usize,
+    sources_total: usize,
+    ram_cache_mb: usize,
+    disk_cache_mb: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -554,6 +566,7 @@ impl DesktopSession {
 
     pub fn open_project_from_dialog(
         &mut self,
+        app: &AppHandle,
         audio: &AudioController,
     ) -> Result<Option<TransportSnapshot>, DesktopError> {
         let song_file = FileDialog::new()
@@ -573,8 +586,10 @@ impl DesktopSession {
             })?;
         let song = load_song_from_file(&song_file)?;
 
+        emit_project_load_progress(app, 10, "Leyendo proyecto...".into(), 0, 0, 0, 0);
         self.load_song_from_path(song, song_dir, audio)?;
         self.song_file_path = Some(song_file);
+        self.wait_for_project_audio_preparation(app, audio)?;
 
         Ok(Some(self.snapshot()))
     }
@@ -2493,6 +2508,95 @@ impl DesktopSession {
         Ok(())
     }
 
+    fn wait_for_project_audio_preparation(
+        &self,
+        app: &AppHandle,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        const TIMEOUT: Duration = Duration::from_secs(120);
+        const POLL_INTERVAL: Duration = Duration::from_millis(100);
+        let started_at = Instant::now();
+        let mut last_percent = 0_u8;
+
+        loop {
+            let snapshot = audio.engine_snapshot()?;
+            let total = snapshot.source_states.len();
+            let ready = snapshot
+                .source_states
+                .iter()
+                .filter(|source| {
+                    matches!(
+                        source.status.as_str(),
+                        "ready" | "failed" | "cancelled"
+                    )
+                })
+                .count();
+            let failures = snapshot
+                .source_states
+                .iter()
+                .filter(|source| source.status == "failed")
+                .count();
+            let ram_cache_mb =
+                (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
+            let disk_cache_mb =
+                (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
+
+            let percent = if total == 0 {
+                35
+            } else {
+                35 + ((ready * 55) / total).min(55) as u8
+            };
+            if percent != last_percent || ready == total {
+                last_percent = percent;
+                let message = if total == 0 {
+                    "Inicializando preparacion de audio...".to_string()
+                } else if failures > 0 {
+                    format!(
+                        "Preparando audio... {ready}/{total} fuentes ({failures} con error)"
+                    )
+                } else {
+                    format!("Preparando audio... {ready}/{total} fuentes")
+                };
+                emit_project_load_progress(
+                    app,
+                    percent,
+                    message,
+                    ready,
+                    total,
+                    ram_cache_mb,
+                    disk_cache_mb,
+                );
+            }
+
+            if total > 0 && ready >= total {
+                emit_project_load_progress(
+                    app,
+                    100,
+                    "Proyecto listo para reproducir.".into(),
+                    ready,
+                    total,
+                    ram_cache_mb,
+                    disk_cache_mb,
+                );
+                return Ok(());
+            }
+            if started_at.elapsed() >= TIMEOUT {
+                emit_project_load_progress(
+                    app,
+                    percent,
+                    "El proyecto se abrio; la preparacion continua en segundo plano.".into(),
+                    ready,
+                    total,
+                    ram_cache_mb,
+                    disk_cache_mb,
+                );
+                return Ok(());
+            }
+
+            thread::sleep(POLL_INTERVAL);
+        }
+    }
+
     fn persist_song_update(
         &mut self,
         song: Song,
@@ -3299,6 +3403,29 @@ fn emit_library_import_progress(app: &AppHandle, percent: u8, message: String) {
 
     if let Err(error) = app.emit(LIBRARY_IMPORT_PROGRESS_EVENT, payload) {
         eprintln!("[libretracks-library] failed to emit import progress: {error}");
+    }
+}
+
+fn emit_project_load_progress(
+    app: &AppHandle,
+    percent: u8,
+    message: String,
+    sources_ready: usize,
+    sources_total: usize,
+    ram_cache_mb: usize,
+    disk_cache_mb: usize,
+) {
+    let payload = ProjectLoadProgressEvent {
+        percent: percent.min(100),
+        message,
+        sources_ready,
+        sources_total,
+        ram_cache_mb,
+        disk_cache_mb,
+    };
+
+    if let Err(error) = app.emit(PROJECT_LOAD_PROGRESS_EVENT, payload) {
+        eprintln!("[libretracks-project] failed to emit load progress: {error}");
     }
 }
 

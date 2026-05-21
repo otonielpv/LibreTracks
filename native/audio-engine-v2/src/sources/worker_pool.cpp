@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdlib>
 #include <deque>
 #include <mutex>
 #include <thread>
@@ -122,7 +123,13 @@ DecodeWorkerPool::DecodeWorkerPool(int num_threads)
     : impl_(std::make_unique<Impl>())
 {
     if (num_threads <= 0) {
-        num_threads = std::max(1u, std::thread::hardware_concurrency() / 2);
+        if (const char* raw = std::getenv("LIBRETRACKS_DECODE_WORKERS")) {
+            const int parsed = std::atoi(raw);
+            if (parsed > 0 && parsed <= 16)
+                num_threads = parsed;
+        }
+        if (num_threads <= 0)
+            num_threads = 2;
     }
     for (int i = 0; i < num_threads; ++i) {
         impl_->threads.emplace_back([this]{ impl_->worker_loop(); });

@@ -3316,6 +3316,27 @@ textarea {
   color: #bacac5;
 }
 
+.busy-overlay-card small {
+  display: block;
+  margin-top: 0.5rem;
+  color: #8fa19a;
+}
+
+.busy-overlay-progress {
+  position: relative;
+  height: 0.35rem;
+  margin-top: 0.75rem;
+  overflow: hidden;
+  background: #111817;
+}
+
+.busy-overlay-progress span {
+  display: block;
+  height: 100%;
+  background: #5fd0a5;
+  transition: width 160ms ease;
+}
+
 .lt-import-overlay {
   position: fixed;
   inset: 0;

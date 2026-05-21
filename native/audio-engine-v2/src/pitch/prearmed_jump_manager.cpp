@@ -296,14 +296,16 @@ std::vector<PrepSpec> enumerate_prep_specs(const Song& song,
     if (track.transpose_behavior == TransposeBehavior::NeverTranspose)
         return out;
 
+    const auto decision = resolve_pitch_render_decision(
+        track, clip, song, target_timeline_frame);
+    if (decision.effective_semitones == 0)
+        return out;
+
     auto src = sources.get_shared(clip.source_id);
     if (!src || !src->is_loaded()) {
         if (out_unloaded_clips) ++*out_unloaded_clips;
         return out;
     }
-
-    const auto decision = resolve_pitch_render_decision(
-        track, clip, song, target_timeline_frame);
 
     PrepSpec spec;
     spec.clip_id              = clip.id;
@@ -434,16 +436,14 @@ struct PrearmedJumpManager::Impl {
     // the whole cache. Phase 6 adds finer-grained revisions.
     std::uint64_t current_revision = 0;
 
-    // Max prepared sets retained. Live use needs marks and region starts to be
-    // genuinely prearmed before the performer asks for them; a tiny cap causes
-    // older marks to be evicted and then rebuilt just-in-time on first use.
-    // Keep the manual env override, but default high enough for real setlists.
+    // Max prepared sets retained. Each prepared set owns Bungee streams, so the
+    // cap is a real RAM budget rather than just a lookup-cache size.
     int max_prepared_targets = [] {
         if (const char* v = std::getenv("LIBRETRACKS_PREARM_MAX_TARGETS")) {
             const int n = std::atoi(v);
             if (n > 0 && n < 1024) return n;
         }
-        return 128;
+        return 16;
     }();
 
     std::atomic<std::uint64_t> prepared_total       {0};
@@ -587,49 +587,56 @@ BuildResult build_prepared_set(
     set->valid                 = false;
 
     bool any_failed = false;
+    std::vector<PrepSpec> specs_to_prepare;
     for (const auto& track : song.tracks) {
         for (const auto& clip : track.clips) {
             auto specs = enumerate_prep_specs(song, track, clip, sources,
                                                target_frame,
                                                &br.unloaded_clips_skipped);
-            for (const auto& spec : specs) {
-                auto voice = std::make_shared<BungeePitchVoice>();
-                if (!voice->configure(sample_rate, channel_count, max_in_frames)) {
-                    any_failed = true;
-                    continue;
-                }
-                warm_voice_silence(*voice, sample_rate, channel_count, max_in_frames);
-                const double pitch_scale =
-                    semitones_to_pitch_scale(spec.effective_semitones);
-                const int latency_frames =
-                    static_cast<int>(voice->latency_frames());
-                const int compensation_frames =
-                    voice->alignment_compensation_frames(pitch_scale);
-                if (!ensure_bungee_jump_read_window_ready(
-                        sources, spec, max_in_frames,
-                        latency_frames, compensation_frames)) {
-                    ++br.unloaded_clips_skipped;
-                    continue;
-                }
-                if (spec.source) {
-                    prefeed_voice_with_target_audio(
-                        *voice, *spec.source, spec.target_source_frame,
-                        sample_rate, channel_count, max_in_frames,
-                        pitch_scale);
-                }
-                // The voice has already been warmed and prefed up to the
-                // target. A second per-voice fade here re-shapes the prepared
-                // audio after the mixer has already applied the seek de-click
-                // ramp, which shows up as roughness on transposed jumps.
-                voice->arm_fade_in(0);
-                PreparedTrackVoice ptv;
-                ptv.clip_id             = spec.clip_id;
-                ptv.voice               = std::move(voice);
-                ptv.target_source_frame = spec.target_source_frame;
-                ptv.ready               = true;
-                set->tracks.push_back(std::move(ptv));
-            }
+            specs_to_prepare.insert(specs_to_prepare.end(),
+                                    specs.begin(), specs.end());
         }
+    }
+    if (br.unloaded_clips_skipped > 0) {
+        return br;
+    }
+
+    for (const auto& spec : specs_to_prepare) {
+        auto voice = std::make_shared<BungeePitchVoice>();
+        if (!voice->configure(sample_rate, channel_count, max_in_frames)) {
+            any_failed = true;
+            continue;
+        }
+        warm_voice_silence(*voice, sample_rate, channel_count, max_in_frames);
+        const double pitch_scale =
+            semitones_to_pitch_scale(spec.effective_semitones);
+        const int latency_frames =
+            static_cast<int>(voice->latency_frames());
+        const int compensation_frames =
+            voice->alignment_compensation_frames(pitch_scale);
+        if (!ensure_bungee_jump_read_window_ready(
+                sources, spec, max_in_frames,
+                latency_frames, compensation_frames)) {
+            ++br.unloaded_clips_skipped;
+            continue;
+        }
+        if (spec.source) {
+            prefeed_voice_with_target_audio(
+                *voice, *spec.source, spec.target_source_frame,
+                sample_rate, channel_count, max_in_frames,
+                pitch_scale);
+        }
+        // The voice has already been warmed and prefed up to the
+        // target. A second per-voice fade here re-shapes the prepared
+        // audio after the mixer has already applied the seek de-click
+        // ramp, which shows up as roughness on transposed jumps.
+        voice->arm_fade_in(0);
+        PreparedTrackVoice ptv;
+        ptv.clip_id             = spec.clip_id;
+        ptv.voice               = std::move(voice);
+        ptv.target_source_frame = spec.target_source_frame;
+        ptv.ready               = true;
+        set->tracks.push_back(std::move(ptv));
     }
     // Set is valid ONLY if every audible-at-target clip got a voice.
     // 0-voice sets where no clip is audible (e.g. all NeverTranspose) are
@@ -732,6 +739,9 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
                     set->tracks.size());
             }
         }
+
+        if (set->valid && set->tracks.empty())
+            return;
 
         impl_->prepared_map[key] = std::move(set);
         impl_->insertion_order.push_back(key);

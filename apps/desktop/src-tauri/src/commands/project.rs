@@ -88,6 +88,7 @@ pub fn save_project_as(
 
 #[tauri::command]
 pub fn open_project_from_dialog(
+    app: AppHandle,
     state: State<'_, DesktopState>,
 ) -> Result<Option<TransportSnapshot>, String> {
     let mut session = state
@@ -96,7 +97,7 @@ pub fn open_project_from_dialog(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     session
-        .open_project_from_dialog(&state.audio)
+        .open_project_from_dialog(&app, &state.audio)
         .map_err(|error| error.to_string())
 }
 

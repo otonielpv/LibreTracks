@@ -9,6 +9,7 @@ import type {
   LibraryAssetSummary,
   LibraryImportProgressEvent,
   MidiRawMessage,
+  ProjectLoadProgressEvent,
   RemoteServerInfo,
   SongView,
   SongPackageImportResponse,
@@ -55,6 +56,15 @@ export async function listenToLibraryImportProgress(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<LibraryImportProgressEvent>("library:import-progress", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenToProjectLoadProgress(
+  handler: (event: ProjectLoadProgressEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<ProjectLoadProgressEvent>("project:load-progress", (event) => {
     handler(event.payload);
   });
 }

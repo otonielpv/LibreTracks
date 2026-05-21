@@ -251,6 +251,15 @@ bool session_contains_source(const Session& session, const Id& source_id) {
         [&](const Source& source) { return source.id == source_id; });
 }
 
+bool session_sources_ready(const Session& session, const SourceManager& sources) {
+    for (const auto& source : session.sources) {
+        const DecodedSource* decoded = sources.get(source.id);
+        if (!decoded || !decoded->is_loaded())
+            return false;
+    }
+    return true;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -325,7 +334,7 @@ Result<void> EngineImpl::initialize() {
         // succeed. Keep the current revision so multiple source-ready events
         // for a multitrack song fill the same cache instead of discarding
         // each other and rebuilding the whole prearm set repeatedly.
-        if (prearmed_jumps_) {
+        if (prearmed_jumps_ && session_sources_ready(*current_session, *source_manager_)) {
             const auto rev = prearm_revision_.load(std::memory_order_relaxed);
             prearmed_jumps_->prepare_all_targets_async(
                 current_session, source_manager_.get(), rev);

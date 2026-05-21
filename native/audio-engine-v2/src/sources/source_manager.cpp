@@ -1,6 +1,7 @@
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/sources/audio_decoder.h>
 #include <algorithm>
+#include <cstdlib>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -11,9 +12,35 @@
 
 namespace lt {
 
+namespace {
+
+size_t source_cache_blocks_from_env() {
+    constexpr size_t kDefaultCacheMb = 512;
+    size_t cache_mb = kDefaultCacheMb;
+    if (const char* raw = std::getenv("LIBRETRACKS_SOURCE_CACHE_MB")) {
+        const int parsed = std::atoi(raw);
+        if (parsed >= 64 && parsed <= 4096)
+            cache_mb = static_cast<size_t>(parsed);
+    }
+    const size_t bytes_per_block =
+        static_cast<size_t>(kDefaultBlockFrames) * sizeof(float) * 2;
+    return std::max<size_t>(1, (cache_mb * 1024 * 1024) / bytes_per_block);
+}
+
+int eager_source_blocks_from_env() {
+    if (const char* raw = std::getenv("LIBRETRACKS_SOURCE_EAGER_BLOCKS")) {
+        const int parsed = std::atoi(raw);
+        if (parsed >= 0 && parsed <= 1024)
+            return parsed;
+    }
+    return 64;
+}
+
+} // namespace
+
 SourceManager::SourceManager()
     : entries_(std::make_shared<EntryMap>())
-    , block_cache_(kDefaultBlockFrames, 32768) // ~1 GB for stereo float32
+    , block_cache_(kDefaultBlockFrames, source_cache_blocks_from_env())
 {
     fill_thread_ = std::thread([this] { fill_worker_loop(); });
 }
@@ -167,7 +194,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
 
     const int block_frames = block_cache_.block_frames();
     const int total_blocks = static_cast<int>((duration_frames + block_frames - 1) / block_frames);
-    const int eager_blocks = std::min(total_blocks, 256);
+    const int eager_blocks = std::min(total_blocks, eager_source_blocks_from_env());
     for (int block = 0; block < eager_blocks; ++block) {
         const Frame start = static_cast<Frame>(block) * block_frames;
         const int frames = static_cast<int>(

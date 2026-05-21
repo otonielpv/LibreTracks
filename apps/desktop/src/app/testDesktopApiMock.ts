@@ -8,6 +8,7 @@ import type {
   LibraryAssetSummary,
   LibraryImportProgressEvent,
   PendingJumpSummary,
+  ProjectLoadProgressEvent,
   SectionMarkerSummary,
   SongRegionSummary,
   SongPackageImportResponse,
@@ -653,6 +654,7 @@ export const testDesktopApiMock = {
   listenToTransportLifecycle: async (_handler: (event: TransportLifecycleEvent) => void) => () => {},
   listenToAudioMeters: async (_handler: (levels: AudioMeterLevel[]) => void) => () => {},
   listenToLibraryImportProgress: async (_handler: (event: LibraryImportProgressEvent) => void) => () => {},
+  listenToProjectLoadProgress: async (_handler: (event: ProjectLoadProgressEvent) => void) => () => {},
   listenToWaveformReady: async (handler: (event: WaveformReadyEvent) => void) => {
     waveformReadyListeners.push(handler);
     return () => {

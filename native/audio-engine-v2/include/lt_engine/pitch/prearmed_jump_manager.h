@@ -141,7 +141,7 @@ public:
     // Phase 7: max number of prepared target sets to keep in the cache.
     // When a new prepare would exceed this count, the OLDEST prepared set
     // (by insertion order — simple FIFO, not LRU access tracking) is
-    // evicted. Default 8 (matches spec). Set via LIBRETRACKS_PREARM_MAX_TARGETS
+    // evicted. Default 16. Set via LIBRETRACKS_PREARM_MAX_TARGETS
     // env var at process start, or programmatically before prepare_all_targets.
     void set_max_prepared_targets(int max_targets) noexcept;
     int  max_prepared_targets() const noexcept;

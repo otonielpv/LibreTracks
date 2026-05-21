@@ -315,6 +315,30 @@ TEST_CASE("PrearmedJumpManager: take_ready rejects invalid set (transactional)")
 
 // ─── Test 4: fallback works when target not ready ───────────────────────────
 
+TEST_CASE("PrearmedJumpManager: zero-semitone targets do not allocate prepared voices") {
+    SourceManager sources;
+    Session       session;
+    init_fixture(sources, session, "src-zero", "clip-zero", "track-zero",
+                  "song-zero", "marker-zero", kMarkerFrame,
+                  /*transposed*/ true,
+                  /*samples_override*/ {},
+                  /*transpose_amount*/ 0);
+
+    PrearmedJumpManager prearm;
+    REQUIRE(prearm.prepare(kSR, kCh, kBlockFrames));
+    prearm.prepare_all_targets(session, sources, /*revision*/ 1);
+
+    CHECK_EQ(prearm.diagnostics().ready_count, 0);
+
+    auto prepared = prearm.prepare_target_now(
+        session, sources,
+        PrearmTargetKind::Marker, "song-zero", "marker-zero", kMarkerFrame,
+        /*revision*/ 1);
+    REQUIRE(prepared);
+    CHECK(prepared->valid);
+    CHECK(prepared->tracks.empty());
+}
+
 TEST_CASE("PrearmedJumpManager: fallback path renders audio when prearm missed") {
     // Caller behaviour we're modelling: miss take_ready → call
     // bvm.rebuild_for_seek synchronously. Verify that path still produces a

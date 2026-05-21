@@ -75,6 +75,7 @@ import {
   importSongPackage,
   isTauriApp,
   listenToMidiRawMessage,
+  listenToProjectLoadProgress,
   listenToSettingsUpdated,
   listenToWaveformReady,
   moveClip,
@@ -286,6 +287,11 @@ export function TransportPanelContent() {
     startedAt?: number;
   }>({ active: false, message: "" });
   const [isBusy, setIsBusy] = useState(false);
+  const [busyFeedback, setBusyFeedback] = useState<{
+    message: string;
+    percent?: number;
+    detail?: string;
+  } | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isRemoteModalOpen, setIsRemoteModalOpen] = useState(false);
   const [activeSettingsTab, setActiveSettingsTab] =
@@ -842,6 +848,7 @@ export function TransportPanelContent() {
       try {
         if (options?.busy) {
           setIsBusy(true);
+          setBusyFeedback(null);
         }
         await work();
       } catch (error) {
@@ -849,6 +856,7 @@ export function TransportPanelContent() {
       } finally {
         if (options?.busy) {
           setIsBusy(false);
+          setBusyFeedback(null);
         }
       }
     },
@@ -982,6 +990,41 @@ export function TransportPanelContent() {
       unlisten?.();
     };
   }, [formatMidiLearnCommandLabel, runAction, setMidiLearnMode, t]);
+
+  useEffect(() => {
+    if (!isTauriApp) {
+      return;
+    }
+
+    let active = true;
+    let unlisten: (() => void) | null = null;
+    void listenToProjectLoadProgress((event) => {
+      if (!active) {
+        return;
+      }
+
+      const detail =
+        event.sourcesTotal > 0
+          ? `${event.sourcesReady}/${event.sourcesTotal} fuentes · RAM ${event.ramCacheMb} MB · disco ${event.diskCacheMb} MB`
+          : undefined;
+      setBusyFeedback({
+        message: event.message,
+        percent: event.percent,
+        detail,
+      });
+    }).then((dispose) => {
+      if (!active) {
+        dispose();
+        return;
+      }
+      unlisten = dispose;
+    });
+
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, []);
 
   const persistAudioSettings = useCallback(
     (
@@ -6701,7 +6744,23 @@ export function TransportPanelContent() {
           <div className="busy-overlay" aria-live="polite">
             <div className="busy-overlay-card">
               <strong>{t("transport.shell.busyTitle")}</strong>
-              <p>{t("transport.shell.busyDescription")}</p>
+              <p>{busyFeedback?.message ?? t("transport.shell.busyDescription")}</p>
+              {typeof busyFeedback?.percent === "number" ? (
+                <div
+                  className="busy-overlay-progress"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(busyFeedback.percent)}
+                >
+                  <span
+                    style={{
+                      width: `${Math.max(0, Math.min(100, busyFeedback.percent))}%`,
+                    }}
+                  />
+                </div>
+              ) : null}
+              {busyFeedback?.detail ? <small>{busyFeedback.detail}</small> : null}
             </div>
           </div>
         ) : null}
