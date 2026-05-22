@@ -18,7 +18,9 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace lt {
 
@@ -214,6 +216,130 @@ void wait_jump_target_audio_ready(SourceManager& sources,
     }
 }
 
+int playback_prepare_wait_ms() {
+    static const int value = [] {
+        const char* v = std::getenv("LIBRETRACKS_PLAYBACK_PREPARE_WAIT_MS");
+        if (!v) return 5000;
+        const int parsed = std::atoi(v);
+        return parsed >= 0 && parsed <= 120000 ? parsed : 5000;
+    }();
+    return value;
+}
+
+int playback_prepare_window_frames(int sample_rate) {
+    const int sr = sample_rate > 0 ? sample_rate : 48000;
+    int seconds = 20;
+    if (const char* v = std::getenv("LIBRETRACKS_PLAYBACK_PREPARE_SECONDS")) {
+        const int parsed = std::atoi(v);
+        if (parsed >= 1 && parsed <= 120)
+            seconds = parsed;
+    }
+    return std::max(4096, sr * seconds);
+}
+
+void request_playback_audio_window(SourceManager& sources,
+                                   const Session& session,
+                                   Frame start_frame,
+                                   int window_frames) noexcept {
+    if (window_frames <= 0)
+        return;
+    const Frame end_frame = start_frame + static_cast<Frame>(window_frames);
+    for (const auto& song : session.songs) {
+        if (end_frame <= song.start_frame || start_frame >= song.end_frame)
+            continue;
+        for (const auto& track : song.tracks) {
+            if (track.kind != TrackKind::Audio)
+                continue;
+            for (const auto& clip : track.clips) {
+                const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
+                const Frame overlap_start = std::max(start_frame, clip.timeline_start_frame);
+                const Frame overlap_end = std::min(end_frame, clip_end);
+                if (overlap_end <= overlap_start)
+                    continue;
+                const Frame source_frame = clip.source_start_frame
+                    + (overlap_start - clip.timeline_start_frame);
+                const int frames = static_cast<int>(std::min<Frame>(
+                    overlap_end - overlap_start,
+                    static_cast<Frame>(std::numeric_limits<int>::max())));
+                sources.request_range(clip.source_id, source_frame, frames);
+            }
+        }
+    }
+}
+
+bool playback_audio_window_ready(SourceManager& sources,
+                                 const Session& session,
+                                 Frame start_frame,
+                                 int window_frames) noexcept {
+    if (window_frames <= 0)
+        return true;
+    const Frame end_frame = start_frame + static_cast<Frame>(window_frames);
+    for (const auto& song : session.songs) {
+        if (end_frame <= song.start_frame || start_frame >= song.end_frame)
+            continue;
+        for (const auto& track : song.tracks) {
+            if (track.kind != TrackKind::Audio)
+                continue;
+            for (const auto& clip : track.clips) {
+                const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
+                const Frame overlap_start = std::max(start_frame, clip.timeline_start_frame);
+                const Frame overlap_end = std::min(end_frame, clip_end);
+                if (overlap_end <= overlap_start)
+                    continue;
+                const auto source = sources.get_shared(clip.source_id);
+                if (!source || !source->is_streaming())
+                    continue;
+                const Frame source_frame = clip.source_start_frame
+                    + (overlap_start - clip.timeline_start_frame);
+                const Frame read_start = std::max<Frame>(0, source_frame);
+                if (read_start >= source->duration_frames())
+                    continue;
+                const int frames = std::max(1, static_cast<int>(std::min<Frame>(
+                    std::min<Frame>(
+                        overlap_end - overlap_start,
+                        source->duration_frames() - read_start),
+                    static_cast<Frame>(std::numeric_limits<int>::max()))));
+                if (!source->is_range_ready(read_start, frames))
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+
+void wait_playback_audio_window_ready(SourceManager& sources,
+                                      const Session& session,
+                                      Frame start_frame,
+                                      int window_frames) noexcept {
+    request_playback_audio_window(sources, session, start_frame, window_frames);
+    if (playback_audio_window_ready(sources, session, start_frame, window_frames))
+        return;
+
+    const int wait_ms = playback_prepare_wait_ms();
+    if (wait_ms <= 0)
+        return;
+
+    const auto start = std::chrono::steady_clock::now();
+    const auto deadline = start + std::chrono::milliseconds(wait_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (playback_audio_window_ready(sources, session, start_frame, window_frames))
+            return;
+        request_playback_audio_window(sources, session, start_frame, window_frames);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    if (jump_debug_enabled()) {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start).count();
+        debug_log(
+            "[LT_JUMP_DEBUG][native-command] playback_prepare_window_timeout start_frame=%lld window_frames=%d wait_ms=%d elapsed_ms=%lld\n",
+            static_cast<long long>(start_frame),
+            window_frames,
+            wait_ms,
+            static_cast<long long>(elapsed));
+    }
+}
+
 // Fires the moment the DLL is loaded by Windows, before any exported function is called.
 struct DllLoadProbe {
     DllLoadProbe() {
@@ -319,26 +445,52 @@ Result<void> EngineImpl::initialize() {
     scheduler_      = std::make_unique<JumpScheduler>();
     source_manager_ = std::make_unique<SourceManager>();
     source_manager_->set_source_ready_callback([this](const Id& source_id) {
-        auto current_session = session_;
-        if (!current_session || !session_contains_source(*current_session, source_id))
+        // Race-safe: load session_ atomically. The control thread may be
+        // reassigning session_ concurrently (LoadSession / transpose / etc.),
+        // and a non-atomic shared_ptr copy can yield a dangling control block
+        // → silent SEH crash on the decode worker thread.
+        auto current_session = std::atomic_load(&session_);
+        if (!current_session || !session_contains_source(*current_session, source_id)) {
+            std::fprintf(stderr,
+                "[LT_LOAD_DEBUG][cpp] source_ready callback skipped (no current session) id=%s\n",
+                source_id.c_str());
+            std::fflush(stderr);
             return;
+        }
 
-        // A source just finished decoding. Rebuild Bungee voices so any clips
-        // that needed this source can now be played pitched.
-        if (bungee_voices_ && bungee_voices_->is_available() && clock_) {
+        const bool all_ready = session_sources_ready(*current_session, *source_manager_);
+        std::fprintf(stderr,
+            "[LT_LOAD_DEBUG][cpp] source_ready ENTER id=%s all_ready=%d\n",
+            source_id.c_str(), all_ready ? 1 : 0);
+        std::fflush(stderr);
+
+        // DIAGNOSTIC: only run the heavy rebuild when ALL sources are ready,
+        // so we can identify whether the per-source rebuild is causing the
+        // silent SEH crash. If this version no longer crashes, the issue is
+        // contention/UB in rebuild_for_session called concurrently from
+        // multiple decode worker threads.
+        if (all_ready && bungee_voices_ && bungee_voices_->is_available() && clock_) {
+            std::fprintf(stderr,
+                "[LT_LOAD_DEBUG][cpp] source_ready calling rebuild_for_session (all_ready)\n");
+            std::fflush(stderr);
             bungee_voices_->rebuild_for_session(
                 *current_session, *source_manager_, clock_->position().frame);
+            std::fprintf(stderr,
+                "[LT_LOAD_DEBUG][cpp] source_ready rebuild_for_session returned\n");
+            std::fflush(stderr);
         }
-        // Re-prearm: a source just finished decoding, so any prepared-set
-        // that was skipped (unloaded_clips > 0) on its first build can now
-        // succeed. Keep the current revision so multiple source-ready events
-        // for a multitrack song fill the same cache instead of discarding
-        // each other and rebuilding the whole prearm set repeatedly.
-        if (prearmed_jumps_ && session_sources_ready(*current_session, *source_manager_)) {
+        if (prearmed_jumps_ && all_ready) {
             const auto rev = prearm_revision_.load(std::memory_order_relaxed);
+            std::fprintf(stderr,
+                "[LT_LOAD_DEBUG][cpp] source_ready triggering prearm reposted revision=%llu\n",
+                static_cast<unsigned long long>(rev));
+            std::fflush(stderr);
             prearmed_jumps_->prepare_all_targets_async(
                 current_session, source_manager_.get(), rev);
         }
+        std::fprintf(stderr,
+            "[LT_LOAD_DEBUG][cpp] source_ready EXIT id=%s\n", source_id.c_str());
+        std::fflush(stderr);
     });
     bungee_voices_  = std::make_unique<BungeeVoiceManager>();
     prearmed_jumps_ = std::make_unique<PrearmedJumpManager>();
@@ -415,7 +567,7 @@ Result<void> EngineImpl::shutdown() {
     mixer_.reset();
     clock_.reset();
     scheduler_.reset();
-    session_.reset();
+    std::atomic_store(&session_, std::shared_ptr<const Session>{});
     bungee_voices_.reset();
     state_ = State::ShutDown;
     return Result<void>::ok();
@@ -591,12 +743,43 @@ std::string EngineImpl::get_snapshot() const {
 
     if (prep_queue_) {
         snap.source_states = prep_queue_->preparation_states();
-    } else if (source_manager_) {
-        for (const auto& d : source_manager_->diagnostics()) {
+    }
+    if (source_manager_) {
+        const auto source_diagnostics = source_manager_->diagnostics();
+        std::unordered_map<Id, SourceDiagnostics> diagnostics_by_id;
+        diagnostics_by_id.reserve(source_diagnostics.size());
+        for (const auto& d : source_diagnostics)
+            diagnostics_by_id[d.source_id] = d;
+
+        for (auto& info : snap.source_states) {
+            auto it = diagnostics_by_id.find(info.source_id);
+            if (it == diagnostics_by_id.end())
+                continue;
+            const auto& d = it->second;
+            if (d.status == "ready" || d.status == "cache_ready") {
+                info.status = d.status;
+                info.progress_percent = 100;
+                info.error_message.clear();
+            } else if (d.status == "failed") {
+                info.status = d.status;
+                info.error_message = d.error_message;
+            }
+        }
+
+        std::unordered_set<Id> seen_sources;
+        seen_sources.reserve(snap.source_states.size());
+        for (const auto& info : snap.source_states)
+            seen_sources.insert(info.source_id);
+
+        for (const auto& d : source_diagnostics) {
+            if (seen_sources.find(d.source_id) != seen_sources.end())
+                continue;
             SourcePreparationInfo info;
             info.source_id = d.source_id;
-            info.status    = d.status;
+            info.status = d.status;
             info.error_message = d.error_message;
+            if (d.status == "ready" || d.status == "cache_ready")
+                info.progress_percent = 100;
             snap.source_states.push_back(std::move(info));
         }
     }
@@ -649,6 +832,11 @@ std::string EngineImpl::get_snapshot() const {
         snap.prearmed_jumps.stale_discard_total  = pd.stale_discard_total;
         snap.prearmed_jumps.eviction_total       = pd.eviction_total;
         snap.prearmed_jumps.max_prepared_targets = pd.max_prepared_targets;
+        snap.prearmed_jumps.worker_busy = pd.worker_busy;
+        snap.prearmed_jumps.latest_posted_revision = pd.latest_posted_revision;
+        snap.prearmed_jumps.last_completed_revision = pd.last_completed_revision;
+        snap.prearmed_jumps.posted_count = pd.posted_count;
+        snap.prearmed_jumps.completed_count = pd.completed_count;
     }
 
     return snapshot_to_json(snap);
@@ -748,13 +936,13 @@ std::string EngineImpl::get_source_peaks(const std::string& source_id,
         return out.dump();
     }
 
-    auto source = source_manager_->get_shared(source_id);
-    if (!source || !source->is_loaded()) {
-        out["error"] = "source is not ready";
+    const auto overview = source_manager_->source_peaks(source_id, resolution_frames);
+    if (overview.sample_rate <= 0 || overview.duration_frames <= 0
+        || overview.min_peaks.empty() || overview.max_peaks.empty()) {
+        out["error"] = "source peaks are not ready";
         return out.dump();
     }
 
-    const auto overview = source->peaks(resolution_frames);
     out["ok"] = true;
     out["sample_rate"] = overview.sample_rate;
     out["duration_frames"] = overview.duration_frames;
@@ -809,7 +997,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     track_count, clip_count,
                     region_count, nonzero_regions);
             }
-            session_ = next_session;
+            std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
 
             // Register all sources, then hand off to the async worker pool.
@@ -821,8 +1009,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 [this](EngineEvent ev){ push_event(std::move(ev)); },
                 sr
             );
+            std::fprintf(stderr,
+                "[LT_LOAD_DEBUG][cpp] LoadSession enqueueing %zu sources\n",
+                session_->sources.size());
+            std::fflush(stderr);
             prep_queue_->enqueue_session(session_->sources,
                                           clock_->position().frame);
+            std::fprintf(stderr,
+                "[LT_LOAD_DEBUG][cpp] LoadSession enqueue_session returned\n");
+            std::fflush(stderr);
 
             if (mixer_) {
                 // preserve_realtime_state=false: LoadSession is the authoritative source
@@ -845,6 +1040,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (prearmed_jumps_) {
                 const auto rev = prearm_revision_.fetch_add(1,
                     std::memory_order_relaxed) + 1;
+                std::fprintf(stderr,
+                    "[LT_LOAD_DEBUG][cpp] LoadSession posting initial prearm revision=%llu\n",
+                    static_cast<unsigned long long>(rev));
+                std::fflush(stderr);
                 if (jump_debug_enabled()) {
                     debug_log(
                         "[LT_JUMP_DEBUG][prearm] request_all reason=load_session revision=%llu\n",
@@ -854,6 +1053,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     next_session, source_manager_.get(), rev);
             }
 
+            std::fprintf(stderr,
+                "[LT_LOAD_DEBUG][cpp] LoadSession command complete\n");
+            std::fflush(stderr);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdPlay>) {
@@ -887,25 +1089,39 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSeekAbsolute>) {
-            Frame from = clock_->position().frame;
+            const auto pos = clock_->position();
+            Frame from = pos.frame;
 
             // No-op seek short-circuit. The Rust play path unconditionally
             // sends SeekAbsolute(current_position) before Play (see
             // audio_engine.rs::play). When the target frame equals where the
-            // clock already is, none of the downstream work is needed: voices
-            // are already primed here, RubberBand streams are already at this
-            // position, pitch cache is already valid. Skipping it removes the
-            // ~700ms+ of warm_voice and stream rebuild that was making the
-            // play button feel laggy. Still emit EvSeekExecuted so listeners
-            // see a consistent event stream.
+            // clock already is while stopped/paused, use it as the guarded
+            // first-play preparation point: fill the near-future disk cache and
+            // publish any transposed voices before the clock is allowed to run.
             if (c.frame == from) {
+                if (pos.state != TransportState::Playing && source_manager_ && session_) {
+                    const int prepare_window = playback_prepare_window_frames(
+                        clock_ ? clock_->sample_rate() : 48000);
+                    wait_playback_audio_window_ready(
+                        *source_manager_, *session_, c.frame, prepare_window);
+                    if (bungee_voices_ && bungee_voices_->is_available()) {
+                        auto seek_voice_map = bungee_voices_->build_seek_voice_map(
+                            c.frame, *session_, *source_manager_);
+                        if (seek_voice_map)
+                            bungee_voices_->publish_prepared_voice_map_realtime(
+                                std::move(seek_voice_map));
+                    }
+                }
                 push_event(EvSeekExecuted{ from, c.frame });
                 return Result<void>::ok();
             }
 
-            const int seek_window = std::max(
-                4096,
-                (device_manager_ ? device_manager_->actual_buffer_size() : 1024) * 8);
+            const bool preparing_stopped_playback = pos.state != TransportState::Playing;
+            const int seek_window = preparing_stopped_playback
+                ? playback_prepare_window_frames(clock_ ? clock_->sample_rate() : 48000)
+                : std::max(
+                    4096,
+                    (device_manager_ ? device_manager_->actual_buffer_size() : 1024) * 8);
             if (source_manager_ && session_)
                 request_jump_target_audio(*source_manager_, *session_, c.frame, seek_window);
             std::shared_ptr<const PreparedVoiceMap> seek_voice_map;
@@ -913,8 +1129,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 seek_voice_map = bungee_voices_->build_seek_voice_map(
                     c.frame, *session_, *source_manager_);
             }
-            if (source_manager_ && session_)
-                wait_jump_target_audio_ready(*source_manager_, *session_, c.frame, seek_window);
+            if (source_manager_ && session_) {
+                if (preparing_stopped_playback) {
+                    wait_playback_audio_window_ready(
+                        *source_manager_, *session_, c.frame, seek_window);
+                } else {
+                    wait_jump_target_audio_ready(
+                        *source_manager_, *session_, c.frame, seek_window);
+                }
+            }
             clock_->seek(c.frame);
             if (bungee_voices_ && seek_voice_map)
                 bungee_voices_->publish_prepared_voice_map_realtime(std::move(seek_voice_map));
@@ -1475,14 +1698,23 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 }
             }
             if (changed) {
-                session_ = next_session;
+                std::shared_ptr<const PreparedVoiceMap> prepared_voice_map;
+                if (bungee_voices_ && bungee_voices_->is_available()
+                    && source_manager_ && clock_) {
+                    const Frame frame = clock_->position().frame;
+                    request_playback_audio_window(
+                        *source_manager_, *next_session, frame,
+                        playback_prepare_window_frames(clock_->sample_rate()));
+                    prepared_voice_map = bungee_voices_->build_seek_voice_map(
+                        frame, *next_session, *source_manager_);
+                    if (prepared_voice_map)
+                        bungee_voices_->publish_prepared_voice_map_realtime(
+                            prepared_voice_map);
+                }
+                std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                 (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 if (mixer_) mixer_->trigger_crossfade();
-                if (bungee_voices_ && bungee_voices_->is_available() && clock_) {
-                    bungee_voices_->rebuild_for_seek_async(
-                        clock_->position().frame, *next_session, *source_manager_);
-                }
                 // Prearm: pitch decision changed → re-prearm all targets
                 // under a new revision (auto-invalidates existing cache).
                 if (prearmed_jumps_) {
@@ -1500,14 +1732,23 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 for (auto& song : next_session->songs)
                     if (song.id == c.song_id)
                         song.transpose_semitones = c.semitones;
-                session_ = next_session;
+                std::shared_ptr<const PreparedVoiceMap> prepared_voice_map;
+                if (bungee_voices_ && bungee_voices_->is_available()
+                    && source_manager_ && clock_) {
+                    const Frame frame = clock_->position().frame;
+                    request_playback_audio_window(
+                        *source_manager_, *next_session, frame,
+                        playback_prepare_window_frames(clock_->sample_rate()));
+                    prepared_voice_map = bungee_voices_->build_seek_voice_map(
+                        frame, *next_session, *source_manager_);
+                    if (prepared_voice_map)
+                        bungee_voices_->publish_prepared_voice_map_realtime(
+                            prepared_voice_map);
+                }
+                std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                 (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 if (mixer_) mixer_->trigger_crossfade();
-                if (bungee_voices_ && bungee_voices_->is_available() && clock_) {
-                    bungee_voices_->rebuild_for_seek_async(
-                        clock_->position().frame, *next_session, *source_manager_);
-                }
                 // Prearm: song transpose changed → re-prearm all targets.
                 if (prearmed_jumps_) {
                     const auto rev = prearm_revision_.fetch_add(1,
@@ -1525,14 +1766,23 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     for (auto& region : song.regions)
                         if (region.id == c.region_id)
                             region.transpose_semitones = c.semitones;
-                session_ = next_session;
+                std::shared_ptr<const PreparedVoiceMap> prepared_voice_map;
+                if (bungee_voices_ && bungee_voices_->is_available()
+                    && source_manager_ && clock_) {
+                    const Frame frame = clock_->position().frame;
+                    request_playback_audio_window(
+                        *source_manager_, *next_session, frame,
+                        playback_prepare_window_frames(clock_->sample_rate()));
+                    prepared_voice_map = bungee_voices_->build_seek_voice_map(
+                        frame, *next_session, *source_manager_);
+                    if (prepared_voice_map)
+                        bungee_voices_->publish_prepared_voice_map_realtime(
+                            prepared_voice_map);
+                }
+                std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                 (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                 if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                 if (mixer_) mixer_->trigger_crossfade();
-                if (bungee_voices_ && bungee_voices_->is_available() && clock_) {
-                    bungee_voices_->rebuild_for_seek_async(
-                        clock_->position().frame, *next_session, *source_manager_);
-                }
                 // Prearm: region transpose changed → re-prearm all targets.
                 if (prearmed_jumps_) {
                     const auto rev = prearm_revision_.fetch_add(1,
@@ -1564,7 +1814,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     break;
                 }
                 if (changed) {
-                    session_ = next_session;
+                    std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                     if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                     if (prearmed_jumps_) {
@@ -1596,7 +1846,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     break;
                 }
                 if (changed) {
-                    session_ = next_session;
+                    std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                     if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
                     if (prearmed_jumps_) {

@@ -106,6 +106,7 @@ export type SongView = {
   sectionMarkers: SectionMarkerSummary[];
   clips: ClipSummary[];
   tracks: TrackSummary[];
+  waveforms?: WaveformSummaryDto[];
   projectRevision: number;
 };
 

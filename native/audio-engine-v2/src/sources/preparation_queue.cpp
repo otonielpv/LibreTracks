@@ -110,7 +110,9 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
     // Update state to "loading" after submission.
     {
         std::lock_guard lock(impl_->mtx);
-        impl_->states[source_id].status = "loading";
+        auto& info = impl_->states[source_id];
+        if (info.status == "queued")
+            info.status = "loading";
     }
 }
 

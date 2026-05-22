@@ -44,6 +44,39 @@ pub struct EngineSnapshot {
 
     #[serde(default)]
     pub pitch: PitchSnapshot,
+
+    #[serde(default)]
+    pub prearmed_jumps: PrearmedJumpsSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PrearmedJumpsSnapshot {
+    #[serde(default)]
+    pub ready_count: i32,
+    #[serde(default)]
+    pub prepared_total: u64,
+    #[serde(default)]
+    pub prepare_failed_total: u64,
+    #[serde(default)]
+    pub take_hit_total: u64,
+    #[serde(default)]
+    pub take_miss_total: u64,
+    #[serde(default)]
+    pub stale_discard_total: u64,
+    #[serde(default)]
+    pub eviction_total: u64,
+    #[serde(default)]
+    pub max_prepared_targets: i32,
+    #[serde(default)]
+    pub worker_busy: bool,
+    #[serde(default)]
+    pub latest_posted_revision: u64,
+    #[serde(default)]
+    pub last_completed_revision: u64,
+    #[serde(default)]
+    pub posted_count: u64,
+    #[serde(default)]
+    pub completed_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

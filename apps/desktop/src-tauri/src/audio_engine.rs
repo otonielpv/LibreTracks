@@ -7,7 +7,7 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread::{self, JoinHandle},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use libretracks_core::Song;
@@ -412,14 +412,46 @@ impl AudioController {
         position_seconds: f64,
         reason: PlaybackStartReason,
     ) -> Result<(), DesktopError> {
+        let play_t0 = Instant::now();
+        eprintln!(
+            "[LT_LOAD_DEBUG] AudioController::play start reason={:?} pos={:.3}s",
+            reason, position_seconds
+        );
         self.with_engine_state("play", Some(reason), |engine, state| {
             state.song_dir = Some(song_dir);
+            let ensure_t0 = Instant::now();
             ensure_song_loaded(engine, state, &song)?;
+            eprintln!(
+                "[LT_LOAD_DEBUG] play.ensure_song_loaded took {}ms",
+                ensure_t0.elapsed().as_millis()
+            );
+            let wait_t0 = Instant::now();
+            wait_for_engine_sources_ready(engine, playback_prepare_wait_timeout())?;
+            eprintln!(
+                "[LT_LOAD_DEBUG] play.wait_for_engine_sources_ready took {}ms",
+                wait_t0.elapsed().as_millis()
+            );
             if !state.running {
+                let seek_t0 = Instant::now();
                 engine.send_command(&EngineCommand::SeekAbsolute {
                     frame: seconds_to_frame_for_engine(engine, position_seconds),
                 })?;
+                eprintln!(
+                    "[LT_LOAD_DEBUG] play.SeekAbsolute took {}ms",
+                    seek_t0.elapsed().as_millis()
+                );
+                let cmd_t0 = Instant::now();
                 engine.send_command(&EngineCommand::Play)?;
+                eprintln!(
+                    "[LT_LOAD_DEBUG] play.Play command took {}ms (total play() = {}ms)",
+                    cmd_t0.elapsed().as_millis(),
+                    play_t0.elapsed().as_millis()
+                );
+            } else {
+                eprintln!(
+                    "[LT_LOAD_DEBUG] play: state.running already true, no-op (total {}ms)",
+                    play_t0.elapsed().as_millis()
+                );
             }
             state.running = true;
             state.anchor_position_seconds = Some(position_seconds);
@@ -433,6 +465,30 @@ impl AudioController {
                 active_sinks: song.tracks.len(),
                 opened_files: 0,
             });
+            Ok(())
+        })
+    }
+
+    pub fn wait_until_sources_ready(&self, timeout: Duration) -> Result<(), DesktopError> {
+        self.with_engine_state("wait_until_sources_ready", None, |engine, _state| {
+            wait_for_engine_sources_ready(engine, timeout)
+        })
+    }
+
+    pub fn prepare_playback_at(
+        &self,
+        song: Song,
+        position_seconds: f64,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("prepare_playback_at", None, |engine, state| {
+            ensure_song_loaded(engine, state, &song)?;
+            wait_for_engine_sources_ready(engine, playback_prepare_wait_timeout())?;
+            engine.send_command(&EngineCommand::SeekAbsolute {
+                frame: seconds_to_frame_for_engine(engine, position_seconds),
+            })?;
+            state.anchor_position_seconds = Some(position_seconds.max(0.0));
+            state.anchor_started_at = None;
+            state.song_duration_seconds = Some(song.duration_seconds);
             Ok(())
         })
     }
@@ -954,7 +1010,8 @@ impl AudioController {
             runtime_state.disk_cache_used_mb =
                 (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
             runtime_state.cached_audio_buffers = snapshot.source_cache.blocks_cached as usize;
-            runtime_state.cached_audio_preload_bytes = snapshot.source_cache.ram_bytes_used as usize;
+            runtime_state.cached_audio_preload_bytes =
+                snapshot.source_cache.ram_bytes_used as usize;
         }
 
         Ok(AudioDebugSnapshot {
@@ -1443,6 +1500,39 @@ fn estimate_position(state: &ControllerState) -> Option<f64> {
         Some(anchor + state.anchor_started_at?.elapsed().as_secs_f64())
     } else {
         Some(anchor)
+    }
+}
+
+fn playback_prepare_wait_timeout() -> Duration {
+    let millis = std::env::var("LIBRETRACKS_PLAYBACK_PREPARE_WAIT_MS")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .filter(|value| *value <= 120_000)
+        .unwrap_or(5_000);
+    Duration::from_millis(millis)
+}
+
+fn wait_for_engine_sources_ready(engine: &Engine, timeout: Duration) -> Result<(), DesktopError> {
+    let started_at = Instant::now();
+    loop {
+        let snapshot = engine
+            .get_snapshot()
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        let total = snapshot.source_states.len();
+        let ready = snapshot
+            .source_states
+            .iter()
+            .filter(|source| {
+                matches!(
+                    source.status.as_str(),
+                    "ready" | "cache_ready" | "failed" | "cancelled"
+                )
+            })
+            .count();
+        if total == 0 || ready >= total || started_at.elapsed() >= timeout {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(20));
     }
 }
 

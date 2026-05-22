@@ -8,6 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -287,6 +288,7 @@ export function TransportPanelContent() {
     startedAt?: number;
   }>({ active: false, message: "" });
   const [isBusy, setIsBusy] = useState(false);
+  const [isProjectViewHydrating, setIsProjectViewHydrating] = useState(false);
   const [busyFeedback, setBusyFeedback] = useState<{
     message: string;
     percent?: number;
@@ -789,6 +791,7 @@ export function TransportPanelContent() {
   const playbackSongDir = useTransportStore(
     (state) => state.playback?.songDir ?? null,
   );
+  const isShellBusy = isBusy || isProjectViewHydrating;
   const {
     libraryAssets,
     libraryFolders,
@@ -855,6 +858,12 @@ export function TransportPanelContent() {
         setStatus(formatErrorStatus(error));
       } finally {
         if (options?.busy) {
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          );
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          );
           setIsBusy(false);
           setBusyFeedback(null);
         }
@@ -863,11 +872,39 @@ export function TransportPanelContent() {
     [formatErrorStatus],
   );
 
-  const refreshSongView = useCallback(async () => {
+  const hydrateWaveformCacheFromSong = useCallback(
+    (nextSong: SongView | null) => {
+      const nextWaveforms = Object.fromEntries(
+        (nextSong?.waveforms ?? []).map((summary) => [
+          summary.waveformKey,
+          summary,
+        ]),
+      );
+      if (!nextSong) {
+        setWaveformCache({});
+      } else if (Object.keys(nextWaveforms).length > 0) {
+        setWaveformCache((current) => ({
+          ...current,
+          ...nextWaveforms,
+        }));
+      }
+    },
+    [],
+  );
+
+  const refreshSongView = useCallback(async (options?: { sync?: boolean }) => {
     const nextSong = await getSongView();
-    setSong(nextSong);
+    if (options?.sync) {
+      flushSync(() => {
+        hydrateWaveformCacheFromSong(nextSong);
+        setSong(nextSong);
+      });
+    } else {
+      hydrateWaveformCacheFromSong(nextSong);
+      setSong(nextSong);
+    }
     return nextSong;
-  }, []);
+  }, [hydrateWaveformCacheFromSong]);
 
   const refreshAudioSettings = useCallback(async () => {
     const [nextSettings, nextAudioDevices, nextMidiInputs] = await Promise.all([
@@ -998,11 +1035,27 @@ export function TransportPanelContent() {
 
     let active = true;
     let unlisten: (() => void) | null = null;
+    let progressEventCount = 0;
+    const listenerStartedAt = performance.now();
+    console.log(
+      `[LT_LOAD_DEBUG] project-load-progress listener registering at t=${listenerStartedAt.toFixed(0)}`,
+    );
     void listenToProjectLoadProgress((event) => {
       if (!active) {
+        console.log(
+          `[LT_LOAD_DEBUG] progress event dropped (listener inactive)`,
+          event,
+        );
         return;
       }
 
+      progressEventCount += 1;
+      const t = (performance.now() - listenerStartedAt).toFixed(0);
+      console.log(
+        `[LT_LOAD_DEBUG] progress #${progressEventCount} t+${t}ms ` +
+          `percent=${event.percent} ready=${event.sourcesReady}/${event.sourcesTotal} ` +
+          `ram=${event.ramCacheMb}MB disk=${event.diskCacheMb}MB msg="${event.message}"`,
+      );
       const detail =
         event.sourcesTotal > 0
           ? `${event.sourcesReady}/${event.sourcesTotal} fuentes · RAM ${event.ramCacheMb} MB · disco ${event.diskCacheMb} MB`
@@ -1013,6 +1066,11 @@ export function TransportPanelContent() {
         detail,
       });
     }).then((dispose) => {
+      console.log(
+        `[LT_LOAD_DEBUG] project-load-progress listener attached, dt=${(
+          performance.now() - listenerStartedAt
+        ).toFixed(0)}ms`,
+      );
       if (!active) {
         dispose();
         return;
@@ -2059,6 +2117,8 @@ export function TransportPanelContent() {
   } = useProjectActions({
     runAction,
     applyPlaybackSnapshot,
+    setProjectViewHydrating: setIsProjectViewHydrating,
+    refreshSongView,
     refreshLibraryState,
     t,
     setStatus,
@@ -2164,6 +2224,7 @@ export function TransportPanelContent() {
     async function loadSong() {
       if (playbackProjectRevision === 0) {
         setSong(null);
+        setIsProjectViewHydrating(false);
         return;
       }
 
@@ -2172,7 +2233,11 @@ export function TransportPanelContent() {
         return;
       }
 
+      hydrateWaveformCacheFromSong(nextSong);
       setSong(nextSong);
+      if (nextSong) {
+        setIsProjectViewHydrating(false);
+      }
     }
 
     void loadSong();
@@ -2180,7 +2245,7 @@ export function TransportPanelContent() {
     return () => {
       active = false;
     };
-  }, [playbackProjectRevision]);
+  }, [hydrateWaveformCacheFromSong, playbackProjectRevision]);
 
   useEffect(() => {
     const nextProjectIdentity = {
@@ -2197,7 +2262,14 @@ export function TransportPanelContent() {
           previousProjectIdentity.songId !== nextProjectIdentity.songId));
 
     if (shouldResetProjectScopedState) {
-      setWaveformCache({});
+      setWaveformCache(
+        Object.fromEntries(
+          (song?.waveforms ?? []).map((summary) => [
+            summary.waveformKey,
+            summary,
+          ]),
+        ),
+      );
       setLibraryAssets([]);
       setLibraryClipPreview([]);
       setOptimisticClipOperations([]);
@@ -2205,7 +2277,7 @@ export function TransportPanelContent() {
     }
 
     projectIdentityRef.current = nextProjectIdentity;
-  }, [playbackSongDir, song?.id]);
+  }, [playbackSongDir, song?.id, song?.waveforms]);
 
   useEffect(() => {
     let active = true;
@@ -3182,7 +3254,7 @@ export function TransportPanelContent() {
   const canPersistProject = Boolean(song);
   const isProjectEmpty = !song;
   const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
-  const shouldShowEmptyState = !isProjectPending && !song;
+  const shouldShowEmptyState = !isShellBusy && !isProjectPending && !song;
   const timelineRowWidth = HEADER_WIDTH + laneViewportWidth;
   const visibleTracks = useMemo<TimelineTrackSummary[]>(() => {
     const realTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
@@ -6736,11 +6808,11 @@ export function TransportPanelContent() {
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
       <div
-        className={`lt-daw-shell ${midiLearnMode !== null ? "is-midi-learn-active" : ""} ${isBusy ? "is-busy" : ""}`}
+        className={`lt-daw-shell ${midiLearnMode !== null ? "is-midi-learn-active" : ""} ${isShellBusy ? "is-busy" : ""}`}
         ref={panelRef}
         onContextMenu={(event) => event.preventDefault()}
       >
-        {isBusy ? (
+        {isShellBusy ? (
           <div className="busy-overlay" aria-live="polite">
             <div className="busy-overlay-card">
               <strong>{t("transport.shell.busyTitle")}</strong>
@@ -6917,7 +6989,7 @@ export function TransportPanelContent() {
           onMidiLearnTarget={handleMidiLearnTarget}
         />
 
-        <div className={`lt-shell-body ${isBusy ? "is-hidden" : ""}`}>
+        <div className={`lt-shell-body ${isShellBusy ? "is-hidden" : ""}`}>
           <SideNav
             activeSidebarTab={activeSidebarTab}
             isRemoteModalOpen={isRemoteModalOpen}

@@ -246,6 +246,18 @@ fn waveform_job_key(song_dir: &Path, waveform_key: &str) -> String {
     format!("{}\n{waveform_key}", song_dir.to_string_lossy())
 }
 
+fn unique_waveform_keys(song: &Song) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut keys = Vec::new();
+    for clip in &song.clips {
+        let key = waveform_key_for_file_path(&clip.file_path);
+        if seen.insert(key.clone()) {
+            keys.push(key);
+        }
+    }
+    keys
+}
+
 fn process_waveform_job(job: WaveformJob) {
     let WaveformJob {
         app,
@@ -586,17 +598,27 @@ impl DesktopSession {
             })?;
         let song = load_song_from_file(&song_file)?;
 
+        let open_t0 = Instant::now();
+        eprintln!("[LT_LOAD_DEBUG] open_project_from_dialog start");
         emit_project_load_progress(app, 10, "Leyendo proyecto...".into(), 0, 0, 0, 0);
         self.load_song_from_path(song, song_dir, audio)?;
         self.song_file_path = Some(song_file);
+        eprintln!(
+            "[LT_LOAD_DEBUG] load_song_from_path done t+{}ms",
+            open_t0.elapsed().as_millis()
+        );
         self.wait_for_project_audio_preparation(app, audio)?;
+        eprintln!(
+            "[LT_LOAD_DEBUG] open_project_from_dialog complete total={}ms",
+            open_t0.elapsed().as_millis()
+        );
 
         Ok(Some(self.snapshot()))
     }
 
     pub fn import_song_from_dialog(
         &mut self,
-        _app: &AppHandle,
+        app: &AppHandle,
         audio: &AudioController,
     ) -> Result<Option<TransportSnapshot>, DesktopError> {
         let package_file = FileDialog::new()
@@ -616,6 +638,7 @@ impl DesktopSession {
 
         let package_path = package_file.to_string_lossy().into_owned();
         let inserted = self.import_song_package(&package_path, self.current_position(), audio)?;
+        self.wait_for_project_audio_preparation(app, audio)?;
 
         Ok(Some(inserted.snapshot))
     }
@@ -2143,6 +2166,15 @@ impl DesktopSession {
             AudioChangeImpact::StructureRebuild,
             true,
         )?;
+        let loaded_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        self.prime_waveform_cache(&song_dir, &loaded_song)?;
+        audio.wait_until_sources_ready(Duration::from_secs(120))?;
+        self.ensure_project_waveforms_ready(&song_dir, &loaded_song, audio)?;
+        audio.prepare_playback_at(loaded_song, self.current_position())?;
         Ok(SongPackageImportResponse {
             snapshot: self.snapshot(),
             library_assets,
@@ -2509,17 +2541,50 @@ impl DesktopSession {
     }
 
     fn wait_for_project_audio_preparation(
-        &self,
+        &mut self,
         app: &AppHandle,
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
         const TIMEOUT: Duration = Duration::from_secs(120);
-        const POLL_INTERVAL: Duration = Duration::from_millis(100);
+        const POLL_INTERVAL: Duration = Duration::from_millis(50);
+        // Sources occupy 0..=85% of the bar; waveforms 85..=92%; prearm 92..=100%.
+        // Leaving the last slice for prearm keeps the UI honest: once we reach
+        // 100% it means Play will be instant (no Bungee voice construction on
+        // the critical path).
+        const SOURCES_SPAN: u8 = 85;
         let started_at = Instant::now();
-        let mut last_percent = 0_u8;
+        let mut last_ready = usize::MAX;
+        let mut last_total = usize::MAX;
+        let mut poll_count = 0u32;
+        eprintln!("[LT_LOAD_DEBUG] wait_for_project_audio_preparation entering");
 
         loop {
-            let snapshot = audio.engine_snapshot()?;
+            poll_count += 1;
+            // engine_snapshot() uses try_lock and returns Err if the lock is
+            // contended (e.g. meter polling holds it). Don't propagate — that
+            // would abort the whole open flow. Just back off and retry on the
+            // next iteration so the loop survives temporary contention.
+            let snapshot = match audio.engine_snapshot() {
+                Ok(s) => s,
+                Err(err) => {
+                    if poll_count <= 3 || poll_count % 20 == 0 {
+                        eprintln!(
+                            "[LT_LOAD_DEBUG] poll #{} t+{}ms engine_snapshot busy: {}",
+                            poll_count,
+                            started_at.elapsed().as_millis(),
+                            err
+                        );
+                    }
+                    if started_at.elapsed() >= TIMEOUT {
+                        eprintln!(
+                            "[LT_LOAD_DEBUG] wait_for_project_audio_preparation TIMED OUT while snapshot lock contended"
+                        );
+                        return Ok(());
+                    }
+                    thread::sleep(POLL_INTERVAL);
+                    continue;
+                }
+            };
             let total = snapshot.source_states.len();
             let ready = snapshot
                 .source_states
@@ -2527,7 +2592,7 @@ impl DesktopSession {
                 .filter(|source| {
                     matches!(
                         source.status.as_str(),
-                        "ready" | "failed" | "cancelled"
+                        "ready" | "cache_ready" | "failed" | "cancelled"
                     )
                 })
                 .count();
@@ -2536,24 +2601,41 @@ impl DesktopSession {
                 .iter()
                 .filter(|source| source.status == "failed")
                 .count();
-            let ram_cache_mb =
-                (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
-            let disk_cache_mb =
-                (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
+            let ram_cache_mb = (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
+            let disk_cache_mb = (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
+            if poll_count <= 3 || poll_count % 20 == 0 || ready != last_ready || total != last_total {
+                let status_breakdown: std::collections::HashMap<&str, usize> = snapshot
+                    .source_states
+                    .iter()
+                    .fold(std::collections::HashMap::new(), |mut acc, s| {
+                        *acc.entry(s.status.as_str()).or_insert(0) += 1;
+                        acc
+                    });
+                eprintln!(
+                    "[LT_LOAD_DEBUG] poll #{} t+{}ms total={} ready={} failures={} breakdown={:?}",
+                    poll_count,
+                    started_at.elapsed().as_millis(),
+                    total,
+                    ready,
+                    failures,
+                    status_breakdown
+                );
+            }
 
             let percent = if total == 0 {
-                35
+                10
             } else {
-                35 + ((ready * 55) / total).min(55) as u8
+                10 + ((ready * SOURCES_SPAN as usize) / total).min(SOURCES_SPAN as usize) as u8
             };
-            if percent != last_percent || ready == total {
-                last_percent = percent;
+            // Emit on every ready/total change so the UI shows 1/31 → 2/31 …
+            // not just the few percent-step boundaries.
+            if ready != last_ready || total != last_total {
+                last_ready = ready;
+                last_total = total;
                 let message = if total == 0 {
                     "Inicializando preparacion de audio...".to_string()
                 } else if failures > 0 {
-                    format!(
-                        "Preparando audio... {ready}/{total} fuentes ({failures} con error)"
-                    )
+                    format!("Preparando audio... {ready}/{total} fuentes ({failures} con error)")
                 } else {
                     format!("Preparando audio... {ready}/{total} fuentes")
                 };
@@ -2569,6 +2651,70 @@ impl DesktopSession {
             }
 
             if total > 0 && ready >= total {
+                eprintln!(
+                    "[LT_LOAD_DEBUG] sources all ready ({}/{}) t+{}ms — entering waveform/prearm phase",
+                    ready,
+                    total,
+                    started_at.elapsed().as_millis()
+                );
+                let song_opt = self.engine.song().cloned();
+                if let Some(song) = song_opt {
+                    let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+                    emit_project_load_progress(
+                        app,
+                        87,
+                        "Preparando waveforms...".into(),
+                        ready,
+                        total,
+                        ram_cache_mb,
+                        disk_cache_mb,
+                    );
+                    let wf_t0 = Instant::now();
+                    self.ensure_project_waveforms_ready(&song_dir, &song, audio)?;
+                    eprintln!(
+                        "[LT_LOAD_DEBUG] ensure_project_waveforms_ready done in {}ms",
+                        wf_t0.elapsed().as_millis()
+                    );
+                    let pp_t0 = Instant::now();
+                    audio.prepare_playback_at(song.clone(), self.current_position())?;
+                    eprintln!(
+                        "[LT_LOAD_DEBUG] prepare_playback_at done in {}ms",
+                        pp_t0.elapsed().as_millis()
+                    );
+                    emit_project_load_progress(
+                        app,
+                        92,
+                        "Preparando voces para reproduccion instantanea...".into(),
+                        ready,
+                        total,
+                        ram_cache_mb,
+                        disk_cache_mb,
+                    );
+                    self.wait_for_prearm_idle(app, audio, ready, total)?;
+                    let prepared_snapshot = audio.engine_snapshot()?;
+                    let ram_cache_mb =
+                        (prepared_snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
+                    let disk_cache_mb =
+                        (prepared_snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
+                    emit_project_load_progress(
+                        app,
+                        100,
+                        "Proyecto listo para reproducir.".into(),
+                        ready,
+                        total,
+                        ram_cache_mb,
+                        disk_cache_mb,
+                    );
+                    eprintln!(
+                        "[LT_LOAD_DEBUG] wait_for_project_audio_preparation complete (song branch) t+{}ms",
+                        started_at.elapsed().as_millis()
+                    );
+                    return Ok(());
+                }
+                eprintln!(
+                    "[LT_LOAD_DEBUG] wait_for_project_audio_preparation: NO SONG in engine, emitting 100% early t+{}ms",
+                    started_at.elapsed().as_millis()
+                );
                 emit_project_load_progress(
                     app,
                     100,
@@ -2593,6 +2739,122 @@ impl DesktopSession {
                 return Ok(());
             }
 
+            thread::sleep(POLL_INTERVAL);
+        }
+    }
+
+    fn wait_for_prearm_idle(
+        &self,
+        app: &AppHandle,
+        audio: &AudioController,
+        ready: usize,
+        total: usize,
+    ) -> Result<(), DesktopError> {
+        // Bungee voice priming for marker/region/song targets runs on a
+        // background worker after LoadSession. Without waiting here, the first
+        // Play after open pays the ~80ms × voices × markers warm cost on the
+        // audio thread → multi-second silence before sound starts. Bound the
+        // wait so a stuck worker can't freeze the open flow forever.
+        const PREARM_TIMEOUT: Duration = Duration::from_secs(30);
+        const POLL_INTERVAL: Duration = Duration::from_millis(50);
+        const STABLE_REQUIRED: u32 = 3; // ~150ms of idle to absorb re-post races
+        const MIN_POSTS: u64 = 2; // initial (sources empty) + re-post once all decoded
+        let started_at = Instant::now();
+        let mut last_emitted_percent = 92_u8;
+        let mut stable_polls: u32 = 0;
+        let mut prearm_poll_count = 0u32;
+        eprintln!("[LT_LOAD_DEBUG] wait_for_prearm_idle entering");
+        loop {
+            prearm_poll_count += 1;
+            let snapshot = match audio.engine_snapshot() {
+                Ok(s) => s,
+                Err(err) => {
+                    if prearm_poll_count <= 3 || prearm_poll_count % 20 == 0 {
+                        eprintln!(
+                            "[LT_LOAD_DEBUG] prearm poll #{} engine_snapshot busy: {}",
+                            prearm_poll_count, err
+                        );
+                    }
+                    if started_at.elapsed() >= PREARM_TIMEOUT {
+                        return Ok(());
+                    }
+                    thread::sleep(POLL_INTERVAL);
+                    continue;
+                }
+            };
+            let prearm = &snapshot.prearmed_jumps;
+            // The first prearm post (from LoadSession) fires before sources
+            // are decoded, so the worker returns in ~0ms with nothing built
+            // (ready_count=0). The REAL build only happens after the
+            // source_ready callback re-posts once every source is decoded —
+            // that's the post we actually need to wait for. So require:
+            //   - at least 2 posts have been seen, AND
+            //   - completed has caught up to posted, AND
+            //   - the prepared cache actually contains voices (ready_count>0)
+            //     OR the session legitimately has zero targets (no markers /
+            //     regions), in which case prepared_total stays 0 and we'll
+            //     bail via the timeout / no-targets check.
+            let idle = !prearm.worker_busy
+                && prearm.posted_count >= MIN_POSTS
+                && prearm.completed_count >= prearm.posted_count;
+            if prearm_poll_count <= 3 || prearm_poll_count % 10 == 0 {
+                eprintln!(
+                    "[LT_LOAD_DEBUG] prearm poll #{} t+{}ms busy={} posted={} completed={} ready_count={} prepared_total={} stable={} idle={}",
+                    prearm_poll_count,
+                    started_at.elapsed().as_millis(),
+                    prearm.worker_busy,
+                    prearm.posted_count,
+                    prearm.completed_count,
+                    prearm.ready_count,
+                    prearm.prepared_total,
+                    stable_polls,
+                    idle
+                );
+            }
+            if idle {
+                stable_polls = stable_polls.saturating_add(1);
+                if stable_polls >= STABLE_REQUIRED {
+                    eprintln!(
+                        "[LT_LOAD_DEBUG] wait_for_prearm_idle finished after {}ms ({} polls)",
+                        started_at.elapsed().as_millis(),
+                        prearm_poll_count
+                    );
+                    return Ok(());
+                }
+            } else {
+                stable_polls = 0;
+            }
+            if started_at.elapsed() >= PREARM_TIMEOUT {
+                eprintln!(
+                    "[LT_LOAD_DEBUG] wait_for_prearm_idle TIMED OUT after {}ms, busy={} posted={} completed={}",
+                    started_at.elapsed().as_millis(),
+                    prearm.worker_busy,
+                    prearm.posted_count,
+                    prearm.completed_count
+                );
+                return Ok(());
+            }
+            // Walk 92 → 99 over the wait so the user sees movement even
+            // though we don't know the exact total number of targets being
+            // prearmed.
+            let elapsed_secs = (started_at.elapsed().as_millis() / 1_000).min(7) as u8;
+            let percent = 92_u8 + elapsed_secs;
+            if percent != last_emitted_percent {
+                last_emitted_percent = percent;
+                let ram_cache_mb =
+                    (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
+                let disk_cache_mb =
+                    (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
+                emit_project_load_progress(
+                    app,
+                    percent.min(99),
+                    "Preparando voces para reproduccion instantanea...".into(),
+                    ready,
+                    total,
+                    ram_cache_mb,
+                    disk_cache_mb,
+                );
+            }
             thread::sleep(POLL_INTERVAL);
         }
     }
@@ -3186,9 +3448,35 @@ impl DesktopSession {
     fn prime_waveform_cache(&mut self, song_dir: &Path, song: &Song) -> Result<(), DesktopError> {
         self.waveform_cache.reset(song_dir);
 
-        for clip in &song.clips {
-            let waveform_key = waveform_key_for_file_path(&clip.file_path);
+        for waveform_key in unique_waveform_keys(song) {
             let _ = self.load_waveform_summary_cached(song_dir, &waveform_key, false);
+        }
+
+        Ok(())
+    }
+
+    fn ensure_project_waveforms_ready(
+        &mut self,
+        song_dir: &Path,
+        song: &Song,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        self.waveform_cache.reset_if_song_changed(song_dir);
+
+        for waveform_key in unique_waveform_keys(song) {
+            match self.load_waveform_summary_cached(song_dir, &waveform_key, false) {
+                Ok(_) => {}
+                Err(DesktopError::Project(ProjectError::Io(_)))
+                | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
+                    if self
+                        .load_native_waveform_summary(song_dir, &waveform_key, audio)
+                        .is_err()
+                    {
+                        let _ = self.load_waveform_summary_cached(song_dir, &waveform_key, true)?;
+                    }
+                }
+                Err(error) => return Err(error),
+            }
         }
 
         Ok(())
@@ -4202,6 +4490,10 @@ fn track_depth_from_tracks(tracks: &[Track], track_id: &str) -> Result<usize, De
 }
 
 impl WaveformMemoryCache {
+    pub(crate) fn summary(&self, waveform_key: &str) -> Option<&WaveformSummary> {
+        self.entries.get(waveform_key).map(|cached| &cached.summary)
+    }
+
     pub(crate) fn source_duration_seconds(&self, waveform_key: &str) -> Option<f64> {
         self.entries
             .get(waveform_key)

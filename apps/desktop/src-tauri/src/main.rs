@@ -20,6 +20,23 @@ use state::DesktopState;
 use commands::engine_v2::EngineV2State;
 
 fn main() {
+    // Force RUST_BACKTRACE=full so any panic prints a stack trace, and install
+    // a panic hook that flushes stderr so npm/PowerShell shows it instead of
+    // a bare "command failed" exit. Also drop the abort-on-panic so we get the
+    // hook output before the process dies.
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::env::set_var("RUST_BACKTRACE", "full");
+    }
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        eprintln!("\n[LT_PANIC] Rust panic captured: {info}");
+        let bt = std::backtrace::Backtrace::force_capture();
+        eprintln!("[LT_PANIC] backtrace:\n{bt}");
+        use std::io::Write as _;
+        let _ = std::io::stderr().flush();
+        default_hook(info);
+    }));
+
     // Keep the env flag visible for diagnostics; desktop audio now routes
     // through the C++ engine v2 path by default.
     let _engine_v2_requested = std::env::var("LIBRETRACKS_AUDIO_ENGINE")

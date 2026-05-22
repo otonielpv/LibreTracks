@@ -63,6 +63,7 @@ public:
     void request_block(const Id& source_id, int block_index) const noexcept;
     void request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept;
     CacheDiagnostics cache_diagnostics() const;
+    SourcePeakOverview source_peaks(const Id& source_id, int resolution_frames) const;
 
     // Get a loaded source.  Returns nullptr if not loaded.
     // Safe to call from audio thread (read-only once loaded).

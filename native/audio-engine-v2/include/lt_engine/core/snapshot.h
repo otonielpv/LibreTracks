@@ -142,6 +142,12 @@ struct EngineSnapshot {
         std::uint64_t stale_discard_total  = 0;
         std::uint64_t eviction_total       = 0;
         int           max_prepared_targets = 0;
+        // Async prearm worker progress (see prearmed_jump_manager.h Diagnostics).
+        bool          worker_busy             = false;
+        std::uint64_t latest_posted_revision  = 0;
+        std::uint64_t last_completed_revision = 0;
+        std::uint64_t posted_count            = 0;
+        std::uint64_t completed_count         = 0;
     } prearmed_jumps;
 };
 

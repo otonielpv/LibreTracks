@@ -276,6 +276,111 @@ CacheDiagnostics SourceManager::cache_diagnostics() const {
     return block_cache_.diagnostics();
 }
 
+SourcePeakOverview SourceManager::source_peaks(const Id& source_id,
+                                               int resolution_frames) const {
+    SourcePeakOverview overview;
+    overview.resolution_frames = std::max(1, resolution_frames);
+
+    Entry entry;
+    {
+        auto entries = std::atomic_load(&entries_);
+        auto it = entries->find(source_id);
+        if (it == entries->end())
+            return overview;
+        entry = it->second;
+    }
+
+    overview.sample_rate = entry.sample_rate;
+    overview.duration_frames = entry.duration_frames;
+    if (!entry.source || !entry.source->is_loaded()
+        || entry.channel_count <= 0 || entry.duration_frames <= 0) {
+        return overview;
+    }
+
+    if (entry.cache_file_path.empty())
+        return entry.source->peaks(overview.resolution_frames);
+
+    const Frame bucket_width = static_cast<Frame>(overview.resolution_frames);
+    const std::size_t bucket_count = static_cast<std::size_t>(
+        (entry.duration_frames + bucket_width - 1) / bucket_width);
+    std::vector<float> min_peaks(bucket_count, 0.f);
+    std::vector<float> max_peaks(bucket_count, 0.f);
+    std::vector<bool> initialized(bucket_count, false);
+
+    constexpr int kChunkFrames = 16384;
+    std::vector<float> data(static_cast<std::size_t>(kChunkFrames)
+                            * static_cast<std::size_t>(entry.channel_count),
+                            0.f);
+
+    Frame cursor = 0;
+#if LT_ENGINE_USE_LIBSNDFILE
+    SF_INFO info{};
+    SNDFILE* sf = sf_open(entry.cache_file_path.c_str(), SFM_READ, &info);
+    if (!sf)
+        return overview;
+    if (info.channels != entry.channel_count) {
+        sf_close(sf);
+        return overview;
+    }
+    while (cursor < entry.duration_frames) {
+        const int frames_to_read = static_cast<int>(
+            std::min<Frame>(kChunkFrames, entry.duration_frames - cursor));
+        const int frames_read = static_cast<int>(
+            sf_readf_float(sf, data.data(), static_cast<sf_count_t>(frames_to_read)));
+        if (frames_read <= 0)
+            break;
+#else
+    std::ifstream in(entry.cache_file_path, std::ios::binary);
+    if (!in)
+        return overview;
+    while (cursor < entry.duration_frames) {
+        const int frames_to_read = static_cast<int>(
+            std::min<Frame>(kChunkFrames, entry.duration_frames - cursor));
+        const std::size_t sample_count =
+            static_cast<std::size_t>(frames_to_read) * entry.channel_count;
+        in.read(reinterpret_cast<char*>(data.data()),
+                static_cast<std::streamsize>(sample_count * sizeof(float)));
+        const int frames_read = static_cast<int>(
+            static_cast<std::size_t>(in.gcount())
+            / (sizeof(float) * static_cast<std::size_t>(entry.channel_count)));
+        if (frames_read <= 0)
+            break;
+#endif
+        for (int frame = 0; frame < frames_read; ++frame) {
+            const Frame absolute = cursor + frame;
+            const std::size_t bucket = static_cast<std::size_t>(absolute / bucket_width);
+            if (bucket >= bucket_count)
+                continue;
+            float value = 0.f;
+            const float* row = data.data()
+                + static_cast<std::size_t>(frame) * entry.channel_count;
+            for (int ch = 0; ch < entry.channel_count; ++ch)
+                value += row[ch];
+            value /= static_cast<float>(entry.channel_count);
+            value = std::clamp(value, -1.f, 1.f);
+            if (!initialized[bucket]) {
+                min_peaks[bucket] = value;
+                max_peaks[bucket] = value;
+                initialized[bucket] = true;
+            } else {
+                min_peaks[bucket] = std::min(min_peaks[bucket], value);
+                max_peaks[bucket] = std::max(max_peaks[bucket], value);
+            }
+        }
+        cursor += frames_read;
+    }
+#if LT_ENGINE_USE_LIBSNDFILE
+    sf_close(sf);
+#endif
+
+    if (cursor <= 0)
+        return overview;
+
+    overview.min_peaks = std::move(min_peaks);
+    overview.max_peaks = std::move(max_peaks);
+    return overview;
+}
+
 const DecodedSource* SourceManager::get(const Id& source_id) const noexcept {
     auto entries = std::atomic_load(&entries_);
     auto it = entries->find(source_id);
@@ -367,6 +472,10 @@ void SourceManager::fill_block_from_disk(const CacheKey& key) const {
     SNDFILE* sf = sf_open(entry.cache_file_path.c_str(), SFM_READ, &info);
     if (!sf)
         return;
+    if (info.channels != entry.channel_count) {
+        sf_close(sf);
+        return;
+    }
     if (sf_seek(sf, static_cast<sf_count_t>(start), SEEK_SET) < 0) {
         sf_close(sf);
         return;

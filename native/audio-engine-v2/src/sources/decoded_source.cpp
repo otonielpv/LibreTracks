@@ -1,10 +1,25 @@
 #include <lt_engine/sources/decoded_source.h>
 #include <lt_engine/debug/logging.h>
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 
 namespace lt {
+
+namespace {
+
+int streaming_read_ahead_blocks() {
+    static const int value = [] {
+        const char* raw = std::getenv("LIBRETRACKS_SOURCE_READ_AHEAD_BLOCKS");
+        if (!raw) return 16;
+        const int parsed = std::atoi(raw);
+        return parsed >= 1 && parsed <= 256 ? parsed : 16;
+    }();
+    return value;
+}
+
+} // namespace
 
 DecodedSource::DecodedSource(std::vector<float> samples,
                              int                channel_count,
@@ -69,7 +84,7 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
                     std::fill(out[ch] + copied, out[ch] + copied + chunk, 0.f);
             }
             if (request_block_) {
-                constexpr int kReadAheadBlocks = 2;
+                const int kReadAheadBlocks = streaming_read_ahead_blocks();
                 for (int ahead = 1; ahead <= kReadAheadBlocks; ++ahead) {
                     const int next_block = block_index + ahead;
                     const Frame next_start =

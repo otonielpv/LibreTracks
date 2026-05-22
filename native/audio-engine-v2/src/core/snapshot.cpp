@@ -113,6 +113,11 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"stale_discard_total",  snap.prearmed_jumps.stale_discard_total},
         {"eviction_total",       snap.prearmed_jumps.eviction_total},
         {"max_prepared_targets", snap.prearmed_jumps.max_prepared_targets},
+        {"worker_busy",             snap.prearmed_jumps.worker_busy},
+        {"latest_posted_revision",  snap.prearmed_jumps.latest_posted_revision},
+        {"last_completed_revision", snap.prearmed_jumps.last_completed_revision},
+        {"posted_count",            snap.prearmed_jumps.posted_count},
+        {"completed_count",         snap.prearmed_jumps.completed_count},
     };
 
     j["metronome"] = {

@@ -5,6 +5,7 @@ use libretracks_core::{
 };
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
+use std::collections::HashSet;
 
 use crate::error::DesktopError;
 use crate::state::WaveformMemoryCache;
@@ -91,6 +92,7 @@ pub struct SongView {
     pub section_markers: Vec<MarkerSummary>,
     pub clips: Vec<ClipSummary>,
     pub tracks: Vec<TrackSummary>,
+    pub waveforms: Vec<WaveformSummaryDto>,
     pub project_revision: u64,
 }
 
@@ -249,6 +251,21 @@ pub(crate) fn song_to_view(
     project_revision: u64,
     song_dir: Option<&std::path::Path>,
 ) -> SongView {
+    let mut waveform_keys = HashSet::new();
+    let waveforms = song
+        .clips
+        .iter()
+        .filter_map(|clip| {
+            let waveform_key = waveform_key_for_file_path(&clip.file_path);
+            if !waveform_keys.insert(waveform_key.clone()) {
+                return None;
+            }
+            waveform_cache
+                .summary(&waveform_key)
+                .map(|summary| waveform_summary_to_dto(&waveform_key, summary))
+        })
+        .collect();
+
     SongView {
         id: song.id.clone(),
         title: song.title.clone(),
@@ -295,6 +312,7 @@ pub(crate) fn song_to_view(
                 audio_to: track.audio_to.clone(),
             })
             .collect(),
+        waveforms,
         project_revision,
     }
 }

@@ -7,6 +7,7 @@ import {
   saveProject,
   saveProjectAs,
 } from "../desktopApi";
+import { nextPaint } from "../pendingAudioImports";
 import type { SidebarTab } from "../types";
 
 type UseProjectActionsProps = {
@@ -15,6 +16,8 @@ type UseProjectActionsProps = {
     options?: { busy?: boolean },
   ) => Promise<void>;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
+  setProjectViewHydrating: (hydrating: boolean) => void;
+  refreshSongView: (options?: { sync?: boolean }) => Promise<unknown>;
   refreshLibraryState: (options?: {
     preserveAssets?: LibraryAssetSummary[];
   }) => Promise<LibraryAssetSummary[]>;
@@ -27,6 +30,8 @@ type UseProjectActionsProps = {
 export function useProjectActions({
   runAction,
   applyPlaybackSnapshot,
+  setProjectViewHydrating,
+  refreshSongView,
   refreshLibraryState,
   t,
   setStatus,
@@ -58,9 +63,67 @@ export function useProjectActions({
   function handleOpenProjectClick() {
     void runAction(
       async () => {
-        const nextSnapshot = (await openProject()) ?? snapshotRef.current;
-        applyPlaybackSnapshot(nextSnapshot);
-        setActiveSidebarTab(null);
+        const t0 = performance.now();
+        console.log(`[LT_LOAD_DEBUG] handleOpenProjectClick start`);
+        setProjectViewHydrating(true);
+        try {
+          // openProject() returns only after the backend has finished decoding
+          // all sources AND prearmed Bungee voices — see
+          // wait_for_project_audio_preparation in state.rs. So by the time we
+          // continue, the engine is ready to Play instantly.
+          console.log(
+            `[LT_LOAD_DEBUG] openProject() invoking backend t+${(
+              performance.now() - t0
+            ).toFixed(0)}ms`,
+          );
+          const nextSnapshot = (await openProject()) ?? snapshotRef.current;
+          console.log(
+            `[LT_LOAD_DEBUG] openProject() returned t+${(
+              performance.now() - t0
+            ).toFixed(0)}ms snapshot=${nextSnapshot ? "yes" : "null"}`,
+          );
+          const nextSong = await refreshSongView({ sync: true });
+          const songSummary = nextSong as
+            | { tracks?: unknown[]; clips?: unknown[] }
+            | null
+            | undefined;
+          console.log(
+            `[LT_LOAD_DEBUG] refreshSongView returned t+${(
+              performance.now() - t0
+            ).toFixed(0)}ms tracks=${songSummary?.tracks?.length ?? "none"} ` +
+              `clips=${songSummary?.clips?.length ?? "none"}`,
+          );
+          applyPlaybackSnapshot(nextSnapshot);
+          setActiveSidebarTab(null);
+          if (nextSong) {
+            // Wait two animation frames so React commits the new SongView and
+            // paints the tracks before we tear down the loading overlay —
+            // prevents the 1-2s flash of an empty timeline between the
+            // overlay closing and the tracks appearing.
+            await nextPaint();
+            console.log(
+              `[LT_LOAD_DEBUG] post-nextPaint hiding overlay t+${(
+                performance.now() - t0
+              ).toFixed(0)}ms`,
+            );
+            setProjectViewHydrating(false);
+          } else {
+            console.log(
+              `[LT_LOAD_DEBUG] no nextSong, overlay stays open t+${(
+                performance.now() - t0
+              ).toFixed(0)}ms`,
+            );
+          }
+        } catch (error) {
+          console.error(
+            `[LT_LOAD_DEBUG] handleOpenProjectClick threw t+${(
+              performance.now() - t0
+            ).toFixed(0)}ms`,
+            error,
+          );
+          setProjectViewHydrating(false);
+          throw error;
+        }
       },
       { busy: true },
     );
@@ -69,15 +132,27 @@ export function useProjectActions({
   function handleImportSongClick() {
     void runAction(
       async () => {
-        const nextSnapshot = await pickAndImportSong();
-        if (!nextSnapshot) {
-          return;
-        }
+        setProjectViewHydrating(true);
+        try {
+          const nextSnapshot = await pickAndImportSong();
+          if (!nextSnapshot) {
+            setProjectViewHydrating(false);
+            return;
+          }
 
-        applyPlaybackSnapshot(nextSnapshot);
-        await refreshLibraryState();
-        setActiveSidebarTab(null);
-        setStatus(t("transport.status.songImported"));
+          const nextSong = await refreshSongView({ sync: true });
+          applyPlaybackSnapshot(nextSnapshot);
+          await refreshLibraryState();
+          setActiveSidebarTab(null);
+          setStatus(t("transport.status.songImported"));
+          if (nextSong) {
+            await nextPaint();
+            setProjectViewHydrating(false);
+          }
+        } catch (error) {
+          setProjectViewHydrating(false);
+          throw error;
+        }
       },
       { busy: true },
     );

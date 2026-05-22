@@ -218,6 +218,19 @@ public:
         std::uint64_t stale_discard_total  = 0; // sets dropped on revision bump
         std::uint64_t eviction_total       = 0; // sets evicted when over cap
         int           max_prepared_targets = 0; // current cap (Phase 7)
+        // Async worker progress. The revision fields may stay constant across
+        // re-posts (the source-ready callback re-prearms under the same
+        // revision once all sources finish decoding), so use the monotonic
+        // posted_count / completed_count to detect "is there outstanding
+        // work?". The worker is idle when
+        //   !worker_busy && posted_count == completed_count
+        // Used by the project-load progress UI to know when prearm priming
+        // has finished and the first Play will be instant.
+        bool          worker_busy             = false;
+        std::uint64_t latest_posted_revision  = 0;
+        std::uint64_t last_completed_revision = 0;
+        std::uint64_t posted_count            = 0;
+        std::uint64_t completed_count         = 0;
     };
     Diagnostics diagnostics() const noexcept;
 
