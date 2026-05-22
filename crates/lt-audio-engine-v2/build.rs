@@ -33,10 +33,22 @@ fn main() {
     if lib_dir.exists() {
         println!("cargo:rustc-link-search=native={}", lib_dir.display());
         println!("cargo:rustc-link-lib=dylib=lt_audio_engine_v2");
-        if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
-            println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
-            println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib");
-            println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib/libretracks-desktop");
+        match std::env::var("CARGO_CFG_TARGET_OS").as_deref() {
+            Ok("linux") => {
+                println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+                println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib");
+                println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib/libretracks-desktop");
+            }
+            Ok("macos") => {
+                // Inside the .app bundle the executable lives at
+                // Contents/MacOS/ and dylibs must be in Contents/Frameworks/.
+                // The other rpaths cover `cargo run` (dylib next to binary)
+                // and being loaded by another module (dylib next to loader).
+                println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/../Frameworks");
+                println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path");
+                println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path");
+            }
+            _ => {}
         }
     } else {
         println!(

@@ -32,6 +32,12 @@
         "installerIcon": "icons/icon.ico"
       }
     },
+    "macOS": {
+      "frameworks": [
+        "../../../vendor/bin/native/liblt_audio_engine_v2.dylib",
+        "../../../vendor/bin/native/bungee.framework"
+      ]
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

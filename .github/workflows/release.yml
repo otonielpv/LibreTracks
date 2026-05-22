@@ -225,6 +225,74 @@ jobs:
           projectPath: 'apps/desktop'
           args: ${{ matrix.platform == 'macos' && '--verbose --target universal-apple-darwin' || matrix.platform == 'linux' && '--verbose --bundles deb,appimage' || '--verbose' }}
 
+      - name: Validate macOS .app bundle dylib wiring
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find target-desktop-native -type d -name 'LibreTracks.app' -path '*/bundle/macos/*' | head -n1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::No LibreTracks.app found under target-desktop-native"
+            exit 1
+          fi
+          echo "Inspecting: $APP_PATH"
+
+          BIN="$APP_PATH/Contents/MacOS/libretracks-desktop"
+          FRAMEWORKS="$APP_PATH/Contents/Frameworks"
+
+          # 1) Engine dylib must be bundled in Contents/Frameworks/
+          DYLIB="$FRAMEWORKS/liblt_audio_engine_v2.dylib"
+          if [ ! -f "$DYLIB" ]; then
+            echo "::error::Missing $DYLIB. Tauri did not bundle the engine dylib."
+            echo "Contents/Frameworks listing:"
+            ls -la "$FRAMEWORKS" 2>/dev/null || echo "(directory absent)"
+            exit 1
+          fi
+
+          # 2) Binary must reference engine dylib via @rpath
+          echo "--- otool -L on main binary ---"
+          otool -L "$BIN"
+          if ! otool -L "$BIN" | grep -q '@rpath/liblt_audio_engine_v2.dylib'; then
+            echo "::error::Main binary does not reference engine via @rpath."
+            exit 1
+          fi
+
+          # 3) Binary must declare an LC_RPATH that resolves to Frameworks/
+          echo "--- LC_RPATH entries ---"
+          otool -l "$BIN" | awk '/LC_RPATH/{flag=1} flag{print; if(/path /) {flag=0}}'
+          if ! otool -l "$BIN" | grep -A2 LC_RPATH | grep -q '@executable_path/../Frameworks'; then
+            echo "::error::Main binary missing LC_RPATH '@executable_path/../Frameworks'. This is the crash users see on launch (Library not loaded / no LC_RPATH's found)."
+            exit 1
+          fi
+
+          # 4) Engine dylib's own install_name must use @rpath
+          echo "--- engine dylib install_name ---"
+          ENGINE_INSTALL_NAME="$(otool -D "$DYLIB" | tail -n1)"
+          echo "$ENGINE_INSTALL_NAME"
+          case "$ENGINE_INSTALL_NAME" in
+            @rpath/*) ;;
+            *)
+              echo "::error::Engine dylib install_name '$ENGINE_INSTALL_NAME' is not @rpath-relative. Set INSTALL_NAME_DIR=@rpath in CMake."
+              exit 1
+              ;;
+          esac
+
+          # 5) Dry-run loader resolution: ask dyld to resolve every dependency
+          #    of the main binary. Will fail with the same DYLD error users hit
+          #    if any @rpath dependency is unresolved.
+          echo "--- DYLD_PRINT_LIBRARIES dry run ---"
+          if ! DYLD_PRINT_LIBRARIES=1 DYLD_PRINT_RPATHS=1 "$BIN" --version 2>&1 | tee /tmp/dyld.log; then
+            if grep -q 'Library not loaded' /tmp/dyld.log; then
+              echo "::error::Dyld could not resolve a referenced library — this is the crash from the macOS report."
+              exit 1
+            fi
+            # Non-zero exit without 'Library not loaded' just means the app
+            # doesn't support --version. That's fine; we only care that dyld
+            # itself was happy.
+            echo "Binary exited non-zero but dyld did not report missing libraries — OK."
+          fi
+          echo "macOS bundle validation passed."
+
       - name: Upload release assets
         uses: actions/upload-artifact@v4
         with:

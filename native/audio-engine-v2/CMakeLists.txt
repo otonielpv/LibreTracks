@@ -28,6 +28,18 @@ set_target_properties(lt_audio_engine_v2 PROPERTIES
   CXX_EXTENSIONS OFF
 )
 
+# On macOS, the consuming binary references the engine via
+# `@rpath/liblt_audio_engine_v2.dylib`. The dylib itself must record that as
+# its install_name so the linker stamps the @rpath form into the executable;
+# otherwise Tauri ships a binary that hard-codes the build-time absolute path.
+if(APPLE)
+    set_target_properties(lt_audio_engine_v2 PROPERTIES
+        MACOSX_RPATH ON
+        INSTALL_NAME_DIR "@rpath"
+        BUILD_WITH_INSTALL_NAME_DIR ON
+    )
+endif()
+
 target_include_directories(lt_audio_engine_v2
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
