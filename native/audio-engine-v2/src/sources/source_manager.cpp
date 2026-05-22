@@ -1,10 +1,18 @@
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/sources/audio_decoder.h>
 #include <algorithm>
+#include <cerrno>
 #include <cstdlib>
 #include <cstdio>
-#include <filesystem>
 #include <fstream>
+#include <string>
+
+#if defined(_WIN32)
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
 
 #if LT_ENGINE_USE_LIBSNDFILE
 #include <sndfile.h>
@@ -34,6 +42,95 @@ int eager_source_blocks_from_env() {
             return parsed;
     }
     return 64;
+}
+
+char native_path_separator() {
+#if defined(_WIN32)
+    return '\\';
+#else
+    return '/';
+#endif
+}
+
+bool is_path_separator(char c) {
+    return c == '/' || c == '\\';
+}
+
+bool is_root_path(const std::string& path) {
+    if (path == "/" || path == "\\")
+        return true;
+    return path.size() == 3 &&
+           path[1] == ':' &&
+           is_path_separator(path[2]);
+}
+
+bool create_directory_if_missing(const std::string& path) {
+    if (path.empty())
+        return false;
+    if (is_root_path(path))
+        return true;
+#if defined(_WIN32)
+    if (_mkdir(path.c_str()) == 0)
+        return true;
+#else
+    if (::mkdir(path.c_str(), 0755) == 0)
+        return true;
+#endif
+    return errno == EEXIST;
+}
+
+bool create_directories_compat(const std::string& path) {
+    if (path.empty())
+        return true;
+
+    std::string current;
+    current.reserve(path.size());
+
+    for (std::size_t i = 0; i < path.size(); ++i) {
+        current.push_back(path[i]);
+        if (!is_path_separator(path[i]) || current.size() <= 1)
+            continue;
+
+        while (i + 1 < path.size() && is_path_separator(path[i + 1])) {
+            current.push_back(path[++i]);
+        }
+
+        if (current.size() > 1 && !create_directory_if_missing(current))
+            return false;
+    }
+
+    return create_directory_if_missing(path);
+}
+
+std::string parent_path_compat(const std::string& path) {
+    const auto pos = path.find_last_of("/\\");
+    if (pos == std::string::npos)
+        return {};
+    if (pos == 0)
+        return path.substr(0, 1);
+    return path.substr(0, pos);
+}
+
+std::string temp_directory_compat() {
+#if defined(_WIN32)
+    const char* candidates[] = {std::getenv("TEMP"), std::getenv("TMP")};
+#else
+    const char* candidates[] = {std::getenv("TMPDIR"), std::getenv("TEMP"), std::getenv("TMP")};
+#endif
+    for (const char* candidate : candidates) {
+        if (candidate && candidate[0] != '\0') {
+            std::string dir(candidate);
+            while (dir.size() > 1 && is_path_separator(dir.back()))
+                dir.pop_back();
+            return dir;
+        }
+    }
+    return
+#if defined(_WIN32)
+        ".";
+#else
+        "/tmp";
+#endif
 }
 
 } // namespace
@@ -163,7 +260,8 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
 
     const std::string cache_file = cache_file_for(source_id, file_path, sample_rate);
     try {
-        std::filesystem::create_directories(std::filesystem::path(cache_file).parent_path());
+        if (!create_directories_compat(parent_path_compat(cache_file)))
+            return Result<void>::err("Could not create PCM cache directory: " + cache_file);
 #if LT_ENGINE_USE_LIBSNDFILE
         SF_INFO info{};
         info.channels = channel_count;
@@ -507,8 +605,9 @@ std::string SourceManager::cache_file_for(const Id& source_id,
                                           int sample_rate) const {
     const std::string key = source_id + "|" + file_path + "|" + std::to_string(sample_rate);
     const auto h = std::hash<std::string>{}(key);
-    auto dir = std::filesystem::temp_directory_path() / "libretracks-audio-cache";
-    return (dir / (std::to_string(h) + ".rf64")).string();
+    return temp_directory_compat() + native_path_separator() +
+           "libretracks-audio-cache" + native_path_separator() +
+           std::to_string(h) + ".rf64";
 }
 
 } // namespace lt
