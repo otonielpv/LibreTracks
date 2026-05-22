@@ -703,6 +703,13 @@ export function TransportPanelContent() {
     durationSeconds: 0,
     running: false,
   });
+  // Set right before an explicit transport action (seek/play/pause/stop) so
+  // the next snapshot from the store subscriber forces a re-anchor even if
+  // shouldPreserveVisualAnchor would otherwise short-circuit. Without this,
+  // previewSeek() leaves the anchor with running=false while the RTT to the
+  // backend resolves, and if the returned snapshot's lastSeekPositionSeconds
+  // matches the previous one the anchor never re-runs → playhead frozen.
+  const forceReanchorOnNextSnapshotRef = useRef(false);
   const displayPositionSecondsRef = useRef(0);
   const suppressTrackClickRef = useRef(false);
   const trackSelectionAnchorRef = useRef<string | null>(null);
@@ -1903,7 +1910,11 @@ export function TransportPanelContent() {
         transportAnchorMetaRef.current = null;
       }
 
+      const forceReanchor = forceReanchorOnNextSnapshotRef.current;
+      forceReanchorOnNextSnapshotRef.current = false;
+
       const shouldPreserveVisualAnchor =
+        !forceReanchor &&
         !anchorMeta &&
         previousSnapshot?.playbackState === "playing" &&
         nextSnapshot.playbackState === "playing" &&
@@ -3033,6 +3044,7 @@ export function TransportPanelContent() {
 
   async function performSeek(positionSeconds: number) {
     previewSeek(positionSeconds);
+    forceReanchorOnNextSnapshotRef.current = true;
 
     try {
       const nextSnapshot = await seekTransport(positionSeconds);
