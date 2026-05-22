@@ -14,7 +14,7 @@ use libretracks_core::Song;
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     DeviceInfo, Engine, EngineCommand, EngineSnapshot, JumpTarget, JumpTargetKind, JumpTrigger,
-    MarkerUpdate, RegionUpdate, SourcePeaks,
+    MarkerUpdate, RegionUpdate, SourcePeaks, TempoMarkerUpdate, TimeSignatureMarkerUpdate,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -325,6 +325,8 @@ pub struct AudioController {
     commit_mix_command_count: AtomicU64,
     /// Total commits that updated pitch runtime (transpose_enabled, region_transpose).
     commit_pitch_command_count: AtomicU64,
+    /// Total tempo/time-signature session updates sent without reloading sources.
+    transport_timing_update_count: AtomicU64,
     /// Total commits that updated model only (name, visual metadata) with no audio command.
     commit_model_only_count: AtomicU64,
     /// Counts `LoadSession` commands sent for structural changes.
@@ -344,6 +346,8 @@ pub struct RealtimeControlDiagnostics {
     pub commit_mix_command_count: u64,
     /// Commit: model updated + one targeted pitch command (transpose_enabled, region_transpose).
     pub commit_pitch_command_count: u64,
+    /// Transport timing: model updated + one targeted session timing command.
+    pub transport_timing_update_count: u64,
     /// Commit: model updated only — no audio command (name, visual metadata).
     pub commit_model_only_count: u64,
     /// Structural: `LoadSession` sent. Must not increment for any Category A or commit-only op.
@@ -367,6 +371,7 @@ impl AudioController {
             metronome_realtime_volume_count: AtomicU64::new(0),
             commit_mix_command_count: AtomicU64::new(0),
             commit_pitch_command_count: AtomicU64::new(0),
+            transport_timing_update_count: AtomicU64::new(0),
             commit_model_only_count: AtomicU64::new(0),
             session_rebuild_count: AtomicU64::new(0),
             last_session_rebuild_reason: Mutex::new(String::new()),
@@ -661,6 +666,57 @@ impl AudioController {
         })
     }
 
+    pub fn update_live_song_timing(&self, song: &Song) -> Result<(), DesktopError> {
+        self.transport_timing_update_count
+            .fetch_add(1, Ordering::Relaxed);
+        self.with_engine_state("set_song_timing", None, |engine, state| {
+            let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
+            let tempo_markers = song
+                .tempo_markers
+                .iter()
+                .map(|marker| TempoMarkerUpdate {
+                    id: marker.id.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                    bpm: marker.bpm,
+                })
+                .collect();
+            let time_signature_markers = song
+                .time_signature_markers
+                .iter()
+                .map(|marker| {
+                    let (beats_per_bar, beat_unit) =
+                        parse_engine_time_signature(&marker.signature)?;
+                    Ok(TimeSignatureMarkerUpdate {
+                        id: marker.id.clone(),
+                        frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                        beats_per_bar,
+                        beat_unit,
+                    })
+                })
+                .collect::<Result<Vec<_>, DesktopError>>()?;
+            engine.send_command(&EngineCommand::SetSongTiming {
+                song_id: song.id.clone(),
+                bpm: song.bpm,
+                beats_per_bar,
+                beat_unit,
+                tempo_markers,
+                time_signature_markers,
+            })?;
+            if state.loaded_session_signature.is_some() {
+                let resolved = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
+                state.loaded_session_signature = Some(session_signature(&resolved));
+            }
+            state.last_sync = Some(AudioOperationSummary {
+                reason: Some("set_song_timing".into()),
+                elapsed_ms: 0.0,
+                scheduled_clips: song.clips.len(),
+                active_sinks: song.tracks.len(),
+                opened_files: 0,
+            });
+            Ok(())
+        })
+    }
+
     pub fn update_live_track_mix(
         &self,
         track_id: &str,
@@ -782,6 +838,9 @@ impl AudioController {
                 .load(Ordering::Relaxed),
             commit_mix_command_count: self.commit_mix_command_count.load(Ordering::Relaxed),
             commit_pitch_command_count: self.commit_pitch_command_count.load(Ordering::Relaxed),
+            transport_timing_update_count: self
+                .transport_timing_update_count
+                .load(Ordering::Relaxed),
             commit_model_only_count: self.commit_model_only_count.load(Ordering::Relaxed),
             session_rebuild_count: self.session_rebuild_count.load(Ordering::Relaxed),
             last_session_rebuild_reason: self
@@ -1333,6 +1392,24 @@ fn normalize_engine_audio_path(path: &str) -> String {
         }
     }
     normalized
+}
+
+fn parse_engine_time_signature(signature: &str) -> Result<(i32, i32), DesktopError> {
+    let (beats_per_bar, beat_unit) = signature
+        .split_once('/')
+        .ok_or_else(|| DesktopError::AudioCommand("time signature is invalid".into()))?;
+    let beats_per_bar = beats_per_bar
+        .parse::<i32>()
+        .map_err(|_| DesktopError::AudioCommand("time signature is invalid".into()))?;
+    let beat_unit = beat_unit
+        .parse::<i32>()
+        .map_err(|_| DesktopError::AudioCommand("time signature is invalid".into()))?;
+    if beats_per_bar <= 0 || beat_unit <= 0 {
+        return Err(DesktopError::AudioCommand(
+            "time signature is invalid".into(),
+        ));
+    }
+    Ok((beats_per_bar, beat_unit))
 }
 
 fn session_signature(song: &Song) -> String {

@@ -2955,7 +2955,12 @@ impl DesktopSession {
                     audio.sync_song(song.clone())?;
                 }
             }
-            AudioChangeImpact::MixerOnly | AudioChangeImpact::TransportOnly => {}
+            AudioChangeImpact::TransportOnly => {
+                // Tempo and meter changes must reach the native session immediately so the
+                // metronome follows the new grid in realtime, even before audio warp exists.
+                audio.update_live_song_timing(&song)?;
+            }
+            AudioChangeImpact::MixerOnly => {}
         }
 
         self.perf_metrics.song_save_millis = 0;
@@ -7130,6 +7135,12 @@ mod tests {
         assert!(snapshot.project_revision > 0);
         assert!(song_view.regions.is_empty());
         assert_eq!(song_view.bpm, 148.0);
+        let diagnostics = audio.realtime_control_diagnostics();
+        assert_eq!(diagnostics.transport_timing_update_count, 1);
+        assert_eq!(
+            diagnostics.session_rebuild_count, 0,
+            "tempo commits must refresh native timing without reloading sources"
+        );
     }
 
     #[test]

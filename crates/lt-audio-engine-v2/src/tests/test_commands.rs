@@ -175,6 +175,47 @@ fn set_song_markers_round_trip() {
 // ── Track / mix ─────────────────────────────────────────────────────────────
 
 #[test]
+fn set_song_timing_round_trip() {
+    let cmd = EngineCommand::SetSongTiming {
+        song_id: "song1".into(),
+        bpm: 132.5,
+        beats_per_bar: 7,
+        beat_unit: 8,
+        tempo_markers: vec![TempoMarkerUpdate {
+            id: "tempo_a".into(),
+            frame: 96000,
+            bpm: 99.0,
+        }],
+        time_signature_markers: vec![TimeSignatureMarkerUpdate {
+            id: "sig_a".into(),
+            frame: 144000,
+            beats_per_bar: 3,
+            beat_unit: 4,
+        }],
+    };
+    let json = serde_json::to_string(&cmd).unwrap();
+    assert!(json.contains("\"type\":\"SetSongTiming\""));
+    let rt: EngineCommand = serde_json::from_str(&json).unwrap();
+    assert!(matches!(
+        rt,
+        EngineCommand::SetSongTiming {
+            song_id,
+            bpm,
+            beats_per_bar: 7,
+            beat_unit: 8,
+            tempo_markers,
+            time_signature_markers,
+        } if song_id == "song1"
+            && (bpm - 132.5).abs() < 1e-9
+            && tempo_markers.len() == 1
+            && tempo_markers[0].id == "tempo_a"
+            && (tempo_markers[0].bpm - 99.0).abs() < 1e-9
+            && time_signature_markers.len() == 1
+            && time_signature_markers[0].beats_per_bar == 3
+    ));
+}
+
+#[test]
 fn set_track_gain_round_trip() {
     let cmd = EngineCommand::SetTrackGain {
         track_id: "t1".into(),
@@ -357,6 +398,14 @@ fn all_commands_have_type_field() {
             audio_to: "master".into(),
         },
         EngineCommand::SetMetronomeEnabled { enabled: true },
+        EngineCommand::SetSongTiming {
+            song_id: "song1".into(),
+            bpm: 120.0,
+            beats_per_bar: 4,
+            beat_unit: 4,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+        },
         EngineCommand::SetSampleRate { sample_rate: 48000 },
         EngineCommand::SetBufferSize { buffer_size: 512 },
     ];

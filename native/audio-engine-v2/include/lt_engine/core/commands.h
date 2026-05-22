@@ -119,6 +119,26 @@ struct CmdSetSongMarkers {
     std::vector<MarkerUpdate> markers;
 };
 
+struct CmdSetSongTiming {
+    struct TempoMarkerUpdate {
+        Id     id;
+        Frame  frame = 0;
+        double bpm = 120.0;
+    };
+    struct TimeSignatureMarkerUpdate {
+        Id     id;
+        Frame  frame = 0;
+        int    beats_per_bar = 4;
+        int    beat_unit = 4;
+    };
+    Id song_id;
+    double bpm = 120.0;
+    int beats_per_bar = 4;
+    int beat_unit = 4;
+    std::vector<TempoMarkerUpdate> tempo_markers;
+    std::vector<TimeSignatureMarkerUpdate> time_signature_markers;
+};
+
 // ---------------------------------------------------------------------------
 // Session management
 // ---------------------------------------------------------------------------
@@ -151,7 +171,7 @@ using EngineCommand = std::variant<
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
     CmdSetMetronomeConfig,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetSongRegions,
-    CmdSetSongMarkers,
+    CmdSetSongMarkers, CmdSetSongTiming,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize
 >;
 

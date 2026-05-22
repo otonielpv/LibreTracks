@@ -231,6 +231,40 @@ textarea {
   cursor: not-allowed;
 }
 
+.lt-tap-tempo-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  height: 2rem;
+  min-width: 4.25rem;
+  padding: 0 0.55rem;
+  border: 1px solid rgb(87 241 219 / 0.24);
+  border-radius: 2px;
+  background: rgb(87 241 219 / 0.08);
+  color: #d8fff7;
+  cursor: pointer;
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.lt-tap-tempo-button:hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.42);
+  background: rgb(87 241 219 / 0.14);
+  color: #ffffff;
+}
+
+.lt-tap-tempo-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.lt-tap-tempo-button .material-symbols-outlined {
+  font-size: 16px;
+}
+
 .lt-transport-buttons {
   display: flex;
   align-items: center;

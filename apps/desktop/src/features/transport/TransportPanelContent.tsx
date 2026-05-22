@@ -254,6 +254,11 @@ import {
   waitForUiPaint,
 } from "./helpers";
 
+const MIN_SESSION_BPM = 20;
+const MAX_SESSION_BPM = 300;
+const TAP_TEMPO_RESET_MS = 2500;
+const TAP_TEMPO_MAX_TAPS = 8;
+
 // Backward-compatible re-exports (TransportPanelContent.test.ts imports these)
 export {
   isAudioDeviceVisibleForBackend,
@@ -264,6 +269,40 @@ export type {
   NativeDropCandidateDebug,
   NativeDropCoordinateMode,
 } from "./types";
+
+export function nextTapTempoTimes(
+  previousTapTimesMs: readonly number[],
+  nowMs: number,
+) {
+  const previousTapMs = previousTapTimesMs.at(-1);
+  const activeTapTimes =
+    typeof previousTapMs === "number" && nowMs - previousTapMs <= TAP_TEMPO_RESET_MS
+      ? [...previousTapTimesMs, nowMs]
+      : [nowMs];
+
+  return activeTapTimes.slice(-TAP_TEMPO_MAX_TAPS);
+}
+
+export function calculateTapTempoBpm(tapTimesMs: readonly number[]) {
+  if (tapTimesMs.length < 2) {
+    return null;
+  }
+
+  const intervalsMs = tapTimesMs
+    .slice(1)
+    .map((tapMs, index) => tapMs - tapTimesMs[index])
+    .filter((intervalMs) => intervalMs > 0);
+
+  if (intervalsMs.length === 0) {
+    return null;
+  }
+
+  const averageIntervalMs =
+    intervalsMs.reduce((totalMs, intervalMs) => totalMs + intervalMs, 0) /
+    intervalsMs.length;
+
+  return 60_000 / averageIntervalMs;
+}
 
 export function TransportPanelContent() {
   useRenderCounter("TransportPanelContent");
@@ -364,6 +403,7 @@ export function TransportPanelContent() {
   const appSettingsRef = useRef(appSettings);
   const hasShownMissingMidiDeviceWarningRef = useRef(false);
   const metronomeLiveRequestIdRef = useRef(0);
+  const tapTempoTimesRef = useRef<number[]>([]);
   useEffect(() => {
     if (isSettingsModalOpen) {
       setActiveSettingsTab("audio");
@@ -3337,6 +3377,51 @@ export function TransportPanelContent() {
         time: formatClock(readoutTempoRegion.startSeconds),
       })
     : t("transport.tempoSource.base");
+  function handleTapTempo() {
+    if (!song) {
+      tapTempoTimesRef.current = [];
+      return;
+    }
+
+    const nextTapTimes = nextTapTempoTimes(
+      tapTempoTimesRef.current,
+      performance.now(),
+    );
+    tapTempoTimesRef.current = nextTapTimes;
+
+    const tappedBpm = calculateTapTempoBpm(nextTapTimes);
+    if (tappedBpm === null) {
+      setStatus(t("transport.status.tapTempoWaiting"));
+      return;
+    }
+
+    const clampedBpm = Math.max(
+      MIN_SESSION_BPM,
+      Math.min(MAX_SESSION_BPM, tappedBpm),
+    );
+    const nextBpm = Math.round(clampedBpm * 10) / 10;
+    setTempoDraft(nextBpm.toFixed(1));
+
+    if (Math.abs(nextBpm - songBaseBpm) < 0.05) {
+      setStatus(
+        t("transport.status.tapTempoUpdated", {
+          bpm: nextBpm.toFixed(1),
+        }),
+      );
+      return;
+    }
+
+    void runAction(async () => {
+      const nextSnapshot = await updateSongTempo(nextBpm);
+      applyPlaybackSnapshot(nextSnapshot);
+      setStatus(
+        t("transport.status.tapTempoUpdated", {
+          bpm: nextBpm.toFixed(1),
+        }),
+      );
+    });
+  }
+
   const canPersistProject = Boolean(song);
   const isProjectEmpty = !song;
   const isProjectPending = Boolean(playbackProjectRevision > 0 && !song);
@@ -7034,10 +7119,14 @@ export function TransportPanelContent() {
             handleMetronomeEnabledChange(!appSettings.metronomeEnabled)
           }
           onTempoDraftChange={setTempoDraft}
+          onTapTempo={handleTapTempo}
           onTempoCommit={() => {
             const nextBpm = Number(tempoDraft);
             const currentBpm = songBaseBpm;
-            const clampedBpm = Math.max(20, Math.min(300, nextBpm));
+            const clampedBpm = Math.max(
+              MIN_SESSION_BPM,
+              Math.min(MAX_SESSION_BPM, nextBpm),
+            );
 
             if (
               !song ||

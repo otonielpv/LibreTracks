@@ -34,6 +34,7 @@ type TimelineTopbarProps = {
   metronomeEnabled: boolean;
   onToggleMetronome: () => void;
   onTempoDraftChange: (nextTempoDraft: string) => void;
+  onTapTempo: () => void;
   onTempoCommit: () => void;
   onTimeSignatureDraftChange: (nextSignatureDraft: string) => void;
   onTimeSignatureCommit: () => void;
@@ -72,6 +73,7 @@ export function TimelineTopbar({
   metronomeEnabled,
   onToggleMetronome,
   onTempoDraftChange,
+  onTapTempo,
   onTempoCommit,
   onTimeSignatureDraftChange,
   onTimeSignatureCommit,
@@ -215,6 +217,24 @@ export function TimelineTopbar({
             />
             <small>{tempoSourceLabel}</small>
           </label>
+
+          <button
+            type="button"
+            className="lt-tap-tempo-button"
+            aria-label={t("timelineTopbar.tapTempo")}
+            disabled={!song && !learnModeActive}
+            onClick={() => {
+              if (learnModeActive) {
+                onMidiLearnTarget("param:tempo");
+                return;
+              }
+
+              onTapTempo();
+            }}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">touch_app</span>
+            <span>{t("timelineTopbar.tapTempoShort")}</span>
+          </button>
 
           <label className="lt-bpm-control">
             <span>Compas</span>

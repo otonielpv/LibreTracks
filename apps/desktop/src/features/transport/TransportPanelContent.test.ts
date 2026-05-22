@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calculateTapTempoBpm,
   isAudioDeviceVisibleForBackend,
+  nextTapTempoTimes,
   selectNativeDropCandidate,
   type NativeDropCandidateDebug,
   type NativeDropCoordinateMode,
@@ -130,6 +132,27 @@ describe("isAudioDeviceVisibleForBackend", () => {
   it("shows ASIO devices only when ASIO is explicitly selected", () => {
     expect(isAudioDeviceVisibleForBackend({ backend: "asio" }, "asio")).toBe(true);
     expect(isAudioDeviceVisibleForBackend({ backend: "wasapi" }, "asio")).toBe(false);
+  });
+});
+
+describe("tap tempo helpers", () => {
+  it("calculates BPM from the average tap interval", () => {
+    expect(calculateTapTempoBpm([0, 500, 1000, 1500])).toBeCloseTo(120);
+    expect(calculateTapTempoBpm([0, 600, 1200])).toBeCloseTo(100);
+  });
+
+  it("requires at least two taps", () => {
+    expect(calculateTapTempoBpm([])).toBeNull();
+    expect(calculateTapTempoBpm([1000])).toBeNull();
+  });
+
+  it("resets a tap run after a long pause and keeps only recent taps", () => {
+    expect(nextTapTempoTimes([0, 500], 3201)).toEqual([3201]);
+
+    const taps = [0, 500, 1000, 1500, 2000, 2500, 3000, 3500];
+    expect(nextTapTempoTimes(taps, 4000)).toEqual([
+      500, 1000, 1500, 2000, 2500, 3000, 3500, 4000,
+    ]);
   });
 });
 

@@ -112,6 +112,14 @@ pub enum EngineCommand {
         song_id: String,
         markers: Vec<MarkerUpdate>,
     },
+    SetSongTiming {
+        song_id: String,
+        bpm: f64,
+        beats_per_bar: i32,
+        beat_unit: i32,
+        tempo_markers: Vec<TempoMarkerUpdate>,
+        time_signature_markers: Vec<TimeSignatureMarkerUpdate>,
+    },
 
     SetOutputDevice {
         device_id: String,
@@ -138,6 +146,21 @@ pub struct MarkerUpdate {
     pub id: String,
     pub name: String,
     pub frame: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TempoMarkerUpdate {
+    pub id: String,
+    pub frame: i64,
+    pub bpm: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeSignatureMarkerUpdate {
+    pub id: String,
+    pub frame: i64,
+    pub beats_per_bar: i32,
+    pub beat_unit: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

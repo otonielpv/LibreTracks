@@ -168,6 +168,30 @@ EngineCommand command_from_json(const std::string& raw) {
         return cmd;
     }
 
+    if (type == "SetSongTiming") {
+        CmdSetSongTiming cmd;
+        cmd.song_id = j.at("song_id").get<Id>();
+        cmd.bpm = j.at("bpm").get<double>();
+        cmd.beats_per_bar = j.at("beats_per_bar").get<int>();
+        cmd.beat_unit = j.at("beat_unit").get<int>();
+        for (const auto& item : j.at("tempo_markers")) {
+            CmdSetSongTiming::TempoMarkerUpdate marker;
+            marker.id = item.at("id").get<Id>();
+            marker.frame = item.at("frame").get<Frame>();
+            marker.bpm = item.at("bpm").get<double>();
+            cmd.tempo_markers.push_back(std::move(marker));
+        }
+        for (const auto& item : j.at("time_signature_markers")) {
+            CmdSetSongTiming::TimeSignatureMarkerUpdate marker;
+            marker.id = item.at("id").get<Id>();
+            marker.frame = item.at("frame").get<Frame>();
+            marker.beats_per_bar = item.at("beats_per_bar").get<int>();
+            marker.beat_unit = item.at("beat_unit").get<int>();
+            cmd.time_signature_markers.push_back(std::move(marker));
+        }
+        return cmd;
+    }
+
     if (type == "SetOutputDevice")
         return CmdSetOutputDevice{ j.at("device_id").get<std::string>() };
 

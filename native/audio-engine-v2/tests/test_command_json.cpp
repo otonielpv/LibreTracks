@@ -93,6 +93,32 @@ TEST_CASE("parse SetSongMarkers") {
     CHECK(c.markers[0].frame == 2025472);
 }
 
+TEST_CASE("parse SetSongTiming") {
+    auto cmd = command_from_json(R"({
+        "type":"SetSongTiming",
+        "song_id":"song1",
+        "bpm":132.5,
+        "beats_per_bar":7,
+        "beat_unit":8,
+        "tempo_markers":[{"id":"tempo_a","frame":96000,"bpm":99.0}],
+        "time_signature_markers":[{"id":"sig_a","frame":144000,"beats_per_bar":3,"beat_unit":4}]
+    })");
+    REQUIRE(std::holds_alternative<CmdSetSongTiming>(cmd));
+    auto& c = std::get<CmdSetSongTiming>(cmd);
+    CHECK(c.song_id == "song1");
+    CHECK(c.bpm == doctest::Approx(132.5));
+    CHECK(c.beats_per_bar == 7);
+    CHECK(c.beat_unit == 8);
+    REQUIRE(c.tempo_markers.size() == 1);
+    CHECK(c.tempo_markers[0].id == "tempo_a");
+    CHECK(c.tempo_markers[0].frame == 96000);
+    CHECK(c.tempo_markers[0].bpm == doctest::Approx(99.0));
+    REQUIRE(c.time_signature_markers.size() == 1);
+    CHECK(c.time_signature_markers[0].id == "sig_a");
+    CHECK(c.time_signature_markers[0].beats_per_bar == 3);
+    CHECK(c.time_signature_markers[0].beat_unit == 4);
+}
+
 TEST_CASE("parse SetTrackGain") {
     auto cmd = command_from_json(R"({"type":"SetTrackGain","track_id":"t1","gain":0.75})");
     REQUIRE(std::holds_alternative<CmdSetTrackGain>(cmd));

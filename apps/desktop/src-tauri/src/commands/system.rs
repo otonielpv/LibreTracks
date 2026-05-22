@@ -41,6 +41,8 @@ pub struct OwnershipDiagnostics {
     pub commit_mix_command_count: u64,
     /// Pointer-up commits that updated pitch runtime (transpose_enabled, region_transpose).
     pub commit_pitch_command_count: u64,
+    /// Tempo/time-signature commits pushed to C++ without reloading sources.
+    pub transport_timing_update_count: u64,
     /// Model-only commits (name, visual metadata) — no audio command sent.
     pub commit_model_only_count: u64,
     /// Structural session rebuilds (LoadSession). Nonzero is expected only for StructureRebuild.
@@ -98,6 +100,7 @@ pub fn get_ownership_diagnostics(
         metronome_realtime_volume_count: rt.metronome_realtime_volume_count,
         commit_mix_command_count: rt.commit_mix_command_count,
         commit_pitch_command_count: rt.commit_pitch_command_count,
+        transport_timing_update_count: rt.transport_timing_update_count,
         commit_model_only_count: rt.commit_model_only_count,
         session_rebuild_count: rt.session_rebuild_count,
         last_session_rebuild_reason: rt.last_session_rebuild_reason.clone(),

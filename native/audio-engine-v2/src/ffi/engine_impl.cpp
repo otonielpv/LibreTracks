@@ -1828,6 +1828,58 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             }
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdSetSongTiming>) {
+            if (session_) {
+                auto next_session = std::make_shared<Session>(*session_);
+                bool changed = false;
+                for (auto& song : next_session->songs) {
+                    if (song.id != c.song_id) continue;
+                    song.bpm = std::clamp(c.bpm, 20.0, 300.0);
+                    song.beats_per_bar = std::max(1, c.beats_per_bar);
+                    song.beat_unit = std::max(1, c.beat_unit);
+
+                    song.tempo_markers.clear();
+                    song.tempo_markers.reserve(c.tempo_markers.size());
+                    for (const auto& update : c.tempo_markers) {
+                        TempoMarker marker;
+                        marker.id = update.id;
+                        marker.frame = std::max<Frame>(0, update.frame);
+                        marker.bpm = std::clamp(update.bpm, 20.0, 300.0);
+                        song.tempo_markers.push_back(std::move(marker));
+                    }
+                    std::sort(song.tempo_markers.begin(), song.tempo_markers.end(),
+                        [](const TempoMarker& left, const TempoMarker& right) {
+                            return left.frame < right.frame;
+                        });
+
+                    song.time_signature_markers.clear();
+                    song.time_signature_markers.reserve(c.time_signature_markers.size());
+                    for (const auto& update : c.time_signature_markers) {
+                        TimeSignatureMarker marker;
+                        marker.id = update.id;
+                        marker.frame = std::max<Frame>(0, update.frame);
+                        marker.beats_per_bar = std::max(1, update.beats_per_bar);
+                        marker.beat_unit = std::max(1, update.beat_unit);
+                        song.time_signature_markers.push_back(std::move(marker));
+                    }
+                    std::sort(song.time_signature_markers.begin(),
+                        song.time_signature_markers.end(),
+                        [](const TimeSignatureMarker& left,
+                           const TimeSignatureMarker& right) {
+                            return left.frame < right.frame;
+                        });
+
+                    changed = true;
+                    break;
+                }
+                if (changed) {
+                    std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
+                    (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+                    if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                }
+            }
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdSetOutputDevice>) {
             DeviceOpenRequest req;
             req.device_id = c.device_id;
