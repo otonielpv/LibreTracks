@@ -2115,8 +2115,6 @@ export function TransportPanelContent() {
       const targetRegionId = selectedRegion.id;
       const targetRegionName = selectedRegion.name;
       void runAction(async () => {
-        const t0 = performance.now();
-        console.log(`[TRANSPOSE_PERF] click t=0ms`);
         setPitchPrepareUiState({
           active: true,
           message: "Aplicando cambio de tono...",
@@ -2126,8 +2124,6 @@ export function TransportPanelContent() {
           targetRegionId,
           clampedTransposeSemitones,
         );
-        const t1 = performance.now();
-        console.log(`[TRANSPOSE_PERF] backend RTT t=+${(t1 - t0).toFixed(0)}ms`);
         // Optimistic local mutation: we know exactly what changed (one field
         // on one region) so we patch our local song view directly. The
         // SongView in `song` is the source of truth for the toolbar / region
@@ -2149,8 +2145,6 @@ export function TransportPanelContent() {
           };
         });
         applyPlaybackSnapshot(nextSnapshot);
-        const t2 = performance.now();
-        console.log(`[TRANSPOSE_PERF] applyPlaybackSnapshot t=+${(t2 - t1).toFixed(0)}ms (total=${(t2 - t0).toFixed(0)}ms)`);
         setStatus(
           t("transport.status.regionTransposeUpdated", {
             name: targetRegionName,
@@ -2274,17 +2268,12 @@ export function TransportPanelContent() {
 
   useEffect(() => {
     let active = true;
-    const tEffectStart = performance.now();
-    console.log(`[REVISION_EFFECT] effect_fired revision=${playbackProjectRevision}`);
 
     // If this revision was produced by a local optimistic mutation, the
     // frontend already applied the change and there is nothing new to learn
     // from the server. Skip the refetch entirely.
     if (optimisticallyAppliedRevisionsRef.current.has(playbackProjectRevision)) {
       optimisticallyAppliedRevisionsRef.current.delete(playbackProjectRevision);
-      console.log(
-        `[REVISION_EFFECT] skipped revision=${playbackProjectRevision} (optimistic)`,
-      );
       return;
     }
 
@@ -2308,12 +2297,7 @@ export function TransportPanelContent() {
       if (needsWaveforms) {
         waveformsHydratedRef.current = true;
       }
-      const tFetch = performance.now();
       const nextSong = await getSongView({ includeWaveforms: needsWaveforms });
-      const tFetchDone = performance.now();
-      console.log(
-        `[REVISION_EFFECT] getSongView includeWfs=${needsWaveforms} took=${(tFetchDone - tFetch).toFixed(0)}ms`,
-      );
       if (!active) {
         return;
       }
@@ -2335,10 +2319,6 @@ export function TransportPanelContent() {
       if (nextSong) {
         setIsProjectViewHydrating(false);
       }
-      const tDone = performance.now();
-      console.log(
-        `[REVISION_EFFECT] setSong done revision=${playbackProjectRevision} total=${(tDone - tEffectStart).toFixed(0)}ms`,
-      );
     }
 
     void loadSong();

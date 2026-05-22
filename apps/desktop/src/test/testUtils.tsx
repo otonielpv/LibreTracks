@@ -403,6 +403,7 @@ export function mockLaneBounds(container: HTMLElement, width = 1140) {
 
 export function mockTrackListBounds(container: HTMLElement, width = 1400, height = 500) {
   const trackList = container.querySelector(".lt-track-list") as HTMLDivElement | null;
+  const scrollViewport = container.querySelector(".lt-timeline-scroll-viewport") as HTMLDivElement | null;
   expect(trackList).toBeTruthy();
   const rows = Array.from(container.querySelectorAll(".lt-track-lane-row")) as HTMLDivElement[];
   const headerRows = Array.from(container.querySelectorAll(".lt-track-header-row")) as HTMLDivElement[];
@@ -427,6 +428,39 @@ export function mockTrackListBounds(container: HTMLElement, width = 1400, height
     writable: true,
     value: 0,
   });
+
+  if (scrollViewport) {
+    Object.defineProperty(scrollViewport, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        left: 0,
+        right: width,
+        top: 64,
+        bottom: 64 + height,
+        width,
+        height,
+        x: 0,
+        y: 64,
+        toJSON: () => ({}),
+      }),
+    });
+
+    Object.defineProperty(scrollViewport, "clientWidth", {
+      configurable: true,
+      value: width,
+    });
+
+    Object.defineProperty(scrollViewport, "clientHeight", {
+      configurable: true,
+      value: height,
+    });
+
+    Object.defineProperty(scrollViewport, "scrollTop", {
+      configurable: true,
+      writable: true,
+      value: 0,
+    });
+  }
 
   Object.defineProperty(document, "elementFromPoint", {
     configurable: true,
