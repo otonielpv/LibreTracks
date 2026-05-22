@@ -227,6 +227,7 @@ jobs:
 
       - name: Validate macOS .app bundle dylib wiring
         if: matrix.platform == 'macos'
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
@@ -281,14 +282,31 @@ jobs:
           #    of the main binary. Will fail with the same DYLD error users hit
           #    if any @rpath dependency is unresolved.
           echo "--- DYLD_PRINT_LIBRARIES dry run ---"
-          if ! DYLD_PRINT_LIBRARIES=1 DYLD_PRINT_RPATHS=1 "$BIN" --version 2>&1 | tee /tmp/dyld.log; then
-            if grep -q 'Library not loaded' /tmp/dyld.log; then
-              echo "::error::Dyld could not resolve a referenced library — this is the crash from the macOS report."
-              exit 1
+          rm -f /tmp/dyld.log
+          set +e
+          DYLD_PRINT_LIBRARIES=1 DYLD_PRINT_RPATHS=1 "$BIN" --version > /tmp/dyld.log 2>&1 &
+          DYLD_PID=$!
+          for _ in $(seq 1 20); do
+            if ! kill -0 "$DYLD_PID" 2>/dev/null; then
+              wait "$DYLD_PID"
+              DYLD_STATUS=$?
+              break
             fi
-            # Non-zero exit without 'Library not loaded' just means the app
-            # doesn't support --version. That's fine; we only care that dyld
-            # itself was happy.
+            sleep 1
+          done
+          if kill -0 "$DYLD_PID" 2>/dev/null; then
+            echo "Binary stayed running after dyld resolved startup libraries; terminating validation dry-run."
+            kill "$DYLD_PID" 2>/dev/null || true
+            wait "$DYLD_PID" 2>/dev/null || true
+            DYLD_STATUS=124
+          fi
+          set -e
+          cat /tmp/dyld.log
+          if grep -q 'Library not loaded' /tmp/dyld.log; then
+            echo "::error::Dyld could not resolve a referenced library — this is the crash from the macOS report."
+            exit 1
+          fi
+          if [ "${DYLD_STATUS:-0}" -ne 0 ] && [ "${DYLD_STATUS:-0}" -ne 124 ]; then
             echo "Binary exited non-zero but dyld did not report missing libraries — OK."
           fi
           echo "macOS bundle validation passed."
