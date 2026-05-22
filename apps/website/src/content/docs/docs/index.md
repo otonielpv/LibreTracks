@@ -31,6 +31,8 @@ Editing is non-destructive. Splitting, moving, duplicating, or arranging clips c
 
 Transport behavior is also explicit. Marker jumps, song jumps, Vamp loops, metronome behavior, and remote commands are resolved through the same application state and Rust-side transport logic instead of temporary UI timers.
 
+Large imported sources are prepared for disk-backed playback. LibreTracks keeps a bounded RAM cache and reads ahead from the project cache on disk, so larger multitrack sessions can load without requiring every decoded source to stay resident in memory.
+
 ## Main Areas
 
 - `Settings`: audio device, sample rate, buffer size, hardware outputs, metronome, and MIDI Learn.

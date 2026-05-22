@@ -31,6 +31,8 @@ La edicion es no destructiva. Cortar, mover, duplicar u organizar clips cambia r
 
 El transporte tambien es explicito. Saltos de marca, saltos de cancion, bucles Vamp, metronomo y comandos remotos se resuelven sobre el mismo estado de aplicacion y logica Rust de transporte, no con timers temporales de UI.
 
+Las fuentes importadas grandes se preparan para reproduccion apoyada en disco. LibreTracks mantiene una cache limitada en RAM y lee por adelantado desde la cache del proyecto en disco, asi las sesiones multitrack mas grandes pueden cargar sin mantener cada fuente decodificada completa en memoria.
+
 ## Areas Principales
 
 - `Configuracion`: dispositivo de audio, frecuencia de muestreo, tamano de buffer, salidas hardware, metronomo y MIDI Learn.
