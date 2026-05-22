@@ -412,46 +412,15 @@ impl AudioController {
         position_seconds: f64,
         reason: PlaybackStartReason,
     ) -> Result<(), DesktopError> {
-        let play_t0 = Instant::now();
-        eprintln!(
-            "[LT_LOAD_DEBUG] AudioController::play start reason={:?} pos={:.3}s",
-            reason, position_seconds
-        );
         self.with_engine_state("play", Some(reason), |engine, state| {
             state.song_dir = Some(song_dir);
-            let ensure_t0 = Instant::now();
             ensure_song_loaded(engine, state, &song)?;
-            eprintln!(
-                "[LT_LOAD_DEBUG] play.ensure_song_loaded took {}ms",
-                ensure_t0.elapsed().as_millis()
-            );
-            let wait_t0 = Instant::now();
             wait_for_engine_sources_ready(engine, playback_prepare_wait_timeout())?;
-            eprintln!(
-                "[LT_LOAD_DEBUG] play.wait_for_engine_sources_ready took {}ms",
-                wait_t0.elapsed().as_millis()
-            );
             if !state.running {
-                let seek_t0 = Instant::now();
                 engine.send_command(&EngineCommand::SeekAbsolute {
                     frame: seconds_to_frame_for_engine(engine, position_seconds),
                 })?;
-                eprintln!(
-                    "[LT_LOAD_DEBUG] play.SeekAbsolute took {}ms",
-                    seek_t0.elapsed().as_millis()
-                );
-                let cmd_t0 = Instant::now();
                 engine.send_command(&EngineCommand::Play)?;
-                eprintln!(
-                    "[LT_LOAD_DEBUG] play.Play command took {}ms (total play() = {}ms)",
-                    cmd_t0.elapsed().as_millis(),
-                    play_t0.elapsed().as_millis()
-                );
-            } else {
-                eprintln!(
-                    "[LT_LOAD_DEBUG] play: state.running already true, no-op (total {}ms)",
-                    play_t0.elapsed().as_millis()
-                );
             }
             state.running = true;
             state.anchor_position_seconds = Some(position_seconds);

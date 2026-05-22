@@ -610,25 +610,9 @@ BuildResult build_prepared_set(
         return br;
     }
 
-    std::fprintf(stderr,
-        "[LT_LOAD_DEBUG][cpp] build_prepared_set target_frame=%lld specs=%zu kind=%s\n",
-        static_cast<long long>(target_frame),
-        specs_to_prepare.size(),
-        target_kind_label(kind));
-    std::fflush(stderr);
-    int spec_index = 0;
     for (const auto& spec : specs_to_prepare) {
-        ++spec_index;
-        std::fprintf(stderr,
-            "[LT_LOAD_DEBUG][cpp]   spec %d/%zu clip=%s source=%s warming…\n",
-            spec_index, specs_to_prepare.size(),
-            spec.clip_id.c_str(), spec.source_id.c_str());
-        std::fflush(stderr);
         auto voice = std::make_shared<BungeePitchVoice>();
         if (!voice->configure(sample_rate, channel_count, max_in_frames)) {
-            std::fprintf(stderr,
-                "[LT_LOAD_DEBUG][cpp]   spec %d configure FAILED\n", spec_index);
-            std::fflush(stderr);
             any_failed = true;
             continue;
         }
@@ -646,18 +630,10 @@ BuildResult build_prepared_set(
             continue;
         }
         if (spec.source) {
-            std::fprintf(stderr,
-                "[LT_LOAD_DEBUG][cpp]   spec %d prefeeding source=%s target_frame=%lld\n",
-                spec_index, spec.source_id.c_str(),
-                static_cast<long long>(spec.target_source_frame));
-            std::fflush(stderr);
             prefeed_voice_with_target_audio(
                 *voice, *spec.source, spec.target_source_frame,
                 sample_rate, channel_count, max_in_frames,
                 pitch_scale);
-            std::fprintf(stderr,
-                "[LT_LOAD_DEBUG][cpp]   spec %d prefeed done\n", spec_index);
-            std::fflush(stderr);
         }
         // The voice has already been warmed and prefed up to the
         // target. A second per-voice fade here re-shapes the prepared
@@ -994,27 +970,11 @@ void PrearmedJumpManager::prepare_all_targets_async(
                         static_cast<unsigned long long>(job->revision));
                 }
                 impl_->worker_busy.store(true, std::memory_order_release);
-                const auto job_t0 = std::chrono::steady_clock::now();
-                std::fprintf(stderr,
-                    "[LT_LOAD_DEBUG][cpp] prearm worker_start revision=%llu posted=%llu completed=%llu\n",
-                    static_cast<unsigned long long>(job->revision),
-                    static_cast<unsigned long long>(impl_->posted_count.load()),
-                    static_cast<unsigned long long>(impl_->completed_count.load()));
-                std::fflush(stderr);
                 prepare_all_targets(*job->session, *job->sources, job->revision);
                 impl_->last_completed_revision.store(
                     job->revision, std::memory_order_release);
                 impl_->completed_count.fetch_add(1, std::memory_order_acq_rel);
                 impl_->worker_busy.store(false, std::memory_order_release);
-                const auto job_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - job_t0).count();
-                std::fprintf(stderr,
-                    "[LT_LOAD_DEBUG][cpp] prearm worker_done revision=%llu took=%lldms ready_count=%d prepared_total=%llu\n",
-                    static_cast<unsigned long long>(job->revision),
-                    static_cast<long long>(job_ms),
-                    static_cast<int>(impl_->prepared_map.size()),
-                    static_cast<unsigned long long>(impl_->prepared_total.load()));
-                std::fflush(stderr);
                 if (prearm_log_enabled()) {
                     lt_debug_log(
                         "[PREARM] worker_done revision=%llu\n",
@@ -1029,15 +989,7 @@ void PrearmedJumpManager::prepare_all_targets_async(
     // This is correct because each job rebuilds EVERYTHING for its revision.
     impl_->latest_posted_revision.store(session_revision,
                                         std::memory_order_release);
-    const auto posted_now =
-        impl_->posted_count.fetch_add(1, std::memory_order_acq_rel) + 1;
-    std::fprintf(stderr,
-        "[LT_LOAD_DEBUG][cpp] prearm post revision=%llu posted_count=%llu completed=%llu busy=%d\n",
-        static_cast<unsigned long long>(session_revision),
-        static_cast<unsigned long long>(posted_now),
-        static_cast<unsigned long long>(impl_->completed_count.load()),
-        impl_->worker_busy.load() ? 1 : 0);
-    std::fflush(stderr);
+    impl_->posted_count.fetch_add(1, std::memory_order_acq_rel);
     {
         std::lock_guard<std::mutex> lk(impl_->worker_mtx);
         impl_->pending_job = Impl::PendingJob{

@@ -63,36 +63,14 @@ export function useProjectActions({
   function handleOpenProjectClick() {
     void runAction(
       async () => {
-        const t0 = performance.now();
-        console.log(`[LT_LOAD_DEBUG] handleOpenProjectClick start`);
         setProjectViewHydrating(true);
         try {
           // openProject() returns only after the backend has finished decoding
           // all sources AND prearmed Bungee voices — see
           // wait_for_project_audio_preparation in state.rs. So by the time we
           // continue, the engine is ready to Play instantly.
-          console.log(
-            `[LT_LOAD_DEBUG] openProject() invoking backend t+${(
-              performance.now() - t0
-            ).toFixed(0)}ms`,
-          );
           const nextSnapshot = (await openProject()) ?? snapshotRef.current;
-          console.log(
-            `[LT_LOAD_DEBUG] openProject() returned t+${(
-              performance.now() - t0
-            ).toFixed(0)}ms snapshot=${nextSnapshot ? "yes" : "null"}`,
-          );
           const nextSong = await refreshSongView({ sync: true });
-          const songSummary = nextSong as
-            | { tracks?: unknown[]; clips?: unknown[] }
-            | null
-            | undefined;
-          console.log(
-            `[LT_LOAD_DEBUG] refreshSongView returned t+${(
-              performance.now() - t0
-            ).toFixed(0)}ms tracks=${songSummary?.tracks?.length ?? "none"} ` +
-              `clips=${songSummary?.clips?.length ?? "none"}`,
-          );
           applyPlaybackSnapshot(nextSnapshot);
           setActiveSidebarTab(null);
           if (nextSong) {
@@ -101,26 +79,9 @@ export function useProjectActions({
             // prevents the 1-2s flash of an empty timeline between the
             // overlay closing and the tracks appearing.
             await nextPaint();
-            console.log(
-              `[LT_LOAD_DEBUG] post-nextPaint hiding overlay t+${(
-                performance.now() - t0
-              ).toFixed(0)}ms`,
-            );
             setProjectViewHydrating(false);
-          } else {
-            console.log(
-              `[LT_LOAD_DEBUG] no nextSong, overlay stays open t+${(
-                performance.now() - t0
-              ).toFixed(0)}ms`,
-            );
           }
         } catch (error) {
-          console.error(
-            `[LT_LOAD_DEBUG] handleOpenProjectClick threw t+${(
-              performance.now() - t0
-            ).toFixed(0)}ms`,
-            error,
-          );
           setProjectViewHydrating(false);
           throw error;
         }

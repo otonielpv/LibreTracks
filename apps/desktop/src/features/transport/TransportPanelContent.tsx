@@ -1035,27 +1035,11 @@ export function TransportPanelContent() {
 
     let active = true;
     let unlisten: (() => void) | null = null;
-    let progressEventCount = 0;
-    const listenerStartedAt = performance.now();
-    console.log(
-      `[LT_LOAD_DEBUG] project-load-progress listener registering at t=${listenerStartedAt.toFixed(0)}`,
-    );
     void listenToProjectLoadProgress((event) => {
       if (!active) {
-        console.log(
-          `[LT_LOAD_DEBUG] progress event dropped (listener inactive)`,
-          event,
-        );
         return;
       }
 
-      progressEventCount += 1;
-      const t = (performance.now() - listenerStartedAt).toFixed(0);
-      console.log(
-        `[LT_LOAD_DEBUG] progress #${progressEventCount} t+${t}ms ` +
-          `percent=${event.percent} ready=${event.sourcesReady}/${event.sourcesTotal} ` +
-          `ram=${event.ramCacheMb}MB disk=${event.diskCacheMb}MB msg="${event.message}"`,
-      );
       const detail =
         event.sourcesTotal > 0
           ? `${event.sourcesReady}/${event.sourcesTotal} fuentes · RAM ${event.ramCacheMb} MB · disco ${event.diskCacheMb} MB`
@@ -1066,11 +1050,6 @@ export function TransportPanelContent() {
         detail,
       });
     }).then((dispose) => {
-      console.log(
-        `[LT_LOAD_DEBUG] project-load-progress listener attached, dt=${(
-          performance.now() - listenerStartedAt
-        ).toFixed(0)}ms`,
-      );
       if (!active) {
         dispose();
         return;

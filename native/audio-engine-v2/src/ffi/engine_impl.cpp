@@ -450,47 +450,24 @@ Result<void> EngineImpl::initialize() {
         // and a non-atomic shared_ptr copy can yield a dangling control block
         // → silent SEH crash on the decode worker thread.
         auto current_session = std::atomic_load(&session_);
-        if (!current_session || !session_contains_source(*current_session, source_id)) {
-            std::fprintf(stderr,
-                "[LT_LOAD_DEBUG][cpp] source_ready callback skipped (no current session) id=%s\n",
-                source_id.c_str());
-            std::fflush(stderr);
+        if (!current_session || !session_contains_source(*current_session, source_id))
             return;
-        }
 
         const bool all_ready = session_sources_ready(*current_session, *source_manager_);
-        std::fprintf(stderr,
-            "[LT_LOAD_DEBUG][cpp] source_ready ENTER id=%s all_ready=%d\n",
-            source_id.c_str(), all_ready ? 1 : 0);
-        std::fflush(stderr);
-
-        // DIAGNOSTIC: only run the heavy rebuild when ALL sources are ready,
-        // so we can identify whether the per-source rebuild is causing the
-        // silent SEH crash. If this version no longer crashes, the issue is
-        // contention/UB in rebuild_for_session called concurrently from
-        // multiple decode worker threads.
+        // Defer the heavy Bungee rebuild until every source is decoded —
+        // doing it per-source from a worker thread races with the control
+        // thread's session reassignments and was crashing on multi-track
+        // projects. One rebuild at the end is enough because pitched
+        // playback only kicks in after the user hits Play / seeks.
         if (all_ready && bungee_voices_ && bungee_voices_->is_available() && clock_) {
-            std::fprintf(stderr,
-                "[LT_LOAD_DEBUG][cpp] source_ready calling rebuild_for_session (all_ready)\n");
-            std::fflush(stderr);
             bungee_voices_->rebuild_for_session(
                 *current_session, *source_manager_, clock_->position().frame);
-            std::fprintf(stderr,
-                "[LT_LOAD_DEBUG][cpp] source_ready rebuild_for_session returned\n");
-            std::fflush(stderr);
         }
         if (prearmed_jumps_ && all_ready) {
             const auto rev = prearm_revision_.load(std::memory_order_relaxed);
-            std::fprintf(stderr,
-                "[LT_LOAD_DEBUG][cpp] source_ready triggering prearm reposted revision=%llu\n",
-                static_cast<unsigned long long>(rev));
-            std::fflush(stderr);
             prearmed_jumps_->prepare_all_targets_async(
                 current_session, source_manager_.get(), rev);
         }
-        std::fprintf(stderr,
-            "[LT_LOAD_DEBUG][cpp] source_ready EXIT id=%s\n", source_id.c_str());
-        std::fflush(stderr);
     });
     bungee_voices_  = std::make_unique<BungeeVoiceManager>();
     prearmed_jumps_ = std::make_unique<PrearmedJumpManager>();
@@ -1009,15 +986,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 [this](EngineEvent ev){ push_event(std::move(ev)); },
                 sr
             );
-            std::fprintf(stderr,
-                "[LT_LOAD_DEBUG][cpp] LoadSession enqueueing %zu sources\n",
-                session_->sources.size());
-            std::fflush(stderr);
             prep_queue_->enqueue_session(session_->sources,
                                           clock_->position().frame);
-            std::fprintf(stderr,
-                "[LT_LOAD_DEBUG][cpp] LoadSession enqueue_session returned\n");
-            std::fflush(stderr);
 
             if (mixer_) {
                 // preserve_realtime_state=false: LoadSession is the authoritative source
@@ -1040,10 +1010,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (prearmed_jumps_) {
                 const auto rev = prearm_revision_.fetch_add(1,
                     std::memory_order_relaxed) + 1;
-                std::fprintf(stderr,
-                    "[LT_LOAD_DEBUG][cpp] LoadSession posting initial prearm revision=%llu\n",
-                    static_cast<unsigned long long>(rev));
-                std::fflush(stderr);
                 if (jump_debug_enabled()) {
                     debug_log(
                         "[LT_JUMP_DEBUG][prearm] request_all reason=load_session revision=%llu\n",
@@ -1053,9 +1019,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     next_session, source_manager_.get(), rev);
             }
 
-            std::fprintf(stderr,
-                "[LT_LOAD_DEBUG][cpp] LoadSession command complete\n");
-            std::fflush(stderr);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdPlay>) {

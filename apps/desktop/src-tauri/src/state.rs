@@ -598,20 +598,10 @@ impl DesktopSession {
             })?;
         let song = load_song_from_file(&song_file)?;
 
-        let open_t0 = Instant::now();
-        eprintln!("[LT_LOAD_DEBUG] open_project_from_dialog start");
         emit_project_load_progress(app, 10, "Leyendo proyecto...".into(), 0, 0, 0, 0);
         self.load_song_from_path(song, song_dir, audio)?;
         self.song_file_path = Some(song_file);
-        eprintln!(
-            "[LT_LOAD_DEBUG] load_song_from_path done t+{}ms",
-            open_t0.elapsed().as_millis()
-        );
         self.wait_for_project_audio_preparation(app, audio)?;
-        eprintln!(
-            "[LT_LOAD_DEBUG] open_project_from_dialog complete total={}ms",
-            open_t0.elapsed().as_millis()
-        );
 
         Ok(Some(self.snapshot()))
     }
@@ -2555,30 +2545,16 @@ impl DesktopSession {
         let started_at = Instant::now();
         let mut last_ready = usize::MAX;
         let mut last_total = usize::MAX;
-        let mut poll_count = 0u32;
-        eprintln!("[LT_LOAD_DEBUG] wait_for_project_audio_preparation entering");
 
         loop {
-            poll_count += 1;
             // engine_snapshot() uses try_lock and returns Err if the lock is
             // contended (e.g. meter polling holds it). Don't propagate — that
             // would abort the whole open flow. Just back off and retry on the
             // next iteration so the loop survives temporary contention.
             let snapshot = match audio.engine_snapshot() {
                 Ok(s) => s,
-                Err(err) => {
-                    if poll_count <= 3 || poll_count % 20 == 0 {
-                        eprintln!(
-                            "[LT_LOAD_DEBUG] poll #{} t+{}ms engine_snapshot busy: {}",
-                            poll_count,
-                            started_at.elapsed().as_millis(),
-                            err
-                        );
-                    }
+                Err(_) => {
                     if started_at.elapsed() >= TIMEOUT {
-                        eprintln!(
-                            "[LT_LOAD_DEBUG] wait_for_project_audio_preparation TIMED OUT while snapshot lock contended"
-                        );
                         return Ok(());
                     }
                     thread::sleep(POLL_INTERVAL);
@@ -2603,24 +2579,6 @@ impl DesktopSession {
                 .count();
             let ram_cache_mb = (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
             let disk_cache_mb = (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
-            if poll_count <= 3 || poll_count % 20 == 0 || ready != last_ready || total != last_total {
-                let status_breakdown: std::collections::HashMap<&str, usize> = snapshot
-                    .source_states
-                    .iter()
-                    .fold(std::collections::HashMap::new(), |mut acc, s| {
-                        *acc.entry(s.status.as_str()).or_insert(0) += 1;
-                        acc
-                    });
-                eprintln!(
-                    "[LT_LOAD_DEBUG] poll #{} t+{}ms total={} ready={} failures={} breakdown={:?}",
-                    poll_count,
-                    started_at.elapsed().as_millis(),
-                    total,
-                    ready,
-                    failures,
-                    status_breakdown
-                );
-            }
 
             let percent = if total == 0 {
                 10
@@ -2651,12 +2609,6 @@ impl DesktopSession {
             }
 
             if total > 0 && ready >= total {
-                eprintln!(
-                    "[LT_LOAD_DEBUG] sources all ready ({}/{}) t+{}ms — entering waveform/prearm phase",
-                    ready,
-                    total,
-                    started_at.elapsed().as_millis()
-                );
                 let song_opt = self.engine.song().cloned();
                 if let Some(song) = song_opt {
                     let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
@@ -2669,18 +2621,8 @@ impl DesktopSession {
                         ram_cache_mb,
                         disk_cache_mb,
                     );
-                    let wf_t0 = Instant::now();
                     self.ensure_project_waveforms_ready(&song_dir, &song, audio)?;
-                    eprintln!(
-                        "[LT_LOAD_DEBUG] ensure_project_waveforms_ready done in {}ms",
-                        wf_t0.elapsed().as_millis()
-                    );
-                    let pp_t0 = Instant::now();
                     audio.prepare_playback_at(song.clone(), self.current_position())?;
-                    eprintln!(
-                        "[LT_LOAD_DEBUG] prepare_playback_at done in {}ms",
-                        pp_t0.elapsed().as_millis()
-                    );
                     emit_project_load_progress(
                         app,
                         92,
@@ -2705,16 +2647,8 @@ impl DesktopSession {
                         ram_cache_mb,
                         disk_cache_mb,
                     );
-                    eprintln!(
-                        "[LT_LOAD_DEBUG] wait_for_project_audio_preparation complete (song branch) t+{}ms",
-                        started_at.elapsed().as_millis()
-                    );
                     return Ok(());
                 }
-                eprintln!(
-                    "[LT_LOAD_DEBUG] wait_for_project_audio_preparation: NO SONG in engine, emitting 100% early t+{}ms",
-                    started_at.elapsed().as_millis()
-                );
                 emit_project_load_progress(
                     app,
                     100,
@@ -2762,19 +2696,10 @@ impl DesktopSession {
         let started_at = Instant::now();
         let mut last_emitted_percent = 92_u8;
         let mut stable_polls: u32 = 0;
-        let mut prearm_poll_count = 0u32;
-        eprintln!("[LT_LOAD_DEBUG] wait_for_prearm_idle entering");
         loop {
-            prearm_poll_count += 1;
             let snapshot = match audio.engine_snapshot() {
                 Ok(s) => s,
-                Err(err) => {
-                    if prearm_poll_count <= 3 || prearm_poll_count % 20 == 0 {
-                        eprintln!(
-                            "[LT_LOAD_DEBUG] prearm poll #{} engine_snapshot busy: {}",
-                            prearm_poll_count, err
-                        );
-                    }
+                Err(_) => {
                     if started_at.elapsed() >= PREARM_TIMEOUT {
                         return Ok(());
                     }
@@ -2797,41 +2722,15 @@ impl DesktopSession {
             let idle = !prearm.worker_busy
                 && prearm.posted_count >= MIN_POSTS
                 && prearm.completed_count >= prearm.posted_count;
-            if prearm_poll_count <= 3 || prearm_poll_count % 10 == 0 {
-                eprintln!(
-                    "[LT_LOAD_DEBUG] prearm poll #{} t+{}ms busy={} posted={} completed={} ready_count={} prepared_total={} stable={} idle={}",
-                    prearm_poll_count,
-                    started_at.elapsed().as_millis(),
-                    prearm.worker_busy,
-                    prearm.posted_count,
-                    prearm.completed_count,
-                    prearm.ready_count,
-                    prearm.prepared_total,
-                    stable_polls,
-                    idle
-                );
-            }
             if idle {
                 stable_polls = stable_polls.saturating_add(1);
                 if stable_polls >= STABLE_REQUIRED {
-                    eprintln!(
-                        "[LT_LOAD_DEBUG] wait_for_prearm_idle finished after {}ms ({} polls)",
-                        started_at.elapsed().as_millis(),
-                        prearm_poll_count
-                    );
                     return Ok(());
                 }
             } else {
                 stable_polls = 0;
             }
             if started_at.elapsed() >= PREARM_TIMEOUT {
-                eprintln!(
-                    "[LT_LOAD_DEBUG] wait_for_prearm_idle TIMED OUT after {}ms, busy={} posted={} completed={}",
-                    started_at.elapsed().as_millis(),
-                    prearm.worker_busy,
-                    prearm.posted_count,
-                    prearm.completed_count
-                );
                 return Ok(());
             }
             // Walk 92 → 99 over the wait so the user sees movement even
