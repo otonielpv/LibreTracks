@@ -250,21 +250,30 @@ pub(crate) fn song_to_view(
     waveform_cache: &WaveformMemoryCache,
     project_revision: u64,
     song_dir: Option<&std::path::Path>,
+    include_waveforms: bool,
 ) -> SongView {
-    let mut waveform_keys = HashSet::new();
-    let waveforms = song
-        .clips
-        .iter()
-        .filter_map(|clip| {
-            let waveform_key = waveform_key_for_file_path(&clip.file_path);
-            if !waveform_keys.insert(waveform_key.clone()) {
-                return None;
-            }
-            waveform_cache
-                .summary(&waveform_key)
-                .map(|summary| waveform_summary_to_dto(&waveform_key, summary))
-        })
-        .collect();
+    // Waveform LODs base64-encoded dominate the payload size (~27 MB for a
+    // multitrack church song). When the caller is responding to a mutation
+    // that does not change clip audio (transpose, gain, mute, region rename,
+    // …), skipping the waveforms collapses serialize+IPC from ~3s to ~50ms.
+    // The frontend's waveform cache remains valid from the previous load.
+    let waveforms = if include_waveforms {
+        let mut waveform_keys = HashSet::new();
+        song.clips
+            .iter()
+            .filter_map(|clip| {
+                let waveform_key = waveform_key_for_file_path(&clip.file_path);
+                if !waveform_keys.insert(waveform_key.clone()) {
+                    return None;
+                }
+                waveform_cache
+                    .summary(&waveform_key)
+                    .map(|summary| waveform_summary_to_dto(&waveform_key, summary))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     SongView {
         id: song.id.clone(),

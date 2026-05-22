@@ -9,13 +9,18 @@ use crate::state::{
 use rfd::FileDialog;
 
 #[tauri::command]
-pub fn get_song_view(state: State<'_, DesktopState>) -> Result<Option<SongView>, String> {
+pub fn get_song_view(
+    state: State<'_, DesktopState>,
+    include_waveforms: Option<bool>,
+) -> Result<Option<SongView>, String> {
     let mut session = state
         .session
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session.song_view().map_err(|error| error.to_string())
+    session
+        .song_view_with_options(include_waveforms.unwrap_or(true))
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

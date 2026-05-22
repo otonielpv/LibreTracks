@@ -8,6 +8,11 @@ import {
 
 const PLAYING_POLL_INTERVAL_MS = 250;
 const IDLE_POLL_INTERVAL_MS = 800;
+// While pitch preparation is in flight (transpose just applied, prearm worker
+// rebuilding voices in the background), poll fast so the overlay dismisses
+// promptly the moment the work completes. Without this the user sees the
+// overlay linger up to ~800ms past the actual completion in idle state.
+const PITCH_PREPARING_POLL_INTERVAL_MS = 100;
 const SLOW_POLL_THRESHOLD_MS = 120;
 const SLOW_POLL_BACKOFF_MS = 750;
 
@@ -21,11 +26,13 @@ function isSyncDebugAvailable() {
 type UseTransportPollingProps = {
   playbackState: string;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
+  pitchPreparing?: boolean;
 };
 
 export function useTransportPolling({
   playbackState,
   applyPlaybackSnapshot,
+  pitchPreparing = false,
 }: UseTransportPollingProps) {
   useEffect(() => {
     if (!isTauriApp) {
@@ -55,8 +62,9 @@ export function useTransportPolling({
       }, delayMs);
     };
 
-    const basePollInterval =
-      playbackState === "playing"
+    const basePollInterval = pitchPreparing
+      ? PITCH_PREPARING_POLL_INTERVAL_MS
+      : playbackState === "playing"
         ? PLAYING_POLL_INTERVAL_MS
         : IDLE_POLL_INTERVAL_MS;
 
@@ -114,5 +122,5 @@ export function useTransportPolling({
       active = false;
       clearScheduledRefresh();
     };
-  }, [applyPlaybackSnapshot, playbackState]);
+  }, [applyPlaybackSnapshot, playbackState, pitchPreparing]);
 }

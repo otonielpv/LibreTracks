@@ -116,6 +116,10 @@ function shouldPublishPlaybackSnapshot(
     current.songFilePath !== next.songFilePath ||
     current.isNativeRuntime !== next.isNativeRuntime ||
     current.transportClock?.running !== next.transportClock?.running ||
+    current.transportClock?.lastSeekPositionSeconds !==
+      next.transportClock?.lastSeekPositionSeconds ||
+    current.transportClock?.lastJumpPositionSeconds !==
+      next.transportClock?.lastJumpPositionSeconds ||
     jumpSignature(current) !== jumpSignature(next) ||
     vampSignature(current) !== vampSignature(next) ||
     pitchPrepareSignature(current) !== pitchPrepareSignature(next)

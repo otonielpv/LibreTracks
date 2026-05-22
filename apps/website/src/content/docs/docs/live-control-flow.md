@@ -52,6 +52,10 @@ LibreTracks can change pitch at two levels during rehearsal or show prep:
 
 This is useful when guide tracks, click-related material, or fixed references should remain in place while musical stems move with the song.
 
+:::caution[Change pitch before playback when possible]
+Whenever you can, set the transpose **before pressing Play**. Changing pitch while a song is already playing forces LibreTracks to rebuild the pitch-engine voices in the background, and on modest CPUs that can cause brief audio dropouts or interference for a few seconds until the engine finishes preparing. In a live show, switch the key between songs or with playback stopped.
+:::
+
 ## Mobile Remote
 
 Open `Remote` in the desktop app, then scan the QR code or open the displayed URL from a phone or tablet on the same local network.

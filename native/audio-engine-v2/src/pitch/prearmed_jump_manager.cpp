@@ -25,6 +25,12 @@
 #  define WIN32_LEAN_AND_MEAN
 #  define NOMINMAX  // prevent windows.h min/max macros from clobbering std::min/max
 #  include <windows.h>
+#elif defined(__APPLE__)
+#  include <pthread.h>
+#  include <pthread/qos.h>
+#elif defined(__linux__)
+#  include <sys/resource.h>
+#  include <sys/time.h>
 #endif
 
 namespace lt {
@@ -938,13 +944,26 @@ void PrearmedJumpManager::prepare_all_targets_async(
     // Lazy-start worker thread on first async call.
     if (!impl_->worker_started.exchange(true)) {
         impl_->worker_thread = std::thread([this] {
+            // Lower priority so prearm priming (Bungee FFT, ~100ms per voice,
+            // ~128 voices per session-revision after a transpose) does NOT
+            // compete with the audio thread for CPU. Without this the audio
+            // callback misses its deadline → 50-200ms underruns of silence
+            // every few seconds for ~10s after a SetSongTranspose /
+            // SetRegionTranspose, because the worker grinds through every
+            // prearm target rebuilding voices at the new pitch.
 #ifdef _WIN32
-            // Lower priority below normal so prearm priming (Bungee FFT, ~100ms
-            // per voice) does NOT compete with the audio thread for CPU. Was
-            // causing audible glitches + playhead/audio desync on real
-            // sessions where the worker grinds through several targets in the
-            // background while the user is seeking/transposing.
             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#elif defined(__APPLE__) || defined(__linux__)
+            // QOS_CLASS_BACKGROUND on macOS biases the scheduler toward
+            // I/O / efficiency cores and ensures we never preempt the audio
+            // thread. On Linux pthread_set_qos_class_self_np doesn't exist;
+            // fall through to setpriority(PRIO_PROCESS, 0, 10) which is the
+            // closest equivalent for an in-process nice bump.
+  #ifdef __APPLE__
+            pthread_set_qos_class_self_np(QOS_CLASS_BACKGROUND, 0);
+  #else
+            setpriority(PRIO_PROCESS, 0, 10);
+  #endif
 #endif
             for (;;) {
                 std::optional<Impl::PendingJob> job;

@@ -100,8 +100,12 @@ export async function getTransportSnapshot(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("get_transport_snapshot");
 }
 
-export async function getSongView(): Promise<SongView | null> {
-  return invokeCommand<SongView | null>("get_song_view");
+export async function getSongView(
+  options?: { includeWaveforms?: boolean },
+): Promise<SongView | null> {
+  return invokeCommand<SongView | null>("get_song_view", {
+    includeWaveforms: options?.includeWaveforms ?? true,
+  });
 }
 
 export async function getWaveformSummaries(

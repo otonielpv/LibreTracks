@@ -52,6 +52,10 @@ LibreTracks puede cambiar el tono en dos niveles durante el ensayo o la preparac
 
 Esto es util cuando guias, material de click o referencias fijas deben permanecer en su sitio mientras los stems musicales cambian con la cancion.
 
+:::caution[Cambia el tono antes de reproducir]
+Cuando es posible, ajusta la transposicion **antes de pulsar Play**. Si cambias el tono mientras la cancion ya esta sonando, LibreTracks tiene que reconstruir las voces del motor de pitch en segundo plano, y en equipos modestos eso puede producir pequeños cortes o interferencias durante unos segundos hasta que el motor termina de prepararse. Si estas en directo, hazlo entre canciones o con la reproduccion detenida.
+:::
+
 ## Remote Movil
 
 Abre `Remote` en la app desktop y escanea el codigo QR o abre la URL mostrada desde un movil o tablet en la misma red local.

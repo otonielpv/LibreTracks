@@ -750,6 +750,20 @@ export function TransportPanelContent() {
     useTransportStore.getState().playback,
   );
   const songRef = useRef<SongView | null>(null);
+  // True once the SongView with waveforms has been fetched (or a fetch is
+  // in flight). Used by the revision-effect to decide whether the next
+  // getSongView call needs to pull the ~27 MB waveform payload or can
+  // skip it. Distinct from songRef.current !== null because that lags by
+  // one render — multiple revision bumps during the initial load can race
+  // and all try to fetch waveforms before the first setSong commits.
+  const waveformsHydratedRef = useRef(false);
+  // When the frontend applies a mutation optimistically (transpose, mute,
+  // gain commit, …), it already knows the resulting state. We record the
+  // backend project_revision that the mutation will produce so the
+  // revision-effect can recognise it and skip the refetch entirely — there
+  // is nothing new to learn from the server. Without this every transpose
+  // click still refetches the full SongView for no reason.
+  const optimisticallyAppliedRevisionsRef = useRef(new Set<number>());
   const tracksByIdRef = useRef<Record<string, TrackSummary>>({});
   const clipDragRef = useRef<ClipDragState>(null);
   const clipMoveLiveStatesRef = useRef<Record<string, LiveClipMoveState>>({});
@@ -899,19 +913,46 @@ export function TransportPanelContent() {
     [],
   );
 
-  const refreshSongView = useCallback(async (options?: { sync?: boolean }) => {
-    const nextSong = await getSongView();
-    if (options?.sync) {
-      flushSync(() => {
-        hydrateWaveformCacheFromSong(nextSong);
-        setSong(nextSong);
-      });
-    } else {
-      hydrateWaveformCacheFromSong(nextSong);
-      setSong(nextSong);
-    }
-    return nextSong;
-  }, [hydrateWaveformCacheFromSong]);
+  const refreshSongView = useCallback(
+    async (options?: { sync?: boolean; includeWaveforms?: boolean }) => {
+      // includeWaveforms defaults to true to preserve the contract for the
+      // initial load and for structural mutations (clip add/remove/move). For
+      // mutations that never touch peaks — transpose, gain, mute, solo, region
+      // rename — pass `includeWaveforms: false` to collapse the IPC payload
+      // from ~27 MB to ~50 KB. The frontend keeps its previously hydrated
+      // waveform cache; ClipSummary.waveformKey still points at it. When
+      // waveforms are skipped we must NOT re-hydrate from an empty array
+      // (it would wipe the cache); skip hydration in that case and preserve
+      // the existing entries on the next setSong.
+      const includeWaveforms = options?.includeWaveforms ?? true;
+      if (includeWaveforms) {
+        waveformsHydratedRef.current = true;
+      }
+      const nextSong = await getSongView({ includeWaveforms });
+      const apply = () => {
+        if (includeWaveforms) {
+          hydrateWaveformCacheFromSong(nextSong);
+          setSong(nextSong);
+        } else {
+          // Merge: keep waveforms from the previous song; overlay everything
+          // else from nextSong. If there was no previous song we still take
+          // nextSong as-is (no waveforms to preserve).
+          setSong((previous) => {
+            if (!nextSong) return null;
+            if (!previous) return nextSong;
+            return { ...nextSong, waveforms: previous.waveforms };
+          });
+        }
+      };
+      if (options?.sync) {
+        flushSync(apply);
+      } else {
+        apply();
+      }
+      return nextSong;
+    },
+    [hydrateWaveformCacheFromSong],
+  );
 
   const refreshAudioSettings = useCallback(async () => {
     const [nextSettings, nextAudioDevices, nextMidiInputs] = await Promise.all([
@@ -2071,25 +2112,48 @@ export function TransportPanelContent() {
         return;
       }
 
+      const targetRegionId = selectedRegion.id;
+      const targetRegionName = selectedRegion.name;
       void runAction(async () => {
+        const t0 = performance.now();
+        console.log(`[TRANSPOSE_PERF] click t=0ms`);
         setPitchPrepareUiState({
           active: true,
           message: "Aplicando cambio de tono...",
           startedAt: Date.now(),
         });
         const nextSnapshot = await updateSongRegionTranspose(
-          selectedRegion.id,
+          targetRegionId,
           clampedTransposeSemitones,
         );
-        setPitchPrepareUiState({
-          active: true,
-          message: "Preparando audio transpuesto...",
-          startedAt: Date.now(),
+        const t1 = performance.now();
+        console.log(`[TRANSPOSE_PERF] backend RTT t=+${(t1 - t0).toFixed(0)}ms`);
+        // Optimistic local mutation: we know exactly what changed (one field
+        // on one region) so we patch our local song view directly. The
+        // SongView in `song` is the source of truth for the toolbar / region
+        // selector UI; updating it here is what the user actually wants. We
+        // also pre-register the resulting project_revision so the
+        // revision-effect skips its refetch — there is nothing new on the
+        // server worth ~1.5s of IPC for a single semitone change.
+        optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
+        setSong((previous) => {
+          if (!previous) return previous;
+          return {
+            ...previous,
+            projectRevision: nextSnapshot.projectRevision,
+            regions: previous.regions.map((region) =>
+              region.id === targetRegionId
+                ? { ...region, transposeSemitones: clampedTransposeSemitones }
+                : region,
+            ),
+          };
         });
         applyPlaybackSnapshot(nextSnapshot);
+        const t2 = performance.now();
+        console.log(`[TRANSPOSE_PERF] applyPlaybackSnapshot t=+${(t2 - t1).toFixed(0)}ms (total=${(t2 - t0).toFixed(0)}ms)`);
         setStatus(
           t("transport.status.regionTransposeUpdated", {
-            name: selectedRegion.name,
+            name: targetRegionName,
             transpose: formatTransposeSemitones(clampedTransposeSemitones),
           }),
         );
@@ -2210,24 +2274,71 @@ export function TransportPanelContent() {
 
   useEffect(() => {
     let active = true;
+    const tEffectStart = performance.now();
+    console.log(`[REVISION_EFFECT] effect_fired revision=${playbackProjectRevision}`);
+
+    // If this revision was produced by a local optimistic mutation, the
+    // frontend already applied the change and there is nothing new to learn
+    // from the server. Skip the refetch entirely.
+    if (optimisticallyAppliedRevisionsRef.current.has(playbackProjectRevision)) {
+      optimisticallyAppliedRevisionsRef.current.delete(playbackProjectRevision);
+      console.log(
+        `[REVISION_EFFECT] skipped revision=${playbackProjectRevision} (optimistic)`,
+      );
+      return;
+    }
 
     async function loadSong() {
       if (playbackProjectRevision === 0) {
         setSong(null);
         setIsProjectViewHydrating(false);
+        waveformsHydratedRef.current = false;
         return;
       }
 
-      const nextSong = await getSongView();
+      // First load needs the full SongView with waveforms; subsequent
+      // revision bumps (transpose, gain, mute, region edit, …) only need
+      // the structural mutations — the waveform cache is still valid.
+      // Use a ref (not songRef which lags by one render) so that overlapping
+      // effect runs during the initial load don't all race to fetch
+      // waveforms before the first setSong has committed.
+      const needsWaveforms = !waveformsHydratedRef.current;
+      // Reserve the slot *before* awaiting so a concurrent revision bump
+      // sees needsWaveforms=false and skips the redundant 27 MB fetch.
+      if (needsWaveforms) {
+        waveformsHydratedRef.current = true;
+      }
+      const tFetch = performance.now();
+      const nextSong = await getSongView({ includeWaveforms: needsWaveforms });
+      const tFetchDone = performance.now();
+      console.log(
+        `[REVISION_EFFECT] getSongView includeWfs=${needsWaveforms} took=${(tFetchDone - tFetch).toFixed(0)}ms`,
+      );
       if (!active) {
         return;
       }
 
-      hydrateWaveformCacheFromSong(nextSong);
-      setSong(nextSong);
+      if (!needsWaveforms && nextSong) {
+        // Preserve previously hydrated waveforms.
+        const previous = songRef.current;
+        setSong({ ...nextSong, waveforms: previous?.waveforms ?? [] });
+      } else {
+        hydrateWaveformCacheFromSong(nextSong);
+        setSong(nextSong);
+        if (!nextSong) {
+          // Fetched-with-waveforms returned null (shouldn't normally happen
+          // mid-session, but be defensive): reset the flag so the next
+          // load will fetch waveforms again.
+          waveformsHydratedRef.current = false;
+        }
+      }
       if (nextSong) {
         setIsProjectViewHydrating(false);
       }
+      const tDone = performance.now();
+      console.log(
+        `[REVISION_EFFECT] setSong done revision=${playbackProjectRevision} total=${(tDone - tEffectStart).toFixed(0)}ms`,
+      );
     }
 
     void loadSong();
@@ -2603,7 +2714,11 @@ export function TransportPanelContent() {
     };
   }, [applyPlaybackSnapshot, playbackState]);
 
-  useTransportPolling({ playbackState, applyPlaybackSnapshot });
+  useTransportPolling({
+    playbackState,
+    applyPlaybackSnapshot,
+    pitchPreparing: pitchPrepareUiState.active,
+  });
 
   useEffect(() => {
     const closeMenu = (event: PointerEvent) => {
@@ -4245,6 +4360,7 @@ export function TransportPanelContent() {
         return;
       }
 
+      const nextTransposeEnabled = !track.transposeEnabled;
       void runAction(async () => {
         setPitchPrepareUiState({
           active: true,
@@ -4253,12 +4369,21 @@ export function TransportPanelContent() {
         });
         const nextSnapshot = await updateTrackTransposeEnabled({
           trackId,
-          transposeEnabled: !track.transposeEnabled,
+          transposeEnabled: nextTransposeEnabled,
         });
-        setPitchPrepareUiState({
-          active: true,
-          message: "Preparando audio transpuesto...",
-          startedAt: Date.now(),
+        // Optimistic local mutation: see handleSelectedRegionTransposeChange.
+        optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
+        setSong((previous) => {
+          if (!previous) return previous;
+          return {
+            ...previous,
+            projectRevision: nextSnapshot.projectRevision,
+            tracks: previous.tracks.map((t) =>
+              t.id === trackId
+                ? { ...t, transposeEnabled: nextTransposeEnabled }
+                : t,
+            ),
+          };
         });
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(

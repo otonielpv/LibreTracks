@@ -26,6 +26,12 @@
   #define NOMINMAX
   #endif
   #include <windows.h>
+#elif defined(__APPLE__)
+  #include <pthread.h>
+  #include <pthread/qos.h>
+#elif defined(__linux__)
+  #include <sys/resource.h>
+  #include <sys/time.h>
 #endif
 
 namespace lt {
@@ -553,33 +559,80 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
     auto next = std::make_shared<VoiceMap>();
     next->reserve(specs.size());
 
+    // Build voices in parallel. Each voice is an isolated BungeePitchVoice
+    // instance — Bungee itself is not thread-safe per-instance but instances
+    // are independent. warm_voice (~80ms each at hop=-1) dominates the cost
+    // for SetSongTranspose / SeekAbsolute; serializing 8 voices took ~1s on
+    // M1-class CPUs. Parallelizing collapses that to ~150-200ms (warm of the
+    // slowest voice + overheads). Reads from SourceManager are thread-safe
+    // (it serves a streaming background worker and concurrent renderers
+    // already).
+    const int sample_rate = impl_->sample_rate;
+    const int channel_count = impl_->channel_count;
+    const int max_in_frames = impl_->max_in_frames;
+
+    struct BuildResult {
+        std::shared_ptr<BungeePitchVoice> voice;  // null on failure
+        Id clip_id;
+        bool succeeded = false;
+    };
+
+    std::vector<BuildResult> results(specs.size());
+    std::vector<std::thread> workers;
+    workers.reserve(specs.size());
+    for (std::size_t i = 0; i < specs.size(); ++i) {
+        workers.emplace_back([&, i] {
+            // Lower priority so 8 parallel Bungee FFT warms (~250ms each)
+            // do NOT steal CPU from the audio thread. Without this the user
+            // hears 50-200ms of silence at the moment of pitch change because
+            // these 8 threads saturate the P-cores and the audio callback
+            // misses its deadline.
+#ifdef _WIN32
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#elif defined(__APPLE__)
+            pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0);
+#elif defined(__linux__)
+            setpriority(PRIO_PROCESS, 0, 10);
+#endif
+
+            const auto& spec = specs[i];
+            auto& result = results[i];
+            result.clip_id = spec.clip_id;
+
+            auto voice = std::make_shared<BungeePitchVoice>();
+            if (!voice->configure(sample_rate, channel_count, max_in_frames))
+                return;
+
+            warm_voice(*voice, sample_rate, channel_count, max_in_frames);
+            const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
+            const int latency_frames = static_cast<int>(voice->latency_frames());
+            const int compensation_frames =
+                voice->alignment_compensation_frames(pitch_scale);
+            if (!ensure_seek_read_window_ready(
+                    sources, spec, max_in_frames,
+                    latency_frames, compensation_frames)) {
+                return;
+            }
+            if (spec.source) {
+                prefeed_voice_with_source_audio(
+                    *voice, *spec.source, spec.source_frame,
+                    sample_rate, channel_count, max_in_frames,
+                    pitch_scale);
+            }
+            voice->arm_fade_in(0);
+            result.voice = std::move(voice);
+            result.succeeded = true;
+        });
+    }
+    for (auto& worker : workers)
+        worker.join();
+
+    // Phase 2: install successful voices into the map serially. Cheap (just
+    // moves + atomic counter increments).
     int built = 0;
-    for (const auto& spec : specs) {
-        auto voice = std::make_shared<BungeePitchVoice>();
-        if (!voice->configure(impl_->sample_rate,
-                              impl_->channel_count,
-                              impl_->max_in_frames)) {
-            continue;
-        }
-        warm_voice(*voice,
-                   impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
-        const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
-        const int latency_frames = static_cast<int>(voice->latency_frames());
-        const int compensation_frames =
-            voice->alignment_compensation_frames(pitch_scale);
-        if (!ensure_seek_read_window_ready(
-                sources, spec, impl_->max_in_frames,
-                latency_frames, compensation_frames)) {
-            continue;
-        }
-        if (spec.source) {
-            prefeed_voice_with_source_audio(
-                *voice, *spec.source, spec.source_frame,
-                impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
-                pitch_scale);
-        }
-        voice->arm_fade_in(0);
-        (*next)[spec.clip_id] = std::move(voice);
+    for (auto& result : results) {
+        if (!result.succeeded) continue;
+        (*next)[result.clip_id] = std::move(result.voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);
     }
@@ -685,14 +738,21 @@ void BungeeVoiceManager::rebuild_for_seek_async(Frame target_frame,
 #if !LT_ENGINE_HAVE_BUNGEE
     (void)target_frame; (void)session; (void)sources;
 #else
-    // Spawn the worker on first use. Single thread, runs at BELOW_NORMAL on
-    // Windows so it never starves the audio callback during the ~600ms warm.
+    // Spawn the worker on first use. Single thread, runs at lowered priority
+    // so it never starves the audio callback during the ~600ms warm. Same
+    // reasoning as PrearmedJumpManager's worker — without this, transposes
+    // mid-playback caused 50-200ms audio dropouts on macOS for several
+    // seconds while the worker rebuilt voices in the background.
     {
         std::lock_guard lock(impl_->worker_mutex);
         if (!impl_->worker_thread.joinable() && !impl_->worker_shutdown) {
             impl_->worker_thread = std::thread([this] {
               #ifdef _WIN32
                 SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+              #elif defined(__APPLE__)
+                pthread_set_qos_class_self_np(QOS_CLASS_BACKGROUND, 0);
+              #elif defined(__linux__)
+                setpriority(PRIO_PROCESS, 0, 10);
               #endif
                 for (;;) {
                     Impl::AsyncJob job;

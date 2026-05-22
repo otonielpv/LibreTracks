@@ -22,6 +22,7 @@ use libretracks_project::{
     SONG_FILE_NAME,
 };
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
+use rayon::prelude::*;
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::to_vec;
@@ -627,7 +628,12 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let package_path = package_file.to_string_lossy().into_owned();
-        let inserted = self.import_song_package(&package_path, self.current_position(), audio)?;
+        emit_project_load_progress(app, 5, "Leyendo paquete...".into(), 0, 0, 0, 0);
+        // Import the package WITHOUT blocking on source decode — that's what
+        // wait_for_project_audio_preparation does, with live progress events.
+        // Otherwise the user only sees the loading bar at the very end, after
+        // sources have already been decoded silently.
+        let inserted = self.import_song_package_no_wait(&package_path, self.current_position(), audio)?;
         self.wait_for_project_audio_preparation(app, audio)?;
 
         Ok(Some(inserted.snapshot))
@@ -961,6 +967,20 @@ impl DesktopSession {
     }
 
     pub fn song_view(&mut self) -> Result<Option<SongView>, DesktopError> {
+        self.song_view_with_options(true)
+    }
+
+    /// Build the song view with optional inclusion of waveforms. Waveform LODs
+    /// encoded as base64 dominate the SongView payload (~27 MB for 33 clips of
+    /// multitrack church audio); skipping them when the caller doesn't need a
+    /// fresh copy collapses the IPC round-trip from ~4s to ~50ms for mutations
+    /// that don't touch clip audio (transpose, gain, mute, solo, region rename
+    /// — none of these change the peaks). The frontend keeps the previously
+    /// hydrated waveforms in its local cache.
+    pub fn song_view_with_options(
+        &mut self,
+        include_waveforms: bool,
+    ) -> Result<Option<SongView>, DesktopError> {
         let started_at = Instant::now();
         let song_view = self.engine.song().map(|song| {
             song_to_view(
@@ -968,15 +988,30 @@ impl DesktopSession {
                 &self.waveform_cache,
                 self.project_revision,
                 self.song_dir.as_deref(),
+                include_waveforms,
             )
         });
-        self.perf_metrics.song_view_build_millis = started_at.elapsed().as_millis();
-        self.perf_metrics.song_view_bytes = song_view
+        let build_ms = started_at.elapsed().as_millis();
+        let serialize_started = Instant::now();
+        let bytes = song_view
             .as_ref()
             .map(|view| to_vec(view).map(|bytes| bytes.len()))
             .transpose()
             .map_err(|error| DesktopError::AudioCommand(error.to_string()))?
             .unwrap_or(0);
+        let serialize_ms = serialize_started.elapsed().as_millis();
+        self.perf_metrics.song_view_build_millis = build_ms;
+        self.perf_metrics.song_view_bytes = bytes;
+        eprintln!(
+            "[SONG_VIEW_PERF] build_ms={} serialize_ms={} bytes={} include_wfs={} clips={} tracks={} regions={}",
+            build_ms,
+            serialize_ms,
+            bytes,
+            include_waveforms,
+            song_view.as_ref().map(|v| v.clips.len()).unwrap_or(0),
+            song_view.as_ref().map(|v| v.tracks.len()).unwrap_or(0),
+            song_view.as_ref().map(|v| v.regions.len()).unwrap_or(0),
+        );
         Ok(song_view)
     }
 
@@ -2171,6 +2206,54 @@ impl DesktopSession {
         })
     }
 
+    // Same as `import_song_package` but skips the blocking source-ready wait
+    // and waveform/playback prep — the caller (the dialog flow) drives those
+    // through `wait_for_project_audio_preparation` so the loading bar can show
+    // per-source progress instead of freezing on a generic "syncing" overlay.
+    fn import_song_package_no_wait(
+        &mut self,
+        package_path: &str,
+        insert_at_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<SongPackageImportResponse, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let imported = import_song_package_into_project(
+            &song_dir,
+            &song,
+            Path::new(package_path),
+            insert_at_seconds,
+        )?;
+        let mut library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
+        merge_package_library_meta(
+            &song_dir,
+            &mut library_assets,
+            &imported.library_meta,
+            Some(&imported.package_title),
+        )?;
+        write_library_manifest_assets(&song_dir, &library_assets)?;
+        self.persist_song_update(
+            imported.song,
+            audio,
+            AudioChangeImpact::StructureRebuild,
+            true,
+        )?;
+        let loaded_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        self.prime_waveform_cache(&song_dir, &loaded_song)?;
+        Ok(SongPackageImportResponse {
+            snapshot: self.snapshot(),
+            library_assets,
+        })
+    }
+
     pub fn create_track(
         &mut self,
         name: &str,
@@ -2606,6 +2689,23 @@ impl DesktopSession {
                     ram_cache_mb,
                     disk_cache_mb,
                 );
+            }
+
+            // Empty project (no sources): give the engine a brief moment to
+            // register sources from LoadSession, then short-circuit straight
+            // to 100% so the loader doesn't hang on "Inicializando..." forever
+            // for projects that legitimately contain no audio.
+            if total == 0 && started_at.elapsed() >= Duration::from_millis(300) {
+                emit_project_load_progress(
+                    app,
+                    100,
+                    "Proyecto listo para reproducir.".into(),
+                    0,
+                    0,
+                    ram_cache_mb,
+                    disk_cache_mb,
+                );
+                return Ok(());
             }
 
             if total > 0 && ready >= total {
@@ -3344,13 +3444,13 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)
     }
 
-    fn prime_waveform_cache(&mut self, song_dir: &Path, song: &Song) -> Result<(), DesktopError> {
+    fn prime_waveform_cache(&mut self, song_dir: &Path, _song: &Song) -> Result<(), DesktopError> {
+        // We used to eagerly load every .peaks file off disk here during
+        // load_song_from_path, then load them AGAIN in
+        // ensure_project_waveforms_ready after sources finished decoding —
+        // 2× syscalls per file with no functional benefit. Now we just reset
+        // the cache; the real load happens once, in parallel, post-sources.
         self.waveform_cache.reset(song_dir);
-
-        for waveform_key in unique_waveform_keys(song) {
-            let _ = self.load_waveform_summary_cached(song_dir, &waveform_key, false);
-        }
-
         Ok(())
     }
 
@@ -3362,19 +3462,44 @@ impl DesktopSession {
     ) -> Result<(), DesktopError> {
         self.waveform_cache.reset_if_song_changed(song_dir);
 
-        for waveform_key in unique_waveform_keys(song) {
-            match self.load_waveform_summary_cached(song_dir, &waveform_key, false) {
-                Ok(_) => {}
-                Err(DesktopError::Project(ProjectError::Io(_)))
-                | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
-                    if self
-                        .load_native_waveform_summary(song_dir, &waveform_key, audio)
-                        .is_err()
-                    {
-                        let _ = self.load_waveform_summary_cached(song_dir, &waveform_key, true)?;
-                    }
-                }
-                Err(error) => return Err(error),
+        let keys = unique_waveform_keys(song);
+
+        // Phase 1: read every .peaks summary from disk in parallel.
+        // load_waveform_summary is pure I/O + decode of a small binary file,
+        // so per-file work is independent. We collect (key, token, summary)
+        // tuples so the mutation pass below can be a single locked write.
+        // Entries that fail with Io/InvalidWaveformSummary are returned as
+        // None so we can fall back to native peak generation sequentially —
+        // that path needs &mut self because it writes the .peaks file.
+        let parallel_results: Vec<(String, Option<(WaveformCacheToken, WaveformSummary)>)> = keys
+            .par_iter()
+            .map(|key| {
+                let token = build_waveform_cache_token(song_dir, key).ok();
+                let summary = load_waveform_summary(song_dir, key).ok();
+                let entry = match (token, summary) {
+                    (Some(t), Some(s)) => Some((t, s)),
+                    _ => None,
+                };
+                (key.clone(), entry)
+            })
+            .collect();
+
+        // Phase 2: install successful reads in the cache, fall back to native
+        // peak generation for any that failed (sequential by necessity).
+        for (key, entry) in parallel_results {
+            if let Some((token, summary)) = entry {
+                self.perf_metrics.waveform_cache_misses += 1;
+                self.waveform_cache.entries.insert(
+                    key,
+                    CachedWaveformSummary { token, summary },
+                );
+                continue;
+            }
+            // Fallback path: disk read failed (missing or corrupt .peaks).
+            // Try to regenerate from the native engine; if that also fails,
+            // use the slow allow_regenerate path that re-decodes the audio.
+            if self.load_native_waveform_summary(song_dir, &key, audio).is_err() {
+                let _ = self.load_waveform_summary_cached(song_dir, &key, true)?;
             }
         }
 
@@ -5311,7 +5436,7 @@ mod tests {
             section_markers: vec![],
         };
 
-        let view = song_to_view(&song, &WaveformMemoryCache::default(), 7, None);
+        let view = song_to_view(&song, &WaveformMemoryCache::default(), 7, None, true);
 
         assert_eq!(view.tracks[0].id, "folder_main");
         assert_eq!(view.tracks[0].parent_track_id, None);
