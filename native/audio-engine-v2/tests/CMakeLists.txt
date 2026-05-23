@@ -28,6 +28,7 @@ add_executable(lt_engine_tests
     bungee_pitch_voice_tests.cpp
     bungee_voice_manager_tests.cpp
     prearmed_jump_tests.cpp
+    signalsmith_warp_voice_tests.cpp
 )
 
 target_link_libraries(lt_engine_tests
