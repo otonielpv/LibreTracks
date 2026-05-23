@@ -32,6 +32,12 @@ type TimelineToolbarProps = {
   onToggleVamp: () => void;
   onCancelPendingJump: () => void;
   onSelectedRegionTransposeChange: (nextTransposeSemitones: number) => void;
+  /** Effective timeline BPM at the start of the selected region.
+   *  Used by the warp panel to display the destination tempo and to
+   *  auto-fill warpSourceBpm the first time warp is enabled. */
+  selectedRegionEffectiveBpm: number;
+  onSelectedRegionWarpToggle: (nextEnabled: boolean) => void;
+  onSelectedRegionWarpSourceBpmChange: (nextSourceBpm: number) => void;
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => void;
 };
@@ -122,12 +128,17 @@ export function TimelineToolbar({
   onToggleVamp,
   onCancelPendingJump,
   onSelectedRegionTransposeChange,
+  selectedRegionEffectiveBpm,
+  onSelectedRegionWarpToggle,
+  onSelectedRegionWarpSourceBpmChange,
   midiLearnMode,
   onMidiLearnTarget,
 }: TimelineToolbarProps) {
   const { t } = useTranslation();
   const learnModeActive = midiLearnMode !== null;
-  const [openGroup, setOpenGroup] = useState<"jump" | "vamp" | "song" | "region" | null>(null);
+  const [openGroup, setOpenGroup] = useState<
+    "jump" | "vamp" | "song" | "region" | "warp" | null
+  >(null);
   const controlsDisabled = isProjectEmpty && !learnModeActive;
   const jumpSummary =
     globalJumpMode === "after_bars"
@@ -150,6 +161,29 @@ export function TimelineToolbar({
     ? `${formatTransposeSemitones(selectedRegion.transposeSemitones)} st`
     : t("timelineToolbar.regionTransposeNoSelection");
   const regionControlsDisabled = controlsDisabled || !selectedRegion;
+
+  const warpEnabled = selectedRegion?.warpEnabled ?? false;
+  const warpSourceBpm = selectedRegion?.warpSourceBpm ?? null;
+  // Display ratio uses Math.round on the source BPM only for the input default;
+  // the live ratio is computed off the configured source and the timeline tempo.
+  const warpRatio =
+    warpEnabled && warpSourceBpm && warpSourceBpm > 0 && selectedRegionEffectiveBpm > 0
+      ? selectedRegionEffectiveBpm / warpSourceBpm
+      : null;
+  const warpSummary = selectedRegion
+    ? warpEnabled && warpSourceBpm && warpRatio
+      ? t("timelineToolbar.regionWarpRatioDisplay", {
+          source: warpSourceBpm.toFixed(0),
+          target: selectedRegionEffectiveBpm.toFixed(0),
+          ratio: warpRatio.toFixed(3),
+        })
+      : t("timelineToolbar.regionWarpSummaryOff")
+    : t("timelineToolbar.regionWarpNoSelection");
+  const warpControlsDisabled = controlsDisabled || !selectedRegion;
+  // BPM field is only editable when warp is enabled (after toggle on, the
+  // user can fine-tune the source BPM). When warp is off but a value was
+  // persisted, we still show it but read-only via disabled state.
+  const warpBpmInputDisabled = warpControlsDisabled || !warpEnabled;
 
   const handleModeButtonClick = (
     learnKey: string,
@@ -582,6 +616,76 @@ export function TimelineToolbar({
                 </label>
               ) : (
                 <span>{t("timelineToolbar.regionTransposeNoSelection")}</span>
+              )
+            }
+          />
+
+          <ControlGroup
+            title={t("timelineToolbar.regionWarpLabel")}
+            summary={warpSummary}
+            open={openGroup === "warp"}
+            onToggleOpen={() => setOpenGroup((current) => (current === "warp" ? null : "warp"))}
+            className="lt-control-group-warp"
+            details={
+              selectedRegion ? (
+                <>
+                  <button
+                    type="button"
+                    className={`lt-vamp-button ${warpEnabled ? "is-active" : ""}`}
+                    aria-label={t("timelineToolbar.regionWarpToggleAria")}
+                    aria-pressed={warpEnabled}
+                    disabled={warpControlsDisabled}
+                    onClick={() => onSelectedRegionWarpToggle(!warpEnabled)}
+                  >
+                    {warpEnabled
+                      ? t("timelineToolbar.regionWarpToggleOn")
+                      : t("timelineToolbar.regionWarpToggleOff")}
+                  </button>
+                  <label className="lt-stepper-control">
+                    <span>{t("timelineToolbar.regionWarpSourceBpmLabel")}</span>
+                    <div className="lt-stepper-control-row">
+                      <button
+                        type="button"
+                        aria-label={t("timelineToolbar.regionWarpSourceBpmDownAria")}
+                        disabled={warpBpmInputDisabled}
+                        onClick={() => {
+                          const current = warpSourceBpm ?? selectedRegionEffectiveBpm;
+                          onSelectedRegionWarpSourceBpmChange(Math.max(20, current - 1));
+                        }}
+                      >
+                        -
+                      </button>
+                      <input
+                        aria-label={t("timelineToolbar.regionWarpSourceBpmAria")}
+                        type="number"
+                        min={20}
+                        max={300}
+                        step={1}
+                        value={warpSourceBpm ?? ""}
+                        placeholder={selectedRegionEffectiveBpm.toFixed(0)}
+                        disabled={warpBpmInputDisabled}
+                        onChange={(event) => {
+                          const parsed = Number(event.target.value);
+                          if (!Number.isFinite(parsed) || parsed <= 0) return;
+                          onSelectedRegionWarpSourceBpmChange(parsed);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        aria-label={t("timelineToolbar.regionWarpSourceBpmUpAria")}
+                        disabled={warpBpmInputDisabled}
+                        onClick={() => {
+                          const current = warpSourceBpm ?? selectedRegionEffectiveBpm;
+                          onSelectedRegionWarpSourceBpmChange(Math.min(300, current + 1));
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </label>
+                </>
+              ) : (
+                <span>{t("timelineToolbar.regionWarpNoSelection")}</span>
               )
             }
           />

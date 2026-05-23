@@ -726,6 +726,28 @@ export function getSongBaseBpm(song: SongView | null | undefined): number {
   return song?.bpm ?? 120;
 }
 
+/**
+ * Effective BPM at a given timeline position. Walks the song's tempo markers
+ * and returns the latest one at-or-before `positionSeconds`, falling back to
+ * `song.bpm` when no marker applies. Mirrors the Rust-side `effective_bpm_at`.
+ */
+export function getEffectiveBpmAt(
+  song: SongView | null | undefined,
+  positionSeconds: number,
+): number {
+  const base = getSongBaseBpm(song);
+  if (!song || song.tempoMarkers.length === 0) return base;
+  let bestBpm = base;
+  let bestStart = -Infinity;
+  for (const marker of song.tempoMarkers) {
+    if (marker.startSeconds <= positionSeconds + 0.001 && marker.startSeconds > bestStart) {
+      bestStart = marker.startSeconds;
+      bestBpm = marker.bpm;
+    }
+  }
+  return bestBpm;
+}
+
 export function getSongBaseTimeSignature(
   song: SongView | null | undefined,
 ): string {

@@ -15,6 +15,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   DEFAULT_APP_SETTINGS,
   buildSongTempoRegions,
+  getEffectiveBpmAt,
   getPrimarySongRegion,
   getSongBaseBpm,
   getSongBaseTimeSignature,
@@ -103,6 +104,7 @@ import {
   updateSectionMarker,
   updateSongRegion,
   updateSongRegionTranspose,
+  updateSongRegionWarp,
   updateSongTempo,
   updateSongTimeSignature,
   updateTrack,
@@ -2282,6 +2284,97 @@ export function TransportPanelContent() {
     },
     [applyPlaybackSnapshot, runAction, selectedRegion, setStatus, t],
   );
+
+  // Warp: keep the same shape as transpose handler. The IPC carries both
+  // the toggle and the source BPM; when enabling for the first time we
+  // auto-fill source BPM with the timeline's effective tempo at the region
+  // start so the initial ratio is 1.0 (no audible change). The user then
+  // fine-tunes via the +/- stepper.
+  const handleSelectedRegionWarpToggle = useCallback(
+    (nextEnabled: boolean) => {
+      if (!selectedRegion) return;
+      const targetRegionId = selectedRegion.id;
+      const previousSourceBpm = selectedRegion.warpSourceBpm;
+      // When enabling and no source BPM has been configured, seed it with the
+      // effective tempo at the region start. When disabling we pass null so the
+      // backend leaves the previously-configured value untouched.
+      const effectiveBpm = getEffectiveBpmAt(song, selectedRegion.startSeconds);
+      const sourceBpm = nextEnabled
+        ? previousSourceBpm ?? effectiveBpm
+        : null;
+      void runAction(async () => {
+        const nextSnapshot = await updateSongRegionWarp(
+          targetRegionId,
+          nextEnabled,
+          sourceBpm,
+        );
+        optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
+        setSong((previous) => {
+          if (!previous) return previous;
+          return {
+            ...previous,
+            projectRevision: nextSnapshot.projectRevision,
+            regions: previous.regions.map((region) =>
+              region.id === targetRegionId
+                ? {
+                    ...region,
+                    warpEnabled: nextEnabled,
+                    warpSourceBpm:
+                      sourceBpm !== null ? sourceBpm : region.warpSourceBpm,
+                  }
+                : region,
+            ),
+          };
+        });
+        applyPlaybackSnapshot(nextSnapshot);
+      });
+    },
+    [applyPlaybackSnapshot, runAction, selectedRegion, song],
+  );
+
+  const handleSelectedRegionWarpSourceBpmChange = useCallback(
+    (nextSourceBpm: number) => {
+      if (!selectedRegion) return;
+      if (!Number.isFinite(nextSourceBpm)) return;
+      const clamped = Math.max(20, Math.min(300, nextSourceBpm));
+      if (clamped === selectedRegion.warpSourceBpm) return;
+      const targetRegionId = selectedRegion.id;
+      // Editing source BPM only makes sense while warp is enabled, which the
+      // UI already guards via the disabled input. The backend's invariant
+      // also requires warp_enabled = true when sending a source_bpm so we
+      // pass through the current toggle state unchanged.
+      const currentEnabled = selectedRegion.warpEnabled;
+      void runAction(async () => {
+        const nextSnapshot = await updateSongRegionWarp(
+          targetRegionId,
+          currentEnabled,
+          clamped,
+        );
+        optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
+        setSong((previous) => {
+          if (!previous) return previous;
+          return {
+            ...previous,
+            projectRevision: nextSnapshot.projectRevision,
+            regions: previous.regions.map((region) =>
+              region.id === targetRegionId
+                ? { ...region, warpSourceBpm: clamped }
+                : region,
+            ),
+          };
+        });
+        applyPlaybackSnapshot(nextSnapshot);
+      });
+    },
+    [applyPlaybackSnapshot, runAction, selectedRegion],
+  );
+
+  // Effective timeline BPM at the start of the selected region — the warp
+  // panel uses this both for display (× ratio) and as the default source
+  // BPM when the user enables warp for the first time.
+  const selectedRegionEffectiveBpm = selectedRegion
+    ? getEffectiveBpmAt(song, selectedRegion.startSeconds)
+    : getSongBaseBpm(song);
 
   const {
     handleSaveProjectClick,
@@ -7659,6 +7752,11 @@ export function TransportPanelContent() {
                     }
                     onSelectedRegionTransposeChange={
                       handleSelectedRegionTransposeChange
+                    }
+                    selectedRegionEffectiveBpm={selectedRegionEffectiveBpm}
+                    onSelectedRegionWarpToggle={handleSelectedRegionWarpToggle}
+                    onSelectedRegionWarpSourceBpmChange={
+                      handleSelectedRegionWarpSourceBpmChange
                     }
                     midiLearnMode={midiLearnMode}
                     onMidiLearnTarget={handleMidiLearnTarget}
