@@ -9,6 +9,8 @@
 
 #if defined(_WIN32)
 #include <direct.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #else
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -131,6 +133,33 @@ std::string temp_directory_compat() {
 #else
         "/tmp";
 #endif
+}
+
+// File metadata used to invalidate the PCM cache when the source file
+// changes on disk. size_bytes = -1 / mtime = 0 means "stat failed".
+struct FileStat {
+    long long size_bytes = -1;
+    long long mtime      = 0;
+};
+
+FileStat stat_file(const std::string& path) {
+    FileStat out;
+    if (path.empty())
+        return out;
+#if defined(_WIN32)
+    struct _stat64 st{};
+    if (_stat64(path.c_str(), &st) == 0) {
+        out.size_bytes = static_cast<long long>(st.st_size);
+        out.mtime      = static_cast<long long>(st.st_mtime);
+    }
+#else
+    struct stat st{};
+    if (::stat(path.c_str(), &st) == 0) {
+        out.size_bytes = static_cast<long long>(st.st_size);
+        out.mtime      = static_cast<long long>(st.st_mtime);
+    }
+#endif
+    return out;
 }
 
 } // namespace
@@ -603,11 +632,93 @@ void SourceManager::fill_block_from_disk(const CacheKey& key) const {
 std::string SourceManager::cache_file_for(const Id& source_id,
                                           const std::string& file_path,
                                           int sample_rate) const {
-    const std::string key = source_id + "|" + file_path + "|" + std::to_string(sample_rate);
+    // Cache key includes the source file's size + mtime so editing or
+    // replacing the original (even with the same path) invalidates the
+    // cached PCM automatically. The orphaned old .rf64 stays on disk until
+    // the LRU eviction sweep reclaims it.
+    const FileStat st = stat_file(file_path);
+    const std::string key = source_id + "|" + file_path + "|" +
+        std::to_string(sample_rate) + "|" +
+        std::to_string(st.size_bytes) + "|" +
+        std::to_string(st.mtime);
     const auto h = std::hash<std::string>{}(key);
     return temp_directory_compat() + native_path_separator() +
            "libretracks-audio-cache" + native_path_separator() +
            std::to_string(h) + ".rf64";
+}
+
+bool SourceManager::try_install_from_cache_file(const Id& source_id,
+                                                int engine_sample_rate) {
+#if !LT_ENGINE_USE_LIBSNDFILE
+    (void)source_id;
+    (void)engine_sample_rate;
+    return false;
+#else
+    std::string file_path;
+    {
+        auto entries = std::atomic_load(&entries_);
+        auto it = entries->find(source_id);
+        if (it == entries->end())
+            return false;
+        file_path = it->second.file_path;
+    }
+    if (file_path.empty())
+        return false;
+
+    const std::string cache_file =
+        cache_file_for(source_id, file_path, engine_sample_rate);
+    SF_INFO info{};
+    SNDFILE* sf = sf_open(cache_file.c_str(), SFM_READ, &info);
+    if (!sf)
+        return false;
+    if (info.samplerate != engine_sample_rate ||
+        info.channels <= 0 || info.frames <= 0) {
+        sf_close(sf);
+        return false;
+    }
+    const int channel_count = info.channels;
+    const Frame duration_frames = static_cast<Frame>(info.frames);
+    sf_close(sf);
+
+    // We don't preload eager blocks here — the block cache fill worker will
+    // pull them on demand once playback starts. The big win is skipping the
+    // ~hundreds of MB of decode CPU work on every project open.
+    const size_t disk_cache_bytes =
+        static_cast<size_t>(duration_frames) *
+        static_cast<size_t>(channel_count) * sizeof(float);
+
+    SourceReadyCallback ready_callback;
+    {
+        std::lock_guard lock(write_mutex_);
+        EntryMap next = *std::atomic_load(&entries_);
+        auto it = next.find(source_id);
+        if (it == next.end())
+            return false;
+
+        auto& entry = it->second;
+        entry.cache_file_path = cache_file;
+        entry.channel_count = channel_count;
+        entry.sample_rate = engine_sample_rate;
+        entry.duration_frames = duration_frames;
+        entry.disk_cache_bytes = disk_cache_bytes;
+        entry.source = std::make_shared<DecodedSource>(
+            source_id,
+            channel_count,
+            engine_sample_rate,
+            duration_frames,
+            &block_cache_,
+            [this](const Id& id, int block_index) {
+                request_block(id, block_index);
+            });
+        entry.status = "cache_ready";
+        entry.error_message.clear();
+        publish_locked(std::move(next));
+        ready_callback = source_ready_callback_;
+    }
+    if (ready_callback)
+        ready_callback(source_id);
+    return true;
+#endif
 }
 
 } // namespace lt

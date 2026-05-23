@@ -60,6 +60,15 @@ public:
                                       int sample_rate,
                                       Frame duration_frames);
 
+    // If a previously-written PCM cache file exists for this source, install
+    // it as a streaming entry (status = "cache_ready") without re-decoding
+    // and return true. Returns false if no usable cache is found — callers
+    // should fall back to the normal decode-via-worker-pool path. The cache
+    // key already encodes the source file's mtime+size, so a positive hit
+    // means the original is byte-identical to when it was decoded.
+    bool try_install_from_cache_file(const Id& source_id,
+                                      int engine_sample_rate);
+
     void request_block(const Id& source_id, int block_index) const noexcept;
     void request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept;
     CacheDiagnostics cache_diagnostics() const;

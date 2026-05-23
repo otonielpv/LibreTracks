@@ -160,6 +160,63 @@ TEST_CASE("Streaming source reads match legacy in-memory source across block bou
     }
 }
 
+TEST_CASE("try_install_from_cache_file reuses a previously written PCM cache") {
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 3 + 91;
+    const std::string fake_path = "cache-reuse-source.wav";
+    const Id source_id = "cache-reuse-source";
+
+    auto samples = make_reference_audio(kFrames, kChannels);
+
+    {
+        SourceManager writer;
+        writer.register_source(source_id, fake_path);
+        REQUIRE(writer.store_decoded_source(
+            source_id, samples, kChannels, kSampleRate, kFrames).is_ok());
+        const auto written = writer.get_shared(source_id);
+        REQUIRE(static_cast<bool>(written));
+        REQUIRE(written->is_streaming());
+    }
+
+    // Fresh manager (simulates re-opening the project): no in-memory state,
+    // only the .rf64 left on disk from the previous session.
+    SourceManager reader;
+    reader.register_source(source_id, fake_path);
+    REQUIRE(reader.try_install_from_cache_file(source_id, kSampleRate));
+
+    const auto reused = reader.get_shared(source_id);
+    REQUIRE(static_cast<bool>(reused));
+    CHECK(reused->is_streaming());
+    CHECK(reused->channel_count() == kChannels);
+    CHECK(reused->sample_rate() == kSampleRate);
+    CHECK(reused->duration_frames() == kFrames);
+
+    // Audio read from the reused cache must match the originally decoded data.
+    for (Frame start : {Frame{0}, Frame{kDefaultBlockFrames + 333},
+                        Frame{kDefaultBlockFrames * 2 + 7}}) {
+        constexpr int kReadFrames = 256;
+        require_ready_range(reader, source_id, start, kReadFrames);
+        std::vector<float> expected;
+        expected.reserve(static_cast<std::size_t>(kReadFrames) * kChannels);
+        for (Frame f = 0; f < kReadFrames; ++f) {
+            const std::size_t base =
+                static_cast<std::size_t>((start + f) * kChannels);
+            expected.push_back(samples[base]);
+            expected.push_back(samples[base + 1]);
+        }
+        require_audio_equal(read_planar(*reused, start, kReadFrames), expected);
+    }
+}
+
+TEST_CASE("try_install_from_cache_file misses when no cache file exists") {
+    SourceManager manager;
+    const Id source_id = "no-cache-source";
+    manager.register_source(source_id,
+        "non-existent-source-for-cache-miss-test-7a2b9.wav");
+    CHECK_FALSE(manager.try_install_from_cache_file(source_id, 48000));
+}
+
 TEST_CASE("TrackRenderer output is identical for memory and streaming source paths") {
     constexpr int kChannels = 2;
     constexpr int kSampleRate = 48000;

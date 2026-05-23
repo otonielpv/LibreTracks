@@ -56,6 +56,21 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
     Id          source_id = source.id;
     int         sr        = impl_->engine_sample_rate;
 
+    // Fast path: if a PCM cache from a previous session is still valid for
+    // this file (matching mtime + size), reuse it and skip the decode worker
+    // entirely. This is what makes a re-open of a 31-stem project drop from
+    // "decode every source again" to "instant".
+    if (impl_->source_manager->try_install_from_cache_file(source_id, sr)) {
+        {
+            std::lock_guard lock(impl_->mtx);
+            auto& info = impl_->states[source_id];
+            info.status           = "ready";
+            info.progress_percent = 100;
+        }
+        impl_->push_event(EvSourcePrepared{ source_id });
+        return;
+    }
+
     std::weak_ptr<Impl> weak_impl = impl_;
     impl_->pool->submit_decode(
         source_id,  // job_id == source_id for simplicity
