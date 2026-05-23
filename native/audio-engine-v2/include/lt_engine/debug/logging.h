@@ -19,30 +19,6 @@ inline bool lt_env_flag_enabled(const char* name) {
     return value == "1" || value == "true" || value == "yes" || value == "on";
 }
 
-// Fase 0 / Warp test hook: when LT_WARP_TEST_RATIO is set to a positive
-// double, every clip in the session is forced through the Bungee path with
-// pitch_scale = 1.0 and time_ratio = <env value>. Returns 1.0 (= no warp,
-// engine should behave normally) when unset, malformed, or out of range.
-// Reasonable range enforced: [0.25, 4.0].
-inline double lt_warp_test_ratio() {
-    static const double ratio = [] {
-        const char* raw = std::getenv("LT_WARP_TEST_RATIO");
-        if (!raw || !*raw) return 1.0;
-        try {
-            const double v = std::stod(raw);
-            if (!(v > 0.25 && v < 4.0)) return 1.0;
-            return v;
-        } catch (...) {
-            return 1.0;
-        }
-    }();
-    return ratio;
-}
-
-inline bool lt_warp_test_active() {
-    return lt_warp_test_ratio() != 1.0;
-}
-
 inline const char* lt_debug_log_path() {
     if (const char* path = std::getenv("LIBRETRACKS_AUDIO_DEBUG_LOG")) {
         if (*path) return path;

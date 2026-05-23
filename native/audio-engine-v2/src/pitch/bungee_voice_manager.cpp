@@ -205,7 +205,7 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
 
                 const auto decision = resolve_pitch_render_decision(
                     track, clip, song, playhead);
-                if (decision.effective_semitones == 0 && !lt_warp_test_active())
+                if (decision.effective_semitones == 0)
                     continue;
 
                 VoiceSpec spec;

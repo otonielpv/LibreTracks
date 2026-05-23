@@ -54,17 +54,13 @@ public:
     // pitch_scale is a frequency multiplier; 1.0 = no change, 0.5 = octave
     // down, 2.0 = octave up. Bungee accepts a new pitch value every call,
     // gaplessly.
-    // time_ratio is the source-advance multiplier per block. 1.0 = identity
-    // (input cursor advances by input_frames per call). Values >1 consume the
-    // source faster than output is produced (compressing time → song plays
-    // faster); values <1 do the opposite. Combined with pitch_scale, allows
-    // warp-style time-stretch while preserving pitch.
+    // Returns the actual number of output frames produced (may be less than
+    // output_frames; remaining samples are left as written by the caller).
     int render_block(const float* const* input,
                      int input_frames,
                      float* const* output,
                      int output_frames,
-                     double pitch_scale,
-                     double time_ratio = 1.0) noexcept;
+                     double pitch_scale) noexcept;
 
     // Control-thread prefill used by prepared jumps. It feeds source input to
     // Bungee and stores the produced output in the realtime FIFO without
@@ -72,8 +68,7 @@ public:
     // the first synthesis call on the audio thread.
     int prime_output_fifo(const float* const* input,
                           int input_frames,
-                          double pitch_scale,
-                          double time_ratio = 1.0) noexcept;
+                          double pitch_scale) noexcept;
 
     // Output frames already produced by Bungee and waiting in the realtime
     // FIFO. TrackRenderer uses this to advance the next source read so partial
