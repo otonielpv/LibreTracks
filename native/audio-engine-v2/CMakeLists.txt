@@ -108,7 +108,14 @@ target_link_libraries(lt_audio_engine_v2
         lt_deps_decoder
         lt_deps_resampler
         lt_deps_json
+        lt_deps_warp
 )
+
+if(LT_ENGINE_USE_SIGNALSMITH)
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HAVE_SIGNALSMITH=1)
+else()
+    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HAVE_SIGNALSMITH=0)
+endif()
 
 # ---------------------------------------------------------------------------
 # Bungee pitch backend (optional, opt-in).

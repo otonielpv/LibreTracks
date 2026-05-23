@@ -45,6 +45,7 @@ set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
 add_library(lt_deps_juce       INTERFACE)
 add_library(lt_deps_decoder    INTERFACE)
 add_library(lt_deps_resampler  INTERFACE)
+add_library(lt_deps_warp       INTERFACE)
 
 # ── JUCE ──────────────────────────────────────────────────────────────────
 if(LT_ENGINE_USE_JUCE)
@@ -206,5 +207,25 @@ elseif(LT_ENGINE_USE_LIBSAMPLERATE)
         set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
         FetchContent_MakeAvailable(libsamplerate)
         target_link_libraries(lt_deps_resampler INTERFACE samplerate)
+    endif()
+endif()
+
+# ── WARP (time-stretch) ───────────────────────────────────────────────────
+# Signalsmith Stretch (MIT, header-only) is the warp backend chosen by the
+# WARP_BACKEND_COMPARISON bench. Bungee stays as the pitch backend; warp
+# uses Signalsmith because it sounds cleaner past ratio ~1.05 at the same
+# CPU class.
+if(LT_ENGINE_USE_SIGNALSMITH)
+    FetchContent_Declare(signalsmith_stretch
+        GIT_REPOSITORY https://github.com/Signalsmith-Audio/signalsmith-stretch.git
+        GIT_TAG        main
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(signalsmith_stretch)
+    if(TARGET signalsmith-stretch)
+        target_link_libraries(lt_deps_warp INTERFACE signalsmith-stretch)
+    else()
+        target_include_directories(lt_deps_warp INTERFACE
+            ${signalsmith_stretch_SOURCE_DIR}/include)
     endif()
 endif()

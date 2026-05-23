@@ -8,7 +8,10 @@
 #include <atomic>
 #include <cstdint>
 
-namespace lt { class BungeeVoiceManager; }
+namespace lt {
+class BungeeVoiceManager;
+class WarpVoiceManager;
+}
 
 namespace lt {
 
@@ -21,6 +24,9 @@ struct TrackRendererDiagnostics {
     // Number of times a pitched clip had no Bungee voice to render through.
     // Non-zero means pitch was needed but no voice existed — the clip was silenced.
     std::uint64_t pitch_missing_stream_silence_count = 0;
+    // Same for warp: number of blocks where the warp path could not find a
+    // Signalsmith voice and silenced output.
+    std::uint64_t warp_missing_stream_silence_count = 0;
 };
 
 // ---------------------------------------------------------------------------

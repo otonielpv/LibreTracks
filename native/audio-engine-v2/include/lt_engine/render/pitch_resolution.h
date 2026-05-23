@@ -15,20 +15,31 @@ Semitones resolve_effective_semitones(const Track& track,
                                       const Song& song,
                                       Frame timeline_frame) noexcept;
 
-// Canonical pitch resolution decision — call once per clip per render block.
-// Encodes whether pitch processing is needed and which semitone value to use,
-// plus whether the region's warp engine should be applied. A clip routes
-// through Bungee when `needs_pitch || warp_active` is true.
+// Which DSP path the renderer should use for a given clip in a given block.
+//   Direct  → no pitch, no warp, copy the source.
+//   Pitch   → Bungee with pitch_scale != 1, ratio = 1.
+//   Warp    → Signalsmith with time_ratio != 1, pitch unchanged.
+//   Cascade → Bungee (pitch) then Signalsmith (warp) in series. Used when
+//             the clip needs BOTH pitch shift and time stretch.
+enum class ClipPathKind {
+    Direct,
+    Pitch,
+    Warp,
+    Cascade,
+};
+
+// Canonical pitch + warp resolution decision — call once per clip per render
+// block. Encodes which DSP path the renderer should run and the parameters
+// it needs. `path` is the source of truth; the other fields are populated
+// for paths that consume them (effective_semitones / pitch path, warp_time_ratio
+// / warp+cascade path).
 struct PitchRenderDecision {
-    Semitones effective_semitones = 0;  // 0 = no pitch shift needed
-    bool needs_pitch = false;           // true if this clip should go through pitch engine
-    bool is_never_transpose = false;    // track has NeverTranspose behavior
-    // Warp: when true, the clip is inside a region whose warp_enabled is set
-    // and whose source/target BPMs produce a non-unity ratio. The renderer
-    // must route the clip through Bungee with the given time_ratio even when
-    // effective_semitones is 0.
-    bool   warp_active = false;
-    double warp_time_ratio = 1.0;
+    Semitones    effective_semitones = 0;
+    bool         needs_pitch = false;       // legacy: same as path != Direct && path != Warp
+    bool         is_never_transpose = false;
+    bool         warp_active = false;       // legacy: same as path == Warp || path == Cascade
+    double       warp_time_ratio = 1.0;
+    ClipPathKind path = ClipPathKind::Direct;
 };
 
 // Returns the authoritative pitch decision for a clip at a given timeline position.

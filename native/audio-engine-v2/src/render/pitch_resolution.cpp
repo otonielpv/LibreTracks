@@ -76,6 +76,16 @@ PitchRenderDecision resolve_pitch_render_decision(
         d.warp_active = true;
         d.warp_time_ratio = ratio;
     }
+
+    // Resolve the rendering path. The four cases are mutually exclusive.
+    if (d.warp_active && d.needs_pitch)
+        d.path = ClipPathKind::Cascade;
+    else if (d.warp_active)
+        d.path = ClipPathKind::Warp;
+    else if (d.needs_pitch)
+        d.path = ClipPathKind::Pitch;
+    else
+        d.path = ClipPathKind::Direct;
     return d;
 }
 

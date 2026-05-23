@@ -24,6 +24,14 @@ option(LT_ENGINE_USE_LIBSNDFILE
     "Use libsndfile + header-only decoders for WAV/FLAC/MP3/OGG decoding"
     ON)
 
+# Warp (time-stretch) backend.
+# Signalsmith Stretch (MIT, header-only) is the default — see
+# `bench/WARP_BACKEND_COMPARISON.md` for the comparison that made us pick it
+# over Bungee for the warp path. Bungee remains the pitch-only backend.
+option(LT_ENGINE_USE_SIGNALSMITH
+    "Use Signalsmith Stretch as the warp (time-stretch) backend"
+    ON)
+
 # Resampler backend - exactly one must be ON.
 option(LT_ENGINE_USE_R8BRAIN
     "Use r8brain-free-src for high-quality resampling (preferred)"
