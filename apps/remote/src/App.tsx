@@ -24,7 +24,11 @@ import {
   METER_ACTIVE_EPSILON_DB,
   METER_CLIP_HOLD_MS,
   METER_CLIP_THRESHOLD,
+  METER_MIN_DB,
+  METER_PEAK_DECAY_DB_PER_SECOND,
+  METER_PEAK_HOLD_MS,
   meterStyleFromDb,
+  peakHoldStyleFromDb,
   peakToMeterDb,
   stepMeterDb,
 } from "@libretracks/shared/meterBallistics";
@@ -1276,6 +1280,7 @@ function TransportView() {
 function MeterBar({ trackId }: { trackId: string }) {
   const fillRef = useRef<HTMLDivElement | null>(null);
   const clipRef = useRef<HTMLDivElement | null>(null);
+  const peakRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let frameId = 0;
@@ -1283,17 +1288,26 @@ function MeterBar({ trackId }: { trackId: string }) {
     let currentDb = peakToMeterDb(0);
     let targetDb = peakToMeterDb(0);
     let clipHoldUntil = 0;
+    let peakHoldDb = METER_MIN_DB;
+    let peakHoldUntil = 0;
 
     const applyMeter = () => {
+      const now = performance.now();
       if (fillRef.current) {
         const meterStyle = meterStyleFromDb(currentDb);
         fillRef.current.style.clipPath = meterStyle.clipPath;
         fillRef.current.style.opacity = meterStyle.opacity;
       }
       if (clipRef.current) {
-        const clipping = performance.now() <= clipHoldUntil;
+        const clipping = now <= clipHoldUntil;
         clipRef.current.style.opacity = clipping ? "1" : "0";
         clipRef.current.style.transform = clipping ? "scaleY(1)" : "scaleY(0)";
+      }
+      if (peakRef.current) {
+        const peakStyle = peakHoldStyleFromDb(peakHoldDb);
+        peakRef.current.style.transform = peakStyle.transform;
+        peakRef.current.style.opacity =
+          peakHoldDb > METER_MIN_DB + METER_ACTIVE_EPSILON_DB ? peakStyle.opacity : "0";
       }
     };
 
@@ -1302,13 +1316,28 @@ function MeterBar({ trackId }: { trackId: string }) {
       lastFrameAt = now;
       currentDb = stepMeterDb(currentDb, targetDb, elapsedMs, DEFAULT_METER_FALLOFF_DB_PER_SECOND);
 
+      if (currentDb >= peakHoldDb) {
+        peakHoldDb = currentDb;
+        peakHoldUntil = now + METER_PEAK_HOLD_MS;
+      } else if (now > peakHoldUntil) {
+        peakHoldDb = stepMeterDb(
+          peakHoldDb,
+          currentDb,
+          elapsedMs,
+          METER_PEAK_DECAY_DB_PER_SECOND,
+        );
+      }
+
       applyMeter();
       const shouldContinue =
         Math.abs(currentDb - targetDb) > METER_ACTIVE_EPSILON_DB ||
-        performance.now() <= clipHoldUntil;
+        peakHoldDb > currentDb + METER_ACTIVE_EPSILON_DB ||
+        now <= clipHoldUntil ||
+        now <= peakHoldUntil;
 
       if (!shouldContinue) {
         currentDb = targetDb;
+        peakHoldDb = currentDb;
         applyMeter();
         frameId = 0;
         return;
@@ -1325,6 +1354,10 @@ function MeterBar({ trackId }: { trackId: string }) {
         if (rawPeak >= METER_CLIP_THRESHOLD) {
           clipHoldUntil = performance.now() + METER_CLIP_HOLD_MS;
         }
+        if (targetDb >= peakHoldDb) {
+          peakHoldDb = targetDb;
+          peakHoldUntil = performance.now() + METER_PEAK_HOLD_MS;
+        }
         if (!frameId) {
           frameId = window.requestAnimationFrame(render);
         }
@@ -1335,6 +1368,7 @@ function MeterBar({ trackId }: { trackId: string }) {
     const initialPeak = Math.max(initialMeter?.leftPeak ?? 0, initialMeter?.rightPeak ?? 0);
     currentDb = peakToMeterDb(initialPeak);
     targetDb = currentDb;
+    peakHoldDb = currentDb;
     if (initialPeak >= METER_CLIP_THRESHOLD) {
       clipHoldUntil = performance.now() + METER_CLIP_HOLD_MS;
     }
@@ -1352,6 +1386,7 @@ function MeterBar({ trackId }: { trackId: string }) {
   return (
     <div className="mixer-meter">
       <div ref={fillRef} className="mixer-meter-fill" />
+      <div ref={peakRef} className="mixer-meter-peak" />
       <div ref={clipRef} className="mixer-meter-clip" />
     </div>
   );

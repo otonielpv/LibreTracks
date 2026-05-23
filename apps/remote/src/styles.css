@@ -1258,19 +1258,32 @@ button {
   position: absolute;
   inset: 0;
   clip-path: inset(100% 0 0 0);
-  opacity: 0.18;
+  opacity: 0;
   will-change: clip-path, opacity;
-  transition: opacity 120ms linear;
+  transition: opacity 90ms linear;
   background: linear-gradient(
     180deg,
     #ff6150 0%,
-    #ff6150 15.79%,
-    #dbe95f 15.79%,
-    #dbe95f 36.84%,
-    #63db78 36.84%,
-    #2fba69 68%,
+    #ff6150 15%,
+    #dbe95f 25%,
+    #63db78 45%,
+    #2fba69 75%,
     #1f8a55 100%
   );
+}
+
+.mixer-meter-peak {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: #ffffff;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  transform: translateY(100%);
+  box-shadow: 0 0 2px rgb(255 255 255 / 0.6);
 }
 
 .mixer-meter-clip {
@@ -1278,7 +1291,7 @@ button {
   top: 0;
   left: 0;
   right: 0;
-  height: calc(15.79% + 1px);
+  height: calc(15% + 1px);
   min-height: 0;
   border-radius: 999px 999px 0 0;
   background: #ff6150;
