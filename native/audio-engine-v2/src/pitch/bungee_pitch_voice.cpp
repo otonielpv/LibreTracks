@@ -174,7 +174,8 @@ int BungeePitchVoice::render_block(const float* const* input,
                                    int input_frames,
                                    float* const* output,
                                    int output_frames,
-                                   double pitch_scale) noexcept {
+                                   double pitch_scale,
+                                   double time_ratio) noexcept {
     if (!impl_ || !impl_->ready || !impl_->stream || input_frames < 0 || output_frames <= 0)
         return 0;
     if (!output) return 0;
@@ -187,11 +188,14 @@ int BungeePitchVoice::render_block(const float* const* input,
 
     const int process_frames = std::min(input_frames, I.max_in_frames);
     if (process_frames > 0) {
+        const double safe_ratio = time_ratio > 0.0 ? time_ratio : 1.0;
+        const double input_advance =
+            static_cast<double>(process_frames) * safe_ratio;
         const int produced = I.stream->process(
             input,
             I.process_ptrs.data(),
             process_frames,
-            static_cast<double>(process_frames),
+            input_advance,
             pitch_scale);
         I.push_fifo(produced);
         const int popped = I.pop_fifo(output, delivered, output_frames - delivered);
@@ -204,7 +208,8 @@ int BungeePitchVoice::render_block(const float* const* input,
 
 int BungeePitchVoice::prime_output_fifo(const float* const* input,
                                         int input_frames,
-                                        double pitch_scale) noexcept {
+                                        double pitch_scale,
+                                        double time_ratio) noexcept {
     if (!impl_ || !impl_->ready || !impl_->stream || !input || input_frames <= 0)
         return 0;
 
@@ -213,12 +218,15 @@ int BungeePitchVoice::prime_output_fifo(const float* const* input,
     if (process_frames <= 0)
         return 0;
 
+    const double safe_ratio = time_ratio > 0.0 ? time_ratio : 1.0;
+    const double input_advance =
+        static_cast<double>(process_frames) * safe_ratio;
     const int before = I.fifo_size;
     const int produced = I.stream->process(
         input,
         I.process_ptrs.data(),
         process_frames,
-        static_cast<double>(process_frames),
+        input_advance,
         pitch_scale);
     I.push_fifo(produced);
     return I.fifo_size - before;
@@ -286,12 +294,13 @@ int BungeePitchVoice::alignment_compensation_frames(double) const noexcept { ret
 bool BungeePitchVoice::is_warm() const noexcept { return false; }
 void BungeePitchVoice::arm_fade_in(int) noexcept {}
 int BungeePitchVoice::queued_output_frames() const noexcept { return 0; }
-int BungeePitchVoice::prime_output_fifo(const float* const*, int, double) noexcept { return 0; }
+int BungeePitchVoice::prime_output_fifo(const float* const*, int, double, double) noexcept { return 0; }
 
 int BungeePitchVoice::render_block(const float* const*,
                                    int,
                                    float* const* output,
                                    int output_frames,
+                                   double,
                                    double) noexcept {
     if (output && output_frames > 0) {
         for (int ch = 0; ch < 2; ++ch) {

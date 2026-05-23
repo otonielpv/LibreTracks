@@ -164,11 +164,21 @@ void TrackRenderer::render_clip(const Clip&          clip,
     int block_offset = 0;
     Frame source_frame = clip.source_start_frame;
 
+    const bool warp_test = lt_warp_test_active();
+    const double warp_time_ratio = warp_test ? lt_warp_test_ratio() : 1.0;
+
     if (timeline_frame < clip.timeline_start_frame) {
         block_offset  = static_cast<int>(clip.timeline_start_frame - timeline_frame);
         source_frame  = clip.source_start_frame;
     } else {
-        source_frame  = clip.source_start_frame + (timeline_frame - clip.timeline_start_frame);
+        // Fase 0 warp: when time_ratio != 1, source advances faster/slower than
+        // timeline. Scale the timeline-relative offset by the ratio so Bungee's
+        // input cursor stays in lockstep across blocks.
+        const Frame timeline_offset = timeline_frame - clip.timeline_start_frame;
+        const Frame source_offset = warp_test
+            ? static_cast<Frame>(static_cast<double>(timeline_offset) * warp_time_ratio)
+            : timeline_offset;
+        source_frame = clip.source_start_frame + source_offset;
     }
 
     int frames_to_read = block_frames - block_offset;
@@ -181,7 +191,7 @@ void TrackRenderer::render_clip(const Clip&          clip,
     std::fill(scratch_l_.begin(), scratch_l_.begin() + frames_to_read, 0.f);
     std::fill(scratch_r_.begin(), scratch_r_.begin() + frames_to_read, 0.f);
 
-    if (effective_semitones != 0) {
+    if (effective_semitones != 0 || warp_test) {
         // Pitch processing required — NEVER fall back to original audio on failure.
         // Instead, count the miss and return silence for this block. Bungee is
         // the sole pitch backend; voices are keyed per-clip and persist across
@@ -264,7 +274,8 @@ void TrackRenderer::render_clip(const Clip&          clip,
             }
             const float* in_ptrs[2] = {bungee_in_l_.data(), bungee_in_r_.data()};
             const int produced = bv->render_block(
-                in_ptrs, feed_frames, scratch_, frames_to_read, pitch_scale);
+                in_ptrs, feed_frames, scratch_, frames_to_read, pitch_scale,
+                warp_time_ratio);
             const int queued_after = bv->queued_output_frames();
             if (queued > 0 || frames_to_read < max_feed) {
                 track_jump_debug_log(
