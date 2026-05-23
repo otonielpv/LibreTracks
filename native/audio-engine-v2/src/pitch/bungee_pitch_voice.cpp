@@ -174,7 +174,8 @@ int BungeePitchVoice::render_block(const float* const* input,
                                    int input_frames,
                                    float* const* output,
                                    int output_frames,
-                                   double pitch_scale) noexcept {
+                                   double pitch_scale,
+                                   double time_ratio) noexcept {
     if (!impl_ || !impl_->ready || !impl_->stream || input_frames < 0 || output_frames <= 0)
         return 0;
     if (!output) return 0;
@@ -185,12 +186,25 @@ int BungeePitchVoice::render_block(const float* const* input,
     if (delivered >= output_frames)
         return delivered;
 
+    // Bungee::Stream::process semantics:
+    //   speed = inputFrameCount / outputFrameCount
+    //   returns ~outputFrameCount frames of output, written into outputPointers.
+    // For warp speed R (output is R× faster than source), the source cursor
+    // must advance R× per output frame → speed = R → inputFrameCount = R *
+    // outputFrameCount. Output side stays at process_frames so the wrapped
+    // I.process_planes scratch (sized to max_in_frames) is never overflowed,
+    // and the caller must supply at least R*process_frames input samples.
     const int process_frames = std::min(input_frames, I.max_in_frames);
     if (process_frames > 0) {
+        const double safe_ratio = time_ratio > 0.0 ? time_ratio : 1.0;
+        const int input_to_consume = std::min(
+            input_frames,
+            static_cast<int>(std::lround(
+                static_cast<double>(process_frames) * safe_ratio)));
         const int produced = I.stream->process(
             input,
             I.process_ptrs.data(),
-            process_frames,
+            input_to_consume,
             static_cast<double>(process_frames),
             pitch_scale);
         I.push_fifo(produced);
@@ -204,7 +218,8 @@ int BungeePitchVoice::render_block(const float* const* input,
 
 int BungeePitchVoice::prime_output_fifo(const float* const* input,
                                         int input_frames,
-                                        double pitch_scale) noexcept {
+                                        double pitch_scale,
+                                        double time_ratio) noexcept {
     if (!impl_ || !impl_->ready || !impl_->stream || !input || input_frames <= 0)
         return 0;
 
@@ -213,11 +228,16 @@ int BungeePitchVoice::prime_output_fifo(const float* const* input,
     if (process_frames <= 0)
         return 0;
 
+    const double safe_ratio = time_ratio > 0.0 ? time_ratio : 1.0;
+    const int input_to_consume = std::min(
+        input_frames,
+        static_cast<int>(std::lround(
+            static_cast<double>(process_frames) * safe_ratio)));
     const int before = I.fifo_size;
     const int produced = I.stream->process(
         input,
         I.process_ptrs.data(),
-        process_frames,
+        input_to_consume,
         static_cast<double>(process_frames),
         pitch_scale);
     I.push_fifo(produced);
@@ -286,12 +306,13 @@ int BungeePitchVoice::alignment_compensation_frames(double) const noexcept { ret
 bool BungeePitchVoice::is_warm() const noexcept { return false; }
 void BungeePitchVoice::arm_fade_in(int) noexcept {}
 int BungeePitchVoice::queued_output_frames() const noexcept { return 0; }
-int BungeePitchVoice::prime_output_fifo(const float* const*, int, double) noexcept { return 0; }
+int BungeePitchVoice::prime_output_fifo(const float* const*, int, double, double) noexcept { return 0; }
 
 int BungeePitchVoice::render_block(const float* const*,
                                    int,
                                    float* const* output,
                                    int output_frames,
+                                   double,
                                    double) noexcept {
     if (output && output_frames > 0) {
         for (int ch = 0; ch < 2; ++ch) {
