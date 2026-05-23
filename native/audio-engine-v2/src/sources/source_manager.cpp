@@ -18,6 +18,7 @@
 #  include <shlobj.h>
 #else
 #  include <dirent.h>
+#  include <sys/statvfs.h>
 #  include <sys/time.h>
 #  include <unistd.h>
 #endif
@@ -202,18 +203,50 @@ std::string source_cache_dir() {
     return resolve_app_cache_dir() + native_path_separator() + "source-cache";
 }
 
-// LRU eviction. Caps the on-disk size of source-cache; defaults to 4 GiB,
-// overridable with LIBRETRACKS_SOURCE_DISK_CACHE_MB so users with smaller
-// SSDs can shrink it.
-size_t source_disk_cache_limit_bytes() {
-    constexpr size_t kDefaultMb = 4096; // 4 GiB
-    size_t mb = kDefaultMb;
-    if (const char* raw = std::getenv("LIBRETRACKS_SOURCE_DISK_CACHE_MB")) {
-        const int parsed = std::atoi(raw);
-        if (parsed >= 0 && parsed <= 1024 * 1024) // sanity 1 TiB
-            mb = static_cast<size_t>(parsed);
+// Free space on the filesystem hosting `dir`. Returns 0 if the query fails
+// (we then fall back to the fixed minimum below).
+unsigned long long free_disk_bytes_for(const std::string& dir) {
+#if defined(_WIN32)
+    ULARGE_INTEGER free_bytes_caller{};
+    ULARGE_INTEGER total_bytes{};
+    ULARGE_INTEGER total_free{};
+    if (GetDiskFreeSpaceExA(dir.c_str(),
+                             &free_bytes_caller,
+                             &total_bytes,
+                             &total_free)) {
+        return static_cast<unsigned long long>(free_bytes_caller.QuadPart);
     }
-    return mb * 1024ull * 1024ull;
+    return 0ull;
+#else
+    struct statvfs st{};
+    if (::statvfs(dir.c_str(), &st) == 0) {
+        return static_cast<unsigned long long>(st.f_bavail) *
+               static_cast<unsigned long long>(st.f_frsize);
+    }
+    return 0ull;
+#endif
+}
+
+// LRU eviction budget. Default policy mirrors Ableton: take 10% of free disk
+// space on the cache volume, clamped to a 4 GiB minimum so a nearly-full
+// drive still has a usable working set. Honour LIBRETRACKS_SOURCE_DISK_CACHE_MB
+// as an explicit override (0 disables eviction entirely; any positive value
+// fixes the cap to that many MiB).
+size_t source_disk_cache_limit_bytes() {
+    if (const char* raw = std::getenv("LIBRETRACKS_SOURCE_DISK_CACHE_MB")) {
+        const long long parsed = std::atoll(raw);
+        if (parsed >= 0 && parsed <= 1024ll * 1024ll) // sanity 1 TiB
+            return static_cast<size_t>(parsed) * 1024ull * 1024ull;
+    }
+
+    constexpr unsigned long long kMinBytes = 4ull * 1024ull * 1024ull * 1024ull; // 4 GiB
+    const std::string dir = source_cache_dir();
+    const unsigned long long free_bytes = free_disk_bytes_for(parent_path_compat(dir));
+    // 10% of free disk. If the stat failed (free_bytes == 0) we land on the
+    // minimum, which keeps the policy safe on weird filesystems.
+    const unsigned long long ten_percent = free_bytes / 10ull;
+    const unsigned long long budget = ten_percent > kMinBytes ? ten_percent : kMinBytes;
+    return static_cast<size_t>(budget);
 }
 
 struct CacheEntryStat {
