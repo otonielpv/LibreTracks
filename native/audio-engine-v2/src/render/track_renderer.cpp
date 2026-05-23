@@ -57,11 +57,15 @@ void TrackRenderer::prepare(int max_block_frames) noexcept {
             scratch_r_.resize(static_cast<std::size_t>(max_block_frames), 0.0f);
             scratch_resize_count_.fetch_add(1, std::memory_order_relaxed);
         }
-        // Bungee planar input scratch, sized to match the output scratch.
-        if (static_cast<int>(bungee_in_l_.size()) < max_block_frames)
-            bungee_in_l_.resize(static_cast<std::size_t>(max_block_frames), 0.0f);
-        if (static_cast<int>(bungee_in_r_.size()) < max_block_frames)
-            bungee_in_r_.resize(static_cast<std::size_t>(max_block_frames), 0.0f);
+        // Bungee planar input scratch. Sized 4x the output block to give
+        // warp room to feed Bungee `ceil(block * ratio)` input frames per
+        // call without truncation. The warp ratio is clamped to [0.25, 4.0]
+        // upstream so this is sufficient.
+        const int max_bungee_in = max_block_frames * 4;
+        if (static_cast<int>(bungee_in_l_.size()) < max_bungee_in)
+            bungee_in_l_.resize(static_cast<std::size_t>(max_bungee_in), 0.0f);
+        if (static_cast<int>(bungee_in_r_.size()) < max_bungee_in)
+            bungee_in_r_.resize(static_cast<std::size_t>(max_bungee_in), 0.0f);
         scratch_capacity_frames_ = std::min(static_cast<int>(scratch_l_.size()),
                                             static_cast<int>(scratch_r_.size()));
         scratch_[0] = scratch_l_.data();
@@ -128,16 +132,21 @@ void TrackRenderer::render(const Track&         track,
     // otherwise fall back to the caller-provided effective_semitones value.
     for (const auto& clip : track.clips) {
         Semitones clip_semitones;
+        bool clip_warp_active = false;
+        double clip_warp_ratio = 1.0;
         if (active_song) {
             const auto decision = resolve_pitch_render_decision(track, clip, *active_song, timeline_frame);
             clip_semitones = decision.effective_semitones;
+            clip_warp_active = decision.warp_active;
+            clip_warp_ratio = decision.warp_time_ratio;
         } else {
             clip_semitones = effective_semitones;
         }
         render_clip(clip, timeline_frame, block_frames,
                     track.gain, out, num_out_channels,
                     sources, bungee_voices, engine_sample_rate,
-                    track.id, clip_semitones);
+                    track.id, clip_semitones,
+                    clip_warp_active, clip_warp_ratio);
     }
 }
 
@@ -151,7 +160,9 @@ void TrackRenderer::render_clip(const Clip&          clip,
                                  BungeeVoiceManager*  bungee_voices,
                                  int                  engine_sample_rate,
                                  const Id&            track_id,
-                                 Semitones            effective_semitones) noexcept {
+                                 Semitones            effective_semitones,
+                                 bool                 warp_active,
+                                 double               warp_time_ratio) noexcept {
     // Does this clip overlap the current block?
     Frame clip_end = clip.timeline_start_frame + clip.length_frames;
     if (timeline_frame >= clip_end)                        return;
@@ -164,11 +175,22 @@ void TrackRenderer::render_clip(const Clip&          clip,
     int block_offset = 0;
     Frame source_frame = clip.source_start_frame;
 
+    const bool warp_enabled = warp_active && warp_time_ratio > 0.0
+                              && warp_time_ratio != 1.0;
+    const double effective_ratio = warp_enabled ? warp_time_ratio : 1.0;
+
     if (timeline_frame < clip.timeline_start_frame) {
         block_offset  = static_cast<int>(clip.timeline_start_frame - timeline_frame);
         source_frame  = clip.source_start_frame;
     } else {
-        source_frame  = clip.source_start_frame + (timeline_frame - clip.timeline_start_frame);
+        // Under warp the source cursor advances `ratio` times faster (or
+        // slower) than the timeline. Scale the timeline-relative offset so
+        // every block reads from the right point in the source.
+        const Frame timeline_offset = timeline_frame - clip.timeline_start_frame;
+        const Frame source_offset = warp_enabled
+            ? static_cast<Frame>(static_cast<double>(timeline_offset) * effective_ratio)
+            : timeline_offset;
+        source_frame = clip.source_start_frame + source_offset;
     }
 
     int frames_to_read = block_frames - block_offset;
@@ -181,7 +203,7 @@ void TrackRenderer::render_clip(const Clip&          clip,
     std::fill(scratch_l_.begin(), scratch_l_.begin() + frames_to_read, 0.f);
     std::fill(scratch_r_.begin(), scratch_r_.begin() + frames_to_read, 0.f);
 
-    if (effective_semitones != 0) {
+    if (effective_semitones != 0 || warp_enabled) {
         // Pitch processing required — NEVER fall back to original audio on failure.
         // Instead, count the miss and return silence for this block. Bungee is
         // the sole pitch backend; voices are keyed per-clip and persist across
@@ -200,9 +222,19 @@ void TrackRenderer::render_clip(const Clip&          clip,
             // Fetch planar source audio into the Bungee input scratch.
             // The render scratch (scratch_l_/scratch_r_) is reserved for output.
             const int queued = bv->queued_output_frames();
-            const int max_feed = std::min({scratch_capacity_frames_,
-                                           static_cast<int>(bungee_in_l_.size()),
-                                           static_cast<int>(bungee_in_r_.size())});
+            const int bungee_in_capacity = std::min(
+                static_cast<int>(bungee_in_l_.size()),
+                static_cast<int>(bungee_in_r_.size()));
+            // Without warp the legacy "feed up to a full block" rule is fine;
+            // with warp > 1 we must hand Bungee `ceil(out * ratio)` input or
+            // it underfeeds and produces silence. Clamp by what the scratch
+            // can hold (prepared 4x oversized for warp ratios up to 4.0).
+            int desired_feed = warp_enabled
+                ? static_cast<int>(std::ceil(
+                    static_cast<double>(frames_to_read) * effective_ratio))
+                : std::min(scratch_capacity_frames_, bungee_in_capacity);
+            desired_feed = std::min(desired_feed, bungee_in_capacity);
+            const int max_feed = desired_feed;
             const int feed_frames = queued >= frames_to_read ? 0 : max_feed;
             // Per Bungee issue #38: the output we get back from process()
             // corresponds to input frame outputPosition() == inputPosition()
@@ -264,7 +296,8 @@ void TrackRenderer::render_clip(const Clip&          clip,
             }
             const float* in_ptrs[2] = {bungee_in_l_.data(), bungee_in_r_.data()};
             const int produced = bv->render_block(
-                in_ptrs, feed_frames, scratch_, frames_to_read, pitch_scale);
+                in_ptrs, feed_frames, scratch_, frames_to_read, pitch_scale,
+                effective_ratio);
             const int queued_after = bv->queued_output_frames();
             if (queued > 0 || frames_to_read < max_feed) {
                 track_jump_debug_log(

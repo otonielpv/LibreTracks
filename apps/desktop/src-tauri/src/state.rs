@@ -1942,6 +1942,73 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn update_song_region_warp(
+        &mut self,
+        region_id: &str,
+        warp_enabled: bool,
+        warp_source_bpm: Option<f64>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        // Validate the BPM mirror of the libretracks-core rule. Done here
+        // (instead of relying on validate_song downstream) so the user gets a
+        // specific error message and the engine never receives a bad value.
+        if let Some(bpm) = warp_source_bpm {
+            if !bpm.is_finite() {
+                return Err(DesktopError::AudioCommand(
+                    "warp source bpm must be a finite number".into(),
+                ));
+            }
+            if !(libretracks_core::MIN_WARP_SOURCE_BPM
+                ..=libretracks_core::MAX_WARP_SOURCE_BPM)
+                .contains(&bpm)
+            {
+                return Err(DesktopError::AudioCommand(format!(
+                    "warp source bpm must be between {} and {}",
+                    libretracks_core::MIN_WARP_SOURCE_BPM,
+                    libretracks_core::MAX_WARP_SOURCE_BPM
+                )));
+            }
+        } else if warp_enabled {
+            return Err(DesktopError::AudioCommand(
+                "warp source bpm is required when warp is enabled".into(),
+            ));
+        }
+
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let region = song
+            .regions
+            .iter_mut()
+            .find(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+
+        region.warp_enabled = warp_enabled;
+        if warp_source_bpm.is_some() {
+            region.warp_source_bpm = warp_source_bpm;
+        }
+
+        // Push the realtime command first so the engine swaps in the new ratio
+        // on the next audio block; then persist the Rust model with MixerOnly
+        // so we don't trigger a redundant LoadSession on top.
+        audio.update_live_region_warp(
+            region_id,
+            warp_enabled,
+            region.warp_source_bpm,
+        )?;
+        self.persist_song_update_internal(
+            song,
+            audio,
+            AudioChangeImpact::MixerOnly,
+            false,
+            true,
+        )?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn update_song_region_transpose(
         &mut self,
         region_id: &str,

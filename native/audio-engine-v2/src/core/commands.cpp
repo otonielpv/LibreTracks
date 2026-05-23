@@ -139,6 +139,14 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "SetRegionTranspose")
         return CmdSetRegionTranspose{ j.at("region_id").get<Id>(), j.at("semitones").get<Semitones>() };
 
+    if (type == "SetRegionWarp") {
+        CmdSetRegionWarp cmd;
+        cmd.region_id = j.at("region_id").get<Id>();
+        cmd.warp_enabled = j.value("warp_enabled", false);
+        cmd.warp_source_bpm = j.value("warp_source_bpm", 0.0);
+        return cmd;
+    }
+
     if (type == "SetSongRegions") {
         CmdSetSongRegions cmd;
         cmd.song_id = j.at("song_id").get<Id>();
@@ -150,6 +158,8 @@ EngineCommand command_from_json(const std::string& raw) {
             region.end_frame = item.at("end_frame").get<Frame>();
             region.transpose_semitones =
                 item.value("transpose_semitones", static_cast<Semitones>(0));
+            region.warp_enabled = item.value("warp_enabled", false);
+            region.warp_source_bpm = item.value("warp_source_bpm", 0.0);
             cmd.regions.push_back(std::move(region));
         }
         return cmd;

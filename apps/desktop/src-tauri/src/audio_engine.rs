@@ -612,6 +612,23 @@ impl AudioController {
         })
     }
 
+    pub fn update_live_region_warp(
+        &self,
+        region_id: &str,
+        warp_enabled: bool,
+        warp_source_bpm: Option<f64>,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("set_region_warp", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetRegionWarp {
+                region_id: region_id.into(),
+                warp_enabled,
+                // 0.0 is the "no warp" sentinel C++ interprets defensively.
+                warp_source_bpm: warp_source_bpm.unwrap_or(0.0),
+            })?;
+            Ok(())
+        })
+    }
+
     pub fn update_live_song_regions(&self, song: &Song) -> Result<(), DesktopError> {
         self.with_engine_state("set_song_regions", None, |engine, state| {
             let regions = song
@@ -623,6 +640,8 @@ impl AudioController {
                     start_frame: seconds_to_frame_for_engine(engine, region.start_seconds),
                     end_frame: seconds_to_frame_for_engine(engine, region.end_seconds),
                     transpose_semitones: region.transpose_semitones,
+                    warp_enabled: region.warp_enabled,
+                    warp_source_bpm: region.warp_source_bpm.unwrap_or(0.0),
                 })
                 .collect();
             engine.send_command(&EngineCommand::SetSongRegions {

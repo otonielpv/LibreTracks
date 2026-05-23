@@ -1,5 +1,6 @@
 pub mod model;
 pub mod validation;
+pub mod warp;
 
 pub use model::{
     default_audio_to, parse_audio_output_route, Clip, Marker, Project, Song, SongRegion,
@@ -7,7 +8,9 @@ pub use model::{
 };
 pub use validation::{
     validate_song, DomainError, MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
+    MAX_WARP_SOURCE_BPM, MIN_WARP_SOURCE_BPM,
 };
+pub use warp::{effective_bpm_at, region_warp_ratio, region_warp_ratio_in_song};
 
 #[cfg(test)]
 mod tests {

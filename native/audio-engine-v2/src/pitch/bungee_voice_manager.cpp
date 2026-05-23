@@ -205,7 +205,11 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
 
                 const auto decision = resolve_pitch_render_decision(
                     track, clip, song, playhead);
-                if (decision.effective_semitones == 0)
+                // Build a Bungee voice when the clip needs pitch OR when its
+                // region warp is active. Warp covers the whole song, so every
+                // overlapping clip gets a voice — pitch-only clips keep the
+                // legacy behaviour (no voice when effective_semitones == 0).
+                if (decision.effective_semitones == 0 && !decision.warp_active)
                     continue;
 
                 VoiceSpec spec;

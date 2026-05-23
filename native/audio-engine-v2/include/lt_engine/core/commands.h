@@ -97,6 +97,16 @@ struct CmdSetMetronomeConfig      { bool enabled; float volume; std::string rout
 struct CmdSetSongTranspose    { Id song_id;    Semitones semitones; };
 struct CmdSetRegionTranspose  { Id region_id;  Semitones semitones; };
 
+// Per-region warp toggle. Hot-applied without rebuilding the session — the
+// renderer reads warp_enabled / warp_source_bpm per block and feeds Bungee
+// the resulting time_ratio. `warp_source_bpm <= 0` disables warp regardless
+// of `warp_enabled`, matching the Rust-side validation.
+struct CmdSetRegionWarp {
+    Id     region_id;
+    bool   warp_enabled = false;
+    double warp_source_bpm = 0.0;
+};
+
 struct CmdSetSongRegions {
     struct RegionUpdate {
         Id          id;
@@ -104,6 +114,8 @@ struct CmdSetSongRegions {
         Frame       start_frame = 0;
         Frame       end_frame = 0;
         Semitones   transpose_semitones = 0;
+        bool        warp_enabled = false;
+        double      warp_source_bpm = 0.0;
     };
     Id song_id;
     std::vector<RegionUpdate> regions;
@@ -174,7 +186,7 @@ using EngineCommand = std::variant<
     CmdSetTrackTransposeEnabled, CmdStartMasterFade,
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
     CmdSetMetronomeConfig,
-    CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetSongRegions,
+    CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetSongRegions,
     CmdSetSongMarkers, CmdSetSongTiming,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize
 >;

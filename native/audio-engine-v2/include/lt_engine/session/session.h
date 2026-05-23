@@ -121,6 +121,14 @@ struct Region {
     Frame       start_frame = 0;
     Frame       end_frame   = 0;
     Semitones   transpose_semitones = 0;
+
+    // Per-region warp configuration. When enabled, the renderer time-stretches
+    // every clip overlapping this region so the audio at `warp_source_bpm`
+    // aligns with the timeline's effective tempo. Pitch is preserved.
+    // `warp_source_bpm <= 0` (or NaN) is treated as "no warp" by the renderer
+    // regardless of `warp_enabled`, mirroring the Rust validation.
+    bool   warp_enabled    = false;
+    double warp_source_bpm = 0.0;
 };
 
 // ---------------------------------------------------------------------------

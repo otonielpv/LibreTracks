@@ -104,6 +104,14 @@ pub enum EngineCommand {
         region_id: String,
         semitones: i32,
     },
+    /// Hot-toggle warp on a single region without rebuilding the session.
+    /// The renderer reads warp_enabled / warp_source_bpm per block, so the
+    /// new ratio takes effect on the next audio callback.
+    SetRegionWarp {
+        region_id: String,
+        warp_enabled: bool,
+        warp_source_bpm: f64,
+    },
     SetSongRegions {
         song_id: String,
         regions: Vec<RegionUpdate>,
@@ -141,6 +149,12 @@ pub struct RegionUpdate {
     pub start_frame: i64,
     pub end_frame: i64,
     pub transpose_semitones: i32,
+    #[serde(default)]
+    pub warp_enabled: bool,
+    /// 0.0 means "no warp" regardless of `warp_enabled`. Use this default when
+    /// warp is disabled and the user has not configured a source BPM yet.
+    #[serde(default)]
+    pub warp_source_bpm: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

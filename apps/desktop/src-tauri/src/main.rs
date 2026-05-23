@@ -155,6 +155,7 @@ fn main() {
             commands::timeline::create_song_region,
             commands::timeline::update_song_region,
             commands::timeline::update_song_region_transpose,
+            commands::timeline::update_song_region_warp,
             commands::timeline::delete_song_region,
             commands::timeline::assign_section_marker_digit,
             commands::timeline::update_song_tempo,

@@ -287,6 +287,23 @@ pub fn update_song_region_transpose(
 }
 
 #[tauri::command]
+pub fn update_song_region_warp(
+    region_id: String,
+    warp_enabled: bool,
+    warp_source_bpm: Option<f64>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_song_region_warp(&region_id, warp_enabled, warp_source_bpm, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn delete_song_region(
     region_id: String,
     state: State<'_, DesktopState>,

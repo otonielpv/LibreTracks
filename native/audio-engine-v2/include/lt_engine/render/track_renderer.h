@@ -54,6 +54,10 @@ public:
 
 private:
     // Render one clip's contribution for this block.
+    // `warp_active` / `warp_time_ratio` come from the per-clip
+    // PitchRenderDecision computed in render(). When `warp_active` is true
+    // the clip is routed through Bungee with `time_ratio = warp_time_ratio`,
+    // even when `effective_semitones == 0` (pure time-stretch).
     void render_clip(const Clip&           clip,
                      Frame                 timeline_frame,
                      int                   block_frames,
@@ -64,7 +68,9 @@ private:
                      BungeeVoiceManager*   bungee_voices,
                      int                   engine_sample_rate,
                      const Id&             track_id,
-                     Semitones             effective_semitones) noexcept;
+                     Semitones             effective_semitones,
+                     bool                  warp_active = false,
+                     double                warp_time_ratio = 1.0) noexcept;
 
     bool ensure_scratch_capacity(int frames) noexcept;
 

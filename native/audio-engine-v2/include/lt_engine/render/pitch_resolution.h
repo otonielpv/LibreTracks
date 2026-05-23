@@ -16,11 +16,19 @@ Semitones resolve_effective_semitones(const Track& track,
                                       Frame timeline_frame) noexcept;
 
 // Canonical pitch resolution decision — call once per clip per render block.
-// Encodes whether pitch processing is needed and which semitone value to use.
+// Encodes whether pitch processing is needed and which semitone value to use,
+// plus whether the region's warp engine should be applied. A clip routes
+// through Bungee when `needs_pitch || warp_active` is true.
 struct PitchRenderDecision {
     Semitones effective_semitones = 0;  // 0 = no pitch shift needed
     bool needs_pitch = false;           // true if this clip should go through pitch engine
     bool is_never_transpose = false;    // track has NeverTranspose behavior
+    // Warp: when true, the clip is inside a region whose warp_enabled is set
+    // and whose source/target BPMs produce a non-unity ratio. The renderer
+    // must route the clip through Bungee with the given time_ratio even when
+    // effective_semitones is 0.
+    bool   warp_active = false;
+    double warp_time_ratio = 1.0;
 };
 
 // Returns the authoritative pitch decision for a clip at a given timeline position.
@@ -28,5 +36,11 @@ struct PitchRenderDecision {
 // TrackRenderer, Mixer, and RealtimePitchEngine always agree on the semitone key.
 PitchRenderDecision resolve_pitch_render_decision(
     const Track& track, const Clip& clip, const Song& song, Frame timeline_frame) noexcept;
+
+// Compute the time_ratio Bungee should use for a clip at `timeline_frame`
+// based on the region's warp settings and the song's effective tempo at the
+// region start. Returns 1.0 (= no warp) when warp is disabled, when the
+// source BPM is missing/invalid, or when no region covers `timeline_frame`.
+double resolve_warp_time_ratio(const Song& song, Frame timeline_frame) noexcept;
 
 } // namespace lt

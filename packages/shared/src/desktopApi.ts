@@ -479,6 +479,23 @@ export async function updateSongRegionTranspose(
   });
 }
 
+/**
+ * Toggle warp on a region and/or set its source BPM. `warpEnabled = true`
+ * requires a finite `warpSourceBpm` between 20 and 300; when disabling warp
+ * pass `null` to leave the previously-configured source BPM untouched.
+ */
+export async function updateSongRegionWarp(
+  regionId: string,
+  warpEnabled: boolean,
+  warpSourceBpm: number | null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_song_region_warp", {
+    regionId,
+    warpEnabled,
+    warpSourceBpm,
+  });
+}
+
 export async function deleteSongRegion(regionId: string): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("delete_song_region", { regionId });
 }

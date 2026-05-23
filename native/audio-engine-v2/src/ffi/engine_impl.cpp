@@ -506,7 +506,10 @@ Result<void> EngineImpl::initialize() {
         const int bs  = device_manager_->actual_buffer_size() > 0
                         ? device_manager_->actual_buffer_size()
                         : 1024;  // generous default; tracks the OS buffer size when available
-        bungee_voices_->prepare(sr, /*channels=*/2, bs);
+        // Bungee's max input per block sized for warp ratios up to 4× the
+        // output block. Keeps the legacy pitch path identical (it always
+        // feeds exactly `bs` input frames) while letting warp pass more.
+        bungee_voices_->prepare(sr, /*channels=*/2, bs * 4);
         if (prearmed_jumps_) prearmed_jumps_->prepare(sr, /*channels=*/2, bs);
     }
 
@@ -852,7 +855,7 @@ void EngineImpl::resample_sources_for_new_sample_rate() {
     if (bungee_voices_ && device_manager_) {
         const int bs = device_manager_->actual_buffer_size() > 0
             ? device_manager_->actual_buffer_size() : 1024;
-        bungee_voices_->prepare(new_sr, /*channels=*/2, bs);
+        bungee_voices_->prepare(new_sr, /*channels=*/2, bs * 4);
         bungee_voices_->clear(); // voices were built for old dims
         if (prearmed_jumps_) {
             prearmed_jumps_->clear();
@@ -1756,6 +1759,34 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             }
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdSetRegionWarp>) {
+            if (session_) {
+                auto next_session = std::make_shared<Session>(*session_);
+                bool changed = false;
+                for (auto& song : next_session->songs) {
+                    for (auto& region : song.regions) {
+                        if (region.id != c.region_id) continue;
+                        region.warp_enabled = c.warp_enabled;
+                        region.warp_source_bpm = c.warp_source_bpm;
+                        changed = true;
+                        break;
+                    }
+                    if (changed) break;
+                }
+                if (changed) {
+                    std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
+                    (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+                    // No mixer crossfade and no Bungee voice rebuild: warp ratio
+                    // is read per-block, so the next callback picks up the new
+                    // value automatically. Toggling warp on for a previously
+                    // unwarped clip does NOT need a voice rebuild either —
+                    // every clip already owns a Bungee voice when the engine is
+                    // built with pitch support, and ratio == 1.0 is a cheap no-op.
+                    if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                }
+            }
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdSetSongRegions>) {
             if (session_) {
                 auto next_session = std::make_shared<Session>(*session_);
@@ -1771,6 +1802,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         region.start_frame = update.start_frame;
                         region.end_frame = update.end_frame;
                         region.transpose_semitones = update.transpose_semitones;
+                        region.warp_enabled = update.warp_enabled;
+                        region.warp_source_bpm = update.warp_source_bpm;
                         song.regions.push_back(std::move(region));
                     }
                     changed = true;
