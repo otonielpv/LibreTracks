@@ -7,8 +7,15 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <string>
 #include <thread>
 #include <vector>
+
+#if LT_ENGINE_USE_LIBSNDFILE
+#include <sndfile.h>
+#endif
 
 using namespace lt;
 
@@ -216,6 +223,114 @@ TEST_CASE("try_install_from_cache_file misses when no cache file exists") {
         "non-existent-source-for-cache-miss-test-7a2b9.wav");
     CHECK_FALSE(manager.try_install_from_cache_file(source_id, 48000));
 }
+
+#if LT_ENGINE_USE_LIBSNDFILE
+namespace {
+
+std::string make_temp_wav_path(const char* tag) {
+#if defined(_WIN32)
+    const char* tmp = std::getenv("TEMP");
+    if (!tmp || !*tmp) tmp = std::getenv("TMP");
+    if (!tmp || !*tmp) tmp = ".";
+    std::string dir(tmp);
+    return dir + "\\lt_native_wav_test_" + tag + ".wav";
+#else
+    const char* tmp = std::getenv("TMPDIR");
+    if (!tmp || !*tmp) tmp = "/tmp";
+    std::string dir(tmp);
+    return dir + "/lt_native_wav_test_" + tag + ".wav";
+#endif
+}
+
+bool write_wav_pcm_float(const std::string& path,
+                         const std::vector<float>& samples,
+                         int channels,
+                         int sample_rate) {
+    SF_INFO info{};
+    info.channels = channels;
+    info.samplerate = sample_rate;
+    info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
+    SNDFILE* sf = sf_open(path.c_str(), SFM_WRITE, &info);
+    if (!sf) return false;
+    const sf_count_t frames =
+        static_cast<sf_count_t>(samples.size() / channels);
+    const sf_count_t written =
+        sf_writef_float(sf, samples.data(), frames);
+    sf_close(sf);
+    return written == frames;
+}
+
+} // namespace
+
+TEST_CASE("try_install_native_file streams a native WAV without writing the PCM cache") {
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 3 + 257;
+    const auto wav_path = make_temp_wav_path("native_streaming");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kSampleRate));
+
+    SourceManager manager;
+    const Id source_id = "native-wav-source";
+    manager.register_source(source_id, wav_path);
+    REQUIRE(manager.try_install_native_file(source_id, kSampleRate));
+
+    const auto streaming = manager.get_shared(source_id);
+    REQUIRE(static_cast<bool>(streaming));
+    CHECK(streaming->is_streaming());
+    CHECK(streaming->channel_count() == kChannels);
+    CHECK(streaming->sample_rate() == kSampleRate);
+    CHECK(streaming->duration_frames() == kFrames);
+
+    const auto diags = manager.diagnostics();
+    REQUIRE(diags.size() == 1);
+    // Native streaming must not bill anything to the engine-managed cache:
+    // the loading screen would otherwise display fake disk growth.
+    CHECK(diags[0].disk_cache_bytes == 0);
+
+    // Sample-accurate readback from the source file.
+    for (Frame start : {Frame{0}, Frame{kDefaultBlockFrames + 17},
+                        Frame{kDefaultBlockFrames * 2 + 199}}) {
+        constexpr int kReadFrames = 320;
+        require_ready_range(manager, source_id, start, kReadFrames);
+        std::vector<float> expected;
+        expected.reserve(static_cast<std::size_t>(kReadFrames) * kChannels);
+        for (Frame f = 0; f < kReadFrames; ++f) {
+            const std::size_t base =
+                static_cast<std::size_t>((start + f) * kChannels);
+            expected.push_back(samples[base]);
+            expected.push_back(samples[base + 1]);
+        }
+        require_audio_equal(read_planar(*streaming, start, kReadFrames), expected);
+    }
+
+    std::remove(wav_path.c_str());
+}
+
+TEST_CASE("try_install_native_file rejects a sample-rate mismatch") {
+    constexpr int kChannels = 2;
+    constexpr int kFileRate = 44100;   // engine wants 48000 below
+    constexpr Frame kFrames = 1024;
+    const auto wav_path = make_temp_wav_path("native_sr_mismatch");
+    const auto samples = make_reference_audio(kFrames, kChannels);
+    REQUIRE(write_wav_pcm_float(wav_path, samples, kChannels, kFileRate));
+
+    SourceManager manager;
+    const Id source_id = "native-sr-mismatch-source";
+    manager.register_source(source_id, wav_path);
+    CHECK_FALSE(manager.try_install_native_file(source_id, 48000));
+
+    std::remove(wav_path.c_str());
+}
+
+TEST_CASE("try_install_native_file rejects missing files") {
+    SourceManager manager;
+    const Id source_id = "missing-native-source";
+    manager.register_source(source_id,
+        "non-existent-native-wav-for-test-3f8c1.wav");
+    CHECK_FALSE(manager.try_install_native_file(source_id, 48000));
+}
+#endif
 
 TEST_CASE("TrackRenderer output is identical for memory and streaming source paths") {
     constexpr int kChannels = 2;

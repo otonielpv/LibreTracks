@@ -647,6 +647,86 @@ std::string SourceManager::cache_file_for(const Id& source_id,
            std::to_string(h) + ".rf64";
 }
 
+bool SourceManager::try_install_native_file(const Id& source_id,
+                                             int engine_sample_rate) {
+#if !LT_ENGINE_USE_LIBSNDFILE
+    (void)source_id;
+    (void)engine_sample_rate;
+    return false;
+#else
+    std::string file_path;
+    {
+        auto entries = std::atomic_load(&entries_);
+        auto it = entries->find(source_id);
+        if (it == entries->end())
+            return false;
+        file_path = it->second.file_path;
+    }
+    if (file_path.empty())
+        return false;
+
+    SF_INFO info{};
+    SNDFILE* sf = sf_open(file_path.c_str(), SFM_READ, &info);
+    if (!sf)
+        return false;
+
+    // Only short-circuit when libsndfile can stream the file as-is at the
+    // engine's working rate. Mismatched SR → resample → still need decode.
+    // Channel counts beyond 2 go through the decode path so the existing
+    // downmix logic in the worker handles them.
+    const bool eligible =
+        info.samplerate == engine_sample_rate &&
+        info.frames > 0 &&
+        (info.channels == 1 || info.channels == 2);
+    if (!eligible) {
+        sf_close(sf);
+        return false;
+    }
+    const int channel_count = info.channels;
+    const Frame duration_frames = static_cast<Frame>(info.frames);
+    sf_close(sf);
+
+    SourceReadyCallback ready_callback;
+    {
+        std::lock_guard lock(write_mutex_);
+        EntryMap next = *std::atomic_load(&entries_);
+        auto it = next.find(source_id);
+        if (it == next.end())
+            return false;
+
+        auto& entry = it->second;
+        // fill_block_from_disk reads bytes from `cache_file_path` via
+        // libsndfile, so pointing it at the original file is enough — no
+        // separate code path needed.
+        entry.cache_file_path = file_path;
+        entry.channel_count = channel_count;
+        entry.sample_rate = engine_sample_rate;
+        entry.duration_frames = duration_frames;
+        // disk_cache_bytes counts bytes the engine has *itself* written to
+        // its cache directory. Native files we stream in place don't take any
+        // extra disk space, so we leave this at 0 — the user shouldn't see
+        // the loading screen lie about cache growth.
+        entry.disk_cache_bytes = 0;
+        entry.source = std::make_shared<DecodedSource>(
+            source_id,
+            channel_count,
+            engine_sample_rate,
+            duration_frames,
+            &block_cache_,
+            [this](const Id& id, int block_index) {
+                request_block(id, block_index);
+            });
+        entry.status = "cache_ready";
+        entry.error_message.clear();
+        publish_locked(std::move(next));
+        ready_callback = source_ready_callback_;
+    }
+    if (ready_callback)
+        ready_callback(source_id);
+    return true;
+#endif
+}
+
 bool SourceManager::try_install_from_cache_file(const Id& source_id,
                                                 int engine_sample_rate) {
 #if !LT_ENGINE_USE_LIBSNDFILE

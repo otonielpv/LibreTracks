@@ -33,6 +33,7 @@ add_executable(lt_engine_tests
 target_link_libraries(lt_engine_tests
     PRIVATE
         lt_audio_engine_v2
+        lt_deps_decoder
         doctest::doctest
 )
 

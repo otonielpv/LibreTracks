@@ -69,6 +69,17 @@ public:
     bool try_install_from_cache_file(const Id& source_id,
                                       int engine_sample_rate);
 
+    // If the original source file is already a libsndfile-readable container
+    // (WAV / AIFF / FLAC …) whose sample rate matches the engine and whose
+    // channel count is supported (1 or 2), install it as a streaming entry
+    // that reads blocks directly from the original file — skipping decode AND
+    // skipping the .rf64 PCM cache entirely. Saves both CPU and disk for the
+    // very common case of native-format WAV stems. Returns false when the
+    // file's format requires the decode pipeline (compressed audio, mismatched
+    // sample rate, etc.); callers fall through to the worker-pool path.
+    bool try_install_native_file(const Id& source_id,
+                                  int engine_sample_rate);
+
     void request_block(const Id& source_id, int block_index) const noexcept;
     void request_range(const Id& source_id, Frame source_frame, int frame_count) const noexcept;
     CacheDiagnostics cache_diagnostics() const;

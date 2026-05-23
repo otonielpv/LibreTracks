@@ -56,11 +56,7 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
     Id          source_id = source.id;
     int         sr        = impl_->engine_sample_rate;
 
-    // Fast path: if a PCM cache from a previous session is still valid for
-    // this file (matching mtime + size), reuse it and skip the decode worker
-    // entirely. This is what makes a re-open of a 31-stem project drop from
-    // "decode every source again" to "instant".
-    if (impl_->source_manager->try_install_from_cache_file(source_id, sr)) {
+    auto mark_ready = [&] {
         {
             std::lock_guard lock(impl_->mtx);
             auto& info = impl_->states[source_id];
@@ -68,6 +64,21 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
             info.progress_percent = 100;
         }
         impl_->push_event(EvSourcePrepared{ source_id });
+    };
+
+    // Fast path 1: if a PCM cache from a previous session is still valid for
+    // this file (matching mtime + size), reuse it and skip the decode worker
+    // entirely.
+    if (impl_->source_manager->try_install_from_cache_file(source_id, sr)) {
+        mark_ready();
+        return;
+    }
+
+    // Fast path 2: if the original file is already a libsndfile-readable
+    // container at the engine sample rate, stream it in place — no decode,
+    // no cache write. This is the common case for native WAV stems.
+    if (impl_->source_manager->try_install_native_file(source_id, sr)) {
+        mark_ready();
         return;
     }
 
