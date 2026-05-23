@@ -4,8 +4,23 @@
 #include <cerrno>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <string>
+#include <vector>
+
+#if defined(_WIN32)
+#  define WIN32_LEAN_AND_MEAN
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#  include <shlobj.h>
+#else
+#  include <dirent.h>
+#  include <sys/time.h>
+#  include <unistd.h>
+#endif
 
 #if defined(_WIN32)
 #include <direct.h>
@@ -133,6 +148,160 @@ std::string temp_directory_compat() {
 #else
         "/tmp";
 #endif
+}
+
+// Resolve the per-user persistent cache directory for the engine. Unlike
+// %TEMP%, the contents survive reboots so the cross-session PCM cache stays
+// useful — and unlike %TEMP%, Windows won't clean it behind our back.
+// Honours $LIBRETRACKS_CACHE_DIR for tests and power users.
+std::string resolve_app_cache_dir() {
+    if (const char* override_dir = std::getenv("LIBRETRACKS_CACHE_DIR")) {
+        if (override_dir[0] != '\0') {
+            std::string out(override_dir);
+            while (out.size() > 1 && is_path_separator(out.back()))
+                out.pop_back();
+            return out;
+        }
+    }
+#if defined(_WIN32)
+    PWSTR path = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &path)) && path) {
+        const int len = WideCharToMultiByte(CP_UTF8, 0, path, -1,
+                                             nullptr, 0, nullptr, nullptr);
+        std::string out;
+        if (len > 1) {
+            out.resize(static_cast<std::size_t>(len - 1));
+            WideCharToMultiByte(CP_UTF8, 0, path, -1, out.data(), len,
+                                 nullptr, nullptr);
+        }
+        CoTaskMemFree(path);
+        if (!out.empty())
+            return out + "\\LibreTracks";
+    }
+    return temp_directory_compat();
+#elif defined(__APPLE__)
+    if (const char* home = std::getenv("HOME")) {
+        if (home[0] != '\0')
+            return std::string(home) + "/Library/Caches/LibreTracks";
+    }
+    return temp_directory_compat();
+#else
+    if (const char* xdg = std::getenv("XDG_CACHE_HOME")) {
+        if (xdg[0] != '\0')
+            return std::string(xdg) + "/LibreTracks";
+    }
+    if (const char* home = std::getenv("HOME")) {
+        if (home[0] != '\0')
+            return std::string(home) + "/.cache/LibreTracks";
+    }
+    return temp_directory_compat();
+#endif
+}
+
+std::string source_cache_dir() {
+    return resolve_app_cache_dir() + native_path_separator() + "source-cache";
+}
+
+// LRU eviction. Caps the on-disk size of source-cache; defaults to 4 GiB,
+// overridable with LIBRETRACKS_SOURCE_DISK_CACHE_MB so users with smaller
+// SSDs can shrink it.
+size_t source_disk_cache_limit_bytes() {
+    constexpr size_t kDefaultMb = 4096; // 4 GiB
+    size_t mb = kDefaultMb;
+    if (const char* raw = std::getenv("LIBRETRACKS_SOURCE_DISK_CACHE_MB")) {
+        const int parsed = std::atoi(raw);
+        if (parsed >= 0 && parsed <= 1024 * 1024) // sanity 1 TiB
+            mb = static_cast<size_t>(parsed);
+    }
+    return mb * 1024ull * 1024ull;
+}
+
+struct CacheEntryStat {
+    std::string path;
+    long long   size_bytes = 0;
+    long long   mtime      = 0;
+};
+
+bool ends_with_rf64(const std::string& name) {
+    constexpr const char* kExt = ".rf64";
+    constexpr std::size_t kLen = 5;
+    if (name.size() < kLen) return false;
+    return name.compare(name.size() - kLen, kLen, kExt) == 0;
+}
+
+std::vector<CacheEntryStat> list_cache_entries(const std::string& dir) {
+    std::vector<CacheEntryStat> out;
+#if defined(_WIN32)
+    WIN32_FIND_DATAA fd{};
+    const std::string pattern = dir + "\\*.rf64";
+    HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE)
+        return out;
+    do {
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+            continue;
+        CacheEntryStat e;
+        e.path = dir + "\\" + fd.cFileName;
+        LARGE_INTEGER sz{};
+        sz.LowPart = fd.nFileSizeLow;
+        sz.HighPart = static_cast<LONG>(fd.nFileSizeHigh);
+        e.size_bytes = static_cast<long long>(sz.QuadPart);
+        // FILETIME → unix-ish seconds for ordering only (not absolute).
+        ULARGE_INTEGER ft{};
+        ft.LowPart = fd.ftLastWriteTime.dwLowDateTime;
+        ft.HighPart = fd.ftLastWriteTime.dwHighDateTime;
+        e.mtime = static_cast<long long>(ft.QuadPart);
+        out.push_back(std::move(e));
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+#else
+    DIR* d = ::opendir(dir.c_str());
+    if (!d) return out;
+    while (auto* ent = ::readdir(d)) {
+        const std::string name(ent->d_name);
+        if (!ends_with_rf64(name)) continue;
+        const std::string full = dir + "/" + name;
+        struct stat st{};
+        if (::stat(full.c_str(), &st) != 0) continue;
+        CacheEntryStat e;
+        e.path = full;
+        e.size_bytes = static_cast<long long>(st.st_size);
+        e.mtime      = static_cast<long long>(st.st_mtime);
+        out.push_back(std::move(e));
+    }
+    ::closedir(d);
+#endif
+    return out;
+}
+
+// Ensure cache dir + the projected new file size stay below the configured
+// budget. Deletes the oldest .rf64 files (by mtime) until the projected total
+// fits. Always preserves the file at `protect_path` — the one we're about to
+// reuse — so a re-open can't evict its own cache mid-flight.
+void evict_cache_lru(const std::string& dir,
+                      size_t projected_new_bytes,
+                      const std::string& protect_path) {
+    const size_t limit = source_disk_cache_limit_bytes();
+    if (limit == 0)
+        return; // user-disabled (LIBRETRACKS_SOURCE_DISK_CACHE_MB=0)
+    auto entries = list_cache_entries(dir);
+    long long total = static_cast<long long>(projected_new_bytes);
+    for (const auto& e : entries) total += e.size_bytes;
+    if (total <= static_cast<long long>(limit))
+        return;
+
+    std::sort(entries.begin(), entries.end(),
+              [](const CacheEntryStat& a, const CacheEntryStat& b) {
+                  return a.mtime < b.mtime; // oldest first
+              });
+    for (const auto& e : entries) {
+        if (total <= static_cast<long long>(limit))
+            break;
+        if (!protect_path.empty() && e.path == protect_path)
+            continue;
+        if (std::remove(e.path.c_str()) == 0)
+            total -= e.size_bytes;
+    }
 }
 
 // File metadata used to invalidate the PCM cache when the source file
@@ -288,9 +457,14 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
     }
 
     const std::string cache_file = cache_file_for(source_id, file_path, sample_rate);
+    const size_t projected_bytes = samples.size() * sizeof(float);
     try {
         if (!create_directories_compat(parent_path_compat(cache_file)))
             return Result<void>::err("Could not create PCM cache directory: " + cache_file);
+        // Keep the on-disk cache under the configured budget before we add
+        // another file to it. Protects the path we're about to write so it
+        // can't be evicted by itself if it happened to be the oldest entry.
+        evict_cache_lru(parent_path_compat(cache_file), projected_bytes, cache_file);
 #if LT_ENGINE_USE_LIBSNDFILE
         SF_INFO info{};
         info.channels = channel_count;
@@ -642,8 +816,7 @@ std::string SourceManager::cache_file_for(const Id& source_id,
         std::to_string(st.size_bytes) + "|" +
         std::to_string(st.mtime);
     const auto h = std::hash<std::string>{}(key);
-    return temp_directory_compat() + native_path_separator() +
-           "libretracks-audio-cache" + native_path_separator() +
+    return source_cache_dir() + native_path_separator() +
            std::to_string(h) + ".rf64";
 }
 
@@ -759,6 +932,25 @@ bool SourceManager::try_install_from_cache_file(const Id& source_id,
     const int channel_count = info.channels;
     const Frame duration_frames = static_cast<Frame>(info.frames);
     sf_close(sf);
+
+    // Touch the cache file so LRU sees it as recently used. Otherwise an
+    // open project whose stems haven't been re-decoded for months would be
+    // the first thing evicted the next time someone imports new audio.
+#if defined(_WIN32)
+    HANDLE h = CreateFileA(cache_file.c_str(), FILE_WRITE_ATTRIBUTES,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h != INVALID_HANDLE_VALUE) {
+        FILETIME ft{};
+        SYSTEMTIME st{};
+        GetSystemTime(&st);
+        SystemTimeToFileTime(&st, &ft);
+        SetFileTime(h, nullptr, nullptr, &ft);
+        CloseHandle(h);
+    }
+#else
+    (void)::utimes(cache_file.c_str(), nullptr);
+#endif
 
     // We don't preload eager blocks here — the block cache fill worker will
     // pull them on demand once playback starts. The big win is skipping the

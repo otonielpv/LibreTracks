@@ -17,6 +17,17 @@
 #include <sndfile.h>
 #endif
 
+#if defined(_WIN32)
+#  define WIN32_LEAN_AND_MEAN
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#else
+#  include <dirent.h>
+#  include <sys/stat.h>
+#endif
+
 using namespace lt;
 
 namespace {
@@ -331,6 +342,187 @@ TEST_CASE("try_install_native_file rejects missing files") {
     CHECK_FALSE(manager.try_install_native_file(source_id, 48000));
 }
 #endif
+
+namespace {
+
+#if defined(_WIN32)
+constexpr char kTestPathSep = '\\';
+#else
+constexpr char kTestPathSep = '/';
+#endif
+
+// Count .rf64 files inside `dir` and accumulate their total size. The engine
+// itself uses platform-specific dir listing helpers; the tests do their own
+// minimal walk so we don't have to expose engine internals.
+struct TestCacheDirStats {
+    std::size_t file_count = 0;
+    std::size_t total_bytes = 0;
+};
+
+TestCacheDirStats stat_cache_dir(const std::string& dir) {
+    TestCacheDirStats out;
+#if defined(_WIN32)
+    WIN32_FIND_DATAA fd{};
+    const std::string pattern = dir + "\\*.rf64";
+    HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return out;
+    do {
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) continue;
+        LARGE_INTEGER sz{};
+        sz.LowPart = fd.nFileSizeLow;
+        sz.HighPart = static_cast<LONG>(fd.nFileSizeHigh);
+        out.total_bytes += static_cast<std::size_t>(sz.QuadPart);
+        ++out.file_count;
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+#else
+    DIR* d = ::opendir(dir.c_str());
+    if (!d) return out;
+    while (auto* ent = ::readdir(d)) {
+        const std::string name(ent->d_name);
+        if (name.size() < 5) continue;
+        if (name.compare(name.size() - 5, 5, ".rf64") != 0) continue;
+        const std::string full = dir + "/" + name;
+        struct stat st{};
+        if (::stat(full.c_str(), &st) != 0) continue;
+        out.total_bytes += static_cast<std::size_t>(st.st_size);
+        ++out.file_count;
+    }
+    ::closedir(d);
+#endif
+    return out;
+}
+
+// Lightweight RAII helper that points LIBRETRACKS_CACHE_DIR at an empty
+// per-test directory so cache-related tests don't smash the real user cache.
+class ScopedCacheDir {
+public:
+    explicit ScopedCacheDir(const char* tag) {
+#if defined(_WIN32)
+        const char* tmp = std::getenv("TEMP");
+        if (!tmp || !*tmp) tmp = std::getenv("TMP");
+        if (!tmp || !*tmp) tmp = ".";
+        path_ = std::string(tmp) + "\\lt_cachedir_test_" + tag;
+        _putenv_s("LIBRETRACKS_CACHE_DIR", path_.c_str());
+#else
+        const char* tmp = std::getenv("TMPDIR");
+        if (!tmp || !*tmp) tmp = "/tmp";
+        path_ = std::string(tmp) + "/lt_cachedir_test_" + tag;
+        setenv("LIBRETRACKS_CACHE_DIR", path_.c_str(), 1);
+#endif
+        clear_existing();
+    }
+    // Start every test with a clean slate so we measure exactly what the
+    // engine wrote during the test body, not leftovers from a prior run.
+    void clear_existing() {
+        const std::string sub = path_ + std::string(1, kTestPathSep) + "source-cache";
+#if defined(_WIN32)
+        WIN32_FIND_DATAA fd{};
+        const std::string pattern = sub + "\\*.rf64";
+        HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE) return;
+        do {
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) continue;
+            std::remove((sub + "\\" + fd.cFileName).c_str());
+        } while (FindNextFileA(h, &fd));
+        FindClose(h);
+#else
+        DIR* d = ::opendir(sub.c_str());
+        if (!d) return;
+        while (auto* ent = ::readdir(d)) {
+            const std::string name(ent->d_name);
+            if (name.size() < 5) continue;
+            if (name.compare(name.size() - 5, 5, ".rf64") != 0) continue;
+            std::remove((sub + "/" + name).c_str());
+        }
+        ::closedir(d);
+#endif
+    }
+    ~ScopedCacheDir() {
+#if defined(_WIN32)
+        _putenv_s("LIBRETRACKS_CACHE_DIR", "");
+#else
+        unsetenv("LIBRETRACKS_CACHE_DIR");
+#endif
+    }
+    const std::string& path() const { return path_; }
+private:
+    std::string path_;
+};
+
+class ScopedEnv {
+public:
+    ScopedEnv(const char* name, const std::string& value) : name_(name) {
+#if defined(_WIN32)
+        _putenv_s(name, value.c_str());
+#else
+        setenv(name, value.c_str(), 1);
+#endif
+    }
+    ~ScopedEnv() {
+#if defined(_WIN32)
+        _putenv_s(name_.c_str(), "");
+#else
+        unsetenv(name_.c_str());
+#endif
+    }
+private:
+    std::string name_;
+};
+
+} // namespace
+
+TEST_CASE("PCM cache writes go into LIBRETRACKS_CACHE_DIR/source-cache") {
+    ScopedCacheDir scope("write_path");
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 2;
+    auto samples = make_reference_audio(kFrames, kChannels);
+
+    SourceManager manager;
+    const Id source_id = "cache-dir-source";
+    manager.register_source(source_id, "cache-dir-source.wav");
+    REQUIRE(manager.store_decoded_source(
+        source_id, std::move(samples), kChannels, kSampleRate, kFrames).is_ok());
+
+    const auto stats = stat_cache_dir(
+        scope.path() + std::string(1, kTestPathSep) + "source-cache");
+    CHECK(stats.file_count == 1);
+}
+
+TEST_CASE("LRU eviction removes oldest .rf64 files when the budget is exceeded") {
+    ScopedCacheDir scope("lru_eviction");
+    // 1 MiB budget: each ~1 MiB source forces eviction of older ones.
+    ScopedEnv limit("LIBRETRACKS_SOURCE_DISK_CACHE_MB", "1");
+
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    // ~1.05 MiB per source: 64k frames * 2 ch * 4 bytes ≈ 524 KiB; multiply
+    // by 2 for ~1 MiB so a second source already trips the cap.
+    constexpr Frame kFrames = 65536 * 2;
+    auto samples = make_reference_audio(kFrames, kChannels);
+
+    auto store_source = [&](const Id& id) {
+        SourceManager manager;
+        manager.register_source(id, id + std::string(".wav"));
+        REQUIRE(manager.store_decoded_source(
+            id, samples, kChannels, kSampleRate, kFrames).is_ok());
+    };
+
+    store_source("lru-a");
+    // Sleep so the second file's mtime is strictly newer than the first.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    store_source("lru-b");
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    store_source("lru-c");
+
+    const auto stats = stat_cache_dir(
+        scope.path() + std::string(1, kTestPathSep) + "source-cache");
+    // Older entries (lru-a, lru-b) should have been pruned to keep us under
+    // the 1 MiB cap; the freshest survives.
+    CHECK(stats.file_count <= 2);
+    CHECK(stats.total_bytes <= 2u * 1024u * 1024u); // slack: latest write is ~1 MiB
+}
 
 TEST_CASE("TrackRenderer output is identical for memory and streaming source paths") {
     constexpr int kChannels = 2;
