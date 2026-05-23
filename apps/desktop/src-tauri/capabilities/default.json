@@ -3,5 +3,12 @@
   "identifier": "default",
   "description": "Default desktop capability for the main LibreTracks UI.",
   "windows": ["*"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://*" }, { "url": "https://*" }]
+    }
+  ]
 }

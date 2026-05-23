@@ -21,6 +21,7 @@ void i18n
       en: { translation: en },
       es: { translation: es },
     },
+    lng: getSystemLanguage(),
     fallbackLng: "en",
     interpolation: {
       escapeValue: false,

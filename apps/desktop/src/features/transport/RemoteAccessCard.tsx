@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import QRCode from "qrcode";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import type { RemoteServerInfo } from "./desktopApi";
 
@@ -59,11 +60,29 @@ export function RemoteAccessCard({ remoteServerInfo }: RemoteAccessCardProps) {
         <div className="lt-remote-link-list">
           <div className="lt-remote-link-row">
             <span>{t("remoteAccess.ipUrl")}</span>
-            <code>{ipUrl}</code>
+            <a
+              className="lt-remote-link"
+              href={ipUrl}
+              onClick={(event) => {
+                event.preventDefault();
+                void openUrl(ipUrl);
+              }}
+            >
+              {ipUrl}
+            </a>
           </div>
           <div className="lt-remote-link-row">
             <span>{t("remoteAccess.hostnameUrl")}</span>
-            <code>{hostnameUrl}</code>
+            <a
+              className="lt-remote-link"
+              href={hostnameUrl}
+              onClick={(event) => {
+                event.preventDefault();
+                void openUrl(hostnameUrl);
+              }}
+            >
+              {hostnameUrl}
+            </a>
           </div>
         </div>
       </div>
