@@ -87,6 +87,7 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.4rem;
   min-height: 2.4rem;
   border-radius: 2px;
   padding: 0 0.8rem;
@@ -106,6 +107,13 @@ a {
 .button-link.primary {
   color: #003731;
   background: linear-gradient(180deg, var(--lt-primary), var(--lt-primary-container));
+}
+
+.support-panel .button-link.primary,
+.donation-dialog-actions .button-link.primary {
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--lt-primary) 45%, transparent);
+  box-shadow: 0 10px 28px rgb(45 212 191 / 0.16);
 }
 
 .hero {
@@ -298,6 +306,80 @@ h1 {
 .download-list {
   display: grid;
   gap: 0.5rem;
+}
+
+.support-panel {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--lt-muted) 12%, transparent);
+}
+
+.support-panel h3 {
+  margin: 0;
+  color: #f3f0ef;
+  font-size: 1rem;
+}
+
+.support-panel p {
+  margin: 0;
+  color: color-mix(in srgb, var(--lt-text) 72%, transparent);
+  line-height: 1.55;
+}
+
+.support-disclaimer {
+  color: color-mix(in srgb, var(--lt-secondary) 82%, transparent) !important;
+  font-size: 0.84rem;
+}
+
+.donation-dialog {
+  width: min(31rem, calc(100% - 2rem));
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--lt-primary) 28%, transparent);
+  border-radius: 4px;
+  color: var(--lt-text);
+  background: linear-gradient(180deg, #201f1f, #161515);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.45);
+}
+
+.donation-dialog::backdrop {
+  background: rgb(0 0 0 / 0.58);
+}
+
+.donation-dialog-body {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.25rem;
+}
+
+.donation-dialog h3 {
+  margin: 0;
+  color: #f3f0ef;
+  font-size: 1.15rem;
+}
+
+.donation-dialog p {
+  margin: 0;
+  color: color-mix(in srgb, var(--lt-text) 74%, transparent);
+  line-height: 1.55;
+}
+
+.donation-dialog-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.donation-dialog-actions .button-link:not(.primary) {
+  border: 1px solid color-mix(in srgb, var(--lt-muted) 18%, transparent);
+  background: var(--lt-surface-low);
+}
+
+.donation-dialog button {
+  border: 0;
+  cursor: pointer;
 }
 
 .stats-panel {

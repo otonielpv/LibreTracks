@@ -49,6 +49,19 @@ const labels = {
   published: isSpanish ? "Publicado" : "Published",
   assets: isSpanish ? "Instaladores" : "Installers",
   notes: isSpanish ? "Notas de la version" : "Release notes",
+  supportTitle: isSpanish ? "Apoya LibreTracks" : "Support LibreTracks",
+  supportText: isSpanish
+    ? "LibreTracks es gratuito. Las donaciones voluntarias ayudan con mantenimiento, pruebas, documentacion, releases y desarrollo continuo."
+    : "LibreTracks is free. Voluntary donations help with maintenance, testing, documentation, releases, and ongoing development.",
+  supportDisclaimer: isSpanish
+    ? "La donacion no desbloquea funciones, soporte prioritario, acceso anticipado ni compromisos de desarrollo."
+    : "Donations do not unlock features, priority support, early access, or development commitments.",
+  supportAction: isSpanish ? "☕ Apoyar en Ko-fi" : "☕ Support on Ko-fi",
+  downloadThanks: isSpanish ? "Gracias por descargar LibreTracks." : "Thanks for downloading LibreTracks.",
+  downloadSupportText: isSpanish
+    ? "Si el proyecto te resulta util, puedes apoyarlo con una donacion voluntaria en Ko-fi."
+    : "If the project is useful to you, you can support it with a voluntary donation on Ko-fi.",
+  downloadClose: isSpanish ? "Ahora no, gracias" : "Not now, thanks",
   fallback: isSpanish
     ? "No se pudo cargar la ultima release durante el build. Puedes abrir GitHub Releases directamente."
     : "The latest release could not be loaded during the build. You can open GitHub Releases directly.",
@@ -57,6 +70,7 @@ const labels = {
 };
 
 const releaseUrl = `https://github.com/${owner}/${repo}/releases/latest`;
+const donationUrl = "https://ko-fi.com/otonielpv";
 const date = release?.published_at
   ? new Intl.DateTimeFormat(isSpanish ? "es" : "en", { dateStyle: "medium" }).format(new Date(release.published_at))
   : null;
@@ -87,7 +101,7 @@ function iconForAsset(name: string): string {
           {release.assets.length > 0 ? (
             <div class="download-list">
               {release.assets.map((asset) => (
-                <a class="download-card" href={asset.browser_download_url}>
+                <a class="download-card" href={asset.browser_download_url} data-download-asset>
                   <span class="download-icon">{iconForAsset(asset.name)}</span>
                   <span class="download-info">
                     <strong>{asset.name}</strong>
@@ -101,6 +115,12 @@ function iconForAsset(name: string): string {
           <div class="hero-actions" style="margin-top: 1.25rem;">
             <a class="button-link" href={release.html_url}>{labels.open}</a>
           </div>
+          <aside class="support-panel" aria-labelledby="support-title">
+            <h3 id="support-title">{labels.supportTitle}</h3>
+            <p>{labels.supportText}</p>
+            <p class="support-disclaimer">{labels.supportDisclaimer}</p>
+            <a class="button-link primary" href={donationUrl} target="_blank" rel="noreferrer">{labels.supportAction}</a>
+          </aside>
         </div>
 
         {/* ── Release notes column ── */}
@@ -122,3 +142,58 @@ function iconForAsset(name: string): string {
     </>
   )}
 </section>
+
+<dialog class="donation-dialog" data-donation-dialog>
+  <div class="donation-dialog-body">
+    <h3>{labels.downloadThanks}</h3>
+    <p>{labels.downloadSupportText}</p>
+    <p class="support-disclaimer">{labels.supportDisclaimer}</p>
+    <div class="donation-dialog-actions">
+      <a class="button-link primary" href={donationUrl} target="_blank" rel="noreferrer" data-donation-close>{labels.supportAction}</a>
+      <button type="button" class="button-link" data-donation-close>{labels.downloadClose}</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+  const storageKey = "libretracks-donation-reminder-dismissed-at";
+  const reminderIntervalMs = 14 * 24 * 60 * 60 * 1000;
+  const dialog = document.querySelector("[data-donation-dialog]");
+  const downloadLinks = document.querySelectorAll("[data-download-asset]");
+  const closeButtons = document.querySelectorAll("[data-donation-close]");
+
+  function wasRecentlyDismissed() {
+    const dismissedAt = Number(window.localStorage.getItem(storageKey) || 0);
+    return dismissedAt > 0 && Date.now() - dismissedAt < reminderIntervalMs;
+  }
+
+  function rememberDismissal() {
+    window.localStorage.setItem(storageKey, String(Date.now()));
+  }
+
+  function showDonationReminder() {
+    if (!(dialog instanceof HTMLDialogElement) || wasRecentlyDismissed() || dialog.open) return;
+    dialog.showModal();
+  }
+
+  downloadLinks.forEach((link) => {
+    link.addEventListener("click", () => {
+      window.setTimeout(showDonationReminder, 900);
+    });
+  });
+
+  closeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      rememberDismissal();
+      if (dialog instanceof HTMLDialogElement) dialog.close();
+    });
+  });
+
+  dialog?.addEventListener("cancel", rememberDismissal);
+  dialog?.addEventListener("click", (event) => {
+    if (event.target === dialog) {
+      rememberDismissal();
+      dialog.close();
+    }
+  });
+</script>

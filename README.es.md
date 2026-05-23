@@ -7,6 +7,14 @@
 
 LibreTracks es una DAW y estacion de reproduccion multitrack para directo, construida con Audio Engine v2 en C++ y una shell de escritorio en React/Tauri. El monorepo actual esta centrado en edicion no destructiva, saltos musicales entre secciones, importacion de audio y una frontera nativa que separa claramente la UI del audio realtime.
 
+## Apoya LibreTracks
+
+LibreTracks es gratuito y se mantiene en tiempo personal. Si te resulta util, puedes hacer una donacion voluntaria para apoyar mantenimiento, pruebas, documentacion, releases y desarrollo continuo.
+
+La donacion no desbloquea funciones extra, soporte prioritario, acceso anticipado, compromisos de roadmap ni ninguna otra contraprestacion. Es simplemente una forma de apoyar el proyecto.
+
+[Apoyar LibreTracks en Ko-fi](https://ko-fi.com/otonielpv)
+
 ## Capturas de pantalla
 | Captura | Captura |
 | --- | --- |
