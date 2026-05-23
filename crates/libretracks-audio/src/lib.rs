@@ -949,6 +949,8 @@ mod tests {
                 start_seconds: 0.0,
                 end_seconds: 24.0,
                 transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
             }],
             tracks: vec![
                 Track {
@@ -1076,6 +1078,8 @@ mod tests {
                     start_seconds: 0.0,
                     end_seconds: 8.0,
                     transpose_semitones: 0,
+                    warp_enabled: false,
+                    warp_source_bpm: None,
                 },
                 SongRegion {
                     id: "region_bridge".into(),
@@ -1083,6 +1087,8 @@ mod tests {
                     start_seconds: 8.0,
                     end_seconds: 14.0,
                     transpose_semitones: 0,
+                    warp_enabled: false,
+                    warp_source_bpm: None,
                 },
                 SongRegion {
                     id: "region_outro".into(),
@@ -1090,6 +1096,8 @@ mod tests {
                     start_seconds: 14.0,
                     end_seconds: 18.0,
                     transpose_semitones: 0,
+                    warp_enabled: false,
+                    warp_source_bpm: None,
                 },
             ],
             tracks: vec![Track {

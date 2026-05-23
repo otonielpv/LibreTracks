@@ -57,6 +57,8 @@ mod tests {
                 start_seconds: 0.0,
                 end_seconds: 240.0,
                 transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
             }],
             tracks: vec![Track {
                 id: "track_click".into(),

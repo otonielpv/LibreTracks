@@ -25,6 +25,13 @@ export type SongRegionSummary = {
   startSeconds: number;
   endSeconds: number;
   transposeSemitones: number;
+  /** When true, the region's audio is time-stretched so its `warpSourceBpm`
+   * aligns with the effective timeline tempo. Applies to ALL tracks in the
+   * region, independent of `transposeSemitones`. */
+  warpEnabled: boolean;
+  /** Original BPM of the source audio at unity speed. May be persisted while
+   * `warpEnabled` is false so toggling preserves the user's value. */
+  warpSourceBpm: number | null;
 };
 
 export type SongTempoRegionSummary = SongRegionSummary & TimelineRegion;
@@ -682,6 +689,8 @@ export function buildSongTempoRegions(
       bpm,
       timeSignature,
       transposeSemitones: 0,
+      warpEnabled: false,
+      warpSourceBpm: null,
     });
     startSeconds = marker.startSeconds;
     bpm = marker.bpm ?? bpm;
@@ -696,6 +705,8 @@ export function buildSongTempoRegions(
     bpm,
     timeSignature,
     transposeSemitones: 0,
+    warpEnabled: false,
+    warpSourceBpm: null,
   });
 
   return regions;

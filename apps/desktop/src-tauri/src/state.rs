@@ -1874,6 +1874,8 @@ impl DesktopSession {
             start_seconds,
             end_seconds,
             transpose_semitones: 0,
+            warp_enabled: false,
+            warp_source_bpm: None,
         };
 
         replace_song_region_range(&mut song, region);
@@ -1917,6 +1919,8 @@ impl DesktopSession {
             start_seconds,
             end_seconds,
             transpose_semitones: existing_region.transpose_semitones,
+            warp_enabled: existing_region.warp_enabled,
+            warp_source_bpm: existing_region.warp_source_bpm,
         };
 
         // Drop the OLD copy of this region before delegating to
@@ -4794,6 +4798,8 @@ fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
                 start_seconds: region.start_seconds,
                 end_seconds: replacement.start_seconds,
                 transpose_semitones: region.transpose_semitones,
+                warp_enabled: region.warp_enabled,
+                warp_source_bpm: region.warp_source_bpm,
             });
         }
 
@@ -4810,6 +4816,8 @@ fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
                 start_seconds: replacement.end_seconds,
                 end_seconds: region.end_seconds,
                 transpose_semitones: region.transpose_semitones,
+                warp_enabled: region.warp_enabled,
+                warp_source_bpm: region.warp_source_bpm,
             });
         }
     }
@@ -4958,6 +4966,8 @@ mod tests {
                 start_seconds: 0.0,
                 end_seconds: 12.0,
                 transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
             }],
             tracks: vec![Track {
                 id: "track_1".into(),
@@ -5073,6 +5083,8 @@ mod tests {
                 start_seconds: 0.0,
                 end_seconds: 8.0,
                 transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
             },
             SongRegion {
                 id: "region_2".into(),
@@ -5080,6 +5092,8 @@ mod tests {
                 start_seconds: 8.0,
                 end_seconds: 14.0,
                 transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
             },
             SongRegion {
                 id: "region_3".into(),
@@ -5087,6 +5101,8 @@ mod tests {
                 start_seconds: 14.0,
                 end_seconds: 18.0,
                 transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
             },
         ];
         song.clips[0].duration_seconds = 18.0;
@@ -5184,6 +5200,8 @@ mod tests {
                 start_seconds: 0.0,
                 end_seconds: 12.0,
                 transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
             }],
             tracks: vec![
                 Track {
@@ -5513,6 +5531,8 @@ mod tests {
                 start_seconds: 0.0,
                 end_seconds: 8.0,
                 transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
             }],
             tracks: vec![
                 Track {

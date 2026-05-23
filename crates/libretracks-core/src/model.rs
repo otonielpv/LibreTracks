@@ -61,6 +61,17 @@ pub struct SongRegion {
     pub end_seconds: f64,
     #[serde(default)]
     pub transpose_semitones: i32,
+    /// When true, every track in this region is time-stretched so the audio's
+    /// original tempo (`warp_source_bpm`) aligns with the timeline's effective
+    /// tempo. Pitch is preserved. Warp applies to the whole region — it is
+    /// not per-track and not gated by `transpose_semitones`.
+    #[serde(default)]
+    pub warp_enabled: bool,
+    /// BPM of the source audio at unity speed. Kept as `Option` even when
+    /// warp is disabled so toggling off and back on preserves the user's
+    /// configured value.
+    #[serde(default)]
+    pub warp_source_bpm: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

@@ -428,6 +428,8 @@ fn import_song_package_from_archive<R: Read + Seek>(
         start_seconds: insert_at_seconds,
         end_seconds: insert_at_seconds + manifest.duration_seconds,
         transpose_semitones: manifest.region_transpose_semitones,
+        warp_enabled: false,
+        warp_source_bpm: None,
     });
     next_song.regions.sort_by(|left, right| {
         left.start_seconds

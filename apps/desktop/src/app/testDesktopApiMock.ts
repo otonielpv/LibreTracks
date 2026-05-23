@@ -134,6 +134,8 @@ function buildInitialSong(): SongView {
         startSeconds: 0,
         endSeconds: 180,
         transposeSemitones: 0,
+        warpEnabled: false,
+        warpSourceBpm: null,
       },
     ],
     tracks: [
@@ -453,6 +455,8 @@ function buildSongTempoRegions(song: SongView | null | undefined): Array<SongReg
       startSeconds,
       endSeconds: marker.startSeconds,
       transposeSemitones: 0,
+      warpEnabled: false,
+      warpSourceBpm: null,
       bpm,
       timeSignature,
     });
@@ -467,6 +471,8 @@ function buildSongTempoRegions(song: SongView | null | undefined): Array<SongReg
     startSeconds,
     endSeconds: Math.max(startSeconds, SONG_TEMPO_REGION_VISUAL_END_SECONDS),
     transposeSemitones: 0,
+    warpEnabled: false,
+    warpSourceBpm: null,
     bpm,
     timeSignature,
   });
@@ -628,6 +634,8 @@ function createRegionFromSelection(startSeconds: number, endSeconds: number): So
     startSeconds: Math.max(0, startSeconds),
     endSeconds: Math.max(startSeconds, endSeconds),
     transposeSemitones: 0,
+    warpEnabled: false,
+    warpSourceBpm: null,
   };
 }
 

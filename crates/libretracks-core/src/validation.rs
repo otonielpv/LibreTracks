@@ -7,6 +7,9 @@ use crate::model::{Song, TrackKind};
 pub const MIN_TRANSPOSE_SEMITONES: i32 = -12;
 pub const MAX_TRANSPOSE_SEMITONES: i32 = 12;
 
+pub const MIN_WARP_SOURCE_BPM: f64 = 20.0;
+pub const MAX_WARP_SOURCE_BPM: f64 = 300.0;
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DomainError {
     #[error("song must have a title")]
@@ -70,6 +73,13 @@ pub enum DomainError {
         region_id: String,
         transpose_semitones: i32,
     },
+    #[error("region {region_id} has warp enabled but no source bpm configured")]
+    WarpEnabledWithoutSourceBpm { region_id: String },
+    #[error("region {region_id} has invalid warp source bpm {source_bpm}")]
+    InvalidWarpSourceBpm {
+        region_id: String,
+        source_bpm: String,
+    },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -96,6 +106,24 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
             return Err(DomainError::InvalidRegionTranspose {
                 region_id: region.id.clone(),
                 transpose_semitones: region.transpose_semitones,
+            });
+        }
+
+        // Warp validation: a source BPM may be persisted while warp is off
+        // (so toggling preserves the user's value), but if warp is on it
+        // MUST be present and within the supported range.
+        if let Some(source_bpm) = region.warp_source_bpm {
+            if !source_bpm.is_finite()
+                || !(MIN_WARP_SOURCE_BPM..=MAX_WARP_SOURCE_BPM).contains(&source_bpm)
+            {
+                return Err(DomainError::InvalidWarpSourceBpm {
+                    region_id: region.id.clone(),
+                    source_bpm: format!("{}", source_bpm),
+                });
+            }
+        } else if region.warp_enabled {
+            return Err(DomainError::WarpEnabledWithoutSourceBpm {
+                region_id: region.id.clone(),
             });
         }
 

@@ -33,6 +33,8 @@ mod tests {
                 start_seconds: 0.0,
                 end_seconds: 240.0,
                 transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
             }],
             tracks: vec![
                 Track {
@@ -95,6 +97,8 @@ mod tests {
             start_seconds: 240.0,
             end_seconds: 360.0,
             transpose_semitones: 0,
+            warp_enabled: false,
+            warp_source_bpm: None,
         });
 
         assert!(validate_song(&song).is_ok());
@@ -128,6 +132,92 @@ mod tests {
         assert!(json.contains("\"kind\": \"audio\""));
         assert!(json.contains("\"regions\""));
         assert!(json.contains("\"sectionMarkers\""));
+    }
+
+    #[test]
+    fn accepts_warp_disabled_with_no_source_bpm() {
+        let song = valid_song();
+        assert_eq!(song.regions[0].warp_enabled, false);
+        assert!(song.regions[0].warp_source_bpm.is_none());
+        assert!(validate_song(&song).is_ok());
+    }
+
+    #[test]
+    fn accepts_warp_disabled_with_persisted_source_bpm() {
+        // Toggling warp off must not invalidate a previously-configured BPM —
+        // users expect to flip warp back on without re-entering the value.
+        let mut song = valid_song();
+        song.regions[0].warp_enabled = false;
+        song.regions[0].warp_source_bpm = Some(120.0);
+        assert!(validate_song(&song).is_ok());
+    }
+
+    #[test]
+    fn accepts_warp_enabled_with_valid_source_bpm() {
+        let mut song = valid_song();
+        song.regions[0].warp_enabled = true;
+        song.regions[0].warp_source_bpm = Some(140.0);
+        assert!(validate_song(&song).is_ok());
+    }
+
+    #[test]
+    fn rejects_warp_enabled_without_source_bpm() {
+        let mut song = valid_song();
+        song.regions[0].warp_enabled = true;
+        song.regions[0].warp_source_bpm = None;
+        let err = validate_song(&song).expect_err("warp without source bpm");
+        assert!(err.to_string().contains("warp enabled"));
+    }
+
+    #[test]
+    fn rejects_warp_source_bpm_out_of_range() {
+        let mut song = valid_song();
+        song.regions[0].warp_enabled = true;
+        song.regions[0].warp_source_bpm = Some(10.0); // below MIN_WARP_SOURCE_BPM
+        assert!(validate_song(&song).is_err());
+
+        song.regions[0].warp_source_bpm = Some(500.0); // above MAX_WARP_SOURCE_BPM
+        assert!(validate_song(&song).is_err());
+    }
+
+    #[test]
+    fn rejects_warp_source_bpm_non_finite() {
+        let mut song = valid_song();
+        song.regions[0].warp_enabled = true;
+        song.regions[0].warp_source_bpm = Some(f64::NAN);
+        assert!(validate_song(&song).is_err());
+
+        song.regions[0].warp_source_bpm = Some(f64::INFINITY);
+        assert!(validate_song(&song).is_err());
+    }
+
+    #[test]
+    fn legacy_song_json_without_warp_fields_deserializes() {
+        // Round-trip a project file saved before warp existed. serde defaults
+        // must fill in warp_enabled=false and warp_source_bpm=None so older
+        // projects load without manual migration.
+        let legacy_region_json = r#"{
+            "id": "region_legacy",
+            "name": "Legacy",
+            "startSeconds": 0.0,
+            "endSeconds": 30.0,
+            "transposeSemitones": 0
+        }"#;
+        let region: crate::model::SongRegion =
+            serde_json::from_str(legacy_region_json).expect("legacy json should parse");
+        assert_eq!(region.warp_enabled, false);
+        assert!(region.warp_source_bpm.is_none());
+    }
+
+    #[test]
+    fn warp_fields_round_trip_through_json() {
+        let mut song = valid_song();
+        song.regions[0].warp_enabled = true;
+        song.regions[0].warp_source_bpm = Some(132.5);
+        let json = serde_json::to_string(&song).expect("serialize");
+        let back: Song = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.regions[0].warp_enabled, true);
+        assert_eq!(back.regions[0].warp_source_bpm, Some(132.5));
     }
 
     #[test]
