@@ -21,6 +21,8 @@ double effective_bpm_at_frame(const Song& song, Frame frame) noexcept {
     return bpm;
 }
 
+} // namespace
+
 const Region* region_at_frame(const Song& song, Frame frame) noexcept {
     for (const auto& r : song.regions) {
         if (frame >= r.start_frame && frame < r.end_frame)
@@ -28,8 +30,6 @@ const Region* region_at_frame(const Song& song, Frame frame) noexcept {
     }
     return nullptr;
 }
-
-} // namespace
 
 Semitones clamp_supported_semitones(Semitones semitones) noexcept {
     return std::max(kMinSupportedPitchSemitones,
@@ -56,16 +56,20 @@ Semitones resolve_effective_semitones(const Track& track,
 PitchRenderDecision resolve_pitch_render_decision(
     const Track& track, const Clip& clip, const Song& song, Frame timeline_frame) noexcept {
     PitchRenderDecision d;
-    if (track.transpose_behavior == TransposeBehavior::NeverTranspose) {
+    const bool never_transpose =
+        track.transpose_behavior == TransposeBehavior::NeverTranspose;
+    if (never_transpose) {
         d.is_never_transpose = true;
-        // Warp also bypasses NeverTranspose tracks for now — those tracks
-        // are typically click/aux/metronome content that the user does not
-        // expect to be stretched. Revisit if a use case shows up.
-        return d;
+        // Pitch stays at 0 (NeverTranspose tracks ignore the song/region
+        // transpose), but warp is a song-level concept: enabling warp on a
+        // region must time-stretch every overlapping clip regardless of
+        // whether the track lets the user pitch it. Fall through to compute
+        // warp_active below with effective_semitones still 0.
+    } else {
+        d.effective_semitones = clamp_supported_semitones(
+            resolve_region_transpose(song, timeline_frame) + clip.semitones);
+        d.needs_pitch = (d.effective_semitones != 0);
     }
-    d.effective_semitones = clamp_supported_semitones(
-        resolve_region_transpose(song, timeline_frame) + clip.semitones);
-    d.needs_pitch = (d.effective_semitones != 0);
 
     const double ratio = resolve_warp_time_ratio(song, timeline_frame);
     if (ratio > 0.0 && ratio != 1.0) {

@@ -179,6 +179,10 @@ struct VoiceSpec {
     std::shared_ptr<const DecodedSource> source;
     Frame                source_frame = 0;  // where in the source we will start
     Semitones            effective_semitones = 0;
+    // Time-stretch ratio to use during warm + prefeed so Bungee's internal
+    // speed state matches what track_renderer will request at runtime. 1.0
+    // means no warp.
+    double               time_ratio = 1.0;
 };
 
 std::vector<VoiceSpec> enumerate_voices(const Session& session,
@@ -187,40 +191,80 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
     std::vector<VoiceSpec> out;
     out.reserve(16);
     for (const auto& song : session.songs) {
+        // Determine which regions in this song have warp active. A clip
+        // counts as "in a warp region" if its timeline range overlaps any
+        // of these regions. We don't gate by playhead position — once the
+        // user enables warp on a region, every clip inside it must own a
+        // Bungee voice so playback can transition into the region without
+        // a build hiccup.
+        std::vector<const Region*> warp_regions;
+        warp_regions.reserve(song.regions.size());
+        for (const auto& r : song.regions) {
+            if (r.warp_enabled && r.warp_source_bpm > 0.0)
+                warp_regions.push_back(&r);
+        }
+
         for (const auto& track : song.tracks) {
+            const bool never_transpose =
+                track.transpose_behavior == TransposeBehavior::NeverTranspose;
             for (const auto& clip : track.clips) {
-                // Skip clips that don't include the playhead — Phase 2 builds
-                // only voices for clips audible right now. Future phases can
-                // pre-build a forward window, mirroring extend_for_playhead.
                 const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
                 const bool playhead_in_clip = (playhead >= clip.timeline_start_frame
                                                 && playhead < clip_end);
-                if (!playhead_in_clip) continue;
+                // Any overlap with a warp region counts (region edges don't
+                // need to align with clip edges).
+                bool clip_in_warp_region = false;
+                for (const Region* wr : warp_regions) {
+                    if (clip.timeline_start_frame < wr->end_frame
+                        && clip_end > wr->start_frame) {
+                        clip_in_warp_region = true;
+                        break;
+                    }
+                }
+                // NeverTranspose tracks never get a pitch voice, but they DO
+                // get a warp voice when their clip sits inside a warp region.
+                // For non-NeverTranspose tracks we additionally include clips
+                // covering the playhead (legacy pitch path).
+                if (never_transpose) {
+                    if (!clip_in_warp_region) continue;
+                } else if (!playhead_in_clip && !clip_in_warp_region) {
+                    continue;
+                }
 
                 auto src = sources.get_shared(clip.source_id);
                 if (!src || !src->is_loaded()) continue;
 
-                if (track.transpose_behavior == TransposeBehavior::NeverTranspose)
-                    continue;
-
                 const auto decision = resolve_pitch_render_decision(
                     track, clip, song, playhead);
-                // Build a Bungee voice when the clip needs pitch OR when its
-                // region warp is active. Warp covers the whole song, so every
-                // overlapping clip gets a voice — pitch-only clips keep the
-                // legacy behaviour (no voice when effective_semitones == 0).
-                if (decision.effective_semitones == 0 && !decision.warp_active)
+                // Build a Bungee voice when the clip needs pitch OR when it
+                // overlaps a warp region. Pitch-only clips keep the legacy
+                // behaviour (no voice when effective_semitones == 0 and
+                // warp is off everywhere).
+                if (decision.effective_semitones == 0 && !clip_in_warp_region)
                     continue;
 
                 VoiceSpec spec;
                 spec.clip_id      = clip.id;
                 spec.source_id    = clip.source_id;
                 spec.source       = std::move(src);
-                // Source frame the audio thread will request first after the
-                // playhead lands here. We will prime up to this position.
-                spec.source_frame = clip.source_start_frame
-                                    + (playhead - clip.timeline_start_frame);
+                // Prime from where playback will resume: if the playhead is
+                // already past this clip's start, jump into the middle;
+                // otherwise prime from the clip's own start so the first
+                // audible block is warm. Scale by warp ratio so the prefeed
+                // reads from the same source frame that runtime will read
+                // (otherwise Bungee's prefed FIFO contains audio shifted by
+                // ~ratio relative to where playback expects to start).
+                const Frame timeline_offset =
+                    std::max<Frame>(0, playhead - clip.timeline_start_frame);
+                const double spec_ratio =
+                    decision.warp_active ? decision.warp_time_ratio : 1.0;
+                const Frame source_offset = decision.warp_active
+                    ? static_cast<Frame>(
+                        static_cast<double>(timeline_offset) * spec_ratio)
+                    : timeline_offset;
+                spec.source_frame = clip.source_start_frame + source_offset;
                 spec.effective_semitones = decision.effective_semitones;
+                spec.time_ratio = spec_ratio;
                 out.push_back(spec);
             }
         }
@@ -252,7 +296,8 @@ constexpr int kMaxWarmFramesAt48k = 8192;  // ~170 ms at 48 kHz
 void warm_voice(BungeePitchVoice& voice,
                 int sample_rate,
                 int channel_count,
-                int max_in_frames) {
+                int max_in_frames,
+                double time_ratio = 1.0) {
     if (!voice.is_ready()) return;
     const int max_warm_frames = std::max(0,
         static_cast<int>(static_cast<long long>(kMaxWarmFramesAt48k) * sample_rate / 48000));
@@ -275,7 +320,8 @@ void warm_voice(BungeePitchVoice& voice,
         const int chunk = std::min(max_in_frames, max_warm_frames - fed);
         (void)voice.render_block(in_ptrs.data(), chunk,
                                   out_ptrs.data(), chunk,
-                                  /*pitch_scale*/ 1.0);
+                                  /*pitch_scale*/ 1.0,
+                                  /*time_ratio*/ time_ratio);
         fed += chunk;
         if (voice.is_warm())
             break;
@@ -380,7 +426,8 @@ void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
                                      int sample_rate,
                                      int channel_count,
                                      int max_in_frames,
-                                     double pitch_scale) {
+                                     double pitch_scale,
+                                     double time_ratio = 1.0) {
     if (!voice.is_ready()) return;
     const int latency_frames = static_cast<int>(voice.latency_frames());
     if (latency_frames <= 0) return;
@@ -428,7 +475,8 @@ void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
 
         (void)voice.render_block(in_ptrs.data(), chunk,
                                   out_ptrs.data(), chunk,
-                                  pitch_scale);
+                                  pitch_scale,
+                                  time_ratio);
         read_cursor += chunk;
         fed += chunk;
     }
@@ -463,7 +511,8 @@ void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
                             read_r.begin() + dst_offset);
         }
         const int before = voice.queued_output_frames();
-        (void)voice.prime_output_fifo(in_ptrs.data(), prime_frames, pitch_scale);
+        (void)voice.prime_output_fifo(in_ptrs.data(), prime_frames, pitch_scale,
+                                      time_ratio);
         primed_total = voice.queued_output_frames();
         read_cursor += prime_frames;
         prime_budget -= prime_frames;
@@ -514,7 +563,8 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
             continue;
         }
         warm_voice(*voice,
-                   impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+                   impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
+                   spec.time_ratio);
         // warm_voice consumed the voice's initial fade window with zero
         // input. Re-arm it so the audio thread's first real frames are
         // ramped, masking Bungee's startup pop when a new clip voice appears.
@@ -607,7 +657,8 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
             if (!voice->configure(sample_rate, channel_count, max_in_frames))
                 return;
 
-            warm_voice(*voice, sample_rate, channel_count, max_in_frames);
+            warm_voice(*voice, sample_rate, channel_count, max_in_frames,
+                       spec.time_ratio);
             const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
             const int latency_frames = static_cast<int>(voice->latency_frames());
             const int compensation_frames =
@@ -621,7 +672,7 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
                 prefeed_voice_with_source_audio(
                     *voice, *spec.source, spec.source_frame,
                     sample_rate, channel_count, max_in_frames,
-                    pitch_scale);
+                    pitch_scale, spec.time_ratio);
             }
             voice->arm_fade_in(0);
             result.voice = std::move(voice);
@@ -682,7 +733,8 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
             continue;
         }
         warm_voice(*voice,
-                   impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
+                   impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
+                   spec.time_ratio);
         // warm_voice consumed the voice's initial fade window with zero
         // input. Prefeed target audio and discard Bungee's silence->audio
         // transition so the audio thread starts on an already-stable grain.
@@ -699,7 +751,7 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
             prefeed_voice_with_source_audio(
                 *voice, *spec.source, spec.source_frame,
                 impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
-                pitch_scale);
+                pitch_scale, spec.time_ratio);
         }
         // This voice has already been prefed to the seek target; the mixer's
         // seek de-click ramp handles the boundary. Avoid an extra per-voice

@@ -184,8 +184,11 @@ void TrackRenderer::render_clip(const Clip&          clip,
         source_frame  = clip.source_start_frame;
     } else {
         // Under warp the source cursor advances `ratio` times faster (or
-        // slower) than the timeline. Scale the timeline-relative offset so
-        // every block reads from the right point in the source.
+        // slower) than the timeline. Bungee consumes `ceil(out * ratio)`
+        // input frames per block (set below via render_block's time_ratio),
+        // so the source pointer we hand it must advance in lockstep — else
+        // we re-read frames Bungee already consumed and the audio appears
+        // unchanged in speed even though Bungee is internally stretching.
         const Frame timeline_offset = timeline_frame - clip.timeline_start_frame;
         const Frame source_offset = warp_enabled
             ? static_cast<Frame>(static_cast<double>(timeline_offset) * effective_ratio)
@@ -225,14 +228,19 @@ void TrackRenderer::render_clip(const Clip&          clip,
             const int bungee_in_capacity = std::min(
                 static_cast<int>(bungee_in_l_.size()),
                 static_cast<int>(bungee_in_r_.size()));
-            // Without warp the legacy "feed up to a full block" rule is fine;
-            // with warp > 1 we must hand Bungee `ceil(out * ratio)` input or
-            // it underfeeds and produces silence. Clamp by what the scratch
-            // can hold (prepared 4x oversized for warp ratios up to 4.0).
+            // Legacy behaviour without warp: feed exactly `frames_to_read`
+            // (one block). With warp we feed `ceil(out * ratio)` so Bungee's
+            // input cursor advances `ratio` times the output it produces.
+            //
+            // Earlier we capped at scratch_capacity_frames_, which inflated
+            // the feed size for the no-warp pitch path and confused Bungee's
+            // analysis pipeline (a single 4096-frame feed every 4 callbacks
+            // instead of 512 per callback). Stick to the legacy size when
+            // warp is inactive.
             int desired_feed = warp_enabled
                 ? static_cast<int>(std::ceil(
                     static_cast<double>(frames_to_read) * effective_ratio))
-                : std::min(scratch_capacity_frames_, bungee_in_capacity);
+                : frames_to_read;
             desired_feed = std::min(desired_feed, bungee_in_capacity);
             const int max_feed = desired_feed;
             const int feed_frames = queued >= frames_to_read ? 0 : max_feed;

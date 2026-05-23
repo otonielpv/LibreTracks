@@ -43,4 +43,11 @@ PitchRenderDecision resolve_pitch_render_decision(
 // source BPM is missing/invalid, or when no region covers `timeline_frame`.
 double resolve_warp_time_ratio(const Song& song, Frame timeline_frame) noexcept;
 
+// First region in `song` whose [start_frame, end_frame) contains `frame`,
+// or nullptr if no region covers it. Linear scan — regions are typically a
+// handful per song. Used by the voice manager to find every clip that needs
+// a Bungee voice prepared because it sits inside the same warp-active
+// region as the playhead.
+const Region* region_at_frame(const Song& song, Frame frame) noexcept;
+
 } // namespace lt

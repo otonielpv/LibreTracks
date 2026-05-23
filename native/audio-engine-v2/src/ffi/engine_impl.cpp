@@ -1763,9 +1763,16 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (session_) {
                 auto next_session = std::make_shared<Session>(*session_);
                 bool changed = false;
+                // Track whether the set of clips needing a Bungee voice
+                // changed shape (toggle on/off) versus a pure parameter tweak
+                // (BPM edit while already enabled). Only the former needs a
+                // voice rebuild; the latter is picked up per-block.
+                bool needs_voice_rebuild = false;
                 for (auto& song : next_session->songs) {
                     for (auto& region : song.regions) {
                         if (region.id != c.region_id) continue;
+                        if (region.warp_enabled != c.warp_enabled)
+                            needs_voice_rebuild = true;
                         region.warp_enabled = c.warp_enabled;
                         region.warp_source_bpm = c.warp_source_bpm;
                         changed = true;
@@ -1774,15 +1781,40 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     if (changed) break;
                 }
                 if (changed) {
+                    // Voice maintenance only when the warp toggle flipped.
+                    // Use rebuild_for_session (not build_seek_voice_map) so
+                    // existing pitched voices are REUSED — destroying the
+                    // already-warmed Bungee streams on every warp toggle
+                    // produces ~100ms of garbled output on the transposed
+                    // tracks (the warm window is non-trivial: see the
+                    // project_bungee_warm_voice + project_bungee_latency_floor
+                    // notes). rebuild_for_session walks enumerate_voices and
+                    // only builds the new entries (the non-transposed clips
+                    // now needing warp); the pitched clip's voice carries on
+                    // unchanged.
+                    if (needs_voice_rebuild
+                        && bungee_voices_ && bungee_voices_->is_available()
+                        && source_manager_ && clock_) {
+                        const Frame frame = clock_->position().frame;
+                        request_playback_audio_window(
+                            *source_manager_, *next_session, frame,
+                            playback_prepare_window_frames(clock_->sample_rate()));
+                        bungee_voices_->rebuild_for_session(
+                            *next_session, *source_manager_, frame);
+                    }
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
-                    // No mixer crossfade and no Bungee voice rebuild: warp ratio
-                    // is read per-block, so the next callback picks up the new
-                    // value automatically. Toggling warp on for a previously
-                    // unwarped clip does NOT need a voice rebuild either —
-                    // every clip already owns a Bungee voice when the engine is
-                    // built with pitch support, and ratio == 1.0 is a cheap no-op.
                     if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                    // No mixer crossfade here — rebuild_for_session preserves
+                    // existing voices, so there is no audible discontinuity to
+                    // hide. Triggering a crossfade would dip the entire mix
+                    // unnecessarily.
+                    if (needs_voice_rebuild && prearmed_jumps_) {
+                        const auto rev = prearm_revision_.fetch_add(1,
+                            std::memory_order_relaxed) + 1;
+                        prearmed_jumps_->prepare_all_targets_async(
+                            next_session, source_manager_.get(), rev);
+                    }
                 }
             }
             return Result<void>::ok();
