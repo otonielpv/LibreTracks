@@ -211,29 +211,16 @@ elseif(LT_ENGINE_USE_LIBSAMPLERATE)
 endif()
 
 # ── WARP (time-stretch) ───────────────────────────────────────────────────
-# Signalsmith Stretch (MIT, header-only) is the warp backend chosen by the
-# WARP_BACKEND_COMPARISON bench. Bungee stays as the pitch backend; warp
-# uses Signalsmith because it sounds cleaner past ratio ~1.05 at the same
-# CPU class.
-if(LT_ENGINE_USE_SIGNALSMITH)
-    FetchContent_Declare(signalsmith_stretch
-        GIT_REPOSITORY https://github.com/Signalsmith-Audio/signalsmith-stretch.git
-        GIT_TAG        main
-        GIT_SHALLOW    TRUE
-    )
-    FetchContent_MakeAvailable(signalsmith_stretch)
-    if(TARGET signalsmith-stretch)
-        target_link_libraries(lt_deps_warp INTERFACE signalsmith-stretch)
-    else()
-        target_include_directories(lt_deps_warp INTERFACE
-            ${signalsmith_stretch_SOURCE_DIR}/include)
-    endif()
-endif()
-
-# Optional RubberBand backend (GPL v2). Comes from vcpkg via the manifest
-# in native/audio-engine-v2/vcpkg.json. find_package first (system /
-# vcpkg config), then fallback to a manual find_path / find_library.
-# Release/Debug separated so MSVC links the right variant per config.
+# RubberBand R3 ("Finer") is the warp backend. Comes from vcpkg via the
+# manifest in native/audio-engine-v2/vcpkg.json. find_package first
+# (system / vcpkg config), then fallback to a manual find_path /
+# find_library. Release/Debug split so MSVC links the right variant.
+#
+# Signalsmith Stretch was the original default (the offline bench ranked
+# it close to RubberBand) but engine-level A/B testing showed it producing
+# audible periodic clicks on real polyphonic material. See
+# `bench/WARP_BACKEND_COMPARISON.md` for the writeup; the previous
+# Signalsmith wrapper lived alongside this code in commit b8663e1.
 if(LT_ENGINE_USE_RUBBERBAND)
     find_package(rubberband CONFIG QUIET)
     if(rubberband_FOUND)

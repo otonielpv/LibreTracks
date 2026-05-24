@@ -25,21 +25,15 @@ option(LT_ENGINE_USE_LIBSNDFILE
     ON)
 
 # Warp (time-stretch) backend.
-# Signalsmith Stretch (MIT, header-only) is the default — see
-# `bench/WARP_BACKEND_COMPARISON.md` for the comparison that made us pick it
-# over Bungee for the warp path. Bungee remains the pitch-only backend.
-option(LT_ENGINE_USE_SIGNALSMITH
-    "Use Signalsmith Stretch as the warp (time-stretch) backend"
-    ON)
-
-# RubberBand (GPL v2 / commercial) as an opt-in second warp backend. Higher
-# audio quality on transients than Signalsmith but ~5x the CPU cost. When
-# ON, the engine binary becomes GPL-bound; leave OFF for a permissive build.
-# The runtime selector (LT_WARP_BACKEND env var or settings) picks between
-# whichever backends are compiled in; Signalsmith is always the fallback.
+# RubberBand R3 (Finer) is the only viable backend on real polyphonic
+# material — see `bench/WARP_BACKEND_COMPARISON.md` for the comparison
+# that ruled out Signalsmith Stretch after engine-level A/B testing.
+# Bungee remains the pitch-only backend; warp goes through RubberBand.
+# The engine binary becomes GPL v2 when this option is on; turn it off
+# only for a permissive build that cannot ship warp.
 option(LT_ENGINE_USE_RUBBERBAND
-    "Link RubberBand as a selectable warp backend (GPL v2)"
-    OFF)
+    "Link RubberBand as the warp (time-stretch) backend (GPL v2)"
+    ON)
 
 # Resampler backend - exactly one must be ON.
 option(LT_ENGINE_USE_R8BRAIN

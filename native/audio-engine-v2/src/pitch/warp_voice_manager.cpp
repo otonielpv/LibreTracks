@@ -2,19 +2,14 @@
 
 #include <lt_engine/debug/logging.h>
 #include <lt_engine/pitch/rubberband_warp_voice.h>
-#include <lt_engine/pitch/signalsmith_warp_voice.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/sources/source_manager.h>
 
-#include <algorithm>
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <memory>
 #include <mutex>
-#include <string>
 #include <vector>
 
 namespace lt {
@@ -34,83 +29,18 @@ void warp_debug_log(const char* fmt, ...) {
     va_end(args);
 }
 
-// Read LT_WARP_BACKEND once, resolved to whatever is actually compiled in.
-// Default: Signalsmith when available, otherwise RubberBand, otherwise the
-// manager just won't be available at all.
-WarpBackend resolve_backend_from_env() {
-    const char* raw = std::getenv("LT_WARP_BACKEND");
-    std::string value = raw ? raw : "";
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
-#if LT_ENGINE_HAVE_RUBBERBAND
-    if (value == "rubberband" || value == "rubberband_r3" || value == "r3")
-        return WarpBackend::RubberBandR3;
-#endif
-#if LT_ENGINE_HAVE_SIGNALSMITH
-    if (value == "signalsmith" || value == "smith" || value.empty())
-        return WarpBackend::Signalsmith;
-#endif
-#if LT_ENGINE_HAVE_RUBBERBAND
-    // Signalsmith not compiled in: fall through to RubberBand if present.
-    return WarpBackend::RubberBandR3;
-#else
-    return WarpBackend::Signalsmith;
-#endif
-}
-
-const char* backend_name(WarpBackend b) {
-    switch (b) {
-        case WarpBackend::Signalsmith:  return "signalsmith";
-        case WarpBackend::RubberBandR3: return "rubberband_r3";
-    }
-    return "unknown";
-}
-
-std::shared_ptr<WarpVoice> make_voice(WarpBackend backend,
-                                       int sample_rate,
+std::shared_ptr<WarpVoice> make_voice(int sample_rate,
                                        int channel_count,
                                        int max_in_frames) {
-    switch (backend) {
-        case WarpBackend::Signalsmith: {
-#if LT_ENGINE_HAVE_SIGNALSMITH
-            auto v = std::make_shared<SignalsmithWarpVoice>();
-            if (!v->configure(sample_rate, channel_count, max_in_frames))
-                return nullptr;
-            return v;
-#else
-            return nullptr;
-#endif
-        }
-        case WarpBackend::RubberBandR3: {
 #if LT_ENGINE_HAVE_RUBBERBAND
-            auto v = std::make_shared<RubberBandWarpVoice>();
-            if (!v->configure(sample_rate, channel_count, max_in_frames))
-                return nullptr;
-            return v;
+    auto v = std::make_shared<RubberBandWarpVoice>();
+    if (!v->configure(sample_rate, channel_count, max_in_frames))
+        return nullptr;
+    return v;
 #else
-            return nullptr;
-#endif
-        }
-    }
+    (void)sample_rate; (void)channel_count; (void)max_in_frames;
     return nullptr;
-}
-
-bool backend_available(WarpBackend backend) {
-    switch (backend) {
-        case WarpBackend::Signalsmith:
-#if LT_ENGINE_HAVE_SIGNALSMITH
-            return true;
-#else
-            return false;
 #endif
-        case WarpBackend::RubberBandR3:
-#if LT_ENGINE_HAVE_RUBBERBAND
-            return true;
-#else
-            return false;
-#endif
-    }
-    return false;
 }
 
 } // namespace
@@ -120,7 +50,6 @@ struct WarpVoiceManager::Impl {
     int  sample_rate   = 0;
     int  channel_count = 0;
     int  max_in_frames = 0;
-    WarpBackend backend = WarpBackend::Signalsmith;
 
     std::shared_ptr<const VoiceMap> empty{std::make_shared<const VoiceMap>()};
     std::shared_ptr<const VoiceMap> active{empty};
@@ -142,44 +71,34 @@ bool WarpVoiceManager::prepare(int sample_rate,
     if (!impl_) return false;
     if (sample_rate <= 0 || channel_count <= 0 || max_input_frames <= 0)
         return false;
-
-    impl_->backend = resolve_backend_from_env();
-    if (!backend_available(impl_->backend)) {
-        impl_->prepared = false;
-        warp_debug_log(
-            "[LT_JUMP_DEBUG][warp-mgr] prepare_failed backend=%s not compiled in\n",
-            backend_name(impl_->backend));
-        return false;
-    }
-
+#if !LT_ENGINE_HAVE_RUBBERBAND
+    impl_->prepared = false;
+    warp_debug_log(
+        "[LT_JUMP_DEBUG][warp-mgr] prepare_failed RubberBand not compiled in\n");
+    return false;
+#else
     impl_->sample_rate   = sample_rate;
     impl_->channel_count = channel_count;
     impl_->max_in_frames = max_input_frames;
     impl_->prepared      = true;
     std::atomic_store(&impl_->active, impl_->empty);
     warp_debug_log(
-        "[LT_JUMP_DEBUG][warp-mgr] prepare backend=%s sr=%d ch=%d max_in=%d\n",
-        backend_name(impl_->backend),
+        "[LT_JUMP_DEBUG][warp-mgr] prepare backend=rubberband_r3 sr=%d ch=%d max_in=%d\n",
         sample_rate, channel_count, max_input_frames);
     return true;
+#endif
 }
 
 bool WarpVoiceManager::is_available() const noexcept {
     return impl_ && impl_->prepared;
 }
 
-WarpBackend WarpVoiceManager::active_backend() const noexcept {
-    return impl_ ? impl_->backend : WarpBackend::Signalsmith;
-}
-
 const char* WarpVoiceManager::active_backend_name() const noexcept {
-    return backend_name(active_backend());
+    return "rubberband_r3";
 }
 
 namespace {
 
-// Only collects clips whose containing region has warp active. Tracks marked
-// NeverTranspose still receive warp — warp is a song-level concept.
 struct WarpVoiceSpec {
     Id        clip_id;
     long long initial_source_cursor = 0;
@@ -252,6 +171,8 @@ void WarpVoiceManager::rebuild_for_session(const Session& session,
     int built = 0;
     int reused = 0;
     for (const auto& spec : specs) {
+        // Reuse if the clip already has a warp voice; RubberBand is stateful
+        // and reconstructing wastes its analysis window.
         auto it = current->find(spec.clip_id);
         if (it != current->end()) {
             (*next)[spec.clip_id] = it->second;
@@ -263,14 +184,13 @@ void WarpVoiceManager::rebuild_for_session(const Session& session,
             ++reused;
             continue;
         }
-        auto voice = make_voice(impl_->backend,
-                                 impl_->sample_rate,
+        auto voice = make_voice(impl_->sample_rate,
                                  impl_->channel_count,
                                  impl_->max_in_frames);
         if (!voice) {
             warp_debug_log(
-                "[LT_JUMP_DEBUG][warp-mgr] configure_failed clip=%s backend=%s sr=%d ch=%d max_in=%d\n",
-                spec.clip_id.c_str(), backend_name(impl_->backend),
+                "[LT_JUMP_DEBUG][warp-mgr] configure_failed clip=%s sr=%d ch=%d max_in=%d\n",
+                spec.clip_id.c_str(),
                 impl_->sample_rate, impl_->channel_count, impl_->max_in_frames);
             continue;
         }
@@ -287,9 +207,8 @@ void WarpVoiceManager::rebuild_for_session(const Session& session,
 
     std::atomic_store(&impl_->active, std::shared_ptr<const VoiceMap>(next));
     warp_debug_log(
-        "[LT_JUMP_DEBUG][warp-mgr] rebuild_for_session playhead=%lld backend=%s specs=%zu built=%d reused=%d active=%zu\n",
+        "[LT_JUMP_DEBUG][warp-mgr] rebuild_for_session playhead=%lld specs=%zu built=%d reused=%d active=%zu\n",
         static_cast<long long>(playhead),
-        backend_name(impl_->backend),
         specs.size(), built, reused, next->size());
 }
 
@@ -322,7 +241,6 @@ WarpVoiceManagerDiagnostics WarpVoiceManager::diagnostics() const noexcept {
     d.rebuilds_total     = impl_->rebuilds_total.load(std::memory_order_relaxed);
     d.voice_lookups_hit  = impl_->voice_lookups_hit.load(std::memory_order_relaxed);
     d.voice_lookups_miss = impl_->voice_lookups_miss.load(std::memory_order_relaxed);
-    d.backend            = impl_->backend;
     return d;
 }
 
