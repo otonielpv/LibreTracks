@@ -3,6 +3,7 @@
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
+#include <lt_engine/pitch/warp_voice_manager.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -412,7 +413,8 @@ void Mixer::render_timeline_span(float** output_channels,
 
             renderers_[ti].render(patched, timeline_frame, num_frames,
                                    mix_, 2, *sources_, bungee_voices_,
-                                   clock_->sample_rate(), 0, &song);
+                                   clock_->sample_rate(), 0, &song,
+                                   warp_voices_);
             ++rendered_this_block;
 
             float track_peak_l = 0.f, track_peak_r = 0.f;
@@ -675,7 +677,8 @@ void Mixer::render(float** output_channels,
 
                 renderers_[ti].render(patched, timeline_frame, num_frames,
                                        mix_, 2, *sources_, bungee_voices_,
-                                       clock_->sample_rate(), 0, &song);
+                                       clock_->sample_rate(), 0, &song,
+                                       warp_voices_);
                 ++rendered_this_block;
 
                 float track_peak_l = 0.f, track_peak_r = 0.f;
@@ -828,6 +831,10 @@ void Mixer::set_session(std::shared_ptr<const Session> session, bool preserve_re
 
 void Mixer::set_bungee_voice_manager(BungeeVoiceManager* mgr) noexcept {
     bungee_voices_ = mgr;
+}
+
+void Mixer::set_warp_voice_manager(WarpVoiceManager* mgr) noexcept {
+    warp_voices_ = mgr;
 }
 
 void Mixer::clear_session() {

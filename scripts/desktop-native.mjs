@@ -119,6 +119,9 @@ const ensureEngineV2 = (normalizedEnv) => {
   const useLibSndFile = "ON";
   const useR8Brain = "ON";
   const useFFmpeg = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_FFMPEG) ? "ON" : "OFF";
+  // RubberBand (GPL v2) is opt-in as a second warp backend. Set
+  // LIBRETRACKS_ENGINE_V2_RUBBERBAND=1 to link it.
+  const useRubberBand = isTruthyEnvValue(normalizedEnv.LIBRETRACKS_ENGINE_V2_RUBBERBAND) ? "ON" : "OFF";
   const bungeeDir = detectBungeeDir(normalizedEnv);
   const useBungee = useBungeeRequested === "ON" && bungeeDir ? "ON" : "OFF";
   const asioSdkDir = detectAsioSdkDir(normalizedEnv);
@@ -132,6 +135,7 @@ const ensureEngineV2 = (normalizedEnv) => {
 
   console.log(`Audio Engine v2 Bungee requested: ${useBungeeRequested}`);
   console.log(`Audio Engine v2 Bungee: ${useBungee}`);
+  console.log(`Audio Engine v2 RubberBand: ${useRubberBand}`);
   if (bungeeDir) {
     console.log(`LT_BUNGEE_DIR: ${bungeeDir}`);
   }
@@ -165,6 +169,7 @@ const ensureEngineV2 = (normalizedEnv) => {
     `-DLT_ENGINE_USE_FFMPEG=${useFFmpeg}`,
     `-DLT_ENGINE_USE_LIBSNDFILE=${useLibSndFile}`,
     `-DLT_ENGINE_USE_R8BRAIN=${useR8Brain}`,
+    `-DLT_ENGINE_USE_RUBBERBAND=${useRubberBand}`,
   ];
   if (useBungee === "ON") {
     configureArgs.push(`-DLT_BUNGEE_DIR=${bungeeDir}`);

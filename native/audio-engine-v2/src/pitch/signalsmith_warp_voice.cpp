@@ -20,6 +20,14 @@ struct SignalsmithWarpVoice::Impl {
     int  max_in_frames = 0;
     bool ready         = false;
 
+    // Next source frame to read. Set by reset_source_cursor() (on voice
+    // build / seek) and advanced by render_block() by exactly the number
+    // of input frames consumed. The renderer reads this back to decide
+    // where in the file to read next, instead of re-deriving from the
+    // timeline (which under a fractional warp ratio introduces ±1-frame
+    // overlaps that the stretcher hears as discontinuities).
+    long long source_cursor = 0;
+
     signalsmith::stretch::SignalsmithStretch<float> stretcher;
 };
 
@@ -73,11 +81,10 @@ int SignalsmithWarpVoice::render_block(const float* const* input,
         || output_frames <= 0 || input_frames <= 0)
         return 0;
 
-    // Signalsmith's process() expects sample-precise input length matching
-    // ceil(output * speed) but it's also resilient to slight surplus —
-    // anything past the required count it ignores. We honour the caller's
-    // contract: feed input_frames, produce output_frames at the given
-    // ratio (speed). Caller is responsible for sizing input correctly.
+    // Signalsmith's process() expects contiguous, non-overlapping input
+    // between calls. We trust the caller to have supplied input that starts
+    // exactly where source_cursor points and advance the cursor here by
+    // input_frames so the next call's caller knows where to read from.
     (void)time_ratio;
     try {
         impl_->stretcher.process(input, input_frames,
@@ -85,6 +92,7 @@ int SignalsmithWarpVoice::render_block(const float* const* input,
     } catch (...) {
         return 0;
     }
+    impl_->source_cursor += input_frames;
     return output_frames;
 }
 
@@ -94,6 +102,14 @@ int SignalsmithWarpVoice::input_latency_frames() const noexcept {
 
 int SignalsmithWarpVoice::output_latency_frames() const noexcept {
     return impl_ ? impl_->stretcher.outputLatency() : 0;
+}
+
+void SignalsmithWarpVoice::reset_source_cursor(long long source_frame) noexcept {
+    if (impl_) impl_->source_cursor = source_frame;
+}
+
+long long SignalsmithWarpVoice::source_cursor() const noexcept {
+    return impl_ ? impl_->source_cursor : 0;
 }
 
 #else
@@ -121,6 +137,8 @@ int SignalsmithWarpVoice::render_block(const float* const*, int,
 }
 int SignalsmithWarpVoice::input_latency_frames() const noexcept { return 0; }
 int SignalsmithWarpVoice::output_latency_frames() const noexcept { return 0; }
+void SignalsmithWarpVoice::reset_source_cursor(long long) noexcept {}
+long long SignalsmithWarpVoice::source_cursor() const noexcept { return 0; }
 
 #endif
 

@@ -32,6 +32,15 @@ option(LT_ENGINE_USE_SIGNALSMITH
     "Use Signalsmith Stretch as the warp (time-stretch) backend"
     ON)
 
+# RubberBand (GPL v2 / commercial) as an opt-in second warp backend. Higher
+# audio quality on transients than Signalsmith but ~5x the CPU cost. When
+# ON, the engine binary becomes GPL-bound; leave OFF for a permissive build.
+# The runtime selector (LT_WARP_BACKEND env var or settings) picks between
+# whichever backends are compiled in; Signalsmith is always the fallback.
+option(LT_ENGINE_USE_RUBBERBAND
+    "Link RubberBand as a selectable warp backend (GPL v2)"
+    OFF)
+
 # Resampler backend - exactly one must be ON.
 option(LT_ENGINE_USE_R8BRAIN
     "Use r8brain-free-src for high-quality resampling (preferred)"

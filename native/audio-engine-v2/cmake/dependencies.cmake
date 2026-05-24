@@ -229,3 +229,39 @@ if(LT_ENGINE_USE_SIGNALSMITH)
             ${signalsmith_stretch_SOURCE_DIR}/include)
     endif()
 endif()
+
+# Optional RubberBand backend (GPL v2). Comes from vcpkg via the manifest
+# in native/audio-engine-v2/vcpkg.json. find_package first (system /
+# vcpkg config), then fallback to a manual find_path / find_library.
+# Release/Debug separated so MSVC links the right variant per config.
+if(LT_ENGINE_USE_RUBBERBAND)
+    find_package(rubberband CONFIG QUIET)
+    if(rubberband_FOUND)
+        target_link_libraries(lt_deps_warp INTERFACE rubberband::rubberband)
+        message(STATUS "Warp backend: RubberBand from find_package")
+    else()
+        find_path(_lt_rb_inc rubberband/RubberBandStretcher.h)
+        find_library(_lt_rb_lib_release NAMES rubberband
+            PATHS "${_lt_rb_inc}/.." PATH_SUFFIXES lib NO_DEFAULT_PATH)
+        find_library(_lt_rb_lib_debug NAMES rubberband
+            PATHS "${_lt_rb_inc}/.." PATH_SUFFIXES debug/lib NO_DEFAULT_PATH)
+        if(NOT _lt_rb_lib_release)
+            find_library(_lt_rb_lib_release NAMES rubberband)
+        endif()
+        if(_lt_rb_inc AND _lt_rb_lib_release)
+            target_include_directories(lt_deps_warp INTERFACE "${_lt_rb_inc}")
+            if(_lt_rb_lib_debug)
+                target_link_libraries(lt_deps_warp INTERFACE
+                    "$<IF:$<CONFIG:Debug>,${_lt_rb_lib_debug},${_lt_rb_lib_release}>")
+            else()
+                target_link_libraries(lt_deps_warp INTERFACE
+                    "${_lt_rb_lib_release}")
+            endif()
+            message(STATUS "Warp backend: RubberBand release="
+                "${_lt_rb_lib_release} debug=${_lt_rb_lib_debug}")
+        else()
+            message(WARNING "LT_ENGINE_USE_RUBBERBAND=ON but RubberBand not "
+                            "found via find_package or find_path. Backend disabled.")
+        endif()
+    endif()
+endif()

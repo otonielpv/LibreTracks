@@ -44,9 +44,16 @@ public:
     // into `out[0..num_out_channels-1]`, each buffer of length block_frames.
     // Accumulates into out (does not zero first).
     //
-    // When `effective_semitones != 0`, the clip is routed through the
-    // BungeeVoiceManager. If no voice exists for the clip the block is
-    // silenced (and pitch_missing_stream_silence_count is incremented).
+    // Each clip is routed through one of four paths (decided per-block by
+    // resolve_pitch_render_decision):
+    //   - Direct:  read source as-is
+    //   - Pitch:   BungeeVoiceManager (pitch_scale != 1, time_ratio = 1)
+    //   - Warp:    WarpVoiceManager (Signalsmith, pitch = 1, time_ratio != 1)
+    //   - Cascade: pitch first, then warp (TODO: not yet implemented; emits
+    //              silence and bumps a diagnostic counter)
+    //
+    // `warp_voices` may be nullptr; clips that resolve to Warp/Cascade then
+    // silence and bump warp_missing_stream_silence_count.
     void render(const Track&          track,
                 Frame                 timeline_frame,
                 int                   block_frames,
@@ -56,27 +63,54 @@ public:
                 BungeeVoiceManager*   bungee_voices,
                 int                   engine_sample_rate,
                 Semitones             effective_semitones = 0,
-                const Song*           active_song = nullptr) noexcept;
+                const Song*           active_song = nullptr,
+                WarpVoiceManager*     warp_voices = nullptr) noexcept;
 
 private:
-    // Render one clip's contribution for this block.
-    // `warp_active` / `warp_time_ratio` come from the per-clip
-    // PitchRenderDecision computed in render(). When `warp_active` is true
-    // the clip is routed through Bungee with `time_ratio = warp_time_ratio`,
-    // even when `effective_semitones == 0` (pure time-stretch).
-    void render_clip(const Clip&           clip,
-                     Frame                 timeline_frame,
-                     int                   block_frames,
-                     float                 track_gain,
-                     float**               out,
-                     int                   num_out_channels,
-                     const SourceManager&  sources,
-                     BungeeVoiceManager*   bungee_voices,
-                     int                   engine_sample_rate,
-                     const Id&             track_id,
-                     Semitones             effective_semitones,
-                     bool                  warp_active = false,
-                     double                warp_time_ratio = 1.0) noexcept;
+    struct ClipBlock {
+        const Clip* clip;
+        const DecodedSource* src;
+        Frame  clip_end;
+        int    block_offset;     // first frame of this block that's inside the clip
+        Frame  source_frame;     // source frame the first scratch[0] sample maps to
+        int    frames_to_read;   // valid frames after block_offset
+        float  effective_gain;   // pre-multiplied gain (track * clip)
+    };
+
+    // Decide the slice of this block that overlaps `clip` and prepare the
+    // source pointer + bounds. Returns false when the block is outside the
+    // clip, when the source isn't loaded, or when scratch can't grow to fit.
+    bool prepare_clip_block(const Clip&            clip,
+                             Frame                  timeline_frame,
+                             int                    block_frames,
+                             float                  track_gain,
+                             const SourceManager&   sources,
+                             ClipBlock&             out_block) noexcept;
+
+    // Per-path renderers. Each writes `frames_to_read` frames into
+    // scratch_l_/scratch_r_ starting at index 0 and returns how many were
+    // actually written (== frames_to_read on success, 0 on miss).
+    int render_path_direct(const ClipBlock& cb) noexcept;
+    int render_path_pitch(const ClipBlock&     cb,
+                          BungeeVoiceManager*  bungee_voices,
+                          Semitones            effective_semitones,
+                          const Id&            track_id) noexcept;
+    int render_path_warp(const ClipBlock&    cb,
+                         WarpVoiceManager*   warp_voices,
+                         double              warp_time_ratio,
+                         const Id&           track_id) noexcept;
+    int render_path_cascade(const ClipBlock&     cb,
+                            BungeeVoiceManager*  bungee_voices,
+                            WarpVoiceManager*    warp_voices,
+                            Semitones            effective_semitones,
+                            double               warp_time_ratio,
+                            const Id&            track_id) noexcept;
+
+    // Apply fades and accumulate into the output mix bus.
+    void finalise_clip_block(const ClipBlock& cb,
+                              int               frames_written,
+                              float**           out,
+                              int               num_out_channels) noexcept;
 
     bool ensure_scratch_capacity(int frames) noexcept;
 
@@ -96,6 +130,7 @@ private:
     static std::atomic<std::uint64_t> block_too_large_count_;
     static std::atomic<int> max_scratch_capacity_frames_;
     static std::atomic<std::uint64_t> pitch_missing_stream_silence_count_;
+    static std::atomic<std::uint64_t> warp_missing_stream_silence_count_;
 };
 
 } // namespace lt

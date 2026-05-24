@@ -1,6 +1,8 @@
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
+#include <lt_engine/pitch/warp_voice_manager.h>
+#include <lt_engine/pitch/warp_voice.h>
 #include <lt_engine/debug/logging.h>
 #include <algorithm>
 #include <cstring>
@@ -44,6 +46,7 @@ std::atomic<std::uint64_t> TrackRenderer::scratch_resize_in_audio_thread_count_{
 std::atomic<std::uint64_t> TrackRenderer::block_too_large_count_{0};
 std::atomic<int> TrackRenderer::max_scratch_capacity_frames_{0};
 std::atomic<std::uint64_t> TrackRenderer::pitch_missing_stream_silence_count_{0};
+std::atomic<std::uint64_t> TrackRenderer::warp_missing_stream_silence_count_{0};
 
 void TrackRenderer::prepare(int max_block_frames) noexcept {
     if (max_block_frames <= 0)
@@ -57,15 +60,15 @@ void TrackRenderer::prepare(int max_block_frames) noexcept {
             scratch_r_.resize(static_cast<std::size_t>(max_block_frames), 0.0f);
             scratch_resize_count_.fetch_add(1, std::memory_order_relaxed);
         }
-        // Bungee planar input scratch. Sized 4x the output block to give
-        // warp room to feed Bungee `ceil(block * ratio)` input frames per
-        // call without truncation. The warp ratio is clamped to [0.25, 4.0]
-        // upstream so this is sufficient.
-        const int max_bungee_in = max_block_frames * 4;
-        if (static_cast<int>(bungee_in_l_.size()) < max_bungee_in)
-            bungee_in_l_.resize(static_cast<std::size_t>(max_bungee_in), 0.0f);
-        if (static_cast<int>(bungee_in_r_.size()) < max_bungee_in)
-            bungee_in_r_.resize(static_cast<std::size_t>(max_bungee_in), 0.0f);
+        // Input scratch for the DSP backends. Sized 4x the output block so
+        // the warp path can feed `ceil(block * ratio)` input frames per call
+        // (ratios clamped upstream to [0.25, 4.0]). The pitch path only ever
+        // reads `block_frames` so the headroom is harmless there.
+        const int max_in = max_block_frames * 4;
+        if (static_cast<int>(bungee_in_l_.size()) < max_in)
+            bungee_in_l_.resize(static_cast<std::size_t>(max_in), 0.0f);
+        if (static_cast<int>(bungee_in_r_.size()) < max_in)
+            bungee_in_r_.resize(static_cast<std::size_t>(max_in), 0.0f);
         scratch_capacity_frames_ = std::min(static_cast<int>(scratch_l_.size()),
                                             static_cast<int>(scratch_r_.size()));
         scratch_[0] = scratch_l_.data();
@@ -89,7 +92,8 @@ TrackRendererDiagnostics TrackRenderer::diagnostics() noexcept {
         scratch_resize_in_audio_thread_count_.load(std::memory_order_relaxed),
         block_too_large_count_.load(std::memory_order_relaxed),
         max_scratch_capacity_frames_.load(std::memory_order_relaxed),
-        pitch_missing_stream_silence_count_.load(std::memory_order_relaxed)};
+        pitch_missing_stream_silence_count_.load(std::memory_order_relaxed),
+        warp_missing_stream_silence_count_.load(std::memory_order_relaxed)};
 }
 
 void TrackRenderer::reset_diagnostics() noexcept {
@@ -99,6 +103,7 @@ void TrackRenderer::reset_diagnostics() noexcept {
     block_too_large_count_.store(0, std::memory_order_relaxed);
     max_scratch_capacity_frames_.store(0, std::memory_order_relaxed);
     pitch_missing_stream_silence_count_.store(0, std::memory_order_relaxed);
+    warp_missing_stream_silence_count_.store(0, std::memory_order_relaxed);
 }
 
 bool TrackRenderer::ensure_scratch_capacity(int frames) noexcept {
@@ -115,6 +120,10 @@ bool TrackRenderer::ensure_scratch_capacity(int frames) noexcept {
     return scratch_capacity_frames_ >= frames && scratch_[0] && scratch_[1];
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Public entry — iterate clips, resolve their per-block decision, dispatch.
+// ────────────────────────────────────────────────────────────────────────────
+
 void TrackRenderer::render(const Track&         track,
                             Frame                timeline_frame,
                             int                  block_frames,
@@ -124,288 +133,373 @@ void TrackRenderer::render(const Track&         track,
                             BungeeVoiceManager*  bungee_voices,
                             int                  engine_sample_rate,
                             Semitones            effective_semitones,
-                            const Song*          active_song) noexcept {
+                            const Song*          active_song,
+                            WarpVoiceManager*    warp_voices) noexcept {
     if (track.mute) return;
+    (void)engine_sample_rate;
 
-    // Compute the authoritative pitch decision per clip using the canonical helper.
-    // When active_song is provided, the per-clip decision is resolved from it;
-    // otherwise fall back to the caller-provided effective_semitones value.
     for (const auto& clip : track.clips) {
-        Semitones clip_semitones;
-        bool clip_warp_active = false;
-        double clip_warp_ratio = 1.0;
+        // Per-clip path decision. When the caller doesn't supply the song
+        // (legacy code path) we fall back to the bare effective_semitones
+        // value — no warp, no path enum, identical to the pre-warp engine.
+        ClipPathKind path = ClipPathKind::Direct;
+        Semitones    clip_semitones = effective_semitones;
+        double       clip_warp_ratio = 1.0;
         if (active_song) {
-            const auto decision = resolve_pitch_render_decision(track, clip, *active_song, timeline_frame);
-            clip_semitones = decision.effective_semitones;
-            clip_warp_active = decision.warp_active;
-            clip_warp_ratio = decision.warp_time_ratio;
-        } else {
-            clip_semitones = effective_semitones;
+            const auto decision = resolve_pitch_render_decision(
+                track, clip, *active_song, timeline_frame);
+            path             = decision.path;
+            clip_semitones   = decision.effective_semitones;
+            clip_warp_ratio  = decision.warp_time_ratio;
+        } else if (clip_semitones != 0) {
+            path = ClipPathKind::Pitch;
         }
-        render_clip(clip, timeline_frame, block_frames,
-                    track.gain, out, num_out_channels,
-                    sources, bungee_voices, engine_sample_rate,
-                    track.id, clip_semitones,
-                    clip_warp_active, clip_warp_ratio);
+
+        ClipBlock cb;
+        if (!prepare_clip_block(clip, timeline_frame, block_frames,
+                                 track.gain, sources, cb)) {
+            continue;
+        }
+
+        // No timeline→source scaling here for warp/cascade — the voice
+        // manager primed the voice's source cursor when it was built, and
+        // SignalsmithWarpVoice advances that cursor by exactly the input
+        // it was fed in the previous call. The renderer reads the cursor
+        // back via wv->source_cursor() inside render_path_warp().
+
+        // Reset scratch for this clip.
+        std::fill(scratch_l_.begin(),
+                  scratch_l_.begin() + cb.frames_to_read, 0.f);
+        std::fill(scratch_r_.begin(),
+                  scratch_r_.begin() + cb.frames_to_read, 0.f);
+
+        int written = 0;
+        switch (path) {
+            case ClipPathKind::Direct:
+                written = render_path_direct(cb);
+                break;
+            case ClipPathKind::Pitch:
+                written = render_path_pitch(cb, bungee_voices,
+                                             clip_semitones, track.id);
+                break;
+            case ClipPathKind::Warp:
+                written = render_path_warp(cb, warp_voices,
+                                            clip_warp_ratio, track.id);
+                break;
+            case ClipPathKind::Cascade:
+                written = render_path_cascade(cb, bungee_voices, warp_voices,
+                                               clip_semitones, clip_warp_ratio,
+                                               track.id);
+                break;
+        }
+
+        if (written > 0)
+            finalise_clip_block(cb, written, out, num_out_channels);
     }
 }
 
-void TrackRenderer::render_clip(const Clip&          clip,
-                                 Frame                timeline_frame,
-                                 int                  block_frames,
-                                 float                track_gain,
-                                 float**              out,
-                                 int                  num_out_channels,
-                                 const SourceManager& sources,
-                                 BungeeVoiceManager*  bungee_voices,
-                                 int                  engine_sample_rate,
-                                 const Id&            track_id,
-                                 Semitones            effective_semitones,
-                                 bool                 warp_active,
-                                 double               warp_time_ratio) noexcept {
-    // Does this clip overlap the current block?
-    Frame clip_end = clip.timeline_start_frame + clip.length_frames;
-    if (timeline_frame >= clip_end)                        return;
-    if (timeline_frame + block_frames <= clip.timeline_start_frame) return;
+// ────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+bool TrackRenderer::prepare_clip_block(const Clip&          clip,
+                                        Frame                timeline_frame,
+                                        int                  block_frames,
+                                        float                track_gain,
+                                        const SourceManager& sources,
+                                        ClipBlock&           out_block) noexcept {
+    const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
+    if (timeline_frame >= clip_end) return false;
+    if (timeline_frame + block_frames <= clip.timeline_start_frame) return false;
 
     const DecodedSource* src = sources.get(clip.source_id);
-    if (!src || !src->is_loaded()) return;
+    if (!src || !src->is_loaded()) return false;
 
-    // Clamp to the portion of this block that overlaps the clip.
     int block_offset = 0;
     Frame source_frame = clip.source_start_frame;
-
-    const bool warp_enabled = warp_active && warp_time_ratio > 0.0
-                              && warp_time_ratio != 1.0;
-    const double effective_ratio = warp_enabled ? warp_time_ratio : 1.0;
-
     if (timeline_frame < clip.timeline_start_frame) {
-        block_offset  = static_cast<int>(clip.timeline_start_frame - timeline_frame);
-        source_frame  = clip.source_start_frame;
+        block_offset = static_cast<int>(clip.timeline_start_frame - timeline_frame);
     } else {
-        // Under warp the source cursor advances `ratio` times faster (or
-        // slower) than the timeline. Bungee consumes `ceil(out * ratio)`
-        // input frames per block (set below via render_block's time_ratio),
-        // so the source pointer we hand it must advance in lockstep — else
-        // we re-read frames Bungee already consumed and the audio appears
-        // unchanged in speed even though Bungee is internally stretching.
-        const Frame timeline_offset = timeline_frame - clip.timeline_start_frame;
-        const Frame source_offset = warp_enabled
-            ? static_cast<Frame>(static_cast<double>(timeline_offset) * effective_ratio)
-            : timeline_offset;
-        source_frame = clip.source_start_frame + source_offset;
+        source_frame = clip.source_start_frame
+            + (timeline_frame - clip.timeline_start_frame);
     }
 
     int frames_to_read = block_frames - block_offset;
     frames_to_read = std::min(frames_to_read,
-                               static_cast<int>(clip_end - (timeline_frame + block_offset)));
-    if (frames_to_read <= 0) return;
-    if (!ensure_scratch_capacity(frames_to_read)) return;
+        static_cast<int>(clip_end - (timeline_frame + block_offset)));
+    if (frames_to_read <= 0) return false;
+    if (!ensure_scratch_capacity(frames_to_read)) return false;
 
-    // Read into scratch (always 2-ch).
-    std::fill(scratch_l_.begin(), scratch_l_.begin() + frames_to_read, 0.f);
-    std::fill(scratch_r_.begin(), scratch_r_.begin() + frames_to_read, 0.f);
+    out_block.clip          = &clip;
+    out_block.src           = src;
+    out_block.clip_end      = clip_end;
+    out_block.block_offset  = block_offset;
+    out_block.source_frame  = source_frame;
+    out_block.frames_to_read = frames_to_read;
+    out_block.effective_gain = track_gain * clip.gain;
+    return true;
+}
 
-    if (effective_semitones != 0 || warp_enabled) {
-        // Pitch processing required — NEVER fall back to original audio on failure.
-        // Instead, count the miss and return silence for this block. Bungee is
-        // the sole pitch backend; voices are keyed per-clip and persist across
-        // pitch changes, with the current effective semitones driving Bungee's
-        // per-grain Request::pitch parameter so live transpose changes are
-        // gapless. When no voice exists for the clip (e.g. control thread
-        // hasn't built one yet, track is NeverTranspose, Bungee unavailable),
-        // we silence the block and bump the miss counter — the control thread
-        // path that builds voices is responsible for healing this.
-        int rendered = 0;
+// ────────────────────────────────────────────────────────────────────────────
+// Path: Direct — read source as-is, no DSP.
+// ────────────────────────────────────────────────────────────────────────────
 
-        std::shared_ptr<BungeePitchVoice> bv;
-        if (bungee_voices)
-            bv = bungee_voices->voice_for_shared(clip.id);
-        if (bv) {
-            // Fetch planar source audio into the Bungee input scratch.
-            // The render scratch (scratch_l_/scratch_r_) is reserved for output.
-            const int queued = bv->queued_output_frames();
-            const int bungee_in_capacity = std::min(
-                static_cast<int>(bungee_in_l_.size()),
-                static_cast<int>(bungee_in_r_.size()));
-            // Legacy behaviour without warp: feed exactly `frames_to_read`
-            // (one block). With warp we feed `ceil(out * ratio)` so Bungee's
-            // input cursor advances `ratio` times the output it produces.
-            //
-            // Earlier we capped at scratch_capacity_frames_, which inflated
-            // the feed size for the no-warp pitch path and confused Bungee's
-            // analysis pipeline (a single 4096-frame feed every 4 callbacks
-            // instead of 512 per callback). Stick to the legacy size when
-            // warp is inactive.
-            int desired_feed = warp_enabled
-                ? static_cast<int>(std::ceil(
-                    static_cast<double>(frames_to_read) * effective_ratio))
-                : frames_to_read;
-            desired_feed = std::min(desired_feed, bungee_in_capacity);
-            const int max_feed = desired_feed;
-            const int feed_frames = queued >= frames_to_read ? 0 : max_feed;
-            // Per Bungee issue #38: the output we get back from process()
-            // corresponds to input frame outputPosition() == inputPosition()
-            // - latency(). To make the listener hear audio that aligns to
-            // `source_frame` we have to feed input from source_frame +
-            // latency() plus Bungee's residual transient compensation forward.
-            // Both values are reported in input-rate frames; at speed=1 that
-            // is just source-frame units. queued_output_frames() is already
-            // future output produced from earlier input, so new source reads
-            // start after that queued audio to keep partial post-jump renders
-            // continuous.
-            const double pitch_scale = std::pow(2.0,
-                static_cast<double>(effective_semitones) / 12.0);
-            const long long latency = static_cast<long long>(bv->latency_frames());
-            const int compensation = bv->alignment_compensation_frames(pitch_scale);
-            const Frame read_from = source_frame
-                + static_cast<Frame>(latency)
-                + static_cast<Frame>(compensation)
-                + static_cast<Frame>(queued);
-            const Frame src_end   = src->duration_frames();
-            // How many of `feed_frames` frames are actually available in the source
-            // starting at `read_from`? Anything past src_end is padded with
-            // silence (clip end / past end of file).
-            if (feed_frames > 0) {
-                std::fill(bungee_in_l_.begin(), bungee_in_l_.begin() + feed_frames, 0.0f);
-                std::fill(bungee_in_r_.begin(), bungee_in_r_.begin() + feed_frames, 0.0f);
-            }
-            const int dst_offset = read_from < 0
-                ? static_cast<int>(std::min<Frame>(feed_frames, -read_from))
-                : 0;
-            const Frame read_start = std::max<Frame>(0, read_from);
-            const int available = (dst_offset >= feed_frames || read_start >= src_end)
-                ? 0
-                : static_cast<int>(std::min<long long>(
-                                       feed_frames - dst_offset,
-                                       static_cast<long long>(src_end - read_start)));
-            float* read_into[2] = {
-                bungee_in_l_.data() + dst_offset,
-                bungee_in_r_.data() + dst_offset};
-            int got = 0;
-            if (available > 0) {
-                got = src->read(read_start, available, read_into,
-                                std::min(2, src->channel_count()));
-                if (got > 0 && src->channel_count() == 1) {
-                    // Mono source: mirror L into R so Bungee gets stereo.
-                    std::copy_n(bungee_in_l_.begin() + dst_offset, got,
-                                bungee_in_r_.begin() + dst_offset);
-                }
-            }
-            // Pad any short read or tail-after-source-end with zeros so we
-            // always feed Bungee exactly `feed_frames` input frames per call.
-            // this keeps Bungee's inputPosition advancing in lockstep with
-            // the audio thread's frame counter regardless of clip bounds.
-            if (dst_offset + got < feed_frames) {
-                std::fill(bungee_in_l_.begin() + std::max(0, dst_offset + got),
-                          bungee_in_l_.begin() + feed_frames, 0.0f);
-                std::fill(bungee_in_r_.begin() + std::max(0, dst_offset + got),
-                          bungee_in_r_.begin() + feed_frames, 0.0f);
-            }
-            const float* in_ptrs[2] = {bungee_in_l_.data(), bungee_in_r_.data()};
-            const int produced = bv->render_block(
-                in_ptrs, feed_frames, scratch_, frames_to_read, pitch_scale,
-                effective_ratio);
-            const int queued_after = bv->queued_output_frames();
-            if (queued > 0 || frames_to_read < max_feed) {
-                track_jump_debug_log(
-                    "[LT_JUMP_DEBUG][track-renderer] pitched track=%s clip=%s source_frame=%lld frames=%d queued_before=%d feed_frames=%d produced=%d queued_after=%d read_from=%lld latency=%lld compensation=%d pitch_scale=%.9f got=%d available=%d\n",
-                    track_id.c_str(),
-                    clip.id.c_str(),
-                    static_cast<long long>(source_frame),
-                    frames_to_read,
-                    queued,
-                    feed_frames,
-                    produced,
-                    queued_after,
-                    static_cast<long long>(read_from),
-                    latency,
-                    compensation,
-                    pitch_scale,
-                    got,
-                    available);
-            }
+int TrackRenderer::render_path_direct(const ClipBlock& cb) noexcept {
+    float* read_into[2] = { scratch_l_.data(), scratch_r_.data() };
+    const int copied = cb.src->read(cb.source_frame, cb.frames_to_read,
+                                     read_into, 2);
+    if (copied <= 0) return 0;
+    if (copied < cb.frames_to_read) {
+        std::fill(scratch_l_.begin() + copied,
+                  scratch_l_.begin() + cb.frames_to_read, 0.0f);
+        std::fill(scratch_r_.begin() + copied,
+                  scratch_r_.begin() + cb.frames_to_read, 0.0f);
+    }
+    return cb.frames_to_read;
+}
 
-            // CRITICAL: the audio thread always advances by `frames_to_read` frames
-            // per callback. Bungee's Stream::process may return fewer output
-            // frames than requested (e.g. during the analysis-pipeline warm-up
-            // window, or whenever grain boundaries don't line up). If we
-            // reported the actual `produced` count downstream, the transposed
-            // clip would write fewer frames into the mix bus while the timeline
-            // still advances by `frames_to_read`, causing transposed tracks to lag
-            // non-transposed ones by the accumulated gap. To keep timeline
-            // alignment we zero-pad the tail and report `frames_to_read` instead.
-            if (produced < frames_to_read) {
-                std::fill(scratch_l_.begin() + std::max(0, produced),
-                          scratch_l_.begin() + frames_to_read, 0.0f);
-                std::fill(scratch_r_.begin() + std::max(0, produced),
-                          scratch_r_.begin() + frames_to_read, 0.0f);
-            }
-            rendered = frames_to_read;
-        } else {
-            // No Bungee voice available for this clip — count as missing
-            // and return silence. The control-thread voice-build path
-            // (BungeeVoiceManager::rebuild_for_session / rebuild_for_seek)
-            // is responsible for healing this on subsequent blocks.
-            pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
-            return;
-        }
-        if (rendered <= 0) {
-            pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
-            return;
-        }
-        frames_to_read = rendered;
-        (void)engine_sample_rate;
-    } else {
-        float* read_into[2] = {scratch_l_.data(), scratch_r_.data()};
-        const int copied = src->read(source_frame, frames_to_read, read_into, 2);
-        if (copied <= 0)
-            return;
-        if (copied < frames_to_read) {
-            std::fill(scratch_l_.begin() + copied,
-                      scratch_l_.begin() + frames_to_read, 0.0f);
-            std::fill(scratch_r_.begin() + copied,
-                      scratch_r_.begin() + frames_to_read, 0.0f);
+// ────────────────────────────────────────────────────────────────────────────
+// Path: Pitch — Bungee at unity speed with a non-1 pitch_scale.
+// ────────────────────────────────────────────────────────────────────────────
+
+int TrackRenderer::render_path_pitch(const ClipBlock&     cb,
+                                      BungeeVoiceManager*  bungee_voices,
+                                      Semitones            effective_semitones,
+                                      const Id&            track_id) noexcept {
+    auto bv = bungee_voices ? bungee_voices->voice_for_shared(cb.clip->id)
+                            : nullptr;
+    if (!bv) {
+        pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
+
+    const int queued = bv->queued_output_frames();
+    const int bungee_in_capacity = std::min(
+        static_cast<int>(bungee_in_l_.size()),
+        static_cast<int>(bungee_in_r_.size()));
+    // Pitch path always feeds `frames_to_read` (one output block) input
+    // frames at speed=1.0. Skipping the feed when the FIFO already has the
+    // block lets Bungee drain its earlier prefeed cleanly.
+    int feed_frames = queued >= cb.frames_to_read ? 0
+                                                  : cb.frames_to_read;
+    feed_frames = std::min(feed_frames, bungee_in_capacity);
+
+    const double pitch_scale = std::pow(2.0,
+        static_cast<double>(effective_semitones) / 12.0);
+    const long long latency = static_cast<long long>(bv->latency_frames());
+    const int compensation = bv->alignment_compensation_frames(pitch_scale);
+    const Frame read_from = cb.source_frame
+        + static_cast<Frame>(latency)
+        + static_cast<Frame>(compensation)
+        + static_cast<Frame>(queued);
+    const Frame src_end = cb.src->duration_frames();
+
+    if (feed_frames > 0) {
+        std::fill(bungee_in_l_.begin(), bungee_in_l_.begin() + feed_frames, 0.0f);
+        std::fill(bungee_in_r_.begin(), bungee_in_r_.begin() + feed_frames, 0.0f);
+    }
+    const int dst_offset = read_from < 0
+        ? static_cast<int>(std::min<Frame>(feed_frames, -read_from))
+        : 0;
+    const Frame read_start = std::max<Frame>(0, read_from);
+    const int available = (dst_offset >= feed_frames || read_start >= src_end)
+        ? 0
+        : static_cast<int>(std::min<long long>(
+            feed_frames - dst_offset,
+            static_cast<long long>(src_end - read_start)));
+    float* read_into[2] = {
+        bungee_in_l_.data() + dst_offset,
+        bungee_in_r_.data() + dst_offset };
+    int got = 0;
+    if (available > 0) {
+        got = cb.src->read(read_start, available, read_into,
+                            std::min(2, cb.src->channel_count()));
+        if (got > 0 && cb.src->channel_count() == 1) {
+            std::copy_n(bungee_in_l_.begin() + dst_offset, got,
+                        bungee_in_r_.begin() + dst_offset);
         }
     }
-    int read = frames_to_read;
+    if (dst_offset + got < feed_frames) {
+        std::fill(bungee_in_l_.begin() + std::max(0, dst_offset + got),
+                  bungee_in_l_.begin() + feed_frames, 0.0f);
+        std::fill(bungee_in_r_.begin() + std::max(0, dst_offset + got),
+                  bungee_in_r_.begin() + feed_frames, 0.0f);
+    }
+    const float* in_ptrs[2] = { bungee_in_l_.data(), bungee_in_r_.data() };
+    const int produced = bv->render_block(
+        in_ptrs, feed_frames, scratch_, cb.frames_to_read, pitch_scale,
+        /*time_ratio*/ 1.0);
+    const int queued_after = bv->queued_output_frames();
+    if (queued > 0 || cb.frames_to_read < feed_frames) {
+        track_jump_debug_log(
+            "[LT_JUMP_DEBUG][track-renderer] pitch track=%s clip=%s source_frame=%lld frames=%d queued_before=%d feed_frames=%d produced=%d queued_after=%d read_from=%lld latency=%lld compensation=%d pitch_scale=%.9f got=%d available=%d\n",
+            track_id.c_str(), cb.clip->id.c_str(),
+            static_cast<long long>(cb.source_frame),
+            cb.frames_to_read, queued, feed_frames, produced, queued_after,
+            static_cast<long long>(read_from), latency, compensation,
+            pitch_scale, got, available);
+    }
 
-    float effective_gain = track_gain * clip.gain;
+    // Bungee may return fewer frames than requested during its warm-up
+    // window; pad the tail with zeros so the mix bus stays aligned.
+    if (produced < cb.frames_to_read) {
+        std::fill(scratch_l_.begin() + std::max(0, produced),
+                  scratch_l_.begin() + cb.frames_to_read, 0.0f);
+        std::fill(scratch_r_.begin() + std::max(0, produced),
+                  scratch_r_.begin() + cb.frames_to_read, 0.0f);
+    }
+    return cb.frames_to_read;
+}
 
-    // Apply fade-in.
+// ────────────────────────────────────────────────────────────────────────────
+// Path: Warp — Signalsmith Stretch at pitch=1, time_ratio=ratio.
+// ────────────────────────────────────────────────────────────────────────────
+
+int TrackRenderer::render_path_warp(const ClipBlock&   cb,
+                                     WarpVoiceManager*  warp_voices,
+                                     double             warp_time_ratio,
+                                     const Id&          track_id) noexcept {
+    auto wv = warp_voices ? warp_voices->voice_for_shared(cb.clip->id)
+                          : nullptr;
+    if (!wv) {
+        warp_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
+
+    const int bungee_in_capacity = std::min(
+        static_cast<int>(bungee_in_l_.size()),
+        static_cast<int>(bungee_in_r_.size()));
+    const int input_to_feed = std::min(
+        bungee_in_capacity,
+        static_cast<int>(std::ceil(
+            static_cast<double>(cb.frames_to_read) * warp_time_ratio)));
+    if (input_to_feed <= 0) {
+        warp_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
+
+    // Read from where the voice last left off. The voice tracks its own
+    // source cursor — re-deriving it from the timeline every block produces
+    // ±1-frame overlaps under fractional warp ratios and Signalsmith
+    // surfaces those as audible crackles.
+    const long long cursor = wv->source_cursor();
+    const Frame src_end = cb.src->duration_frames();
+    std::fill(bungee_in_l_.begin(), bungee_in_l_.begin() + input_to_feed, 0.0f);
+    std::fill(bungee_in_r_.begin(), bungee_in_r_.begin() + input_to_feed, 0.0f);
+    const int dst_offset = cursor < 0
+        ? static_cast<int>(std::min<long long>(input_to_feed, -cursor))
+        : 0;
+    const Frame read_start = static_cast<Frame>(std::max<long long>(0, cursor));
+    const int available = (dst_offset >= input_to_feed || read_start >= src_end)
+        ? 0
+        : static_cast<int>(std::min<long long>(
+            input_to_feed - dst_offset,
+            static_cast<long long>(src_end - read_start)));
+    if (available > 0) {
+        float* read_into[2] = {
+            bungee_in_l_.data() + dst_offset,
+            bungee_in_r_.data() + dst_offset };
+        const int got = cb.src->read(read_start, available, read_into,
+                                      std::min(2, cb.src->channel_count()));
+        if (got > 0 && cb.src->channel_count() == 1) {
+            std::copy_n(bungee_in_l_.begin() + dst_offset, got,
+                        bungee_in_r_.begin() + dst_offset);
+        }
+    }
+
+    // Read what we got count BEFORE process() so we can log the actual
+    // amount of real source frames (vs zero-padded tail).
+    int got_input = 0;
+    if (available > 0) {
+        got_input = static_cast<int>(std::min<long long>(available,
+                                                          src_end - read_start));
+    }
+
+    const float* in_ptrs[2] = { bungee_in_l_.data(), bungee_in_r_.data() };
+    const int produced = wv->render_block(
+        in_ptrs, input_to_feed, scratch_, cb.frames_to_read, warp_time_ratio);
+
+    // Detect first/last sample of the scratch — useful for spotting clicks.
+    // We log them every block under LIBRETRACKS_AUDIO_DEBUG so the user can
+    // grep "warp track=" and see the per-block trace.
+    const float first_l = produced > 0 ? scratch_l_[0] : 0.f;
+    const float last_l  = produced > 0
+        ? scratch_l_[static_cast<size_t>(produced - 1)]
+        : 0.f;
+    track_jump_debug_log(
+        "[LT_JUMP_DEBUG][track-renderer] warp track=%s clip=%s cursor=%lld src_end=%lld input_to_feed=%d got_input=%d dst_offset=%d frames_to_read=%d produced=%d ratio=%.6f first_l=%.6f last_l=%.6f\n",
+        track_id.c_str(), cb.clip->id.c_str(),
+        cursor, static_cast<long long>(src_end),
+        input_to_feed, got_input, dst_offset,
+        cb.frames_to_read, produced, warp_time_ratio,
+        first_l, last_l);
+
+    if (produced < cb.frames_to_read) {
+        std::fill(scratch_l_.begin() + std::max(0, produced),
+                  scratch_l_.begin() + cb.frames_to_read, 0.0f);
+        std::fill(scratch_r_.begin() + std::max(0, produced),
+                  scratch_r_.begin() + cb.frames_to_read, 0.0f);
+    }
+    return cb.frames_to_read;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Path: Cascade — pitch (Bungee) feeding warp (Signalsmith). NOT YET WIRED.
+// Drops to silence until the cascade implementation lands. The user-visible
+// behaviour matches a missing voice (silenced clip + warp_missing counter).
+// ────────────────────────────────────────────────────────────────────────────
+
+int TrackRenderer::render_path_cascade(const ClipBlock&     /*cb*/,
+                                        BungeeVoiceManager*  /*bungee_voices*/,
+                                        WarpVoiceManager*    /*warp_voices*/,
+                                        Semitones            /*effective_semitones*/,
+                                        double               /*warp_time_ratio*/,
+                                        const Id&            /*track_id*/) noexcept {
+    warp_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
+    return 0;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Apply fades + accumulate into the mix bus.
+// ────────────────────────────────────────────────────────────────────────────
+
+void TrackRenderer::finalise_clip_block(const ClipBlock& cb,
+                                          int               frames_written,
+                                          float**           out,
+                                          int               num_out_channels) noexcept {
+    const Clip& clip = *cb.clip;
+    const int read = frames_written;
+
     if (clip.fade_in_frames > 0) {
-        Frame played = source_frame - clip.source_start_frame;
+        Frame played = cb.source_frame - clip.source_start_frame;
         for (int f = 0; f < read; ++f) {
             Frame pos = played + f;
             if (pos < clip.fade_in_frames) {
-                float g = static_cast<float>(pos) / clip.fade_in_frames;
+                const float g = static_cast<float>(pos) / clip.fade_in_frames;
                 scratch_l_[static_cast<std::size_t>(f)] *= g;
                 scratch_r_[static_cast<std::size_t>(f)] *= g;
             }
         }
     }
-
-    // Apply fade-out.
     if (clip.fade_out_frames > 0) {
-        Frame played = source_frame - clip.source_start_frame;
+        Frame played = cb.source_frame - clip.source_start_frame;
         for (int f = 0; f < read; ++f) {
             Frame pos = played + f;
             Frame from_end = clip.length_frames - pos;
             if (from_end < clip.fade_out_frames && from_end >= 0) {
-                float g = static_cast<float>(from_end) / clip.fade_out_frames;
+                const float g = static_cast<float>(from_end) / clip.fade_out_frames;
                 scratch_l_[static_cast<std::size_t>(f)] *= g;
                 scratch_r_[static_cast<std::size_t>(f)] *= g;
             }
         }
     }
 
-    // Accumulate into output mix bus.
-    float* dst_l = out[0] + block_offset;
-    float* dst_r = (num_out_channels >= 2) ? out[1] + block_offset : nullptr;
-
+    float* dst_l = out[0] + cb.block_offset;
+    float* dst_r = (num_out_channels >= 2) ? out[1] + cb.block_offset : nullptr;
     for (int f = 0; f < read; ++f) {
-        dst_l[f] += scratch_l_[static_cast<std::size_t>(f)] * effective_gain;
-        if (dst_r) dst_r[f] += scratch_r_[static_cast<std::size_t>(f)] * effective_gain;
+        dst_l[f] += scratch_l_[static_cast<std::size_t>(f)] * cb.effective_gain;
+        if (dst_r)
+            dst_r[f] += scratch_r_[static_cast<std::size_t>(f)] * cb.effective_gain;
     }
 }
 

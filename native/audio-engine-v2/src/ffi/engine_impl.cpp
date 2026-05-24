@@ -470,6 +470,7 @@ Result<void> EngineImpl::initialize() {
         }
     });
     bungee_voices_  = std::make_unique<BungeeVoiceManager>();
+    warp_voices_    = std::make_unique<WarpVoiceManager>();
     prearmed_jumps_ = std::make_unique<PrearmedJumpManager>();
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
     mixer_          = std::make_unique<Mixer>(
@@ -479,6 +480,7 @@ Result<void> EngineImpl::initialize() {
         scheduler_.get());
     mixer_->set_metronome_config(metronome_config_);
     mixer_->set_bungee_voice_manager(bungee_voices_.get());
+    mixer_->set_warp_voice_manager(warp_voices_.get());
 
     // Open the default audio device with the silent callback.
     auto open_result = device_manager_->open_device(current_device_request_, mixer_.get());
@@ -510,6 +512,7 @@ Result<void> EngineImpl::initialize() {
         // output block. Keeps the legacy pitch path identical (it always
         // feeds exactly `bs` input frames) while letting warp pass more.
         bungee_voices_->prepare(sr, /*channels=*/2, bs * 4);
+        if (warp_voices_) warp_voices_->prepare(sr, /*channels=*/2, bs * 4);
         if (prearmed_jumps_) prearmed_jumps_->prepare(sr, /*channels=*/2, bs);
     }
 
@@ -537,9 +540,10 @@ Result<void> EngineImpl::shutdown() {
     device_manager_->close_device();
     if (mixer_) {
         mixer_->clear_session();
-        // Detach the Bungee manager pointer before destroying the manager so
+        // Detach the voice manager pointers before destroying the managers so
         // the (now silent) mixer cannot dereference a dangling pointer.
         mixer_->set_bungee_voice_manager(nullptr);
+        mixer_->set_warp_voice_manager(nullptr);
     }
     if (prep_queue_) { prep_queue_->cancel_all(); prep_queue_.reset(); }
     if (worker_pool_) { worker_pool_->shutdown(); }
@@ -549,6 +553,7 @@ Result<void> EngineImpl::shutdown() {
     scheduler_.reset();
     std::atomic_store(&session_, std::shared_ptr<const Session>{});
     bungee_voices_.reset();
+    warp_voices_.reset();
     state_ = State::ShutDown;
     return Result<void>::ok();
 }
@@ -857,6 +862,10 @@ void EngineImpl::resample_sources_for_new_sample_rate() {
             ? device_manager_->actual_buffer_size() : 1024;
         bungee_voices_->prepare(new_sr, /*channels=*/2, bs * 4);
         bungee_voices_->clear(); // voices were built for old dims
+        if (warp_voices_) {
+            warp_voices_->prepare(new_sr, /*channels=*/2, bs * 4);
+            warp_voices_->clear();
+        }
         if (prearmed_jumps_) {
             prearmed_jumps_->clear();
             prearmed_jumps_->prepare(new_sr, /*channels=*/2, bs);
@@ -998,12 +1007,17 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // stale Mixer atomics. This eliminates the need for sync_live_mix after load.
                 mixer_->set_session(next_session, /*preserve_realtime_state=*/false);
                 mixer_->set_bungee_voice_manager(bungee_voices_.get());
+                mixer_->set_warp_voice_manager(warp_voices_.get());
             }
             // Build Bungee voices for whatever is currently transposed at playhead.
             // Source data may not be decoded yet — voices for unloaded sources are
             // skipped and rebuilt later when sources become ready.
             if (bungee_voices_ && bungee_voices_->is_available())
                 bungee_voices_->rebuild_for_session(
+                    *next_session, *source_manager_, clock_->position().frame);
+            // Build warp voices for whatever is inside a warp-active region.
+            if (warp_voices_ && warp_voices_->is_available())
+                warp_voices_->rebuild_for_session(
                     *next_session, *source_manager_, clock_->position().frame);
 
             // Prearm marker / region / song targets on session load. Bumps
@@ -1780,27 +1794,28 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     }
                     if (changed) break;
                 }
+                if (env_flag_enabled("LIBRETRACKS_AUDIO_DEBUG")) {
+                    lt_debug_log(
+                        "[LT_JUMP_DEBUG][engine] CmdSetRegionWarp region=%s enabled=%d source_bpm=%.3f changed=%d needs_rebuild=%d\n",
+                        c.region_id.c_str(),
+                        c.warp_enabled ? 1 : 0,
+                        c.warp_source_bpm,
+                        changed ? 1 : 0,
+                        needs_voice_rebuild ? 1 : 0);
+                }
                 if (changed) {
                     // Voice maintenance only when the warp toggle flipped.
-                    // Use rebuild_for_session (not build_seek_voice_map) so
-                    // existing pitched voices are REUSED — destroying the
-                    // already-warmed Bungee streams on every warp toggle
-                    // produces ~100ms of garbled output on the transposed
-                    // tracks (the warm window is non-trivial: see the
-                    // project_bungee_warm_voice + project_bungee_latency_floor
-                    // notes). rebuild_for_session walks enumerate_voices and
-                    // only builds the new entries (the non-transposed clips
-                    // now needing warp); the pitched clip's voice carries on
-                    // unchanged.
-                    if (needs_voice_rebuild
-                        && bungee_voices_ && bungee_voices_->is_available()
-                        && source_manager_ && clock_) {
-                        const Frame frame = clock_->position().frame;
-                        request_playback_audio_window(
-                            *source_manager_, *next_session, frame,
-                            playback_prepare_window_frames(clock_->sample_rate()));
-                        bungee_voices_->rebuild_for_session(
-                            *next_session, *source_manager_, frame);
+                    // Warp now lives in WarpVoiceManager (Signalsmith); Bungee
+                    // continues handling pitch unchanged so its voices don't
+                    // get touched by warp toggles. The warp manager itself
+                    // reuses voices for already-warp-active clips and only
+                    // builds new ones — toggling on a region adds the missing
+                    // warp voices without disturbing pitched ones.
+                    if (needs_voice_rebuild && source_manager_ && clock_) {
+                        if (warp_voices_ && warp_voices_->is_available())
+                            warp_voices_->rebuild_for_session(
+                                *next_session, *source_manager_,
+                                clock_->position().frame);
                     }
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
