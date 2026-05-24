@@ -123,6 +123,8 @@ pub enum EngineCommand {
 
     SetOutputDevice {
         device_id: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        active_channels: Vec<i32>,
     },
     SetSampleRate {
         sample_rate: i32,

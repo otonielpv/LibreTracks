@@ -1098,6 +1098,22 @@ textarea {
   accent-color: #3cddc7;
 }
 
+.lt-output-channel-actions {
+  margin-top: 0.6rem;
+  align-items: center;
+}
+
+.lt-output-channel-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lt-output-channel-actions-hint {
+  color: #9ba6a3;
+  font: 600 0.72rem/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+}
+
 .lt-settings-icon-button {
   display: inline-flex;
   align-items: center;

@@ -13,7 +13,11 @@ The audio settings page can also refresh the detected device list and lets you c
 
 ## Hardware Outputs
 
-Enable the physical outputs you want to use in `Settings > Audio`. Track headers can then route each track to `Master` or directly to mono/stereo `Ext. Out` destinations.
+Enable the physical outputs you want to use in `Settings > Audio`. The checkbox grid shows every channel the driver actually exposes — two for typical stereo interfaces, eight for an ASIO MOTU, thirty‑two for a Behringer X32 over USB, and so on — instead of a fixed list.
+
+Channel changes use an explicit **Apply** / **Discard** flow: ticks update the draft selection locally and the audio device only reopens when you press `Apply`. This avoids reopening the device (which can take several seconds on ASIO drivers) once per click when you are configuring many channels at the same time. `Discard` reverts the draft to the active selection.
+
+Track headers can then route each track to `Master` or directly to any of the enabled mono/stereo `Ext. Out` destinations.
 
 ![Track routing menu](/screenshots/Track-Audio-Route.png)
 

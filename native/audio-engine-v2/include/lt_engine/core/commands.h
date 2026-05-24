@@ -150,7 +150,11 @@ struct CmdLoadSession { std::string project_json; };
 // ---------------------------------------------------------------------------
 // Device / stream
 // ---------------------------------------------------------------------------
-struct CmdSetOutputDevice { std::string device_id; };
+struct CmdSetOutputDevice {
+    std::string device_id;
+    // Output channel indices to activate (0-based). Empty = back-compat stereo.
+    std::vector<int> active_channels;
+};
 struct CmdSetSampleRate   { int sample_rate; };
 struct CmdSetBufferSize   { int buffer_size; };
 

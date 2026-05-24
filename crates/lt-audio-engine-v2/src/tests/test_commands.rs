@@ -336,11 +336,14 @@ fn set_region_transpose_max_round_trip() {
 fn set_output_device_round_trip() {
     let cmd = EngineCommand::SetOutputDevice {
         device_id: "Speakers (Realtek)".into(),
+        active_channels: vec![0, 1, 2, 3],
     };
     let rt = round_trip(&cmd);
-    assert!(
-        matches!(rt, EngineCommand::SetOutputDevice { device_id } if device_id.contains("Realtek"))
-    );
+    assert!(matches!(
+        rt,
+        EngineCommand::SetOutputDevice { ref device_id, ref active_channels }
+            if device_id.contains("Realtek") && active_channels == &vec![0, 1, 2, 3]
+    ));
 }
 
 #[test]

@@ -36,6 +36,9 @@ struct DeviceOpenRequest {
     std::string device_id;    // empty = default
     int         sample_rate  = 0;  // 0 = device default
     int         buffer_size  = 0;  // 0 = device default
+    // Output channels to activate on the hardware (0-based indices into the
+    // device's channel list). Empty = back-compat stereo (channels 0 and 1).
+    std::vector<int> active_output_channels;
 };
 
 // ---------------------------------------------------------------------------

@@ -192,8 +192,16 @@ EngineCommand command_from_json(const std::string& raw) {
         return cmd;
     }
 
-    if (type == "SetOutputDevice")
-        return CmdSetOutputDevice{ j.at("device_id").get<std::string>() };
+    if (type == "SetOutputDevice") {
+        CmdSetOutputDevice cmd;
+        cmd.device_id = j.at("device_id").get<std::string>();
+        if (auto it = j.find("active_channels"); it != j.end() && it->is_array()) {
+            cmd.active_channels.reserve(it->size());
+            for (const auto& ch : *it)
+                cmd.active_channels.push_back(ch.get<int>());
+        }
+        return cmd;
+    }
 
     if (type == "SetSampleRate")
         return CmdSetSampleRate{ j.at("sample_rate").get<int>() };

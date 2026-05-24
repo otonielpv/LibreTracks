@@ -13,7 +13,11 @@ La pagina de audio tambien puede refrescar la lista de dispositivos detectados y
 
 ## Salidas Hardware
 
-Activa las salidas fisicas que quieras usar en `Configuracion > Audio`. Desde la cabecera de cada pista puedes rutear a `Master` o directamente a destinos `Ext. Out` mono o estereo.
+Activa las salidas fisicas que quieras usar en `Configuracion > Audio`. La rejilla de checkboxes muestra todos los canales que el driver expone realmente — dos para una interfaz estereo tipica, ocho para una MOTU ASIO, treinta y dos para una Behringer X32 por USB, etc. — en lugar de una lista fija.
+
+Los cambios de canal usan un flujo explicito de **Aplicar** / **Descartar**: cada tick actualiza una seleccion borrador local, y el dispositivo de audio solo se reabre cuando pulsas `Aplicar`. Esto evita reabrir el dispositivo (lo que en drivers ASIO puede tardar varios segundos) una vez por click cuando configuras varios canales seguidos. `Descartar` devuelve el borrador a la seleccion activa.
+
+Desde la cabecera de cada pista puedes rutear a `Master` o directamente a cualquiera de los destinos `Ext. Out` mono o estereo que tengas activados.
 
 ![Menu de routing de pista](/screenshots/Track-Audio-Route.png)
 

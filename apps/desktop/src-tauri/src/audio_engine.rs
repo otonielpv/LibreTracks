@@ -868,34 +868,63 @@ impl AudioController {
         _rebuild_stream: bool,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("apply_settings", None, |engine, state| {
-            // Device-open errors must NOT abort apply_settings: the saved
-            // device may have been unplugged (Razer/USB), renamed, or
-            // disabled since last launch. Treating that as fatal kept the
-            // whole app from starting. Log + clear the stale device fields
-            // + fall back to the system default device. Subsequent settings
-            // (sample rate / buffer / metronome) MUST still apply.
+            // Device-open errors must NOT abort apply_settings. There are
+            // two failure modes we treat differently:
+            //   (a) the saved device is GONE (unplugged USB, removed driver,
+            //       renamed). It will never come back under this id, so we
+            //       clear the saved selection and fall back to default.
+            //   (b) the saved device EXISTS but its open call failed (ASIO
+            //       hogged by another app, sample-rate negotiation failure,
+            //       driver in a bad state). This is transient — keep the
+            //       saved selection so the next launch can retry, and fall
+            //       back to default for now.
             if let Some(device_id) = settings
                 .selected_output_device_id
                 .clone()
                 .or_else(|| settings.selected_output_device.clone())
             {
+                let active_channels: Vec<i32> = settings
+                    .enabled_output_channels
+                    .iter()
+                    .map(|c| *c as i32)
+                    .collect();
                 if let Err(error) = engine.send_command(&EngineCommand::SetOutputDevice {
                     device_id: device_id.clone(),
+                    active_channels: active_channels.clone(),
                 }) {
-                    if audio_debug_logging_enabled() {
-                        eprintln!(
-                            "[libretracks-audio] saved output device '{device_id}' \
-                             failed to open ({error}); falling back to system default \
-                             and clearing the saved selection so subsequent launches \
-                             don't re-hit this error."
-                        );
+                    let device_exists = engine
+                        .list_devices()
+                        .map(|devs| {
+                            devs.iter().any(|d| {
+                                d.device_id == device_id
+                                    || d.device_name == device_id
+                            })
+                        })
+                        .unwrap_or(false);
+                    if device_exists {
+                        if audio_debug_logging_enabled() {
+                            eprintln!(
+                                "[libretracks-audio] saved output device '{device_id}' \
+                                 exists but failed to open ({error}); falling back to system \
+                                 default for this session and keeping the saved selection \
+                                 so subsequent launches can retry."
+                            );
+                        }
+                    } else {
+                        if audio_debug_logging_enabled() {
+                            eprintln!(
+                                "[libretracks-audio] saved output device '{device_id}' is \
+                                 not present ({error}); clearing the saved selection."
+                            );
+                        }
+                        settings.selected_output_device = None;
+                        settings.selected_output_device_id = None;
+                        settings.selected_output_device_name = None;
                     }
-                    settings.selected_output_device = None;
-                    settings.selected_output_device_id = None;
-                    settings.selected_output_device_name = None;
                     if let Err(fallback_error) =
                         engine.send_command(&EngineCommand::SetOutputDevice {
                             device_id: String::new(),
+                            active_channels: active_channels.clone(),
                         })
                     {
                         if audio_debug_logging_enabled() {

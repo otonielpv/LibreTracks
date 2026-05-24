@@ -38,6 +38,13 @@ type SettingsPanelProps = {
   onOutputSampleRateChange: (value: string) => void;
   onOutputBufferSizeChange: (value: string) => void;
   onEnabledOutputChannelChange: (channelIndex: number, checked: boolean) => void;
+  // Channel selection uses an explicit draft → apply model so that picking
+  // ten channels doesn't trigger ten device reopens (each can take several
+  // seconds on ASIO drivers).
+  enabledOutputChannelsDraft: number[];
+  enabledOutputChannelsDirty: boolean;
+  onCommitEnabledOutputChannels: () => void;
+  onDiscardEnabledOutputChannels: () => void;
   onAudioSafeModeChange: (checked: boolean) => void;
 
   metronomeVolumeDraft: number;
@@ -97,6 +104,10 @@ export function SettingsPanel({
   onOutputSampleRateChange,
   onOutputBufferSizeChange,
   onEnabledOutputChannelChange,
+  enabledOutputChannelsDraft,
+  enabledOutputChannelsDirty,
+  onCommitEnabledOutputChannels,
+  onDiscardEnabledOutputChannels,
   onAudioSafeModeChange,
   metronomeVolumeDraft,
   onMetronomeEnabledChange,
@@ -375,7 +386,7 @@ export function SettingsPanel({
                             >
                               <input
                                 type="checkbox"
-                                checked={appSettings.enabledOutputChannels.includes(
+                                checked={enabledOutputChannelsDraft.includes(
                                   channelIndex,
                                 )}
                                 disabled={isSaving}
@@ -398,6 +409,45 @@ export function SettingsPanel({
                             </label>
                           ),
                         )}
+                      </div>
+                      <div className="lt-inline-actions lt-output-channel-actions">
+                        <button
+                          type="button"
+                          className="is-primary"
+                          disabled={isSaving || !enabledOutputChannelsDirty}
+                          onClick={onCommitEnabledOutputChannels}
+                        >
+                          {t(
+                            "transport.settingsModal.applyChannels",
+                            { defaultValue: "Apply" },
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSaving || !enabledOutputChannelsDirty}
+                          onClick={onDiscardEnabledOutputChannels}
+                        >
+                          {t(
+                            "transport.settingsModal.discardChannels",
+                            { defaultValue: "Discard" },
+                          )}
+                        </button>
+                        <span className="lt-output-channel-actions-hint">
+                          {enabledOutputChannelsDirty
+                            ? t(
+                                "transport.settingsModal.channelsPendingHint",
+                                {
+                                  defaultValue:
+                                    "Pending changes — the audio device reopens on Apply.",
+                                },
+                              )
+                            : t(
+                                "transport.settingsModal.channelsAppliedHint",
+                                {
+                                  defaultValue: "All changes applied.",
+                                },
+                              )}
+                        </span>
                       </div>
                     </div>
 

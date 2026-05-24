@@ -1885,6 +1885,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             req.device_id = c.device_id;
             req.sample_rate = current_device_request_.sample_rate;
             req.buffer_size = current_device_request_.buffer_size;
+            req.active_output_channels = c.active_channels;
             bool was_playing = clock_ && clock_->position().state == TransportState::Playing;
             const int prev_sr = clock_ ? clock_->sample_rate() : 0;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
@@ -1936,6 +1937,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             req.device_id = current_device_request_.device_id;
             req.sample_rate = c.sample_rate;
             req.buffer_size = current_device_request_.buffer_size;
+            req.active_output_channels = current_device_request_.active_output_channels;
             const int prev_sr = clock_ ? clock_->sample_rate() : 0;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
@@ -1970,6 +1972,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             req.device_id = current_device_request_.device_id;
             req.sample_rate = current_device_request_.sample_rate;
             req.buffer_size = c.buffer_size;
+            req.active_output_channels = current_device_request_.active_output_channels;
             const int prev_sr = clock_ ? clock_->sample_rate() : 0;
             auto* callback = mixer_ ? static_cast<AudioRenderCallback*>(mixer_.get())
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());

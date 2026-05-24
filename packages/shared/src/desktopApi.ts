@@ -144,8 +144,39 @@ export async function updateAudioSettings(settings: AppSettings): Promise<AppSet
   return invokeCommand<AppSettings>("update_audio_settings", { settings });
 }
 
-export async function getAudioOutputDevices(): Promise<AudioOutputDevices> {
-  return invokeCommand<AudioOutputDevices>("get_audio_output_devices");
+// Enumerating audio devices is expensive (~650ms with ASIO drivers) and gets
+// triggered redundantly: React StrictMode double-fires effects in dev, and the
+// app re-fetches when the Settings modal opens shortly after mount. Dedup
+// in-flight calls and serve a cached result for a short window so the user
+// doesn't pay the cost twice. Pass force=true from the explicit Refresh button.
+let audioOutputDevicesInflight: Promise<AudioOutputDevices> | null = null;
+let audioOutputDevicesCache: { value: AudioOutputDevices; at: number } | null = null;
+const AUDIO_OUTPUT_DEVICES_TTL_MS = 2000;
+
+export async function getAudioOutputDevices(
+  options: { force?: boolean } = {},
+): Promise<AudioOutputDevices> {
+  if (!options.force) {
+    if (audioOutputDevicesInflight) {
+      return audioOutputDevicesInflight;
+    }
+    if (
+      audioOutputDevicesCache &&
+      Date.now() - audioOutputDevicesCache.at < AUDIO_OUTPUT_DEVICES_TTL_MS
+    ) {
+      return audioOutputDevicesCache.value;
+    }
+  }
+  const request = invokeCommand<AudioOutputDevices>("get_audio_output_devices")
+    .then((value) => {
+      audioOutputDevicesCache = { value, at: Date.now() };
+      return value;
+    })
+    .finally(() => {
+      audioOutputDevicesInflight = null;
+    });
+  audioOutputDevicesInflight = request;
+  return request;
 }
 
 export async function getMidiInputs(): Promise<string[]> {

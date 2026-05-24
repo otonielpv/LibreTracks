@@ -349,6 +349,12 @@ export function TransportPanelContent() {
   const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(
     DEFAULT_APP_SETTINGS.metronomeVolume,
   );
+  // Draft for the Settings → Hardware Outputs checkbox grid. Each tick stays
+  // local until the user hits Apply, so picking N channels does not trigger
+  // N device reopens.
+  const [enabledOutputChannelsDraft, setEnabledOutputChannelsDraft] = useState<
+    number[]
+  >(DEFAULT_APP_SETTINGS.enabledOutputChannels);
   const [audioDeviceDescriptors, setAudioDeviceDescriptors] = useState<
     AudioDeviceDescriptor[]
   >([]);
@@ -585,6 +591,18 @@ export function TransportPanelContent() {
   useEffect(() => {
     setMetronomeVolumeDraft(appSettings.metronomeVolume);
   }, [appSettings.metronomeVolume]);
+
+  useEffect(() => {
+    setEnabledOutputChannelsDraft(appSettings.enabledOutputChannels);
+  }, [appSettings.enabledOutputChannels]);
+
+  useEffect(() => {
+    if (isSettingsModalOpen) {
+      setEnabledOutputChannelsDraft(
+        appSettingsRef.current.enabledOutputChannels,
+      );
+    }
+  }, [isSettingsModalOpen]);
 
   useEffect(() => {
     appSettingsRef.current = appSettings;
@@ -4944,7 +4962,7 @@ export function TransportPanelContent() {
     setIsSettingsLoading(true);
     void runAction(async () => {
       try {
-        const nextAudioDevices = await getAudioOutputDevices();
+        const nextAudioDevices = await getAudioOutputDevices({ force: true });
         setAudioDeviceDescriptors(nextAudioDevices.deviceDescriptors ?? []);
         setAudioOutputChannelCounts(nextAudioDevices.channelCounts ?? {});
         setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
@@ -4963,26 +4981,34 @@ export function TransportPanelContent() {
     channelIndex: number,
     enabled: boolean,
   ) {
-    const currentChannels = new Set(
-      appSettingsRef.current.enabledOutputChannels,
-    );
-    if (enabled) {
-      currentChannels.add(channelIndex);
-    } else {
-      currentChannels.delete(channelIndex);
-    }
+    setEnabledOutputChannelsDraft((previous) => {
+      const next = new Set(previous);
+      if (enabled) {
+        next.add(channelIndex);
+      } else {
+        next.delete(channelIndex);
+      }
+      return Array.from(next).sort((left, right) => left - right);
+    });
+  }
 
-    const nextChannels = Array.from(currentChannels).sort(
-      (left, right) => left - right,
-    );
+  function handleCommitEnabledOutputChannels() {
+    const draft = enabledOutputChannelsDraft;
+    const nextChannels = draft.length ? draft : [0, 1];
     persistAudioSettings(
       normalizeAppSettings({
         ...appSettingsRef.current,
-        enabledOutputChannels: nextChannels.length ? nextChannels : [0, 1],
+        enabledOutputChannels: nextChannels,
       }),
       t("transport.status.audioRoutingUpdated", {
         defaultValue: "Audio routing updated.",
       }),
+    );
+  }
+
+  function handleDiscardEnabledOutputChannels() {
+    setEnabledOutputChannelsDraft(
+      appSettingsRef.current.enabledOutputChannels,
     );
   }
 
@@ -6917,6 +6943,14 @@ export function TransportPanelContent() {
     () => buildAudioRoutingOptions(appSettings.enabledOutputChannels, t),
     [appSettings.enabledOutputChannels, t],
   );
+  const enabledOutputChannelsDirty = useMemo(() => {
+    const persisted = appSettings.enabledOutputChannels;
+    if (persisted.length !== enabledOutputChannelsDraft.length) return true;
+    for (let i = 0; i < persisted.length; i += 1) {
+      if (persisted[i] !== enabledOutputChannelsDraft[i]) return true;
+    }
+    return false;
+  }, [appSettings.enabledOutputChannels, enabledOutputChannelsDraft]);
   const selectedOutputChannelCount = Math.max(
     1,
     Math.min(
@@ -7869,6 +7903,12 @@ export function TransportPanelContent() {
               onOutputSampleRateChange={handleOutputSampleRateChange}
               onOutputBufferSizeChange={handleOutputBufferSizeChange}
               onEnabledOutputChannelChange={handleEnabledOutputChannelChange}
+              enabledOutputChannelsDraft={enabledOutputChannelsDraft}
+              enabledOutputChannelsDirty={enabledOutputChannelsDirty}
+              onCommitEnabledOutputChannels={handleCommitEnabledOutputChannels}
+              onDiscardEnabledOutputChannels={
+                handleDiscardEnabledOutputChannels
+              }
               onAudioSafeModeChange={handleAudioSafeModeChange}
               metronomeVolumeDraft={metronomeVolumeDraft}
               onMetronomeEnabledChange={handleMetronomeEnabledChange}
