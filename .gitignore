@@ -21,3 +21,4 @@ native/audio-engine-v2/vcpkg_installed/
 build-rb-tests*
 build-rb-release*
 build*
+bench-out*

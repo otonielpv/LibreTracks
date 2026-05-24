@@ -31,7 +31,9 @@ La edicion es no destructiva. Cortar, mover, duplicar u organizar clips cambia r
 
 El transporte tambien es explicito. Saltos de marca, saltos de cancion, bucles Vamp, metronomo y comandos remotos se resuelven sobre el mismo estado de aplicacion y logica Rust de transporte, no con timers temporales de UI.
 
-Las fuentes importadas grandes se preparan para reproduccion apoyada en disco. LibreTracks mantiene una cache limitada en RAM y lee por adelantado desde la cache del proyecto en disco, asi las sesiones multitrack mas grandes pueden cargar sin mantener cada fuente decodificada completa en memoria.
+Las fuentes importadas grandes se preparan para reproduccion apoyada en disco. LibreTracks mantiene una cache limitada en RAM y lee por adelantado desde la cache del proyecto en disco, asi las sesiones multitrack mas grandes pueden cargar sin mantener cada fuente decodificada completa en memoria. La cache PCM tambien se reutiliza entre sesiones cuando el archivo no ha cambiado, y los archivos en formato nativo pueden transmitirse en sitio sin pasar por la cache cuando es posible, asi reabrir proyectos grandes es mucho mas rapido.
+
+LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, mostrando las novedades en el idioma de la app y un acceso directo a la pagina de descargas. La comprobacion tambien se puede lanzar manualmente desde `Configuracion - General`.
 
 ## Areas Principales
 

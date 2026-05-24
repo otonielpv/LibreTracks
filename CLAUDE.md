@@ -7,3 +7,7 @@ Rules:
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
 - For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
 - After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
+
+## Releases
+
+When the user asks to cut a new version, follow `docs/RELEASE_PROCESS.md` step by step. It lists every file that must be version-bumped (7 of them, easy to miss `Cargo.lock` or one of the `package.json`s), the release-notes format the in-app update modal parses, and the Facebook announcement guidelines.
