@@ -461,6 +461,23 @@ const es = {
     hostnameUrl: "URL por hostname (.local)",
     qrAlt: "Codigo QR para LibreTracks Remote",
   },
+  update: {
+    eyebrow: "Nueva version disponible",
+    title: "LibreTracks {{version}} ya esta disponible",
+    subtitle: "Estas usando la version {{current}}.",
+    published: "Publicada el {{date}}",
+    notesTitle: "Novedades",
+    notesEmpty: "Abre la pagina de la release para ver el changelog completo.",
+    download: "Descargar",
+    remindLater: "Recordar mas tarde",
+    skipVersion: "Omitir esta version",
+    checkNow: "Buscar actualizaciones",
+    checking: "Buscando...",
+    upToDate: "Estas usando la ultima version ({{version}}).",
+    available: "La version {{version}} esta disponible.",
+    viewDetails: "Ver detalles",
+    checkError: "No se pudo comprobar actualizaciones: {{message}}",
+  },
 } as const;
 
 export default es;

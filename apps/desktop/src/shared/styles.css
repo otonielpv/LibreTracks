@@ -711,6 +711,109 @@ textarea {
   font-size: 16px;
 }
 
+.lt-update-modal-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 22rem;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.lt-update-modal-notes-title {
+  margin: 0;
+  color: rgb(87 241 219 / 0.82);
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.lt-update-modal-notes-body {
+  color: rgb(229 226 225 / 0.88);
+  font: 500 0.92rem/1.55 "Space Grotesk", sans-serif;
+}
+
+.lt-update-modal-notes-body h3,
+.lt-update-modal-notes-body h4,
+.lt-update-modal-notes-body h5,
+.lt-update-modal-notes-body h6 {
+  margin: 0.8rem 0 0.4rem;
+  color: #f3f0ef;
+  font: 700 0.95rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-update-modal-notes-body p {
+  margin: 0 0 0.5rem;
+}
+
+.lt-update-modal-notes-body ul {
+  margin: 0 0 0.5rem;
+  padding-left: 1.1rem;
+}
+
+.lt-update-modal-notes-body li {
+  margin-bottom: 0.3rem;
+}
+
+.lt-update-modal-notes-body code {
+  background: rgb(255 255 255 / 0.06);
+  border-radius: 2px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.85em;
+}
+
+.lt-update-modal-notes-empty {
+  color: rgb(229 226 225 / 0.7);
+}
+
+.lt-update-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+
+.lt-update-modal-primary {
+  border-color: rgb(87 241 219 / 0.5);
+  background: rgb(87 241 219 / 0.12);
+  color: #57f1db;
+}
+
+.lt-update-modal-primary:hover {
+  background: rgb(87 241 219 / 0.22);
+}
+
+.lt-update-modal-skip {
+  color: rgb(229 226 225 / 0.6);
+}
+
+.lt-update-check-status {
+  display: block;
+  margin-top: 0.4rem;
+  color: rgb(229 226 225 / 0.75);
+  font: 500 0.82rem/1.4 "Space Grotesk", sans-serif;
+}
+
+.lt-update-check-status--new {
+  color: #57f1db;
+}
+
+.lt-update-check-status--error {
+  color: #ff9a8a;
+}
+
+.lt-update-check-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 0.4rem;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
 .lt-settings-modal-body {
   display: flex;
   flex-direction: column;

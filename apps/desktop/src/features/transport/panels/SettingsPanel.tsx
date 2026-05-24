@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { AppSettings, AudioDeviceDescriptor } from "@libretracks/shared/models";
 import type {
@@ -6,6 +7,15 @@ import type {
   SettingsTab,
 } from "../types";
 import { formatMidiBinding } from "../helpers";
+import {
+  isNewerVersion,
+  normalizeVersion,
+} from "../../../shared/updateCheck";
+import {
+  openUpdateModal,
+  runUpdateCheck,
+  useUpdateCheckStore,
+} from "../../updates/updateCheckStore";
 
 type AudioRoutingOption = { value: string; label: string };
 
@@ -718,6 +728,7 @@ export function SettingsPanel({
                         </option>
                       </select>
                     </label>
+                    <UpdateCheckField />
                   </div>
                 </section>
               ) : null}
@@ -965,6 +976,63 @@ export function SettingsPanel({
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function UpdateCheckField() {
+  const { t } = useTranslation();
+  const { release, error, isChecking, hasCheckedOnce } = useUpdateCheckStore();
+  const current = normalizeVersion(
+    typeof window !== "undefined"
+      ? (window as { __LT_APP_VERSION__?: string }).__LT_APP_VERSION__ ?? ""
+      : "",
+  );
+  const remoteIsNewer =
+    release && current ? isNewerVersion(release.version, current) : false;
+
+  let statusLine: ReactNode = null;
+  if (error) {
+    statusLine = (
+      <small className="lt-update-check-status lt-update-check-status--error">
+        {t("update.checkError", { message: error })}
+      </small>
+    );
+  } else if (release && remoteIsNewer) {
+    statusLine = (
+      <small className="lt-update-check-status lt-update-check-status--new">
+        {t("update.available", { version: release.version })}{" "}
+        <button
+          type="button"
+          className="lt-update-check-link"
+          onClick={openUpdateModal}
+        >
+          {t("update.viewDetails")}
+        </button>
+      </small>
+    );
+  } else if (hasCheckedOnce && current) {
+    statusLine = (
+      <small className="lt-update-check-status">
+        {t("update.upToDate", { version: current })}
+      </small>
+    );
+  }
+
+  return (
+    <div className="lt-settings-field">
+      <span className="lt-settings-field-label">{t("update.checkNow")}</span>
+      <button
+        type="button"
+        className="lt-secondary-button"
+        disabled={isChecking}
+        onClick={() => {
+          void runUpdateCheck({ force: true });
+        }}
+      >
+        {isChecking ? t("update.checking") : t("update.checkNow")}
+      </button>
+      {statusLine}
     </div>
   );
 }
