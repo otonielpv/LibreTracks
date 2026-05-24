@@ -1,6 +1,7 @@
 import { memo, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AudioRouteCombobox } from "./AudioRouteCombobox";
 import type { TrackKind } from "./desktopApi";
 import { TrackMeter } from "./TrackMeter";
 import { useTransportStore } from "./store";
@@ -264,18 +265,15 @@ function TrackHeaderItemComponent({
               </label>
               <label className="lt-track-audio-to">
                 <span>{t("trackHeader.audioTo", { defaultValue: "Audio To" })}</span>
-                <select
+                <AudioRouteCombobox
                   value={audioTo}
-                  aria-label={t("trackHeader.audioToAria", { name: trackName, defaultValue: `Audio To ${trackName}` })}
-                  onClick={(event) => event.stopPropagation()}
-                  onChange={(event) => onAudioToChange(trackId, event.target.value)}
-                >
-                  {audioRoutingOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  options={audioRoutingOptions}
+                  ariaLabel={t("trackHeader.audioToAria", {
+                    name: trackName,
+                    defaultValue: `Audio To ${trackName}`,
+                  })}
+                  onChange={(next) => onAudioToChange(trackId, next)}
+                />
               </label>
             </div>
           </div>

@@ -5012,6 +5012,16 @@ export function TransportPanelContent() {
     );
   }
 
+  function handleSelectAllOutputChannels() {
+    setEnabledOutputChannelsDraft(
+      Array.from({ length: selectedOutputChannelCount }, (_, i) => i),
+    );
+  }
+
+  function handleClearOutputChannels() {
+    setEnabledOutputChannelsDraft([]);
+  }
+
   function handleMetronomeOutputChange(nextValue: string) {
     persistAudioSettings(
       normalizeAppSettings({
@@ -7909,6 +7919,8 @@ export function TransportPanelContent() {
               onDiscardEnabledOutputChannels={
                 handleDiscardEnabledOutputChannels
               }
+              onSelectAllOutputChannels={handleSelectAllOutputChannels}
+              onClearOutputChannels={handleClearOutputChannels}
               onAudioSafeModeChange={handleAudioSafeModeChange}
               metronomeVolumeDraft={metronomeVolumeDraft}
               onMetronomeEnabledChange={handleMetronomeEnabledChange}

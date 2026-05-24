@@ -45,6 +45,8 @@ type SettingsPanelProps = {
   enabledOutputChannelsDirty: boolean;
   onCommitEnabledOutputChannels: () => void;
   onDiscardEnabledOutputChannels: () => void;
+  onSelectAllOutputChannels: () => void;
+  onClearOutputChannels: () => void;
   onAudioSafeModeChange: (checked: boolean) => void;
 
   metronomeVolumeDraft: number;
@@ -108,6 +110,8 @@ export function SettingsPanel({
   enabledOutputChannelsDirty,
   onCommitEnabledOutputChannels,
   onDiscardEnabledOutputChannels,
+  onSelectAllOutputChannels,
+  onClearOutputChannels,
   onAudioSafeModeChange,
   metronomeVolumeDraft,
   onMetronomeEnabledChange,
@@ -370,12 +374,43 @@ export function SettingsPanel({
                     </label>
 
                     <div className="lt-settings-field">
-                      <span className="lt-settings-field-label">
-                        {t(
-                          "transport.settingsModal.hardwareOutputs",
-                          { defaultValue: "Hardware Outputs" },
-                        )}
-                      </span>
+                      <div className="lt-output-channel-header">
+                        <span className="lt-settings-field-label">
+                          {t(
+                            "transport.settingsModal.hardwareOutputs",
+                            { defaultValue: "Hardware Outputs" },
+                          )}
+                        </span>
+                        <div className="lt-output-channel-bulk">
+                          <button
+                            type="button"
+                            disabled={
+                              isSaving ||
+                              enabledOutputChannelsDraft.length ===
+                                selectedOutputChannelCount
+                            }
+                            onClick={onSelectAllOutputChannels}
+                          >
+                            {t(
+                              "transport.settingsModal.selectAllChannels",
+                              { defaultValue: "Select all" },
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              isSaving ||
+                              enabledOutputChannelsDraft.length === 0
+                            }
+                            onClick={onClearOutputChannels}
+                          >
+                            {t(
+                              "transport.settingsModal.clearChannels",
+                              { defaultValue: "Clear" },
+                            )}
+                          </button>
+                        </div>
+                      </div>
                       <div className="lt-output-channel-grid">
                         {Array.from(
                           { length: selectedOutputChannelCount },

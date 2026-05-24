@@ -1098,6 +1098,43 @@ textarea {
   accent-color: #3cddc7;
 }
 
+.lt-output-channel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.45rem;
+}
+
+.lt-output-channel-bulk {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.lt-output-channel-bulk button {
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+  color: #f3f0ef;
+  padding: 0.32rem 0.7rem;
+  font: 700 0.7rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.lt-output-channel-bulk button:hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.28);
+  color: #57f1db;
+}
+
+.lt-output-channel-bulk button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .lt-output-channel-actions {
   margin-top: 0.6rem;
   align-items: center;
@@ -2518,6 +2555,85 @@ textarea {
   background: #0e0e0e;
   color: #d8fff7;
   font: 600 10px/1 "Space Grotesk", sans-serif;
+}
+
+.lt-audio-route-combobox {
+  position: relative;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.lt-audio-route-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  width: 100%;
+  height: 22px;
+  padding: 0 0.45rem;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  background: #0e0e0e;
+  color: #d8fff7;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lt-audio-route-trigger:hover:not(:disabled),
+.lt-audio-route-trigger[aria-expanded="true"] {
+  border-color: rgb(87 241 219 / 0.4);
+}
+
+.lt-audio-route-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+}
+
+.lt-audio-route-trigger-caret {
+  flex: 0 0 auto;
+  color: #57f1db;
+  font-size: 10px;
+}
+
+/* Dropdown panel: portalled and positioned via inline `top/left/width` to
+   match the trigger; capped at ~5 items with scroll for long routing lists. */
+.lt-audio-route-list {
+  z-index: 60;
+  margin: 0;
+  padding: 0.15rem 0;
+  list-style: none;
+  max-height: calc((22px + 0.32rem * 2) * 5 + 0.3rem);
+  overflow-y: auto;
+  border: 1px solid rgb(87 241 219 / 0.32);
+  border-radius: 2px;
+  background: #0a0a0a;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.55);
+  outline: none;
+}
+
+.lt-audio-route-option {
+  padding: 0.32rem 0.65rem;
+  color: #d8fff7;
+  font: 600 10px/1.2 "Space Grotesk", sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lt-audio-route-option.is-active {
+  background: rgb(87 241 219 / 0.16);
+}
+
+.lt-audio-route-option.is-selected {
+  color: #57f1db;
+}
+
+.lt-audio-route-option.is-selected::before {
+  content: "•";
+  margin-right: 0.35rem;
+  color: #57f1db;
 }
 
 .lt-track-volume input[type="range"],
