@@ -134,10 +134,31 @@ code so future sessions stay in sync.)
 
 End-user audience, natural language, minimal emojis, no version-bump
 jargon. Lead with the most relatable improvement (loading speed, new
-in-app behavior), not internals. Keep it short — 4–6 lines max plus a
-download link to https://libretracks.pages.dev/downloads. Spanish by
-default unless told otherwise. Do NOT post it anywhere; just hand back
-the text.
+in-app behavior), not internals. Spanish by default unless told otherwise.
+Do NOT post it anywhere; just hand back the text.
+
+Use this exact template (matches the channel's voice):
+
+```
+Hola @todos!!
+Hemos sacado una nueva versión v<NEW> estos han sido los cambios:
+- <bullet 1 — most relatable improvement first>
+- <bullet 2>
+- <bullet 3>
+- <bullet 4>
+- <bullet 5 — optional, max ~5 bullets>
+
+Puedes descargar la nueva versión aqui:
+https://libretracks.pages.dev/es/download/
+```
+
+Notes:
+- Bullets are user-facing benefits, lifted from the Spanish section of
+  `docs/releases/v<NEW>.md` but rewritten for a conversational tone.
+- Keep accents on key words ("rápida", "más", "directo"), but it's OK to
+  leave a few off — the original channel does too. Don't over-correct.
+- Download URL is the localized Spanish page: `/es/download/`, not `/downloads`.
+- No closing line, no signature, no hashtags. The template ends at the URL.
 
 ---
 
