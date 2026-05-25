@@ -82,6 +82,19 @@ export type ClipDragMember = {
   previewSeconds: number;
 };
 
+export type ClipSnapAnchorKind =
+  | "playhead"
+  | "section"
+  | "region-start"
+  | "region-end"
+  | "clip-start"
+  | "clip-end";
+
+export type ClipSnapAnchor = {
+  seconds: number;
+  kind: ClipSnapAnchorKind;
+};
+
 export type ClipDragState = {
   /**
    * Primary clip the user clicked on — used for the click-seek preview and as
@@ -100,6 +113,18 @@ export type ClipDragState = {
    * they all travel together using the same delta as the primary.
    */
   members: ClipDragMember[];
+  /**
+   * Snap targets computed once at drag start: playhead, section markers,
+   * region edges, and the edges of any clip that is NOT part of this drag.
+   * Used during the drag when the user holds Ctrl/Cmd to magnet onto a
+   * fixed point in the timeline.
+   */
+  snapAnchors: ClipSnapAnchor[];
+  /**
+   * The anchor the group is currently magneted to (within the snap radius)
+   * while Ctrl is held during the drag. Drives the visual indicator.
+   */
+  activeSnapAnchor: ClipSnapAnchor | null;
 } | null;
 
 export type PlayheadDragState = {

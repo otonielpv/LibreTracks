@@ -90,6 +90,7 @@ type TimelineCanvasPaneProps = {
     options?: { allowSnap?: boolean },
   ) => number;
   resolveLibraryGhostLeft: (seconds: number) => number;
+  clipDragSnapIndicatorSeconds: number | null;
   onRulerMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onRulerContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onMarkerPrimaryAction: (sectionId: string) => void;
@@ -191,6 +192,7 @@ export function TimelineCanvasPane({
   externalDropPreview,
   normalizePositionSeconds,
   resolveLibraryGhostLeft,
+  clipDragSnapIndicatorSeconds,
   onRulerMouseDown,
   onRulerContextMenu,
   onMarkerPrimaryAction,
@@ -753,6 +755,24 @@ export function TimelineCanvasPane({
               positionSecondsRef={displayPositionSecondsRef}
             />
           </div>
+
+          {clipDragSnapIndicatorSeconds !== null ? (
+            <div
+              aria-hidden="true"
+              className="lt-clip-snap-indicator"
+              style={{
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: resolveLibraryGhostLeft(clipDragSnapIndicatorSeconds),
+                width: 1,
+                background: "#ffd166",
+                boxShadow: "0 0 6px 1px rgba(255, 209, 102, 0.65)",
+                pointerEvents: "none",
+                zIndex: 35,
+              }}
+            />
+          ) : null}
 
           {externalDropPreview !== null ? (
             <div

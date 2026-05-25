@@ -10,6 +10,8 @@ export const RULER_HEIGHT = 132;
 export const ZOOM_MIN = 0.0625;
 export const ZOOM_MAX = 64;
 export const DRAG_THRESHOLD_PX = 6;
+/** Snap radius (in viewport pixels) for the Ctrl-during-drag clip magnet. */
+export const CLIP_SNAP_RADIUS_PX = 12;
 export const LIVE_TRACK_MIX_MIN_INTERVAL_MS = 16;
 export const SCROLL_COMMIT_DEBOUNCE_MS = 100;
 export const LIVE_ZOOM_COMMIT_DEBOUNCE_MS = 150;

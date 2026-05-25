@@ -119,6 +119,7 @@ import { useRenderCounter } from "./perf/useRenderCounter";
 import { TimelineToolbar } from "./TimelineToolbar";
 import { TimelineTopbar } from "./TimelineTopbar";
 import { TrackHeadersPane } from "./TrackHeadersPane";
+import { buildClipSnapAnchors, findSnappedGroupDelta } from "./clipSnapping";
 import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
 import {
   BASE_PIXELS_PER_SECOND,
@@ -171,6 +172,7 @@ import {
 import type {
   ClipDragMember,
   ClipDragState,
+  ClipSnapAnchor,
   ContextMenuAction,
   ContextMenuState,
   InternalLibraryPointerDrag,
@@ -201,6 +203,7 @@ import type {
   TransportAnchorMeta,
 } from "./types";
 import {
+  CLIP_SNAP_RADIUS_PX,
   DEFAULT_TIMELINE_VIEWPORT_WIDTH,
   DRAG_THRESHOLD_PX,
   DOM_EXTERNAL_DROP_PREVIEW_TTL_MS,
@@ -387,6 +390,10 @@ export function TransportPanelContent() {
   >([]);
   const [internalLibraryPointerDrag, setInternalLibraryPointerDrag] =
     useState<InternalLibraryPointerDrag | null>(null);
+  // Position (in seconds) of the anchor a magneted clip drag is locked onto.
+  // Drives the vertical snap indicator. null when no anchor is engaged.
+  const [clipDragSnapIndicatorSeconds, setClipDragSnapIndicatorSeconds] =
+    useState<number | null>(null);
   const [externalDropPreview, setExternalDropPreview] =
     useState<ExternalDropPreview | null>(null);
   const [nativeDropDebugCandidates, setNativeDropDebugCandidates] = useState<
@@ -2901,27 +2908,57 @@ export function TransportPanelContent() {
         const rawDeltaSeconds =
           (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
 
-        // Resolve the primary clip's target position (snapped if snap is on),
-        // then derive the effective delta applied to every member. Snapping
-        // off the *primary* (not each member individually) preserves the
-        // relative spacing between selected clips while still aligning the
-        // group to the grid.
-        const timingRegion = getSongTempoRegionAtPosition(
-          effectSong,
-          clipDrag.originSeconds + rawDeltaSeconds,
-        );
-        const tempoRegions = buildSongTempoRegions(effectSong);
-        const primaryTarget = snapEnabled
-          ? snapToTimelineGrid(
-              clipDrag.originSeconds + rawDeltaSeconds,
-              timingRegion?.bpm ?? effectSong.bpm,
-              timingRegion?.timeSignature ?? effectSong.timeSignature,
-              liveZoomLevelRef.current,
-              effectPixelsPerSecond,
-              tempoRegions,
-            )
-          : clipDrag.originSeconds + rawDeltaSeconds;
-        const groupDelta = primaryTarget - clipDrag.originSeconds;
+        // Holding Ctrl/Cmd during the drag enables snap-to-anchors:
+        // every member's start and end edge magnets onto the playhead,
+        // section markers, region edges, and the edges of other clips
+        // (within 12 px). Takes precedence over the grid — Ableton works
+        // the same way (Cmd-drag magnets, plain drag uses the grid).
+        const magnetActive = event.ctrlKey || event.metaKey;
+        const rawDelta = rawDeltaSeconds;
+        let groupDelta: number;
+        let activeSnapAnchor: ClipSnapAnchor | null = null;
+
+        if (magnetActive && clipDrag.snapAnchors.length > 0) {
+          const snapRadiusSeconds =
+            CLIP_SNAP_RADIUS_PX / effectPixelsPerSecond;
+          const durationByClipId: Record<string, number> = {};
+          for (const member of clipDrag.members) {
+            const clip = findClip(effectSong, member.clipId);
+            if (clip) {
+              durationByClipId[member.clipId] = clip.durationSeconds;
+            }
+          }
+          const snapResult = findSnappedGroupDelta(
+            clipDrag.members,
+            rawDelta,
+            clipDrag.snapAnchors,
+            snapRadiusSeconds,
+            durationByClipId,
+          );
+          groupDelta = snapResult.groupDelta;
+          activeSnapAnchor = snapResult.activeAnchor;
+        } else {
+          // Standard grid snap on the primary clip. Snapping off the
+          // *primary* (not each member individually) preserves the
+          // relative spacing between selected clips while still aligning
+          // the group to the grid.
+          const timingRegion = getSongTempoRegionAtPosition(
+            effectSong,
+            clipDrag.originSeconds + rawDelta,
+          );
+          const tempoRegions = buildSongTempoRegions(effectSong);
+          const primaryTarget = snapEnabled
+            ? snapToTimelineGrid(
+                clipDrag.originSeconds + rawDelta,
+                timingRegion?.bpm ?? effectSong.bpm,
+                timingRegion?.timeSignature ?? effectSong.timeSignature,
+                liveZoomLevelRef.current,
+                effectPixelsPerSecond,
+                tempoRegions,
+              )
+            : clipDrag.originSeconds + rawDelta;
+          groupDelta = primaryTarget - clipDrag.originSeconds;
+        }
 
         // Clamp the group delta so no member crosses below zero. Clamping at
         // the group level (not per-member) preserves spacing — if the user
@@ -2958,9 +2995,13 @@ export function TransportPanelContent() {
           hasMoved: clipDrag.hasMoved || exceededThreshold,
           previewSeconds: primaryPreview,
           members: nextMembers,
+          activeSnapAnchor,
         };
         clipDragRef.current = nextDrag;
         clipPreviewSecondsRef.current = nextPreviewSeed;
+        setClipDragSnapIndicatorSeconds(
+          activeSnapAnchor ? activeSnapAnchor.seconds : null,
+        );
       }
 
       const trackDrag = trackDragRef.current;
@@ -2998,6 +3039,7 @@ export function TransportPanelContent() {
 
       const activeClipDrag = clipDragRef.current;
       clipDragRef.current = null;
+      setClipDragSnapIndicatorSeconds(null);
       if (activeClipDrag) {
         const movedEnough =
           activeClipDrag.hasMoved ||
@@ -4785,6 +4827,14 @@ export function TransportPanelContent() {
         previewSeed[hitClip.id] = hitClip.timelineStartSeconds;
       }
 
+      const snapAnchors = currentSong
+        ? buildClipSnapAnchors(
+            currentSong,
+            members,
+            displayPositionSecondsRef.current,
+          )
+        : [];
+
       clipDragRef.current = {
         clipId: hitClip.id,
         pointerId: 1,
@@ -4794,6 +4844,8 @@ export function TransportPanelContent() {
         startClientX: event.clientX,
         hasMoved: false,
         members,
+        snapAnchors,
+        activeSnapAnchor: null,
       };
       clipPreviewSecondsRef.current = previewSeed;
       return;
@@ -7731,6 +7783,9 @@ export function TransportPanelContent() {
                             )
                           }
                           resolveLibraryGhostLeft={resolveLibraryGhostLeft}
+                          clipDragSnapIndicatorSeconds={
+                            clipDragSnapIndicatorSeconds
+                          }
                           onSeekIntent={prewarmTimelinePosition}
                           onRulerMouseDown={(event) => {
                             if (
