@@ -177,8 +177,31 @@ function iconForAsset(name: string): string {
   }
 
   downloadLinks.forEach((link) => {
-    link.addEventListener("click", () => {
-      window.setTimeout(showDonationReminder, 900);
+    link.addEventListener("click", (event) => {
+      if (!(link instanceof HTMLAnchorElement)) return;
+      if (wasRecentlyDismissed()) return;
+      if (event.defaultPrevented) return;
+      // Modifier-clicks / middle-click open in a new tab — let the
+      // browser handle them without intercepting.
+      const mouseEvent = event as MouseEvent;
+      if (mouseEvent.button !== 0 || mouseEvent.metaKey || mouseEvent.ctrlKey || mouseEvent.shiftKey || mouseEvent.altKey) return;
+
+      // On desktop the browser starts the download immediately when the
+      // anchor is followed, and the resulting focus shift can prevent
+      // showModal() from actually painting the dialog (mobile is fine
+      // because the download is handed off to a system UI). Intercept
+      // the click, open the dialog first, then kick off the download
+      // ourselves via a synthetic anchor.
+      event.preventDefault();
+      showDonationReminder();
+      const href = link.href;
+      const trigger = document.createElement("a");
+      trigger.href = href;
+      trigger.rel = "noopener";
+      trigger.style.display = "none";
+      document.body.appendChild(trigger);
+      trigger.click();
+      trigger.remove();
     });
   });
 
