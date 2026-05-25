@@ -230,6 +230,7 @@ const es = {
       clipDeleted: "Clip eliminado.",
       tracksDeleted: "{{count}} track(s) eliminado(s).",
       clipMoved: "Clip movido: {{name}}",
+      clipsMoved: "Movidos {{count}} clips ({{name}}).",
       cursorMoved: "Cursor movido a {{time}}",
       noMarkersAhead:
         "Aviso: no quedan marcas por delante; salto en la siguiente marca ignorado.",

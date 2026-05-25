@@ -150,6 +150,79 @@ describe("App / timeline-clips", () => {
     expect(screen.getByText("Marker 5")).toBeTruthy();
   });
 
+  it("ctrl-clicks two clips and drags them together via the batch move IPC", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    const moveClipsBatchSpy = vi.spyOn(desktopApi, "moveClipsBatch");
+    const moveClipSpy = vi.spyOn(desktopApi, "moveClip");
+
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTimelineShellMetrics(container, 1500);
+
+    await act(async () => {
+      fireEvent(window, new Event("resize"));
+    });
+
+    const drumsRow = getTrackLaneRow(container, "Drums");
+    const bassRow = getTrackLaneRow(container, "Bass");
+    const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
+    const bassLane = bassRow?.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(drumsLane).toBeTruthy();
+    expect(bassLane).toBeTruthy();
+
+    // Click drums clip (origin t=0), then ctrl+click bass clip (origin t=8)
+    // to extend the selection. The Bass clip starts at t=8s which at the
+    // default zoom maps roughly to clientX≈8*pps; the lane mock uses
+    // left=260, so a pointerX of ~400 lands solidly inside it.
+    await act(async () => {
+      fireEvent.mouseDown(drumsLane as HTMLElement, {
+        button: 0,
+        clientX: 320,
+      });
+      fireEvent.mouseUp(window, { button: 0, clientX: 320 });
+    });
+    await act(async () => {
+      fireEvent.mouseDown(bassLane as HTMLElement, {
+        button: 0,
+        clientX: 400,
+        ctrlKey: true,
+      });
+      fireEvent.mouseUp(window, { button: 0, clientX: 400, ctrlKey: true });
+    });
+
+    // Now drag the drums clip 100px to the right with both clips selected.
+    await act(async () => {
+      fireEvent.mouseDown(drumsLane as HTMLElement, {
+        button: 0,
+        clientX: 320,
+      });
+      fireEvent.mouseMove(window, { clientX: 420 });
+      fireEvent.mouseUp(window, { button: 0, clientX: 420 });
+    });
+
+    await waitFor(() => {
+      expect(moveClipsBatchSpy).toHaveBeenCalled();
+    });
+
+    // The single-clip path should NOT have been used — multi-selection must
+    // go through the batch IPC so the engine rebuilds the timeline once.
+    expect(moveClipSpy).not.toHaveBeenCalled();
+
+    const batchArg = moveClipsBatchSpy.mock.calls[0][0];
+    expect(batchArg).toHaveLength(2);
+    const clipIds = batchArg.map((m) => m.clipId).sort();
+    expect(clipIds).toEqual(["clip-bass", "clip-drums"]);
+
+    // Both clips moved by the same group delta (drums went from 0 to some
+    // value, bass started at 8 and moved by the same delta).
+    const drumsMove = batchArg.find((m) => m.clipId === "clip-drums")!;
+    const bassMove = batchArg.find((m) => m.clipId === "clip-bass")!;
+    const groupDelta = drumsMove.timelineStartSeconds - 0;
+    expect(groupDelta).toBeGreaterThan(0);
+    expect(bassMove.timelineStartSeconds - 8).toBeCloseTo(groupDelta, 3);
+  });
+
   it("opens the clip context menu and allows splitting at the cursor", async () => {
     const { container } = await renderApp();
     mockRulerBounds(container);

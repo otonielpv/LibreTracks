@@ -76,7 +76,17 @@ export type ContextMenuState = {
   actions: ContextMenuAction[];
 } | null;
 
+export type ClipDragMember = {
+  clipId: string;
+  originSeconds: number;
+  previewSeconds: number;
+};
+
 export type ClipDragState = {
+  /**
+   * Primary clip the user clicked on — used for the click-seek preview and as
+   * the label/anchor in status messages. Always included in `members`.
+   */
   clipId: string;
   pointerId: number;
   originSeconds: number;
@@ -84,6 +94,12 @@ export type ClipDragState = {
   clickSeekSeconds: number;
   startClientX: number;
   hasMoved: boolean;
+  /**
+   * All clips that should follow the drag — at least the primary clip. When
+   * the user clicks an already-selected clip with other selected siblings,
+   * they all travel together using the same delta as the primary.
+   */
+  members: ClipDragMember[];
 } | null;
 
 export type PlayheadDragState = {

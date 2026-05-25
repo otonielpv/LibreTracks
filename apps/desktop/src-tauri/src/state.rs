@@ -372,6 +372,13 @@ pub struct CreateClipRequest {
     pub timeline_start_seconds: f64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipMoveRequest {
+    pub clip_id: String,
+    pub timeline_start_seconds: f64,
+}
+
 #[derive(Debug, Clone, Default)]
 struct DesktopPerformanceMetrics {
     copy_millis: u128,
@@ -1532,6 +1539,76 @@ impl DesktopSession {
             .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
 
         clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
+        refresh_song_duration(&mut song);
+
+        self.persist_song_update_internal(
+            song,
+            audio,
+            AudioChangeImpact::TimelineWindow,
+            false,
+            false,
+        )?;
+
+        Ok(())
+    }
+
+    pub fn move_clips_batch(
+        &mut self,
+        moves: &[ClipMoveRequest],
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if moves.is_empty() {
+            return Ok(self.snapshot());
+        }
+
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        for request in moves {
+            let clip = song
+                .clips
+                .iter_mut()
+                .find(|clip| clip.id == request.clip_id)
+                .ok_or_else(|| DesktopError::ClipNotFound(request.clip_id.clone()))?;
+            clip.timeline_start_seconds = request.timeline_start_seconds.max(0.0);
+        }
+
+        refresh_song_duration(&mut song);
+        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn move_clips_live_batch(
+        &mut self,
+        moves: &[ClipMoveRequest],
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        if moves.is_empty() {
+            return Ok(());
+        }
+
+        self.sync_position(audio)?;
+        self.capture_live_history_anchor();
+
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        for request in moves {
+            let clip = song
+                .clips
+                .iter_mut()
+                .find(|clip| clip.id == request.clip_id)
+                .ok_or_else(|| DesktopError::ClipNotFound(request.clip_id.clone()))?;
+            clip.timeline_start_seconds = request.timeline_start_seconds.max(0.0);
+        }
+
         refresh_song_duration(&mut song);
 
         self.persist_song_update_internal(

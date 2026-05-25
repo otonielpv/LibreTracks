@@ -81,6 +81,9 @@ import {
   listenToWaveformReady,
   moveClip,
   moveClipLive,
+  moveClipsBatch,
+  moveClipsLiveBatch,
+  type ClipMoveRequest,
   moveLibraryAsset,
   moveTrack,
   pauseTransport,
@@ -166,6 +169,7 @@ import {
   type NativeDroppedPathClassification,
 } from "./dragDrop";
 import type {
+  ClipDragMember,
   ClipDragState,
   ContextMenuAction,
   ContextMenuState,
@@ -771,6 +775,7 @@ export function TransportPanelContent() {
   const displayPositionSecondsRef = useRef(0);
   const suppressTrackClickRef = useRef(false);
   const trackSelectionAnchorRef = useRef<string | null>(null);
+  const clipSelectionAnchorRef = useRef<string | null>(null);
   const renderMetricTimeoutRef = useRef<number | null>(null);
   const pendingRenderMetricRef = useRef(0);
   const nativeExternalDropPathsRef = useRef<string[]>([]);
@@ -827,6 +832,13 @@ export function TransportPanelContent() {
   const clipMoveLiveStatesRef = useRef<Record<string, LiveClipMoveState>>({});
   const clipMoveCommitPendingRef = useRef<Set<string>>(new Set());
   const clipPreviewClearAfterRevisionRef = useRef<Record<string, number>>({});
+  // Batch live-move state for multi-clip drags. Single state because the
+  // batch IPC replaces every selected clip's position in one call, so there
+  // can only ever be one in-flight batch at a time.
+  const clipMoveBatchLiveStateRef = useRef<{
+    inFlight: boolean;
+    queuedMoves: ClipMoveRequest[] | null;
+  }>({ inFlight: false, queuedMoves: null });
   const duplicateClipCursorRef = useRef<Record<string, number>>({});
   const trackMixRequestIdsRef = useRef<Record<string, number>>({});
   const trackMixLiveStatesRef = useRef<
@@ -1743,6 +1755,50 @@ export function TransportPanelContent() {
         window.setTimeout(tick, 0);
       };
 
+      tick();
+    });
+  }, []);
+
+  const flushClipMoveBatchLive = useCallback(async () => {
+    const state = clipMoveBatchLiveStateRef.current;
+    if (!state || state.inFlight) {
+      return;
+    }
+    state.inFlight = true;
+    try {
+      while (state.queuedMoves !== null) {
+        const moves = state.queuedMoves;
+        state.queuedMoves = null;
+        await moveClipsLiveBatch(moves);
+      }
+    } finally {
+      state.inFlight = false;
+    }
+  }, []);
+
+  const queueClipMoveBatchLiveUpdate = useCallback(
+    (moves: ClipMoveRequest[]) => {
+      const state = clipMoveBatchLiveStateRef.current;
+      state.queuedMoves = moves;
+      void flushClipMoveBatchLive().catch((error) => {
+        state.queuedMoves = null;
+        state.inFlight = false;
+        setStatus(formatErrorStatus(error));
+      });
+    },
+    [flushClipMoveBatchLive, setStatus],
+  );
+
+  const waitForClipMoveBatchLiveIdle = useCallback(() => {
+    return new Promise<void>((resolve) => {
+      const tick = () => {
+        const state = clipMoveBatchLiveStateRef.current;
+        if (!state.inFlight && state.queuedMoves === null) {
+          resolve();
+          return;
+        }
+        window.setTimeout(tick, 0);
+      };
       tick();
     });
   }, []);
@@ -2842,32 +2898,69 @@ export function TransportPanelContent() {
         if (!clipDrag.hasMoved && exceededThreshold) {
           restoreConfirmedTransportVisual();
         }
-        const deltaSeconds =
+        const rawDeltaSeconds =
           (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
+
+        // Resolve the primary clip's target position (snapped if snap is on),
+        // then derive the effective delta applied to every member. Snapping
+        // off the *primary* (not each member individually) preserves the
+        // relative spacing between selected clips while still aligning the
+        // group to the grid.
         const timingRegion = getSongTempoRegionAtPosition(
           effectSong,
-          clipDrag.originSeconds + deltaSeconds,
+          clipDrag.originSeconds + rawDeltaSeconds,
         );
-        const nextSeconds = snapEnabled
+        const tempoRegions = buildSongTempoRegions(effectSong);
+        const primaryTarget = snapEnabled
           ? snapToTimelineGrid(
-              clipDrag.originSeconds + deltaSeconds,
+              clipDrag.originSeconds + rawDeltaSeconds,
               timingRegion?.bpm ?? effectSong.bpm,
               timingRegion?.timeSignature ?? effectSong.timeSignature,
               liveZoomLevelRef.current,
               effectPixelsPerSecond,
-              buildSongTempoRegions(effectSong),
+              tempoRegions,
             )
-          : clipDrag.originSeconds + deltaSeconds;
+          : clipDrag.originSeconds + rawDeltaSeconds;
+        const groupDelta = primaryTarget - clipDrag.originSeconds;
 
-        const nextDrag = {
+        // Clamp the group delta so no member crosses below zero. Clamping at
+        // the group level (not per-member) preserves spacing — if the user
+        // drags far left, the whole group stops together at the boundary
+        // instead of collapsing onto t=0.
+        const minOrigin = clipDrag.members.reduce(
+          (acc, member) => Math.min(acc, member.originSeconds),
+          Number.POSITIVE_INFINITY,
+        );
+        const lowerBound = minOrigin > 0 ? -minOrigin : 0;
+        const clampedDelta = Math.max(groupDelta, lowerBound);
+
+        const nextPreviewSeed: Record<string, number> = {};
+        const nextMembers = clipDrag.members.map((member) => {
+          const nextSeconds = clamp(
+            member.originSeconds + clampedDelta,
+            0,
+            effectSong.durationSeconds,
+          );
+          nextPreviewSeed[member.clipId] = nextSeconds;
+          return { ...member, previewSeconds: nextSeconds };
+        });
+
+        const primaryPreview =
+          nextPreviewSeed[clipDrag.clipId] ??
+          clamp(
+            clipDrag.originSeconds + clampedDelta,
+            0,
+            effectSong.durationSeconds,
+          );
+
+        const nextDrag: NonNullable<ClipDragState> = {
           ...clipDrag,
           hasMoved: clipDrag.hasMoved || exceededThreshold,
-          previewSeconds: clamp(nextSeconds, 0, effectSong.durationSeconds),
+          previewSeconds: primaryPreview,
+          members: nextMembers,
         };
         clipDragRef.current = nextDrag;
-        clipPreviewSecondsRef.current = {
-          [nextDrag.clipId]: nextDrag.previewSeconds,
-        };
+        clipPreviewSecondsRef.current = nextPreviewSeed;
       }
 
       const trackDrag = trackDragRef.current;
@@ -2910,7 +3003,53 @@ export function TransportPanelContent() {
           activeClipDrag.hasMoved ||
           Math.abs(event.clientX - activeClipDrag.startClientX) >
             DRAG_THRESHOLD_PX;
-        if (movedEnough) {
+        if (movedEnough && activeClipDrag.members.length > 1) {
+          // Multi-clip drag: commit all positions in one batch so the engine
+          // rebuilds the timeline window once, the history records a single
+          // entry, and only one project_revision bumps.
+          const batchMoves: ClipMoveRequest[] = activeClipDrag.members.map(
+            (member) => ({
+              clipId: member.clipId,
+              timelineStartSeconds: member.previewSeconds,
+            }),
+          );
+          for (const move of batchMoves) {
+            clipMoveCommitPendingRef.current.add(move.clipId);
+          }
+          queueClipMoveBatchLiveUpdate(batchMoves);
+          const primaryClipId = activeClipDrag.clipId;
+          const movedCount = batchMoves.length;
+          void runAction(async () => {
+            try {
+              await waitForClipMoveBatchLiveIdle();
+              const nextSnapshot = await moveClipsBatch(batchMoves);
+              for (const move of batchMoves) {
+                clipPreviewClearAfterRevisionRef.current[move.clipId] =
+                  nextSnapshot.projectRevision;
+              }
+              applyPlaybackSnapshot(nextSnapshot);
+              const primaryClip = findClip(songRef.current, primaryClipId);
+              setStatus(
+                t("transport.status.clipsMoved", {
+                  count: movedCount,
+                  name: primaryClip?.trackName ?? primaryClipId,
+                  defaultValue: "Moved {{count}} clips ({{name}}).",
+                }),
+              );
+            } finally {
+              for (const move of batchMoves) {
+                clipMoveCommitPendingRef.current.delete(move.clipId);
+              }
+              const anyPending = batchMoves.some(
+                (move) =>
+                  !clipPreviewClearAfterRevisionRef.current[move.clipId],
+              );
+              if (!anyPending) {
+                clipPreviewSecondsRef.current = {};
+              }
+            }
+          });
+        } else if (movedEnough) {
           clipMoveCommitPendingRef.current.add(activeClipDrag.clipId);
           queueClipMoveLiveUpdate(
             activeClipDrag.clipId,
@@ -2997,7 +3136,9 @@ export function TransportPanelContent() {
     clearTrackDragVisuals,
     handleTrackDrop,
     performSeek,
+    queueClipMoveBatchLiveUpdate,
     queueClipMoveLiveUpdate,
+    waitForClipMoveBatchLiveIdle,
     runAction,
     selectClip,
     selectedClipIds,
@@ -4576,12 +4717,74 @@ export function TransportPanelContent() {
         songRef.current?.durationSeconds ?? 0,
       );
       previewSeek(clickSeekSeconds);
+
+      // Selection update. Three modes:
+      //   Ctrl/Cmd+click → toggle just this clip
+      //   Shift+click    → range select from the anchor through this clip
+      //                    (ordered by song.clips order — the same order the
+      //                    track list iterates)
+      //   plain click    → replace selection (unless the clip is already
+      //                    inside a multi-selection, in which case keep the
+      //                    selection so the user can drag the whole group)
+      const currentSong = songRef.current;
+      const currentSelection =
+        useTimelineUIStore.getState().selectedClipIds;
       if (event.ctrlKey || event.metaKey) {
         toggleClipSelection(hitClip.id);
-      } else if (!selectedClipIds.includes(hitClip.id)) {
+        clipSelectionAnchorRef.current = hitClip.id;
+      } else if (event.shiftKey && currentSong) {
+        const orderedIds = currentSong.clips.map((clip) => clip.id);
+        const anchor = clipSelectionAnchorRef.current;
+        const anchorIdx = anchor ? orderedIds.indexOf(anchor) : -1;
+        const currentIdx = orderedIds.indexOf(hitClip.id);
+        if (anchorIdx !== -1 && currentIdx !== -1) {
+          const start = Math.min(anchorIdx, currentIdx);
+          const end = Math.max(anchorIdx, currentIdx);
+          setSelectedClipIds(orderedIds.slice(start, end + 1));
+        } else {
+          selectClip(hitClip.id, track.id);
+          clipSelectionAnchorRef.current = hitClip.id;
+        }
+      } else if (!currentSelection.includes(hitClip.id)) {
         selectClip(hitClip.id, track.id);
+        clipSelectionAnchorRef.current = hitClip.id;
+      } else {
+        // Clicked on an already-selected clip: keep the multi-selection so
+        // the drag can move the whole group. Anchor stays put.
       }
+
       setContextMenu(null);
+
+      // Build the drag manifest from the *post-update* selection. When the
+      // primary clip is part of a multi-selection (e.g. user kept a group
+      // and started dragging one of them), every selected clip travels with
+      // the same delta as the primary.
+      const finalSelection = useTimelineUIStore.getState().selectedClipIds;
+      const members: ClipDragMember[] = [];
+      const previewSeed: Record<string, number> = {};
+      if (currentSong && finalSelection.includes(hitClip.id)) {
+        for (const clipId of finalSelection) {
+          const clip = findClip(currentSong, clipId);
+          if (!clip) continue;
+          members.push({
+            clipId: clip.id,
+            originSeconds: clip.timelineStartSeconds,
+            previewSeconds: clip.timelineStartSeconds,
+          });
+          previewSeed[clip.id] = clip.timelineStartSeconds;
+        }
+      }
+      if (members.length === 0) {
+        // Selection didn't include the primary (e.g. plain click during a
+        // shift-range that ended elsewhere). Fall back to dragging just it.
+        members.push({
+          clipId: hitClip.id,
+          originSeconds: hitClip.timelineStartSeconds,
+          previewSeconds: hitClip.timelineStartSeconds,
+        });
+        previewSeed[hitClip.id] = hitClip.timelineStartSeconds;
+      }
+
       clipDragRef.current = {
         clipId: hitClip.id,
         pointerId: 1,
@@ -4590,10 +4793,9 @@ export function TransportPanelContent() {
         clickSeekSeconds,
         startClientX: event.clientX,
         hasMoved: false,
+        members,
       };
-      clipPreviewSecondsRef.current = {
-        [hitClip.id]: hitClip.timelineStartSeconds,
-      };
+      clipPreviewSecondsRef.current = previewSeed;
       return;
     }
 

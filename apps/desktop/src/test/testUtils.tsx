@@ -118,6 +118,8 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     cancelMarkerJump: vi.fn(testDesktopApiMock.cancelMarkerJump),
     moveClip: vi.fn(testDesktopApiMock.moveClip),
     moveClipLive: vi.fn(testDesktopApiMock.moveClipLive),
+    moveClipsBatch: vi.fn(testDesktopApiMock.moveClipsBatch),
+    moveClipsLiveBatch: vi.fn(testDesktopApiMock.moveClipsLiveBatch),
     deleteClip: vi.fn(testDesktopApiMock.deleteClip),
     updateClipWindow: vi.fn(testDesktopApiMock.updateClipWindow),
     duplicateClip: vi.fn(testDesktopApiMock.duplicateClip),

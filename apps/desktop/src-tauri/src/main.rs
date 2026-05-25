@@ -140,6 +140,8 @@ fn main() {
             commands::transport::toggle_vamp,
             commands::timeline::move_clip,
             commands::timeline::move_clip_live,
+            commands::timeline::move_clips_batch,
+            commands::timeline::move_clips_live_batch,
             commands::timeline::delete_clip,
             commands::timeline::update_clip_window,
             commands::timeline::duplicate_clip,

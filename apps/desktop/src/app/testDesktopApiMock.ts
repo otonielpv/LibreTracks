@@ -1032,6 +1032,25 @@ export const testDesktopApiMock = {
     return clone(buildSnapshot());
   },
   moveClipLive: async (_clipId: string, _timelineStartSeconds: number) => {},
+  moveClipsBatch: async (
+    moves: Array<{ clipId: string; timelineStartSeconds: number }>,
+  ) => {
+    const movesByClipId = new Map(
+      moves.map((move) => [move.clipId, Math.max(0, move.timelineStartSeconds)]),
+    );
+    replaceSong({
+      ...state.song,
+      clips: state.song.clips.map((clip) =>
+        movesByClipId.has(clip.id)
+          ? { ...clip, timelineStartSeconds: movesByClipId.get(clip.id)! }
+          : clip,
+      ),
+    });
+    return clone(buildSnapshot());
+  },
+  moveClipsLiveBatch: async (
+    _moves: Array<{ clipId: string; timelineStartSeconds: number }>,
+  ) => {},
   deleteClip: async (clipId: string) => {
     replaceSong({
       ...state.song,

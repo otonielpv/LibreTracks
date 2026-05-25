@@ -2,7 +2,7 @@ use tauri::State;
 
 use crate::error::DesktopError;
 use crate::models::TransportSnapshot;
-use crate::state::DesktopState;
+use crate::state::{ClipMoveRequest, DesktopState};
 use libretracks_core::TrackKind;
 use serde::Deserialize;
 
@@ -42,6 +42,36 @@ pub fn move_clip_live(
 
     session
         .move_clip_live(&clip_id, timeline_start_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn move_clips_batch(
+    moves: Vec<ClipMoveRequest>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .move_clips_batch(&moves, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn move_clips_live_batch(
+    moves: Vec<ClipMoveRequest>,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .move_clips_live_batch(&moves, &state.audio)
         .map_err(|error| error.to_string())
 }
 

@@ -393,6 +393,23 @@ export async function moveClipLive(
   await invokeCommand("move_clip_live", { clipId, timelineStartSeconds });
 }
 
+export type ClipMoveRequest = {
+  clipId: string;
+  timelineStartSeconds: number;
+};
+
+export async function moveClipsBatch(
+  moves: ClipMoveRequest[],
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("move_clips_batch", { moves });
+}
+
+export async function moveClipsLiveBatch(
+  moves: ClipMoveRequest[],
+): Promise<void> {
+  await invokeCommand("move_clips_live_batch", { moves });
+}
+
 export async function deleteClip(clipId: string): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("delete_clip", { clipId });
 }

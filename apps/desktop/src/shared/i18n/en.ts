@@ -224,6 +224,7 @@ const en = {
       clipDeleted: "Clip deleted.",
       tracksDeleted: "{{count}} track(s) deleted.",
       clipMoved: "Clip moved: {{name}}",
+      clipsMoved: "Moved {{count}} clips ({{name}}).",
       cursorMoved: "Cursor moved to {{time}}",
       noMarkersAhead:
         "Warning: there are no markers ahead; jump at next marker was ignored.",
