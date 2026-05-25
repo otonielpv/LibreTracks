@@ -783,6 +783,12 @@ export function TransportPanelContent() {
   const suppressTrackClickRef = useRef(false);
   const trackSelectionAnchorRef = useRef<string | null>(null);
   const clipSelectionAnchorRef = useRef<string | null>(null);
+  // When a plain click lands on a clip that is part of an existing
+  // multi-selection, we keep the group selected so the drag can move it
+  // together. If the user releases without dragging, the click is treated
+  // as "collapse selection to just this clip" — this ref carries the clip
+  // ID across mouseDown→mouseUp.
+  const clipSelectionPendingCollapseRef = useRef<string | null>(null);
   const renderMetricTimeoutRef = useRef<number | null>(null);
   const pendingRenderMetricRef = useRef(0);
   const nativeExternalDropPathsRef = useRef<string[]>([]);
@@ -3124,6 +3130,15 @@ export function TransportPanelContent() {
           });
         } else {
           clipPreviewSecondsRef.current = {};
+          // Plain click on a clip that was part of a multi-selection at
+          // mouseDown time: collapse the selection to just this clip now
+          // that we know the user did NOT drag the group.
+          const collapseTo = clipSelectionPendingCollapseRef.current;
+          if (collapseTo && collapseTo === activeClipDrag.clipId) {
+            const clip = findClip(songRef.current, collapseTo);
+            selectClip(collapseTo, clip?.trackId ?? null);
+            clipSelectionAnchorRef.current = collapseTo;
+          }
           void runAction(async () => {
             await performSeek(activeClipDrag.clickSeekSeconds);
           });
@@ -3131,6 +3146,7 @@ export function TransportPanelContent() {
       } else {
         clipPreviewSecondsRef.current = {};
       }
+      clipSelectionPendingCollapseRef.current = null;
 
       const activeTrackDrag = trackDragRef.current;
       if (activeTrackDrag) {
@@ -4798,8 +4814,14 @@ export function TransportPanelContent() {
         selectClip(hitClip.id, track.id);
         clipSelectionAnchorRef.current = hitClip.id;
       } else {
-        // Clicked on an already-selected clip: keep the multi-selection so
-        // the drag can move the whole group. Anchor stays put.
+        // Clicked on an already-selected clip while several were selected.
+        // Keep the multi-selection FOR NOW so the drag can move the whole
+        // group, but remember that we should collapse the selection down to
+        // just this clip if the user releases without dragging. This is the
+        // same pattern Ableton / Reaper / Finder use: mouseDown preserves
+        // the group (so drag works), plain mouseUp resets to one.
+        clipSelectionPendingCollapseRef.current =
+          currentSelection.length > 1 ? hitClip.id : null;
       }
 
       setContextMenu(null);
