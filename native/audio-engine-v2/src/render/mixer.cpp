@@ -414,7 +414,6 @@ void Mixer::render_timeline_span(float** output_channels,
             renderers_[ti].render(patched, timeline_frame, num_frames,
                                    mix_, 2, *sources_, bungee_voices_,
                                    clock_->sample_rate(), 0, &song,
-                                   warp_voices_,
                                    /*track_is_silent=*/settled_silent);
             ++rendered_this_block;
 
@@ -554,26 +553,10 @@ void Mixer::render(float** output_channels,
             bungee_voices_->publish_prepared_voice_map_realtime(due_jump->prepared_voice_map);
         }
         clock_->seek(due_jump->target_frame);
-        // Warp voices: prefer the prepared map carried by the jump (built
-        // with stretchers already warmed at target_frame). Falling back to
-        // retime_existing_realtime leaves the pre-jump stretcher state
-        // intact and produces a metallic burst on warp/cascade clips
-        // because Bungee's analysis window is still tuned to the old cursor.
-        if (warp_voices_) {
-            if (due_jump->prepared_warp_voice_map) {
-                jump_debug_log(
-                    "[LT_JUMP_DEBUG][mixer] publish_prepared_warp target_frame=%lld voices=%zu\n",
-                    static_cast<long long>(due_jump->target_frame),
-                    due_jump->prepared_warp_voice_map->size());
-                warp_voices_->publish_prepared_voice_map_realtime(
-                    due_jump->prepared_warp_voice_map);
-            } else {
-                jump_debug_log(
-                    "[LT_JUMP_DEBUG][mixer] retime_warp_fallback target_frame=%lld (no prepared warp map)\n",
-                    static_cast<long long>(due_jump->target_frame));
-                warp_voices_->retime_existing_realtime(*session, due_jump->target_frame);
-            }
-        }
+        // Warp lives inside the single Bungee voice now (one stretcher per
+        // clip handles pitch + warp via render_block's pitch_scale +
+        // time_ratio parameters), so the prepared pitch voice map above
+        // already covers warp.
         clock_->clear_pending_start();
         scheduler_->mark_executed(from, due_jump->target_frame);
         if (apply_seek_fade)
@@ -697,15 +680,13 @@ void Mixer::render(float** output_channels,
                 patched.pan = 0.0f;
 
                 // `track_is_silent`: when both endpoints of the mute/gain
-                // smoothing window are zero, the warp/cascade DSP is purely
+                // smoothing window are zero, the stretched Bungee path is
                 // wasted work — its output gets multiplied by zero downstream.
-                // Telling the renderer lets it skip the RubberBand stage and
-                // just advance its source cursor, which kept the audio thread
-                // inside its 10ms budget when multiple warp tracks were muted.
+                // Telling the renderer lets it advance its source cursor
+                // without running the grain pipeline.
                 renderers_[ti].render(patched, timeline_frame, num_frames,
                                        mix_, 2, *sources_, bungee_voices_,
                                        clock_->sample_rate(), 0, &song,
-                                       warp_voices_,
                                        /*track_is_silent=*/settled_silent);
                 ++rendered_this_block;
 
@@ -821,14 +802,6 @@ void Mixer::render(float** output_channels,
     const bool over_budget = budget_ms > 0.0 && dur > budget_ms * 0.75;
     if (over_budget)
         callback_over_budget_count_.fetch_add(1, std::memory_order_relaxed);
-    if (jump_debug_enabled() && warp_voices_) {
-        const auto wd = warp_voices_->diagnostics();
-        jump_debug_log(
-            "[LT_JUMP_DEBUG][mixer] block frames=%d dur_ms=%.3f budget_ms=%.3f over_budget=%d warp_active=%d warp_hits=%llu\n",
-            num_frames, dur, budget_ms, over_budget ? 1 : 0,
-            wd.active_voice_count,
-            static_cast<unsigned long long>(wd.voice_lookups_hit));
-    }
 }
 
 void Mixer::set_track_gain(const Id& track_id, Gain gain) {
@@ -872,10 +845,6 @@ void Mixer::swap_session_atomic(std::shared_ptr<const Session> session) noexcept
 
 void Mixer::set_bungee_voice_manager(BungeeVoiceManager* mgr) noexcept {
     bungee_voices_ = mgr;
-}
-
-void Mixer::set_warp_voice_manager(WarpVoiceManager* mgr) noexcept {
-    warp_voices_ = mgr;
 }
 
 void Mixer::clear_session() {

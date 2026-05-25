@@ -73,6 +73,13 @@ public:
                           const Session& session,
                           const SourceManager& sources);
 
+    // Reposition already-active voices after a tempo/warp-ratio edit without
+    // rebuilding Bungee streams. The next render block keeps the warm stream
+    // state but reads from the source frame that matches `playhead`.
+    void retime_existing_for_session(const Session& session,
+                                     const SourceManager& sources,
+                                     Frame playhead) noexcept;
+
     // Build a seek-ready voice map without publishing it. This lets callers
     // commit the transport seek and the Bungee voice swap together, avoiding
     // an audio callback that sees the old playhead with the new target voices.

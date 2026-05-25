@@ -343,7 +343,6 @@ std::optional<DueJump> JumpScheduler::check_due(const TransportClock& clock,
                     j.suppress_seek_fade ? 1 : 0);
                 return DueJump{target_frame, trigger_frame,
                                j.prepared_voice_map,
-                               j.prepared_warp_voice_map,
                                j.suppress_seek_fade};
             }
             j.status         = JumpStatus::Failed;

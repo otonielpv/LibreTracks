@@ -463,10 +463,6 @@ Result<void> EngineImpl::initialize() {
             bungee_voices_->rebuild_for_session(
                 *current_session, *source_manager_, clock_->position().frame);
         }
-        if (all_ready && warp_voices_ && warp_voices_->is_available() && clock_) {
-            warp_voices_->rebuild_for_session(
-                *current_session, *source_manager_, clock_->position().frame);
-        }
         if (prearmed_jumps_ && all_ready) {
             const auto rev = prearm_revision_.load(std::memory_order_relaxed);
             prearmed_jumps_->prepare_all_targets_async(
@@ -474,14 +470,7 @@ Result<void> EngineImpl::initialize() {
         }
     });
     bungee_voices_  = std::make_unique<BungeeVoiceManager>();
-    warp_voices_    = std::make_unique<WarpVoiceManager>();
     prearmed_jumps_ = std::make_unique<PrearmedJumpManager>();
-    // Wire warp voice prearming. Without this the scheduled-jump path
-    // swaps in the prepared pitched voices but leaves the warp voices
-    // stale, which on the Bungee Stream warp backend (~4864 frame analysis
-    // latency) presents as a metallic burst on warp/cascade clips at the
-    // jump moment until the stretcher re-analyses from the new cursor.
-    prearmed_jumps_->set_warp_voice_manager(warp_voices_.get());
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
     mixer_          = std::make_unique<Mixer>(
         std::shared_ptr<const Session>{},
@@ -490,7 +479,6 @@ Result<void> EngineImpl::initialize() {
         scheduler_.get());
     mixer_->set_metronome_config(metronome_config_);
     mixer_->set_bungee_voice_manager(bungee_voices_.get());
-    mixer_->set_warp_voice_manager(warp_voices_.get());
 
     // Open the default audio device with the silent callback.
     auto open_result = device_manager_->open_device(current_device_request_, mixer_.get());
@@ -522,8 +510,7 @@ Result<void> EngineImpl::initialize() {
         // output block. Keeps the legacy pitch path identical (it always
         // feeds exactly `bs` input frames) while letting warp pass more.
         bungee_voices_->prepare(sr, /*channels=*/2, bs * 4);
-        if (warp_voices_) warp_voices_->prepare(sr, /*channels=*/2, bs * 4);
-        if (prearmed_jumps_) prearmed_jumps_->prepare(sr, /*channels=*/2, bs);
+        if (prearmed_jumps_) prearmed_jumps_->prepare(sr, /*channels=*/2, bs * 4);
     }
 
     state_ = State::Initialized;
@@ -553,7 +540,6 @@ Result<void> EngineImpl::shutdown() {
         // Detach the voice manager pointers before destroying the managers so
         // the (now silent) mixer cannot dereference a dangling pointer.
         mixer_->set_bungee_voice_manager(nullptr);
-        mixer_->set_warp_voice_manager(nullptr);
     }
     if (prep_queue_) { prep_queue_->cancel_all(); prep_queue_.reset(); }
     if (worker_pool_) { worker_pool_->shutdown(); }
@@ -563,7 +549,6 @@ Result<void> EngineImpl::shutdown() {
     scheduler_.reset();
     std::atomic_store(&session_, std::shared_ptr<const Session>{});
     bungee_voices_.reset();
-    warp_voices_.reset();
     state_ = State::ShutDown;
     return Result<void>::ok();
 }
@@ -593,18 +578,6 @@ void EngineImpl::service_control_thread_tasks() {
             && session_ && source_manager_) {
             bungee_voices_->rebuild_for_seek_async(
                 target, *session_, *source_manager_);
-        }
-        if (target != Mixer::kNoJumpPending
-            && warp_voices_ && warp_voices_->is_available()
-            && session_ && source_manager_) {
-            // Use the prefed seek voice map (mirrors what Bungee pitch does
-            // via rebuild_for_seek_async). A bare rebuild_for_seek here would
-            // skip the stretcher warmup → ~100 ms of silence on warp/cascade
-            // tracks until the analysis window fills up.
-            auto seek_warp_map = warp_voices_->build_seek_voice_map(
-                target, *session_, *source_manager_);
-            warp_voices_->publish_prepared_voice_map_realtime(
-                std::move(seek_warp_map));
         }
     }
 }
@@ -881,16 +854,12 @@ void EngineImpl::resample_sources_for_new_sample_rate() {
     // audio thread feeds it samples that drift in time → desync.
     if (bungee_voices_ && device_manager_) {
         const int bs = device_manager_->actual_buffer_size() > 0
-            ? device_manager_->actual_buffer_size() : 1024;
-        bungee_voices_->prepare(new_sr, /*channels=*/2, bs * 4);
-        bungee_voices_->clear(); // voices were built for old dims
-        if (warp_voices_) {
-            warp_voices_->prepare(new_sr, /*channels=*/2, bs * 4);
-            warp_voices_->clear();
-        }
-        if (prearmed_jumps_) {
+        ? device_manager_->actual_buffer_size() : 1024;
+    bungee_voices_->prepare(new_sr, /*channels=*/2, bs * 4);
+    bungee_voices_->clear(); // voices were built for old dims
+    if (prearmed_jumps_) {
             prearmed_jumps_->clear();
-            prearmed_jumps_->prepare(new_sr, /*channels=*/2, bs);
+            prearmed_jumps_->prepare(new_sr, /*channels=*/2, bs * 4);
             prearm_revision_.fetch_add(1, std::memory_order_relaxed);
         }
     }
@@ -1029,7 +998,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // stale Mixer atomics. This eliminates the need for sync_live_mix after load.
                 mixer_->set_session(next_session, /*preserve_realtime_state=*/false);
                 mixer_->set_bungee_voice_manager(bungee_voices_.get());
-                mixer_->set_warp_voice_manager(warp_voices_.get());
             }
             // Build Bungee voices for whatever is currently transposed at playhead.
             // Source data may not be decoded yet — voices for unloaded sources are
@@ -1037,11 +1005,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (bungee_voices_ && bungee_voices_->is_available())
                 bungee_voices_->rebuild_for_session(
                     *next_session, *source_manager_, clock_->position().frame);
-            // Build warp voices for whatever is inside a warp-active region.
-            if (warp_voices_ && warp_voices_->is_available())
-                warp_voices_->rebuild_for_session(
-                    *next_session, *source_manager_, clock_->position().frame);
-
             // Prearm marker / region / song targets on session load. Bumps
             // prearm_revision_ so any previous prepared sets are discarded.
             // Phase 2: posts to PrearmedJumpManager's worker thread so we
@@ -1065,15 +1028,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // clips were built at LoadSession / SeekAbsolute time, so Play
             // is now a pure clock advance with no pitch-priming work.
             const auto pos = clock_->position();
-            if (pos.state != TransportState::Playing
-                && warp_voices_ && warp_voices_->is_available()
-                && session_ && source_manager_) {
-                // Prefed seek voice map so first audible block has audio.
-                auto seek_warp_map = warp_voices_->build_seek_voice_map(
-                    pos.frame, *session_, *source_manager_);
-                warp_voices_->publish_prepared_voice_map_realtime(
-                    std::move(seek_warp_map));
-            }
             clock_->play();
             push_event(EvPlaybackStarted{ clock_->position().frame });
             return Result<void>::ok();
@@ -1096,12 +1050,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (bungee_voices_ && bungee_voices_->is_available() && session_) {
                 bungee_voices_->rebuild_for_seek_async(
                     0, *session_, *source_manager_);
-            }
-            if (warp_voices_ && warp_voices_->is_available() && session_ && source_manager_) {
-                auto seek_warp_map = warp_voices_->build_seek_voice_map(
-                    0, *session_, *source_manager_);
-                warp_voices_->publish_prepared_voice_map_realtime(
-                    std::move(seek_warp_map));
             }
             push_event(EvPlaybackStopped{ f });
             return Result<void>::ok();
@@ -1129,12 +1077,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             bungee_voices_->publish_prepared_voice_map_realtime(
                                 std::move(seek_voice_map));
                     }
-                    if (warp_voices_ && warp_voices_->is_available()) {
-                        auto seek_warp_map = warp_voices_->build_seek_voice_map(
-                            c.frame, *session_, *source_manager_);
-                        warp_voices_->publish_prepared_voice_map_realtime(
-                            std::move(seek_warp_map));
-                    }
                 }
                 push_event(EvSeekExecuted{ from, c.frame });
                 return Result<void>::ok();
@@ -1159,11 +1101,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 seek_voice_map = bungee_voices_->build_seek_voice_map(
                     c.frame, *session_, *source_manager_);
             }
-            std::shared_ptr<const WarpVoiceManager::VoiceMap> seek_warp_map;
-            if (warp_voices_ && warp_voices_->is_available() && session_ && source_manager_) {
-                seek_warp_map = warp_voices_->build_seek_voice_map(
-                    c.frame, *session_, *source_manager_);
-            }
             if (source_manager_ && session_) {
                 if (preparing_stopped_playback) {
                     wait_playback_audio_window_ready(
@@ -1176,8 +1113,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             clock_->seek(c.frame);
             if (bungee_voices_ && seek_voice_map)
                 bungee_voices_->publish_prepared_voice_map_realtime(std::move(seek_voice_map));
-            if (warp_voices_ && seek_warp_map)
-                warp_voices_->publish_prepared_voice_map_realtime(std::move(seek_warp_map));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
             if (mixer_) mixer_->trigger_crossfade();
             push_event(EvSeekExecuted{ from, c.frame });
@@ -1199,18 +1134,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 seek_voice_map = bungee_voices_->build_seek_voice_map(
                     to, *session_, *source_manager_);
             }
-            std::shared_ptr<const WarpVoiceManager::VoiceMap> seek_warp_map;
-            if (warp_voices_ && warp_voices_->is_available() && session_ && source_manager_) {
-                seek_warp_map = warp_voices_->build_seek_voice_map(
-                    to, *session_, *source_manager_);
-            }
             if (source_manager_ && session_)
                 wait_jump_target_audio_ready(*source_manager_, *session_, to, seek_window);
             clock_->seek(to);
             if (bungee_voices_ && seek_voice_map)
                 bungee_voices_->publish_prepared_voice_map_realtime(std::move(seek_voice_map));
-            if (warp_voices_ && seek_warp_map)
-                warp_voices_->publish_prepared_voice_map_realtime(std::move(seek_warp_map));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
             if (mixer_) mixer_->trigger_crossfade();
             push_event(EvSeekExecuted{ from, to });
@@ -1314,22 +1242,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     key.target_id        = c.marker_id;
                     key.timeline_frame   = target_frame;
                     key.sample_rate      = clock_->sample_rate();
-                    key.block_size       = device_manager_
+                    key.block_size       = (device_manager_
                         ? device_manager_->actual_buffer_size()
-                        : 1024;
+                        : 1024) * 4;
                     key.session_revision = prearm_revision_.load(
                         std::memory_order_relaxed);
 
                     if (auto prepared = prearmed_jumps_->take_ready(key)) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
-                        if (warp_voices_ && warp_voices_->is_available()) {
-                            auto wmap = prepared->extract_warp_voice_map();
-                            if (!wmap.empty()) {
-                                warp_voices_->publish_prepared_voice_map_realtime(
-                                    warp_voices_->build_prepared_voice_map(std::move(wmap)));
-                            }
-                        }
                         // Set transport to target immediately so the next
                         // audio block reads from the new playhead with the
                         // freshly-published voices.
@@ -1375,20 +1296,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     key.target_id        = c.region_id;
                     key.timeline_frame   = target_frame;
                     key.sample_rate      = clock_->sample_rate();
-                    key.block_size       = device_manager_
-                        ? device_manager_->actual_buffer_size() : 1024;
+                    key.block_size       = (device_manager_
+                        ? device_manager_->actual_buffer_size() : 1024) * 4;
                     key.session_revision = prearm_revision_.load(
                         std::memory_order_relaxed);
                     if (auto prepared = prearmed_jumps_->take_ready(key)) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
-                        if (warp_voices_ && warp_voices_->is_available()) {
-                            auto wmap = prepared->extract_warp_voice_map();
-                            if (!wmap.empty()) {
-                                warp_voices_->publish_prepared_voice_map_realtime(
-                                    warp_voices_->build_prepared_voice_map(std::move(wmap)));
-                            }
-                        }
                         clock_->seek(target_frame);
                         if (mixer_) mixer_->trigger_crossfade();
                         prearmed_jumps_->prepare_all_targets_async(
@@ -1429,20 +1343,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     key.target_id        = c.song_id;
                     key.timeline_frame   = target_frame;
                     key.sample_rate      = clock_->sample_rate();
-                    key.block_size       = device_manager_
-                        ? device_manager_->actual_buffer_size() : 1024;
+                    key.block_size       = (device_manager_
+                        ? device_manager_->actual_buffer_size() : 1024) * 4;
                     key.session_revision = prearm_revision_.load(
                         std::memory_order_relaxed);
                     if (auto prepared = prearmed_jumps_->take_ready(key)) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
-                        if (warp_voices_ && warp_voices_->is_available()) {
-                            auto wmap = prepared->extract_warp_voice_map();
-                            if (!wmap.empty()) {
-                                warp_voices_->publish_prepared_voice_map_realtime(
-                                    warp_voices_->build_prepared_voice_map(std::move(wmap)));
-                            }
-                        }
                         clock_->seek(target_frame);
                         if (mixer_) mixer_->trigger_crossfade();
                         prearmed_jumps_->prepare_all_targets_async(
@@ -1560,8 +1467,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             key.target_id        = target_id;
                             key.timeline_frame   = target_frame;
                             key.sample_rate      = clock_->sample_rate();
-                            key.block_size       = device_manager_
-                                ? device_manager_->actual_buffer_size() : 1024;
+                            key.block_size       = (device_manager_
+                                ? device_manager_->actual_buffer_size() : 1024) * 4;
                             key.session_revision = rev;
 
                             auto refill_prearm_cache = [&] {
@@ -1572,13 +1479,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             if (auto prepared = prearmed_jumps_->take_ready(key)) {
                                 bungee_voices_->swap_in_prepared_voices(
                                     prepared->extract_voice_map());
-                                if (warp_voices_ && warp_voices_->is_available()) {
-                                    auto wmap = prepared->extract_warp_voice_map();
-                                    if (!wmap.empty()) {
-                                        warp_voices_->publish_prepared_voice_map_realtime(
-                                            warp_voices_->build_prepared_voice_map(std::move(wmap)));
-                                    }
-                                }
                                 clock_->seek(target_frame);
                                 if (mixer_) mixer_->trigger_crossfade();
                                 refill_prearm_cache();
@@ -1696,8 +1596,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             key.target_id        = target_id;
                             key.timeline_frame   = target_frame;
                             key.sample_rate      = clock_->sample_rate();
-                            key.block_size       = device_manager_
-                                ? device_manager_->actual_buffer_size() : 1024;
+                            key.block_size       = (device_manager_
+                                ? device_manager_->actual_buffer_size() : 1024) * 4;
                             key.session_revision = rev;
 
                             std::unique_ptr<PreparedJumpVoiceSet> prepared =
@@ -1714,30 +1614,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             if (prepared) {
                                 prearm_set_valid = prepared->valid;
                                 prearm_set_voices = static_cast<int>(prepared->tracks.size());
-                                const std::size_t pre_warp_count = prepared->warp_voices.size();
                                 jump.prepared_voice_map =
                                     bungee_voices_->build_prepared_voice_map(
                                         prepared->extract_voice_map());
-                                // Carry the prepared warp voices too —
-                                // empty when the target has no warp clips,
-                                // populated otherwise. Mixer publishes both
-                                // maps atomically at jump time.
-                                std::size_t published_warp = 0;
-                                if (warp_voices_ && warp_voices_->is_available()) {
-                                    auto wmap = prepared->extract_warp_voice_map();
-                                    published_warp = wmap.size();
-                                    if (!wmap.empty()) {
-                                        jump.prepared_warp_voice_map =
-                                            warp_voices_->build_prepared_voice_map(
-                                                std::move(wmap));
-                                    }
-                                }
-                                if (jump_debug_enabled()) {
-                                    debug_log(
-                                        "[LT_JUMP_DEBUG][native-command] schedule_warp_prearm pre_warp_voices=%zu published_warp=%zu warp_mgr_available=%d\n",
-                                        pre_warp_count, published_warp,
-                                        (warp_voices_ && warp_voices_->is_available()) ? 1 : 0);
-                                }
                                 prearmed_jumps_->prepare_all_targets_async(
                                     session_, source_manager_.get(), rev);
                             }
@@ -1920,22 +1799,22 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         needs_voice_rebuild ? 1 : 0);
                 }
                 if (changed) {
-                    // Reposition warp voices on every warp edit. At ratio
+                    // Reposition Bungee voices on every warp edit. At ratio
                     // 1.0 the renderer uses the direct path, so a previously
-                    // built warp voice may not have advanced with playback.
+                    // built stretched voice may not have advanced with playback.
                     if (source_manager_ && clock_) {
-                        if (warp_voices_ && warp_voices_->is_available()) {
+                        if (bungee_voices_ && bungee_voices_->is_available()) {
                             if (needs_voice_rebuild) {
                                 // Prefed seek voice map so the user gets
                                 // audible warp immediately after toggling
                                 // warp on for a region.
-                                auto seek_warp_map = warp_voices_->build_seek_voice_map(
+                                auto seek_voice_map = bungee_voices_->build_seek_voice_map(
                                     clock_->position().frame,
                                     *next_session, *source_manager_);
-                                warp_voices_->publish_prepared_voice_map_realtime(
-                                    std::move(seek_warp_map));
+                                bungee_voices_->publish_prepared_voice_map_realtime(
+                                    std::move(seek_voice_map));
                             } else {
-                                warp_voices_->retime_existing_for_session(
+                                bungee_voices_->retime_existing_for_session(
                                     *next_session, *source_manager_,
                                     clock_->position().frame);
                             }
@@ -1950,9 +1829,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     //     pointer swap. Rebuilding control_slots on every
                     //     stepper click while audio is rolling produced
                     //     audible glitches / desync / metallic mush — the
-                    //     isolated cascade test with the same ratio drag
-                    //     pattern sounded fine, which is what proved this
-                    //     was the engine-side culprit.
+                    //     isolated DSP test with the same ratio drag pattern
+                    //     sounded fine, which is what proved this was the
+                    //     engine-side culprit.
                     if (mixer_) {
                         if (needs_voice_rebuild)
                             mixer_->set_session(next_session,
@@ -1993,13 +1872,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     break;
                 }
                 if (changed) {
-                    if (warp_voices_ && warp_voices_->is_available()
+                    if (bungee_voices_ && bungee_voices_->is_available()
                         && source_manager_ && clock_) {
-                        auto seek_warp_map = warp_voices_->build_seek_voice_map(
+                        auto seek_voice_map = bungee_voices_->build_seek_voice_map(
                             clock_->position().frame,
                             *next_session, *source_manager_);
-                        warp_voices_->publish_prepared_voice_map_realtime(
-                            std::move(seek_warp_map));
+                        bungee_voices_->publish_prepared_voice_map_realtime(
+                            std::move(seek_voice_map));
                     }
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
@@ -2097,9 +1976,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     break;
                 }
                 if (changed) {
-                    if (warp_voices_ && warp_voices_->is_available()
+                    if (bungee_voices_ && bungee_voices_->is_available()
                         && source_manager_ && clock_) {
-                        warp_voices_->retime_existing_for_session(
+                        bungee_voices_->retime_existing_for_session(
                             *next_session, *source_manager_,
                             clock_->position().frame);
                     }
@@ -2151,7 +2030,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     ? device_manager_->actual_sample_rate() : 48000;
                 const int bs = device_manager_->actual_buffer_size() > 0
                     ? device_manager_->actual_buffer_size() : 1024;
-                prearmed_jumps_->prepare(sr, /*channels=*/2, bs);
+                prearmed_jumps_->prepare(sr, /*channels=*/2, bs * 4);
                 prearm_revision_.fetch_add(1, std::memory_order_relaxed);
             }
             push_event(EvDeviceChanged{
@@ -2191,7 +2070,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         ? device_manager_->actual_sample_rate() : 48000;
                     const int bs = device_manager_->actual_buffer_size() > 0
                         ? device_manager_->actual_buffer_size() : 1024;
-                    prearmed_jumps_->prepare(sr, /*channels=*/2, bs);
+                    prearmed_jumps_->prepare(sr, /*channels=*/2, bs * 4);
                     prearm_revision_.fetch_add(1, std::memory_order_relaxed);
                 }
             }
@@ -2223,7 +2102,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         ? device_manager_->actual_sample_rate() : 48000;
                     const int bs = device_manager_->actual_buffer_size() > 0
                         ? device_manager_->actual_buffer_size() : 1024;
-                    prearmed_jumps_->prepare(sr, /*channels=*/2, bs);
+                    prearmed_jumps_->prepare(sr, /*channels=*/2, bs * 4);
                     prearm_revision_.fetch_add(1, std::memory_order_relaxed);
                 }
             }

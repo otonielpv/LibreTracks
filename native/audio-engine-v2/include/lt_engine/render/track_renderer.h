@@ -10,7 +10,6 @@
 
 namespace lt {
 class BungeeVoiceManager;
-class WarpVoiceManager;
 }
 
 namespace lt {
@@ -21,12 +20,10 @@ struct TrackRendererDiagnostics {
     std::uint64_t scratch_resize_in_audio_thread_count = 0;
     std::uint64_t block_too_large_count = 0;
     int scratch_capacity_frames = 0;
-    // Number of times a pitched clip had no Bungee voice to render through.
-    // Non-zero means pitch was needed but no voice existed — the clip was silenced.
+    // Number of times a stretched clip had no Bungee voice to render through.
+    // Non-zero means pitch/warp was needed but no voice existed — the clip
+    // was silenced.
     std::uint64_t pitch_missing_stream_silence_count = 0;
-    // Same for warp: number of blocks where the warp path could not find a
-    // warp voice and silenced output.
-    std::uint64_t warp_missing_stream_silence_count = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -44,21 +41,18 @@ public:
     // into `out[0..num_out_channels-1]`, each buffer of length block_frames.
     // Accumulates into out (does not zero first).
     //
-    // Each clip is routed through one of four paths (decided per-block by
+    // Each clip is routed through one of two paths (decided per-block by
     // resolve_pitch_render_decision):
-    //   - Direct:  read source as-is
-    //   - Pitch:   BungeeVoiceManager (pitch_scale != 1, time_ratio = 1)
-    //   - Warp:    WarpVoiceManager (pitch = 1, time_ratio != 1)
-    //   - Cascade: pitch first, then warp
+    //   - Direct:    read source as-is.
+    //   - Stretched: BungeeVoiceManager (single voice processes pitch and
+    //                warp in the same grain pipeline via render_block's
+    //                pitch_scale + time_ratio parameters).
     //
-    // `warp_voices` may be nullptr; clips that resolve to Warp/Cascade then
-    // silence and bump warp_missing_stream_silence_count.
-    // `track_is_silent` (default false): when true, warp/cascade voices
-    // skip their stretcher work and just advance the source cursor so the
-    // voice stays timeline-aligned for when the track un-mutes. Direct and
-    // pitch paths still render — only the expensive RubberBand stages are
-    // gated. Used by the mixer to keep CPU bounded when several warp tracks
-    // exist but most are muted.
+    // `track_is_silent` (default false): when true the renderer skips the
+    // stretcher work and advances the voice's source cursor so its timeline
+    // position stays aligned for when the track un-mutes. Direct path still
+    // renders. Used by the mixer to keep CPU bounded when several stretched
+    // tracks are muted.
     void render(const Track&          track,
                 Frame                 timeline_frame,
                 int                   block_frames,
@@ -69,7 +63,6 @@ public:
                 int                   engine_sample_rate,
                 Semitones             effective_semitones = 0,
                 const Song*           active_song = nullptr,
-                WarpVoiceManager*     warp_voices = nullptr,
                 bool                  track_is_silent = false) noexcept;
 
 private:
@@ -97,22 +90,12 @@ private:
     // scratch_l_/scratch_r_ starting at index 0 and returns how many were
     // actually written (== frames_to_read on success, 0 on miss).
     int render_path_direct(const ClipBlock& cb) noexcept;
-    int render_path_pitch(const ClipBlock&     cb,
-                          BungeeVoiceManager*  bungee_voices,
-                          Semitones            effective_semitones,
-                          const Id&            track_id) noexcept;
-    int render_path_warp(const ClipBlock&    cb,
-                         WarpVoiceManager*   warp_voices,
-                         double              warp_time_ratio,
-                         const Id&           track_id,
-                         bool                track_is_silent) noexcept;
-    int render_path_cascade(const ClipBlock&     cb,
-                            BungeeVoiceManager*  bungee_voices,
-                            WarpVoiceManager*    warp_voices,
-                            Semitones            effective_semitones,
-                            double               warp_time_ratio,
-                            const Id&            track_id,
-                            bool                 track_is_silent) noexcept;
+    int render_path_stretched(const ClipBlock&     cb,
+                               BungeeVoiceManager*  bungee_voices,
+                               Semitones            effective_semitones,
+                               double               warp_time_ratio,
+                               const Id&            track_id,
+                               bool                 track_is_silent) noexcept;
 
     // Apply fades and accumulate into the output mix bus.
     void finalise_clip_block(const ClipBlock& cb,
@@ -127,13 +110,11 @@ private:
     int scratch_capacity_frames_ = 0;
     float* scratch_[2] = { nullptr, nullptr };
     // Planar input scratch used to feed BungeePitchVoice (which wants planar
-    // pointers). Sized to match scratch_l_/scratch_r_ during prepare().
+    // pointers). Sized to max_block_frames * 4 in prepare() so the warp path
+    // can feed `ceil(block * ratio)` input frames per call (ratios clamped
+    // upstream to [0.25, 4.0]).
     std::vector<float> bungee_in_l_;
     std::vector<float> bungee_in_r_;
-    // Intermediate buffer used by the Cascade path to hold pitch-shifted
-    // audio coming out of Bungee on its way into the warp backend.
-    std::vector<float> cascade_mid_l_;
-    std::vector<float> cascade_mid_r_;
     OriginalSourceCache original_cache_;
 
     static std::atomic<std::uint64_t> prepare_count_;
@@ -142,7 +123,6 @@ private:
     static std::atomic<std::uint64_t> block_too_large_count_;
     static std::atomic<int> max_scratch_capacity_frames_;
     static std::atomic<std::uint64_t> pitch_missing_stream_silence_count_;
-    static std::atomic<std::uint64_t> warp_missing_stream_silence_count_;
 };
 
 } // namespace lt

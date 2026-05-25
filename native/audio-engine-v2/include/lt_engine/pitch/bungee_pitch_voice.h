@@ -112,6 +112,20 @@ public:
     // latency_frames() < epsilon.
     bool   is_warm() const noexcept;
 
+    // ── Source cursor (mirrors the warp-aware advance model) ────────────
+    //
+    // The voice tracks an external "source frame" that the renderer reads
+    // from before feeding samples. Each render_block / prime_output_fifo
+    // advances this cursor by `input_frames` (regardless of pitch_scale or
+    // time_ratio — the cursor lives in source-frame units, which is what
+    // the file read uses). reset_source_cursor() lets the prearm path
+    // position the voice at a jump target before the first render.
+    //
+    // Default value at configure() is 0; the manager sets it to
+    // clip.source_start_frame after configure for non-prearm builds.
+    void      reset_source_cursor(long long source_frame) noexcept;
+    long long source_cursor() const noexcept;
+
     // Re-arm the post-construction fade-in so the next `fade_ms` of OUTPUT
     // frames the caller receives are ramped from 0→1 (equal-power). Used by
     // BungeeVoiceManager after warm_voice() has consumed the initial fade

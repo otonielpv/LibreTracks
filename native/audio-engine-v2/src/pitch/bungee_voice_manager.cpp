@@ -565,6 +565,11 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
         warm_voice(*voice,
                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
                    spec.time_ratio);
+        // No prefeed here (rebuild_for_session is the cheap path) — but the
+        // renderer's first read uses `cursor + latency + queued`, so anchor
+        // the cursor at the spec's source position.
+        voice->reset_source_cursor(
+            static_cast<long long>(spec.source_frame));
         // warm_voice consumed the voice's initial fade window with zero
         // input. Re-arm it so the audio thread's first real frames are
         // ramped, masking Bungee's startup pop when a new clip voice appears.
@@ -592,6 +597,38 @@ void BungeeVoiceManager::rebuild_for_seek(Frame target_frame,
                                            const SourceManager& sources) {
     auto next = build_seek_voice_map(target_frame, session, sources);
     publish_prepared_voice_map_realtime(std::move(next));
+}
+
+void BungeeVoiceManager::retime_existing_for_session(
+        const Session& session,
+        const SourceManager& sources,
+        Frame playhead) noexcept {
+    if (!is_available()) return;
+
+#if LT_ENGINE_HAVE_BUNGEE
+    const auto specs = enumerate_voices(session, sources, playhead);
+    auto current = std::atomic_load(&impl_->active);
+    int retimed = 0;
+    int missing = 0;
+    for (const auto& spec : specs) {
+        auto it = current->find(spec.clip_id);
+        if (it == current->end() || !it->second) {
+            ++missing;
+            continue;
+        }
+        it->second->reset_source_cursor(
+            static_cast<long long>(spec.source_frame));
+        ++retimed;
+    }
+    if (bungee_debug_enabled()) {
+        lt_debug_log(
+            "[BUNGEE] retime_existing playhead=%lld specs=%zu retimed=%d missing=%d active=%zu\n",
+            static_cast<long long>(playhead), specs.size(),
+            retimed, missing, current ? current->size() : 0);
+    }
+#else
+    (void)session; (void)sources; (void)playhead;
+#endif
 }
 
 std::shared_ptr<const PreparedVoiceMap>
@@ -674,6 +711,11 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
                     sample_rate, channel_count, max_in_frames,
                     pitch_scale, spec.time_ratio);
             }
+            // Anchor the voice's source cursor at the timeline position the
+            // renderer will start reading from. The renderer's read formula
+            // (cursor + latency + compensation + queued) assumes this anchor.
+            voice->reset_source_cursor(
+                static_cast<long long>(spec.source_frame));
             voice->arm_fade_in(0);
             result.voice = std::move(voice);
             result.succeeded = true;
@@ -753,6 +795,8 @@ void BungeeVoiceManager::rebuild_for_seek_guarded(Frame target_frame,
                 impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
                 pitch_scale, spec.time_ratio);
         }
+        voice->reset_source_cursor(
+            static_cast<long long>(spec.source_frame));
         // This voice has already been prefed to the seek target; the mixer's
         // seek de-click ramp handles the boundary. Avoid an extra per-voice
         // gain ramp here because it can roughen transposed post-seek audio.

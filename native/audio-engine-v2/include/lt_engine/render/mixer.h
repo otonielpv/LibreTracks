@@ -61,7 +61,6 @@ public:
     // identity needs the full set_session() path.
     void swap_session_atomic(std::shared_ptr<const Session> session) noexcept;
     void set_bungee_voice_manager(class BungeeVoiceManager* mgr) noexcept;
-    void set_warp_voice_manager(class WarpVoiceManager* mgr) noexcept;
     void clear_session();
     void prepare_render_resources(int max_block_frames) noexcept;
     void trigger_crossfade() noexcept;
@@ -100,7 +99,6 @@ private:
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
     class BungeeVoiceManager* bungee_voices_ = nullptr;
-    class WarpVoiceManager*   warp_voices_   = nullptr;
 
     // Per-track renderer pool (one per track, up to kMaxTracks).
     // Allocated once on construction, never in render().

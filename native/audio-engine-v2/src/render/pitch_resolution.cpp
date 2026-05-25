@@ -77,15 +77,12 @@ PitchRenderDecision resolve_pitch_render_decision(
         d.warp_time_ratio = ratio;
     }
 
-    // Resolve the rendering path. The four cases are mutually exclusive.
-    if (d.warp_active && d.needs_pitch)
-        d.path = ClipPathKind::Cascade;
-    else if (d.warp_active)
-        d.path = ClipPathKind::Warp;
-    else if (d.needs_pitch)
-        d.path = ClipPathKind::Pitch;
-    else
-        d.path = ClipPathKind::Direct;
+    // Two paths: either direct copy, or stretched (a single Bungee voice
+    // handles pitch + warp simultaneously via render_block's pitch_scale +
+    // time_ratio parameters).
+    d.path = (d.warp_active || d.needs_pitch)
+        ? ClipPathKind::Stretched
+        : ClipPathKind::Direct;
     return d;
 }
 

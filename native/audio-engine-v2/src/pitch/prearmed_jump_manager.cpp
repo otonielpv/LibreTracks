@@ -2,7 +2,6 @@
 
 #include <lt_engine/debug/logging.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
-#include <lt_engine/pitch/warp_voice_manager.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/sources/source_manager.h>
 
@@ -43,15 +42,6 @@ PreparedVoiceMap PreparedJumpVoiceSet::extract_voice_map() {
     out.reserve(tracks.size());
     for (auto& t : tracks)
         if (t.voice) out.emplace(t.clip_id, std::move(t.voice));
-    return out;
-}
-
-std::unordered_map<Id, std::shared_ptr<WarpVoice>>
-PreparedJumpVoiceSet::extract_warp_voice_map() {
-    std::unordered_map<Id, std::shared_ptr<WarpVoice>> out;
-    out.reserve(warp_voices.size());
-    for (auto& w : warp_voices)
-        if (w.voice) out.emplace(w.clip_id, std::move(w.voice));
     return out;
 }
 
@@ -115,9 +105,10 @@ double semitones_to_pitch_scale(Semitones semitones) {
 constexpr int kWarmFramesAt48k = 28800; // 600 ms safety cap
 
 void warm_voice_silence(BungeePitchVoice& voice,
-                         int sample_rate,
-                         int channel_count,
-                         int max_in_frames) {
+                        int sample_rate,
+                        int channel_count,
+                        int max_in_frames,
+                        double time_ratio = 1.0) {
     if (!voice.is_ready()) return;
     const int max_warm = std::max(0,
         static_cast<int>(static_cast<long long>(kWarmFramesAt48k) * sample_rate / 48000));
@@ -141,7 +132,8 @@ void warm_voice_silence(BungeePitchVoice& voice,
         const int chunk = std::min(max_in_frames, max_warm - fed);
         (void)voice.render_block(in_ptrs.data(), chunk,
                                   out_ptrs.data(), chunk,
-                                  /*pitch_scale*/ 1.0);
+                                  /*pitch_scale*/ 1.0,
+                                  time_ratio);
         fed += chunk;
         if (voice.is_warm()) break;
     }
@@ -181,7 +173,8 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
                                       int sample_rate,
                                       int channel_count,
                                       int max_in_frames,
-                                      double pitch_scale) {
+                                      double pitch_scale,
+                                      double time_ratio = 1.0) {
     if (!voice.is_ready()) return;
     const int latency_frames = static_cast<int>(voice.latency_frames());
     if (latency_frames <= 0) return; // nothing to prefeed; voice not warm
@@ -234,7 +227,8 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
 
         (void)voice.render_block(in_ptrs.data(), chunk,
                                   out_ptrs.data(), chunk,
-                                  pitch_scale);
+                                  pitch_scale,
+                                  time_ratio);
         read_cursor += chunk;
         fed         += chunk;
     }
@@ -275,7 +269,8 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
             }
         }
         const int before = voice.queued_output_frames();
-        (void)voice.prime_output_fifo(in_ptrs.data(), prime_frames, pitch_scale);
+        (void)voice.prime_output_fifo(in_ptrs.data(), prime_frames,
+                                      pitch_scale, time_ratio);
         primed_total = voice.queued_output_frames();
         read_cursor += prime_frames;
         prime_budget -= prime_frames;
@@ -291,6 +286,7 @@ struct PrepSpec {
     std::shared_ptr<const DecodedSource> source;
     Frame                target_source_frame = 0;
     Semitones            effective_semitones = 0;
+    double               time_ratio = 1.0;
 };
 
 // `out_unloaded_clips` is incremented when a clip at the target frame would
@@ -309,12 +305,9 @@ std::vector<PrepSpec> enumerate_prep_specs(const Song& song,
     if (target_timeline_frame < clip.timeline_start_frame
         || target_timeline_frame >= clip_end)
         return out;
-    if (track.transpose_behavior == TransposeBehavior::NeverTranspose)
-        return out;
-
     const auto decision = resolve_pitch_render_decision(
         track, clip, song, target_timeline_frame);
-    if (decision.effective_semitones == 0)
+    if (decision.path != ClipPathKind::Stretched)
         return out;
 
     auto src = sources.get_shared(clip.source_id);
@@ -327,9 +320,17 @@ std::vector<PrepSpec> enumerate_prep_specs(const Song& song,
     spec.clip_id              = clip.id;
     spec.source_id            = clip.source_id;
     spec.source               = std::move(src);
+    const Frame timeline_offset =
+        target_timeline_frame - clip.timeline_start_frame;
     spec.target_source_frame  = clip.source_start_frame
-                                + (target_timeline_frame - clip.timeline_start_frame);
+        + (decision.warp_active
+            ? static_cast<Frame>(
+                static_cast<double>(timeline_offset) * decision.warp_time_ratio)
+            : timeline_offset);
     spec.effective_semitones  = decision.effective_semitones;
+    spec.time_ratio           = decision.warp_active
+        ? decision.warp_time_ratio
+        : 1.0;
     out.push_back(spec);
     return out;
 }
@@ -428,142 +429,6 @@ bool ensure_bungee_jump_read_window_ready(const SourceManager& sources,
     return spec.source->is_range_ready(clamped_start, required_frames);
 }
 
-// ─── Warp prearm helpers ────────────────────────────────────────────────
-//
-// Mirror of the pitch prearm helpers above, for WarpVoice (Bungee Stream
-// in warp mode). The cursor model matches WarpVoiceManager::enumerate_warp_clips:
-// the warp voice's source cursor advances by `ceil(out_frames * ratio)` per
-// block, so the cursor at target_timeline_frame is
-// `clip.source_start_frame + (target_timeline_frame - clip.timeline_start_frame) * ratio`.
-
-struct WarpPrepSpec {
-    Id        clip_id;
-    Id        source_id;
-    std::shared_ptr<const DecodedSource> source;
-    long long target_source_cursor = 0;
-    double    warp_ratio           = 1.0;
-};
-
-std::vector<WarpPrepSpec> enumerate_warp_prep_specs(
-        const Song& song,
-        const Track& track,
-        const Clip& clip,
-        const SourceManager& sources,
-        Frame target_timeline_frame,
-        int* out_unloaded_clips = nullptr) {
-    std::vector<WarpPrepSpec> out;
-
-    const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
-    if (target_timeline_frame < clip.timeline_start_frame
-        || target_timeline_frame >= clip_end)
-        return out;
-
-    const auto decision = resolve_pitch_render_decision(
-        track, clip, song, target_timeline_frame);
-    // Warp prearm is needed for Warp and Cascade paths only.
-    if (decision.path != ClipPathKind::Warp
-        && decision.path != ClipPathKind::Cascade)
-        return out;
-    if (decision.warp_time_ratio == 1.0)
-        return out;  // direct path, no warp voice involved
-
-    auto src = sources.get_shared(clip.source_id);
-    if (!src || !src->is_loaded()) {
-        if (out_unloaded_clips) ++*out_unloaded_clips;
-        return out;
-    }
-
-    WarpPrepSpec spec;
-    spec.clip_id              = clip.id;
-    spec.source_id            = clip.source_id;
-    spec.source               = std::move(src);
-    spec.warp_ratio           = decision.warp_time_ratio;
-    const Frame timeline_offset =
-        target_timeline_frame - clip.timeline_start_frame;
-    spec.target_source_cursor =
-        static_cast<long long>(clip.source_start_frame)
-        + static_cast<long long>(
-            static_cast<double>(timeline_offset) * decision.warp_time_ratio);
-    out.push_back(spec);
-    return out;
-}
-
-// Prefeed a freshly-built WarpVoice so its internal stretcher has a warm
-// analysis window centred on `target_source_cursor`. Without this, the first
-// post-jump render_block returns ~latency_frames of garbled audio while the
-// stretcher (Bungee Stream warp = ~4864 frames @ 48k) builds up its grain
-// pipeline from scratch.
-//
-// Strategy: feed `latency_frames` of REAL source audio starting at the
-// cursor and discard the output (it's the silence-warm tail). The voice's
-// source_cursor advances by exactly the input fed, so it lands at
-// (target_source_cursor + latency_frames) — which matches what the audio
-// thread's first post-jump render_block will read from when it calls
-// source.read(wv->source_cursor()).
-void prefeed_warp_voice_with_target_audio(WarpVoice& voice,
-                                           const DecodedSource& source,
-                                           long long target_source_cursor,
-                                           int sample_rate,
-                                           int channel_count,
-                                           int max_in_frames,
-                                           double warp_ratio) {
-    if (!voice.is_ready()) return;
-    (void)sample_rate;
-    const int latency_frames = std::max(0, voice.input_latency_frames());
-    if (latency_frames <= 0) return;
-
-    voice.reset_source_cursor(target_source_cursor);
-
-    std::vector<float> in_l (static_cast<std::size_t>(max_in_frames), 0.0f);
-    std::vector<float> in_r (static_cast<std::size_t>(max_in_frames), 0.0f);
-    std::vector<float> out_l(static_cast<std::size_t>(max_in_frames), 0.0f);
-    std::vector<float> out_r(static_cast<std::size_t>(max_in_frames), 0.0f);
-    const float* in_ptrs[2]  = { in_l.data(), in_r.data() };
-    float*       out_ptrs[2] = { out_l.data(), out_r.data() };
-    (void)channel_count;
-
-    const Frame src_end = source.duration_frames();
-    long long read_cursor = target_source_cursor;
-    int fed = 0;
-    while (fed < latency_frames) {
-        const int chunk = std::min(max_in_frames, latency_frames - fed);
-
-        std::fill(in_l.begin(), in_l.begin() + chunk, 0.0f);
-        std::fill(in_r.begin(), in_r.begin() + chunk, 0.0f);
-        const int dst_offset = read_cursor < 0
-            ? static_cast<int>(std::min<long long>(chunk, -read_cursor))
-            : 0;
-        const Frame read_start = static_cast<Frame>(
-            std::max<long long>(0, read_cursor));
-        const int available = (dst_offset >= chunk || read_start >= src_end)
-            ? 0
-            : static_cast<int>(std::min<long long>(
-                chunk - dst_offset,
-                static_cast<long long>(src_end - read_start)));
-        if (available > 0) {
-            float* read_into[2] = {
-                in_l.data() + dst_offset,
-                in_r.data() + dst_offset};
-            const int got = source.read(read_start, available, read_into,
-                                         std::min(2, source.channel_count()));
-            if (got > 0 && source.channel_count() == 1) {
-                std::copy_n(in_l.begin() + dst_offset, got,
-                            in_r.begin() + dst_offset);
-            }
-        }
-
-        (void)voice.render_block(in_ptrs, chunk, out_ptrs, chunk, warp_ratio);
-        read_cursor += chunk;
-        fed         += chunk;
-    }
-
-    // After prefeed, the stretcher has consumed [target, target+latency)
-    // and its internal cursor sits at (target + latency). The audio thread
-    // reads from `wv->source_cursor()` on the first post-jump block, so it
-    // will pick up exactly where the prefeed stopped — no double-feed and
-    // no skipped audio.
-}
-
 } // namespace
 
 // ─── Impl ────────────────────────────────────────────────────────────────
@@ -573,10 +438,6 @@ struct PrearmedJumpManager::Impl {
     int  sample_rate   = 0;
     int  channel_count = 0;
     int  max_in_frames = 0;
-    // Optional. When set, build_prepared_set also prepares warp voices
-    // via this manager's make_voice_for_clip(). Plain pointer because the
-    // owning EngineImpl outlives both managers.
-    WarpVoiceManager* warp_voices = nullptr;
 
     mutable std::mutex mtx;
     std::unordered_map<PrearmTargetKey,
@@ -692,12 +553,6 @@ bool PrearmedJumpManager::prepare(int sample_rate,
     return true;
 }
 
-void PrearmedJumpManager::set_warp_voice_manager(
-    WarpVoiceManager* warp_voices) noexcept {
-    if (!impl_) return;
-    std::unique_lock<std::mutex> g(impl_->mtx);
-    impl_->warp_voices = warp_voices;
-}
 
 void PrearmedJumpManager::clear() {
     if (!impl_) return;
@@ -744,8 +599,7 @@ BuildResult build_prepared_set(
         int sample_rate,
         int channel_count,
         int max_in_frames,
-        std::uint64_t session_revision,
-        WarpVoiceManager* warp_voices) {
+        std::uint64_t session_revision) {
     BuildResult br;
     br.set = std::make_unique<PreparedJumpVoiceSet>();
     auto& set = br.set;
@@ -780,7 +634,8 @@ BuildResult build_prepared_set(
             any_failed = true;
             continue;
         }
-        warm_voice_silence(*voice, sample_rate, channel_count, max_in_frames);
+        warm_voice_silence(*voice, sample_rate, channel_count, max_in_frames,
+                           spec.time_ratio);
         const double pitch_scale =
             semitones_to_pitch_scale(spec.effective_semitones);
         const int latency_frames =
@@ -797,8 +652,10 @@ BuildResult build_prepared_set(
             prefeed_voice_with_target_audio(
                 *voice, *spec.source, spec.target_source_frame,
                 sample_rate, channel_count, max_in_frames,
-                pitch_scale);
+                pitch_scale, spec.time_ratio);
         }
+        voice->reset_source_cursor(
+            static_cast<long long>(spec.target_source_frame));
         // The voice has already been warmed and prefed up to the
         // target. A second per-voice fade here re-shapes the prepared
         // audio after the mixer has already applied the seek de-click
@@ -811,66 +668,6 @@ BuildResult build_prepared_set(
         ptv.ready               = true;
         set->tracks.push_back(std::move(ptv));
     }
-    // Warp voices — built only if a WarpVoiceManager is wired up. For each
-    // clip that resolves to Warp or Cascade at target_frame, build a fresh
-    // WarpVoice, position its cursor at target_source_cursor, and prefeed
-    // latency_frames of source audio so the stretcher's analysis window is
-    // warm. Without this the first post-jump block emits the silence-tail
-    // of the stretcher's grain pipeline → audible "metallic burst".
-    if (warp_voices) {
-        std::vector<WarpPrepSpec> warp_specs;
-        for (const auto& track : song.tracks) {
-            for (const auto& clip : track.clips) {
-                auto specs = enumerate_warp_prep_specs(
-                    song, track, clip, sources, target_frame,
-                    &br.unloaded_clips_skipped);
-                warp_specs.insert(warp_specs.end(),
-                                   specs.begin(), specs.end());
-            }
-        }
-        if (br.unloaded_clips_skipped > 0) {
-            // Same "wait for source" semantics as the pitch path. Caller
-            // will retry when source-ready fires.
-            set->valid = false;
-            if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DEBUG")) {
-                lt_debug_log(
-                    "[LT_JUMP_DEBUG][prearm] build_warp_skipped_unloaded target=%lld unloaded=%d warp_specs=%zu\n",
-                    static_cast<long long>(target_frame),
-                    br.unloaded_clips_skipped, warp_specs.size());
-            }
-            return br;
-        }
-        for (const auto& wspec : warp_specs) {
-            auto wv = warp_voices->make_voice_for_clip();
-            if (!wv || !wv->is_ready()) {
-                any_failed = true;
-                continue;
-            }
-            if (wspec.source) {
-                prefeed_warp_voice_with_target_audio(
-                    *wv, *wspec.source, wspec.target_source_cursor,
-                    sample_rate, channel_count, max_in_frames,
-                    wspec.warp_ratio);
-            }
-            PreparedWarpVoice pwv;
-            pwv.clip_id              = wspec.clip_id;
-            pwv.voice                = std::move(wv);
-            pwv.target_source_cursor = wspec.target_source_cursor;
-            set->warp_voices.push_back(std::move(pwv));
-        }
-        if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DEBUG")) {
-            lt_debug_log(
-                "[LT_JUMP_DEBUG][prearm] build_warp target=%lld song=%s id=%s warp_specs=%zu warp_voices_built=%zu\n",
-                static_cast<long long>(target_frame),
-                song.id.c_str(), target_id.c_str(),
-                warp_specs.size(), set->warp_voices.size());
-        }
-    } else if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DEBUG")) {
-        lt_debug_log(
-            "[LT_JUMP_DEBUG][prearm] build_warp_skipped_no_mgr target=%lld\n",
-            static_cast<long long>(target_frame));
-    }
-
     // Set is valid ONLY if every audible-at-target clip got a voice.
     // 0-voice sets where no clip is audible (e.g. all NeverTranspose) are
     // still "valid" — the audio thread just doesn't need pitched voices.
@@ -902,10 +699,6 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
     const int sample_rate = impl_->sample_rate;
     const int channel_count = impl_->channel_count;
     const int max_in_frames = impl_->max_in_frames;
-    // Snapshot the warp manager pointer under the lock — build_prepared_set
-    // runs with the lock released, so it can't touch impl_->warp_voices
-    // directly.
-    WarpVoiceManager* const warp_voices_ptr = impl_->warp_voices;
 
     std::unordered_set<PrearmTargetKey, PrearmTargetKeyHash> kept;
     kept.reserve(32);
@@ -934,8 +727,7 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
         auto br  = build_prepared_set(kind, song, target_id, target_frame,
                                        sources, sample_rate,
                                        channel_count,
-                                       max_in_frames, session_revision,
-                                       warp_voices_ptr);
+                                       max_in_frames, session_revision);
         g.lock();
         if (session_revision != impl_->current_revision)
             return;
@@ -1050,22 +842,18 @@ PrearmedJumpManager::prepare_target_now(const Session& session,
     // Build the set without holding the manager mutex — voice priming is
     // ~13 ms and we don't want to block other threads' diagnostics reads.
     int sr, ch, bs;
-    WarpVoiceManager* warp_voices_ptr = nullptr;
     {
         std::lock_guard<std::mutex> g(impl_->mtx);
         sr = impl_->sample_rate;
         ch = impl_->channel_count;
         bs = impl_->max_in_frames;
-        warp_voices_ptr = impl_->warp_voices;
     }
     auto br  = build_prepared_set(kind, *song_ptr, target_id, target_frame,
-                                   sources, sr, ch, bs, session_revision,
-                                   warp_voices_ptr);
+                                   sources, sr, ch, bs, session_revision);
     for (int attempt = 0; br.unloaded_clips_skipped > 0 && attempt < 10; ++attempt) {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
         br = build_prepared_set(kind, *song_ptr, target_id, target_frame,
-                                sources, sr, ch, bs, session_revision,
-                                warp_voices_ptr);
+                                sources, sr, ch, bs, session_revision);
     }
     auto set = std::move(br.set);
 

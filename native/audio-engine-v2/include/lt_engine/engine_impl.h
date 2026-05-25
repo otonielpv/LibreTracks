@@ -19,7 +19,6 @@
 #include <lt_engine/sources/preparation_queue.h>
 #include <lt_engine/render/mixer.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
-#include <lt_engine/pitch/warp_voice_manager.h>
 #include <lt_engine/pitch/prearmed_jump_manager.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
@@ -62,7 +61,6 @@ private:
     std::unique_ptr<DecodeWorkerPool>   worker_pool_;
     std::unique_ptr<SourcePreparationQueue> prep_queue_;
     std::unique_ptr<BungeeVoiceManager> bungee_voices_;
-    std::unique_ptr<WarpVoiceManager>   warp_voices_;
     std::unique_ptr<PrearmedJumpManager> prearmed_jumps_;
     // Bumped on ANY change that could invalidate a prearmed voice set:
     //   - LoadSession (structural session change)

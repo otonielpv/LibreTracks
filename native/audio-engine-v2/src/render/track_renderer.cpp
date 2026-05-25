@@ -1,8 +1,6 @@
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
-#include <lt_engine/pitch/warp_voice_manager.h>
-#include <lt_engine/pitch/warp_voice.h>
 #include <lt_engine/debug/logging.h>
 #include <algorithm>
 #include <chrono>
@@ -47,7 +45,6 @@ std::atomic<std::uint64_t> TrackRenderer::scratch_resize_in_audio_thread_count_{
 std::atomic<std::uint64_t> TrackRenderer::block_too_large_count_{0};
 std::atomic<int> TrackRenderer::max_scratch_capacity_frames_{0};
 std::atomic<std::uint64_t> TrackRenderer::pitch_missing_stream_silence_count_{0};
-std::atomic<std::uint64_t> TrackRenderer::warp_missing_stream_silence_count_{0};
 
 void TrackRenderer::prepare(int max_block_frames) noexcept {
     if (max_block_frames <= 0)
@@ -61,22 +58,15 @@ void TrackRenderer::prepare(int max_block_frames) noexcept {
             scratch_r_.resize(static_cast<std::size_t>(max_block_frames), 0.0f);
             scratch_resize_count_.fetch_add(1, std::memory_order_relaxed);
         }
-        // Input scratch for the DSP backends. Sized 4x the output block so
-        // the warp path can feed `ceil(block * ratio)` input frames per call
-        // (ratios clamped upstream to [0.25, 4.0]). The pitch path only ever
-        // reads `block_frames` so the headroom is harmless there.
+        // Input scratch for Bungee. Sized 4x the output block so the warp
+        // path can feed `ceil(block * ratio)` input frames per call (ratios
+        // clamped upstream to [0.25, 4.0]). The pitch-only path only reads
+        // `block_frames` so the headroom is harmless there.
         const int max_in = max_block_frames * 4;
         if (static_cast<int>(bungee_in_l_.size()) < max_in)
             bungee_in_l_.resize(static_cast<std::size_t>(max_in), 0.0f);
         if (static_cast<int>(bungee_in_r_.size()) < max_in)
             bungee_in_r_.resize(static_cast<std::size_t>(max_in), 0.0f);
-        // Cascade intermediate buffer (Bungee output → RubberBand input).
-        // Sized like bungee_in_* so Bungee can write up to one warp-scaled
-        // block worth of frames into it.
-        if (static_cast<int>(cascade_mid_l_.size()) < max_in)
-            cascade_mid_l_.resize(static_cast<std::size_t>(max_in), 0.0f);
-        if (static_cast<int>(cascade_mid_r_.size()) < max_in)
-            cascade_mid_r_.resize(static_cast<std::size_t>(max_in), 0.0f);
         scratch_capacity_frames_ = std::min(static_cast<int>(scratch_l_.size()),
                                             static_cast<int>(scratch_r_.size()));
         scratch_[0] = scratch_l_.data();
@@ -100,8 +90,7 @@ TrackRendererDiagnostics TrackRenderer::diagnostics() noexcept {
         scratch_resize_in_audio_thread_count_.load(std::memory_order_relaxed),
         block_too_large_count_.load(std::memory_order_relaxed),
         max_scratch_capacity_frames_.load(std::memory_order_relaxed),
-        pitch_missing_stream_silence_count_.load(std::memory_order_relaxed),
-        warp_missing_stream_silence_count_.load(std::memory_order_relaxed)};
+        pitch_missing_stream_silence_count_.load(std::memory_order_relaxed)};
 }
 
 void TrackRenderer::reset_diagnostics() noexcept {
@@ -111,7 +100,6 @@ void TrackRenderer::reset_diagnostics() noexcept {
     block_too_large_count_.store(0, std::memory_order_relaxed);
     max_scratch_capacity_frames_.store(0, std::memory_order_relaxed);
     pitch_missing_stream_silence_count_.store(0, std::memory_order_relaxed);
-    warp_missing_stream_silence_count_.store(0, std::memory_order_relaxed);
 }
 
 bool TrackRenderer::ensure_scratch_capacity(int frames) noexcept {
@@ -142,7 +130,6 @@ void TrackRenderer::render(const Track&         track,
                             int                  engine_sample_rate,
                             Semitones            effective_semitones,
                             const Song*          active_song,
-                            WarpVoiceManager*    warp_voices,
                             bool                 track_is_silent) noexcept {
     if (track.mute) return;
     (void)engine_sample_rate;
@@ -150,7 +137,7 @@ void TrackRenderer::render(const Track&         track,
     for (const auto& clip : track.clips) {
         // Per-clip path decision. When the caller doesn't supply the song
         // (legacy code path) we fall back to the bare effective_semitones
-        // value — no warp, no path enum, identical to the pre-warp engine.
+        // value — identical to the pre-warp engine.
         ClipPathKind path = ClipPathKind::Direct;
         Semitones    clip_semitones = effective_semitones;
         double       clip_warp_ratio = 1.0;
@@ -161,7 +148,7 @@ void TrackRenderer::render(const Track&         track,
             clip_semitones   = decision.effective_semitones;
             clip_warp_ratio  = decision.warp_time_ratio;
         } else if (clip_semitones != 0) {
-            path = ClipPathKind::Pitch;
+            path = ClipPathKind::Stretched;
         }
 
         ClipBlock cb;
@@ -169,12 +156,6 @@ void TrackRenderer::render(const Track&         track,
                                  track.gain, sources, cb)) {
             continue;
         }
-
-        // No timeline→source scaling here for warp/cascade — the voice
-        // manager primed the voice's source cursor when it was built, and
-        // SignalsmithWarpVoice advances that cursor by exactly the input
-        // it was fed in the previous call. The renderer reads the cursor
-        // back via wv->source_cursor() inside render_path_warp().
 
         // Reset scratch for this clip.
         std::fill(scratch_l_.begin(),
@@ -187,19 +168,12 @@ void TrackRenderer::render(const Track&         track,
             case ClipPathKind::Direct:
                 written = render_path_direct(cb);
                 break;
-            case ClipPathKind::Pitch:
-                written = render_path_pitch(cb, bungee_voices,
-                                             clip_semitones, track.id);
-                break;
-            case ClipPathKind::Warp:
-                written = render_path_warp(cb, warp_voices,
-                                            clip_warp_ratio, track.id,
-                                            track_is_silent);
-                break;
-            case ClipPathKind::Cascade:
-                written = render_path_cascade(cb, bungee_voices, warp_voices,
-                                               clip_semitones, clip_warp_ratio,
-                                               track.id, track_is_silent);
+            case ClipPathKind::Stretched:
+                written = render_path_stretched(cb, bungee_voices,
+                                                clip_semitones,
+                                                clip_warp_ratio,
+                                                track.id,
+                                                track_is_silent);
                 break;
         }
 
@@ -269,13 +243,17 @@ int TrackRenderer::render_path_direct(const ClipBlock& cb) noexcept {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Path: Pitch — Bungee at unity speed with a non-1 pitch_scale.
+// Path: Stretched — Bungee with pitch_scale and time_ratio in a single voice.
+// Replaces the old separate Pitch / Warp / Cascade paths; Bungee::Stream
+// handles pitch + warp simultaneously in the same grain pipeline.
 // ────────────────────────────────────────────────────────────────────────────
 
-int TrackRenderer::render_path_pitch(const ClipBlock&     cb,
-                                      BungeeVoiceManager*  bungee_voices,
-                                      Semitones            effective_semitones,
-                                      const Id&            track_id) noexcept {
+int TrackRenderer::render_path_stretched(const ClipBlock&     cb,
+                                          BungeeVoiceManager*  bungee_voices,
+                                          Semitones            effective_semitones,
+                                          double               warp_time_ratio,
+                                          const Id&            track_id,
+                                          bool                 track_is_silent) noexcept {
     auto bv = bungee_voices ? bungee_voices->voice_for_shared(cb.clip->id)
                             : nullptr;
     if (!bv) {
@@ -283,25 +261,51 @@ int TrackRenderer::render_path_pitch(const ClipBlock&     cb,
         return 0;
     }
 
-    const int queued = bv->queued_output_frames();
     const int bungee_in_capacity = std::min(
         static_cast<int>(bungee_in_l_.size()),
         static_cast<int>(bungee_in_r_.size()));
-    // Pitch path always feeds `frames_to_read` (one output block) input
-    // frames at speed=1.0. Skipping the feed when the FIFO already has the
-    // block lets Bungee drain its earlier prefeed cleanly.
-    int feed_frames = queued >= cb.frames_to_read ? 0
-                                                  : cb.frames_to_read;
+    const double safe_ratio = warp_time_ratio > 0.0 ? warp_time_ratio : 1.0;
+
+    // Bungee consumes ~ceil(output_frames * ratio) input frames per call to
+    // produce output_frames of stretched output. For pitch-only (ratio=1)
+    // this equals frames_to_read, matching the old pitch-path behaviour.
+    const int input_to_feed = std::min(
+        bungee_in_capacity,
+        static_cast<int>(std::ceil(
+            static_cast<double>(cb.frames_to_read) * safe_ratio)));
+    if (input_to_feed <= 0) {
+        pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
+
+    // Silent-track gate: keep the voice's source cursor in sync with the
+    // timeline (so un-mute resumes at the right position) but skip the
+    // expensive grain synthesis.
+    if (track_is_silent) {
+        bv->reset_source_cursor(bv->source_cursor() + input_to_feed);
+        std::fill(scratch_l_.begin(),
+                  scratch_l_.begin() + cb.frames_to_read, 0.0f);
+        std::fill(scratch_r_.begin(),
+                  scratch_r_.begin() + cb.frames_to_read, 0.0f);
+        return cb.frames_to_read;
+    }
+
+    const int queued = bv->queued_output_frames();
+    int feed_frames = queued >= cb.frames_to_read ? 0 : input_to_feed;
     feed_frames = std::min(feed_frames, bungee_in_capacity);
 
     const double pitch_scale = std::pow(2.0,
         static_cast<double>(effective_semitones) / 12.0);
     const long long latency = static_cast<long long>(bv->latency_frames());
     const int compensation = bv->alignment_compensation_frames(pitch_scale);
-    const Frame read_from = cb.source_frame
-        + static_cast<Frame>(latency)
-        + static_cast<Frame>(compensation)
-        + static_cast<Frame>(queued);
+    // Read from where the voice last left off. The voice tracks its own
+    // source cursor so warp ratios that don't advance the timeline 1:1 stay
+    // in sync without the renderer having to re-derive the offset.
+    const long long cursor = bv->source_cursor();
+    const Frame queued_source_frames = static_cast<Frame>(std::ceil(
+        static_cast<double>(queued) * safe_ratio));
+    const Frame read_from = static_cast<Frame>(cursor
+        + latency + compensation + queued_source_frames);
     const Frame src_end = cb.src->duration_frames();
 
     if (feed_frames > 0) {
@@ -336,18 +340,24 @@ int TrackRenderer::render_path_pitch(const ClipBlock&     cb,
                   bungee_in_r_.begin() + feed_frames, 0.0f);
     }
     const float* in_ptrs[2] = { bungee_in_l_.data(), bungee_in_r_.data() };
+    const auto dsp_t0 = std::chrono::steady_clock::now();
     const int produced = bv->render_block(
         in_ptrs, feed_frames, scratch_, cb.frames_to_read, pitch_scale,
-        /*time_ratio*/ 1.0);
+        safe_ratio);
+    const auto dsp_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - dsp_t0).count();
     const int queued_after = bv->queued_output_frames();
-    if (queued > 0 || cb.frames_to_read < feed_frames) {
+
+    if (queued > 0 || cb.frames_to_read < feed_frames || safe_ratio != 1.0) {
         track_jump_debug_log(
-            "[LT_JUMP_DEBUG][track-renderer] pitch track=%s clip=%s source_frame=%lld frames=%d queued_before=%d feed_frames=%d produced=%d queued_after=%d read_from=%lld latency=%lld compensation=%d pitch_scale=%.9f got=%d available=%d\n",
+            "[LT_JUMP_DEBUG][track-renderer] stretched track=%s clip=%s cursor=%lld frames=%d queued_before=%d queued_source=%lld feed=%d input=%d produced=%d queued_after=%d read_from=%lld latency=%lld compensation=%d pitch=%.6f ratio=%.6f dsp_us=%lld\n",
             track_id.c_str(), cb.clip->id.c_str(),
-            static_cast<long long>(cb.source_frame),
-            cb.frames_to_read, queued, feed_frames, produced, queued_after,
+            cursor, cb.frames_to_read, queued,
+            static_cast<long long>(queued_source_frames), feed_frames,
+            input_to_feed, produced, queued_after,
             static_cast<long long>(read_from), latency, compensation,
-            pitch_scale, got, available);
+            pitch_scale, safe_ratio,
+            static_cast<long long>(dsp_us));
     }
 
     // Bungee may return fewer frames than requested during its warm-up
@@ -358,297 +368,6 @@ int TrackRenderer::render_path_pitch(const ClipBlock&     cb,
         std::fill(scratch_r_.begin() + std::max(0, produced),
                   scratch_r_.begin() + cb.frames_to_read, 0.0f);
     }
-    return cb.frames_to_read;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Path: Warp — WarpVoice backend at pitch=1, time_ratio=ratio.
-// ────────────────────────────────────────────────────────────────────────────
-
-int TrackRenderer::render_path_warp(const ClipBlock&   cb,
-                                     WarpVoiceManager*  warp_voices,
-                                     double             warp_time_ratio,
-                                     const Id&          track_id,
-                                     bool               track_is_silent) noexcept {
-    auto wv = warp_voices ? warp_voices->voice_for_shared(cb.clip->id)
-                          : nullptr;
-    if (!wv) {
-        warp_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
-        return 0;
-    }
-
-    const int bungee_in_capacity = std::min(
-        static_cast<int>(bungee_in_l_.size()),
-        static_cast<int>(bungee_in_r_.size()));
-    const int input_to_feed = std::min(
-        bungee_in_capacity,
-        static_cast<int>(std::ceil(
-            static_cast<double>(cb.frames_to_read) * warp_time_ratio)));
-    if (input_to_feed <= 0) {
-        warp_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
-        return 0;
-    }
-
-    // Track is muted/inaudible: keep the voice's source cursor in sync with
-    // the timeline (so un-mute resumes at the right position) but skip the
-    // stretcher work.
-    if (track_is_silent) {
-        wv->advance_silent(input_to_feed);
-        std::fill(scratch_l_.begin(),
-                  scratch_l_.begin() + cb.frames_to_read, 0.0f);
-        std::fill(scratch_r_.begin(),
-                  scratch_r_.begin() + cb.frames_to_read, 0.0f);
-        return cb.frames_to_read;
-    }
-
-    // Read from where the voice last left off. Backends with a large
-    // analysis delay (Bungee) ask for source-side latency compensation so
-    // warped and unwarped tracks stay aligned on the timeline.
-    const long long cursor = wv->source_cursor();
-    const long long warp_latency = wv->needs_source_latency_compensation()
-        ? static_cast<long long>(wv->input_latency_frames())
-        : 0LL;
-    const long long read_from = cursor + warp_latency;
-    const Frame src_end = cb.src->duration_frames();
-    std::fill(bungee_in_l_.begin(), bungee_in_l_.begin() + input_to_feed, 0.0f);
-    std::fill(bungee_in_r_.begin(), bungee_in_r_.begin() + input_to_feed, 0.0f);
-    const int dst_offset = read_from < 0
-        ? static_cast<int>(std::min<long long>(input_to_feed, -read_from))
-        : 0;
-    const Frame read_start = static_cast<Frame>(std::max<long long>(0, read_from));
-    const int available = (dst_offset >= input_to_feed || read_start >= src_end)
-        ? 0
-        : static_cast<int>(std::min<long long>(
-            input_to_feed - dst_offset,
-            static_cast<long long>(src_end - read_start)));
-    if (available > 0) {
-        float* read_into[2] = {
-            bungee_in_l_.data() + dst_offset,
-            bungee_in_r_.data() + dst_offset };
-        const int got = cb.src->read(read_start, available, read_into,
-                                      std::min(2, cb.src->channel_count()));
-        if (got > 0 && cb.src->channel_count() == 1) {
-            std::copy_n(bungee_in_l_.begin() + dst_offset, got,
-                        bungee_in_r_.begin() + dst_offset);
-        }
-    }
-
-    // Read what we got count BEFORE process() so we can log the actual
-    // amount of real source frames (vs zero-padded tail).
-    int got_input = 0;
-    if (available > 0) {
-        got_input = static_cast<int>(std::min<long long>(available,
-                                                          src_end - read_start));
-    }
-
-    const float* in_ptrs[2] = { bungee_in_l_.data(), bungee_in_r_.data() };
-    const auto dsp_t0 = std::chrono::steady_clock::now();
-    const int produced = wv->render_block(
-        in_ptrs, input_to_feed, scratch_, cb.frames_to_read, warp_time_ratio);
-    const auto dsp_us = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now() - dsp_t0).count();
-
-    // Detect first/last sample of the scratch — useful for spotting clicks.
-    // We log them every block under LIBRETRACKS_AUDIO_DEBUG so the user can
-    // grep "warp track=" and see the per-block trace.
-    const float first_l = produced > 0 ? scratch_l_[0] : 0.f;
-    const float last_l  = produced > 0
-        ? scratch_l_[static_cast<size_t>(produced - 1)]
-        : 0.f;
-    track_jump_debug_log(
-        "[LT_JUMP_DEBUG][track-renderer] warp track=%s clip=%s cursor=%lld read_from=%lld warp_latency=%lld src_end=%lld input_to_feed=%d got_input=%d dst_offset=%d frames_to_read=%d produced=%d ratio=%.6f first_l=%.6f last_l=%.6f dsp_us=%lld\n",
-        track_id.c_str(), cb.clip->id.c_str(),
-        cursor, read_from, warp_latency, static_cast<long long>(src_end),
-        input_to_feed, got_input, dst_offset,
-        cb.frames_to_read, produced, warp_time_ratio,
-        first_l, last_l, static_cast<long long>(dsp_us));
-
-    if (produced < cb.frames_to_read) {
-        std::fill(scratch_l_.begin() + std::max(0, produced),
-                  scratch_l_.begin() + cb.frames_to_read, 0.0f);
-        std::fill(scratch_r_.begin() + std::max(0, produced),
-                  scratch_r_.begin() + cb.frames_to_read, 0.0f);
-    }
-    return cb.frames_to_read;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Path: Cascade — Bungee (pitch, speed=1) → intermediate buffer → WarpVoice
-// (time-stretch, pitch=1). Used when a clip has both transpose and warp.
-//
-// Frame math:
-//   - WarpVoice wants `ceil(frames_to_read * ratio)` input per call to
-//     produce `frames_to_read` output.
-//   - Bungee runs at speed=1, so it produces 1 frame of output per frame of
-//     input. We therefore ask Bungee to produce `ceil(frames_to_read * ratio)`
-//     pitched frames, which means we read that many source frames and feed
-//     them to Bungee.
-//   - Bungee's own latency (~3-10k frames) shifts where in the source we
-//     have to read from; we add latency + compensation just like the Pitch
-//     path does. The warp cursor lives on the WarpVoice and advances in
-//     lockstep with the input we hand it.
-// ────────────────────────────────────────────────────────────────────────────
-
-int TrackRenderer::render_path_cascade(const ClipBlock&     cb,
-                                        BungeeVoiceManager*  bungee_voices,
-                                        WarpVoiceManager*    warp_voices,
-                                        Semitones            effective_semitones,
-                                        double               warp_time_ratio,
-                                        const Id&            track_id,
-                                        bool                 track_is_silent) noexcept {
-    auto bv = bungee_voices ? bungee_voices->voice_for_shared(cb.clip->id)
-                            : nullptr;
-    auto wv = warp_voices ? warp_voices->voice_for_shared(cb.clip->id)
-                          : nullptr;
-    if (!bv) {
-        pitch_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
-        return 0;
-    }
-    if (!wv) {
-        warp_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
-        return 0;
-    }
-
-    const int bungee_in_capacity = std::min(
-        static_cast<int>(bungee_in_l_.size()),
-        static_cast<int>(bungee_in_r_.size()));
-    const int mid_capacity = std::min(
-        static_cast<int>(cascade_mid_l_.size()),
-        static_cast<int>(cascade_mid_r_.size()));
-    // RubberBand consumes ceil(out * ratio) input per call.
-    const int rb_input_needed = std::min(
-        mid_capacity,
-        static_cast<int>(std::ceil(
-            static_cast<double>(cb.frames_to_read) * warp_time_ratio)));
-    if (rb_input_needed <= 0) {
-        warp_missing_stream_silence_count_.fetch_add(1, std::memory_order_relaxed);
-        return 0;
-    }
-
-    // See render_path_warp: muted/silent tracks advance their cursors
-    // without running the DSP. Bungee state will be slightly stale on
-    // un-mute (first ~1 block is the only audible artifact) but the CPU
-    // savings are large enough to make multi-track muted-warp setups
-    // playable. Without this gate, 3 cascade voices spent ~30ms per
-    // 10.7ms block.
-    if (track_is_silent) {
-        wv->advance_silent(rb_input_needed);
-        std::fill(scratch_l_.begin(),
-                  scratch_l_.begin() + cb.frames_to_read, 0.0f);
-        std::fill(scratch_r_.begin(),
-                  scratch_r_.begin() + cb.frames_to_read, 0.0f);
-        return cb.frames_to_read;
-    }
-
-    // Bungee feed: same size as what RubberBand will consume, because Bungee
-    // runs at speed=1 (1 input frame → 1 output frame). Skip the feed when
-    // Bungee's own FIFO already has enough — drain it first like the Pitch
-    // path does.
-    const int bungee_queued = bv->queued_output_frames();
-    int bungee_feed_frames = bungee_queued >= rb_input_needed
-        ? 0
-        : std::min(rb_input_needed, bungee_in_capacity);
-
-    const double pitch_scale = std::pow(2.0,
-        static_cast<double>(effective_semitones) / 12.0);
-    const long long latency = static_cast<long long>(bv->latency_frames());
-    const int compensation = bv->alignment_compensation_frames(pitch_scale);
-    // The WarpVoice has its own source cursor — use it as the authoritative
-    // read position. Bungee's latency / compensation shift forward from
-    // there because Bungee output lags its input by that much.
-    const long long cursor = wv->source_cursor();
-    const long long warp_latency = wv->needs_source_latency_compensation()
-        ? static_cast<long long>(wv->input_latency_frames())
-        : 0LL;
-    const Frame read_from = static_cast<Frame>(cursor
-        + warp_latency + latency + compensation + bungee_queued);
-    const Frame src_end = cb.src->duration_frames();
-
-    // Read source into bungee_in_*.
-    if (bungee_feed_frames > 0) {
-        std::fill(bungee_in_l_.begin(),
-                  bungee_in_l_.begin() + bungee_feed_frames, 0.0f);
-        std::fill(bungee_in_r_.begin(),
-                  bungee_in_r_.begin() + bungee_feed_frames, 0.0f);
-    }
-    const int src_dst_offset = read_from < 0
-        ? static_cast<int>(std::min<Frame>(bungee_feed_frames, -read_from))
-        : 0;
-    const Frame read_start = std::max<Frame>(0, read_from);
-    const int src_available =
-        (src_dst_offset >= bungee_feed_frames || read_start >= src_end)
-            ? 0
-            : static_cast<int>(std::min<long long>(
-                bungee_feed_frames - src_dst_offset,
-                static_cast<long long>(src_end - read_start)));
-    if (src_available > 0) {
-        float* read_into[2] = {
-            bungee_in_l_.data() + src_dst_offset,
-            bungee_in_r_.data() + src_dst_offset };
-        const int got = cb.src->read(read_start, src_available, read_into,
-                                      std::min(2, cb.src->channel_count()));
-        if (got > 0 && cb.src->channel_count() == 1) {
-            std::copy_n(bungee_in_l_.begin() + src_dst_offset, got,
-                        bungee_in_r_.begin() + src_dst_offset);
-        }
-    }
-
-    // Bungee process: pitch-shift, speed=1. Output goes to cascade_mid_*.
-    float* mid_ptrs[2] = { cascade_mid_l_.data(), cascade_mid_r_.data() };
-    const float* bungee_in_ptrs[2] = {
-        bungee_in_l_.data(), bungee_in_r_.data() };
-    const auto bungee_t0 = std::chrono::steady_clock::now();
-    const int pitched = bv->render_block(
-        bungee_in_ptrs, bungee_feed_frames,
-        mid_ptrs, rb_input_needed,
-        pitch_scale,
-        /*time_ratio*/ 1.0);
-    const auto bungee_us = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now() - bungee_t0).count();
-    // If Bungee fell short (warmup), zero-pad the tail so RubberBand gets
-    // exactly rb_input_needed frames of pitched audio.
-    if (pitched < rb_input_needed) {
-        std::fill(cascade_mid_l_.begin() + std::max(0, pitched),
-                  cascade_mid_l_.begin() + rb_input_needed, 0.0f);
-        std::fill(cascade_mid_r_.begin() + std::max(0, pitched),
-                  cascade_mid_r_.begin() + rb_input_needed, 0.0f);
-    }
-
-    // RubberBand process: time-stretch the pitched audio at warp_time_ratio.
-    const float* rb_in_ptrs[2] = {
-        cascade_mid_l_.data(), cascade_mid_r_.data() };
-    const auto rb_t0 = std::chrono::steady_clock::now();
-    const int produced = wv->render_block(
-        rb_in_ptrs, rb_input_needed,
-        scratch_, cb.frames_to_read, warp_time_ratio);
-    const auto rb_us = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now() - rb_t0).count();
-    if (produced < cb.frames_to_read) {
-        std::fill(scratch_l_.begin() + std::max(0, produced),
-                  scratch_l_.begin() + cb.frames_to_read, 0.0f);
-        std::fill(scratch_r_.begin() + std::max(0, produced),
-                  scratch_r_.begin() + cb.frames_to_read, 0.0f);
-    }
-
-    // First/last sample of the output so we can spot silence, NaN, or
-    // gross discontinuities at block boundaries.
-    const float out_first_l = produced > 0 ? scratch_l_[0] : 0.f;
-    const float out_last_l  = produced > 0
-        ? scratch_l_[static_cast<std::size_t>(produced - 1)]
-        : 0.f;
-    const float mid_first_l = pitched > 0 ? cascade_mid_l_[0] : 0.f;
-    const float mid_last_l  = pitched > 0
-        ? cascade_mid_l_[static_cast<std::size_t>(pitched - 1)]
-        : 0.f;
-    track_jump_debug_log(
-        "[LT_JUMP_DEBUG][track-renderer] cascade track=%s clip=%s cursor=%lld read_from=%lld warp_latency=%lld bungee_feed=%d pitched=%d rb_input=%d produced=%d pitch_scale=%.6f ratio=%.6f mid_first=%.6f mid_last=%.6f out_first=%.6f out_last=%.6f bungee_us=%lld rb_us=%lld\n",
-        track_id.c_str(), cb.clip->id.c_str(),
-        cursor, static_cast<long long>(read_from), warp_latency,
-        bungee_feed_frames, pitched, rb_input_needed, produced,
-        pitch_scale, warp_time_ratio,
-        mid_first_l, mid_last_l, out_first_l, out_last_l,
-        static_cast<long long>(bungee_us),
-        static_cast<long long>(rb_us));
     return cb.frames_to_read;
 }
 
