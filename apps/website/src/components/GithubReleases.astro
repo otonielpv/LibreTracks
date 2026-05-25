@@ -101,7 +101,7 @@ function iconForAsset(name: string): string {
           {release.assets.length > 0 ? (
             <div class="download-list">
               {release.assets.map((asset) => (
-                <a class="download-card" href={asset.browser_download_url} data-download-asset>
+                <a class="download-card" href={asset.browser_download_url} target="_blank" rel="noopener noreferrer" data-download-asset>
                   <span class="download-icon">{iconForAsset(asset.name)}</span>
                   <span class="download-info">
                     <strong>{asset.name}</strong>
@@ -186,22 +186,12 @@ function iconForAsset(name: string): string {
       const mouseEvent = event as MouseEvent;
       if (mouseEvent.button !== 0 || mouseEvent.metaKey || mouseEvent.ctrlKey || mouseEvent.shiftKey || mouseEvent.altKey) return;
 
-      // On desktop the browser starts the download immediately when the
-      // anchor is followed, and the resulting focus shift can prevent
-      // showModal() from actually painting the dialog (mobile is fine
-      // because the download is handed off to a system UI). Intercept
-      // the click, open the dialog first, then kick off the download
-      // ourselves via a synthetic anchor.
+      // On desktop, following the download URL in the same tab can move the
+      // page away before the modal paints. Keep LibreTracks open, show the
+      // reminder here, and let the browser handle the GitHub asset separately.
       event.preventDefault();
       showDonationReminder();
-      const href = link.href;
-      const trigger = document.createElement("a");
-      trigger.href = href;
-      trigger.rel = "noopener";
-      trigger.style.display = "none";
-      document.body.appendChild(trigger);
-      trigger.click();
-      trigger.remove();
+      window.open(link.href, "_blank", "noopener,noreferrer");
     });
   });
 
