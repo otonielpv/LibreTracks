@@ -156,30 +156,18 @@ function iconForAsset(name: string): string {
 </dialog>
 
 <script>
-  const storageKey = "libretracks-donation-reminder-dismissed-at";
-  const reminderIntervalMs = 14 * 24 * 60 * 60 * 1000;
   const dialog = document.querySelector("[data-donation-dialog]");
   const downloadLinks = document.querySelectorAll("[data-download-asset]");
   const closeButtons = document.querySelectorAll("[data-donation-close]");
 
-  function wasRecentlyDismissed() {
-    const dismissedAt = Number(window.localStorage.getItem(storageKey) || 0);
-    return dismissedAt > 0 && Date.now() - dismissedAt < reminderIntervalMs;
-  }
-
-  function rememberDismissal() {
-    window.localStorage.setItem(storageKey, String(Date.now()));
-  }
-
   function showDonationReminder() {
-    if (!(dialog instanceof HTMLDialogElement) || wasRecentlyDismissed() || dialog.open) return;
+    if (!(dialog instanceof HTMLDialogElement) || dialog.open) return;
     dialog.showModal();
   }
 
   downloadLinks.forEach((link) => {
     link.addEventListener("click", (event) => {
       if (!(link instanceof HTMLAnchorElement)) return;
-      if (wasRecentlyDismissed()) return;
       if (event.defaultPrevented) return;
       // Modifier-clicks / middle-click open in a new tab — let the
       // browser handle them without intercepting.
@@ -197,15 +185,12 @@ function iconForAsset(name: string): string {
 
   closeButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      rememberDismissal();
       if (dialog instanceof HTMLDialogElement) dialog.close();
     });
   });
 
-  dialog?.addEventListener("cancel", rememberDismissal);
   dialog?.addEventListener("click", (event) => {
     if (event.target === dialog) {
-      rememberDismissal();
       dialog.close();
     }
   });
