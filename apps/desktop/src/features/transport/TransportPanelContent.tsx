@@ -4118,8 +4118,13 @@ export function TransportPanelContent() {
         insertAfterTrackId: anchorTrack?.id ?? null,
         parentTrackId: parentTrackId ?? null,
       });
+      // Pre-register the new revision so the revision-effect skips its own
+      // refetch — refreshSongView below already pulls the fresh structure.
+      optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
       applyPlaybackSnapshot(nextSnapshot);
-      await refreshSongView();
+      // Creating an empty track does not add, move, or remove clips, so the
+      // waveform peaks cache is still valid. Skip the ~27 MB waveform payload.
+      await refreshSongView({ includeWaveforms: false });
       setStatus(t("transport.status.trackCreated", { name }));
     });
   }
@@ -4180,9 +4185,14 @@ export function TransportPanelContent() {
 
           await runAction(async () => {
             const nextSnapshot = await deleteTrack(track.id);
+            optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
             applyPlaybackSnapshot(nextSnapshot);
             clearLibraryDragPreview();
-            await refreshSongView();
+            // Deleting a track removes its clips but the surviving clips
+            // still reference the same waveformKeys, and orphaned cache
+            // entries are harmless until the next full reload. Skip the
+            // ~27 MB waveform payload to keep the UI responsive.
+            await refreshSongView({ includeWaveforms: false });
             setStatus(t("transport.status.trackDeleted", { name: track.name }));
           });
         },
@@ -4683,6 +4693,22 @@ export function TransportPanelContent() {
     clearSelection();
     setSelectedRegionId(null);
     openMenu(event, "Tracks", globalTrackListContextMenu());
+  }
+
+  function handleTrackHeadersEmptyAreaContextMenu(
+    event: ReactMouseEvent<HTMLDivElement>,
+  ) {
+    if (!songRef.current) {
+      return;
+    }
+
+    clearSelection();
+    setSelectedRegionId(null);
+    openMenu(
+      event,
+      t("transport.menu.tracksMenuTitle", { defaultValue: "Tracks" }),
+      globalTrackListContextMenu(),
+    );
   }
 
   function sectionContextMenu(section: SectionMarkerSummary) {
@@ -5241,6 +5267,20 @@ export function TransportPanelContent() {
         suppressMissingMidiDeviceWarning: true,
       },
       t("transport.status.midiWarningHidden"),
+    );
+  }
+
+  function handleTimelineNavigationSchemeChange(
+    nextValue: "ableton" | "libretracks",
+  ) {
+    persistAudioSettings(
+      normalizeAppSettings({
+        ...appSettingsRef.current,
+        timelineNavigationScheme: nextValue,
+      }),
+      t("transport.status.timelineNavigationSchemeUpdated", {
+        defaultValue: "Timeline navigation scheme updated.",
+      }),
     );
   }
 
@@ -7429,6 +7469,9 @@ export function TransportPanelContent() {
                           }
                           onSelectTrack={handleTrackHeaderSelect}
                           onOpenContextMenu={handleTrackHeaderContextMenu}
+                          onEmptyAreaContextMenu={
+                            handleTrackHeadersEmptyAreaContextMenu
+                          }
                           onStartTrackDrag={handleTrackHeaderDragStart}
                           onToggleFolder={handleTrackHeaderFolderToggle}
                           onToggleMute={handleTrackHeaderMuteToggle}
@@ -7817,6 +7860,7 @@ export function TransportPanelContent() {
                           }}
                           snapEnabled={snapEnabled}
                           canNativeZoom={Boolean(song)}
+                          navigationScheme={appSettings.timelineNavigationScheme}
                           onNativeCameraXPreview={(nextCameraX) =>
                             updateCameraX(nextCameraX, {
                               commitToStore: false,
@@ -7935,6 +7979,9 @@ export function TransportPanelContent() {
               onRefreshMidiInputDevices={handleRefreshMidiInputDevices}
               selectedLocale={selectedLocale}
               onLocaleChange={handleLocaleChange}
+              onTimelineNavigationSchemeChange={
+                handleTimelineNavigationSchemeChange
+              }
               midiLearnMode={midiLearnMode}
               midiLearnFeedback={midiLearnFeedback}
               midiLearnFeedbackCommand={midiLearnFeedbackCommand}

@@ -1,15 +1,18 @@
-import { clamp, getZoomLevelDelta } from "../timelineMath";
+import { clamp } from "../timelineMath";
 
 type NativeZoomView = {
   cameraX: number;
   zoomLevel: number;
 };
 
+export type TimelineNavigationScheme = "ableton" | "libretracks";
+
 type InputManagerState = {
   cameraX: number;
   zoomLevel: number;
   trackHeight: number;
   canZoom: boolean;
+  navigationScheme: TimelineNavigationScheme;
 };
 
 type InputManagerOptions = {
@@ -27,6 +30,7 @@ type InputManagerOptions = {
   onPreviewZoom: (nextZoomLevel: number, anchorViewportX: number) => NativeZoomView | null;
   onCommitZoom: (view: NativeZoomView) => void;
   onTrackHeightChange: (trackHeight: number) => void;
+  onScrollVertical?: (deltaY: number) => void;
 };
 
 type DragPanState = {
@@ -93,6 +97,15 @@ export class InputManager {
   private handleWheel = (event: WheelEvent) => {
     const state = this.options.getState();
 
+    if (state.navigationScheme === "ableton") {
+      this.handleWheelAbleton(event, state);
+      return;
+    }
+
+    this.handleWheelLibreTracks(event, state);
+  };
+
+  private handleWheelLibreTracks(event: WheelEvent, state: InputManagerState) {
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
       const nextTrackHeight = clamp(
@@ -120,21 +133,94 @@ export class InputManager {
       return;
     }
 
+    this.applyZoomFromWheel(event, state);
+  }
+
+  private handleWheelAbleton(event: WheelEvent, state: InputManagerState) {
+    // Trackpad pinch gestures arrive as wheel events with ctrlKey=true on every
+    // major browser/OS. Treat ctrlKey/metaKey + wheel as horizontal zoom.
+    if (event.ctrlKey || event.metaKey) {
+      if (!state.canZoom) {
+        event.preventDefault();
+        return;
+      }
+      this.applyZoomFromWheel(event, state);
+      return;
+    }
+
+    // Alt + wheel = track height (replaces Ctrl + wheel from the legacy scheme).
+    if (event.altKey) {
+      event.preventDefault();
+      const nextTrackHeight = clamp(
+        Math.round(
+          state.trackHeight + (event.deltaY < 0 ? this.options.trackHeightStep : -this.options.trackHeightStep),
+        ),
+        this.options.trackHeightMin,
+        this.options.trackHeightMax,
+      );
+      this.options.onTrackHeightChange(nextTrackHeight);
+      return;
+    }
+
+    // Horizontal pan: explicit horizontal scroll, or shift + vertical.
+    const hasHorizontalIntent =
+      event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    if (hasHorizontalIntent) {
+      event.preventDefault();
+      const horizontalDelta =
+        event.deltaX + (event.shiftKey ? event.deltaY : 0);
+      const nextCameraX = this.options.onPreviewCameraX(
+        state.cameraX + horizontalDelta,
+      );
+      this.schedulePanCommit(nextCameraX);
+      return;
+    }
+
+    // Plain vertical scroll: forward to track list scroller if provided,
+    // otherwise let the browser scroll the viewport naturally.
+    if (this.options.onScrollVertical) {
+      event.preventDefault();
+      this.options.onScrollVertical(event.deltaY);
+    }
+  }
+
+  private applyZoomFromWheel(event: WheelEvent, state: InputManagerState) {
     event.preventDefault();
     const bounds = this.container.getBoundingClientRect();
     const anchorViewportX = clamp(event.clientX - bounds.left, 0, bounds.width);
-    const nextZoomLevel = getZoomLevelDelta(
-      state.zoomLevel,
-      event.deltaY < 0 ? "in" : "out",
-      this.options.zoomMultiplier,
-    );
+    const nextZoomLevel = this.computeNextZoomLevel(event, state.zoomLevel);
     const nextView = this.options.onPreviewZoom(nextZoomLevel, anchorViewportX);
     if (!nextView) {
       return;
     }
 
     this.scheduleZoomCommit(nextView);
-  };
+  }
+
+  private computeNextZoomLevel(event: WheelEvent, currentZoomLevel: number) {
+    // Trackpad pinch gestures fire many wheel events with very small deltaY
+    // values (often 1-10), while a real mouse wheel notch is ~100. Using a
+    // fixed per-event multiplier (the legacy behaviour) makes pinch zoom feel
+    // explosive. Scale the multiplier exponentially by the normalized deltaY
+    // magnitude so that small gestures produce small steps and large notches
+    // still feel snappy.
+    const lineHeightPx = 16;
+    const pageHeightPx = 800;
+    const normalizedDelta =
+      event.deltaMode === 1
+        ? event.deltaY * lineHeightPx
+        : event.deltaMode === 2
+          ? event.deltaY * pageHeightPx
+          : event.deltaY;
+    // Cap a single event's contribution so an OS that bursts a huge delta
+    // (e.g. macOS momentum scroll) can't snap multiple stops at once.
+    const cappedDelta = clamp(normalizedDelta, -200, 200);
+    // Map a full mouse notch (~100px) to roughly the legacy 1.2x factor.
+    const stepReference = 100;
+    const baseStep = Math.log(Math.max(1.01, this.options.zoomMultiplier));
+    const factor = Math.exp((-cappedDelta * baseStep) / stepReference);
+    return Math.max(0.01, currentZoomLevel * factor);
+  }
 
   private handleMouseDown = (event: MouseEvent) => {
     if (event.button !== 1) {

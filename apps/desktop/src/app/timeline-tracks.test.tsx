@@ -149,7 +149,8 @@ describe("App / timeline-tracks", () => {
     expect(screen.getByLabelText(textMatcher(en.transport.shell.horizontalScroll))).toBeTruthy();
 
     await act(async () => {
-      fireEvent.wheel(ruler, { deltaY: -100, clientX: 900 });
+      // Ableton-style scheme: pinch (or Ctrl + wheel) is the zoom gesture.
+      fireEvent.wheel(ruler, { deltaY: -100, clientX: 900, ctrlKey: true });
     });
 
     expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
@@ -168,7 +169,11 @@ describe("App / timeline-tracks", () => {
     expect(trackCanvas).toBeTruthy();
 
     await act(async () => {
-      fireEvent.wheel(trackCanvas as HTMLElement, { deltaY: -100, clientX: 900 });
+      fireEvent.wheel(trackCanvas as HTMLElement, {
+        deltaY: -100,
+        clientX: 900,
+        ctrlKey: true,
+      });
     });
 
     expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
@@ -187,7 +192,11 @@ describe("App / timeline-tracks", () => {
     expect(trackList).toBeTruthy();
 
     await act(async () => {
-      fireEvent.wheel(trackList as HTMLElement, { deltaY: -100, clientX: 900 });
+      fireEvent.wheel(trackList as HTMLElement, {
+        deltaY: -100,
+        clientX: 900,
+        ctrlKey: true,
+      });
     });
 
     expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThan(0);

@@ -22,6 +22,7 @@ type TrackHeadersPaneProps = {
   getTrackChildCount: (trackId: string) => number;
   onSelectTrack: (trackId: string, trackName: string, event: ReactMouseEvent<HTMLDivElement>) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
+  onEmptyAreaContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onStartTrackDrag: (event: ReactMouseEvent<HTMLElement>, trackId: string) => void;
   onToggleFolder: (trackId: string) => void;
   onToggleMute: (trackId: string) => void;
@@ -47,6 +48,7 @@ export function TrackHeadersPane({
   getTrackChildCount,
   onSelectTrack,
   onOpenContextMenu,
+  onEmptyAreaContextMenu,
   onStartTrackDrag,
   onToggleFolder,
   onToggleMute,
@@ -60,7 +62,22 @@ export function TrackHeadersPane({
   onAudioToChange,
 }: TrackHeadersPaneProps) {
   return (
-    <div className="lt-track-headers-pane">
+    <div
+      className="lt-track-headers-pane"
+      onContextMenu={(event) => {
+        // Show the global track-list menu when the right-click hits empty
+        // space inside the pane (below the last header). Header rows and the
+        // ruler header keep their own handling.
+        const target = event.target as HTMLElement | null;
+        if (
+          target?.closest(".lt-track-header-row") ||
+          target?.closest(".lt-ruler-header")
+        ) {
+          return;
+        }
+        onEmptyAreaContextMenu(event);
+      }}
+    >
       <div className="lt-ruler-header">
         <span>Tracks</span>
       </div>

@@ -86,6 +86,13 @@ const es = {
       languageSystemDefault: "Sistema / System Default",
       languageEnglish: "English",
       languageSpanish: "Español",
+      timelineNavigationScheme: "Navegación de la línea de tiempo",
+      timelineNavigationSchemeAbleton:
+        "Ableton / Audacity (pellizcar para hacer zoom, scroll para desplazar)",
+      timelineNavigationSchemeLibreTracks:
+        "LibreTracks clásico (la rueda hace zoom)",
+      timelineNavigationSchemeHelp:
+        "Elige cómo el trackpad o la rueda del ratón se mueven por la línea de tiempo. En modo Ableton, pellizcar (o Ctrl + scroll) hace zoom hacia el cursor y Alt + scroll cambia la altura de las pistas.",
       metronomeTitle: "Metronomo",
       metronomeDescription:
         "Añade una claqueta sintetizada y la mantiene bloqueada muestra a muestra con el timeline del transporte.",
@@ -290,6 +297,8 @@ const es = {
         "Asignacion MIDI aprendida para {{key}}: {{binding}}.",
       midiMappingsReset: "Mapeos MIDI reseteados.",
       audioRoutingUpdated: "Ruteo de audio actualizado.",
+      timelineNavigationSchemeUpdated:
+        "Navegación de la línea de tiempo actualizada.",
       trackRoutingUpdated: "Ruteo de pista actualizado.",
       importRequiresSession:
         "Crea o abre una sesion antes de importar audio a la libreria.",

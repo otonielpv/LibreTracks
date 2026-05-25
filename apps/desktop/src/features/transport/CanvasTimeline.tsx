@@ -11,7 +11,7 @@ import type {
   WaveformSummaryDto,
 } from "./desktopApi";
 import type { TimelineClipSummary, TimelineTrackSummary } from "./pendingAudioImports";
-import { InputManager } from "./Renderer/InputManager";
+import { InputManager, type TimelineNavigationScheme } from "./Renderer/InputManager";
 import {
   drawGridLines,
   drawRulerBackgroundLayer,
@@ -50,6 +50,7 @@ type RulerCanvasProps = {
   playheadDragRef: MutableRefObject<{ currentSeconds: number } | null>;
   interactionContainerRef: RefObject<HTMLDivElement | null>;
   canNativeZoom: boolean;
+  navigationScheme: TimelineNavigationScheme;
   onNativeCameraXPreview: (cameraX: number) => number;
   onNativeCameraXCommit: (cameraX: number) => void;
   onNativeZoomPreview: (nextZoomLevel: number, anchorViewportX: number) => {
@@ -80,6 +81,7 @@ type TrackCanvasProps = {
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
   trackHeightForInput: number;
   canNativeZoom: boolean;
+  navigationScheme: TimelineNavigationScheme;
   onNativeCameraXPreview: (cameraX: number) => number;
   onNativeCameraXCommit: (cameraX: number) => void;
   onNativeZoomPreview: (nextZoomLevel: number, anchorViewportX: number) => {
@@ -211,6 +213,7 @@ export function TimelineRulerCanvas({
   playheadDragRef,
   interactionContainerRef,
   canNativeZoom,
+  navigationScheme,
   onNativeCameraXPreview,
   onNativeCameraXCommit,
   onNativeZoomPreview,
@@ -310,6 +313,7 @@ export function TimelineRulerCanvas({
         zoomLevel: livePixelsPerSecondRef.current / BASE_PIXELS_PER_SECOND,
         trackHeight,
         canZoom: canNativeZoom,
+        navigationScheme,
       }),
       dragThresholdPx: 6,
       panCommitDelayMs: 100,
@@ -333,6 +337,7 @@ export function TimelineRulerCanvas({
     cameraXRef,
     interactionContainerRef,
     livePixelsPerSecondRef,
+    navigationScheme,
     onNativeCameraXCommit,
     onNativeCameraXPreview,
     onNativeTrackHeightChange,
@@ -514,6 +519,7 @@ export function TimelineTrackCanvas({
   clipPreviewSecondsRef,
   trackHeightForInput,
   canNativeZoom,
+  navigationScheme,
   onNativeCameraXPreview,
   onNativeCameraXCommit,
   onNativeZoomPreview,
@@ -563,6 +569,7 @@ export function TimelineTrackCanvas({
         zoomLevel: livePixelsPerSecondRef.current / BASE_PIXELS_PER_SECOND,
         trackHeight: trackHeightForInput,
         canZoom: canNativeZoom,
+        navigationScheme,
       }),
       dragThresholdPx: 6,
       panCommitDelayMs: 100,
@@ -576,6 +583,11 @@ export function TimelineTrackCanvas({
       onPreviewZoom: onNativeZoomPreview,
       onCommitZoom: onNativeZoomCommit,
       onTrackHeightChange: onNativeTrackHeightChange,
+      onScrollVertical: (deltaY) => {
+        const viewport = scrollViewportRef.current;
+        if (!viewport) return;
+        viewport.scrollTop += deltaY;
+      },
     });
 
     return () => {
@@ -586,11 +598,13 @@ export function TimelineTrackCanvas({
     cameraXRef,
     interactionContainerRef,
     livePixelsPerSecondRef,
+    navigationScheme,
     onNativeCameraXCommit,
     onNativeCameraXPreview,
     onNativeTrackHeightChange,
     onNativeZoomCommit,
     onNativeZoomPreview,
+    scrollViewportRef,
     trackHeightForInput,
   ]);
 

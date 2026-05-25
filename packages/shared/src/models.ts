@@ -320,6 +320,7 @@ export type AppSettings = {
   songTransitionMode: "instant" | "fade_out";
   vampMode: "section" | "bars";
   vampBars: number;
+  timelineNavigationScheme: "ableton" | "libretracks";
   midiMappings: Record<string, MidiBinding>;
 };
 
@@ -347,6 +348,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   songTransitionMode: "instant",
   vampMode: "section",
   vampBars: 4,
+  timelineNavigationScheme: "ableton",
   midiMappings: {},
 };
 
@@ -420,6 +422,10 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     settings.vampMode === "bars"
       ? settings.vampMode
       : DEFAULT_APP_SETTINGS.vampMode;
+  const timelineNavigationScheme =
+    settings.timelineNavigationScheme === "libretracks"
+      ? settings.timelineNavigationScheme
+      : DEFAULT_APP_SETTINGS.timelineNavigationScheme;
   const midiMappings = Object.fromEntries(
     Object.entries(settings.midiMappings ?? {}).map(([key, binding]) => [
       key,
@@ -468,6 +474,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
       settings.vampBars,
       DEFAULT_APP_SETTINGS.vampBars,
     ),
+    timelineNavigationScheme,
     midiMappings,
   };
 }

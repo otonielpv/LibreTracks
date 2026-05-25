@@ -1,6 +1,7 @@
 import { useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
+import type { TimelineNavigationScheme } from "./Renderer/InputManager";
 import type {
   ActiveVampSummary,
   ClipSummary,
@@ -119,6 +120,7 @@ type TimelineCanvasPaneProps = {
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => boolean;
   canNativeZoom: boolean;
+  navigationScheme: TimelineNavigationScheme;
   onNativeCameraXPreview: (cameraX: number) => number;
   onNativeCameraXCommit: (cameraX: number) => void;
   onNativeZoomPreview: (nextZoomLevel: number, anchorViewportX: number) => {
@@ -201,6 +203,7 @@ export function TimelineCanvasPane({
   midiLearnMode,
   onMidiLearnTarget,
   canNativeZoom,
+  navigationScheme,
   onNativeCameraXPreview,
   onNativeCameraXCommit,
   onNativeZoomPreview,
@@ -499,6 +502,7 @@ export function TimelineCanvasPane({
             playheadDragRef={playheadDragRef}
             interactionContainerRef={rulerTrackRef}
             canNativeZoom={canNativeZoom}
+            navigationScheme={navigationScheme}
             onNativeCameraXPreview={onNativeCameraXPreview}
             onNativeCameraXCommit={onNativeCameraXCommit}
             onNativeZoomPreview={onNativeZoomPreview}
@@ -729,6 +733,7 @@ export function TimelineCanvasPane({
               clipPreviewSecondsRef={clipPreviewSecondsRef}
               trackHeightForInput={trackHeight}
               canNativeZoom={canNativeZoom}
+              navigationScheme={navigationScheme}
               onNativeCameraXPreview={onNativeCameraXPreview}
               onNativeCameraXCommit={onNativeCameraXCommit}
               onNativeZoomPreview={onNativeZoomPreview}

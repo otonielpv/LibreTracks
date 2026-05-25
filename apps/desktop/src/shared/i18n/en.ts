@@ -85,6 +85,13 @@ const en = {
       languageSystemDefault: "Sistema / System Default",
       languageEnglish: "English",
       languageSpanish: "Español",
+      timelineNavigationScheme: "Timeline navigation",
+      timelineNavigationSchemeAbleton:
+        "Ableton / Audacity (pinch to zoom, scroll to pan)",
+      timelineNavigationSchemeLibreTracks:
+        "LibreTracks classic (scroll wheel zooms)",
+      timelineNavigationSchemeHelp:
+        "Choose how the trackpad / mouse wheel moves around the timeline. In Ableton mode, pinch (or Ctrl + scroll) zooms toward the cursor and Alt + scroll resizes track height.",
       metronomeTitle: "Metronome",
       metronomeDescription:
         "Adds a synthesized click and keeps it sample-locked to the transport timeline.",
@@ -280,6 +287,7 @@ const en = {
       midiBindingLearned: "MIDI binding learned for {{key}}: {{binding}}.",
       midiMappingsReset: "MIDI mappings reset.",
       audioRoutingUpdated: "Audio routing updated.",
+      timelineNavigationSchemeUpdated: "Timeline navigation scheme updated.",
       trackRoutingUpdated: "Track routing updated.",
       importRequiresSession:
         "Create or open a session before importing audio to the library.",

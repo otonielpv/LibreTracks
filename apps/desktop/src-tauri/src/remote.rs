@@ -133,7 +133,13 @@ async fn run_remote_sync_poller(app: AppHandle, handle: RemoteServerHandle) {
         }
 
         if snapshot.project_revision != last_song_revision {
-            let song_view = session.song_view().ok().flatten();
+            // The remote control UI (phone) never renders waveform peaks —
+            // it only needs track/clip/region metadata for play/stop/jump
+            // controls. Sending the ~27 MB peaks payload on every revision
+            // bump (which fires on every track add, transpose, mute, ...)
+            // holds the session lock for ~700 ms and blocks foreground UI
+            // operations.
+            let song_view = session.song_view_with_options(false).ok().flatten();
             if let Ok(song_json) = serde_json::to_string(&song_view) {
                 if song_json != last_song_json {
                     handle.publish_song_view(&song_view);
@@ -312,7 +318,7 @@ async fn run_remote_command_bridge(
         }
 
         handle.publish_transport_snapshot(&snapshot);
-        if let Ok(song_view) = session.song_view() {
+        if let Ok(song_view) = session.song_view_with_options(false) {
             handle.publish_song_view(&song_view);
         }
     }

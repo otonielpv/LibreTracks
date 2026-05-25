@@ -383,6 +383,7 @@ function buildInitialState(): DesktopApiMockState {
       songTransitionMode: "instant",
       vampMode: "section",
       vampBars: 4,
+      timelineNavigationScheme: "ableton",
       midiMappings: {},
     },
     audioOutputDevices: {

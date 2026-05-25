@@ -75,6 +75,8 @@ type SettingsPanelProps = {
   selectedLocale: string;
   onLocaleChange: (value: string) => void;
 
+  onTimelineNavigationSchemeChange: (value: "ableton" | "libretracks") => void;
+
   midiLearnMode: string | null;
   midiLearnFeedback: MidiLearnFeedback | null;
   midiLearnFeedbackCommand: MidiLearnCommandRow | null;
@@ -136,6 +138,7 @@ export function SettingsPanel({
   onRefreshMidiInputDevices,
   selectedLocale,
   onLocaleChange,
+  onTimelineNavigationSchemeChange,
   midiLearnMode,
   midiLearnFeedback,
   midiLearnFeedbackCommand,
@@ -728,6 +731,54 @@ export function SettingsPanel({
                         </option>
                       </select>
                     </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.timelineNavigationScheme", {
+                          defaultValue: "Timeline navigation",
+                        })}
+                      </span>
+                      <select
+                        value={appSettings.timelineNavigationScheme}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onTimelineNavigationSchemeChange(
+                            event.target.value === "libretracks"
+                              ? "libretracks"
+                              : "ableton",
+                          )
+                        }
+                      >
+                        <option value="ableton">
+                          {t(
+                            "transport.settingsModal.timelineNavigationSchemeAbleton",
+                            {
+                              defaultValue:
+                                "Ableton / Audacity (pinch to zoom, scroll to pan)",
+                            },
+                          )}
+                        </option>
+                        <option value="libretracks">
+                          {t(
+                            "transport.settingsModal.timelineNavigationSchemeLibreTracks",
+                            {
+                              defaultValue:
+                                "LibreTracks classic (scroll wheel zooms)",
+                            },
+                          )}
+                        </option>
+                      </select>
+                      <small>
+                        {t(
+                          "transport.settingsModal.timelineNavigationSchemeHelp",
+                          {
+                            defaultValue:
+                              "Choose how the trackpad / mouse wheel moves around the timeline. In Ableton mode, pinch (or Ctrl + scroll) zooms toward the cursor and Alt + scroll resizes track height.",
+                          },
+                        )}
+                      </small>
+                    </label>
+
                     <UpdateCheckField />
                   </div>
                 </section>
