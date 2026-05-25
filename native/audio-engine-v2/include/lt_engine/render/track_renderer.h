@@ -122,6 +122,10 @@ private:
     // pointers). Sized to match scratch_l_/scratch_r_ during prepare().
     std::vector<float> bungee_in_l_;
     std::vector<float> bungee_in_r_;
+    // Intermediate buffer used by the Cascade path to hold pitch-shifted
+    // audio coming out of Bungee on its way into the warp backend.
+    std::vector<float> cascade_mid_l_;
+    std::vector<float> cascade_mid_r_;
     OriginalSourceCache original_cache_;
 
     static std::atomic<std::uint64_t> prepare_count_;

@@ -28,6 +28,7 @@ add_executable(lt_engine_tests
     bungee_pitch_voice_tests.cpp
     bungee_voice_manager_tests.cpp
     prearmed_jump_tests.cpp
+    warp_cascade_isolated_tests.cpp
 )
 
 target_link_libraries(lt_engine_tests
@@ -90,6 +91,21 @@ if(LT_ENGINE_USE_BUNGEE AND DEFINED LT_BUNGEE_DIR)
                 "${_lt_bungee_test_dll}"
                 "$<TARGET_FILE_DIR:lt_engine_tests>"
             COMMENT "Copying Bungee runtime next to lt_engine_tests")
+    endif()
+endif()
+
+# Copy RubberBand DLL too if the engine was built with it.
+if(LT_ENGINE_USE_RUBBERBAND AND WIN32)
+    find_path(_lt_rb_test_inc rubberband/RubberBandStretcher.h)
+    if(_lt_rb_test_inc)
+        get_filename_component(_lt_rb_test_root "${_lt_rb_test_inc}" DIRECTORY)
+        file(GLOB _lt_rb_test_dlls "${_lt_rb_test_root}/bin/rubberband*.dll")
+        foreach(_dll ${_lt_rb_test_dlls})
+            add_custom_command(TARGET lt_engine_tests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_dll}" "$<TARGET_FILE_DIR:lt_engine_tests>"
+                COMMENT "Copying ${_dll} for tests")
+        endforeach()
     endif()
 endif()
 

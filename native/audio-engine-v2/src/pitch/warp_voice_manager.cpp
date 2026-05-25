@@ -140,6 +140,11 @@ std::vector<WarpVoiceSpec> enumerate_warp_clips(const Session& session,
                     && playhead < clip_end) {
                     const Frame timeline_offset =
                         playhead - clip.timeline_start_frame;
+                    // Cursor advances in warped source units in both Warp
+                    // and Cascade paths: the renderer reads the source file
+                    // at ratio-scaled speed in both (warp directly, cascade
+                    // through Bungee at speed=1 but with ceil(out*ratio)
+                    // input per block).
                     spec.initial_source_cursor = clip.source_start_frame
                         + static_cast<long long>(
                             static_cast<double>(timeline_offset) * hit->ratio);
