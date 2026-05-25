@@ -4758,6 +4758,13 @@ export function TransportPanelContent() {
         ),
         songRef.current?.durationSeconds ?? 0,
       );
+      // Capture the playhead's true position BEFORE previewSeek shifts the
+      // visual cursor to the click point — otherwise snap-to-playhead would
+      // pull the dragged clip toward the click coordinate, not toward where
+      // the transport actually is.
+      const playheadAnchorSeconds =
+        snapshotRef.current?.positionSeconds ??
+        displayPositionSecondsRef.current;
       previewSeek(clickSeekSeconds);
 
       // Selection update. Three modes:
@@ -4828,11 +4835,7 @@ export function TransportPanelContent() {
       }
 
       const snapAnchors = currentSong
-        ? buildClipSnapAnchors(
-            currentSong,
-            members,
-            displayPositionSecondsRef.current,
-          )
+        ? buildClipSnapAnchors(currentSong, members, playheadAnchorSeconds)
         : [];
 
       clipDragRef.current = {
