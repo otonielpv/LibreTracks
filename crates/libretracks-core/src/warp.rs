@@ -55,6 +55,63 @@ pub fn region_warp_ratio_in_song(region: &SongRegion, song: &Song) -> f64 {
     region_warp_ratio(region, target)
 }
 
+/// Maps a stored project second into the effective arrangement second after
+/// applying every warp-enabled region before that point.
+///
+/// Project data keeps clip/region/marker positions in the source song's
+/// original time. Warp changes the rendered arrangement length by
+/// `duration / ratio`, so positions inside and after warped regions need the
+/// same remap for the UI and native engine timeline to agree.
+pub fn warp_timeline_seconds_at(song: &Song, seconds: f64) -> f64 {
+    if !seconds.is_finite() {
+        return seconds;
+    }
+
+    let mut regions = song.regions.iter().collect::<Vec<_>>();
+    regions.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut shift = 0.0_f64;
+    for region in regions {
+        if region.end_seconds <= region.start_seconds {
+            continue;
+        }
+        if seconds <= region.start_seconds {
+            break;
+        }
+
+        let ratio = region_warp_ratio_in_song(region, song);
+        if !(ratio.is_finite() && ratio > 0.0) || (ratio - 1.0).abs() < f64::EPSILON {
+            continue;
+        }
+
+        let covered_seconds = (seconds.min(region.end_seconds) - region.start_seconds).max(0.0);
+        shift += covered_seconds / ratio - covered_seconds;
+
+        if seconds < region.end_seconds {
+            break;
+        }
+    }
+
+    (seconds + shift).max(0.0)
+}
+
+pub fn warp_timeline_duration_seconds(
+    song: &Song,
+    start_seconds: f64,
+    duration_seconds: f64,
+) -> f64 {
+    if !duration_seconds.is_finite() || duration_seconds <= 0.0 {
+        return 0.0;
+    }
+    let start = warp_timeline_seconds_at(song, start_seconds);
+    let end = warp_timeline_seconds_at(song, start_seconds + duration_seconds);
+    (end - start).max(0.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,5 +261,40 @@ mod tests {
             (ratio - 140.0 / 120.0).abs() < 1e-9,
             "expected 140/120, got {ratio}"
         );
+    }
+
+    #[test]
+    fn warp_timeline_seconds_shortens_positions_after_faster_region() {
+        let mut s = song(120.0, vec![]);
+        s.regions.push(SongRegion {
+            id: "r1".into(),
+            name: "r1".into(),
+            start_seconds: 10.0,
+            end_seconds: 70.0,
+            transpose_semitones: 0,
+            warp_enabled: true,
+            warp_source_bpm: Some(100.0),
+        });
+
+        assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
+        assert!((warp_timeline_seconds_at(&s, 70.0) - 60.0).abs() < 1e-9);
+        assert!((warp_timeline_seconds_at(&s, 80.0) - 70.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn warp_timeline_duration_expands_slower_region_span() {
+        let mut s = song(90.0, vec![]);
+        s.regions.push(SongRegion {
+            id: "r1".into(),
+            name: "r1".into(),
+            start_seconds: 0.0,
+            end_seconds: 12.0,
+            transpose_semitones: 0,
+            warp_enabled: true,
+            warp_source_bpm: Some(120.0),
+        });
+
+        let duration = warp_timeline_duration_seconds(&s, 0.0, 12.0);
+        assert!((duration - 16.0).abs() < 1e-9, "got {duration}");
     }
 }

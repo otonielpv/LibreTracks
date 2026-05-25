@@ -1,11 +1,18 @@
-import type { ClipSummary, WaveformLodDto, WaveformSummaryDto } from "../desktopApi";
+import type {
+  ClipSummary,
+  WaveformLodDto,
+  WaveformSummaryDto,
+} from "../desktopApi";
 import { clamp } from "../timelineMath";
 
 export const WAVEFORM_TILE_WIDTH_PX = 1024;
 const TILE_HEIGHT_PX = 256;
 const WAVEFORM_ZOOM_CACHE_STEP = 1.5;
 const MAX_CACHED_TILES = 320;
-const decodedWaveformLodCache = new WeakMap<WaveformLodDto, ResolvedWaveformLod>();
+const decodedWaveformLodCache = new WeakMap<
+  WaveformLodDto,
+  ResolvedWaveformLod
+>();
 
 type ResolvedWaveformLod = {
   resolutionFrames: number;
@@ -45,7 +52,9 @@ export function getWaveformRenderPixelsPerSecond(pixelsPerSecond: number) {
     return 1;
   }
 
-  const exponent = Math.round(Math.log(pixelsPerSecond) / Math.log(WAVEFORM_ZOOM_CACHE_STEP));
+  const exponent = Math.round(
+    Math.log(pixelsPerSecond) / Math.log(WAVEFORM_ZOOM_CACHE_STEP),
+  );
   return Math.max(1, Math.pow(WAVEFORM_ZOOM_CACHE_STEP, exponent));
 }
 
@@ -63,13 +72,19 @@ function decodeBase64ToBytes(base64: string) {
   return new Uint8Array(0);
 }
 
-export function decodeFloat32Peaks(base64: string | undefined, expectedCount: number) {
+export function decodeFloat32Peaks(
+  base64: string | undefined,
+  expectedCount: number,
+) {
   if (!base64 || expectedCount <= 0) {
     return new Float32Array(0);
   }
 
   const bytes = decodeBase64ToBytes(base64);
-  const availableCount = Math.min(expectedCount, Math.floor(bytes.byteLength / 4));
+  const availableCount = Math.min(
+    expectedCount,
+    Math.floor(bytes.byteLength / 4),
+  );
   const values = new Float32Array(availableCount);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
@@ -156,11 +171,12 @@ function getTileContext(surface: TileSurface) {
 }
 
 function tileNamespace(request: TileRequest) {
-  const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(request.pixelsPerSecond);
+  const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(
+    request.pixelsPerSecond,
+  );
   const channelLayout = request.waveform.lods.some(
     (lod) =>
-      Boolean(lod.maxPeaksRight?.length) ||
-      Boolean(lod.maxPeaksRightBase64),
+      Boolean(lod.maxPeaksRight?.length) || Boolean(lod.maxPeaksRightBase64),
   )
     ? "stereo"
     : "mono";
@@ -171,6 +187,9 @@ function tileNamespace(request: TileRequest) {
     request.waveform.sampleRate,
     request.waveform.durationSeconds.toFixed(6),
     request.clip.sourceStartSeconds.toFixed(6),
+    (
+      request.clip.sourceWindowDurationSeconds ?? request.clip.durationSeconds
+    ).toFixed(6),
     request.clip.sourceDurationSeconds.toFixed(6),
     request.clip.durationSeconds.toFixed(6),
     renderPixelsPerSecond.toFixed(4),
@@ -187,7 +206,10 @@ function renderWaveformTile(
   tileStartPixel: number,
   tileWidth: number,
 ) {
-  const waveformLod = selectWaveformLod(request.waveform, request.pixelsPerSecond);
+  const waveformLod = selectWaveformLod(
+    request.waveform,
+    request.pixelsPerSecond,
+  );
   const maxPeaks = waveformLod?.maxPeaks ?? new Float32Array(0);
   const minPeaks = waveformLod?.minPeaks ?? new Float32Array(0);
   const maxPeaksRight = waveformLod?.maxPeaksRight ?? new Float32Array(0);
@@ -202,26 +224,50 @@ function renderWaveformTile(
     return;
   }
 
-  const clipStartRatio = clamp(request.clip.sourceStartSeconds / request.clip.sourceDurationSeconds, 0, 1);
-  const clipSpanRatio = clamp(request.clip.durationSeconds / request.clip.sourceDurationSeconds, 0, 1);
-  const clipStartIndex = Math.max(0, Math.floor(clipStartRatio * maxPeaks.length));
+  const clipStartRatio = clamp(
+    request.clip.sourceStartSeconds / request.clip.sourceDurationSeconds,
+    0,
+    1,
+  );
+  const sourceWindowDurationSeconds =
+    request.clip.sourceWindowDurationSeconds ?? request.clip.durationSeconds;
+  const clipSpanRatio = clamp(
+    sourceWindowDurationSeconds / request.clip.sourceDurationSeconds,
+    0,
+    1,
+  );
+  const clipStartIndex = Math.max(
+    0,
+    Math.floor(clipStartRatio * maxPeaks.length),
+  );
   const clipEndIndex = Math.min(
     maxPeaks.length,
-    Math.max(clipStartIndex + 1, Math.ceil((clipStartRatio + clipSpanRatio) * maxPeaks.length)),
+    Math.max(
+      clipStartIndex + 1,
+      Math.ceil((clipStartRatio + clipSpanRatio) * maxPeaks.length),
+    ),
   );
   const clipSampleCount = clipEndIndex - clipStartIndex;
   if (clipSampleCount <= 0) {
     return;
   }
 
-  const tileEndPixel = Math.min(request.clipPixelWidth, tileStartPixel + tileWidth);
+  const tileEndPixel = Math.min(
+    request.clipPixelWidth,
+    tileStartPixel + tileWidth,
+  );
   const startIndex = Math.max(
     clipStartIndex,
-    clipStartIndex + Math.floor((tileStartPixel / request.clipPixelWidth) * clipSampleCount),
+    clipStartIndex +
+      Math.floor((tileStartPixel / request.clipPixelWidth) * clipSampleCount),
   );
   const endIndex = Math.min(
     clipEndIndex,
-    Math.max(startIndex + 1, clipStartIndex + Math.ceil((tileEndPixel / request.clipPixelWidth) * clipSampleCount)),
+    Math.max(
+      startIndex + 1,
+      clipStartIndex +
+        Math.ceil((tileEndPixel / request.clipPixelWidth) * clipSampleCount),
+    ),
   );
   if (startIndex >= endIndex || startIndex >= minPeaks.length) {
     return;
@@ -308,7 +354,8 @@ function drawChannelPeaks(
   let previousTopY = 0;
 
   for (let index = startIndex; index < endIndex; index += 1) {
-    const clipLocalX = ((index - clipStartIndex) / xDenominator) * clipPixelWidth;
+    const clipLocalX =
+      ((index - clipStartIndex) / xDenominator) * clipPixelWidth;
     const x = clipLocalX - tileStartPixel;
     const y = centerY - clamp(maxPeaks[index], -1, 1) * amplitudeY;
     if (index === startIndex) {
@@ -325,7 +372,8 @@ function drawChannelPeaks(
 
   let previousBottomY = 0;
   for (let index = endIndex - 1; index >= startIndex; index -= 1) {
-    const clipLocalX = ((index - clipStartIndex) / xDenominator) * clipPixelWidth;
+    const clipLocalX =
+      ((index - clipStartIndex) / xDenominator) * clipPixelWidth;
     const x = clipLocalX - tileStartPixel;
     const y = centerY - clamp(minPeaks[index], -1, 1) * amplitudeY;
     if (index === endIndex - 1) {
@@ -351,7 +399,12 @@ export class WaveformTileCache {
     const tileStartPixel = request.tileIndex * WAVEFORM_TILE_WIDTH_PX;
     const tileWidth = Math.max(
       1,
-      Math.ceil(Math.min(WAVEFORM_TILE_WIDTH_PX, request.clipPixelWidth - tileStartPixel)),
+      Math.ceil(
+        Math.min(
+          WAVEFORM_TILE_WIDTH_PX,
+          request.clipPixelWidth - tileStartPixel,
+        ),
+      ),
     );
     if (tileWidth <= 0) {
       return null;
@@ -399,8 +452,13 @@ export class WaveformTileCache {
     }
   }
 
-  buildNamespace(clip: ClipSummary, waveform: WaveformSummaryDto, pixelsPerSecond: number) {
-    const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(pixelsPerSecond);
+  buildNamespace(
+    clip: ClipSummary,
+    waveform: WaveformSummaryDto,
+    pixelsPerSecond: number,
+  ) {
+    const renderPixelsPerSecond =
+      getWaveformRenderPixelsPerSecond(pixelsPerSecond);
     return tileNamespace({
       clip,
       waveform,

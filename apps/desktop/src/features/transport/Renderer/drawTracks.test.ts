@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("./WaveformTileCache", () => {
   return {
     WAVEFORM_TILE_WIDTH_PX: 1024,
-    getWaveformRenderPixelsPerSecond: (pixelsPerSecond: number) => pixelsPerSecond,
+    getWaveformRenderPixelsPerSecond: (pixelsPerSecond: number) =>
+      pixelsPerSecond,
     WaveformTileCache: class {
       getTile() {
         return {
@@ -17,7 +18,10 @@ vi.mock("./WaveformTileCache", () => {
 });
 
 import { drawTrackClipsLayer } from "./drawTracks";
-import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
+import type {
+  TrackSceneSnapshot,
+  TimelineViewportMetrics,
+} from "./TimelineRenderer";
 
 function createContextSpy() {
   return {
@@ -105,6 +109,7 @@ function createSnapshot(withWaveform: boolean): TrackSceneSnapshot {
           isMissing: false,
           timelineStartSeconds: 0,
           sourceStartSeconds: 0,
+          sourceWindowDurationSeconds: 45,
           sourceDurationSeconds: 45,
           durationSeconds: 45,
           gain: 1,
@@ -164,8 +169,14 @@ describe("drawTrackClipsLayer", () => {
 
     drawTrackClipsLayer(context, createSnapshot(false), viewport);
 
-    expect((context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(([text]) => text === "ANALYZING WAVEFORM...")).toBe(true);
-    expect((context.drawImage as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    expect(
+      (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([text]) => text === "ANALYZING WAVEFORM...",
+      ),
+    ).toBe(true);
+    expect(
+      context.drawImage as ReturnType<typeof vi.fn>,
+    ).not.toHaveBeenCalled();
   });
 
   it("renders the pending import label for optimistic clips", () => {
@@ -182,7 +193,11 @@ describe("drawTrackClipsLayer", () => {
 
     drawTrackClipsLayer(context, snapshot, viewport);
 
-    expect((context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(([text]) => text === "IMPORTING...")).toBe(true);
+    expect(
+      (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([text]) => text === "IMPORTING...",
+      ),
+    ).toBe(true);
   });
 
   it("renders waveform tiles once analysis is ready", () => {
@@ -190,7 +205,11 @@ describe("drawTrackClipsLayer", () => {
 
     drawTrackClipsLayer(context, createSnapshot(true), viewport);
 
-    expect((context.drawImage as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
-    expect((context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(([text]) => text === "ANALYZING...")).toBe(false);
+    expect(context.drawImage as ReturnType<typeof vi.fn>).toHaveBeenCalled();
+    expect(
+      (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([text]) => text === "ANALYZING...",
+      ),
+    ).toBe(false);
   });
 });

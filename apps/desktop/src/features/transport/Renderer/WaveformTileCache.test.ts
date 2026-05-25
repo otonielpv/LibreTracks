@@ -18,7 +18,9 @@ function encodeFloat32Peaks(values: number[]) {
   return btoa(String.fromCharCode(...bytes));
 }
 
-function buildWaveform(overrides?: Partial<WaveformSummaryDto>): WaveformSummaryDto {
+function buildWaveform(
+  overrides?: Partial<WaveformSummaryDto>,
+): WaveformSummaryDto {
   return {
     waveformKey: "audio/test.wav",
     version: 1,
@@ -52,6 +54,7 @@ function buildClip(overrides?: Partial<ClipSummary>): ClipSummary {
     isMissing: false,
     timelineStartSeconds: 0,
     sourceStartSeconds: 0,
+    sourceWindowDurationSeconds: 4,
     sourceDurationSeconds: 8,
     durationSeconds: 4,
     gain: 1,
@@ -61,7 +64,10 @@ function buildClip(overrides?: Partial<ClipSummary>): ClipSummary {
 
 describe("WaveformTileCache", () => {
   it("decodes float32 peaks from base64 payloads", () => {
-    const decoded = decodeFloat32Peaks(encodeFloat32Peaks([-0.5, 0.25, 0.75]), 3);
+    const decoded = decodeFloat32Peaks(
+      encodeFloat32Peaks([-0.5, 0.25, 0.75]),
+      3,
+    );
 
     expect(Array.from(decoded)).toHaveLength(3);
     expect(decoded[0]).toBeCloseTo(-0.5);

@@ -1,4 +1,12 @@
-import { useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import {
+  useRef,
+  useState,
+  type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
+  type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from "react";
 
 import { TimelineRulerCanvas, TimelineTrackCanvas } from "./CanvasTimeline";
 import type { TimelineNavigationScheme } from "./Renderer/InputManager";
@@ -11,10 +19,11 @@ import type {
   TimeSignatureMarkerSummary,
   WaveformSummaryDto,
 } from "./desktopApi";
-import type { TimelineClipSummary, TimelineTrackSummary } from "./pendingAudioImports";
-import {
-  formatTransposeSemitones,
-} from "./desktopApi";
+import type {
+  TimelineClipSummary,
+  TimelineTrackSummary,
+} from "./pendingAudioImports";
+import { formatTransposeSemitones } from "./desktopApi";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import {
@@ -76,7 +85,10 @@ type TimelineCanvasPaneProps = {
   pendingMarkerJump: PendingJumpSummary | null;
   activeVamp: ActiveVampSummary | null;
   displayPositionSecondsRef: MutableRefObject<number>;
-  playheadDragRef: MutableRefObject<{ pointerId: number; currentSeconds: number } | null>;
+  playheadDragRef: MutableRefObject<{
+    pointerId: number;
+    currentSeconds: number;
+  } | null>;
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
   rulerTrackRef: RefObject<HTMLDivElement | null>;
   horizontalScrollbarRef: RefObject<HTMLDivElement | null>;
@@ -94,13 +106,22 @@ type TimelineCanvasPaneProps = {
   onRulerMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onRulerContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onMarkerPrimaryAction: (sectionId: string) => void;
-  onMarkerContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, sectionId: string) => void;
-  onTempoMarkerContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, markerId: string) => void;
+  onMarkerContextMenu: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    sectionId: string,
+  ) => void;
+  onTempoMarkerContextMenu: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    markerId: string,
+  ) => void;
   onTimeSignatureMarkerContextMenu: (
     event: ReactMouseEvent<HTMLButtonElement>,
     markerId: string,
   ) => void;
-  onRegionContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, regionId: string) => void;
+  onRegionContextMenu: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    regionId: string,
+  ) => void;
   /**
    * Commit a region resize. Called once on pointer-up with the final
    * start/end seconds after snap + clamp have already been applied. The
@@ -124,7 +145,10 @@ type TimelineCanvasPaneProps = {
   navigationScheme: TimelineNavigationScheme;
   onNativeCameraXPreview: (cameraX: number) => number;
   onNativeCameraXCommit: (cameraX: number) => void;
-  onNativeZoomPreview: (nextZoomLevel: number, anchorViewportX: number) => {
+  onNativeZoomPreview: (
+    nextZoomLevel: number,
+    anchorViewportX: number,
+  ) => {
     cameraX: number;
     zoomLevel: number;
   } | null;
@@ -144,7 +168,10 @@ type TimelineCanvasPaneProps = {
     track: TimelineTrackSummary,
     trackClips: ClipSummary[],
   ) => void;
-  onResolveTimelineDropFromClientPoint: (clientX: number, clientY: number) => {
+  onResolveTimelineDropFromClientPoint: (
+    clientX: number,
+    clientY: number,
+  ) => {
     isOverTimeline: boolean;
     dropSeconds: number;
     targetTrackId: string | null;
@@ -156,7 +183,10 @@ type TimelineCanvasPaneProps = {
   };
   nativeDropKindRef: MutableRefObject<ExternalDropKind | null>;
   onExternalDropPreviewChange: (preview: ExternalDropPreview | null) => void;
-  onExternalDrop: (classification: DroppedFileClassification, seconds: number) => void;
+  onExternalDrop: (
+    classification: DroppedFileClassification,
+    seconds: number,
+  ) => void;
 };
 
 export function TimelineCanvasPane({
@@ -239,7 +269,7 @@ export function TimelineCanvasPane({
     initialStartSeconds: number;
     initialEndSeconds: number;
     minStartSeconds: number; // lower clamp for the moving edge (left neighbour end or 0)
-    maxEndSeconds: number;   // upper clamp for the moving edge (right neighbour start or duration)
+    maxEndSeconds: number; // upper clamp for the moving edge (right neighbour start or duration)
     previewStartSeconds: number;
     previewEndSeconds: number;
   };
@@ -269,7 +299,8 @@ export function TimelineCanvasPane({
     );
     const idx = sorted.findIndex((entry) => entry.id === region.id);
     const leftNeighbour = idx > 0 ? sorted[idx - 1] : null;
-    const rightNeighbour = idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
+    const rightNeighbour =
+      idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
     const minStart = leftNeighbour ? leftNeighbour.endSeconds : 0;
     const maxEnd = rightNeighbour
       ? rightNeighbour.startSeconds
@@ -344,12 +375,18 @@ export function TimelineCanvasPane({
     if (drag.edge === "start") {
       nextStart = Math.max(
         drag.minStartSeconds,
-        Math.min(nextStart, drag.initialEndSeconds - MIN_REGION_DURATION_SECONDS),
+        Math.min(
+          nextStart,
+          drag.initialEndSeconds - MIN_REGION_DURATION_SECONDS,
+        ),
       );
     } else {
       nextEnd = Math.min(
         drag.maxEndSeconds,
-        Math.max(nextEnd, drag.initialStartSeconds + MIN_REGION_DURATION_SECONDS),
+        Math.max(
+          nextEnd,
+          drag.initialStartSeconds + MIN_REGION_DURATION_SECONDS,
+        ),
       );
     }
 
@@ -401,13 +438,18 @@ export function TimelineCanvasPane({
     event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
 
-    const hit = onResolveTimelineDropFromClientPoint(event.clientX, event.clientY);
+    const hit = onResolveTimelineDropFromClientPoint(
+      event.clientX,
+      event.clientY,
+    );
     if (!hit.isOverTimeline) {
       onExternalDropPreviewChange(null);
       return;
     }
 
-    const fallbackClassification = classifyDroppedFiles(getDroppedFiles(event.dataTransfer));
+    const fallbackClassification = classifyDroppedFiles(
+      getDroppedFiles(event.dataTransfer),
+    );
     const effectiveKind =
       nativeDropKindRef.current && nativeDropKindRef.current !== "unknown"
         ? nativeDropKindRef.current
@@ -430,7 +472,10 @@ export function TimelineCanvasPane({
     }
 
     const nextTarget = event.relatedTarget;
-    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+    if (
+      nextTarget instanceof Node &&
+      event.currentTarget.contains(nextTarget)
+    ) {
       return;
     }
 
@@ -443,8 +488,13 @@ export function TimelineCanvasPane({
       return;
     }
 
-    const classification = classifyDroppedFiles(getDroppedFiles(event.dataTransfer));
-    const hit = onResolveTimelineDropFromClientPoint(event.clientX, event.clientY);
+    const classification = classifyDroppedFiles(
+      getDroppedFiles(event.dataTransfer),
+    );
+    const hit = onResolveTimelineDropFromClientPoint(
+      event.clientX,
+      event.clientY,
+    );
     if (!hit.isOverTimeline) {
       onExternalDropPreviewChange(null);
       nativeDropKindRef.current = null;
@@ -455,7 +505,10 @@ export function TimelineCanvasPane({
     event.stopPropagation();
     onExternalDropPreviewChange(null);
     nativeDropKindRef.current = null;
-    onExternalDrop(classification, externalDropPreview?.seconds ?? hit.dropSeconds);
+    onExternalDrop(
+      classification,
+      externalDropPreview?.seconds ?? hit.dropSeconds,
+    );
   };
 
   const externalDropGuideLeft = (() => {
@@ -521,18 +574,22 @@ export function TimelineCanvasPane({
               const renderEnd = isResizing
                 ? regionResizePreview.endSeconds
                 : region.endSeconds;
+              const regionDescription = `Carril superior: región ${region.name}${region.warpEnabled && region.warpSourceBpm ? `, BPM original ${region.warpSourceBpm.toFixed(0)}` : ""}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`;
               return (
                 <button
                   key={region.id}
                   type="button"
                   className={`lt-region-hotspot ${selectedRegionId === region.id ? "is-selected" : ""}`}
-                  aria-label={`Carril superior: región ${region.name}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`}
-                  title={`Carril superior: región ${region.name}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`}
+                  aria-label={regionDescription}
+                  title={regionDescription}
                   style={{
                     left: renderStart * pixelsPerSecond,
                     top: LANE_REGIONS.top,
                     height: LANE_REGIONS.height,
-                    width: Math.max(24, (renderEnd - renderStart) * pixelsPerSecond),
+                    width: Math.max(
+                      24,
+                      (renderEnd - renderStart) * pixelsPerSecond,
+                    ),
                   }}
                   onMouseDown={(event) => {
                     event.preventDefault();
@@ -542,12 +599,18 @@ export function TimelineCanvasPane({
                     event.preventDefault();
                     event.stopPropagation();
                     if (midiLearnMode !== null) {
-                      const chronologicalRegions = [...(song?.regions ?? [])].sort((left, right) => (
-                        left.startSeconds - right.startSeconds
-                      ));
-                      const regionIndex = chronologicalRegions.findIndex((candidate) => candidate.id === region.id);
+                      const chronologicalRegions = [
+                        ...(song?.regions ?? []),
+                      ].sort(
+                        (left, right) => left.startSeconds - right.startSeconds,
+                      );
+                      const regionIndex = chronologicalRegions.findIndex(
+                        (candidate) => candidate.id === region.id,
+                      );
                       if (regionIndex >= 0) {
-                        onMidiLearnTarget(`action:jump_song_${regionIndex + 1}`);
+                        onMidiLearnTarget(
+                          `action:jump_song_${regionIndex + 1}`,
+                        );
                       }
                       return;
                     }
@@ -563,7 +626,9 @@ export function TimelineCanvasPane({
                   <div
                     className="lt-region-resize-handle is-start"
                     role="presentation"
-                    onPointerDown={(event) => beginRegionResize(event, region, "start")}
+                    onPointerDown={(event) =>
+                      beginRegionResize(event, region, "start")
+                    }
                     onPointerMove={updateRegionResize}
                     onPointerUp={endRegionResize}
                     onPointerCancel={endRegionResize}
@@ -571,7 +636,9 @@ export function TimelineCanvasPane({
                   <div
                     className="lt-region-resize-handle is-end"
                     role="presentation"
-                    onPointerDown={(event) => beginRegionResize(event, region, "end")}
+                    onPointerDown={(event) =>
+                      beginRegionResize(event, region, "end")
+                    }
                     onPointerMove={updateRegionResize}
                     onPointerUp={endRegionResize}
                     onPointerCancel={endRegionResize}
@@ -587,7 +654,9 @@ export function TimelineCanvasPane({
                   left: selectedTimelineRange.startSeconds * pixelsPerSecond,
                   width: Math.max(
                     2,
-                    (selectedTimelineRange.endSeconds - selectedTimelineRange.startSeconds) * pixelsPerSecond,
+                    (selectedTimelineRange.endSeconds -
+                      selectedTimelineRange.startSeconds) *
+                      pixelsPerSecond,
                   ),
                 }}
               />
@@ -613,12 +682,18 @@ export function TimelineCanvasPane({
                   event.preventDefault();
                   event.stopPropagation();
                   if (midiLearnMode !== null) {
-                    const chronologicalMarkers = [...(song?.sectionMarkers ?? [])].sort((left, right) => (
-                      left.startSeconds - right.startSeconds
-                    ));
-                    const markerIndex = chronologicalMarkers.findIndex((candidate) => candidate.id === section.id);
+                    const chronologicalMarkers = [
+                      ...(song?.sectionMarkers ?? []),
+                    ].sort(
+                      (left, right) => left.startSeconds - right.startSeconds,
+                    );
+                    const markerIndex = chronologicalMarkers.findIndex(
+                      (candidate) => candidate.id === section.id,
+                    );
                     if (markerIndex >= 0) {
-                      onMidiLearnTarget(`action:jump_marker_${markerIndex + 1}`);
+                      onMidiLearnTarget(
+                        `action:jump_marker_${markerIndex + 1}`,
+                      );
                     }
                     return;
                   }
@@ -714,11 +789,18 @@ export function TimelineCanvasPane({
         onContextMenu={onTrackListContextMenu}
         onDragEnter={handleTimelineDragEnter}
       >
-        <div ref={trackLayersRef} className="lt-track-layers" style={{ width: laneViewportWidth }}>
+        <div
+          ref={trackLayersRef}
+          className="lt-track-layers"
+          style={{ width: laneViewportWidth }}
+        >
           {song ? (
             <TimelineTrackCanvas
               width={laneViewportWidth}
-              height={Math.max(scrollViewportRef.current?.clientHeight ?? 500, visibleTracks.length * trackHeight)}
+              height={Math.max(
+                scrollViewportRef.current?.clientHeight ?? 500,
+                visibleTracks.length * trackHeight,
+              )}
               trackHeight={trackHeight}
               song={song}
               visibleTracks={visibleTracks}
@@ -790,7 +872,7 @@ export function TimelineCanvasPane({
                       ? "#ffb86b"
                       : externalDropPreview.kind === "unknown"
                         ? "#76b8ff"
-                      : "#ff6b6b",
+                        : "#ff6b6b",
                 boxShadow:
                   externalDropPreview.kind === "audio"
                     ? "0 0 0 1px rgba(122,229,130,0.24), 0 0 18px rgba(122,229,130,0.44)"
@@ -798,7 +880,7 @@ export function TimelineCanvasPane({
                       ? "0 0 0 1px rgba(255,184,107,0.22), 0 0 18px rgba(255,184,107,0.42)"
                       : externalDropPreview.kind === "unknown"
                         ? "0 0 0 1px rgba(118,184,255,0.22), 0 0 18px rgba(118,184,255,0.42)"
-                      : "0 0 0 1px rgba(255,107,107,0.22), 0 0 18px rgba(255,107,107,0.42)",
+                        : "0 0 0 1px rgba(255,107,107,0.22), 0 0 18px rgba(255,107,107,0.42)",
                 pointerEvents: "none",
               }}
             />
@@ -830,7 +912,7 @@ export function TimelineCanvasPane({
                         ? "rgba(255,184,107,0.18)"
                         : externalDropPreview.kind === "unknown"
                           ? "rgba(118,184,255,0.16)"
-                        : "rgba(255,107,107,0.18)",
+                          : "rgba(255,107,107,0.18)",
                   border:
                     externalDropPreview.kind === "audio"
                       ? "1px solid rgba(122,229,130,0.34)"
@@ -838,7 +920,7 @@ export function TimelineCanvasPane({
                         ? "1px solid rgba(255,184,107,0.34)"
                         : externalDropPreview.kind === "unknown"
                           ? "1px solid rgba(118,184,255,0.34)"
-                        : "1px solid rgba(255,107,107,0.34)",
+                          : "1px solid rgba(255,107,107,0.34)",
                   color: "#f4f3ee",
                   font: '600 11px "Space Grotesk", sans-serif',
                   letterSpacing: "0.04em",
@@ -856,58 +938,64 @@ export function TimelineCanvasPane({
                     ? "Package"
                     : externalDropPreview.kind === "unknown"
                       ? "Drop"
-                    : externalDropPreview.kind === "mixed"
-                      ? "Mixed"
-                      : "Unsupported"}
+                      : externalDropPreview.kind === "mixed"
+                        ? "Mixed"
+                        : "Unsupported"}
               </div>
             </div>
           ) : null}
 
-          {song?.tracks && visibleTracks.map((track) => {
-            const trackClips = clipsByTrack[track.id] ?? [];
-            const isPendingTrack = Boolean(track.isPending);
+          {song?.tracks &&
+            visibleTracks.map((track) => {
+              const trackClips = clipsByTrack[track.id] ?? [];
+              const isPendingTrack = Boolean(track.isPending);
 
-            return (
-              <div
-                key={track.id}
-                className="lt-track-lane-row"
-                data-track-id={track.id}
-                style={{ height: trackHeight }}
-              >
+              return (
                 <div
-                  className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""} ${isPendingTrack ? "is-pending" : ""}`}
+                  key={track.id}
+                  className="lt-track-lane-row"
+                  data-track-id={track.id}
                   style={{ height: trackHeight }}
-                  aria-label={`Lane ${track.name}`}
-                  onDragEnter={handleTimelineDragEnter}
-                  onMouseDown={(event) => {
-                    if (!isPendingTrack) {
-                      onTrackLaneMouseDown(event, track, trackClips);
-                    }
-                  }}
-                  onContextMenu={(event) => {
-                    if (!isPendingTrack) {
-                      onTrackLaneContextMenu(event, track, trackClips);
-                    }
-                  }}
                 >
-                  {libraryClipPreview
-                    .filter((preview) => preview.trackId === track.id)
-                    .map((preview) => (
-                      <div
-                        key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
-                        className="lt-library-clip-ghost"
-                        style={{
-                          left: resolveLibraryGhostLeft(preview.timelineStartSeconds),
-                          width: Math.max(preview.durationSeconds * pixelsPerSecond, 36),
-                        }}
-                      >
-                        <span>{preview.label}</span>
-                      </div>
-                    ))}
+                  <div
+                    className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""} ${isPendingTrack ? "is-pending" : ""}`}
+                    style={{ height: trackHeight }}
+                    aria-label={`Lane ${track.name}`}
+                    onDragEnter={handleTimelineDragEnter}
+                    onMouseDown={(event) => {
+                      if (!isPendingTrack) {
+                        onTrackLaneMouseDown(event, track, trackClips);
+                      }
+                    }}
+                    onContextMenu={(event) => {
+                      if (!isPendingTrack) {
+                        onTrackLaneContextMenu(event, track, trackClips);
+                      }
+                    }}
+                  >
+                    {libraryClipPreview
+                      .filter((preview) => preview.trackId === track.id)
+                      .map((preview) => (
+                        <div
+                          key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
+                          className="lt-library-clip-ghost"
+                          style={{
+                            left: resolveLibraryGhostLeft(
+                              preview.timelineStartSeconds,
+                            ),
+                            width: Math.max(
+                              preview.durationSeconds * pixelsPerSecond,
+                              36,
+                            ),
+                          }}
+                        >
+                          <span>{preview.label}</span>
+                        </div>
+                      ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
           {libraryPreviewRows.map((previewRow) => (
             <div
@@ -926,8 +1014,13 @@ export function TimelineCanvasPane({
                     key={`${preview.filePath}-${preview.rowOffset}-${preview.timelineStartSeconds}`}
                     className="lt-library-clip-ghost"
                     style={{
-                      left: resolveLibraryGhostLeft(preview.timelineStartSeconds),
-                      width: Math.max(preview.durationSeconds * pixelsPerSecond, 36),
+                      left: resolveLibraryGhostLeft(
+                        preview.timelineStartSeconds,
+                      ),
+                      width: Math.max(
+                        preview.durationSeconds * pixelsPerSecond,
+                        36,
+                      ),
                     }}
                   >
                     <span>{preview.label}</span>
@@ -944,7 +1037,6 @@ export function TimelineCanvasPane({
           />
         </div>
       </div>
-
     </div>
   );
 }

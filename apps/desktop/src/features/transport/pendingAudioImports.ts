@@ -1,4 +1,8 @@
-import type { ClipSummary, LibraryAssetSummary, TrackSummary } from "./desktopApi";
+import type {
+  ClipSummary,
+  LibraryAssetSummary,
+  TrackSummary,
+} from "./desktopApi";
 
 export type PendingAudioImportStatus =
   | "queued"
@@ -39,7 +43,10 @@ export type PendingLibraryAssetSummary = LibraryAssetSummary & {
 };
 
 function createPendingAudioImportId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
 
@@ -50,7 +57,10 @@ function pendingImportFileName(value: string) {
   return value.split(/[\\/]/).at(-1) ?? value;
 }
 
-export function createPendingAudioImports(files: File[], dropSeconds: number): PendingAudioImport[] {
+export function createPendingAudioImports(
+  files: File[],
+  dropSeconds: number,
+): PendingAudioImport[] {
   return files.map((file) => {
     const id = createPendingAudioImportId();
 
@@ -93,7 +103,9 @@ export function nextPaint(): Promise<void> {
   });
 }
 
-export function toPendingTrack(importJob: PendingAudioImport): TimelineTrackSummary {
+export function toPendingTrack(
+  importJob: PendingAudioImport,
+): TimelineTrackSummary {
   return {
     id: importJob.temporaryTrackId,
     name: importJob.fileName,
@@ -112,7 +124,9 @@ export function toPendingTrack(importJob: PendingAudioImport): TimelineTrackSumm
   };
 }
 
-export function toPendingClip(importJob: PendingAudioImport): TimelineClipSummary {
+export function toPendingClip(
+  importJob: PendingAudioImport,
+): TimelineClipSummary {
   return {
     id: importJob.temporaryClipId,
     trackId: importJob.temporaryTrackId,
@@ -122,6 +136,7 @@ export function toPendingClip(importJob: PendingAudioImport): TimelineClipSummar
     isMissing: false,
     timelineStartSeconds: importJob.dropSeconds,
     sourceStartSeconds: 0,
+    sourceWindowDurationSeconds: 8,
     sourceDurationSeconds: 8,
     durationSeconds: 8,
     gain: 1,
@@ -145,18 +160,25 @@ export function mergePendingClipsByTrack(
     return clipsByTrack;
   }
 
-  const nextClipsByTrack: Record<string, TimelineClipSummary[]> = { ...clipsByTrack };
+  const nextClipsByTrack: Record<string, TimelineClipSummary[]> = {
+    ...clipsByTrack,
+  };
 
   for (const pendingImport of pendingAudioImports) {
     const trackId = pendingImport.temporaryTrackId;
     const currentTrackClips = nextClipsByTrack[trackId] ?? [];
-    nextClipsByTrack[trackId] = [...currentTrackClips, toPendingClip(pendingImport)];
+    nextClipsByTrack[trackId] = [
+      ...currentTrackClips,
+      toPendingClip(pendingImport),
+    ];
   }
 
   return nextClipsByTrack;
 }
 
-export function toPendingLibraryAsset(importJob: PendingAudioImport): PendingLibraryAssetSummary {
+export function toPendingLibraryAsset(
+  importJob: PendingAudioImport,
+): PendingLibraryAssetSummary {
   return {
     fileName: importJob.fileName,
     filePath: importJob.temporaryAssetId,
@@ -186,7 +208,10 @@ export function mergeLibraryAssetsByFilePath(
   return [...byFilePath.values()].sort((left, right) => {
     const leftFolder = (left.folderPath ?? "").toLowerCase();
     const rightFolder = (right.folderPath ?? "").toLowerCase();
-    return leftFolder.localeCompare(rightFolder) || left.fileName.localeCompare(right.fileName);
+    return (
+      leftFolder.localeCompare(rightFolder) ||
+      left.fileName.localeCompare(right.fileName)
+    );
   });
 }
 

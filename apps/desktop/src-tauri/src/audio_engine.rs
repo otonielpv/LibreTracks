@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use libretracks_core::Song;
+use libretracks_core::{warp_timeline_duration_seconds, warp_timeline_seconds_at, Song};
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     DeviceInfo, Engine, EngineCommand, EngineSnapshot, JumpTarget, JumpTargetKind, JumpTrigger,
@@ -631,17 +631,19 @@ impl AudioController {
 
     pub fn update_live_song_regions(&self, song: &Song) -> Result<(), DesktopError> {
         self.with_engine_state("set_song_regions", None, |engine, state| {
+            let runtime_song = song_with_warped_timeline(song);
             let regions = song
                 .regions
                 .iter()
+                .zip(runtime_song.regions.iter())
                 .map(|region| RegionUpdate {
-                    id: region.id.clone(),
-                    name: region.name.clone(),
-                    start_frame: seconds_to_frame_for_engine(engine, region.start_seconds),
-                    end_frame: seconds_to_frame_for_engine(engine, region.end_seconds),
-                    transpose_semitones: region.transpose_semitones,
-                    warp_enabled: region.warp_enabled,
-                    warp_source_bpm: region.warp_source_bpm.unwrap_or(0.0),
+                    id: region.0.id.clone(),
+                    name: region.0.name.clone(),
+                    start_frame: seconds_to_frame_for_engine(engine, region.1.start_seconds),
+                    end_frame: seconds_to_frame_for_engine(engine, region.1.end_seconds),
+                    transpose_semitones: region.0.transpose_semitones,
+                    warp_enabled: region.0.warp_enabled,
+                    warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
                 })
                 .collect();
             engine.send_command(&EngineCommand::SetSongRegions {
@@ -661,13 +663,15 @@ impl AudioController {
 
     pub fn update_live_section_markers(&self, song: &Song) -> Result<(), DesktopError> {
         self.with_engine_state("set_song_markers", None, |engine, state| {
+            let runtime_song = song_with_warped_timeline(song);
             let markers = song
                 .section_markers
                 .iter()
+                .zip(runtime_song.section_markers.iter())
                 .map(|marker| MarkerUpdate {
-                    id: marker.id.clone(),
-                    name: marker.name.clone(),
-                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                    id: marker.0.id.clone(),
+                    name: marker.0.name.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
                 })
                 .collect();
             engine.send_command(&EngineCommand::SetSongMarkers {
@@ -689,25 +693,28 @@ impl AudioController {
         self.transport_timing_update_count
             .fetch_add(1, Ordering::Relaxed);
         self.with_engine_state("set_song_timing", None, |engine, state| {
+            let runtime_song = song_with_warped_timeline(song);
             let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
             let tempo_markers = song
                 .tempo_markers
                 .iter()
+                .zip(runtime_song.tempo_markers.iter())
                 .map(|marker| TempoMarkerUpdate {
-                    id: marker.id.clone(),
-                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
-                    bpm: marker.bpm,
+                    id: marker.0.id.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                    bpm: marker.0.bpm,
                 })
                 .collect();
             let time_signature_markers = song
                 .time_signature_markers
                 .iter()
+                .zip(runtime_song.time_signature_markers.iter())
                 .map(|marker| {
                     let (beats_per_bar, beat_unit) =
-                        parse_engine_time_signature(&marker.signature)?;
+                        parse_engine_time_signature(&marker.0.signature)?;
                     Ok(TimeSignatureMarkerUpdate {
-                        id: marker.id.clone(),
-                        frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                        id: marker.0.id.clone(),
+                        frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
                         beats_per_bar,
                         beat_unit,
                     })
@@ -1380,7 +1387,8 @@ fn load_resolved_song(
     song: &Song,
     signature: String,
 ) -> Result<(), DesktopError> {
-    let project_json = serde_json::to_string(song)
+    let runtime_song = song_with_warped_timeline(song);
+    let project_json = serde_json::to_string(&runtime_song)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
     engine
         .send_command(&EngineCommand::LoadSession { project_json })
@@ -1408,6 +1416,50 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
         }
     }
     resolved
+}
+
+fn song_with_warped_timeline(song: &Song) -> Song {
+    let source_song = song.clone();
+    let mut runtime = song.clone();
+
+    for clip in &mut runtime.clips {
+        let source_start_seconds = clip.timeline_start_seconds;
+        clip.timeline_start_seconds = warp_timeline_seconds_at(&source_song, source_start_seconds);
+        clip.duration_seconds = warp_timeline_duration_seconds(
+            &source_song,
+            source_start_seconds,
+            clip.duration_seconds,
+        );
+    }
+
+    for region in &mut runtime.regions {
+        let source_start_seconds = region.start_seconds;
+        let source_end_seconds = region.end_seconds;
+        region.start_seconds = warp_timeline_seconds_at(&source_song, source_start_seconds);
+        region.end_seconds = warp_timeline_seconds_at(&source_song, source_end_seconds)
+            .max(region.start_seconds + 0.001);
+    }
+
+    for marker in &mut runtime.section_markers {
+        marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
+    }
+    for marker in &mut runtime.tempo_markers {
+        marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
+    }
+    for marker in &mut runtime.time_signature_markers {
+        marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
+    }
+
+    let max_clip_end = runtime
+        .clips
+        .iter()
+        .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
+        .fold(
+            warp_timeline_seconds_at(&source_song, source_song.duration_seconds),
+            f64::max,
+        );
+    runtime.duration_seconds = max_clip_end.max(1.0);
+    runtime
 }
 
 fn resolve_engine_source_id(song_dir: &Path, file_path: &str) -> String {

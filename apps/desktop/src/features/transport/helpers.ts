@@ -125,10 +125,7 @@ export function formatAudioRouteLabel(route: string, t: TFunc) {
   return route;
 }
 
-export function buildAudioRoutingOptions(
-  enabledChannels: number[],
-  t: TFunc,
-) {
+export function buildAudioRoutingOptions(enabledChannels: number[], t: TFunc) {
   const channels = Array.from(new Set(enabledChannels)).sort(
     (left, right) => left - right,
   );
@@ -335,9 +332,7 @@ export function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-export function keyboardDigit(
-  eventCodeOrEvent: string | KeyboardEvent,
-) {
+export function keyboardDigit(eventCodeOrEvent: string | KeyboardEvent) {
   // event.code path: "Digit1" / "Numpad1" — works for plain number keys but
   // breaks for Shift+Numpad because Windows toggles NumLock under Shift and
   // browsers then report "End"/"Home"/"ArrowDown" etc. as the code.
@@ -480,9 +475,7 @@ export function findSection(song: SongView | null, sectionId: string | null) {
     return null;
   }
 
-  return (
-    song.sectionMarkers.find((marker) => marker.id === sectionId) ?? null
-  );
+  return song.sectionMarkers.find((marker) => marker.id === sectionId) ?? null;
 }
 
 export function trackChildrenCount(song: SongView, trackId: string) {
@@ -497,6 +490,7 @@ function isClipStructurallyEqual(left: ClipSummary, right: ClipSummary) {
     left.isMissing === right.isMissing &&
     left.timelineStartSeconds === right.timelineStartSeconds &&
     left.sourceStartSeconds === right.sourceStartSeconds &&
+    left.sourceWindowDurationSeconds === right.sourceWindowDurationSeconds &&
     left.sourceDurationSeconds === right.sourceDurationSeconds &&
     left.durationSeconds === right.durationSeconds
   );
@@ -543,8 +537,7 @@ function isSameClipPlacement(left: ClipSummary, right: ClipSummary) {
   return (
     left.trackId === right.trackId &&
     left.filePath === right.filePath &&
-    Math.abs(left.timelineStartSeconds - right.timelineStartSeconds) <
-      0.0001 &&
+    Math.abs(left.timelineStartSeconds - right.timelineStartSeconds) < 0.0001 &&
     Math.abs(left.sourceStartSeconds - right.sourceStartSeconds) < 0.0001 &&
     Math.abs(left.durationSeconds - right.durationSeconds) < 0.0001
   );
@@ -577,8 +570,7 @@ export function mergeOptimisticClipsByTrack(
       }
 
       nextClipsByTrack[clip.trackId] = [...currentTrackClips, clip].sort(
-        (left, right) =>
-          left.timelineStartSeconds - right.timelineStartSeconds,
+        (left, right) => left.timelineStartSeconds - right.timelineStartSeconds,
       );
     }
   }
@@ -638,19 +630,14 @@ export function resolveTrackDropState(
 ): TrackDropState {
   const hoveredRow = document
     .elementFromPoint(clientX, clientY)
-    ?.closest(
-      ".lt-track-lane-row, .lt-track-header-row",
-    ) as HTMLElement | null;
+    ?.closest(".lt-track-lane-row, .lt-track-header-row") as HTMLElement | null;
   const targetTrackId = hoveredRow?.dataset.trackId ?? null;
   if (!hoveredRow || !targetTrackId || targetTrackId === draggingTrackId) {
     return null;
   }
 
   const targetTrack = findTrack(song, targetTrackId);
-  if (
-    !targetTrack ||
-    isTrackDescendant(song, targetTrackId, draggingTrackId)
-  ) {
+  if (!targetTrack || isTrackDescendant(song, targetTrackId, draggingTrackId)) {
     return null;
   }
 

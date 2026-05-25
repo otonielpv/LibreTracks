@@ -1,4 +1,7 @@
-import { getCumulativeMusicalPosition, type TimelineRegion } from "../features/transport/timelineMath";
+import {
+  getCumulativeMusicalPosition,
+  type TimelineRegion,
+} from "../features/transport/timelineMath";
 import type {
   AppSettings,
   AudioMeterLevel,
@@ -69,7 +72,10 @@ function sortLibraryAssets(assets: LibraryAssetSummary[]) {
   return [...assets].sort((left, right) => {
     const leftFolder = (left.folderPath ?? "").toLowerCase();
     const rightFolder = (right.folderPath ?? "").toLowerCase();
-    return leftFolder.localeCompare(rightFolder) || left.fileName.localeCompare(right.fileName);
+    return (
+      leftFolder.localeCompare(rightFolder) ||
+      left.fileName.localeCompare(right.fileName)
+    );
   });
 }
 
@@ -82,20 +88,30 @@ function addImportedPackageAsset() {
     folderPath: null,
   } satisfies LibraryAssetSummary;
 
-  if (!state.libraryAssets.some((existing) => existing.filePath === asset.filePath)) {
+  if (
+    !state.libraryAssets.some(
+      (existing) => existing.filePath === asset.filePath,
+    )
+  ) {
     state.libraryAssets.push(asset);
     state.libraryAssets = sortLibraryAssets(state.libraryAssets);
   }
 }
 
-function buildWaveformSummary(waveformKey: string, durationSeconds: number): WaveformSummaryDto {
+function buildWaveformSummary(
+  waveformKey: string,
+  durationSeconds: number,
+): WaveformSummaryDto {
   const bucketCount = 96;
   const minPeaks: number[] = [];
   const maxPeaks: number[] = [];
 
   for (let index = 0; index < bucketCount; index += 1) {
     const progress = index / Math.max(1, bucketCount - 1);
-    const amplitude = 0.12 + Math.abs(Math.sin(progress * 18)) * 0.28 + Math.abs(Math.cos(progress * 5)) * 0.08;
+    const amplitude =
+      0.12 +
+      Math.abs(Math.sin(progress * 18)) * 0.28 +
+      Math.abs(Math.cos(progress * 5)) * 0.08;
     maxPeaks.push(Math.min(0.92, amplitude));
     minPeaks.push(-Math.min(0.92, amplitude));
   }
@@ -248,6 +264,7 @@ function buildInitialSong(): SongView {
         isMissing: false,
         timelineStartSeconds: 0,
         sourceStartSeconds: 0,
+        sourceWindowDurationSeconds: 180,
         sourceDurationSeconds: 180,
         durationSeconds: 180,
         gain: 1,
@@ -261,6 +278,7 @@ function buildInitialSong(): SongView {
         isMissing: false,
         timelineStartSeconds: 8,
         sourceStartSeconds: 0,
+        sourceWindowDurationSeconds: 164,
         sourceDurationSeconds: 164,
         durationSeconds: 164,
         gain: 0.94,
@@ -274,6 +292,7 @@ function buildInitialSong(): SongView {
         isMissing: false,
         timelineStartSeconds: 0,
         sourceStartSeconds: 0,
+        sourceWindowDurationSeconds: 180,
         sourceDurationSeconds: 180,
         durationSeconds: 180,
         gain: 1,
@@ -287,6 +306,7 @@ function buildInitialSong(): SongView {
         isMissing: false,
         timelineStartSeconds: 12,
         sourceStartSeconds: 0,
+        sourceWindowDurationSeconds: 140,
         sourceDurationSeconds: 140,
         durationSeconds: 140,
         gain: 0.86,
@@ -424,7 +444,9 @@ function buildInitialState(): DesktopApiMockState {
   };
 }
 
-function buildSongTempoRegions(song: SongView | null | undefined): Array<SongRegionSummary & TimelineRegion> {
+function buildSongTempoRegions(
+  song: SongView | null | undefined,
+): Array<SongRegionSummary & TimelineRegion> {
   if (!song) {
     return [];
   }
@@ -432,10 +454,18 @@ function buildSongTempoRegions(song: SongView | null | undefined): Array<SongReg
   const markers = [
     ...song.tempoMarkers
       .filter((marker) => marker.startSeconds > 0)
-      .map((marker) => ({ startSeconds: marker.startSeconds, bpm: marker.bpm, timeSignature: null as string | null })),
+      .map((marker) => ({
+        startSeconds: marker.startSeconds,
+        bpm: marker.bpm,
+        timeSignature: null as string | null,
+      })),
     ...song.timeSignatureMarkers
       .filter((marker) => marker.startSeconds > 0)
-      .map((marker) => ({ startSeconds: marker.startSeconds, bpm: null as number | null, timeSignature: marker.signature })),
+      .map((marker) => ({
+        startSeconds: marker.startSeconds,
+        bpm: null as number | null,
+        timeSignature: marker.signature,
+      })),
   ].sort((left, right) => left.startSeconds - right.startSeconds);
   const regions: Array<SongRegionSummary & TimelineRegion> = [];
   let startSeconds = 0;
@@ -499,7 +529,9 @@ function normalizeSong(song: SongView): SongView {
     return {
       ...track,
       depth,
-      hasChildren: tracks.some((candidate) => candidate.parentTrackId === track.id),
+      hasChildren: tracks.some(
+        (candidate) => candidate.parentTrackId === track.id,
+      ),
     };
   });
 
@@ -512,10 +544,14 @@ function normalizeSong(song: SongView): SongView {
   const durationSeconds = Math.max(
     song.durationSeconds,
     normalizedClips.reduce(
-      (maxDuration, clip) => Math.max(maxDuration, clip.timelineStartSeconds + clip.durationSeconds),
+      (maxDuration, clip) =>
+        Math.max(maxDuration, clip.timelineStartSeconds + clip.durationSeconds),
       0,
     ),
-    song.regions.reduce((maxDuration, region) => Math.max(maxDuration, region.endSeconds), 0),
+    song.regions.reduce(
+      (maxDuration, region) => Math.max(maxDuration, region.endSeconds),
+      0,
+    ),
   );
 
   return {
@@ -523,10 +559,18 @@ function normalizeSong(song: SongView): SongView {
     durationSeconds,
     tracks: normalizedTracks,
     clips: normalizedClips,
-    regions: [...song.regions].sort((left, right) => left.startSeconds - right.startSeconds),
-    sectionMarkers: [...song.sectionMarkers].sort((left, right) => left.startSeconds - right.startSeconds),
-    tempoMarkers: [...song.tempoMarkers].sort((left, right) => left.startSeconds - right.startSeconds),
-    timeSignatureMarkers: [...song.timeSignatureMarkers].sort((left, right) => left.startSeconds - right.startSeconds),
+    regions: [...song.regions].sort(
+      (left, right) => left.startSeconds - right.startSeconds,
+    ),
+    sectionMarkers: [...song.sectionMarkers].sort(
+      (left, right) => left.startSeconds - right.startSeconds,
+    ),
+    tempoMarkers: [...song.tempoMarkers].sort(
+      (left, right) => left.startSeconds - right.startSeconds,
+    ),
+    timeSignatureMarkers: [...song.timeSignatureMarkers].sort(
+      (left, right) => left.startSeconds - right.startSeconds,
+    ),
   };
 }
 
@@ -534,7 +578,8 @@ function buildSnapshot(): TransportSnapshot {
   const currentMarker =
     [...state.song.sectionMarkers]
       .reverse()
-      .find((marker) => state.playbackPositionSeconds >= marker.startSeconds) ?? null;
+      .find((marker) => state.playbackPositionSeconds >= marker.startSeconds) ??
+    null;
   const musicalPosition = getCumulativeMusicalPosition(
     state.playbackPositionSeconds,
     buildSongTempoRegions(state.song),
@@ -546,14 +591,19 @@ function buildSnapshot(): TransportSnapshot {
     playbackState: state.playbackState,
     positionSeconds: state.playbackPositionSeconds,
     currentMarker,
-    pendingMarkerJump: state.pendingMarkerJump ? clone(state.pendingMarkerJump) : null,
+    pendingMarkerJump: state.pendingMarkerJump
+      ? clone(state.pendingMarkerJump)
+      : null,
     activeVamp: state.activeVamp ? clone(state.activeVamp) : null,
     musicalPosition,
     transportClock: {
       anchorPositionSeconds: state.playbackPositionSeconds,
       running: state.playbackState === "playing",
       lastSeekPositionSeconds: state.playbackPositionSeconds,
-      lastStartPositionSeconds: state.playbackState === "playing" ? state.playbackPositionSeconds : null,
+      lastStartPositionSeconds:
+        state.playbackState === "playing"
+          ? state.playbackPositionSeconds
+          : null,
       lastJumpPositionSeconds: null,
     },
     projectRevision: state.projectRevision,
@@ -574,10 +624,15 @@ function getTrack(trackId: string) {
   return state.song.tracks.find((track) => track.id === trackId) ?? null;
 }
 
-function getTrackInsertIndex(insertAfterTrackId: string | null, parentTrackId: string | null) {
+function getTrackInsertIndex(
+  insertAfterTrackId: string | null,
+  parentTrackId: string | null,
+) {
   const tracks = state.song.tracks;
   if (insertAfterTrackId) {
-    const anchorIndex = tracks.findIndex((track) => track.id === insertAfterTrackId);
+    const anchorIndex = tracks.findIndex(
+      (track) => track.id === insertAfterTrackId,
+    );
     if (anchorIndex >= 0) {
       const anchorDepth = tracks[anchorIndex]?.depth ?? 0;
       let end = anchorIndex + 1;
@@ -609,11 +664,15 @@ function ensureWaveform(filePath: string, durationSeconds: number) {
 }
 
 function findLibraryAsset(filePath: string) {
-  return state.libraryAssets.find((asset) => asset.filePath === filePath) ?? null;
+  return (
+    state.libraryAssets.find((asset) => asset.filePath === filePath) ?? null
+  );
 }
 
 function createPendingJump(
-  marker: Pick<SectionMarkerSummary, "id" | "name" | "startSeconds"> & { digit?: number | null },
+  marker: Pick<SectionMarkerSummary, "id" | "name" | "startSeconds"> & {
+    digit?: number | null;
+  },
   trigger: JumpTriggerLabel,
   transition: PendingJumpSummary["transition"] = "instant",
 ): PendingJumpSummary {
@@ -622,12 +681,18 @@ function createPendingJump(
     targetMarkerName: marker.name,
     targetDigit: marker.digit ?? null,
     trigger,
-    executeAtSeconds: trigger === "immediate" ? marker.startSeconds : Math.max(state.playbackPositionSeconds, marker.startSeconds),
+    executeAtSeconds:
+      trigger === "immediate"
+        ? marker.startSeconds
+        : Math.max(state.playbackPositionSeconds, marker.startSeconds),
     transition,
   };
 }
 
-function createRegionFromSelection(startSeconds: number, endSeconds: number): SongRegionSummary {
+function createRegionFromSelection(
+  startSeconds: number,
+  endSeconds: number,
+): SongRegionSummary {
   return {
     id: nextId("region"),
     name: state.song.title,
@@ -645,7 +710,10 @@ export function resetTestDesktopApiMock() {
   waveformReadyListeners = [];
 }
 
-export function emitWaveformReadyForTest(filePath: string, durationSeconds: number) {
+export function emitWaveformReadyForTest(
+  filePath: string,
+  durationSeconds: number,
+) {
   const summary = buildWaveformSummary(filePath, durationSeconds);
   state.waveforms[filePath] = summary;
   const event: WaveformReadyEvent = {
@@ -660,24 +728,47 @@ export function emitWaveformReadyForTest(filePath: string, durationSeconds: numb
 }
 
 export const testDesktopApiMock = {
-  listenToTransportLifecycle: async (_handler: (event: TransportLifecycleEvent) => void) => () => {},
-  listenToAudioMeters: async (_handler: (levels: AudioMeterLevel[]) => void) => () => {},
-  listenToLibraryImportProgress: async (_handler: (event: LibraryImportProgressEvent) => void) => () => {},
-  listenToProjectLoadProgress: async (_handler: (event: ProjectLoadProgressEvent) => void) => () => {},
-  listenToWaveformReady: async (handler: (event: WaveformReadyEvent) => void) => {
+  listenToTransportLifecycle:
+    async (_handler: (event: TransportLifecycleEvent) => void) => () => {},
+  listenToAudioMeters:
+    async (_handler: (levels: AudioMeterLevel[]) => void) => () => {},
+  listenToLibraryImportProgress:
+    async (_handler: (event: LibraryImportProgressEvent) => void) => () => {},
+  listenToProjectLoadProgress:
+    async (_handler: (event: ProjectLoadProgressEvent) => void) => () => {},
+  listenToWaveformReady: async (
+    handler: (event: WaveformReadyEvent) => void,
+  ) => {
     waveformReadyListeners.push(handler);
     return () => {
-      waveformReadyListeners = waveformReadyListeners.filter((listener) => listener !== handler);
+      waveformReadyListeners = waveformReadyListeners.filter(
+        (listener) => listener !== handler,
+      );
     };
   },
-  listenToSettingsUpdated: async (_handler: (settings: AppSettings) => void) => () => {},
-  listenToMidiRawMessage: async (_handler: (message: { status: number; data1: number; data2: number }) => void) => () => {},
+  listenToSettingsUpdated:
+    async (_handler: (settings: AppSettings) => void) => () => {},
+  listenToMidiRawMessage:
+    async (
+      _handler: (message: {
+        status: number;
+        data1: number;
+        data2: number;
+      }) => void,
+    ) =>
+    () => {},
   getTransportSnapshot: async () => clone(buildSnapshot()),
   getSongView: async () => clone(state.song),
   getWaveformSummaries: async (waveformKeys: string[]) =>
-    waveformKeys.map((waveformKey) => state.waveforms[waveformKey]).filter(Boolean).map((entry) => clone(entry)),
+    waveformKeys
+      .map((waveformKey) => state.waveforms[waveformKey])
+      .filter(Boolean)
+      .map((entry) => clone(entry)),
   getLibraryWaveformSummaries: async (filePaths: string[]) =>
-    filePaths.map((filePath) => state.waveforms[filePath]).filter(Boolean).map((entry) => clone(entry)),
+    filePaths
+      .map((filePath) => state.waveforms[filePath])
+      .filter(Boolean)
+      .map((entry) => clone(entry)),
   getLibraryAssets: async () => clone(sortLibraryAssets(state.libraryAssets)),
   getLibraryFolders: async () => clone(state.libraryFolders),
   getDesktopPerformanceSnapshot: async () => ({
@@ -727,8 +818,14 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
-  upsertSongTempoMarker: async (args: { markerId?: string | null; startSeconds: number; bpm: number }) => {
-    const nextMarkers = state.song.tempoMarkers.filter((marker) => marker.id !== args.markerId);
+  upsertSongTempoMarker: async (args: {
+    markerId?: string | null;
+    startSeconds: number;
+    bpm: number;
+  }) => {
+    const nextMarkers = state.song.tempoMarkers.filter(
+      (marker) => marker.id !== args.markerId,
+    );
     nextMarkers.push({
       id: args.markerId ?? nextId("tempo-marker"),
       startSeconds: Math.max(0, args.startSeconds),
@@ -743,7 +840,9 @@ export const testDesktopApiMock = {
   deleteSongTempoMarker: async (markerId: string) => {
     replaceSong({
       ...state.song,
-      tempoMarkers: state.song.tempoMarkers.filter((marker) => marker.id !== markerId),
+      tempoMarkers: state.song.tempoMarkers.filter(
+        (marker) => marker.id !== markerId,
+      ),
     });
     return clone(buildSnapshot());
   },
@@ -755,7 +854,10 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
-  upsertSongTimeSignatureMarker: async (startSeconds: number, signature: string) => {
+  upsertSongTimeSignatureMarker: async (
+    startSeconds: number,
+    signature: string,
+  ) => {
     const nextMarkers = state.song.timeSignatureMarkers.filter(
       (marker) => Math.abs(marker.startSeconds - startSeconds) > 0.0001,
     );
@@ -773,7 +875,9 @@ export const testDesktopApiMock = {
   deleteSongTimeSignatureMarker: async (markerId: string) => {
     replaceSong({
       ...state.song,
-      timeSignatureMarkers: state.song.timeSignatureMarkers.filter((marker) => marker.id !== markerId),
+      timeSignatureMarkers: state.song.timeSignatureMarkers.filter(
+        (marker) => marker.id !== markerId,
+      ),
     });
     return clone(buildSnapshot());
   },
@@ -783,7 +887,9 @@ export const testDesktopApiMock = {
   },
   pickAndImportSong: async () => clone(buildSnapshot()),
   importLibraryAssetsFromDialog: async () => clone(state.libraryAssets),
-  importAudioFilesFromPaths: async (files: Array<{ fileName: string; sourcePath: string }>) => {
+  importAudioFilesFromPaths: async (
+    files: Array<{ fileName: string; sourcePath: string }>,
+  ) => {
     const importedAssets = files.map((file, index) => {
       const normalizedName = file.fileName.replace(/^.*[\\/]/, "");
       const filePath = `audio/${normalizedName}`;
@@ -798,7 +904,11 @@ export const testDesktopApiMock = {
     });
 
     for (const asset of importedAssets) {
-      if (!state.libraryAssets.some((existing) => existing.filePath === asset.filePath)) {
+      if (
+        !state.libraryAssets.some(
+          (existing) => existing.filePath === asset.filePath,
+        )
+      ) {
         state.libraryAssets.push(asset);
       }
       delete state.waveforms[asset.filePath];
@@ -807,7 +917,9 @@ export const testDesktopApiMock = {
     state.libraryAssets = sortLibraryAssets(state.libraryAssets);
     return clone(importedAssets);
   },
-  importAudioFilesFromBytes: async (files: Array<{ fileName: string; bytes: Uint8Array | number[] }>) => {
+  importAudioFilesFromBytes: async (
+    files: Array<{ fileName: string; bytes: Uint8Array | number[] }>,
+  ) => {
     const importedAssets = files.map((file, index) => {
       const normalizedName = file.fileName.replace(/^.*[\\/]/, "");
       const filePath = `audio/${normalizedName}`;
@@ -822,7 +934,11 @@ export const testDesktopApiMock = {
     });
 
     for (const asset of importedAssets) {
-      if (!state.libraryAssets.some((existing) => existing.filePath === asset.filePath)) {
+      if (
+        !state.libraryAssets.some(
+          (existing) => existing.filePath === asset.filePath,
+        )
+      ) {
         state.libraryAssets.push(asset);
       }
       delete state.waveforms[asset.filePath];
@@ -847,7 +963,12 @@ export const testDesktopApiMock = {
     state.libraryAssets = sortLibraryAssets(
       state.libraryAssets.map((asset) =>
         asset.filePath === oldPath
-          ? { ...asset, filePath: newPath, fileName: newPath.split(/[\\/]/).pop() ?? newPath, isMissing: false }
+          ? {
+              ...asset,
+              filePath: newPath,
+              fileName: newPath.split(/[\\/]/).pop() ?? newPath,
+              isMissing: false,
+            }
           : asset,
       ),
     );
@@ -855,18 +976,28 @@ export const testDesktopApiMock = {
       ...state.song,
       clips: state.song.clips.map((clip) =>
         clip.filePath === oldPath
-          ? { ...clip, filePath: newPath, waveformKey: newPath, isMissing: false }
+          ? {
+              ...clip,
+              filePath: newPath,
+              waveformKey: newPath,
+              isMissing: false,
+            }
           : clip,
       ),
     });
     if (state.waveforms[oldPath]) {
-      state.waveforms[newPath] = { ...state.waveforms[oldPath], waveformKey: newPath };
+      state.waveforms[newPath] = {
+        ...state.waveforms[oldPath],
+        waveformKey: newPath,
+      };
       delete state.waveforms[oldPath];
     }
     return clone(buildSnapshot());
   },
   deleteLibraryAsset: async (filePath: string) => {
-    state.libraryAssets = state.libraryAssets.filter((asset) => asset.filePath !== filePath);
+    state.libraryAssets = state.libraryAssets.filter(
+      (asset) => asset.filePath !== filePath,
+    );
     delete state.waveforms[filePath];
     return clone(state.libraryAssets);
   },
@@ -882,13 +1013,17 @@ export const testDesktopApiMock = {
       ),
     );
     if (folderPath && !state.libraryFolders.includes(folderPath)) {
-      state.libraryFolders = [...state.libraryFolders, folderPath].sort((left, right) => left.localeCompare(right));
+      state.libraryFolders = [...state.libraryFolders, folderPath].sort(
+        (left, right) => left.localeCompare(right),
+      );
     }
     return clone(state.libraryAssets);
   },
   createLibraryFolder: async (folderPath: string) => {
     if (!state.libraryFolders.includes(folderPath)) {
-      state.libraryFolders = [...state.libraryFolders, folderPath].sort((left, right) => left.localeCompare(right));
+      state.libraryFolders = [...state.libraryFolders, folderPath].sort(
+        (left, right) => left.localeCompare(right),
+      );
     }
     return clone(state.libraryFolders);
   },
@@ -905,7 +1040,9 @@ export const testDesktopApiMock = {
     return clone(state.libraryAssets);
   },
   deleteLibraryFolder: async (folderPath: string) => {
-    state.libraryFolders = state.libraryFolders.filter((entry) => entry !== folderPath);
+    state.libraryFolders = state.libraryFolders.filter(
+      (entry) => entry !== folderPath,
+    );
     state.libraryAssets = sortLibraryAssets(
       state.libraryAssets.map((asset) => ({
         ...asset,
@@ -944,18 +1081,22 @@ export const testDesktopApiMock = {
       const currentMarker =
         [...state.song.sectionMarkers]
           .reverse()
-          .find((marker) => state.playbackPositionSeconds >= marker.startSeconds) ?? null;
+          .find(
+            (marker) => state.playbackPositionSeconds >= marker.startSeconds,
+          ) ?? null;
       const startSeconds = currentMarker?.startSeconds ?? 0;
       const endSeconds =
-        state.song.sectionMarkers.find((marker) => marker.startSeconds > startSeconds)?.startSeconds ??
-        state.song.durationSeconds;
+        state.song.sectionMarkers.find(
+          (marker) => marker.startSeconds > startSeconds,
+        )?.startSeconds ?? state.song.durationSeconds;
       state.activeVamp = { startSeconds, endSeconds };
       return clone(buildSnapshot());
     }
 
     const safeBars = Math.max(1, Math.floor(bars ?? 4));
     const secondsPerBar = (60 / Math.max(1, state.song.bpm)) * 4;
-    const startSeconds = Math.floor(state.playbackPositionSeconds / secondsPerBar) * secondsPerBar;
+    const startSeconds =
+      Math.floor(state.playbackPositionSeconds / secondsPerBar) * secondsPerBar;
     state.activeVamp = {
       startSeconds,
       endSeconds: startSeconds + secondsPerBar * safeBars,
@@ -963,7 +1104,9 @@ export const testDesktopApiMock = {
     return clone(buildSnapshot());
   },
   scheduleMarkerJump: async (targetMarkerId: string) => {
-    const marker = state.song.sectionMarkers.find((entry) => entry.id === targetMarkerId) ?? null;
+    const marker =
+      state.song.sectionMarkers.find((entry) => entry.id === targetMarkerId) ??
+      null;
     if (!marker) {
       return clone(buildSnapshot());
     }
@@ -981,7 +1124,9 @@ export const testDesktopApiMock = {
       const hasMarkerAhead = state.song.sectionMarkers.some(
         (entry) => entry.startSeconds > state.playbackPositionSeconds,
       );
-      state.pendingMarkerJump = hasMarkerAhead ? createPendingJump(marker, "next_marker") : null;
+      state.pendingMarkerJump = hasMarkerAhead
+        ? createPendingJump(marker, "next_marker")
+        : null;
       return clone(buildSnapshot());
     }
 
@@ -989,7 +1134,8 @@ export const testDesktopApiMock = {
     return clone(buildSnapshot());
   },
   scheduleRegionJump: async (targetRegionId: string) => {
-    const region = state.song.regions.find((entry) => entry.id === targetRegionId) ?? null;
+    const region =
+      state.song.regions.find((entry) => entry.id === targetRegionId) ?? null;
     if (!region) {
       return clone(buildSnapshot());
     }
@@ -1017,7 +1163,8 @@ export const testDesktopApiMock = {
     );
     if (trigger === "after_bars") {
       const secondsPerBar = (60 / Math.max(1, state.song.bpm)) * 4;
-      state.pendingMarkerJump.executeAtSeconds = state.playbackPositionSeconds + secondsPerBar * bars;
+      state.pendingMarkerJump.executeAtSeconds =
+        state.playbackPositionSeconds + secondsPerBar * bars;
     }
     return clone(buildSnapshot());
   },
@@ -1066,7 +1213,11 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
-  updateClipWindow: async (args: { clipId: string; sourceStartSeconds: number; durationSeconds: number }) => {
+  updateClipWindow: async (args: {
+    clipId: string;
+    sourceStartSeconds: number;
+    durationSeconds: number;
+  }) => {
     replaceSong({
       ...state.song,
       clips: state.song.clips.map((clip) =>
@@ -1140,11 +1291,19 @@ export const testDesktopApiMock = {
   createSongRegion: async (startSeconds: number, endSeconds: number) => {
     replaceSong({
       ...state.song,
-      regions: [...state.song.regions, createRegionFromSelection(startSeconds, endSeconds)],
+      regions: [
+        ...state.song.regions,
+        createRegionFromSelection(startSeconds, endSeconds),
+      ],
     });
     return clone(buildSnapshot());
   },
-  updateSongRegion: async (args: { regionId: string; name?: string; startSeconds?: number; endSeconds?: number }) => {
+  updateSongRegion: async (args: {
+    regionId: string;
+    name?: string;
+    startSeconds?: number;
+    endSeconds?: number;
+  }) => {
     replaceSong({
       ...state.song,
       regions: state.song.regions.map((region) =>
@@ -1183,7 +1342,11 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
-  updateSectionMarker: async (args: { sectionId: string; name?: string; startSeconds?: number }) => {
+  updateSectionMarker: async (args: {
+    sectionId: string;
+    name?: string;
+    startSeconds?: number;
+  }) => {
     replaceSong({
       ...state.song,
       sectionMarkers: state.song.sectionMarkers.map((marker) =>
@@ -1201,7 +1364,9 @@ export const testDesktopApiMock = {
   deleteSectionMarker: async (sectionId: string) => {
     replaceSong({
       ...state.song,
-      sectionMarkers: state.song.sectionMarkers.filter((marker) => marker.id !== sectionId),
+      sectionMarkers: state.song.sectionMarkers.filter(
+        (marker) => marker.id !== sectionId,
+      ),
     });
     return clone(buildSnapshot());
   },
@@ -1226,27 +1391,35 @@ export const testDesktopApiMock = {
     parentTrackId?: string | null;
   }) => {
     const nextTracks = [...state.song.tracks];
-    nextTracks.splice(getTrackInsertIndex(args.insertAfterTrackId ?? null, args.parentTrackId ?? null), 0, {
-      id: nextId("track"),
-      name: args.name,
-      kind: args.kind,
-      parentTrackId: args.parentTrackId ?? null,
-      depth: 0,
-      hasChildren: false,
-      volume: 1,
-      pan: 0,
-      muted: false,
-      solo: false,
-      audioTo: "master",
-      transposeEnabled: false,
-    });
+    nextTracks.splice(
+      getTrackInsertIndex(
+        args.insertAfterTrackId ?? null,
+        args.parentTrackId ?? null,
+      ),
+      0,
+      {
+        id: nextId("track"),
+        name: args.name,
+        kind: args.kind,
+        parentTrackId: args.parentTrackId ?? null,
+        depth: 0,
+        hasChildren: false,
+        volume: 1,
+        pan: 0,
+        muted: false,
+        solo: false,
+        audioTo: "master",
+        transposeEnabled: false,
+      },
+    );
     replaceSong({
       ...state.song,
       tracks: nextTracks,
     });
     return clone(buildSnapshot());
   },
-  createClip: async (args: CreateClipArgs) => testDesktopApiMock.createClipsBatch([args]),
+  createClip: async (args: CreateClipArgs) =>
+    testDesktopApiMock.createClipsBatch([args]),
   createClipsBatch: async (args: CreateClipArgs[]) => {
     const nextClips = [...state.song.clips];
     for (const entry of args) {
@@ -1262,6 +1435,7 @@ export const testDesktopApiMock = {
         isMissing: false,
         timelineStartSeconds: Math.max(0, entry.timelineStartSeconds),
         sourceStartSeconds: 0,
+        sourceWindowDurationSeconds: durationSeconds,
         sourceDurationSeconds: durationSeconds,
         durationSeconds,
         gain: 1,
@@ -1298,10 +1472,15 @@ export const testDesktopApiMock = {
     };
 
     const insertIndex = args.insertBeforeTrackId
-      ? Math.max(0, tracks.findIndex((track) => track.id === args.insertBeforeTrackId))
+      ? Math.max(
+          0,
+          tracks.findIndex((track) => track.id === args.insertBeforeTrackId),
+        )
       : (() => {
           if (args.insertAfterTrackId) {
-            const anchorIndex = tracks.findIndex((track) => track.id === args.insertAfterTrackId);
+            const anchorIndex = tracks.findIndex(
+              (track) => track.id === args.insertAfterTrackId,
+            );
             if (anchorIndex >= 0) {
               const anchorDepth = tracks[anchorIndex]?.depth ?? 0;
               let end = anchorIndex + 1;
@@ -1322,10 +1501,7 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
-  updateTrack: async (args: {
-    trackId: string;
-    name?: string;
-  }) => {
+  updateTrack: async (args: { trackId: string; name?: string }) => {
     replaceSong({
       ...state.song,
       tracks: state.song.tracks.map((track) =>
@@ -1394,9 +1570,10 @@ export const testDesktopApiMock = {
     replaceSong({
       ...state.song,
       tracks: nextTracks,
-      clips: track.kind === "audio"
-        ? state.song.clips.filter((clip) => clip.trackId !== trackId)
-        : state.song.clips,
+      clips:
+        track.kind === "audio"
+          ? state.song.clips.filter((clip) => clip.trackId !== trackId)
+          : state.song.clips,
     });
     return clone(buildSnapshot());
   },

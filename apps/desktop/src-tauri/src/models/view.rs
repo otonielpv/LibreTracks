@@ -1,7 +1,8 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{ActiveVamp, JumpTrigger, PendingMarkerJump, TransitionType};
 use libretracks_core::{
-    Clip, Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker, TrackKind,
+    warp_timeline_duration_seconds, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion,
+    TempoMarker, TimeSignatureMarker, TrackKind,
 };
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
@@ -113,6 +114,7 @@ pub struct SongRegionSummary {
 pub struct TempoMarkerSummary {
     pub id: String,
     pub start_seconds: f64,
+    pub source_start_seconds: f64,
     pub bpm: f64,
 }
 
@@ -188,6 +190,7 @@ pub struct ClipSummary {
     pub is_missing: bool,
     pub timeline_start_seconds: f64,
     pub source_start_seconds: f64,
+    pub source_window_duration_seconds: f64,
     pub source_duration_seconds: f64,
     pub duration_seconds: f64,
     pub gain: f64,
@@ -281,6 +284,23 @@ pub(crate) fn song_to_view(
         Vec::new()
     };
 
+    let view_duration_seconds = song
+        .clips
+        .iter()
+        .map(|clip| {
+            warp_timeline_seconds_at(song, clip.timeline_start_seconds)
+                + warp_timeline_duration_seconds(
+                    song,
+                    clip.timeline_start_seconds,
+                    clip.duration_seconds,
+                )
+        })
+        .fold(
+            warp_timeline_seconds_at(song, song.duration_seconds),
+            f64::max,
+        )
+        .max(1.0);
+
     SongView {
         id: song.id.clone(),
         title: song.title.clone(),
@@ -288,19 +308,27 @@ pub(crate) fn song_to_view(
         key: song.key.clone(),
         bpm: song.bpm,
         time_signature: song.time_signature.clone(),
-        duration_seconds: song.duration_seconds,
+        duration_seconds: view_duration_seconds,
         tempo_markers: song
             .tempo_markers
             .iter()
-            .map(tempo_marker_to_summary)
+            .map(|marker| tempo_marker_to_warped_summary(song, marker))
             .collect(),
         time_signature_markers: song
             .time_signature_markers
             .iter()
-            .map(time_signature_marker_to_summary)
+            .map(|marker| time_signature_marker_to_warped_summary(song, marker))
             .collect(),
-        regions: song.regions.iter().map(region_to_summary).collect(),
-        section_markers: song.section_markers.iter().map(marker_to_summary).collect(),
+        regions: song
+            .regions
+            .iter()
+            .map(|region| region_to_summary(song, region))
+            .collect(),
+        section_markers: song
+            .section_markers
+            .iter()
+            .map(|marker| marker_to_warped_summary(song, marker))
+            .collect(),
         clips: song
             .clips
             .iter()
@@ -366,10 +394,15 @@ pub(crate) fn clip_to_summary(
         } else {
             !std::path::Path::new(&clip.file_path).exists()
         },
-        timeline_start_seconds: clip.timeline_start_seconds,
+        timeline_start_seconds: warp_timeline_seconds_at(song, clip.timeline_start_seconds),
         source_start_seconds: clip.source_start_seconds,
+        source_window_duration_seconds: clip.duration_seconds,
         source_duration_seconds,
-        duration_seconds: clip.duration_seconds,
+        duration_seconds: warp_timeline_duration_seconds(
+            song,
+            clip.timeline_start_seconds,
+            clip.duration_seconds,
+        ),
         gain: clip.gain,
     }
 }
@@ -438,32 +471,43 @@ pub(crate) fn active_vamp_to_summary(active_vamp: &ActiveVamp) -> ActiveVampSumm
     }
 }
 
-pub(crate) fn region_to_summary(region: &SongRegion) -> SongRegionSummary {
+fn marker_to_warped_summary(song: &Song, marker: &Marker) -> MarkerSummary {
+    MarkerSummary {
+        id: marker.id.clone(),
+        name: marker.name.clone(),
+        start_seconds: warp_timeline_seconds_at(song, marker.start_seconds),
+        digit: marker.digit,
+    }
+}
+
+pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionSummary {
     SongRegionSummary {
         id: region.id.clone(),
         name: region.name.clone(),
-        start_seconds: region.start_seconds,
-        end_seconds: region.end_seconds,
+        start_seconds: warp_timeline_seconds_at(song, region.start_seconds),
+        end_seconds: warp_timeline_seconds_at(song, region.end_seconds),
         transpose_semitones: region.transpose_semitones,
         warp_enabled: region.warp_enabled,
         warp_source_bpm: region.warp_source_bpm,
     }
 }
 
-pub(crate) fn tempo_marker_to_summary(marker: &TempoMarker) -> TempoMarkerSummary {
+fn tempo_marker_to_warped_summary(song: &Song, marker: &TempoMarker) -> TempoMarkerSummary {
     TempoMarkerSummary {
         id: marker.id.clone(),
-        start_seconds: marker.start_seconds,
+        start_seconds: warp_timeline_seconds_at(song, marker.start_seconds),
+        source_start_seconds: marker.start_seconds,
         bpm: marker.bpm,
     }
 }
 
-pub(crate) fn time_signature_marker_to_summary(
+fn time_signature_marker_to_warped_summary(
+    song: &Song,
     marker: &TimeSignatureMarker,
 ) -> TimeSignatureMarkerSummary {
     TimeSignatureMarkerSummary {
         id: marker.id.clone(),
-        start_seconds: marker.start_seconds,
+        start_seconds: warp_timeline_seconds_at(song, marker.start_seconds),
         signature: marker.signature.clone(),
     }
 }

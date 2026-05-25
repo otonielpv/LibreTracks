@@ -39,6 +39,7 @@ export type SongTempoRegionSummary = SongRegionSummary & TimelineRegion;
 export type TempoMarkerSummary = {
   id: string;
   startSeconds: number;
+  sourceStartSeconds?: number;
   bpm: number;
 };
 
@@ -94,6 +95,7 @@ export type ClipSummary = {
   isMissing: boolean;
   timelineStartSeconds: number;
   sourceStartSeconds: number;
+  sourceWindowDurationSeconds: number;
   sourceDurationSeconds: number;
   durationSeconds: number;
   gain: number;
@@ -740,7 +742,10 @@ export function getEffectiveBpmAt(
   let bestBpm = base;
   let bestStart = -Infinity;
   for (const marker of song.tempoMarkers) {
-    if (marker.startSeconds <= positionSeconds + 0.001 && marker.startSeconds > bestStart) {
+    if (
+      marker.startSeconds <= positionSeconds + 0.001 &&
+      marker.startSeconds > bestStart
+    ) {
       bestStart = marker.startSeconds;
       bestBpm = marker.bpm;
     }

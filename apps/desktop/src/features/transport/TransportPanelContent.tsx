@@ -268,6 +268,23 @@ const MAX_SESSION_BPM = 300;
 const TAP_TEMPO_RESET_MS = 2500;
 const TAP_TEMPO_MAX_TAPS = 8;
 
+function getEffectiveTempoMarkerAt(
+  song: SongView | null | undefined,
+  positionSeconds: number,
+): TempoMarkerSummary | null {
+  if (!song?.tempoMarkers.length) return null;
+  let bestMarker: TempoMarkerSummary | null = null;
+  for (const marker of song.tempoMarkers) {
+    if (
+      marker.startSeconds <= positionSeconds + 0.001 &&
+      (!bestMarker || marker.startSeconds > bestMarker.startSeconds)
+    ) {
+      bestMarker = marker;
+    }
+  }
+  return bestMarker;
+}
+
 // Backward-compatible re-exports (TransportPanelContent.test.ts imports these)
 export {
   isAudioDeviceVisibleForBackend,
@@ -285,7 +302,8 @@ export function nextTapTempoTimes(
 ) {
   const previousTapMs = previousTapTimesMs.at(-1);
   const activeTapTimes =
-    typeof previousTapMs === "number" && nowMs - previousTapMs <= TAP_TEMPO_RESET_MS
+    typeof previousTapMs === "number" &&
+    nowMs - previousTapMs <= TAP_TEMPO_RESET_MS
       ? [...previousTapTimesMs, nowMs]
       : [nowMs];
 
@@ -1447,7 +1465,8 @@ export function TransportPanelContent() {
       const placements = sortedSourceClips.map((clip) => ({
         clipId: clip.id,
         timelineStartSeconds:
-          insertionStartSeconds + (clip.timelineStartSeconds - sourceStartSeconds),
+          insertionStartSeconds +
+          (clip.timelineStartSeconds - sourceStartSeconds),
       }));
       const optimisticClips = sortedSourceClips.map((clip, index) => ({
         ...clip,
@@ -2260,7 +2279,9 @@ export function TransportPanelContent() {
         // also pre-register the resulting project_revision so the
         // revision-effect skips its refetch — there is nothing new on the
         // server worth ~1.5s of IPC for a single semitone change.
-        optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
+        optimisticallyAppliedRevisionsRef.current.add(
+          nextSnapshot.projectRevision,
+        );
         setSong((previous) => {
           if (!previous) return previous;
           return {
@@ -2300,7 +2321,7 @@ export function TransportPanelContent() {
       // backend leaves the previously-configured value untouched.
       const effectiveBpm = getEffectiveBpmAt(song, selectedRegion.startSeconds);
       const sourceBpm = nextEnabled
-        ? previousSourceBpm ?? effectiveBpm
+        ? (previousSourceBpm ?? effectiveBpm)
         : null;
       void runAction(async () => {
         const nextSnapshot = await updateSongRegionWarp(
@@ -2308,7 +2329,9 @@ export function TransportPanelContent() {
           nextEnabled,
           sourceBpm,
         );
-        optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
+        optimisticallyAppliedRevisionsRef.current.add(
+          nextSnapshot.projectRevision,
+        );
         setSong((previous) => {
           if (!previous) return previous;
           return {
@@ -2332,41 +2355,31 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, runAction, selectedRegion, song],
   );
 
-  const handleSelectedRegionWarpSourceBpmChange = useCallback(
-    (nextSourceBpm: number) => {
+  const handleSelectedRegionWarpTargetBpmChange = useCallback(
+    (nextTargetBpm: number) => {
       if (!selectedRegion) return;
-      if (!Number.isFinite(nextSourceBpm)) return;
-      const clamped = Math.max(20, Math.min(300, nextSourceBpm));
-      if (clamped === selectedRegion.warpSourceBpm) return;
-      const targetRegionId = selectedRegion.id;
-      // Editing source BPM only makes sense while warp is enabled, which the
-      // UI already guards via the disabled input. The backend's invariant
-      // also requires warp_enabled = true when sending a source_bpm so we
-      // pass through the current toggle state unchanged.
-      const currentEnabled = selectedRegion.warpEnabled;
+      if (!Number.isFinite(nextTargetBpm)) return;
+      const clamped = Math.max(20, Math.min(300, nextTargetBpm));
+      const currentTargetBpm = getEffectiveBpmAt(
+        song,
+        selectedRegion.startSeconds,
+      );
+      if (Math.abs(clamped - currentTargetBpm) < 0.0001) return;
+      const tempoMarker = getEffectiveTempoMarkerAt(
+        song,
+        selectedRegion.startSeconds,
+      );
       void runAction(async () => {
-        const nextSnapshot = await updateSongRegionWarp(
-          targetRegionId,
-          currentEnabled,
-          clamped,
-        );
-        optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
-        setSong((previous) => {
-          if (!previous) return previous;
-          return {
-            ...previous,
-            projectRevision: nextSnapshot.projectRevision,
-            regions: previous.regions.map((region) =>
-              region.id === targetRegionId
-                ? { ...region, warpSourceBpm: clamped }
-                : region,
-            ),
-          };
-        });
+        const nextSnapshot = tempoMarker
+          ? await upsertSongTempoMarker(
+              tempoMarker.sourceStartSeconds ?? tempoMarker.startSeconds,
+              clamped,
+            )
+          : await updateSongTempo(clamped);
         applyPlaybackSnapshot(nextSnapshot);
       });
     },
-    [applyPlaybackSnapshot, runAction, selectedRegion],
+    [applyPlaybackSnapshot, runAction, selectedRegion, song],
   );
 
   // Effective timeline BPM at the start of the selected region — the warp
@@ -2492,7 +2505,9 @@ export function TransportPanelContent() {
     // If this revision was produced by a local optimistic mutation, the
     // frontend already applied the change and there is nothing new to learn
     // from the server. Skip the refetch entirely.
-    if (optimisticallyAppliedRevisionsRef.current.has(playbackProjectRevision)) {
+    if (
+      optimisticallyAppliedRevisionsRef.current.has(playbackProjectRevision)
+    ) {
       optimisticallyAppliedRevisionsRef.current.delete(playbackProjectRevision);
       return;
     }
@@ -2708,7 +2723,9 @@ export function TransportPanelContent() {
       return;
     }
 
-    setTempoDraft(String(getSongBaseBpm(song)));
+    setTempoDraft(
+      String(getEffectiveBpmAt(song, displayPositionSecondsRef.current)),
+    );
     setTimeSignatureDraft(getSongBaseTimeSignature(song));
   }, [song, song?.projectRevision]);
 
@@ -3719,7 +3736,11 @@ export function TransportPanelContent() {
     const nextBpm = Math.round(clampedBpm * 10) / 10;
     setTempoDraft(nextBpm.toFixed(1));
 
-    if (Math.abs(nextBpm - songBaseBpm) < 0.05) {
+    const tempoPositionSeconds = displayPositionSecondsRef.current;
+    const currentBpm = getEffectiveBpmAt(song, tempoPositionSeconds);
+    const tempoMarker = getEffectiveTempoMarkerAt(song, tempoPositionSeconds);
+
+    if (Math.abs(nextBpm - currentBpm) < 0.05) {
       setStatus(
         t("transport.status.tapTempoUpdated", {
           bpm: nextBpm.toFixed(1),
@@ -3729,7 +3750,12 @@ export function TransportPanelContent() {
     }
 
     void runAction(async () => {
-      const nextSnapshot = await updateSongTempo(nextBpm);
+      const nextSnapshot = tempoMarker
+        ? await upsertSongTempoMarker(
+            tempoMarker.sourceStartSeconds ?? tempoMarker.startSeconds,
+            nextBpm,
+          )
+        : await updateSongTempo(nextBpm);
       applyPlaybackSnapshot(nextSnapshot);
       setStatus(
         t("transport.status.tapTempoUpdated", {
@@ -4173,7 +4199,7 @@ export function TransportPanelContent() {
 
           await runAction(async () => {
             const nextSnapshot = await upsertSongTempoMarker(
-              marker.startSeconds,
+              marker.sourceStartSeconds ?? marker.startSeconds,
               nextBpm,
             );
             applyPlaybackSnapshot(nextSnapshot);
@@ -4764,7 +4790,9 @@ export function TransportPanelContent() {
           transposeEnabled: nextTransposeEnabled,
         });
         // Optimistic local mutation: see handleSelectedRegionTransposeChange.
-        optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
+        optimisticallyAppliedRevisionsRef.current.add(
+          nextSnapshot.projectRevision,
+        );
         setSong((previous) => {
           if (!previous) return previous;
           return {
@@ -5441,7 +5469,10 @@ export function TransportPanelContent() {
 
   function handleTrackAudioToChange(trackId: string, nextAudioTo: string) {
     void runAction(async () => {
-      const nextSnapshot = await commitTrackMixChange({ trackId, audioTo: nextAudioTo });
+      const nextSnapshot = await commitTrackMixChange({
+        trackId,
+        audioTo: nextAudioTo,
+      });
       applyPlaybackSnapshot(nextSnapshot);
       setStatus(
         t("transport.status.trackRoutingUpdated", {
@@ -5462,7 +5493,9 @@ export function TransportPanelContent() {
 
     void runAction(async () => {
       await setMetronomeEnabledRealtime(nextValue);
-      const savedSettings = normalizeAppSettings(await saveSettings(nextSettings));
+      const savedSettings = normalizeAppSettings(
+        await saveSettings(nextSettings),
+      );
       appSettingsRef.current = savedSettings;
       setAppSettings(savedSettings);
       setStatus(
@@ -5515,7 +5548,9 @@ export function TransportPanelContent() {
     void runAction(async () => {
       try {
         await setMetronomeVolumeRealtime(normalizedValue);
-        const savedSettings = normalizeAppSettings(await saveSettings(nextSettings));
+        const savedSettings = normalizeAppSettings(
+          await saveSettings(nextSettings),
+        );
         appSettingsRef.current = savedSettings;
         setAppSettings(savedSettings);
         setStatus(
@@ -6182,7 +6217,9 @@ export function TransportPanelContent() {
     let score = 100;
     if (candidate.elementFromPoint?.includes(".lt-track-lane")) {
       score += 200;
-    } else if (candidate.elementFromPoint?.includes(".lt-track-list-dropzone")) {
+    } else if (
+      candidate.elementFromPoint?.includes(".lt-track-list-dropzone")
+    ) {
       score += 180;
     } else if (candidate.elementFromPoint?.includes(".lt-track-list")) {
       score += 140;
@@ -6745,6 +6782,7 @@ export function TransportPanelContent() {
         isMissing: placement.asset.isMissing,
         timelineStartSeconds: placement.timelineStartSeconds,
         sourceStartSeconds: 0,
+        sourceWindowDurationSeconds: placement.asset.durationSeconds,
         sourceDurationSeconds: placement.asset.durationSeconds,
         durationSeconds: placement.asset.durationSeconds,
         gain: 1,
@@ -7460,7 +7498,9 @@ export function TransportPanelContent() {
           <div className="busy-overlay" aria-live="polite">
             <div className="busy-overlay-card">
               <strong>{t("transport.shell.busyTitle")}</strong>
-              <p>{busyFeedback?.message ?? t("transport.shell.busyDescription")}</p>
+              <p>
+                {busyFeedback?.message ?? t("transport.shell.busyDescription")}
+              </p>
               {typeof busyFeedback?.percent === "number" ? (
                 <div
                   className="busy-overlay-progress"
@@ -7476,7 +7516,9 @@ export function TransportPanelContent() {
                   />
                 </div>
               ) : null}
-              {busyFeedback?.detail ? <small>{busyFeedback.detail}</small> : null}
+              {busyFeedback?.detail ? (
+                <small>{busyFeedback.detail}</small>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -7585,7 +7627,8 @@ export function TransportPanelContent() {
           onTapTempo={handleTapTempo}
           onTempoCommit={() => {
             const nextBpm = Number(tempoDraft);
-            const currentBpm = songBaseBpm;
+            const tempoPositionSeconds = readoutPositionSeconds;
+            const currentBpm = getEffectiveBpmAt(song, tempoPositionSeconds);
             const clampedBpm = Math.max(
               MIN_SESSION_BPM,
               Math.min(MAX_SESSION_BPM, nextBpm),
@@ -7601,7 +7644,16 @@ export function TransportPanelContent() {
             }
 
             void runAction(async () => {
-              const nextSnapshot = await updateSongTempo(clampedBpm);
+              const tempoMarker = getEffectiveTempoMarkerAt(
+                song,
+                tempoPositionSeconds,
+              );
+              const nextSnapshot = tempoMarker
+                ? await upsertSongTempoMarker(
+                    tempoMarker.sourceStartSeconds ?? tempoMarker.startSeconds,
+                    clampedBpm,
+                  )
+                : await updateSongTempo(clampedBpm);
               applyPlaybackSnapshot(nextSnapshot);
               setStatus(
                 t("transport.status.tempoUpdated", {
@@ -7755,8 +7807,8 @@ export function TransportPanelContent() {
                     }
                     selectedRegionEffectiveBpm={selectedRegionEffectiveBpm}
                     onSelectedRegionWarpToggle={handleSelectedRegionWarpToggle}
-                    onSelectedRegionWarpSourceBpmChange={
-                      handleSelectedRegionWarpSourceBpmChange
+                    onSelectedRegionWarpTargetBpmChange={
+                      handleSelectedRegionWarpTargetBpmChange
                     }
                     midiLearnMode={midiLearnMode}
                     onMidiLearnTarget={handleMidiLearnTarget}
@@ -7905,7 +7957,10 @@ export function TransportPanelContent() {
                           libraryClipPreview={libraryClipPreview}
                           libraryPreviewRows={libraryPreviewRows}
                           externalDropPreview={externalDropPreview}
-                          normalizePositionSeconds={(positionSeconds, options) =>
+                          normalizePositionSeconds={(
+                            positionSeconds,
+                            options,
+                          ) =>
                             normalizeTimelineSeekSeconds(
                               positionSeconds,
                               workspaceDurationSeconds,
@@ -8227,7 +8282,11 @@ export function TransportPanelContent() {
                               songRegionContextMenu(region),
                             );
                           }}
-                          onRegionResizeCommit={(regionId, startSeconds, endSeconds) => {
+                          onRegionResizeCommit={(
+                            regionId,
+                            startSeconds,
+                            endSeconds,
+                          ) => {
                             const region = song?.regions.find(
                               (candidate) => candidate.id === regionId,
                             );

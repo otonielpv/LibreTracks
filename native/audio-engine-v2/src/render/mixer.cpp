@@ -531,8 +531,7 @@ void Mixer::render(float** output_channels,
             due_jump->suppress_seek_fade ? 1 : 0,
             clock_->pending_start() ? 1 : 0);
 
-        const bool apply_seek_fade =
-            !due_jump->suppress_seek_fade || static_cast<bool>(due_jump->prepared_voice_map);
+        const bool apply_seek_fade = !due_jump->suppress_seek_fade;
 
         render_timeline_span(output_channels, num_channels, pre_frames, 0, session);
         if (apply_seek_fade && pre_frames > 0)

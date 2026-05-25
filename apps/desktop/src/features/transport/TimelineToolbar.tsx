@@ -2,7 +2,12 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { formatTransposeSemitones, type SongRegionSummary } from "./desktopApi";
-import type { GlobalJumpMode, SongJumpTrigger, SongTransitionMode, VampMode } from "./uiStore";
+import type {
+  GlobalJumpMode,
+  SongJumpTrigger,
+  SongTransitionMode,
+  VampMode,
+} from "./uiStore";
 
 type TimelineToolbarProps = {
   snapEnabled: boolean;
@@ -32,12 +37,10 @@ type TimelineToolbarProps = {
   onToggleVamp: () => void;
   onCancelPendingJump: () => void;
   onSelectedRegionTransposeChange: (nextTransposeSemitones: number) => void;
-  /** Effective timeline BPM at the start of the selected region.
-   *  Used by the warp panel to display the destination tempo and to
-   *  auto-fill warpSourceBpm the first time warp is enabled. */
+  /** Effective timeline BPM at the start of the selected region. */
   selectedRegionEffectiveBpm: number;
   onSelectedRegionWarpToggle: (nextEnabled: boolean) => void;
-  onSelectedRegionWarpSourceBpmChange: (nextSourceBpm: number) => void;
+  onSelectedRegionWarpTargetBpmChange: (nextTargetBpm: number) => void;
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => void;
 };
@@ -70,7 +73,9 @@ function ControlGroup({
           <span className="lt-control-group-title">{title}</span>
           {summary ? <p>{summary}</p> : null}
         </div>
-        {action ? <div className="lt-control-group-action">{action}</div> : null}
+        {action ? (
+          <div className="lt-control-group-action">{action}</div>
+        ) : null}
         <div className={`lt-control-popover ${open ? "is-open" : ""}`}>
           <button
             type="button"
@@ -90,7 +95,9 @@ function ControlGroup({
               </div>
               <div className="lt-control-group-body">
                 <div className="lt-control-group-actions">{children}</div>
-                {details ? <div className="lt-control-group-details">{details}</div> : null}
+                {details ? (
+                  <div className="lt-control-group-details">{details}</div>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -130,7 +137,7 @@ export function TimelineToolbar({
   onSelectedRegionTransposeChange,
   selectedRegionEffectiveBpm,
   onSelectedRegionWarpToggle,
-  onSelectedRegionWarpSourceBpmChange,
+  onSelectedRegionWarpTargetBpmChange,
   midiLearnMode,
   onMidiLearnTarget,
 }: TimelineToolbarProps) {
@@ -164,10 +171,11 @@ export function TimelineToolbar({
 
   const warpEnabled = selectedRegion?.warpEnabled ?? false;
   const warpSourceBpm = selectedRegion?.warpSourceBpm ?? null;
-  // Display ratio uses Math.round on the source BPM only for the input default;
-  // the live ratio is computed off the configured source and the timeline tempo.
   const warpRatio =
-    warpEnabled && warpSourceBpm && warpSourceBpm > 0 && selectedRegionEffectiveBpm > 0
+    warpEnabled &&
+    warpSourceBpm &&
+    warpSourceBpm > 0 &&
+    selectedRegionEffectiveBpm > 0
       ? selectedRegionEffectiveBpm / warpSourceBpm
       : null;
   const warpSummary = selectedRegion
@@ -180,15 +188,9 @@ export function TimelineToolbar({
       : t("timelineToolbar.regionWarpSummaryOff")
     : t("timelineToolbar.regionWarpNoSelection");
   const warpControlsDisabled = controlsDisabled || !selectedRegion;
-  // BPM field is only editable when warp is enabled (after toggle on, the
-  // user can fine-tune the source BPM). When warp is off but a value was
-  // persisted, we still show it but read-only via disabled state.
   const warpBpmInputDisabled = warpControlsDisabled || !warpEnabled;
 
-  const handleModeButtonClick = (
-    learnKey: string,
-    commit: () => void,
-  ) => {
+  const handleModeButtonClick = (learnKey: string, commit: () => void) => {
     if (learnModeActive) {
       onMidiLearnTarget(learnKey);
       return;
@@ -204,19 +206,33 @@ export function TimelineToolbar({
           <button
             type="button"
             className={`lt-icon-button ${snapEnabled ? "is-active" : ""}`}
-            aria-label={snapEnabled ? t("timelineToolbar.disableSnap") : t("timelineToolbar.enableSnap")}
+            aria-label={
+              snapEnabled
+                ? t("timelineToolbar.disableSnap")
+                : t("timelineToolbar.enableSnap")
+            }
             aria-pressed={snapEnabled}
-            title={t("timelineToolbar.snapTitle", { subdivision: subdivisionPerBeat })}
+            title={t("timelineToolbar.snapTitle", {
+              subdivision: subdivisionPerBeat,
+            })}
             onClick={onToggleSnap}
           >
-            <span className="material-symbols-outlined">{snapEnabled ? "grid_on" : "grid_off"}</span>
+            <span className="material-symbols-outlined">
+              {snapEnabled ? "grid_on" : "grid_off"}
+            </span>
           </button>
 
           <ControlGroup
             title={t("timelineToolbar.vampModeLabel")}
-            summary={vampMode === "bars" ? `${vampBars} bars` : t("timelineToolbar.vampSectionOption")}
+            summary={
+              vampMode === "bars"
+                ? `${vampBars} bars`
+                : t("timelineToolbar.vampSectionOption")
+            }
             open={openGroup === "vamp"}
-            onToggleOpen={() => setOpenGroup((current) => (current === "vamp" ? null : "vamp"))}
+            onToggleOpen={() =>
+              setOpenGroup((current) => (current === "vamp" ? null : "vamp"))
+            }
             className="lt-control-group-vamp"
             action={
               <button
@@ -273,7 +289,9 @@ export function TimelineToolbar({
                           event.stopPropagation();
                           onMidiLearnTarget("param:vamp_bars");
                         }}
-                        onChange={(event) => onVampBarsChange(Number(event.target.value) || 1)}
+                        onChange={(event) =>
+                          onVampBarsChange(Number(event.target.value) || 1)
+                        }
                       />
                       <button
                         type="button"
@@ -296,15 +314,18 @@ export function TimelineToolbar({
               </>
             }
           >
-            <div className="lt-segmented-control" role="group" aria-label={t("timelineToolbar.vampModeAria")}>
+            <div
+              className="lt-segmented-control"
+              role="group"
+              aria-label={t("timelineToolbar.vampModeAria")}
+            >
               <button
                 type="button"
                 className={vampMode === "section" ? "is-active" : ""}
                 disabled={controlsDisabled}
                 onClick={() =>
-                  handleModeButtonClick(
-                    "action:set_vamp_mode_section",
-                    () => onVampModeChange("section"),
+                  handleModeButtonClick("action:set_vamp_mode_section", () =>
+                    onVampModeChange("section"),
                   )
                 }
               >
@@ -315,9 +336,8 @@ export function TimelineToolbar({
                 className={vampMode === "bars" ? "is-active" : ""}
                 disabled={controlsDisabled}
                 onClick={() =>
-                  handleModeButtonClick(
-                    "action:set_vamp_mode_bars",
-                    () => onVampModeChange("bars"),
+                  handleModeButtonClick("action:set_vamp_mode_bars", () =>
+                    onVampModeChange("bars"),
                   )
                 }
               >
@@ -330,7 +350,9 @@ export function TimelineToolbar({
             title={t("timelineToolbar.markerJumpLabel")}
             summary={jumpSummary}
             open={openGroup === "jump"}
-            onToggleOpen={() => setOpenGroup((current) => (current === "jump" ? null : "jump"))}
+            onToggleOpen={() =>
+              setOpenGroup((current) => (current === "jump" ? null : "jump"))
+            }
             className="lt-control-group-jump"
             details={
               <>
@@ -344,11 +366,15 @@ export function TimelineToolbar({
                         disabled={controlsDisabled}
                         onClick={() => {
                           if (learnModeActive) {
-                            onMidiLearnTarget("action:decrease_global_jump_bars");
+                            onMidiLearnTarget(
+                              "action:decrease_global_jump_bars",
+                            );
                             return;
                           }
 
-                          onGlobalJumpBarsChange(Math.max(1, globalJumpBars - 1));
+                          onGlobalJumpBarsChange(
+                            Math.max(1, globalJumpBars - 1),
+                          );
                         }}
                       >
                         -
@@ -368,7 +394,11 @@ export function TimelineToolbar({
                           event.stopPropagation();
                           onMidiLearnTarget("param:global_jump_bars");
                         }}
-                        onChange={(event) => onGlobalJumpBarsChange(Number(event.target.value) || 1)}
+                        onChange={(event) =>
+                          onGlobalJumpBarsChange(
+                            Number(event.target.value) || 1,
+                          )
+                        }
                       />
                       <button
                         type="button"
@@ -376,7 +406,9 @@ export function TimelineToolbar({
                         disabled={controlsDisabled}
                         onClick={() => {
                           if (learnModeActive) {
-                            onMidiLearnTarget("action:increase_global_jump_bars");
+                            onMidiLearnTarget(
+                              "action:increase_global_jump_bars",
+                            );
                             return;
                           }
 
@@ -388,11 +420,17 @@ export function TimelineToolbar({
                     </div>
                   </label>
                 ) : null}
-                {pendingMarkerJumpLabel ? <span>{pendingMarkerJumpLabel}</span> : null}
+                {pendingMarkerJumpLabel ? (
+                  <span>{pendingMarkerJumpLabel}</span>
+                ) : null}
               </>
             }
           >
-            <div className="lt-segmented-control" role="group" aria-label={t("timelineToolbar.markerJumpModeAria")}>
+            <div
+              className="lt-segmented-control"
+              role="group"
+              aria-label={t("timelineToolbar.markerJumpModeAria")}
+            >
               <button
                 type="button"
                 className={globalJumpMode === "immediate" ? "is-active" : ""}
@@ -439,7 +477,9 @@ export function TimelineToolbar({
             title={t("timelineToolbar.songTransitionLabel")}
             summary={songSummary}
             open={openGroup === "song"}
-            onToggleOpen={() => setOpenGroup((current) => (current === "song" ? null : "song"))}
+            onToggleOpen={() =>
+              setOpenGroup((current) => (current === "song" ? null : "song"))
+            }
             className="lt-control-group-song"
             details={
               <>
@@ -477,7 +517,9 @@ export function TimelineToolbar({
                           event.stopPropagation();
                           onMidiLearnTarget("param:song_jump_bars");
                         }}
-                        onChange={(event) => onSongJumpBarsChange(Number(event.target.value) || 1)}
+                        onChange={(event) =>
+                          onSongJumpBarsChange(Number(event.target.value) || 1)
+                        }
                       />
                       <button
                         type="button"
@@ -500,7 +542,11 @@ export function TimelineToolbar({
               </>
             }
           >
-            <div className="lt-segmented-control" role="group" aria-label={t("timelineToolbar.songJumpModeAria")}>
+            <div
+              className="lt-segmented-control"
+              role="group"
+              aria-label={t("timelineToolbar.songJumpModeAria")}
+            >
               <button
                 type="button"
                 className={songJumpTrigger === "immediate" ? "is-active" : ""}
@@ -575,7 +621,11 @@ export function TimelineToolbar({
             title={t("timelineToolbar.regionTransposeLabel")}
             summary={regionSummary}
             open={openGroup === "region"}
-            onToggleOpen={() => setOpenGroup((current) => (current === "region" ? null : "region"))}
+            onToggleOpen={() =>
+              setOpenGroup((current) =>
+                current === "region" ? null : "region",
+              )
+            }
             className="lt-control-group-region"
             details={
               selectedRegion ? (
@@ -587,7 +637,9 @@ export function TimelineToolbar({
                       aria-label={t("timelineToolbar.regionTransposeDownAria")}
                       disabled={regionControlsDisabled}
                       onClick={() => {
-                        onSelectedRegionTransposeChange(Math.max(-12, selectedRegion.transposeSemitones - 1));
+                        onSelectedRegionTransposeChange(
+                          Math.max(-12, selectedRegion.transposeSemitones - 1),
+                        );
                       }}
                     >
                       -
@@ -600,14 +652,20 @@ export function TimelineToolbar({
                       step={1}
                       value={selectedRegion.transposeSemitones}
                       disabled={regionControlsDisabled}
-                      onChange={(event) => onSelectedRegionTransposeChange(Number(event.target.value) || 0)}
+                      onChange={(event) =>
+                        onSelectedRegionTransposeChange(
+                          Number(event.target.value) || 0,
+                        )
+                      }
                     />
                     <button
                       type="button"
                       aria-label={t("timelineToolbar.regionTransposeUpAria")}
                       disabled={regionControlsDisabled}
                       onClick={() => {
-                        onSelectedRegionTransposeChange(Math.min(12, selectedRegion.transposeSemitones + 1));
+                        onSelectedRegionTransposeChange(
+                          Math.min(12, selectedRegion.transposeSemitones + 1),
+                        );
                       }}
                     >
                       +
@@ -624,7 +682,9 @@ export function TimelineToolbar({
             title={t("timelineToolbar.regionWarpLabel")}
             summary={warpSummary}
             open={openGroup === "warp"}
-            onToggleOpen={() => setOpenGroup((current) => (current === "warp" ? null : "warp"))}
+            onToggleOpen={() =>
+              setOpenGroup((current) => (current === "warp" ? null : "warp"))
+            }
             className="lt-control-group-warp"
             details={
               selectedRegion ? (
@@ -642,41 +702,52 @@ export function TimelineToolbar({
                       : t("timelineToolbar.regionWarpToggleOff")}
                   </button>
                   <label className="lt-stepper-control">
-                    <span>{t("timelineToolbar.regionWarpSourceBpmLabel")}</span>
+                    <span>{t("timelineToolbar.regionWarpTargetBpmLabel")}</span>
                     <div className="lt-stepper-control-row">
                       <button
                         type="button"
-                        aria-label={t("timelineToolbar.regionWarpSourceBpmDownAria")}
+                        aria-label={t(
+                          "timelineToolbar.regionWarpTargetBpmDownAria",
+                        )}
                         disabled={warpBpmInputDisabled}
                         onClick={() => {
-                          const current = warpSourceBpm ?? selectedRegionEffectiveBpm;
-                          onSelectedRegionWarpSourceBpmChange(Math.max(20, current - 1));
+                          onSelectedRegionWarpTargetBpmChange(
+                            Math.max(20, selectedRegionEffectiveBpm - 1),
+                          );
                         }}
                       >
                         -
                       </button>
                       <input
-                        aria-label={t("timelineToolbar.regionWarpSourceBpmAria")}
+                        aria-label={t(
+                          "timelineToolbar.regionWarpTargetBpmAria",
+                        )}
                         type="number"
                         min={20}
                         max={300}
                         step={1}
-                        value={warpSourceBpm ?? ""}
-                        placeholder={selectedRegionEffectiveBpm.toFixed(0)}
+                        value={
+                          Number.isFinite(selectedRegionEffectiveBpm)
+                            ? selectedRegionEffectiveBpm.toFixed(1)
+                            : ""
+                        }
                         disabled={warpBpmInputDisabled}
                         onChange={(event) => {
                           const parsed = Number(event.target.value);
                           if (!Number.isFinite(parsed) || parsed <= 0) return;
-                          onSelectedRegionWarpSourceBpmChange(parsed);
+                          onSelectedRegionWarpTargetBpmChange(parsed);
                         }}
                       />
                       <button
                         type="button"
-                        aria-label={t("timelineToolbar.regionWarpSourceBpmUpAria")}
+                        aria-label={t(
+                          "timelineToolbar.regionWarpTargetBpmUpAria",
+                        )}
                         disabled={warpBpmInputDisabled}
                         onClick={() => {
-                          const current = warpSourceBpm ?? selectedRegionEffectiveBpm;
-                          onSelectedRegionWarpSourceBpmChange(Math.min(300, current + 1));
+                          onSelectedRegionWarpTargetBpmChange(
+                            Math.min(300, selectedRegionEffectiveBpm + 1),
+                          );
                         }}
                       >
                         +
@@ -712,7 +783,9 @@ export function TimelineToolbar({
         <div className="lt-timeline-stats">
           <span>{t("timelineToolbar.tracksCount", { count: trackCount })}</span>
           <span>{t("timelineToolbar.clipsCount", { count: clipCount })}</span>
-          <span>{t("timelineToolbar.markersCount", { count: markerCount })}</span>
+          <span>
+            {t("timelineToolbar.markersCount", { count: markerCount })}
+          </span>
         </div>
       </div>
     </div>

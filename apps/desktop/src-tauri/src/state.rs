@@ -10,8 +10,9 @@ use std::{
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
 use libretracks_core::{
-    Clip, Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track, TrackKind,
-    MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
+    region_warp_ratio_in_song, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion,
+    TempoMarker, TimeSignatureMarker, Track, TrackKind, MAX_TRANSPOSE_SEMITONES,
+    MIN_TRANSPOSE_SEMITONES,
 };
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary,
@@ -640,7 +641,8 @@ impl DesktopSession {
         // wait_for_project_audio_preparation does, with live progress events.
         // Otherwise the user only sees the loading bar at the very end, after
         // sources have already been decoded silently.
-        let inserted = self.import_song_package_no_wait(&package_path, self.current_position(), audio)?;
+        let inserted =
+            self.import_song_package_no_wait(&package_path, self.current_position(), audio)?;
         self.wait_for_project_audio_preparation(app, audio)?;
 
         Ok(Some(inserted.snapshot))
@@ -1350,11 +1352,15 @@ impl DesktopSession {
                 if jump_debug_logging_enabled() {
                     eprintln!(
                         "[LT_JUMP_DEBUG][state] marker_pending target_marker={target_marker_id} transition={transition:?} execute_at_seconds={:.9} current_position={:.9} native_count_baseline={}",
-                        pending_jump.execute_at_seconds,
-                        self.engine.position_seconds(),
-                        self.last_native_scheduled_jump_executed_count
-                    );
+                    pending_jump.execute_at_seconds,
+                    self.engine.position_seconds(),
+                    self.last_native_scheduled_jump_executed_count
+                );
                 }
+                let target_seconds = self.engine.song().and_then(|song| {
+                    song.marker_by_id(&pending_jump.target_marker_id)
+                        .map(|marker| warp_timeline_seconds_at(song, marker.start_seconds))
+                });
                 audio.schedule_jump_at_frame(
                     &pending_jump.target_marker_id,
                     NativeJumpTarget {
@@ -1363,10 +1369,7 @@ impl DesktopSession {
                         frame: None,
                     },
                     pending_jump.execute_at_seconds,
-                    self.engine
-                        .song()
-                        .and_then(|song| song.marker_by_id(&pending_jump.target_marker_id))
-                        .map(|marker| marker.start_seconds),
+                    target_seconds,
                     true,
                 )?;
             } else {
@@ -1958,8 +1961,7 @@ impl DesktopSession {
                     "warp source bpm must be a finite number".into(),
                 ));
             }
-            if !(libretracks_core::MIN_WARP_SOURCE_BPM
-                ..=libretracks_core::MAX_WARP_SOURCE_BPM)
+            if !(libretracks_core::MIN_WARP_SOURCE_BPM..=libretracks_core::MAX_WARP_SOURCE_BPM)
                 .contains(&bpm)
             {
                 return Err(DesktopError::AudioCommand(format!(
@@ -1991,17 +1993,13 @@ impl DesktopSession {
         }
 
         // Push the realtime command first so the engine swaps in the new ratio
-        // on the next audio block; then persist the Rust model with MixerOnly
-        // so we don't trigger a redundant LoadSession on top.
-        audio.update_live_region_warp(
-            region_id,
-            warp_enabled,
-            region.warp_source_bpm,
-        )?;
+        // on the next audio block. Persist as a timeline change because warp
+        // also remaps clip/region lengths in the runtime timeline.
+        audio.update_live_region_warp(region_id, warp_enabled, region.warp_source_bpm)?;
         self.persist_song_update_internal(
             song,
             audio,
-            AudioChangeImpact::MixerOnly,
+            AudioChangeImpact::TimelineWindow,
             false,
             true,
         )?;
@@ -2168,7 +2166,12 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
         song.bpm = bpm;
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+        let impact = if song_has_active_warp(&song) {
+            AudioChangeImpact::TimelineWindow
+        } else {
+            AudioChangeImpact::TransportOnly
+        };
+        self.persist_song_update(song, audio, impact, true)?;
 
         Ok(self.snapshot())
     }
@@ -2213,7 +2216,12 @@ impl DesktopSession {
             });
         }
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+        let impact = if song_has_active_warp(&song) {
+            AudioChangeImpact::TimelineWindow
+        } else {
+            AudioChangeImpact::TransportOnly
+        };
+        self.persist_song_update(song, audio, impact, true)?;
 
         Ok(self.snapshot())
     }
@@ -2235,7 +2243,12 @@ impl DesktopSession {
             .ok_or_else(|| DesktopError::AudioCommand("tempo marker not found".into()))?;
         song.tempo_markers.remove(marker_index);
 
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+        let impact = if song_has_active_warp(&song) {
+            AudioChangeImpact::TimelineWindow
+        } else {
+            AudioChangeImpact::TransportOnly
+        };
+        self.persist_song_update(song, audio, impact, true)?;
 
         Ok(self.snapshot())
     }
@@ -3003,8 +3016,7 @@ impl DesktopSession {
             let percent = 92_u8 + elapsed_secs;
             if percent != last_emitted_percent {
                 last_emitted_percent = percent;
-                let ram_cache_mb =
-                    (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
+                let ram_cache_mb = (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
                 let disk_cache_mb =
                     (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
                 emit_project_load_progress(
@@ -4816,6 +4828,16 @@ fn refresh_song_duration(song: &mut Song) {
         .fold(0.0_f64, f64::max);
 
     song.duration_seconds = max_clip_end.max(1.0);
+}
+
+fn song_has_active_warp(song: &Song) -> bool {
+    song.regions.iter().any(|region| {
+        region.warp_enabled
+            && region
+                .warp_source_bpm
+                .is_some_and(|bpm| bpm.is_finite() && bpm > 0.0)
+            && (region_warp_ratio_in_song(region, song) - 1.0).abs() > f64::EPSILON
+    })
 }
 
 fn sanitize_region_bounds(

@@ -47,7 +47,8 @@ function getPrimaryRulerMarkers(grid: TimelineGrid) {
   }
 
   return grid.markers.filter(
-    (marker) => marker.isBarStart && (marker.barNumber - 1) % grid.barLabelStep === 0,
+    (marker) =>
+      marker.isBarStart && (marker.barNumber - 1) % grid.barLabelStep === 0,
   );
 }
 
@@ -62,11 +63,16 @@ function getPrimaryMarkerOrdinal(
   return Math.floor((marker.barNumber - 1) / grid.barLabelStep);
 }
 
-function getLabelSkipDivisor(primaryMarkers: TimelineGrid["markers"], pixelsPerSecond: number) {
+function getLabelSkipDivisor(
+  primaryMarkers: TimelineGrid["markers"],
+  pixelsPerSecond: number,
+) {
   let minimumPrimaryIntervalPx = Number.POSITIVE_INFINITY;
 
   for (let index = 1; index < primaryMarkers.length; index += 1) {
-    const intervalPx = (primaryMarkers[index].seconds - primaryMarkers[index - 1].seconds) * pixelsPerSecond;
+    const intervalPx =
+      (primaryMarkers[index].seconds - primaryMarkers[index - 1].seconds) *
+      pixelsPerSecond;
     if (intervalPx > 0) {
       minimumPrimaryIntervalPx = Math.min(minimumPrimaryIntervalPx, intervalPx);
     }
@@ -109,8 +115,16 @@ function drawActiveVampRange(
   cameraX: number,
   pixelsPerSecond: number,
 ) {
-  const left = secondsToScreenX(activeVamp.startSeconds, cameraX, pixelsPerSecond);
-  const right = secondsToScreenX(activeVamp.endSeconds, cameraX, pixelsPerSecond);
+  const left = secondsToScreenX(
+    activeVamp.startSeconds,
+    cameraX,
+    pixelsPerSecond,
+  );
+  const right = secondsToScreenX(
+    activeVamp.endSeconds,
+    cameraX,
+    pixelsPerSecond,
+  );
   const highlightLeft = Math.max(0, left);
   const highlightRight = Math.min(width, right);
   const highlightWidth = highlightRight - highlightLeft;
@@ -145,14 +159,23 @@ export function drawGridLines(
     return;
   }
 
-  const visibleStartSeconds = Math.max(0, screenXToSeconds(0, cameraX, pixelsPerSecond));
+  const visibleStartSeconds = Math.max(
+    0,
+    screenXToSeconds(0, cameraX, pixelsPerSecond),
+  );
   const visibleEndSeconds = screenXToSeconds(width, cameraX, pixelsPerSecond);
   const beatPath = grid.showBeatGridLines ? new Path2D() : null;
   const barPath = new Path2D();
 
   for (const seconds of grid.beats) {
-    const x = Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;
-    if (seconds < visibleStartSeconds || seconds > visibleEndSeconds || x < 0 || x > width) {
+    const x =
+      Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;
+    if (
+      seconds < visibleStartSeconds ||
+      seconds > visibleEndSeconds ||
+      x < 0 ||
+      x > width
+    ) {
       continue;
     }
 
@@ -163,8 +186,14 @@ export function drawGridLines(
   }
 
   for (const seconds of grid.bars) {
-    const x = Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;
-    if (seconds < visibleStartSeconds || seconds > visibleEndSeconds || x < 0 || x > width) {
+    const x =
+      Math.round(secondsToScreenX(seconds, cameraX, pixelsPerSecond)) + 0.5;
+    if (
+      seconds < visibleStartSeconds ||
+      seconds > visibleEndSeconds ||
+      x < 0 ||
+      x > width
+    ) {
       continue;
     }
 
@@ -204,7 +233,10 @@ export function drawRulerGridLabels(
     }
 
     const markerX = secondsToScreenX(marker.seconds, cameraX, pixelsPerSecond);
-    if (marker.seconds < visibleStartSeconds - 2 || marker.seconds > visibleEndSeconds + 2) {
+    if (
+      marker.seconds < visibleStartSeconds - 2 ||
+      marker.seconds > visibleEndSeconds + 2
+    ) {
       continue;
     }
 
@@ -213,12 +245,20 @@ export function drawRulerGridLabels(
 
     context.fillStyle = marker.isBarStart ? "#e5e2e1" : "#bacac5";
     context.font = '600 9px "Space Grotesk", sans-serif';
-    context.fillText(formatRulerMusicalPosition(marker.barNumber, marker.beatInBar), x, y);
+    context.fillText(
+      formatRulerMusicalPosition(marker.barNumber, marker.beatInBar),
+      x,
+      y,
+    );
 
     if (marker.isBarStart) {
       context.fillStyle = "#57f1db";
       context.font = '400 9px "Space Grotesk", sans-serif';
-      context.fillText(formatRulerTimecode(marker.seconds), x, GRID_LABEL_SECOND_LINE_TOP);
+      context.fillText(
+        formatRulerTimecode(marker.seconds),
+        x,
+        GRID_LABEL_SECOND_LINE_TOP,
+      );
     }
   }
 }
@@ -232,7 +272,8 @@ export function drawRulerRegion(
   isSelected: boolean,
 ) {
   const left = secondsToScreenX(region.startSeconds, cameraX, pixelsPerSecond);
-  const regionWidth = (region.endSeconds - region.startSeconds) * pixelsPerSecond;
+  const regionWidth =
+    (region.endSeconds - region.startSeconds) * pixelsPerSecond;
   const right = left + regionWidth;
   if (right < -8 || left > width + 8 || regionWidth <= 0) {
     return;
@@ -244,8 +285,12 @@ export function drawRulerRegion(
   const blockHeight = LANE_REGIONS.height - 6;
 
   context.save();
-  context.fillStyle = isSelected ? "rgba(255, 226, 171, 0.28)" : "rgba(255, 226, 171, 0.14)";
-  context.strokeStyle = isSelected ? "rgba(255, 226, 171, 0.72)" : "rgba(255, 226, 171, 0.32)";
+  context.fillStyle = isSelected
+    ? "rgba(255, 226, 171, 0.28)"
+    : "rgba(255, 226, 171, 0.14)";
+  context.strokeStyle = isSelected
+    ? "rgba(255, 226, 171, 0.72)"
+    : "rgba(255, 226, 171, 0.32)";
   context.lineWidth = 1;
   context.beginPath();
   context.roundRect(blockLeft, blockTop, blockWidth, blockHeight, 6);
@@ -253,7 +298,12 @@ export function drawRulerRegion(
   context.stroke();
 
   context.beginPath();
-  context.rect(blockLeft + 6, blockTop, Math.max(0, blockWidth - 12), blockHeight);
+  context.rect(
+    blockLeft + 6,
+    blockTop,
+    Math.max(0, blockWidth - 12),
+    blockHeight,
+  );
   context.clip();
   context.fillStyle = isSelected ? "#fff4d6" : "rgba(255, 244, 214, 0.92)";
   context.font = '700 10px "Space Grotesk", sans-serif';
@@ -262,15 +312,23 @@ export function drawRulerRegion(
   const textCenterY = blockTop + blockHeight / 2 + 0.5;
   context.fillText(region.name, textLeft, textCenterY);
 
+  let badgeLeft = blockLeft + 7 + context.measureText(region.name).width + 8;
+  const badges: string[] = [];
+  if (region.warpEnabled && region.warpSourceBpm && region.warpSourceBpm > 0) {
+    badges.push(`${region.warpSourceBpm.toFixed(0)} BPM`);
+  }
   if (region.transposeSemitones !== 0) {
-    const textWidth = context.measureText(region.name).width;
-    const badgeText = `${region.transposeSemitones > 0 ? `+${region.transposeSemitones}` : region.transposeSemitones} st`;
+    badges.push(
+      `${region.transposeSemitones > 0 ? `+${region.transposeSemitones}` : region.transposeSemitones} st`,
+    );
+  }
+
+  for (const badgeText of badges) {
     context.font = '700 9px "Space Grotesk", sans-serif';
     const badgeTextWidth = context.measureText(badgeText).width;
     const badgePaddingX = 5;
     const badgeHeight = 12;
     const badgeWidth = Math.ceil(badgeTextWidth + badgePaddingX * 2);
-    const badgeLeft = blockLeft + 7 + textWidth + 8;
     const badgeTop = Math.round(textCenterY - badgeHeight / 2);
 
     context.fillStyle = "rgba(12, 12, 18, 0.82)";
@@ -283,6 +341,7 @@ export function drawRulerRegion(
 
     context.fillStyle = "rgb(255, 244, 210)";
     context.fillText(badgeText, badgeLeft + badgePaddingX, textCenterY + 0.1);
+    badgeLeft += badgeWidth + 5;
   }
   context.restore();
 }
@@ -297,10 +356,14 @@ export function drawRulerMarker(
   options: RulerMarkerDrawOptions,
 ) {
   const x = secondsToScreenX(marker.startSeconds, cameraX, pixelsPerSecond);
-  const label = marker.digit == null ? marker.name : `${marker.digit}. ${marker.name}`;
+  const label =
+    marker.digit == null ? marker.name : `${marker.digit}. ${marker.name}`;
 
   context.font = '600 10px "Space Grotesk", sans-serif';
-  const labelWidth = Math.max(30, Math.ceil(context.measureText(label).width) + 12);
+  const labelWidth = Math.max(
+    30,
+    Math.ceil(context.measureText(label).width) + 12,
+  );
   const labelHeight = 16;
   const snappedX = Math.round(x) + 0.5;
   const stemTop = LANE_SECTIONS.top + 2;
@@ -394,15 +457,21 @@ export function drawRulerTempoMarker(
   overrideLabel?: string,
 ) {
   const x = secondsToScreenX(marker.startSeconds, cameraX, pixelsPerSecond);
-  const label = overrideLabel ?? `${marker.bpm.toFixed(marker.bpm % 1 === 0 ? 0 : 1)}`;
+  const label =
+    overrideLabel ?? `${marker.bpm.toFixed(marker.bpm % 1 === 0 ? 0 : 1)}`;
 
   context.font = '700 10px "Space Grotesk", sans-serif';
-  const labelWidth = Math.max(30, Math.ceil(context.measureText(label).width) + 14);
+  const labelWidth = Math.max(
+    30,
+    Math.ceil(context.measureText(label).width) + 14,
+  );
   const snappedX = Math.round(x) + 0.5;
   const isMetricMarker = overrideLabel != null;
   const verticalOffset = isMetricMarker ? TIME_SIGNATURE_VERTICAL_OFFSET : 0;
   const flagTop =
-    LANE_TEMPO_METRIC.top + (isMetricMarker ? METRIC_LABEL_TOP : TEMPO_LABEL_TOP) + verticalOffset;
+    LANE_TEMPO_METRIC.top +
+    (isMetricMarker ? METRIC_LABEL_TOP : TEMPO_LABEL_TOP) +
+    verticalOffset;
   const flagHeight = isMetricMarker ? 12 : 13;
   const alignRight = snappedX > width - labelWidth - 12;
   const flagLeft = alignRight ? snappedX - labelWidth - 7 : snappedX + 3;
@@ -413,8 +482,12 @@ export function drawRulerTempoMarker(
   }
 
   context.save();
-  context.strokeStyle = overrideLabel ? "rgba(255, 184, 107, 0.78)" : "rgba(87, 241, 219, 0.78)";
-  context.fillStyle = overrideLabel ? "rgba(255, 184, 107, 0.16)" : "rgba(87, 241, 219, 0.16)";
+  context.strokeStyle = overrideLabel
+    ? "rgba(255, 184, 107, 0.78)"
+    : "rgba(87, 241, 219, 0.78)";
+  context.fillStyle = overrideLabel
+    ? "rgba(255, 184, 107, 0.16)"
+    : "rgba(87, 241, 219, 0.16)";
   context.lineWidth = 1.2;
   context.beginPath();
   context.moveTo(snappedX, flagTop + 2);

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -114,6 +115,33 @@ const char* jump_trigger_name(JumpTrigger trigger) noexcept {
     return "Unknown";
 }
 
+Frame clip_source_frame_at_timeline(const Track& track,
+                                    const Clip& clip,
+                                    const Song& song,
+                                    Frame timeline_frame) noexcept {
+    const Frame timeline_offset =
+        std::max<Frame>(0, timeline_frame - clip.timeline_start_frame);
+    const auto decision = resolve_pitch_render_decision(
+        track, clip, song, timeline_frame);
+    const double ratio = decision.warp_active ? decision.warp_time_ratio : 1.0;
+    return clip.source_start_frame
+        + static_cast<Frame>(static_cast<double>(timeline_offset) * ratio);
+}
+
+int clip_source_frames_for_timeline_span(const Track& track,
+                                         const Clip& clip,
+                                         const Song& song,
+                                         Frame timeline_frame,
+                                         Frame timeline_frames) noexcept {
+    if (timeline_frames <= 0) return 0;
+    const auto decision = resolve_pitch_render_decision(
+        track, clip, song, timeline_frame);
+    const double ratio = decision.warp_active ? decision.warp_time_ratio : 1.0;
+    return static_cast<int>(std::min<Frame>(
+        static_cast<Frame>(std::ceil(static_cast<double>(timeline_frames) * ratio)),
+        static_cast<Frame>(std::numeric_limits<int>::max())));
+}
+
 void request_jump_target_audio(SourceManager& sources,
                                const Session& session,
                                Frame target_frame,
@@ -128,9 +156,13 @@ void request_jump_target_audio(SourceManager& sources,
                 const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
                 if (target_frame < clip.timeline_start_frame || target_frame >= clip_end)
                     continue;
-                const Frame source_frame = clip.source_start_frame
-                    + (target_frame - clip.timeline_start_frame);
-                sources.request_range(clip.source_id, source_frame, window_frames);
+                const Frame source_frame = clip_source_frame_at_timeline(
+                    track, clip, song, target_frame);
+                sources.request_range(
+                    clip.source_id,
+                    source_frame,
+                    clip_source_frames_for_timeline_span(
+                        track, clip, song, target_frame, window_frames));
             }
         }
         return;
@@ -164,14 +196,17 @@ bool jump_target_audio_ready(SourceManager& sources,
                 const auto source = sources.get_shared(clip.source_id);
                 if (!source || !source->is_streaming())
                     continue;
-                const Frame source_frame = clip.source_start_frame
-                    + (target_frame - clip.timeline_start_frame);
+                const Frame source_frame = clip_source_frame_at_timeline(
+                    track, clip, song, target_frame);
                 const Frame read_start = std::max<Frame>(0, source_frame);
                 if (read_start >= source->duration_frames())
                     continue;
+                const int requested_frames = std::max(1,
+                    clip_source_frames_for_timeline_span(
+                        track, clip, song, target_frame, window_frames));
                 const int frames = std::max(1, static_cast<int>(std::min<Frame>(
                     std::min<Frame>(
-                        static_cast<Frame>(std::max(1, window_frames)),
+                        static_cast<Frame>(requested_frames),
                         source->duration_frames() - read_start),
                     static_cast<Frame>(std::numeric_limits<int>::max()))));
                 if (!source->is_range_ready(read_start, frames))
@@ -256,11 +291,10 @@ void request_playback_audio_window(SourceManager& sources,
                 const Frame overlap_end = std::min(end_frame, clip_end);
                 if (overlap_end <= overlap_start)
                     continue;
-                const Frame source_frame = clip.source_start_frame
-                    + (overlap_start - clip.timeline_start_frame);
-                const int frames = static_cast<int>(std::min<Frame>(
-                    overlap_end - overlap_start,
-                    static_cast<Frame>(std::numeric_limits<int>::max())));
+                const Frame source_frame = clip_source_frame_at_timeline(
+                    track, clip, song, overlap_start);
+                const int frames = clip_source_frames_for_timeline_span(
+                    track, clip, song, overlap_start, overlap_end - overlap_start);
                 sources.request_range(clip.source_id, source_frame, frames);
             }
         }
@@ -289,14 +323,17 @@ bool playback_audio_window_ready(SourceManager& sources,
                 const auto source = sources.get_shared(clip.source_id);
                 if (!source || !source->is_streaming())
                     continue;
-                const Frame source_frame = clip.source_start_frame
-                    + (overlap_start - clip.timeline_start_frame);
+                const Frame source_frame = clip_source_frame_at_timeline(
+                    track, clip, song, overlap_start);
                 const Frame read_start = std::max<Frame>(0, source_frame);
                 if (read_start >= source->duration_frames())
                     continue;
+                const int requested_frames = std::max(1,
+                    clip_source_frames_for_timeline_span(
+                        track, clip, song, overlap_start, overlap_end - overlap_start));
                 const int frames = std::max(1, static_cast<int>(std::min<Frame>(
                     std::min<Frame>(
-                        overlap_end - overlap_start,
+                        static_cast<Frame>(requested_frames),
                         source->duration_frames() - read_start),
                     static_cast<Frame>(std::numeric_limits<int>::max()))));
                 if (!source->is_range_ready(read_start, frames))

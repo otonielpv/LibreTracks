@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, type MutableRefObject, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type MutableRefObject,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import type {
   ActiveVampSummary,
@@ -10,8 +17,14 @@ import type {
   SongView,
   WaveformSummaryDto,
 } from "./desktopApi";
-import type { TimelineClipSummary, TimelineTrackSummary } from "./pendingAudioImports";
-import { InputManager, type TimelineNavigationScheme } from "./Renderer/InputManager";
+import type {
+  TimelineClipSummary,
+  TimelineTrackSummary,
+} from "./pendingAudioImports";
+import {
+  InputManager,
+  type TimelineNavigationScheme,
+} from "./Renderer/InputManager";
 import {
   drawGridLines,
   drawRulerBackgroundLayer,
@@ -53,7 +66,10 @@ type RulerCanvasProps = {
   navigationScheme: TimelineNavigationScheme;
   onNativeCameraXPreview: (cameraX: number) => number;
   onNativeCameraXCommit: (cameraX: number) => void;
-  onNativeZoomPreview: (nextZoomLevel: number, anchorViewportX: number) => {
+  onNativeZoomPreview: (
+    nextZoomLevel: number,
+    anchorViewportX: number,
+  ) => {
     cameraX: number;
     zoomLevel: number;
   } | null;
@@ -84,7 +100,10 @@ type TrackCanvasProps = {
   navigationScheme: TimelineNavigationScheme;
   onNativeCameraXPreview: (cameraX: number) => number;
   onNativeCameraXCommit: (cameraX: number) => void;
-  onNativeZoomPreview: (nextZoomLevel: number, anchorViewportX: number) => {
+  onNativeZoomPreview: (
+    nextZoomLevel: number,
+    anchorViewportX: number,
+  ) => {
     cameraX: number;
     zoomLevel: number;
   } | null;
@@ -152,46 +171,59 @@ function safeGetCanvasContext(canvas: HTMLCanvasElement) {
 }
 
 function formatClipSignatureNumber(value: number | null | undefined) {
-  return (typeof value === "number" && Number.isFinite(value) ? value : 0).toFixed(6);
+  return (
+    typeof value === "number" && Number.isFinite(value) ? value : 0
+  ).toFixed(6);
 }
 
-function buildClipSceneSignature(clipsByTrack: Record<string, TimelineClipSummary[]>) {
+function buildClipSceneSignature(
+  clipsByTrack: Record<string, TimelineClipSummary[]>,
+) {
   return Object.keys(clipsByTrack)
     .sort()
-    .map((trackId) =>
-      `${trackId}:${(clipsByTrack[trackId] ?? [])
-        .map((clip) =>
-          [
-            clip.id,
-            clip.trackId,
-            clip.waveformKey,
-            formatClipSignatureNumber(clip.timelineStartSeconds),
-            formatClipSignatureNumber(clip.sourceStartSeconds),
-            formatClipSignatureNumber(clip.sourceDurationSeconds),
-            formatClipSignatureNumber(clip.durationSeconds),
-          ].join(":"),
-        )
-        .join("|")}`,
+    .map(
+      (trackId) =>
+        `${trackId}:${(clipsByTrack[trackId] ?? [])
+          .map((clip) =>
+            [
+              clip.id,
+              clip.trackId,
+              clip.waveformKey,
+              formatClipSignatureNumber(clip.timelineStartSeconds),
+              formatClipSignatureNumber(clip.sourceStartSeconds),
+              formatClipSignatureNumber(clip.sourceWindowDurationSeconds),
+              formatClipSignatureNumber(clip.sourceDurationSeconds),
+              formatClipSignatureNumber(clip.durationSeconds),
+            ].join(":"),
+          )
+          .join("|")}`,
     )
     .join("#");
 }
 
-function buildWaveformCacheSignature(waveformCache: Record<string, WaveformSummaryDto>) {
+function buildWaveformCacheSignature(
+  waveformCache: Record<string, WaveformSummaryDto>,
+) {
   return Object.entries(waveformCache)
     .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
     .map(
       ([waveformKey, summary]) =>
         `${waveformKey}:${summary.version}:${summary.sampleRate}:${summary.lods
           .map((lod) => {
-            const rawMin = lod.minPeaks?.[0]?.toFixed(4) ?? lod.minPeaksBase64?.slice(0, 12) ?? "0";
-            const rawMax = lod.maxPeaks?.[0]?.toFixed(4) ?? lod.maxPeaksBase64?.slice(0, 12) ?? "0";
+            const rawMin =
+              lod.minPeaks?.[0]?.toFixed(4) ??
+              lod.minPeaksBase64?.slice(0, 12) ??
+              "0";
+            const rawMax =
+              lod.maxPeaks?.[0]?.toFixed(4) ??
+              lod.maxPeaksBase64?.slice(0, 12) ??
+              "0";
             return `${lod.resolutionFrames}:${lod.bucketCount}:${rawMin}:${rawMax}`;
           })
           .join(",")}`,
     )
     .join("|");
 }
-
 
 export function TimelineRulerCanvas({
   width,
@@ -258,7 +290,13 @@ export function TimelineRulerCanvas({
   };
 
   const regionsSignature = useMemo(
-    () => regions.map((region) => `${region.id}:${region.name}:${region.startSeconds}:${region.endSeconds}`).join("|"),
+    () =>
+      regions
+        .map(
+          (region) =>
+            `${region.id}:${region.name}:${region.startSeconds}:${region.endSeconds}:${region.warpEnabled ? 1 : 0}:${region.warpSourceBpm ?? 0}`,
+        )
+        .join("|"),
     [regions],
   );
 
@@ -268,11 +306,15 @@ export function TimelineRulerCanvas({
   );
 
   const tempoMarkersSignature = useMemo(
-    () => tempoMarkers.map((m) => `${m.id}:${m.startSeconds}:${m.bpm}`).join("|"),
+    () =>
+      tempoMarkers.map((m) => `${m.id}:${m.startSeconds}:${m.bpm}`).join("|"),
     [tempoMarkers],
   );
   const timeSignatureMarkersSignature = useMemo(
-    () => timeSignatureMarkers.map((m) => `${m.id}:${m.startSeconds}:${m.signature}`).join("|"),
+    () =>
+      timeSignatureMarkers
+        .map((m) => `${m.id}:${m.startSeconds}:${m.signature}`)
+        .join("|"),
     [timeSignatureMarkers],
   );
 
@@ -367,7 +409,10 @@ export function TimelineRulerCanvas({
 
     const render = () => {
       const snapshot = snapshotRef.current;
-      if (!isRenderableCanvasSize(snapshot.width) || !isRenderableCanvasSize(snapshot.height)) {
+      if (
+        !isRenderableCanvasSize(snapshot.width) ||
+        !isRenderableCanvasSize(snapshot.height)
+      ) {
         animationFrameId = window.requestAnimationFrame(render);
         return;
       }
@@ -381,7 +426,11 @@ export function TimelineRulerCanvas({
           lastBaseCameraX !== cameraX ||
           lastBasePixelsPerSecond !== livePixelsPerSecond
         ) {
-          const baseContext = setupCanvas(baseCanvas, snapshot.width, snapshot.height);
+          const baseContext = setupCanvas(
+            baseCanvas,
+            snapshot.width,
+            snapshot.height,
+          );
           if (baseContext) {
             baseContext.clearRect(0, 0, snapshot.width, snapshot.height);
             drawRulerBackgroundLayer(baseContext, {
@@ -403,7 +452,9 @@ export function TimelineRulerCanvas({
 
         if (overlayContentRef.current) {
           const overlayScaleX =
-            snapshot.pixelsPerSecond > 0 ? livePixelsPerSecond / snapshot.pixelsPerSecond : 1;
+            snapshot.pixelsPerSecond > 0
+              ? livePixelsPerSecond / snapshot.pixelsPerSecond
+              : 1;
 
           if (
             lastOverlayTransformCameraX !== cameraX ||
@@ -421,14 +472,22 @@ export function TimelineRulerCanvas({
           }
         }
 
-        const overlayContext = setupCanvas(overlayCanvas, snapshot.width, snapshot.height);
+        const overlayContext = setupCanvas(
+          overlayCanvas,
+          snapshot.width,
+          snapshot.height,
+        );
         if (overlayContext) {
           const playheadSeconds =
-            snapshot.playheadDragRef.current?.currentSeconds ?? playheadSecondsRef.current;
-          const pulseFrame = snapshot.pendingMarkerJump ? Math.floor(performance.now() / 32) : 0;
-          const currentMarkerId = snapshot.markers
-            .filter((marker) => playheadSeconds >= marker.startSeconds)
-            .at(-1)?.id ?? null;
+            snapshot.playheadDragRef.current?.currentSeconds ??
+            playheadSecondsRef.current;
+          const pulseFrame = snapshot.pendingMarkerJump
+            ? Math.floor(performance.now() / 32)
+            : 0;
+          const currentMarkerId =
+            snapshot.markers
+              .filter((marker) => playheadSeconds >= marker.startSeconds)
+              .at(-1)?.id ?? null;
           const shouldRedrawOverlay =
             lastOverlaySceneVersion !== sceneVersionRef.current ||
             lastOverlayCameraX !== cameraX ||
@@ -483,8 +542,16 @@ export function TimelineRulerCanvas({
         height: isRenderableCanvasSize(height) ? height : 1,
       }}
     >
-      <canvas className="lt-ruler-canvas" ref={baseCanvasRef} aria-hidden="true" />
-      <canvas className="lt-ruler-canvas-overlay" ref={overlayCanvasRef} aria-hidden="true" />
+      <canvas
+        className="lt-ruler-canvas"
+        ref={baseCanvasRef}
+        aria-hidden="true"
+      />
+      <canvas
+        className="lt-ruler-canvas-overlay"
+        ref={overlayCanvasRef}
+        aria-hidden="true"
+      />
       <div className="lt-ruler-overlay">
         <div
           ref={overlayContentRef}
@@ -550,7 +617,10 @@ export function TimelineTrackCanvas({
     () => buildTrackStructureSignature(song, visibleTracks),
     [song.tracks, visibleTracks],
   );
-  const clipSceneSignature = useMemo(() => buildClipSceneSignature(clipsByTrack), [clipsByTrack]);
+  const clipSceneSignature = useMemo(
+    () => buildClipSceneSignature(clipsByTrack),
+    [clipsByTrack],
+  );
   const waveformCacheSignature = useMemo(
     () => buildWaveformCacheSignature(waveformCache),
     [waveformCache],
@@ -650,7 +720,9 @@ export function TimelineTrackCanvas({
       {
         getViewportMetrics: (): TimelineViewportMetrics => ({
           scrollTop: scrollViewportRef.current?.scrollTop ?? 0,
-          height: scrollViewportRef.current?.clientHeight ?? snapshotRef.current.height,
+          height:
+            scrollViewportRef.current?.clientHeight ??
+            snapshotRef.current.height,
         }),
         renderBackground: (context, snapshot) => {
           drawTrackCanvasBackground(context, snapshot);
@@ -745,9 +817,21 @@ export function TimelineTrackCanvas({
 
   return (
     <div className="lt-track-canvas-layer" style={{ width, height }}>
-      <canvas className="lt-track-canvas-background" ref={backgroundCanvasRef} aria-hidden="true" />
-      <canvas className="lt-track-canvas" ref={tracksCanvasRef} aria-hidden="true" />
-      <canvas className="lt-track-canvas-overlay" ref={foregroundCanvasRef} aria-hidden="true" />
+      <canvas
+        className="lt-track-canvas-background"
+        ref={backgroundCanvasRef}
+        aria-hidden="true"
+      />
+      <canvas
+        className="lt-track-canvas"
+        ref={tracksCanvasRef}
+        aria-hidden="true"
+      />
+      <canvas
+        className="lt-track-canvas-overlay"
+        ref={foregroundCanvasRef}
+        aria-hidden="true"
+      />
     </div>
   );
 }

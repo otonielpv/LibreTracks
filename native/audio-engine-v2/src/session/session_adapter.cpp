@@ -307,6 +307,8 @@ Result<Session> session_from_project_json(const std::string& project_json,
                                 + seconds_to_frames(duration_s, engine_sample_rate);
                     }
                     region.transpose_semitones = value_any<Semitones>(jr, "transpose_semitones", "transposeSemitones", 0);
+                    region.warp_enabled = value_any<bool>(jr, "warp_enabled", "warpEnabled", false);
+                    region.warp_source_bpm = value_any<double>(jr, "warp_source_bpm", "warpSourceBpm", 0.0);
                     // Only add the region if end_frame > start_frame (otherwise it is malformed
                     // and would never match in resolve_region_transpose).
                     if (region.end_frame > region.start_frame)
