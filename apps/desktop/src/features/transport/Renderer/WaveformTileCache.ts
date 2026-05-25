@@ -12,6 +12,8 @@ type ResolvedWaveformLod = {
   bucketCount: number;
   minPeaks: Float32Array;
   maxPeaks: Float32Array;
+  minPeaksRight: Float32Array;
+  maxPeaksRight: Float32Array;
 };
 
 type TileSurface = OffscreenCanvas | HTMLCanvasElement;
@@ -93,6 +95,12 @@ function resolveWaveformLod(lod: WaveformLodDto): ResolvedWaveformLod {
     maxPeaks: lod.maxPeaks
       ? Float32Array.from(lod.maxPeaks)
       : decodeFloat32Peaks(lod.maxPeaksBase64, lod.bucketCount),
+    minPeaksRight: lod.minPeaksRight
+      ? Float32Array.from(lod.minPeaksRight)
+      : decodeFloat32Peaks(lod.minPeaksRightBase64, lod.bucketCount),
+    maxPeaksRight: lod.maxPeaksRight
+      ? Float32Array.from(lod.maxPeaksRight)
+      : decodeFloat32Peaks(lod.maxPeaksRightBase64, lod.bucketCount),
   };
   decodedWaveformLodCache.set(lod, resolved);
   return resolved;
@@ -149,9 +157,17 @@ function getTileContext(surface: TileSurface) {
 
 function tileNamespace(request: TileRequest) {
   const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(request.pixelsPerSecond);
+  const channelLayout = request.waveform.lods.some(
+    (lod) =>
+      Boolean(lod.maxPeaksRight?.length) ||
+      Boolean(lod.maxPeaksRightBase64),
+  )
+    ? "stereo"
+    : "mono";
   return [
     request.clip.waveformKey,
     request.waveform.version,
+    channelLayout,
     request.waveform.sampleRate,
     request.waveform.durationSeconds.toFixed(6),
     request.clip.sourceStartSeconds.toFixed(6),
@@ -174,6 +190,8 @@ function renderWaveformTile(
   const waveformLod = selectWaveformLod(request.waveform, request.pixelsPerSecond);
   const maxPeaks = waveformLod?.maxPeaks ?? new Float32Array(0);
   const minPeaks = waveformLod?.minPeaks ?? new Float32Array(0);
+  const maxPeaksRight = waveformLod?.maxPeaksRight ?? new Float32Array(0);
+  const minPeaksRight = waveformLod?.minPeaksRight ?? new Float32Array(0);
   if (
     !maxPeaks.length ||
     !minPeaks.length ||
@@ -213,17 +231,86 @@ function renderWaveformTile(
   context.fillStyle = "rgba(20, 20, 20, 0.72)";
   context.lineJoin = "round";
   context.lineCap = "round";
-  context.beginPath();
 
   const xDenominator = Math.max(1, clipSampleCount - 1);
   const pxPerBucket = request.clipPixelWidth / xDenominator;
   const shouldUseSteppedPeaks = pxPerBucket > 5;
+  const hasRightChannel =
+    minPeaksRight.length === minPeaks.length &&
+    maxPeaksRight.length === maxPeaks.length;
+
+  if (hasRightChannel) {
+    context.fillStyle = "rgba(20, 20, 20, 0.18)";
+    context.fillRect(0, Math.round(TILE_HEIGHT_PX * 0.5), tileWidth, 1);
+    context.fillStyle = "rgba(20, 20, 20, 0.72)";
+    drawChannelPeaks(
+      context,
+      minPeaks,
+      maxPeaks,
+      startIndex,
+      endIndex,
+      clipStartIndex,
+      xDenominator,
+      request.clipPixelWidth,
+      tileStartPixel,
+      TILE_HEIGHT_PX * 0.25,
+      TILE_HEIGHT_PX * 0.2,
+      shouldUseSteppedPeaks,
+    );
+    drawChannelPeaks(
+      context,
+      minPeaksRight,
+      maxPeaksRight,
+      startIndex,
+      endIndex,
+      clipStartIndex,
+      xDenominator,
+      request.clipPixelWidth,
+      tileStartPixel,
+      TILE_HEIGHT_PX * 0.75,
+      TILE_HEIGHT_PX * 0.2,
+      shouldUseSteppedPeaks,
+    );
+    return;
+  }
+
+  drawChannelPeaks(
+    context,
+    minPeaks,
+    maxPeaks,
+    startIndex,
+    endIndex,
+    clipStartIndex,
+    xDenominator,
+    request.clipPixelWidth,
+    tileStartPixel,
+    TILE_HEIGHT_PX * 0.5,
+    TILE_HEIGHT_PX * 0.42,
+    shouldUseSteppedPeaks,
+  );
+}
+
+function drawChannelPeaks(
+  context: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+  minPeaks: Float32Array,
+  maxPeaks: Float32Array,
+  startIndex: number,
+  endIndex: number,
+  clipStartIndex: number,
+  xDenominator: number,
+  clipPixelWidth: number,
+  tileStartPixel: number,
+  centerY: number,
+  amplitudeY: number,
+  shouldUseSteppedPeaks: boolean,
+) {
+  context.beginPath();
   let previousTopY = 0;
 
   for (let index = startIndex; index < endIndex; index += 1) {
-    const clipLocalX = ((index - clipStartIndex) / xDenominator) * request.clipPixelWidth;
+    const clipLocalX = ((index - clipStartIndex) / xDenominator) * clipPixelWidth;
     const x = clipLocalX - tileStartPixel;
-    const y = TILE_HEIGHT_PX * 0.5 - clamp(maxPeaks[index], -1, 1) * TILE_HEIGHT_PX * 0.42;
+    const y = centerY - clamp(maxPeaks[index], -1, 1) * amplitudeY;
     if (index === startIndex) {
       context.moveTo(x, y);
       previousTopY = y;
@@ -238,9 +325,9 @@ function renderWaveformTile(
 
   let previousBottomY = 0;
   for (let index = endIndex - 1; index >= startIndex; index -= 1) {
-    const clipLocalX = ((index - clipStartIndex) / xDenominator) * request.clipPixelWidth;
+    const clipLocalX = ((index - clipStartIndex) / xDenominator) * clipPixelWidth;
     const x = clipLocalX - tileStartPixel;
-    const y = TILE_HEIGHT_PX * 0.5 - clamp(minPeaks[index], -1, 1) * TILE_HEIGHT_PX * 0.42;
+    const y = centerY - clamp(minPeaks[index], -1, 1) * amplitudeY;
     if (index === endIndex - 1) {
       previousBottomY = y;
     } else if (shouldUseSteppedPeaks) {

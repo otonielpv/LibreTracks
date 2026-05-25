@@ -1058,6 +1058,12 @@ impl DesktopSession {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(waveform_key, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
+                    if let Ok(summary) =
+                        self.load_waveform_summary_cached(&song_dir, waveform_key, true)
+                    {
+                        summaries.push(waveform_summary_to_dto(waveform_key, summary));
+                        continue;
+                    }
                     if let Some(audio) = audio {
                         if let Ok(summary) =
                             self.load_native_waveform_summary(&song_dir, waveform_key, audio)
@@ -1104,6 +1110,12 @@ impl DesktopSession {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(&normalized_path, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
+                    if let Ok(summary) =
+                        self.load_waveform_summary_cached(&song_dir, &normalized_path, true)
+                    {
+                        summaries.push(waveform_summary_to_dto(&normalized_path, summary));
+                        continue;
+                    }
                     if let Ok(summary) =
                         self.load_native_waveform_summary(&song_dir, &normalized_path, audio)
                     {
@@ -3546,18 +3558,18 @@ impl DesktopSession {
 
         let keys = unique_waveform_keys(song);
 
-        // Phase 1: read every .peaks summary from disk in parallel.
-        // load_waveform_summary is pure I/O + decode of a small binary file,
-        // so per-file work is independent. We collect (key, token, summary)
-        // tuples so the mutation pass below can be a single locked write.
+        // Phase 1: read every .peaks summary from disk in parallel. Older
+        // waveform caches may be upgraded while loading, so the freshness
+        // token is captured after the summary read. We collect (key, token,
+        // summary) tuples so the mutation pass below can be a single locked write.
         // Entries that fail with Io/InvalidWaveformSummary are returned as
         // None so we can fall back to native peak generation sequentially —
         // that path needs &mut self because it writes the .peaks file.
         let parallel_results: Vec<(String, Option<(WaveformCacheToken, WaveformSummary)>)> = keys
             .par_iter()
             .map(|key| {
-                let token = build_waveform_cache_token(song_dir, key).ok();
                 let summary = load_waveform_summary(song_dir, key).ok();
+                let token = build_waveform_cache_token(song_dir, key).ok();
                 let entry = match (token, summary) {
                     (Some(t), Some(s)) => Some((t, s)),
                     _ => None,
@@ -3571,17 +3583,19 @@ impl DesktopSession {
         for (key, entry) in parallel_results {
             if let Some((token, summary)) = entry {
                 self.perf_metrics.waveform_cache_misses += 1;
-                self.waveform_cache.entries.insert(
-                    key,
-                    CachedWaveformSummary { token, summary },
-                );
+                self.waveform_cache
+                    .entries
+                    .insert(key, CachedWaveformSummary { token, summary });
                 continue;
             }
             // Fallback path: disk read failed (missing or corrupt .peaks).
-            // Try to regenerate from the native engine; if that also fails,
-            // use the slow allow_regenerate path that re-decodes the audio.
-            if self.load_native_waveform_summary(song_dir, &key, audio).is_err() {
-                let _ = self.load_waveform_summary_cached(song_dir, &key, true)?;
+            // Regenerate from the source file first so stereo channels remain
+            // separate in the visual cache; use native peaks only as a last resort.
+            if self
+                .load_waveform_summary_cached(song_dir, &key, true)
+                .is_err()
+            {
+                let _ = self.load_native_waveform_summary(song_dir, &key, audio)?;
             }
         }
 

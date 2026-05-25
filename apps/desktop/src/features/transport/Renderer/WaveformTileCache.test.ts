@@ -79,6 +79,27 @@ describe("WaveformTileCache", () => {
     expect(lowZoomLod?.resolutionFrames).toBe(2048);
   });
 
+  it("decodes right-channel peaks for stereo waveforms", () => {
+    const waveform = buildWaveform({
+      lods: [
+        {
+          resolutionFrames: 256,
+          bucketCount: 3,
+          minPeaksBase64: encodeFloat32Peaks([-0.8, -0.7, -0.6]),
+          maxPeaksBase64: encodeFloat32Peaks([0.8, 0.7, 0.6]),
+          minPeaksRightBase64: encodeFloat32Peaks([-0.2, -0.3, -0.4]),
+          maxPeaksRightBase64: encodeFloat32Peaks([0.2, 0.3, 0.4]),
+        },
+      ],
+    });
+
+    const lod = selectWaveformLod(waveform, 200);
+
+    expect(Array.from(lod?.maxPeaksRight ?? [])).toHaveLength(3);
+    expect(lod?.maxPeaksRight[2]).toBeCloseTo(0.4);
+    expect(lod?.minPeaksRight[0]).toBeCloseTo(-0.2);
+  });
+
   it("builds different namespaces when waveform identity inputs change", () => {
     const cache = new WaveformTileCache();
     const baseClip = buildClip();
@@ -98,6 +119,30 @@ describe("WaveformTileCache", () => {
 
     expect(durationNamespace).not.toBe(baseNamespace);
     expect(waveformNamespace).not.toBe(baseNamespace);
+  });
+
+  it("builds different namespaces for mono and stereo waveform tiles", () => {
+    const cache = new WaveformTileCache();
+    const baseClip = buildClip();
+    const monoNamespace = cache.buildNamespace(baseClip, buildWaveform(), 120);
+    const stereoNamespace = cache.buildNamespace(
+      baseClip,
+      buildWaveform({
+        lods: [
+          {
+            resolutionFrames: 256,
+            bucketCount: 2,
+            minPeaks: [-0.8, -0.6],
+            maxPeaks: [0.8, 0.6],
+            minPeaksRight: [-0.2, -0.4],
+            maxPeaksRight: [0.2, 0.4],
+          },
+        ],
+      }),
+      120,
+    );
+
+    expect(stereoNamespace).not.toBe(monoNamespace);
   });
 
   it("quantizes nearby zoom levels to the same waveform render scale", () => {

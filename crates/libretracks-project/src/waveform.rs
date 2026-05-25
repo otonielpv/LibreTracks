@@ -19,7 +19,8 @@ use symphonia::core::{
 
 use crate::ProjectError;
 
-const WAVEFORM_FORMAT_VERSION: u32 = 4;
+const WAVEFORM_FORMAT_VERSION: u32 = 5;
+const MIN_READABLE_WAVEFORM_FORMAT_VERSION: u32 = 4;
 const WAVEFORM_FILE_MAGIC: &[u8; 8] = b"LTPEAKS1";
 const WAVEFORM_LOD_RESOLUTIONS: [usize; 4] = [256, 2_048, 16_384, 131_072];
 
@@ -27,10 +28,19 @@ const WAVEFORM_LOD_RESOLUTIONS: [usize; 4] = [256, 2_048, 16_384, 131_072];
 #[serde(rename_all = "camelCase")]
 pub struct WaveformLod {
     pub resolution_frames: usize,
+    /// Min peaks for the left channel (or the only channel for mono sources).
     #[serde(default)]
     pub min_peaks: Vec<f32>,
+    /// Max peaks for the left channel (or the only channel for mono sources).
     #[serde(default)]
     pub max_peaks: Vec<f32>,
+    /// Min peaks for the right channel. Empty for mono sources — consumers
+    /// that see an empty vector should render the clip as a single waveform.
+    #[serde(default)]
+    pub min_peaks_right: Vec<f32>,
+    /// Max peaks for the right channel. See `min_peaks_right`.
+    #[serde(default)]
+    pub max_peaks_right: Vec<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -175,9 +185,11 @@ pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectEr
     let mut decoder = symphonia::default::get_codecs()
         .make(&codec_params, &DecoderOptions::default())
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    let track_right = channels >= 2;
     let mut buckets = WaveformBuckets::new(
         codec_params.n_frames.unwrap_or(sample_rate as u64) as usize,
         WAVEFORM_LOD_RESOLUTIONS[0],
+        track_right,
     );
     let mut frame_index = 0usize;
     let mut seek_index = Vec::new();
@@ -223,12 +235,17 @@ pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectEr
         sample_buffer.copy_interleaved_ref(decoded);
         let channel_count = usize::from(channels.max(1));
         for frame in sample_buffer.samples().chunks(channel_count) {
-            let value = if frame.is_empty() {
+            let left_sample = if frame.is_empty() {
                 0.0
             } else {
-                frame.iter().copied().sum::<f32>() / frame.len() as f32
+                frame[0].clamp(-1.0, 1.0)
             };
-            buckets.push_frame(frame_index, value.clamp(-1.0, 1.0));
+            let right_sample = if track_right {
+                frame.get(1).map(|sample| sample.clamp(-1.0, 1.0))
+            } else {
+                None
+            };
+            buckets.push_frame(frame_index, left_sample, right_sample);
             frame_index += 1;
         }
     }
@@ -279,13 +296,17 @@ pub fn waveform_summary_from_peaks(
         || min_peaks.is_empty()
         || min_peaks.len() != max_peaks.len()
     {
-        return Err(ProjectError::InvalidWaveformSummary("<native-waveform>".into()));
+        return Err(ProjectError::InvalidWaveformSummary(
+            "<native-waveform>".into(),
+        ));
     }
 
     let base_lod = WaveformLod {
         resolution_frames,
         min_peaks,
         max_peaks,
+        min_peaks_right: Vec::new(),
+        max_peaks_right: Vec::new(),
     };
     let summary = WaveformSummary {
         version: WAVEFORM_FORMAT_VERSION,
@@ -324,6 +345,13 @@ pub fn load_waveform_summary(
     if path.exists() {
         let summary = decode_waveform_summary_binary(&fs::read(&path)?)
             .ok_or_else(|| ProjectError::InvalidWaveformSummary(path.clone()))?;
+        if summary.version < WAVEFORM_FORMAT_VERSION {
+            let summary =
+                analyze_wav_file(resolve_audio_source_path(song_dir, audio_relative_path))?
+                    .waveform;
+            write_waveform_summary(&path, &summary)?;
+            return Ok(summary);
+        }
         validate_waveform_summary(&summary, &path)?;
         return Ok(summary);
     }
@@ -352,9 +380,12 @@ fn validate_waveform_summary(
             lod.resolution_frames > 0
                 && !lod.max_peaks.is_empty()
                 && lod.min_peaks.len() == lod.max_peaks.len()
+                && (lod.max_peaks_right.is_empty()
+                    || (lod.min_peaks_right.len() == lod.max_peaks.len()
+                        && lod.max_peaks_right.len() == lod.max_peaks.len()))
         });
 
-    if summary.version < WAVEFORM_FORMAT_VERSION
+    if summary.version < MIN_READABLE_WAVEFORM_FORMAT_VERSION
         || summary.duration_seconds <= 0.0
         || summary.sample_rate == 0
         || !lods_are_valid
@@ -391,6 +422,8 @@ fn load_legacy_waveform_summary(
         resolution_frames,
         min_peaks: legacy.min_peaks,
         max_peaks: legacy.max_peaks,
+        min_peaks_right: Vec::new(),
+        max_peaks_right: Vec::new(),
     };
 
     let summary = WaveformSummary {
@@ -430,26 +463,44 @@ fn downsample_waveform_lod(source: &WaveformLod, target_resolution_frames: usize
     let chunk_size = target_resolution_frames
         .div_ceil(source.resolution_frames.max(1))
         .max(1);
-    let mut min_peaks = Vec::with_capacity(source.min_peaks.len().div_ceil(chunk_size));
-    let mut max_peaks = Vec::with_capacity(source.max_peaks.len().div_ceil(chunk_size));
+    let (min_peaks, max_peaks) =
+        downsample_peak_pair(&source.min_peaks, &source.max_peaks, chunk_size);
+    let (min_peaks_right, max_peaks_right) = if source.max_peaks_right.is_empty() {
+        (Vec::new(), Vec::new())
+    } else {
+        downsample_peak_pair(&source.min_peaks_right, &source.max_peaks_right, chunk_size)
+    };
 
-    for chunk_start in (0..source.max_peaks.len()).step_by(chunk_size) {
-        let chunk_end = (chunk_start + chunk_size).min(source.max_peaks.len());
-        let min_peak = source.min_peaks[chunk_start..chunk_end]
+    WaveformLod {
+        resolution_frames: target_resolution_frames,
+        min_peaks,
+        max_peaks,
+        min_peaks_right,
+        max_peaks_right,
+    }
+}
+
+fn downsample_peak_pair(
+    min_source: &[f32],
+    max_source: &[f32],
+    chunk_size: usize,
+) -> (Vec<f32>, Vec<f32>) {
+    let mut min_peaks = Vec::with_capacity(max_source.len().div_ceil(chunk_size));
+    let mut max_peaks = Vec::with_capacity(max_source.len().div_ceil(chunk_size));
+
+    for chunk_start in (0..max_source.len()).step_by(chunk_size) {
+        let chunk_end = (chunk_start + chunk_size).min(max_source.len());
+        let min_peak = min_source[chunk_start..chunk_end]
             .iter()
             .fold(1.0_f32, |current, value| current.min(*value));
-        let max_peak = source.max_peaks[chunk_start..chunk_end]
+        let max_peak = max_source[chunk_start..chunk_end]
             .iter()
             .fold(-1.0_f32, |current, value| current.max(*value));
         min_peaks.push(min_peak);
         max_peaks.push(max_peak);
     }
 
-    WaveformLod {
-        resolution_frames: target_resolution_frames,
-        min_peaks,
-        max_peaks,
-    }
+    (min_peaks, max_peaks)
 }
 
 fn encode_waveform_summary_binary(summary: &WaveformSummary) -> Result<Vec<u8>, ProjectError> {
@@ -466,6 +517,14 @@ fn encode_waveform_summary_binary(summary: &WaveformSummary) -> Result<Vec<u8>, 
                 "<waveform-memory>",
             )));
         }
+        if !lod.max_peaks_right.is_empty()
+            && (lod.min_peaks_right.len() != lod.max_peaks.len()
+                || lod.max_peaks_right.len() != lod.max_peaks.len())
+        {
+            return Err(ProjectError::InvalidWaveformSummary(PathBuf::from(
+                "<waveform-memory>",
+            )));
+        }
 
         bytes.extend_from_slice(&(lod.resolution_frames as u64).to_le_bytes());
         bytes.extend_from_slice(&(lod.max_peaks.len() as u32).to_le_bytes());
@@ -474,6 +533,18 @@ fn encode_waveform_summary_binary(summary: &WaveformSummary) -> Result<Vec<u8>, 
         }
         for value in &lod.max_peaks {
             bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        // v5+ appends a flag byte: 0 = mono (no right peaks follow), 1 =
+        // stereo (right channel peaks follow, same bucket count as left).
+        let stereo_flag: u8 = if lod.max_peaks_right.is_empty() { 0 } else { 1 };
+        bytes.push(stereo_flag);
+        if stereo_flag == 1 {
+            for value in &lod.min_peaks_right {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            for value in &lod.max_peaks_right {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
         }
     }
     bytes.extend_from_slice(&(summary.seek_index.len() as u32).to_le_bytes());
@@ -512,10 +583,32 @@ fn decode_waveform_summary_binary(bytes: &[u8]) -> Option<WaveformSummary> {
             max_peaks.push(read_f32(bytes, &mut offset)?);
         }
 
+        let mut min_peaks_right = Vec::new();
+        let mut max_peaks_right = Vec::new();
+        if version >= 5 {
+            let stereo_flag = *bytes.get(offset)?;
+            offset += 1;
+            if stereo_flag > 1 {
+                return None;
+            }
+            if stereo_flag == 1 {
+                min_peaks_right.reserve(bucket_count);
+                max_peaks_right.reserve(bucket_count);
+                for _ in 0..bucket_count {
+                    min_peaks_right.push(read_f32(bytes, &mut offset)?);
+                }
+                for _ in 0..bucket_count {
+                    max_peaks_right.push(read_f32(bytes, &mut offset)?);
+                }
+            }
+        }
+
         lods.push(WaveformLod {
             resolution_frames,
             min_peaks,
             max_peaks,
+            min_peaks_right,
+            max_peaks_right,
         });
     }
 
@@ -569,35 +662,53 @@ fn read_f64(bytes: &[u8], offset: &mut usize) -> Option<f64> {
     Some(f64::from_le_bytes(read_exact(bytes, offset)?))
 }
 
+/// Accumulator that builds the base-resolution peak data while a file is
+/// being decoded. Tracks the left/L channel (or the only channel for mono)
+/// in `min_peaks`/`max_peaks`; when `track_right` is true, the right channel
+/// is tracked separately in `min_peaks_right`/`max_peaks_right` so the
+/// renderer can paint L on top and R on the bottom half of the clip.
 struct WaveformBuckets {
     resolution_frames: usize,
     bucket_count: usize,
     min_peaks: Vec<f32>,
     max_peaks: Vec<f32>,
+    min_peaks_right: Vec<f32>,
+    max_peaks_right: Vec<f32>,
+    track_right: bool,
     touched: Vec<bool>,
 }
 
 impl WaveformBuckets {
-    fn new(frame_count: usize, resolution_frames: usize) -> Self {
+    fn new(frame_count: usize, resolution_frames: usize, track_right: bool) -> Self {
         let bucket_count = frame_count.div_ceil(resolution_frames.max(1)).max(1);
 
+        let right_capacity = if track_right { bucket_count } else { 0 };
         Self {
             resolution_frames: resolution_frames.max(1),
             bucket_count,
             min_peaks: vec![1.0; bucket_count],
             max_peaks: vec![-1.0; bucket_count],
+            min_peaks_right: vec![1.0; right_capacity],
+            max_peaks_right: vec![-1.0; right_capacity],
+            track_right,
             touched: vec![false; bucket_count],
         }
     }
 
-    fn push_frame(&mut self, frame_index: usize, sample: f32) {
+    fn push_frame(&mut self, frame_index: usize, left_sample: f32, right_sample: Option<f32>) {
         if self.bucket_count == 0 {
             return;
         }
 
         let bucket_index = (frame_index / self.resolution_frames).min(self.bucket_count - 1);
-        self.min_peaks[bucket_index] = self.min_peaks[bucket_index].min(sample);
-        self.max_peaks[bucket_index] = self.max_peaks[bucket_index].max(sample);
+        self.min_peaks[bucket_index] = self.min_peaks[bucket_index].min(left_sample);
+        self.max_peaks[bucket_index] = self.max_peaks[bucket_index].max(left_sample);
+        if self.track_right {
+            if let Some(right) = right_sample {
+                self.min_peaks_right[bucket_index] = self.min_peaks_right[bucket_index].min(right);
+                self.max_peaks_right[bucket_index] = self.max_peaks_right[bucket_index].max(right);
+            }
+        }
         self.touched[bucket_index] = true;
     }
 
@@ -607,6 +718,10 @@ impl WaveformBuckets {
             if !self.touched[bucket_index] {
                 self.min_peaks[bucket_index] = 0.0;
                 self.max_peaks[bucket_index] = 0.0;
+                if self.track_right {
+                    self.min_peaks_right[bucket_index] = 0.0;
+                    self.max_peaks_right[bucket_index] = 0.0;
+                }
             }
         }
 
@@ -614,6 +729,8 @@ impl WaveformBuckets {
             resolution_frames: self.resolution_frames,
             min_peaks: self.min_peaks,
             max_peaks: self.max_peaks,
+            min_peaks_right: self.min_peaks_right,
+            max_peaks_right: self.max_peaks_right,
         }
     }
 
@@ -623,6 +740,10 @@ impl WaveformBuckets {
             self.bucket_count = bucket_count;
             self.min_peaks.truncate(bucket_count);
             self.max_peaks.truncate(bucket_count);
+            if self.track_right {
+                self.min_peaks_right.truncate(bucket_count);
+                self.max_peaks_right.truncate(bucket_count);
+            }
             self.touched.truncate(bucket_count);
         }
     }

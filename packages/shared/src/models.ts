@@ -123,8 +123,12 @@ export type WaveformLodDto = {
   bucketCount: number;
   minPeaks?: number[];
   maxPeaks?: number[];
+  minPeaksRight?: number[];
+  maxPeaksRight?: number[];
   minPeaksBase64?: string;
   maxPeaksBase64?: string;
+  minPeaksRightBase64?: string;
+  maxPeaksRightBase64?: string;
 };
 
 export type LibraryAssetSummary = {
@@ -172,12 +176,19 @@ function downsampleWaveformLod(
 ): WaveformLodDto {
   const sourceMin = lod.minPeaks ?? [];
   const sourceMax = lod.maxPeaks ?? [];
+  const sourceMinRight = lod.minPeaksRight ?? [];
+  const sourceMaxRight = lod.maxPeaksRight ?? [];
+  const hasRightChannel =
+    sourceMinRight.length === sourceMax.length &&
+    sourceMaxRight.length === sourceMax.length;
   const chunkSize = Math.max(
     1,
     Math.ceil(targetResolutionFrames / Math.max(1, lod.resolutionFrames)),
   );
   const minPeaks: number[] = [];
   const maxPeaks: number[] = [];
+  const minPeaksRight: number[] = [];
+  const maxPeaksRight: number[] = [];
 
   for (
     let chunkStart = 0;
@@ -187,14 +198,24 @@ function downsampleWaveformLod(
     const chunkEnd = Math.min(sourceMax.length, chunkStart + chunkSize);
     let minPeak = 1;
     let maxPeak = -1;
+    let minPeakRight = 1;
+    let maxPeakRight = -1;
 
     for (let index = chunkStart; index < chunkEnd; index += 1) {
       minPeak = Math.min(minPeak, sourceMin[index] ?? 0);
       maxPeak = Math.max(maxPeak, sourceMax[index] ?? 0);
+      if (hasRightChannel) {
+        minPeakRight = Math.min(minPeakRight, sourceMinRight[index] ?? 0);
+        maxPeakRight = Math.max(maxPeakRight, sourceMaxRight[index] ?? 0);
+      }
     }
 
     minPeaks.push(minPeak);
     maxPeaks.push(maxPeak);
+    if (hasRightChannel) {
+      minPeaksRight.push(minPeakRight);
+      maxPeaksRight.push(maxPeakRight);
+    }
   }
 
   return {
@@ -202,6 +223,7 @@ function downsampleWaveformLod(
     bucketCount: maxPeaks.length,
     minPeaks,
     maxPeaks,
+    ...(hasRightChannel ? { minPeaksRight, maxPeaksRight } : {}),
   };
 }
 

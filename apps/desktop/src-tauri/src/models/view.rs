@@ -198,6 +198,10 @@ pub struct WaveformLodDto {
     pub bucket_count: usize,
     pub min_peaks_base64: String,
     pub max_peaks_base64: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub min_peaks_right_base64: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub max_peaks_right_base64: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -391,6 +395,8 @@ fn waveform_lod_to_dto(lod: &WaveformLod) -> WaveformLodDto {
         bucket_count: lod.max_peaks.len(),
         min_peaks_base64: encode_peaks_base64(&lod.min_peaks),
         max_peaks_base64: encode_peaks_base64(&lod.max_peaks),
+        min_peaks_right_base64: encode_peaks_base64(&lod.min_peaks_right),
+        max_peaks_right_base64: encode_peaks_base64(&lod.max_peaks_right),
     }
 }
 

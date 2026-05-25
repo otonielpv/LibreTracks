@@ -21,8 +21,8 @@ pub use song_store::{
 };
 pub use waveform::{
     analyze_wav_file, generate_waveform_summary, load_waveform_summary, waveform_file_path,
-    waveform_summary_from_peaks, write_waveform_summary, AnalyzedWav, SeekIndexEntry,
-    WaveformLod, WaveformSummary,
+    waveform_summary_from_peaks, write_waveform_summary, AnalyzedWav, SeekIndexEntry, WaveformLod,
+    WaveformSummary,
 };
 
 #[cfg(test)]
@@ -205,6 +205,32 @@ mod tests {
         writer.finalize().expect("wav should finalize");
     }
 
+    fn write_split_stereo_test_wav(path: &Path, sample_rate: u32, duration_seconds: u32) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("wav parent dir should exist");
+        }
+        let spec = WavSpec {
+            channels: 2,
+            sample_rate,
+            bits_per_sample: 32,
+            sample_format: SampleFormat::Float,
+        };
+
+        let mut writer = WavWriter::create(path, spec).expect("wav should be created");
+        let total_frames = sample_rate * duration_seconds;
+
+        for frame in 0..total_frames {
+            let left = if frame % 2 == 0 { 0.8_f32 } else { -0.8_f32 };
+            let right = if frame % 2 == 0 { 0.25_f32 } else { -0.25_f32 };
+            writer.write_sample(left).expect("left sample should write");
+            writer
+                .write_sample(right)
+                .expect("right sample should write");
+        }
+
+        writer.finalize().expect("wav should finalize");
+    }
+
     fn write_click_test_wav(
         path: &Path,
         sample_rate: u32,
@@ -362,6 +388,27 @@ mod tests {
         assert_eq!(base_lod.min_peaks.len(), base_lod.max_peaks.len());
         assert_eq!(base_lod.resolution_frames, 256);
         assert!(analysis.waveform.lods.len() >= 3);
+    }
+
+    #[test]
+    fn analyzes_and_roundtrips_stereo_waveform_channels_separately() {
+        let root = tempdir().expect("temp dir should exist");
+        let song_dir =
+            create_song_folder(root.path(), "split-stereo").expect("song dir should exist");
+        let wav_path = song_dir.join("audio").join("split.wav");
+        write_split_stereo_test_wav(&wav_path, 48_000, 1);
+
+        let summary = crate::generate_waveform_summary(&song_dir, "audio/split.wav")
+            .expect("waveform should generate");
+        let loaded =
+            load_waveform_summary(&song_dir, "audio/split.wav").expect("waveform should load");
+
+        assert_eq!(summary, loaded);
+        let base_lod = loaded.primary_lod().expect("base lod should exist");
+        assert_eq!(base_lod.min_peaks.len(), base_lod.min_peaks_right.len());
+        assert_eq!(base_lod.max_peaks.len(), base_lod.max_peaks_right.len());
+        assert!(base_lod.max_peaks.iter().any(|peak| *peak > 0.7));
+        assert!(base_lod.max_peaks_right.iter().any(|peak| *peak < 0.3));
     }
 
     #[test]
