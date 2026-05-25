@@ -5,6 +5,7 @@
 #include <lt_engine/pitch/warp_voice.h>
 #include <lt_engine/debug/logging.h>
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <cmath>
 #include <cstdarg>
@@ -141,7 +142,8 @@ void TrackRenderer::render(const Track&         track,
                             int                  engine_sample_rate,
                             Semitones            effective_semitones,
                             const Song*          active_song,
-                            WarpVoiceManager*    warp_voices) noexcept {
+                            WarpVoiceManager*    warp_voices,
+                            bool                 track_is_silent) noexcept {
     if (track.mute) return;
     (void)engine_sample_rate;
 
@@ -191,12 +193,13 @@ void TrackRenderer::render(const Track&         track,
                 break;
             case ClipPathKind::Warp:
                 written = render_path_warp(cb, warp_voices,
-                                            clip_warp_ratio, track.id);
+                                            clip_warp_ratio, track.id,
+                                            track_is_silent);
                 break;
             case ClipPathKind::Cascade:
                 written = render_path_cascade(cb, bungee_voices, warp_voices,
                                                clip_semitones, clip_warp_ratio,
-                                               track.id);
+                                               track.id, track_is_silent);
                 break;
         }
 
@@ -359,13 +362,14 @@ int TrackRenderer::render_path_pitch(const ClipBlock&     cb,
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Path: Warp — Signalsmith Stretch at pitch=1, time_ratio=ratio.
+// Path: Warp — WarpVoice backend at pitch=1, time_ratio=ratio.
 // ────────────────────────────────────────────────────────────────────────────
 
 int TrackRenderer::render_path_warp(const ClipBlock&   cb,
                                      WarpVoiceManager*  warp_voices,
                                      double             warp_time_ratio,
-                                     const Id&          track_id) noexcept {
+                                     const Id&          track_id,
+                                     bool               track_is_silent) noexcept {
     auto wv = warp_voices ? warp_voices->voice_for_shared(cb.clip->id)
                           : nullptr;
     if (!wv) {
@@ -385,18 +389,33 @@ int TrackRenderer::render_path_warp(const ClipBlock&   cb,
         return 0;
     }
 
-    // Read from where the voice last left off. The voice tracks its own
-    // source cursor — re-deriving it from the timeline every block produces
-    // ±1-frame overlaps under fractional warp ratios and Signalsmith
-    // surfaces those as audible crackles.
+    // Track is muted/inaudible: keep the voice's source cursor in sync with
+    // the timeline (so un-mute resumes at the right position) but skip the
+    // stretcher work.
+    if (track_is_silent) {
+        wv->advance_silent(input_to_feed);
+        std::fill(scratch_l_.begin(),
+                  scratch_l_.begin() + cb.frames_to_read, 0.0f);
+        std::fill(scratch_r_.begin(),
+                  scratch_r_.begin() + cb.frames_to_read, 0.0f);
+        return cb.frames_to_read;
+    }
+
+    // Read from where the voice last left off. Backends with a large
+    // analysis delay (Bungee) ask for source-side latency compensation so
+    // warped and unwarped tracks stay aligned on the timeline.
     const long long cursor = wv->source_cursor();
+    const long long warp_latency = wv->needs_source_latency_compensation()
+        ? static_cast<long long>(wv->input_latency_frames())
+        : 0LL;
+    const long long read_from = cursor + warp_latency;
     const Frame src_end = cb.src->duration_frames();
     std::fill(bungee_in_l_.begin(), bungee_in_l_.begin() + input_to_feed, 0.0f);
     std::fill(bungee_in_r_.begin(), bungee_in_r_.begin() + input_to_feed, 0.0f);
-    const int dst_offset = cursor < 0
-        ? static_cast<int>(std::min<long long>(input_to_feed, -cursor))
+    const int dst_offset = read_from < 0
+        ? static_cast<int>(std::min<long long>(input_to_feed, -read_from))
         : 0;
-    const Frame read_start = static_cast<Frame>(std::max<long long>(0, cursor));
+    const Frame read_start = static_cast<Frame>(std::max<long long>(0, read_from));
     const int available = (dst_offset >= input_to_feed || read_start >= src_end)
         ? 0
         : static_cast<int>(std::min<long long>(
@@ -423,8 +442,11 @@ int TrackRenderer::render_path_warp(const ClipBlock&   cb,
     }
 
     const float* in_ptrs[2] = { bungee_in_l_.data(), bungee_in_r_.data() };
+    const auto dsp_t0 = std::chrono::steady_clock::now();
     const int produced = wv->render_block(
         in_ptrs, input_to_feed, scratch_, cb.frames_to_read, warp_time_ratio);
+    const auto dsp_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - dsp_t0).count();
 
     // Detect first/last sample of the scratch — useful for spotting clicks.
     // We log them every block under LIBRETRACKS_AUDIO_DEBUG so the user can
@@ -434,12 +456,12 @@ int TrackRenderer::render_path_warp(const ClipBlock&   cb,
         ? scratch_l_[static_cast<size_t>(produced - 1)]
         : 0.f;
     track_jump_debug_log(
-        "[LT_JUMP_DEBUG][track-renderer] warp track=%s clip=%s cursor=%lld src_end=%lld input_to_feed=%d got_input=%d dst_offset=%d frames_to_read=%d produced=%d ratio=%.6f first_l=%.6f last_l=%.6f\n",
+        "[LT_JUMP_DEBUG][track-renderer] warp track=%s clip=%s cursor=%lld read_from=%lld warp_latency=%lld src_end=%lld input_to_feed=%d got_input=%d dst_offset=%d frames_to_read=%d produced=%d ratio=%.6f first_l=%.6f last_l=%.6f dsp_us=%lld\n",
         track_id.c_str(), cb.clip->id.c_str(),
-        cursor, static_cast<long long>(src_end),
+        cursor, read_from, warp_latency, static_cast<long long>(src_end),
         input_to_feed, got_input, dst_offset,
         cb.frames_to_read, produced, warp_time_ratio,
-        first_l, last_l);
+        first_l, last_l, static_cast<long long>(dsp_us));
 
     if (produced < cb.frames_to_read) {
         std::fill(scratch_l_.begin() + std::max(0, produced),
@@ -472,7 +494,8 @@ int TrackRenderer::render_path_cascade(const ClipBlock&     cb,
                                         WarpVoiceManager*    warp_voices,
                                         Semitones            effective_semitones,
                                         double               warp_time_ratio,
-                                        const Id&            track_id) noexcept {
+                                        const Id&            track_id,
+                                        bool                 track_is_silent) noexcept {
     auto bv = bungee_voices ? bungee_voices->voice_for_shared(cb.clip->id)
                             : nullptr;
     auto wv = warp_voices ? warp_voices->voice_for_shared(cb.clip->id)
@@ -502,6 +525,21 @@ int TrackRenderer::render_path_cascade(const ClipBlock&     cb,
         return 0;
     }
 
+    // See render_path_warp: muted/silent tracks advance their cursors
+    // without running the DSP. Bungee state will be slightly stale on
+    // un-mute (first ~1 block is the only audible artifact) but the CPU
+    // savings are large enough to make multi-track muted-warp setups
+    // playable. Without this gate, 3 cascade voices spent ~30ms per
+    // 10.7ms block.
+    if (track_is_silent) {
+        wv->advance_silent(rb_input_needed);
+        std::fill(scratch_l_.begin(),
+                  scratch_l_.begin() + cb.frames_to_read, 0.0f);
+        std::fill(scratch_r_.begin(),
+                  scratch_r_.begin() + cb.frames_to_read, 0.0f);
+        return cb.frames_to_read;
+    }
+
     // Bungee feed: same size as what RubberBand will consume, because Bungee
     // runs at speed=1 (1 input frame → 1 output frame). Skip the feed when
     // Bungee's own FIFO already has enough — drain it first like the Pitch
@@ -519,8 +557,11 @@ int TrackRenderer::render_path_cascade(const ClipBlock&     cb,
     // read position. Bungee's latency / compensation shift forward from
     // there because Bungee output lags its input by that much.
     const long long cursor = wv->source_cursor();
+    const long long warp_latency = wv->needs_source_latency_compensation()
+        ? static_cast<long long>(wv->input_latency_frames())
+        : 0LL;
     const Frame read_from = static_cast<Frame>(cursor
-        + latency + compensation + bungee_queued);
+        + warp_latency + latency + compensation + bungee_queued);
     const Frame src_end = cb.src->duration_frames();
 
     // Read source into bungee_in_*.
@@ -556,11 +597,14 @@ int TrackRenderer::render_path_cascade(const ClipBlock&     cb,
     float* mid_ptrs[2] = { cascade_mid_l_.data(), cascade_mid_r_.data() };
     const float* bungee_in_ptrs[2] = {
         bungee_in_l_.data(), bungee_in_r_.data() };
+    const auto bungee_t0 = std::chrono::steady_clock::now();
     const int pitched = bv->render_block(
         bungee_in_ptrs, bungee_feed_frames,
         mid_ptrs, rb_input_needed,
         pitch_scale,
         /*time_ratio*/ 1.0);
+    const auto bungee_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - bungee_t0).count();
     // If Bungee fell short (warmup), zero-pad the tail so RubberBand gets
     // exactly rb_input_needed frames of pitched audio.
     if (pitched < rb_input_needed) {
@@ -573,9 +617,12 @@ int TrackRenderer::render_path_cascade(const ClipBlock&     cb,
     // RubberBand process: time-stretch the pitched audio at warp_time_ratio.
     const float* rb_in_ptrs[2] = {
         cascade_mid_l_.data(), cascade_mid_r_.data() };
+    const auto rb_t0 = std::chrono::steady_clock::now();
     const int produced = wv->render_block(
         rb_in_ptrs, rb_input_needed,
         scratch_, cb.frames_to_read, warp_time_ratio);
+    const auto rb_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - rb_t0).count();
     if (produced < cb.frames_to_read) {
         std::fill(scratch_l_.begin() + std::max(0, produced),
                   scratch_l_.begin() + cb.frames_to_read, 0.0f);
@@ -594,12 +641,14 @@ int TrackRenderer::render_path_cascade(const ClipBlock&     cb,
         ? cascade_mid_l_[static_cast<std::size_t>(pitched - 1)]
         : 0.f;
     track_jump_debug_log(
-        "[LT_JUMP_DEBUG][track-renderer] cascade track=%s clip=%s cursor=%lld read_from=%lld bungee_feed=%d pitched=%d rb_input=%d produced=%d pitch_scale=%.6f ratio=%.6f mid_first=%.6f mid_last=%.6f out_first=%.6f out_last=%.6f\n",
+        "[LT_JUMP_DEBUG][track-renderer] cascade track=%s clip=%s cursor=%lld read_from=%lld warp_latency=%lld bungee_feed=%d pitched=%d rb_input=%d produced=%d pitch_scale=%.6f ratio=%.6f mid_first=%.6f mid_last=%.6f out_first=%.6f out_last=%.6f bungee_us=%lld rb_us=%lld\n",
         track_id.c_str(), cb.clip->id.c_str(),
-        cursor, static_cast<long long>(read_from),
+        cursor, static_cast<long long>(read_from), warp_latency,
         bungee_feed_frames, pitched, rb_input_needed, produced,
         pitch_scale, warp_time_ratio,
-        mid_first_l, mid_last_l, out_first_l, out_last_l);
+        mid_first_l, mid_last_l, out_first_l, out_last_l,
+        static_cast<long long>(bungee_us),
+        static_cast<long long>(rb_us));
     return cb.frames_to_read;
 }
 

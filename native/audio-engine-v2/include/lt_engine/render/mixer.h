@@ -54,6 +54,12 @@ public:
     // preserve_realtime_state=false: always load values from session
     //   (used after LoadSession — the session IS the source of truth for mixer values).
     void set_session(std::shared_ptr<const Session> session, bool preserve_realtime_state = true);
+    // Atomic-only swap: replace the active session pointer without
+    // rebuilding control slots or resizing renderer scratch. Use for
+    // changes that only affect per-block reads (e.g. warp source BPM,
+    // tempo edits) — anything that adds/removes tracks or changes their
+    // identity needs the full set_session() path.
+    void swap_session_atomic(std::shared_ptr<const Session> session) noexcept;
     void set_bungee_voice_manager(class BungeeVoiceManager* mgr) noexcept;
     void set_warp_voice_manager(class WarpVoiceManager* mgr) noexcept;
     void clear_session();

@@ -463,6 +463,10 @@ Result<void> EngineImpl::initialize() {
             bungee_voices_->rebuild_for_session(
                 *current_session, *source_manager_, clock_->position().frame);
         }
+        if (all_ready && warp_voices_ && warp_voices_->is_available() && clock_) {
+            warp_voices_->rebuild_for_session(
+                *current_session, *source_manager_, clock_->position().frame);
+        }
         if (prearmed_jumps_ && all_ready) {
             const auto rev = prearm_revision_.load(std::memory_order_relaxed);
             prearmed_jumps_->prepare_all_targets_async(
@@ -472,6 +476,12 @@ Result<void> EngineImpl::initialize() {
     bungee_voices_  = std::make_unique<BungeeVoiceManager>();
     warp_voices_    = std::make_unique<WarpVoiceManager>();
     prearmed_jumps_ = std::make_unique<PrearmedJumpManager>();
+    // Wire warp voice prearming. Without this the scheduled-jump path
+    // swaps in the prepared pitched voices but leaves the warp voices
+    // stale, which on the Bungee Stream warp backend (~4864 frame analysis
+    // latency) presents as a metallic burst on warp/cascade clips at the
+    // jump moment until the stretcher re-analyses from the new cursor.
+    prearmed_jumps_->set_warp_voice_manager(warp_voices_.get());
     worker_pool_    = std::make_unique<DecodeWorkerPool>();
     mixer_          = std::make_unique<Mixer>(
         std::shared_ptr<const Session>{},
@@ -583,6 +593,18 @@ void EngineImpl::service_control_thread_tasks() {
             && session_ && source_manager_) {
             bungee_voices_->rebuild_for_seek_async(
                 target, *session_, *source_manager_);
+        }
+        if (target != Mixer::kNoJumpPending
+            && warp_voices_ && warp_voices_->is_available()
+            && session_ && source_manager_) {
+            // Use the prefed seek voice map (mirrors what Bungee pitch does
+            // via rebuild_for_seek_async). A bare rebuild_for_seek here would
+            // skip the stretcher warmup → ~100 ms of silence on warp/cascade
+            // tracks until the analysis window fills up.
+            auto seek_warp_map = warp_voices_->build_seek_voice_map(
+                target, *session_, *source_manager_);
+            warp_voices_->publish_prepared_voice_map_realtime(
+                std::move(seek_warp_map));
         }
     }
 }
@@ -1042,6 +1064,16 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // Bungee is the sole pitch backend; voices for already-loaded
             // clips were built at LoadSession / SeekAbsolute time, so Play
             // is now a pure clock advance with no pitch-priming work.
+            const auto pos = clock_->position();
+            if (pos.state != TransportState::Playing
+                && warp_voices_ && warp_voices_->is_available()
+                && session_ && source_manager_) {
+                // Prefed seek voice map so first audible block has audio.
+                auto seek_warp_map = warp_voices_->build_seek_voice_map(
+                    pos.frame, *session_, *source_manager_);
+                warp_voices_->publish_prepared_voice_map_realtime(
+                    std::move(seek_warp_map));
+            }
             clock_->play();
             push_event(EvPlaybackStarted{ clock_->position().frame });
             return Result<void>::ok();
@@ -1064,6 +1096,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (bungee_voices_ && bungee_voices_->is_available() && session_) {
                 bungee_voices_->rebuild_for_seek_async(
                     0, *session_, *source_manager_);
+            }
+            if (warp_voices_ && warp_voices_->is_available() && session_ && source_manager_) {
+                auto seek_warp_map = warp_voices_->build_seek_voice_map(
+                    0, *session_, *source_manager_);
+                warp_voices_->publish_prepared_voice_map_realtime(
+                    std::move(seek_warp_map));
             }
             push_event(EvPlaybackStopped{ f });
             return Result<void>::ok();
@@ -1091,6 +1129,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             bungee_voices_->publish_prepared_voice_map_realtime(
                                 std::move(seek_voice_map));
                     }
+                    if (warp_voices_ && warp_voices_->is_available()) {
+                        auto seek_warp_map = warp_voices_->build_seek_voice_map(
+                            c.frame, *session_, *source_manager_);
+                        warp_voices_->publish_prepared_voice_map_realtime(
+                            std::move(seek_warp_map));
+                    }
                 }
                 push_event(EvSeekExecuted{ from, c.frame });
                 return Result<void>::ok();
@@ -1104,9 +1148,20 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     (device_manager_ ? device_manager_->actual_buffer_size() : 1024) * 8);
             if (source_manager_ && session_)
                 request_jump_target_audio(*source_manager_, *session_, c.frame, seek_window);
+            // Build BOTH voice maps (pitch + warp) before the clock seek so
+            // we can publish them atomically right after. Building warp
+            // takes ~100ms per voice for the stretcher prefeed; if we did
+            // it after publishing pitch, the audio thread would render
+            // several blocks with new pitch voices but stale warp voices,
+            // producing a brief desync ("pitched track lags warp track").
             std::shared_ptr<const PreparedVoiceMap> seek_voice_map;
             if (bungee_voices_ && bungee_voices_->is_available() && session_ && source_manager_) {
                 seek_voice_map = bungee_voices_->build_seek_voice_map(
+                    c.frame, *session_, *source_manager_);
+            }
+            std::shared_ptr<const WarpVoiceManager::VoiceMap> seek_warp_map;
+            if (warp_voices_ && warp_voices_->is_available() && session_ && source_manager_) {
+                seek_warp_map = warp_voices_->build_seek_voice_map(
                     c.frame, *session_, *source_manager_);
             }
             if (source_manager_ && session_) {
@@ -1121,6 +1176,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             clock_->seek(c.frame);
             if (bungee_voices_ && seek_voice_map)
                 bungee_voices_->publish_prepared_voice_map_realtime(std::move(seek_voice_map));
+            if (warp_voices_ && seek_warp_map)
+                warp_voices_->publish_prepared_voice_map_realtime(std::move(seek_warp_map));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
             if (mixer_) mixer_->trigger_crossfade();
             push_event(EvSeekExecuted{ from, c.frame });
@@ -1134,9 +1191,17 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 (device_manager_ ? device_manager_->actual_buffer_size() : 1024) * 8);
             if (source_manager_ && session_)
                 request_jump_target_audio(*source_manager_, *session_, to, seek_window);
+            // Build pitch + warp maps before the clock seek so they publish
+            // atomically (see CmdSeek comment above for the desync this
+            // avoids).
             std::shared_ptr<const PreparedVoiceMap> seek_voice_map;
             if (bungee_voices_ && bungee_voices_->is_available() && session_ && source_manager_) {
                 seek_voice_map = bungee_voices_->build_seek_voice_map(
+                    to, *session_, *source_manager_);
+            }
+            std::shared_ptr<const WarpVoiceManager::VoiceMap> seek_warp_map;
+            if (warp_voices_ && warp_voices_->is_available() && session_ && source_manager_) {
+                seek_warp_map = warp_voices_->build_seek_voice_map(
                     to, *session_, *source_manager_);
             }
             if (source_manager_ && session_)
@@ -1144,6 +1209,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             clock_->seek(to);
             if (bungee_voices_ && seek_voice_map)
                 bungee_voices_->publish_prepared_voice_map_realtime(std::move(seek_voice_map));
+            if (warp_voices_ && seek_warp_map)
+                warp_voices_->publish_prepared_voice_map_realtime(std::move(seek_warp_map));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
             if (mixer_) mixer_->trigger_crossfade();
             push_event(EvSeekExecuted{ from, to });
@@ -1256,6 +1323,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     if (auto prepared = prearmed_jumps_->take_ready(key)) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
+                        if (warp_voices_ && warp_voices_->is_available()) {
+                            auto wmap = prepared->extract_warp_voice_map();
+                            if (!wmap.empty()) {
+                                warp_voices_->publish_prepared_voice_map_realtime(
+                                    warp_voices_->build_prepared_voice_map(std::move(wmap)));
+                            }
+                        }
                         // Set transport to target immediately so the next
                         // audio block reads from the new playhead with the
                         // freshly-published voices.
@@ -1308,6 +1382,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     if (auto prepared = prearmed_jumps_->take_ready(key)) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
+                        if (warp_voices_ && warp_voices_->is_available()) {
+                            auto wmap = prepared->extract_warp_voice_map();
+                            if (!wmap.empty()) {
+                                warp_voices_->publish_prepared_voice_map_realtime(
+                                    warp_voices_->build_prepared_voice_map(std::move(wmap)));
+                            }
+                        }
                         clock_->seek(target_frame);
                         if (mixer_) mixer_->trigger_crossfade();
                         prearmed_jumps_->prepare_all_targets_async(
@@ -1355,6 +1436,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     if (auto prepared = prearmed_jumps_->take_ready(key)) {
                         bungee_voices_->swap_in_prepared_voices(
                             prepared->extract_voice_map());
+                        if (warp_voices_ && warp_voices_->is_available()) {
+                            auto wmap = prepared->extract_warp_voice_map();
+                            if (!wmap.empty()) {
+                                warp_voices_->publish_prepared_voice_map_realtime(
+                                    warp_voices_->build_prepared_voice_map(std::move(wmap)));
+                            }
+                        }
                         clock_->seek(target_frame);
                         if (mixer_) mixer_->trigger_crossfade();
                         prearmed_jumps_->prepare_all_targets_async(
@@ -1484,6 +1572,13 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             if (auto prepared = prearmed_jumps_->take_ready(key)) {
                                 bungee_voices_->swap_in_prepared_voices(
                                     prepared->extract_voice_map());
+                                if (warp_voices_ && warp_voices_->is_available()) {
+                                    auto wmap = prepared->extract_warp_voice_map();
+                                    if (!wmap.empty()) {
+                                        warp_voices_->publish_prepared_voice_map_realtime(
+                                            warp_voices_->build_prepared_voice_map(std::move(wmap)));
+                                    }
+                                }
                                 clock_->seek(target_frame);
                                 if (mixer_) mixer_->trigger_crossfade();
                                 refill_prearm_cache();
@@ -1619,9 +1714,30 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             if (prepared) {
                                 prearm_set_valid = prepared->valid;
                                 prearm_set_voices = static_cast<int>(prepared->tracks.size());
+                                const std::size_t pre_warp_count = prepared->warp_voices.size();
                                 jump.prepared_voice_map =
                                     bungee_voices_->build_prepared_voice_map(
                                         prepared->extract_voice_map());
+                                // Carry the prepared warp voices too —
+                                // empty when the target has no warp clips,
+                                // populated otherwise. Mixer publishes both
+                                // maps atomically at jump time.
+                                std::size_t published_warp = 0;
+                                if (warp_voices_ && warp_voices_->is_available()) {
+                                    auto wmap = prepared->extract_warp_voice_map();
+                                    published_warp = wmap.size();
+                                    if (!wmap.empty()) {
+                                        jump.prepared_warp_voice_map =
+                                            warp_voices_->build_prepared_voice_map(
+                                                std::move(wmap));
+                                    }
+                                }
+                                if (jump_debug_enabled()) {
+                                    debug_log(
+                                        "[LT_JUMP_DEBUG][native-command] schedule_warp_prearm pre_warp_voices=%zu published_warp=%zu warp_mgr_available=%d\n",
+                                        pre_warp_count, published_warp,
+                                        (warp_voices_ && warp_voices_->is_available()) ? 1 : 0);
+                                }
                                 prearmed_jumps_->prepare_all_targets_async(
                                     session_, source_manager_.get(), rev);
                             }
@@ -1804,26 +1920,46 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         needs_voice_rebuild ? 1 : 0);
                 }
                 if (changed) {
-                    // Voice maintenance only when the warp toggle flipped.
-                    // Warp now lives in WarpVoiceManager (Signalsmith); Bungee
-                    // continues handling pitch unchanged so its voices don't
-                    // get touched by warp toggles. The warp manager itself
-                    // reuses voices for already-warp-active clips and only
-                    // builds new ones — toggling on a region adds the missing
-                    // warp voices without disturbing pitched ones.
-                    if (needs_voice_rebuild && source_manager_ && clock_) {
-                        if (warp_voices_ && warp_voices_->is_available())
-                            warp_voices_->rebuild_for_session(
-                                *next_session, *source_manager_,
-                                clock_->position().frame);
+                    // Reposition warp voices on every warp edit. At ratio
+                    // 1.0 the renderer uses the direct path, so a previously
+                    // built warp voice may not have advanced with playback.
+                    if (source_manager_ && clock_) {
+                        if (warp_voices_ && warp_voices_->is_available()) {
+                            if (needs_voice_rebuild) {
+                                // Prefed seek voice map so the user gets
+                                // audible warp immediately after toggling
+                                // warp on for a region.
+                                auto seek_warp_map = warp_voices_->build_seek_voice_map(
+                                    clock_->position().frame,
+                                    *next_session, *source_manager_);
+                                warp_voices_->publish_prepared_voice_map_realtime(
+                                    std::move(seek_warp_map));
+                            } else {
+                                warp_voices_->retime_existing_for_session(
+                                    *next_session, *source_manager_,
+                                    clock_->position().frame);
+                            }
+                        }
                     }
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
-                    if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
-                    // No mixer crossfade here — rebuild_for_session preserves
-                    // existing voices, so there is no audible discontinuity to
-                    // hide. Triggering a crossfade would dip the entire mix
-                    // unnecessarily.
+                    // Two flavours of mixer update:
+                    //   - toggle warp on/off: full set_session() so control
+                    //     slots / renderer scratch rebuild for the new shape.
+                    //   - BPM-only tweak (user dragging the stepper): atomic
+                    //     pointer swap. Rebuilding control_slots on every
+                    //     stepper click while audio is rolling produced
+                    //     audible glitches / desync / metallic mush — the
+                    //     isolated cascade test with the same ratio drag
+                    //     pattern sounded fine, which is what proved this
+                    //     was the engine-side culprit.
+                    if (mixer_) {
+                        if (needs_voice_rebuild)
+                            mixer_->set_session(next_session,
+                                /*preserve_realtime_state=*/true);
+                        else
+                            mixer_->swap_session_atomic(next_session);
+                    }
                     if (needs_voice_rebuild && prearmed_jumps_) {
                         const auto rev = prearm_revision_.fetch_add(1,
                             std::memory_order_relaxed) + 1;
@@ -1857,6 +1993,14 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     break;
                 }
                 if (changed) {
+                    if (warp_voices_ && warp_voices_->is_available()
+                        && source_manager_ && clock_) {
+                        auto seek_warp_map = warp_voices_->build_seek_voice_map(
+                            clock_->position().frame,
+                            *next_session, *source_manager_);
+                        warp_voices_->publish_prepared_voice_map_realtime(
+                            std::move(seek_warp_map));
+                    }
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                     if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
@@ -1953,9 +2097,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     break;
                 }
                 if (changed) {
+                    if (warp_voices_ && warp_voices_->is_available()
+                        && source_manager_ && clock_) {
+                        warp_voices_->retime_existing_for_session(
+                            *next_session, *source_manager_,
+                            clock_->position().frame);
+                    }
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
-                    if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                    if (mixer_) mixer_->swap_session_atomic(next_session);
                 }
             }
             return Result<void>::ok();

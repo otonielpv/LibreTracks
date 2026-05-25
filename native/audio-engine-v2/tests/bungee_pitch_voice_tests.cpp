@@ -15,6 +15,8 @@
 
 #include <doctest/doctest.h>
 #include <lt_engine/pitch/bungee_pitch_voice.h>
+#include <lt_engine/pitch/bungee_warp_voice.h>
+#include <lt_engine/pitch/warp_voice_manager.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -362,6 +364,46 @@ TEST_CASE("Warp[0]: real WAV survives time-stretch without clipping (optional)")
     CAPTURE(worst_step);
     CHECK(worst_amp < 1.5f);  // very loose; only catches gross blow-up
     CHECK(worst_step < 0.9f); // catches obvious zipper/click artefacts
+}
+
+TEST_CASE("BungeeWarpVoice renders finite time-stretched blocks") {
+    BungeeWarpVoice voice;
+    REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames * 4));
+    CHECK(voice.is_ready());
+    CHECK_EQ(std::string(voice.backend_name()), std::string("bungee_basic_warp"));
+    CHECK(voice.needs_source_latency_compensation());
+
+    constexpr double kRatio = 1.213333;
+    const int input_per_block = static_cast<int>(
+        std::ceil(static_cast<double>(kBlockFrames) * kRatio));
+    auto in_l = make_sine(input_per_block, 440.0);
+    auto in_r = make_sine(input_per_block, 440.0);
+    const float* in_ptrs[2] = { in_l.data(), in_r.data() };
+    std::vector<float> out_l(kBlockFrames, 0.f), out_r(kBlockFrames, 0.f);
+    float* out_ptrs[2] = { out_l.data(), out_r.data() };
+
+    int produced_total = 0;
+    for (int b = 0; b < 16; ++b) {
+        const int produced = voice.render_block(
+            in_ptrs, input_per_block, out_ptrs, kBlockFrames, kRatio);
+        CHECK(produced >= 0);
+        CHECK(produced <= kBlockFrames);
+        produced_total += produced;
+        for (int f = 0; f < produced; ++f) {
+            CHECK(std::isfinite(out_l[static_cast<std::size_t>(f)]));
+            CHECK(std::isfinite(out_r[static_cast<std::size_t>(f)]));
+        }
+    }
+
+    CHECK(produced_total > kBlockFrames * 8);
+    CHECK(voice.source_cursor() > input_per_block * 8);
+    CHECK(voice.input_latency_frames() > 0);
+}
+
+TEST_CASE("WarpVoiceManager prefers Bungee when available") {
+    WarpVoiceManager mgr;
+    REQUIRE(mgr.prepare(kSampleRate, kChannels, kBlockFrames * 4));
+    CHECK_EQ(std::string(mgr.active_backend_name()), std::string("bungee_basic_warp"));
 }
 
 #endif // LT_ENGINE_HAVE_BUNGEE

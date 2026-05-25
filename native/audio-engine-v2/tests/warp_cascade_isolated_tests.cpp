@@ -317,4 +317,108 @@ TEST_CASE("Warp[cascade]: identity ratio 1.0 matches plain pitch shift") {
     MESSAGE("Cascade identity-ratio output → " << out_path.string());
 }
 
+// Replica of run_cascade that walks a list of ratios: starts at ratios[0],
+// after `kRatioChangeBlocks` blocks switches to ratios[1], and so on.
+// Mirrors the user's edit pattern (toggle warp at 1.0 then drag BPM down).
+TEST_CASE("Warp[cascade]: ratio changes mid-stream (engine A/B pattern)") {
+    const auto sample = find_acustica_sample();
+    if (sample.empty()) {
+        MESSAGE("sample not found, skipping");
+        return;
+    }
+    constexpr int kMaxLoad = 44100 * 8;
+    constexpr int kBlock = 480;
+    constexpr double kPitchScale = 0.8908987181403393;
+    constexpr int kRatioChangeBlocks = 50;  // ~580ms between ratio bumps
+    const std::vector<double> ratios = {
+        1.0, 1.011, 1.034, 1.058, 1.083, 1.110, 1.137, 1.164, 1.192, 1.213
+    };
+
+    std::vector<float> src_l, src_r;
+    int sr = 0;
+    REQUIRE(load_wav_planar(sample, kMaxLoad, src_l, src_r, sr) > 0);
+
+    constexpr int kMaxIn = 2048;
+    BungeePitchVoice bv;
+    RubberBandWarpVoice wv;
+    REQUIRE(bv.configure(sr, 2, kMaxIn));
+    REQUIRE(wv.configure(sr, 2, kMaxIn));
+    {
+        std::vector<float> z(static_cast<size_t>(kMaxIn), 0.f);
+        const float* in_p[2] = { z.data(), z.data() };
+        float* out_p[2] = { z.data(), z.data() };
+        bv.render_block(in_p, kMaxIn, out_p, kMaxIn, 1.0, 1.0);
+    }
+    wv.reset_source_cursor(0);
+
+    const int total_src = static_cast<int>(std::min(src_l.size(), src_r.size()));
+    std::vector<float> bungee_in_l(kMaxIn, 0.f);
+    std::vector<float> bungee_in_r(kMaxIn, 0.f);
+    std::vector<float> mid_l(kMaxIn, 0.f);
+    std::vector<float> mid_r(kMaxIn, 0.f);
+    std::vector<float> out_l_block(kBlock, 0.f);
+    std::vector<float> out_r_block(kBlock, 0.f);
+    std::vector<float> out_l, out_r;
+    out_l.reserve(total_src * 2);
+    out_r.reserve(total_src * 2);
+
+    int blocks = 0;
+    while (true) {
+        const size_t ratio_idx = std::min(
+            ratios.size() - 1,
+            static_cast<size_t>(blocks / kRatioChangeBlocks));
+        const double time_ratio = ratios[ratio_idx];
+        const int rb_input_needed = static_cast<int>(
+            std::ceil(static_cast<double>(kBlock) * time_ratio));
+
+        const long long cursor = wv.source_cursor();
+        const long long latency = static_cast<long long>(bv.latency_frames());
+        const int compensation = bv.alignment_compensation_frames(kPitchScale);
+        const int bungee_queued = bv.queued_output_frames();
+        const long long read_from = cursor + latency + compensation + bungee_queued;
+        const int feed = bungee_queued >= rb_input_needed ? 0 : rb_input_needed;
+
+        if (read_from >= total_src) break;
+
+        std::fill(bungee_in_l.begin(), bungee_in_l.begin() + feed, 0.f);
+        std::fill(bungee_in_r.begin(), bungee_in_r.begin() + feed, 0.f);
+        if (feed > 0) {
+            const int dst_offset = read_from < 0
+                ? static_cast<int>(std::min<long long>(feed, -read_from)) : 0;
+            const long long start = std::max<long long>(0, read_from);
+            const int max_from_src = static_cast<int>(std::max<long long>(0,
+                static_cast<long long>(total_src) - start));
+            const int avail = std::min(feed - dst_offset, max_from_src);
+            for (int i = 0; i < avail; ++i) {
+                const size_t src_i = static_cast<size_t>(start + i);
+                if (src_i >= src_l.size()) break;
+                bungee_in_l[static_cast<size_t>(dst_offset + i)] = src_l[src_i];
+                bungee_in_r[static_cast<size_t>(dst_offset + i)] = src_r[src_i];
+            }
+        }
+
+        float* mid_ptrs[2] = { mid_l.data(), mid_r.data() };
+        const float* bungee_in_ptrs[2] = { bungee_in_l.data(), bungee_in_r.data() };
+        bv.render_block(bungee_in_ptrs, feed, mid_ptrs, rb_input_needed, kPitchScale, 1.0);
+
+        float* out_ptrs[2] = { out_l_block.data(), out_r_block.data() };
+        const float* rb_in_ptrs[2] = { mid_l.data(), mid_r.data() };
+        wv.render_block(rb_in_ptrs, rb_input_needed, out_ptrs, kBlock, time_ratio);
+
+        for (int i = 0; i < kBlock; ++i) {
+            out_l.push_back(out_l_block[static_cast<size_t>(i)]);
+            out_r.push_back(out_r_block[static_cast<size_t>(i)]);
+        }
+        ++blocks;
+        if (blocks > 1500) break;
+    }
+
+    const std::filesystem::path out_path =
+        std::filesystem::absolute("bench-out/warp/cascade_isolated_ratio_drag.wav");
+    write_wav_planar(out_path, out_l, out_r, sr);
+    MESSAGE("Cascade ratio-drag output → " << out_path.string()
+            << " (this is what the engine should sound like when the user "
+               "drags the BPM stepper from 91 down to 75)");
+}
+
 #endif // backends

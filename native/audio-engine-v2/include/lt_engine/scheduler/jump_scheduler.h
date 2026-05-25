@@ -16,12 +16,14 @@
 #include <lt_engine/core/events.h>
 #include <lt_engine/core/result.h>
 #include <lt_engine/pitch/prepared_voice_map.h>
+#include <lt_engine/pitch/warp_voice.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/session/session.h>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace lt {
@@ -34,6 +36,10 @@ namespace lt {
 // ---------------------------------------------------------------------------
 enum class JumpStatus { Pending, Armed, Cancelled, Executed, Failed };
 
+// Map type for prepared warp voices carried alongside the pitched ones in
+// a scheduled jump. Same shape as WarpVoiceManager::VoiceMap.
+using PreparedWarpVoiceMap = std::unordered_map<Id, std::shared_ptr<WarpVoice>>;
+
 struct ScheduledJump {
     Id          jump_id;
     JumpTarget  target;
@@ -44,7 +50,12 @@ struct ScheduledJump {
     Frame       executed_frame  = 0;
     Frame       cancelled_frame = 0;
     std::optional<Frame> trigger_frame;
-    std::shared_ptr<const PreparedVoiceMap> prepared_voice_map;
+    std::shared_ptr<const PreparedVoiceMap>     prepared_voice_map;
+    // Optional. When non-null, the audio thread also swaps in this warp
+    // voice map at jump time so warp/cascade clips don't reuse the
+    // pre-jump stretcher state (which causes a metallic burst on Bungee
+    // warp because the analysis window needs ~4864 frames to settle).
+    std::shared_ptr<const PreparedWarpVoiceMap> prepared_warp_voice_map;
     bool suppress_seek_fade = false;
     std::string failure_reason;
 };
@@ -52,7 +63,8 @@ struct ScheduledJump {
 struct DueJump {
     Frame target_frame = 0;
     Frame trigger_frame = 0;
-    std::shared_ptr<const PreparedVoiceMap> prepared_voice_map;
+    std::shared_ptr<const PreparedVoiceMap>     prepared_voice_map;
+    std::shared_ptr<const PreparedWarpVoiceMap> prepared_warp_voice_map;
     bool suppress_seek_fade = false;
 };
 

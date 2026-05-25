@@ -10,7 +10,14 @@
         "avformat",
         "swresample"
       ]
-    },
-    "rubberband"
-  ]
+    }
+  ],
+  "features": {
+    "rubberband": {
+      "description": "Optional RubberBand fallback/debug warp backend.",
+      "dependencies": [
+        "rubberband"
+      ]
+    }
+  }
 }

@@ -24,15 +24,12 @@ option(LT_ENGINE_USE_LIBSNDFILE
     "Use libsndfile + header-only decoders for WAV/FLAC/MP3/OGG decoding"
     ON)
 
-# Warp (time-stretch) backend.
-# RubberBand R3 (Finer) is the only viable backend on real polyphonic
-# material — see `bench/WARP_BACKEND_COMPARISON.md` for the comparison
-# that ruled out Signalsmith Stretch after engine-level A/B testing.
-# Bungee remains the pitch-only backend; warp goes through RubberBand.
-# The engine binary becomes GPL v2 when this option is on; turn it off
-# only for a permissive build that cannot ship warp.
+# Warp (time-stretch) fallback backend.
+# Bungee is preferred for warp when LT_ENGINE_USE_BUNGEE is ON.
+# RubberBand is kept as a fallback for builds without Bungee.
+# The engine binary becomes GPL v2 when this option is on.
 option(LT_ENGINE_USE_RUBBERBAND
-    "Link RubberBand as the warp (time-stretch) backend (GPL v2)"
+    "Link RubberBand as the fallback warp backend (GPL v2)"
     ON)
 
 # Resampler backend - exactly one must be ON.

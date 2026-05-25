@@ -1,16 +1,13 @@
 #pragma once
 
 // ---------------------------------------------------------------------------
-// RubberBandWarpVoice
+// BungeeWarpVoice
 //
-// Time-stretch backend backed by RubberBand R2 ("Faster") in realtime mode.
-// Kept as a fallback when Bungee is not available. Opt-in via
-// LT_ENGINE_USE_RUBBERBAND because RubberBand is GPL v2 / commercial.
+// Time-stretch backend backed by Bungee::Stream. This mirrors the Bungee
+// pitch voice integration, but locks pitch to 1.0 and exposes the WarpVoice
+// cursor contract used by TrackRenderer.
 //
-// Same shape as SignalsmithWarpVoice: implements the WarpVoice interface,
-// owns its own source cursor so the renderer stays cursor-math-free.
-//
-// Compiled into a stub when LT_ENGINE_HAVE_RUBBERBAND is 0.
+// Compiled into a stub when LT_ENGINE_HAVE_BUNGEE is 0.
 // ---------------------------------------------------------------------------
 
 #include <lt_engine/core/types.h>
@@ -20,15 +17,15 @@
 
 namespace lt {
 
-class RubberBandWarpVoice final : public WarpVoice {
+class BungeeWarpVoice final : public WarpVoice {
 public:
-    RubberBandWarpVoice();
-    ~RubberBandWarpVoice() override;
+    BungeeWarpVoice();
+    ~BungeeWarpVoice() override;
 
-    RubberBandWarpVoice(const RubberBandWarpVoice&) = delete;
-    RubberBandWarpVoice& operator=(const RubberBandWarpVoice&) = delete;
-    RubberBandWarpVoice(RubberBandWarpVoice&&) noexcept;
-    RubberBandWarpVoice& operator=(RubberBandWarpVoice&&) noexcept;
+    BungeeWarpVoice(const BungeeWarpVoice&) = delete;
+    BungeeWarpVoice& operator=(const BungeeWarpVoice&) = delete;
+    BungeeWarpVoice(BungeeWarpVoice&&) noexcept;
+    BungeeWarpVoice& operator=(BungeeWarpVoice&&) noexcept;
 
     bool configure(int sample_rate,
                    int channel_count,
@@ -38,6 +35,7 @@ public:
     const char* backend_name()          const noexcept override;
     int         input_latency_frames()  const noexcept override;
     int         output_latency_frames() const noexcept override;
+    bool        needs_source_latency_compensation() const noexcept override;
 
     int render_block(const float* const* input,
                      int                 input_frames,
@@ -45,8 +43,9 @@ public:
                      int                 output_frames,
                      double              time_ratio) noexcept override;
 
-    void      reset_source_cursor(long long source_frame) noexcept override;
-    long long source_cursor()                  const noexcept override;
+    void advance_silent(int input_frames) noexcept override;
+    void reset_source_cursor(long long source_frame) noexcept override;
+    long long source_cursor() const noexcept override;
 
 private:
     struct Impl;

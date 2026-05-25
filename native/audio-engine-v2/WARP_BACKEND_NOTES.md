@@ -1,61 +1,71 @@
-# Warp backend notes
+# Warp Backend Notes
 
-Warp (time-stretch) ships on **RubberBand R3 ("Finer")**. Bungee continues
-to handle pitch shift; the two paths are independent.
+Warp (time-stretch) now prefers **Bungee Basic via `Bungee::Stream`** when
+`LT_ENGINE_USE_BUNGEE=ON`. RubberBand R2 remains compiled as a fallback when
+`LT_ENGINE_USE_RUBBERBAND=ON`, but it is no longer the first choice in Bungee
+builds.
 
-## Why RubberBand and not the alternatives
+## Why Bungee Again
 
-The offline benchmark (`bench/warp-backends-2026`) measured Bungee Basic,
-RubberBand R2, RubberBand R3, and Signalsmith Stretch processing a 20s
-stereo WAV at ratios 0.85–1.5. Its conclusions were:
+The first Bungee warp tests were too synthetic and made the quality look worse
+than it sounded in real material. Re-running the comparison with
+`samples/ACUSTICA 1_01.wav` showed Bungee and RubberBand R2 were close enough
+to A/B directly, and Bungee was preferred by ear.
 
-| Backend | CPU/cb | Latency | RMS | Verdict (offline) |
-|---|---:|---:|---:|---|
-| Bungee Basic (hop=0) | 111 µs | ~180 ms | 1.00 | metallic past ~1.05 |
-| Bungee Basic (hop=-1) | 110 µs | ~95 ms | 0.99 | same metallic, lower latency |
-| RubberBand R2 | ~135 µs | ~4 ms | ~0.78 | level drop ~25 %, unusable |
-| **RubberBand R3** | ~547 µs | ~28 ms | 0.97 | best quality |
-| Signalsmith Stretch | ~122 µs | ~85 ms | 0.99 | initially looked viable |
+The current bench target is:
 
-Signalsmith was the offline recommendation (MIT-licensed, low CPU). Engine
-A/B testing with the same material proved otherwise: Signalsmith produces
-audible periodic clicks at the ratios users actually edit (1.05–1.20) when
-two or more polyphonic stems are mixed. The offline `worst_step < 0.4`
-metric did not catch them. RubberBand R3 stayed clean under the same
-conditions and is therefore the backend we ship.
-
-The takeaway for future backend evaluations: an offline single-stream WAV
-comparison is not enough — wire the candidate into the actual engine and
-listen with two or more real stems active before deciding.
-
-## Configuration
-
-```cmake
--DLT_ENGINE_USE_RUBBERBAND=ON   # default
+```powershell
+cmake --build native\audio-engine-v2\build-bungee-on-ffmpeg --config Release --target bench_bungee_warp_backends
+native\audio-engine-v2\build-bungee-on-ffmpeg\Release\bench_bungee_warp_backends.exe
 ```
 
-RubberBand comes from vcpkg via `native/audio-engine-v2/vcpkg.json`.
+It writes comparison WAVs under:
 
-Turning it OFF compiles the engine without a warp backend; the warp UI
-remains visible but no audio time-stretches (the renderer silences the
-warp clips and bumps `warp_missing_stream_silence_count`). This mode is
-only useful for a permissive build that explicitly cannot ship GPL code.
+```text
+bench-out/warp-bungee-samples/ACUSTICA_1_01
+```
 
-## CPU / latency in the engine
+On the 44.1 kHz sample, ratio `1.213`, 3 voices:
 
-At 480-frame callbacks, RubberBand R3 measures ~547 µs per voice on the
-hardware used for the bench. With two warped voices this lands at ~10 % of
-the 10 ms audio budget — comfortable. For sessions with 8+ simultaneously
-warped voices the CPU bill grows linearly; if that becomes the actual use
-case, revisit either using fewer warped tracks (toggle warp per region) or
-re-running the bench to see if a newer Signalsmith preset has improved.
+| Backend | CPU avg | CPU p95 | Latency |
+|---|---:|---:|---:|
+| Bungee hop=-1 | ~340 us | ~375 us | ~114 ms |
+| Bungee hop=0 | ~350 us | ~392 us | ~228 ms |
+| Bungee hop=1 | ~375 us | ~771 us | ~456 ms |
+| RubberBand R2 | ~358 us | ~419 us | ~12 ms |
 
-## Source-cursor model
+`hop=-1` is the default for `BungeeWarpVoice`: it has the lowest Bungee latency
+and was not audibly worse in the sample A/B.
 
-`WarpVoice` owns its own source cursor. The renderer reads it back every
-block instead of recomputing `source_frame = timeline_offset * ratio`,
-which under a fractional warp ratio produces ±1-frame drift that the
-stretcher hears as a click. Bench results are reproducible only because
-the offline test code feeds Bungee a contiguous stream — the engine has
-to feed RubberBand the same shape, and the cursor-on-the-voice design is
-what guarantees that.
+## Engine Integration
+
+`WarpVoiceManager` chooses backends in this order:
+
+1. `BungeeWarpVoice`, when `LT_ENGINE_HAVE_BUNGEE=1`.
+2. `RubberBandWarpVoice`, when Bungee is unavailable and RubberBand is linked.
+3. No warp backend.
+
+For quick A/B in the real app, set `LIBRETRACKS_WARP_BACKEND=rubberband` to
+force the RubberBand R2 fallback even in a Bungee-enabled build.
+
+`BungeeWarpVoice` uses the same upstream streaming API as `BungeePitchVoice`.
+It owns the warp source cursor and locks pitch to `1.0`. Because Bungee has a
+larger analysis delay than RubberBand, the renderer applies source-side latency
+compensation for backends that request it, so warped and unwarped tracks stay
+timeline-aligned.
+
+For clips that are both transposed and warped, the current path is still a
+cascade: `BungeePitchVoice` for pitch, then `WarpVoiceManager` for the tempo
+stage. In Bungee builds that means Bungee handles both stages, with separate
+stream instances. A future simplification can collapse pitch + warp into a
+single `BungeePitchVoice::render_block(..., pitch_scale, time_ratio)` path.
+
+## Build Flags
+
+```cmake
+-DLT_ENGINE_USE_BUNGEE=ON
+-DLT_BUNGEE_DIR=<unpacked-bungee-release>
+-DLT_ENGINE_USE_RUBBERBAND=ON   # optional fallback, GPL v2
+```
+
+If Bungee is off, the engine falls back to RubberBand R2 when available.

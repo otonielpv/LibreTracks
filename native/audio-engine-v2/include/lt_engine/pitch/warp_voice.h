@@ -5,8 +5,8 @@
 //
 // Common interface for time-stretch backends used by the warp path. Concrete
 // implementations:
-//   - SignalsmithWarpVoice (MIT, default)
-//   - RubberBandWarpVoice  (GPL v2, opt-in)
+//   - BungeeWarpVoice      (MPL-2.0, preferred when Bungee is available)
+//   - RubberBandWarpVoice  (GPL v2, fallback)
 //
 // One instance per warp-active clip. The voice owns its own source cursor
 // so the renderer doesn't have to re-derive it from a fractional ratio
@@ -27,6 +27,9 @@ public:
     virtual const char* backend_name()               const noexcept = 0;
     virtual int         input_latency_frames()       const noexcept = 0;
     virtual int         output_latency_frames()      const noexcept = 0;
+    virtual bool        needs_source_latency_compensation() const noexcept {
+        return false;
+    }
 
     // Source-cursor tracking. The renderer reads source_cursor() each block
     // to decide where in the file to read, then calls render_block() with
@@ -42,6 +45,15 @@ public:
                               float* const*       output,
                               int                 output_frames,
                               double              time_ratio) noexcept = 0;
+
+    // Audio thread. Advance the source cursor by `input_frames` without
+    // running the stretcher — used to keep a muted/silent track's voice
+    // timeline-aligned so when it un-mutes the read position is correct.
+    // Default implementation just updates the cursor via reset.
+    virtual void advance_silent(int input_frames) noexcept {
+        if (input_frames <= 0) return;
+        reset_source_cursor(source_cursor() + input_frames);
+    }
 };
 
 } // namespace lt

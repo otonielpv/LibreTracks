@@ -34,6 +34,10 @@ if (-not $env:CMAKE_TOOLCHAIN_FILE) {
 }
 $useBungeeRequested = if ($env:LIBRETRACKS_ENGINE_V2_BUNGEE -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
 $useFFmpeg = if ($env:LIBRETRACKS_ENGINE_V2_FFMPEG -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
+# RubberBand is only a fallback/debug backend now. Keep it out of the normal
+# desktop build unless explicitly requested so warp uses the Bungee path.
+$useRubberBand = if ($env:LIBRETRACKS_ENGINE_V2_RUBBERBAND -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
+$vcpkgManifestFeatures = if ($useRubberBand -eq "ON") { "rubberband" } else { "" }
 $bungeeCandidates = @(
   $env:LT_BUNGEE_DIR,
   (Join-Path $env:USERPROFILE "Downloads\bungee-v2.4.24"),
@@ -307,6 +311,7 @@ $useR8Brain = "ON"
 
 Write-Host "Audio Engine v2 Bungee requested: $useBungeeRequested"
 Write-Host "Audio Engine v2 Bungee: $useBungee"
+Write-Host "Audio Engine v2 RubberBand: $useRubberBand"
 if ($bungeeDir) {
   Write-Host "LT_BUNGEE_DIR: $bungeeDir"
 }
@@ -338,11 +343,14 @@ $cmakeConfigureArgs = @(
   "-S", "native/audio-engine-v2",
   "-B", $engineV2BuildDir,
   "-DLT_ENGINE_BUILD_TESTS=OFF",
+  "-DLT_ENGINE_BUILD_BENCHES=OFF",
   "-DLT_ENGINE_USE_JUCE=ON",
   "-DLT_ENGINE_USE_BUNGEE=$useBungee",
   "-DLT_ENGINE_USE_FFMPEG=$useFFmpeg",
   "-DLT_ENGINE_USE_LIBSNDFILE=$useLibSndFile",
-  "-DLT_ENGINE_USE_R8BRAIN=$useR8Brain"
+  "-DLT_ENGINE_USE_R8BRAIN=$useR8Brain",
+  "-DLT_ENGINE_USE_RUBBERBAND=$useRubberBand",
+  "-DVCPKG_MANIFEST_FEATURES=$vcpkgManifestFeatures"
 )
 if ($useBungee -eq "ON") {
   $cmakeConfigureArgs += "-DLT_BUNGEE_DIR=$bungeeDir"

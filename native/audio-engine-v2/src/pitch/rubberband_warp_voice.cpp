@@ -57,14 +57,21 @@ bool RubberBandWarpVoice::configure(int sample_rate,
     impl_->ready         = false;
     try {
         using RB = RubberBand::RubberBandStretcher;
-        // R3 ("Finer") in realtime mode with the highest-quality flags
-        // available without going offline. Same profile the bench measured.
+        // R2 ("Faster") in realtime mode. R3 ("Finer") sounds better but at
+        // ~5ms/voice on this CPU it can't fit 3 concurrent warp voices in a
+        // 10.7ms callback — verified by per-block timing logs. R2 measures
+        // ~1.9ms/voice, leaving headroom for 4–5 voices.
+        // Transient/window flags chosen for the fixed-ratio streaming case:
+        // mixed transients + short window keep per-block CPU bounded; the
+        // pitch is locked to 1.0 here so PitchHighSpeed is the cheap choice.
         const int options =
             RB::OptionProcessRealTime
-            | RB::OptionEngineFiner
+            | RB::OptionEngineFaster
             | RB::OptionTransientsMixed
-            | RB::OptionWindowStandard
-            | RB::OptionPitchHighQuality;
+            | RB::OptionWindowShort
+            | RB::OptionPitchHighSpeed
+            | RB::OptionChannelsTogether
+            | RB::OptionPhaseIndependent;
         impl_->stretcher = std::make_unique<RB>(
             sample_rate, channel_count, options,
             /*initial_time_ratio*/  1.0,
@@ -94,7 +101,7 @@ bool RubberBandWarpVoice::is_ready() const noexcept {
 }
 
 const char* RubberBandWarpVoice::backend_name() const noexcept {
-    return "rubberband_r3";
+    return "rubberband_r2";
 }
 
 int RubberBandWarpVoice::input_latency_frames() const noexcept {

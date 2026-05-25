@@ -41,6 +41,7 @@
 #include <lt_engine/core/types.h>
 #include <lt_engine/pitch/bungee_pitch_voice.h>
 #include <lt_engine/pitch/prepared_voice_map.h>
+#include <lt_engine/pitch/warp_voice.h>
 #include <lt_engine/session/session.h>
 
 #include <cstdint>
@@ -53,6 +54,7 @@ namespace lt {
 
 class SourceManager;
 class BungeeVoiceManager;
+class WarpVoiceManager;
 
 enum class PrearmTargetKind {
     Marker,
@@ -109,12 +111,29 @@ struct PreparedTrackVoice {
     bool  ready                = false;        // priming finished without error
 };
 
+// One prepared warp voice for one clip. Built with the warp ratio active
+// at target_frame and its internal stretcher pre-fed enough source audio
+// to have a warm analysis window — without this, the first post-jump block
+// produces ~Bungee-grain-size of metallic/garbled audio.
+struct PreparedWarpVoice {
+    Id                          clip_id;
+    std::shared_ptr<WarpVoice>  voice;
+    long long                   target_source_cursor = 0;
+};
+
 // A complete prepared set for a single jump target. Either all voices are
 // `ready` (the set is `valid`) or the set must NOT be used — partial application
 // would desync tracks.
 struct PreparedJumpVoiceSet {
     PrearmTargetKey                 key;
     std::vector<PreparedTrackVoice> tracks;
+    // Warp voices prepared in parallel. Empty when the target has no
+    // warp-active clips (the common case for sessions without warp). When
+    // non-empty, the audio thread MUST publish these to WarpVoiceManager
+    // alongside the pitched voice map — using a stale warp voice on a
+    // freshly-jumped clip produces a robotic/metallic burst until the
+    // stretcher re-analyses (Bungee warp latency ~4864 frames @ 48k).
+    std::vector<PreparedWarpVoice>  warp_voices;
     Frame                           target_timeline_frame = 0;
     bool                            valid                 = false;
 
@@ -123,6 +142,11 @@ struct PreparedJumpVoiceSet {
     // moved out, so calling this consumes the set's `voice` pointers — the
     // set itself becomes unusable afterwards.
     PreparedVoiceMap extract_voice_map();
+
+    // Same idea for warp voices — moves them out into a clip_id → WarpVoice
+    // map ready for WarpVoiceManager::publish_prepared_voice_map_realtime.
+    std::unordered_map<Id, std::shared_ptr<WarpVoice>>
+    extract_warp_voice_map();
 };
 
 class PrearmedJumpManager {
@@ -137,6 +161,16 @@ public:
     // prepared voices must match the active voice configuration so the swap
     // is dimensionally compatible.
     bool prepare(int sample_rate, int channel_count, int max_input_frames);
+
+    // Optional: hand the manager a pointer to the WarpVoiceManager so it can
+    // also prearm WarpVoices alongside the pitched ones for any clip that
+    // resolves to Warp or Cascade at the target frame. When not set (or
+    // nullptr), prepared sets only contain pitch voices — warp voices fall
+    // back to the reactive `rebuild_for_seek` path post-jump, which causes a
+    // metallic burst on Bungee-warp tracks because Bungee's analysis window
+    // needs ~4864 frames to settle. Caller retains ownership; the pointer
+    // must outlive this manager. Pass nullptr to disable warp prearm.
+    void set_warp_voice_manager(WarpVoiceManager* warp_voices) noexcept;
 
     // Phase 7: max number of prepared target sets to keep in the cache.
     // When a new prepare would exceed this count, the OLDEST prepared set

@@ -164,12 +164,14 @@ const ensureEngineV2 = (normalizedEnv) => {
     "-B",
     buildArg,
     "-DLT_ENGINE_BUILD_TESTS=OFF",
+    "-DLT_ENGINE_BUILD_BENCHES=OFF",
     "-DLT_ENGINE_USE_JUCE=ON",
     `-DLT_ENGINE_USE_BUNGEE=${useBungee}`,
     `-DLT_ENGINE_USE_FFMPEG=${useFFmpeg}`,
     `-DLT_ENGINE_USE_LIBSNDFILE=${useLibSndFile}`,
     `-DLT_ENGINE_USE_R8BRAIN=${useR8Brain}`,
     `-DLT_ENGINE_USE_RUBBERBAND=${useRubberBand}`,
+    `-DVCPKG_MANIFEST_FEATURES=${useRubberBand === "ON" ? "rubberband" : ""}`,
   ];
   if (useBungee === "ON") {
     configureArgs.push(`-DLT_BUNGEE_DIR=${bungeeDir}`);

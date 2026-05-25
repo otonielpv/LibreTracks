@@ -25,7 +25,7 @@ struct TrackRendererDiagnostics {
     // Non-zero means pitch was needed but no voice existed — the clip was silenced.
     std::uint64_t pitch_missing_stream_silence_count = 0;
     // Same for warp: number of blocks where the warp path could not find a
-    // Signalsmith voice and silenced output.
+    // warp voice and silenced output.
     std::uint64_t warp_missing_stream_silence_count = 0;
 };
 
@@ -48,12 +48,17 @@ public:
     // resolve_pitch_render_decision):
     //   - Direct:  read source as-is
     //   - Pitch:   BungeeVoiceManager (pitch_scale != 1, time_ratio = 1)
-    //   - Warp:    WarpVoiceManager (Signalsmith, pitch = 1, time_ratio != 1)
-    //   - Cascade: pitch first, then warp (TODO: not yet implemented; emits
-    //              silence and bumps a diagnostic counter)
+    //   - Warp:    WarpVoiceManager (pitch = 1, time_ratio != 1)
+    //   - Cascade: pitch first, then warp
     //
     // `warp_voices` may be nullptr; clips that resolve to Warp/Cascade then
     // silence and bump warp_missing_stream_silence_count.
+    // `track_is_silent` (default false): when true, warp/cascade voices
+    // skip their stretcher work and just advance the source cursor so the
+    // voice stays timeline-aligned for when the track un-mutes. Direct and
+    // pitch paths still render — only the expensive RubberBand stages are
+    // gated. Used by the mixer to keep CPU bounded when several warp tracks
+    // exist but most are muted.
     void render(const Track&          track,
                 Frame                 timeline_frame,
                 int                   block_frames,
@@ -64,7 +69,8 @@ public:
                 int                   engine_sample_rate,
                 Semitones             effective_semitones = 0,
                 const Song*           active_song = nullptr,
-                WarpVoiceManager*     warp_voices = nullptr) noexcept;
+                WarpVoiceManager*     warp_voices = nullptr,
+                bool                  track_is_silent = false) noexcept;
 
 private:
     struct ClipBlock {
@@ -98,13 +104,15 @@ private:
     int render_path_warp(const ClipBlock&    cb,
                          WarpVoiceManager*   warp_voices,
                          double              warp_time_ratio,
-                         const Id&           track_id) noexcept;
+                         const Id&           track_id,
+                         bool                track_is_silent) noexcept;
     int render_path_cascade(const ClipBlock&     cb,
                             BungeeVoiceManager*  bungee_voices,
                             WarpVoiceManager*    warp_voices,
                             Semitones            effective_semitones,
                             double               warp_time_ratio,
-                            const Id&            track_id) noexcept;
+                            const Id&            track_id,
+                            bool                 track_is_silent) noexcept;
 
     // Apply fades and accumulate into the output mix bus.
     void finalise_clip_block(const ClipBlock& cb,

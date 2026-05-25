@@ -133,7 +133,7 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# Bungee pitch backend (optional, opt-in).
+# Bungee pitch/warp backend (optional, opt-in).
 #
 # Bungee (https://github.com/bungee-audio-stretch/bungee, MPL-2.0) is a phase-
 # vocoder library with much lower per-voice CPU than RubberBand. We consume the
@@ -143,8 +143,8 @@ endif()
 # Enable with:
 #   cmake -DLT_ENGINE_USE_BUNGEE=ON -DLT_BUNGEE_DIR=<unpacked-release-folder>
 #
-# When OFF (default), LT_ENGINE_HAVE_BUNGEE is 0 and BungeePitchVoice compiles
-# to a no-op stub; the production build is unchanged.
+# When OFF (default), LT_ENGINE_HAVE_BUNGEE is 0 and Bungee voices compile
+# to no-op stubs; RubberBand remains the warp fallback when enabled.
 # ---------------------------------------------------------------------------
 option(LT_ENGINE_USE_BUNGEE "Link the Bungee pitch backend into the engine" OFF)
 if(LT_ENGINE_USE_BUNGEE)
@@ -307,6 +307,26 @@ if(LT_ENGINE_BUILD_BENCHES)
                         "${_lt_real_sample_bungee_dll}"
                         "$<TARGET_FILE_DIR:bench_real_sample_jump_stability>"
                     COMMENT "Copying Bungee DLL for real-sample jump bench")
+            endif()
+        endif()
+    endif()
+
+    if(LT_ENGINE_USE_BUNGEE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_bungee_warp_backends.cpp")
+        add_executable(bench_bungee_warp_backends
+            bench/bench_bungee_warp_backends.cpp)
+        target_compile_features(bench_bungee_warp_backends PRIVATE cxx_std_20)
+        target_link_libraries(bench_bungee_warp_backends PRIVATE lt_audio_engine_v2)
+        target_include_directories(bench_bungee_warp_backends PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            "${LT_BUNGEE_DIR}/include")
+        if(WIN32 AND DEFINED LT_BUNGEE_DIR)
+            set(_lt_bungee_warp_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
+            if(EXISTS "${_lt_bungee_warp_dll}")
+                add_custom_command(TARGET bench_bungee_warp_backends POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_lt_bungee_warp_dll}"
+                        "$<TARGET_FILE_DIR:bench_bungee_warp_backends>"
+                    COMMENT "Copying Bungee DLL for warp-backend bench")
             endif()
         endif()
     endif()
