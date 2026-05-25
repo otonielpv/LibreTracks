@@ -27,6 +27,15 @@ describe("timelineMath", () => {
     expect(snapToTimelineGrid(3600.376, 120, "4/4", 1, 1)).toBe(3600.5);
   });
 
+  it("snaps negative pre-roll positions before bar one", () => {
+    expect(snapToTimelineGrid(-0.26, 120, "4/4", 1, 1)).toBe(-0.5);
+    expect(
+      snapToTimelineGrid(-0.74, 120, "4/4", 1, 1, [
+        { startSeconds: 0, endSeconds: 8, bpm: 120, timeSignature: "4/4" },
+      ]),
+    ).toBe(-0.5);
+  });
+
   it("builds visible markers from absolute frame positions", () => {
     const grid = buildVisibleTimelineGrid({
       durationSeconds: 4000,

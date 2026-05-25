@@ -99,6 +99,13 @@ function timebaseFrameDeltaToSeconds(
   return frames / clampPositive(timebaseHz, 1);
 }
 
+function secondsToSignedTimebaseFrames(
+  seconds: number,
+  timebaseHz = TIMELINE_TIMEBASE_HZ,
+) {
+  return Math.round(seconds * clampPositive(timebaseHz, 1));
+}
+
 export function getBeatFrames(
   bpm: number,
   timeSignature: string,
@@ -403,6 +410,14 @@ export function snapToTimelineGrid(
       timeSignature,
       regions,
     });
+    const firstRegion = resolvedRegions[0];
+    if (firstRegion && seconds < firstRegion.startSeconds) {
+      const localFrames = secondsToSignedTimebaseFrames(seconds - firstRegion.startSeconds);
+      const snappedFrames =
+        Math.round(localFrames / firstRegion.beatFrames) * firstRegion.beatFrames;
+      return firstRegion.startSeconds + timebaseFrameDeltaToSeconds(snappedFrames);
+    }
+
     const region = resolveTimelineRegionAtSeconds(seconds, resolvedRegions) ?? resolvedRegions[0];
     if (region) {
       const localFrames = secondsToTimebaseFrames(seconds - region.startSeconds);
@@ -419,8 +434,8 @@ export function snapToTimelineGrid(
   }
 
   const beatFrames = getBeatFrames(bpm, timeSignature);
-  const positionFrames = secondsToTimebaseFrames(seconds);
-  return timebaseFramesToSeconds(Math.round(positionFrames / beatFrames) * beatFrames);
+  const positionFrames = secondsToSignedTimebaseFrames(seconds);
+  return timebaseFrameDeltaToSeconds(Math.round(positionFrames / beatFrames) * beatFrames);
 }
 
 function normalizeTimelineRegions(

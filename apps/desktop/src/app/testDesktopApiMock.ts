@@ -1024,7 +1024,7 @@ export const testDesktopApiMock = {
         clip.id === clipId
           ? {
               ...clip,
-              timelineStartSeconds: Math.max(0, timelineStartSeconds),
+              timelineStartSeconds,
             }
           : clip,
       ),
@@ -1036,7 +1036,7 @@ export const testDesktopApiMock = {
     moves: Array<{ clipId: string; timelineStartSeconds: number }>,
   ) => {
     const movesByClipId = new Map(
-      moves.map((move) => [move.clipId, Math.max(0, move.timelineStartSeconds)]),
+      moves.map((move) => [move.clipId, move.timelineStartSeconds]),
     );
     replaceSong({
       ...state.song,

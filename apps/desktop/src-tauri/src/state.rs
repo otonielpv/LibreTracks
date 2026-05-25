@@ -1522,7 +1522,7 @@ impl DesktopSession {
             .find(|clip| clip.id == clip_id)
             .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
 
-        clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
+        clip.timeline_start_seconds = normalize_timeline_start_seconds(timeline_start_seconds);
         refresh_song_duration(&mut song);
 
         self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
@@ -1550,7 +1550,7 @@ impl DesktopSession {
             .find(|clip| clip.id == clip_id)
             .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
 
-        clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
+        clip.timeline_start_seconds = normalize_timeline_start_seconds(timeline_start_seconds);
         refresh_song_duration(&mut song);
 
         self.persist_song_update_internal(
@@ -1585,7 +1585,8 @@ impl DesktopSession {
                 .iter_mut()
                 .find(|clip| clip.id == request.clip_id)
                 .ok_or_else(|| DesktopError::ClipNotFound(request.clip_id.clone()))?;
-            clip.timeline_start_seconds = request.timeline_start_seconds.max(0.0);
+            clip.timeline_start_seconds =
+                normalize_timeline_start_seconds(request.timeline_start_seconds);
         }
 
         refresh_song_duration(&mut song);
@@ -1618,7 +1619,8 @@ impl DesktopSession {
                 .iter_mut()
                 .find(|clip| clip.id == request.clip_id)
                 .ok_or_else(|| DesktopError::ClipNotFound(request.clip_id.clone()))?;
-            clip.timeline_start_seconds = request.timeline_start_seconds.max(0.0);
+            clip.timeline_start_seconds =
+                normalize_timeline_start_seconds(request.timeline_start_seconds);
         }
 
         refresh_song_duration(&mut song);
@@ -1685,7 +1687,7 @@ impl DesktopSession {
             duration_seconds,
         )?;
 
-        clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
+        clip.timeline_start_seconds = normalize_timeline_start_seconds(timeline_start_seconds);
         clip.source_start_seconds = source_start_seconds.max(0.0);
         clip.duration_seconds = duration_seconds;
         refresh_song_duration(&mut song);
@@ -1736,7 +1738,8 @@ impl DesktopSession {
         for (index, (source_clip, timeline_start_seconds)) in source_clips.into_iter().enumerate() {
             let mut duplicated_clip = source_clip;
             duplicated_clip.id = format!("clip_{timestamp}_{index}");
-            duplicated_clip.timeline_start_seconds = timeline_start_seconds.max(0.0);
+            duplicated_clip.timeline_start_seconds =
+                normalize_timeline_start_seconds(timeline_start_seconds);
             song.clips.push(duplicated_clip);
         }
         refresh_song_duration(&mut song);
@@ -4670,6 +4673,14 @@ fn modified_millis(metadata: &fs::Metadata) -> Result<u128, DesktopError> {
         .as_millis())
 }
 
+fn normalize_timeline_start_seconds(value: f64) -> f64 {
+    if value.is_finite() {
+        value
+    } else {
+        0.0
+    }
+}
+
 fn validate_clip_window(
     song_dir: &std::path::Path,
     clip_file_path: &str,
@@ -4677,7 +4688,8 @@ fn validate_clip_window(
     source_start_seconds: f64,
     duration_seconds: f64,
 ) -> Result<(), DesktopError> {
-    if timeline_start_seconds < 0.0 || source_start_seconds < 0.0 || duration_seconds < 0.05 {
+    if !timeline_start_seconds.is_finite() || source_start_seconds < 0.0 || duration_seconds < 0.05
+    {
         return Err(DesktopError::InvalidClipRange);
     }
 
@@ -4714,7 +4726,7 @@ fn append_clip_to_song(
         id: clip_id,
         track_id: request.track_id.clone(),
         file_path: normalized_file_path,
-        timeline_start_seconds: request.timeline_start_seconds.max(0.0),
+        timeline_start_seconds: normalize_timeline_start_seconds(request.timeline_start_seconds),
         source_start_seconds: 0.0,
         duration_seconds: wav_metadata.duration_seconds,
         gain: 1.0,
@@ -5668,6 +5680,20 @@ mod tests {
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.clips[0].timeline_start_seconds, 1.0);
         assert_eq!(session.engine.playback_state(), PlaybackState::Stopped);
+    }
+
+    #[test]
+    fn moving_a_clip_allows_preroll_before_bar_one() {
+        let mut session = session_with_song_dir("negative-clip-start", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+
+        session
+            .move_clip("clip_1", -1.5, &audio)
+            .expect("clip should move before zero");
+        let song = session.engine.song().expect("song should remain loaded");
+
+        assert_eq!(song.clips[0].timeline_start_seconds, -1.5);
+        assert!((song.duration_seconds - 2.5).abs() < 0.0001);
     }
 
     #[test]

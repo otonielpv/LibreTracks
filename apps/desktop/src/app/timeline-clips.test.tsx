@@ -42,6 +42,43 @@ import {
 } from "../test/testUtils";
 
 describe("App / timeline-clips", () => {
+  it("drags a clip before bar one for pre-roll alignment", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    const moveClipSpy = vi.spyOn(desktopApi, "moveClip");
+
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTimelineShellMetrics(container, 1500);
+
+    await act(async () => {
+      fireEvent(window, new Event("resize"));
+    });
+
+    const drumsRow = getTrackLaneRow(container, "Drums");
+    const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(drumsLane).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.mouseDown(drumsLane as HTMLElement, {
+        button: 0,
+        clientX: 320,
+      });
+      window.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: 220, bubbles: true }),
+      );
+      window.dispatchEvent(
+        new MouseEvent("mouseup", { button: 0, clientX: 220, bubbles: true }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(moveClipSpy).toHaveBeenCalled();
+    });
+
+    expect(moveClipSpy.mock.calls[0][1]).toBeLessThan(0);
+  });
+
   it("clears stale library clip ghosts after deleting a track", async () => {
     disablePointerEventSupport();
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);

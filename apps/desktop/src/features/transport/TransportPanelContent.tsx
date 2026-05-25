@@ -2966,22 +2966,30 @@ export function TransportPanelContent() {
           groupDelta = primaryTarget - clipDrag.originSeconds;
         }
 
-        // Clamp the group delta so no member crosses below zero. Clamping at
-        // the group level (not per-member) preserves spacing — if the user
-        // drags far left, the whole group stops together at the boundary
-        // instead of collapsing onto t=0.
-        const minOrigin = clipDrag.members.reduce(
-          (acc, member) => Math.min(acc, member.originSeconds),
-          Number.POSITIVE_INFINITY,
+        // Keep the drag as a group while allowing pre-roll before bar 1.
+        // The bound only prevents a clip from disappearing completely before
+        // t=0, which would make it hard to grab back without undo.
+        const durationByClipId: Record<string, number> = {};
+        for (const member of clipDrag.members) {
+          const clip = findClip(effectSong, member.clipId);
+          if (clip) {
+            durationByClipId[member.clipId] = clip.durationSeconds;
+          }
+        }
+        const lowerBound = clipDrag.members.reduce(
+          (acc, member) =>
+            Math.max(
+              acc,
+              0.05 - (durationByClipId[member.clipId] ?? 0) - member.originSeconds,
+            ),
+          Number.NEGATIVE_INFINITY,
         );
-        const lowerBound = minOrigin > 0 ? -minOrigin : 0;
         const clampedDelta = Math.max(groupDelta, lowerBound);
 
         const nextPreviewSeed: Record<string, number> = {};
         const nextMembers = clipDrag.members.map((member) => {
-          const nextSeconds = clamp(
+          const nextSeconds = Math.min(
             member.originSeconds + clampedDelta,
-            0,
             effectSong.durationSeconds,
           );
           nextPreviewSeed[member.clipId] = nextSeconds;
@@ -2990,9 +2998,8 @@ export function TransportPanelContent() {
 
         const primaryPreview =
           nextPreviewSeed[clipDrag.clipId] ??
-          clamp(
+          Math.min(
             clipDrag.originSeconds + clampedDelta,
-            0,
             effectSong.durationSeconds,
           );
 
@@ -6643,7 +6650,7 @@ export function TransportPanelContent() {
         filePath: placement.asset.filePath,
         waveformKey: placement.asset.filePath,
         isMissing: placement.asset.isMissing,
-        timelineStartSeconds: Math.max(0, placement.timelineStartSeconds),
+        timelineStartSeconds: placement.timelineStartSeconds,
         sourceStartSeconds: 0,
         sourceDurationSeconds: placement.asset.durationSeconds,
         durationSeconds: placement.asset.durationSeconds,
