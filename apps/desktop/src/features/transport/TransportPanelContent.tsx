@@ -4140,9 +4140,39 @@ export function TransportPanelContent() {
         },
       },
       {
-        label: t("transport.menu.changeBpm"),
-        disabled: true,
-        onSelect: () => {},
+        label: t("transport.menu.changeRegionWarpSourceBpm"),
+        onSelect: async () => {
+          const currentSourceBpm =
+            region.warpSourceBpm ?? getEffectiveBpmAt(song, region.startSeconds);
+          const input = window
+            .prompt(
+              t("transport.prompt.regionWarpSourceBpm"),
+              currentSourceBpm.toFixed(2),
+            )
+            ?.trim();
+          if (!input) {
+            return;
+          }
+          const nextSourceBpm = Number(input.replace(",", "."));
+          if (!Number.isFinite(nextSourceBpm) || nextSourceBpm <= 0) {
+            return;
+          }
+          await runAction(async () => {
+            const nextSnapshot = await updateSongRegionWarp(
+              region.id,
+              region.warpEnabled,
+              nextSourceBpm,
+            );
+            await refreshSongView({ includeWaveforms: false, sync: true });
+            applyPlaybackSnapshot(nextSnapshot);
+            setStatus(
+              t("transport.status.regionWarpSourceBpmUpdated", {
+                bpm: nextSourceBpm.toFixed(2),
+                name: region.name,
+              }),
+            );
+          });
+        },
       },
       {
         label: "Exportar Cancion",
