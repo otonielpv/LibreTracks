@@ -402,6 +402,8 @@ const en = {
     regionWarpSourceBpmUpAria: "Increase original BPM by 1",
     regionWarpNoSelection: "Select a region to warp.",
     regionWarpRatioDisplay: "{{source}} → {{target}} (×{{ratio}})",
+    regionWarpSemanticsOn: "Warp on: pitch preserves duration.",
+    regionWarpSemanticsOff: "Warp off: pitch changes speed.",
     cancelJump: "Cancel jump",
     tracksCount: "{{count}} tracks",
     clipsCount: "{{count}} clips",

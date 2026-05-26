@@ -716,6 +716,11 @@ export function TimelineToolbar({
                       ? t("timelineToolbar.regionWarpToggleOn")
                       : t("timelineToolbar.regionWarpToggleOff")}
                   </button>
+                  <small className="lt-warp-semantics-hint">
+                    {warpEnabled
+                      ? t("timelineToolbar.regionWarpSemanticsOn")
+                      : t("timelineToolbar.regionWarpSemanticsOff")}
+                  </small>
                 </>
               ) : (
                 <span>{t("timelineToolbar.regionWarpNoSelection")}</span>

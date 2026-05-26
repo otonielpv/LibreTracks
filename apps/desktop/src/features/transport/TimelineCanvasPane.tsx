@@ -579,7 +579,13 @@ export function TimelineCanvasPane({
                 <button
                   key={region.id}
                   type="button"
-                  className={`lt-region-hotspot ${selectedRegionId === region.id ? "is-selected" : ""}`}
+                  className={[
+                    "lt-region-hotspot",
+                    selectedRegionId === region.id ? "is-selected" : "",
+                    region.warpEnabled ? "is-warped" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   aria-label={regionDescription}
                   title={regionDescription}
                   style={{
@@ -623,6 +629,11 @@ export function TimelineCanvasPane({
                   }}
                 >
                   <span className="lt-sr-only">{region.name}</span>
+                  {region.warpEnabled ? (
+                    <span className="lt-region-warp-indicator" aria-hidden="true">
+                      warped
+                    </span>
+                  ) : null}
                   <div
                     className="lt-region-resize-handle is-start"
                     role="presentation"

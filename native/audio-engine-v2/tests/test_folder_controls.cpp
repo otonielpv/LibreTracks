@@ -275,13 +275,35 @@ TEST_CASE("resolve_pitch_render_decision_matches_effective_semitones") {
         CHECK(dec.needs_pitch == true);
         CHECK(dec.effective_semitones == resolve_effective_semitones(track, clip, song, 1500));
     }
-    // NeverTranspose.
+    // NeverTranspose without warp: track follows the region pitch as
+    // varispeed (Opción 4 — pitch IS time-stretch, so opting out would
+    // desync the track from the rest of the song).
     {
         Track nt_track; nt_track.id = "nt"; nt_track.transpose_behavior = TransposeBehavior::NeverTranspose;
         const auto dec = resolve_pitch_render_decision(nt_track, clip, song, 500);
+        CHECK(dec.needs_pitch == true);
+        CHECK(dec.is_never_transpose == true);
+        CHECK(dec.effective_semitones == song.transpose_semitones + clip.semitones);
+    }
+    // NeverTranspose with warp: track ignores pitch but still follows warp's
+    // time-stretch (Bungee decouples pitch from duration).
+    {
+        Song warped = song;
+        warped.bpm = 120.0;
+        Region warp_region;
+        warp_region.id = "rw";
+        warp_region.start_frame = 0;
+        warp_region.end_frame = 48000;
+        warp_region.warp_enabled = true;
+        warp_region.warp_source_bpm = 100.0;
+        warped.regions.clear();
+        warped.regions.push_back(warp_region);
+        Track nt_track; nt_track.id = "nt"; nt_track.transpose_behavior = TransposeBehavior::NeverTranspose;
+        const auto dec = resolve_pitch_render_decision(nt_track, clip, warped, 500);
         CHECK(dec.needs_pitch == false);
         CHECK(dec.is_never_transpose == true);
         CHECK(dec.effective_semitones == 0);
+        CHECK(dec.warp_active == true);
     }
 }
 

@@ -196,6 +196,19 @@ impl AudioEngine {
         Ok(())
     }
 
+    pub fn sync_position_preserving_transport_state(
+        &mut self,
+        position_seconds: f64,
+    ) -> Result<(), AudioEngineError> {
+        self.ensure_song_loaded()?;
+        if position_seconds < 0.0 {
+            return Err(AudioEngineError::PositionOutOfRange);
+        }
+
+        self.position_seconds = position_seconds;
+        Ok(())
+    }
+
     pub fn current_marker(&self) -> Result<Option<Marker>, AudioEngineError> {
         let song = self.ensure_song_loaded()?;
         Ok(song.marker_at(self.position_seconds))
@@ -777,18 +790,32 @@ struct ResolvedSongRegion {
 }
 
 fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEngineError> {
-    let mut boundaries = song
-        .tempo_markers
-        .iter()
-        .filter(|marker| marker.start_seconds > 0.0)
-        .map(|marker| (marker.start_seconds, Some(marker.bpm), None))
-        .chain(
-            song.time_signature_markers
-                .iter()
-                .filter(|marker| marker.start_seconds > 0.0)
-                .map(|marker| (marker.start_seconds, None, Some(marker.signature.as_str()))),
-        )
-        .collect::<Vec<_>>();
+    let mut boundaries = Vec::with_capacity(
+        song.tempo_markers.len() + song.time_signature_markers.len() + song.regions.len() * 2,
+    );
+    boundaries.extend(
+        song.tempo_markers
+            .iter()
+            .filter(|marker| marker.start_seconds > 0.0)
+            .map(|marker| (marker.start_seconds, Some(marker.bpm), None)),
+    );
+    boundaries.extend(
+        song.time_signature_markers
+            .iter()
+            .filter(|marker| marker.start_seconds > 0.0)
+            .map(|marker| (marker.start_seconds, None, Some(marker.signature.as_str()))),
+    );
+    for region in &song.regions {
+        if region.end_seconds <= region.start_seconds {
+            continue;
+        }
+        if region.start_seconds > 0.0 {
+            boundaries.push((region.start_seconds, None, None));
+        }
+        if region.end_seconds > 0.0 {
+            boundaries.push((region.end_seconds, None, None));
+        }
+    }
     boundaries.sort_by(|left, right| {
         left.0
             .partial_cmp(&right.0)
@@ -812,7 +839,9 @@ fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEng
             continue;
         }
 
-        let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, time_signature)?;
+        let source_bpm = warp_source_bpm_at(song, start_seconds).unwrap_or(bpm);
+        let bar_duration_seconds =
+            song_bar_duration_seconds_for_region(source_bpm, time_signature)?;
         let duration_seconds = (boundary_seconds - start_seconds).max(0.0);
         resolved_regions.push(ResolvedSongRegion {
             start_seconds,
@@ -830,7 +859,8 @@ fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEng
         }
     }
 
-    let bar_duration_seconds = song_bar_duration_seconds_for_region(bpm, time_signature)?;
+    let source_bpm = warp_source_bpm_at(song, start_seconds).unwrap_or(bpm);
+    let bar_duration_seconds = song_bar_duration_seconds_for_region(source_bpm, time_signature)?;
     resolved_regions.push(ResolvedSongRegion {
         start_seconds,
         end_seconds: f64::MAX,
@@ -839,6 +869,24 @@ fn resolve_song_regions(song: &Song) -> Result<Vec<ResolvedSongRegion>, AudioEng
     });
 
     Ok(resolved_regions)
+}
+
+fn warp_source_bpm_at(song: &Song, position_seconds: f64) -> Option<f64> {
+    song.regions.iter().find_map(|region| {
+        if !region.warp_enabled
+            || position_seconds < region.start_seconds
+            || position_seconds >= region.end_seconds
+        {
+            return None;
+        }
+
+        let source_bpm = region.warp_source_bpm?;
+        if source_bpm.is_finite() && source_bpm > 0.0 {
+            Some(source_bpm)
+        } else {
+            None
+        }
+    })
 }
 
 fn resolve_resolved_region_for_position(
@@ -986,7 +1034,9 @@ fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, Audi
 
 #[cfg(test)]
 mod tests {
-    use libretracks_core::{Clip, Marker, Song, SongRegion, Track, TrackKind};
+    use libretracks_core::{
+        warp_timeline_seconds_at, Clip, Marker, Song, SongRegion, Track, TrackKind,
+    };
 
     use crate::{
         ActiveVamp, AudioEngine, AudioEngineError, JumpTrigger, PlaybackState, TransitionType,
@@ -1377,6 +1427,27 @@ mod tests {
     }
 
     #[test]
+    fn syncing_position_preserves_pending_jump() {
+        let mut engine = AudioEngine::new();
+        engine.load_song(demo_song()).expect("song should load");
+        engine.seek(1.0).expect("seek should work");
+        engine
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::AfterBars(2),
+                TransitionType::Instant,
+            )
+            .expect("jump should schedule");
+
+        engine
+            .sync_position_preserving_transport_state(2.0)
+            .expect("position should sync");
+
+        assert_eq!(engine.position_seconds(), 2.0);
+        assert!(engine.pending_marker_jump().is_some());
+    }
+
+    #[test]
     fn four_bar_jump_uses_the_local_bar_count_even_near_song_end() {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
@@ -1496,6 +1567,36 @@ mod tests {
             .expect("jump should remain pending");
 
         assert!((scheduled.execute_at_seconds - 7.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn jump_after_bars_uses_warp_source_bpm_inside_warp_region() {
+        let mut song = demo_song();
+        song.bpm = 100.0;
+        song.duration_seconds = 60.0;
+        song.regions[0].end_seconds = 60.0;
+        song.regions[0].warp_enabled = true;
+        song.regions[0].warp_source_bpm = Some(91.0);
+
+        let mut engine = AudioEngine::new();
+        engine.load_song(song.clone()).expect("song should load");
+        engine.seek(0.0).expect("seek should work");
+        engine.play().expect("play should work");
+
+        let scheduled = engine
+            .schedule_marker_jump(
+                "section_outro",
+                JumpTrigger::AfterBars(2),
+                TransitionType::Instant,
+            )
+            .expect("jump should schedule")
+            .expect("jump should remain pending");
+
+        let expected_source_seconds = 8.0 * 60.0 / 91.0;
+        assert!((scheduled.execute_at_seconds - expected_source_seconds).abs() < 0.0001);
+
+        let view_execute_seconds = warp_timeline_seconds_at(&song, scheduled.execute_at_seconds);
+        assert!((view_execute_seconds - 4.8).abs() < 0.0001);
     }
 
     #[test]

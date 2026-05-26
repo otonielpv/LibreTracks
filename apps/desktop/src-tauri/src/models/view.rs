@@ -1,7 +1,7 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{ActiveVamp, JumpTrigger, PendingMarkerJump, TransitionType};
 use libretracks_core::{
-    warp_timeline_duration_seconds, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion,
+    audible_clip_duration_seconds, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion,
     TempoMarker, TimeSignatureMarker, TrackKind,
 };
 use libretracks_project::{WaveformLod, WaveformSummary};
@@ -288,11 +288,18 @@ pub(crate) fn song_to_view(
         .clips
         .iter()
         .map(|clip| {
+            let track_transpose_enabled = song
+                .tracks
+                .iter()
+                .find(|t| t.id == clip.track_id)
+                .map(|t| t.transpose_enabled)
+                .unwrap_or(true);
             warp_timeline_seconds_at(song, clip.timeline_start_seconds)
-                + warp_timeline_duration_seconds(
+                + audible_clip_duration_seconds(
                     song,
                     clip.timeline_start_seconds,
                     clip.duration_seconds,
+                    track_transpose_enabled,
                 )
         })
         .fold(
@@ -366,12 +373,11 @@ pub(crate) fn clip_to_summary(
     waveform_cache: &WaveformMemoryCache,
     song_dir: Option<&std::path::Path>,
 ) -> ClipSummary {
-    let track_name = song
-        .tracks
-        .iter()
-        .find(|track| track.id == clip.track_id)
-        .map(|track| track.name.clone())
+    let track = song.tracks.iter().find(|track| track.id == clip.track_id);
+    let track_name = track
+        .map(|t| t.name.clone())
         .unwrap_or_else(|| clip.track_id.clone());
+    let track_transpose_enabled = track.map(|t| t.transpose_enabled).unwrap_or(true);
     let waveform_key = waveform_key_for_file_path(&clip.file_path);
     let source_duration_seconds = waveform_cache
         .source_duration_seconds(&waveform_key)
@@ -398,10 +404,15 @@ pub(crate) fn clip_to_summary(
         source_start_seconds: clip.source_start_seconds,
         source_window_duration_seconds: clip.duration_seconds,
         source_duration_seconds,
-        duration_seconds: warp_timeline_duration_seconds(
+        // Phase-3 visual mapping: warp shrinks/expands by warp ratio, pitch
+        // without warp shrinks/expands by pitch_scale (varispeed) on tracks
+        // that allow transpose. Region/marker positions deliberately stay on
+        // the musical grid — varispeed only changes this clip's audible end.
+        duration_seconds: audible_clip_duration_seconds(
             song,
             clip.timeline_start_seconds,
             clip.duration_seconds,
+            track_transpose_enabled,
         ),
         gain: clip.gain,
     }
@@ -444,15 +455,6 @@ fn encode_peaks_base64(values: &[f32]) -> String {
     STANDARD.encode(bytes)
 }
 
-pub(crate) fn marker_to_summary(marker: &Marker) -> MarkerSummary {
-    MarkerSummary {
-        id: marker.id.clone(),
-        name: marker.name.clone(),
-        start_seconds: marker.start_seconds,
-        digit: marker.digit,
-    }
-}
-
 pub(crate) fn pending_jump_to_summary(pending_jump: &PendingMarkerJump) -> PendingJumpSummary {
     PendingJumpSummary {
         target_marker_id: pending_jump.target_marker_id.clone(),
@@ -464,6 +466,20 @@ pub(crate) fn pending_jump_to_summary(pending_jump: &PendingMarkerJump) -> Pendi
     }
 }
 
+pub(crate) fn pending_jump_to_warped_summary(
+    song: &Song,
+    pending_jump: &PendingMarkerJump,
+) -> PendingJumpSummary {
+    PendingJumpSummary {
+        target_marker_id: pending_jump.target_marker_id.clone(),
+        target_marker_name: pending_jump.target_marker_name.clone(),
+        target_digit: pending_jump.target_digit,
+        trigger: pending_jump_trigger_label(&pending_jump.trigger),
+        execute_at_seconds: warp_timeline_seconds_at(song, pending_jump.execute_at_seconds),
+        transition: transition_type_label(&pending_jump.transition),
+    }
+}
+
 pub(crate) fn active_vamp_to_summary(active_vamp: &ActiveVamp) -> ActiveVampSummary {
     ActiveVampSummary {
         start_seconds: active_vamp.start_seconds,
@@ -471,7 +487,17 @@ pub(crate) fn active_vamp_to_summary(active_vamp: &ActiveVamp) -> ActiveVampSumm
     }
 }
 
-fn marker_to_warped_summary(song: &Song, marker: &Marker) -> MarkerSummary {
+pub(crate) fn active_vamp_to_warped_summary(
+    song: &Song,
+    active_vamp: &ActiveVamp,
+) -> ActiveVampSummary {
+    ActiveVampSummary {
+        start_seconds: warp_timeline_seconds_at(song, active_vamp.start_seconds),
+        end_seconds: warp_timeline_seconds_at(song, active_vamp.end_seconds),
+    }
+}
+
+pub(crate) fn marker_to_warped_summary(song: &Song, marker: &Marker) -> MarkerSummary {
     MarkerSummary {
         id: marker.id.clone(),
         name: marker.name.clone(),

@@ -16,13 +16,17 @@ Semitones resolve_effective_semitones(const Track& track,
                                       Frame timeline_frame) noexcept;
 
 // Which DSP path the renderer should use for a given clip in a given block.
-//   Direct    → no pitch, no warp, copy the source.
-//   Stretched → Bungee with pitch_scale != 1 and/or time_ratio != 1. A single
-//               voice handles any combination (pitch-only, warp-only, or
-//               both), because BungeePitchVoice::render_block(..., pitch_scale,
-//               time_ratio) processes them in the same grain pipeline.
+// Selection follows the Ableton-style semantics:
+//   Direct    → warp off, pitch 0 (or track is NeverTranspose). Copy source.
+//   Varispeed → warp off, pitch != 0. Linear-interpolated resample changes
+//               pitch AND duration (no time-stretch). Cheap, no Bungee voice.
+//   Stretched → warp on (with or without pitch). Bungee handles pitch + warp
+//               in a single grain pipeline via render_block's pitch_scale +
+//               time_ratio parameters; duration is determined by warp ratio,
+//               not by pitch.
 enum class ClipPathKind {
     Direct,
+    Varispeed,
     Stretched,
 };
 
@@ -37,6 +41,10 @@ struct PitchRenderDecision {
     bool         is_never_transpose = false;
     bool         warp_active = false;       // legacy: same as warp_time_ratio != 1.0
     double       warp_time_ratio = 1.0;
+    // Frequency scale 2^(effective_semitones/12). Always set; the renderer
+    // uses it for both Varispeed (resample by this factor) and Stretched
+    // (Bungee pitch_scale parameter).
+    double       pitch_scale = 1.0;
     ClipPathKind path = ClipPathKind::Direct;
 };
 

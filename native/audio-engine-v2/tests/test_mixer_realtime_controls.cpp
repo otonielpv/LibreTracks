@@ -107,8 +107,27 @@ TEST_CASE("scheduled jump without prepared voices clears stale Bungee voice and 
     song.id = "song";
     song.start_frame = 0;
     song.end_frame = kDuration;
+    song.bpm = 120.0;
     song.transpose_semitones = -2;
     song.markers.push_back(Marker{"target", "Target", kTarget});
+    // Phase-4: Bungee voices only build for warp-active clips. Pre-Phase-4
+    // this test relied on the pitch-only path to enroll a Bungee voice for
+    // "clip-p"; that path is now Varispeed and does not enroll. Wrap the
+    // song in a warp region (with ratio 1.0) so the manager still produces
+    // a voice for the pitched track, which is what this test exercises.
+    {
+        Region region;
+        region.id              = "warp-region";
+        region.start_frame     = 0;
+        region.end_frame       = kDuration;
+        region.warp_enabled    = true;
+        // Near-unity ratio: keeps Bungee active (so the de-click test still
+        // exercises the Bungee voice lifecycle) without skewing the
+        // sample-exact assertions further down.
+        song.bpm               = 120.0;
+        region.warp_source_bpm = 120.0001;
+        song.regions.push_back(region);
+    }
 
     Track unpitched;
     unpitched.id = "unpitched";

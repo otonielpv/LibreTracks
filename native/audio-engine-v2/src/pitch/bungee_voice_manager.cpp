@@ -205,14 +205,15 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
         }
 
         for (const auto& track : song.tracks) {
-            const bool never_transpose =
-                track.transpose_behavior == TransposeBehavior::NeverTranspose;
+            (void)track;
             for (const auto& clip : track.clips) {
                 const Frame clip_end = clip.timeline_start_frame + clip.length_frames;
-                const bool playhead_in_clip = (playhead >= clip.timeline_start_frame
-                                                && playhead < clip_end);
-                // Any overlap with a warp region counts (region edges don't
-                // need to align with clip edges).
+                // Bungee voices are now scoped strictly to warp-active clips.
+                // Pitch-only-no-warp now goes through TrackRenderer's
+                // Varispeed path (linear resample), so we deliberately do not
+                // enroll those clips here — even on the same track as the
+                // playhead. Region edges don't need to align with clip edges,
+                // so any overlap with a warp region qualifies.
                 bool clip_in_warp_region = false;
                 for (const Region* wr : warp_regions) {
                     if (clip.timeline_start_frame < wr->end_frame
@@ -221,27 +222,13 @@ std::vector<VoiceSpec> enumerate_voices(const Session& session,
                         break;
                     }
                 }
-                // NeverTranspose tracks never get a pitch voice, but they DO
-                // get a warp voice when their clip sits inside a warp region.
-                // For non-NeverTranspose tracks we additionally include clips
-                // covering the playhead (legacy pitch path).
-                if (never_transpose) {
-                    if (!clip_in_warp_region) continue;
-                } else if (!playhead_in_clip && !clip_in_warp_region) {
-                    continue;
-                }
+                if (!clip_in_warp_region) continue;
 
                 auto src = sources.get_shared(clip.source_id);
                 if (!src || !src->is_loaded()) continue;
 
                 const auto decision = resolve_pitch_render_decision(
                     track, clip, song, playhead);
-                // Build a Bungee voice when the clip needs pitch OR when it
-                // overlaps a warp region. Pitch-only clips keep the legacy
-                // behaviour (no voice when effective_semitones == 0 and
-                // warp is off everywhere).
-                if (decision.effective_semitones == 0 && !clip_in_warp_region)
-                    continue;
 
                 VoiceSpec spec;
                 spec.clip_id      = clip.id;
@@ -608,7 +595,22 @@ void BungeeVoiceManager::retime_existing_for_session(
 #if LT_ENGINE_HAVE_BUNGEE
     const auto specs = enumerate_voices(session, sources, playhead);
     auto current = std::atomic_load(&impl_->active);
+    // Tempo/warp edits during playback: keep Bungee's warm pipeline. Most BPM
+    // tweaks (especially when the playhead is at or near the start of the
+    // region) leave each voice's correct source frame within a few samples
+    // of where the cursor already sits, so resetting the cursor + dumping
+    // the output FIFO would force every voice to refill from scratch
+    // (~108 ms of structural latency at hop=-1) — that's the audible cut
+    // the user hears on every BPM change. Skip the cursor reset and FIFO
+    // clear when the drift is small; Bungee absorbs the new ratio at the
+    // next render_block via render_block(pitch_scale, time_ratio). Only fall
+    // back to a hard retime when the source frame jumps by more than a
+    // block's worth of samples (e.g. the user dragged a tempo marker and
+    // the playhead is mid-region — the new mapping genuinely points at a
+    // different sample).
+    constexpr long long kRetimeSoftDriftFrames = 256;
     int retimed = 0;
+    int retimed_soft = 0;
     int missing = 0;
     for (const auto& spec : specs) {
         auto it = current->find(spec.clip_id);
@@ -616,17 +618,26 @@ void BungeeVoiceManager::retime_existing_for_session(
             ++missing;
             continue;
         }
-        it->second->reset_source_cursor(
-            static_cast<long long>(spec.source_frame));
+        const long long current_cursor = it->second->source_cursor();
+        const long long target_cursor = static_cast<long long>(spec.source_frame);
+        if (std::llabs(target_cursor - current_cursor) <= kRetimeSoftDriftFrames) {
+            // Soft retime: leave the warm pipeline alone. The next block
+            // will feed Bungee the new time_ratio and grain advance picks
+            // up the change without an audible discontinuity.
+            ++retimed_soft;
+            continue;
+        }
+        it->second->reset_source_cursor(target_cursor);
         it->second->clear_queued_output();
         it->second->arm_fade_in(3);
         ++retimed;
     }
     if (bungee_debug_enabled()) {
         lt_debug_log(
-            "[BUNGEE] retime_existing playhead=%lld specs=%zu retimed=%d missing=%d active=%zu\n",
+            "[BUNGEE] retime_existing playhead=%lld specs=%zu retimed=%d soft=%d missing=%d active=%zu\n",
             static_cast<long long>(playhead), specs.size(),
-            retimed, missing, current ? current->size() : 0);
+            retimed, retimed_soft, missing,
+            current ? current->size() : 0);
     }
 #else
     (void)session; (void)sources; (void)playhead;

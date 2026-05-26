@@ -11,8 +11,8 @@ pub use validation::{
     MIN_TRANSPOSE_SEMITONES, MIN_WARP_SOURCE_BPM,
 };
 pub use warp::{
-    effective_bpm_at, region_warp_ratio, region_warp_ratio_in_song, warp_timeline_duration_seconds,
-    warp_timeline_seconds_at,
+    audible_clip_duration_seconds, effective_bpm_at, region_warp_ratio, region_warp_ratio_in_song,
+    source_seconds_at_view, warp_timeline_duration_seconds, warp_timeline_seconds_at,
 };
 
 #[cfg(test)]

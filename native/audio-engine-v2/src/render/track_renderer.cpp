@@ -45,6 +45,9 @@ std::atomic<std::uint64_t> TrackRenderer::scratch_resize_in_audio_thread_count_{
 std::atomic<std::uint64_t> TrackRenderer::block_too_large_count_{0};
 std::atomic<int> TrackRenderer::max_scratch_capacity_frames_{0};
 std::atomic<std::uint64_t> TrackRenderer::pitch_missing_stream_silence_count_{0};
+std::atomic<std::uint64_t> TrackRenderer::path_direct_count_{0};
+std::atomic<std::uint64_t> TrackRenderer::path_varispeed_count_{0};
+std::atomic<std::uint64_t> TrackRenderer::path_stretched_count_{0};
 
 void TrackRenderer::prepare(int max_block_frames) noexcept {
     if (max_block_frames <= 0)
@@ -90,7 +93,10 @@ TrackRendererDiagnostics TrackRenderer::diagnostics() noexcept {
         scratch_resize_in_audio_thread_count_.load(std::memory_order_relaxed),
         block_too_large_count_.load(std::memory_order_relaxed),
         max_scratch_capacity_frames_.load(std::memory_order_relaxed),
-        pitch_missing_stream_silence_count_.load(std::memory_order_relaxed)};
+        pitch_missing_stream_silence_count_.load(std::memory_order_relaxed),
+        path_direct_count_.load(std::memory_order_relaxed),
+        path_varispeed_count_.load(std::memory_order_relaxed),
+        path_stretched_count_.load(std::memory_order_relaxed)};
 }
 
 void TrackRenderer::reset_diagnostics() noexcept {
@@ -100,6 +106,9 @@ void TrackRenderer::reset_diagnostics() noexcept {
     block_too_large_count_.store(0, std::memory_order_relaxed);
     max_scratch_capacity_frames_.store(0, std::memory_order_relaxed);
     pitch_missing_stream_silence_count_.store(0, std::memory_order_relaxed);
+    path_direct_count_.store(0, std::memory_order_relaxed);
+    path_varispeed_count_.store(0, std::memory_order_relaxed);
+    path_stretched_count_.store(0, std::memory_order_relaxed);
 }
 
 bool TrackRenderer::ensure_scratch_capacity(int frames) noexcept {
@@ -137,17 +146,26 @@ void TrackRenderer::render(const Track&         track,
     for (const auto& clip : track.clips) {
         // Per-clip path decision. When the caller doesn't supply the song
         // (legacy code path) we fall back to the bare effective_semitones
-        // value — identical to the pre-warp engine.
+        // value — identical to the pre-warp engine, but now mapped through
+        // the Varispeed path when pitch is non-zero and warp is absent.
         ClipPathKind path = ClipPathKind::Direct;
         Semitones    clip_semitones = effective_semitones;
         double       clip_warp_ratio = 1.0;
+        double       clip_pitch_scale = 1.0;
         if (active_song) {
             const auto decision = resolve_pitch_render_decision(
                 track, clip, *active_song, timeline_frame);
             path             = decision.path;
             clip_semitones   = decision.effective_semitones;
             clip_warp_ratio  = decision.warp_time_ratio;
+            clip_pitch_scale = decision.pitch_scale;
         } else if (clip_semitones != 0) {
+            // Legacy callers (tests, direct invocations) pass a non-null bvm
+            // and no song context; keep them on the Bungee path so their
+            // bvm setup is exercised. The Phase-4 Varispeed routing requires
+            // the song to decide pitch_scale vs warp, and runtime always
+            // plumbs the song through, so this branch only ever fires for
+            // legacy test paths.
             path = ClipPathKind::Stretched;
         }
 
@@ -166,9 +184,26 @@ void TrackRenderer::render(const Track&         track,
         int written = 0;
         switch (path) {
             case ClipPathKind::Direct:
+                path_direct_count_.fetch_add(1, std::memory_order_relaxed);
                 written = render_path_direct(cb);
                 break;
+            case ClipPathKind::Varispeed:
+                path_varispeed_count_.fetch_add(1, std::memory_order_relaxed);
+                written = render_path_varispeed(cb, clip_pitch_scale);
+                track_jump_debug_log(
+                    "[LT_JUMP_DEBUG][track-renderer] varispeed track=%s clip=%s timeline=%lld runtime_start=%lld runtime_len=%lld source_frame=%lld frames=%d pitch_scale=%.6f written=%d\n",
+                    track.id.c_str(),
+                    clip.id.c_str(),
+                    static_cast<long long>(timeline_frame),
+                    static_cast<long long>(clip.timeline_start_frame),
+                    static_cast<long long>(clip.length_frames),
+                    static_cast<long long>(cb.source_frame),
+                    cb.frames_to_read,
+                    clip_pitch_scale,
+                    written);
+                break;
             case ClipPathKind::Stretched:
+                path_stretched_count_.fetch_add(1, std::memory_order_relaxed);
                 written = render_path_stretched(cb, bungee_voices,
                                                 clip_semitones,
                                                 clip_warp_ratio,
@@ -238,6 +273,99 @@ int TrackRenderer::render_path_direct(const ClipBlock& cb) noexcept {
                   scratch_l_.begin() + cb.frames_to_read, 0.0f);
         std::fill(scratch_r_.begin() + copied,
                   scratch_r_.begin() + cb.frames_to_read, 0.0f);
+    }
+    return cb.frames_to_read;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Path: Varispeed — linear-interpolated resample. Used when pitch != 0 and
+// warp is off. Reads ~ceil(N * pitch_scale) source frames and interpolates
+// them down/up to N output frames. The clip's runtime length_frames is
+// expected to already be shrunk/expanded by the front-end's timeline
+// mapping, so `frames_to_read` reflects the audible length; we just need to
+// stream source samples `pitch_scale`× as fast as the timeline.
+// ────────────────────────────────────────────────────────────────────────────
+
+int TrackRenderer::render_path_varispeed(const ClipBlock& cb,
+                                          double           pitch_scale) noexcept {
+    if (!(pitch_scale > 0.0) || !std::isfinite(pitch_scale)) return 0;
+    if (cb.frames_to_read <= 0) return 0;
+
+    // Source position of the FIRST output frame in this block. The runtime
+    // timeline_start_frame and source_start_frame already encode the clip's
+    // boundary; the per-block offset (timeline_frame - timeline_start_frame)
+    // is measured in audible frames, so we scale it by pitch_scale to get
+    // the matching source frame.
+    const long long timeline_offset_in_clip =
+        static_cast<long long>(cb.source_frame - cb.clip->source_start_frame);
+    const double source_start = static_cast<double>(cb.clip->source_start_frame)
+        + static_cast<double>(timeline_offset_in_clip) * pitch_scale;
+
+    // We need ceil(N * scale) + 1 source samples to interpolate N output
+    // samples. +1 for the right-hand neighbour of the last fractional index.
+    const int input_capacity = std::min(
+        static_cast<int>(bungee_in_l_.size()),
+        static_cast<int>(bungee_in_r_.size()));
+    const int frames_needed = static_cast<int>(std::ceil(
+        static_cast<double>(cb.frames_to_read) * pitch_scale)) + 1;
+    if (frames_needed > input_capacity || frames_needed <= 0) return 0;
+
+    // Clamp source read to the source's available range; fill any tail with
+    // zeros so the interpolation reads valid memory.
+    const Frame src_end = cb.src->duration_frames();
+    const Frame read_start_floor = static_cast<Frame>(std::floor(source_start));
+    const Frame read_start = std::max<Frame>(0, read_start_floor);
+    const int leading_zeros = static_cast<int>(read_start - read_start_floor);
+    const int after_leading = frames_needed - leading_zeros;
+    const int available = (after_leading <= 0 || read_start >= src_end)
+        ? 0
+        : static_cast<int>(std::min<long long>(
+            after_leading, static_cast<long long>(src_end - read_start)));
+
+    if (leading_zeros > 0) {
+        std::fill(bungee_in_l_.begin(),
+                  bungee_in_l_.begin() + leading_zeros, 0.0f);
+        std::fill(bungee_in_r_.begin(),
+                  bungee_in_r_.begin() + leading_zeros, 0.0f);
+    }
+
+    int got = 0;
+    if (available > 0) {
+        float* read_into[2] = {
+            bungee_in_l_.data() + leading_zeros,
+            bungee_in_r_.data() + leading_zeros };
+        got = cb.src->read(read_start, available, read_into,
+                           std::min(2, cb.src->channel_count()));
+        if (got > 0 && cb.src->channel_count() == 1) {
+            std::copy_n(bungee_in_l_.begin() + leading_zeros, got,
+                        bungee_in_r_.begin() + leading_zeros);
+        }
+    }
+    const int tail_start = leading_zeros + std::max(0, got);
+    if (tail_start < frames_needed) {
+        std::fill(bungee_in_l_.begin() + tail_start,
+                  bungee_in_l_.begin() + frames_needed, 0.0f);
+        std::fill(bungee_in_r_.begin() + tail_start,
+                  bungee_in_r_.begin() + frames_needed, 0.0f);
+    }
+
+    // Fractional cursor inside the input buffer for output sample 0.
+    const double cursor0 = source_start - static_cast<double>(read_start_floor);
+    for (int i = 0; i < cb.frames_to_read; ++i) {
+        const double pos = cursor0 + static_cast<double>(i) * pitch_scale;
+        const int idx0 = static_cast<int>(std::floor(pos));
+        if (idx0 < 0 || idx0 + 1 >= frames_needed) {
+            scratch_l_[static_cast<std::size_t>(i)] = 0.0f;
+            scratch_r_[static_cast<std::size_t>(i)] = 0.0f;
+            continue;
+        }
+        const float frac = static_cast<float>(pos - static_cast<double>(idx0));
+        const float l0 = bungee_in_l_[static_cast<std::size_t>(idx0)];
+        const float l1 = bungee_in_l_[static_cast<std::size_t>(idx0 + 1)];
+        const float r0 = bungee_in_r_[static_cast<std::size_t>(idx0)];
+        const float r1 = bungee_in_r_[static_cast<std::size_t>(idx0 + 1)];
+        scratch_l_[static_cast<std::size_t>(i)] = l0 + (l1 - l0) * frac;
+        scratch_r_[static_cast<std::size_t>(i)] = r0 + (r1 - r0) * frac;
     }
     return cb.frames_to_read;
 }

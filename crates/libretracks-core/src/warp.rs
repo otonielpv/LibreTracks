@@ -56,12 +56,19 @@ pub fn region_warp_ratio_in_song(region: &SongRegion, song: &Song) -> f64 {
 }
 
 /// Maps a stored project second into the effective arrangement second after
-/// applying every warp-enabled region before that point.
+/// applying every warp-enabled region (and every non-warp pitched region's
+/// varispeed) before that point.
 ///
 /// Project data keeps clip/region/marker positions in the source song's
-/// original time. Warp changes the rendered arrangement length by
-/// `duration / ratio`, so positions inside and after warped regions need the
-/// same remap for the UI and native engine timeline to agree.
+/// original time. Two things can change the rendered arrangement length:
+///   - Warp: `duration / warp_ratio` (Bungee preserves pitch, ratio = target
+///     BPM / source BPM).
+///   - Varispeed (warp off + region pitch != 0): `duration / pitch_scale`,
+///     where `pitch_scale = 2^(semitones/12)`. This is the Ableton-style
+///     "pitch changes speed" behaviour — applied at the song level so the
+///     musical grid shifts uniformly across tracks. Tracks with
+///     `transpose_enabled=false` ignore varispeed audibly but still follow
+///     the grid (handled by the renderer).
 pub fn warp_timeline_seconds_at(song: &Song, seconds: f64) -> f64 {
     if !seconds.is_finite() {
         return seconds;
@@ -83,7 +90,16 @@ pub fn warp_timeline_seconds_at(song: &Song, seconds: f64) -> f64 {
             break;
         }
 
-        let ratio = region_warp_ratio_in_song(region, song);
+        // Pick warp ratio when warp is active; otherwise fall back to
+        // varispeed (pitch as time-stretch). Both apply per region and don't
+        // compose with each other — Bungee already absorbs pitch under warp.
+        let ratio = if region.warp_enabled {
+            region_warp_ratio_in_song(region, song)
+        } else if region.transpose_semitones != 0 {
+            semitones_to_pitch_scale(region.transpose_semitones)
+        } else {
+            1.0
+        };
         if !(ratio.is_finite() && ratio > 0.0) || (ratio - 1.0).abs() < f64::EPSILON {
             continue;
         }
@@ -99,6 +115,76 @@ pub fn warp_timeline_seconds_at(song: &Song, seconds: f64) -> f64 {
     (seconds + shift).max(0.0)
 }
 
+/// Inverse of `warp_timeline_seconds_at`: given a second in the rendered
+/// (view) timeline, return the corresponding second in the stored (source)
+/// timeline.
+///
+/// Use this when the user clicks somewhere on the visible timeline to
+/// produce a position that's about to be stored on the song (markers,
+/// region edges, clip starts, programmatic seeks specified in view-time).
+/// Without this inverse, view-time positions inside or after a stretched
+/// region land at the wrong stored offset because the renderer's mapping
+/// has already moved the visible scale.
+///
+/// Returns `seconds` unchanged when the value is non-finite or when there
+/// are no time-stretching regions before it.
+pub fn source_seconds_at_view(song: &Song, view_seconds: f64) -> f64 {
+    if !view_seconds.is_finite() {
+        return view_seconds;
+    }
+
+    let mut regions = song.regions.iter().collect::<Vec<_>>();
+    regions.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Walk regions in source-order, tracking how many "view seconds" we've
+    // consumed so far. Each region contributes either an unstretched span
+    // (ratio == 1) or a stretched span of `source_len / ratio` view seconds.
+    // The first region whose view-span contains `view_seconds` is where the
+    // click landed; we map the local offset back through the same ratio.
+    let mut consumed_view = 0.0_f64;
+    let mut last_source_end = 0.0_f64;
+    for region in regions {
+        if region.end_seconds <= region.start_seconds {
+            continue;
+        }
+        // Gap before this region (ratio = 1).
+        let gap_source = (region.start_seconds - last_source_end).max(0.0);
+        if view_seconds < consumed_view + gap_source {
+            return (last_source_end + (view_seconds - consumed_view)).max(0.0);
+        }
+        consumed_view += gap_source;
+
+        let ratio = if region.warp_enabled {
+            region_warp_ratio_in_song(region, song)
+        } else if region.transpose_semitones != 0 {
+            semitones_to_pitch_scale(region.transpose_semitones)
+        } else {
+            1.0
+        };
+        let effective_ratio = if ratio.is_finite() && ratio > 0.0 {
+            ratio
+        } else {
+            1.0
+        };
+
+        let source_len = region.end_seconds - region.start_seconds;
+        let view_len = source_len / effective_ratio;
+        if view_seconds < consumed_view + view_len {
+            let local_view = view_seconds - consumed_view;
+            return (region.start_seconds + local_view * effective_ratio).max(0.0);
+        }
+        consumed_view += view_len;
+        last_source_end = region.end_seconds;
+    }
+
+    // Past every region: trailing tail is ratio = 1.
+    (last_source_end + (view_seconds - consumed_view)).max(0.0)
+}
+
 pub fn warp_timeline_duration_seconds(
     song: &Song,
     start_seconds: f64,
@@ -110,6 +196,44 @@ pub fn warp_timeline_duration_seconds(
     let start = warp_timeline_seconds_at(song, start_seconds);
     let end = warp_timeline_seconds_at(song, start_seconds + duration_seconds);
     (end - start).max(0.0)
+}
+
+/// Frequency scale `2^(semitones/12)` clamped to a finite positive value.
+fn semitones_to_pitch_scale(semitones: i32) -> f64 {
+    let scale = 2.0_f64.powf(semitones as f64 / 12.0);
+    if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    }
+}
+
+/// Audible duration of a clip in the rendered timeline.
+///
+/// Ableton-style rules (matching the engine's `PitchRenderDecision`):
+///   - Warp ON over the clip's start → duration shrunk/expanded by warp ratio
+///     (pitch preserved, duration set by warp). `track_transpose_enabled=false`
+///     tracks still follow warp's time-stretch but Bungee suppresses pitch,
+///     so duration matches the rest of the song.
+///   - Warp OFF, region pitch != 0 → varispeed: duration = source /
+///     pitch_scale. `track_transpose_enabled` is intentionally ignored here:
+///     since pitch *is* speed under varispeed, opting out would desync the
+///     track. Tracks that need to stay at original pitch under varispeed
+///     would also be desynced visually, so they don't have that option.
+///
+/// In short: the timeline mapping (`warp_timeline_*`) is the source of truth
+/// for every track. `track_transpose_enabled` only changes the audible pitch
+/// in cases where it doesn't affect duration (i.e., under warp).
+pub fn audible_clip_duration_seconds(
+    song: &Song,
+    clip_start_seconds: f64,
+    clip_duration_seconds: f64,
+    _track_transpose_enabled: bool,
+) -> f64 {
+    if !clip_duration_seconds.is_finite() || clip_duration_seconds <= 0.0 {
+        return 0.0;
+    }
+    warp_timeline_duration_seconds(song, clip_start_seconds, clip_duration_seconds)
 }
 
 #[cfg(test)]
@@ -279,6 +403,137 @@ mod tests {
         assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
         assert!((warp_timeline_seconds_at(&s, 70.0) - 60.0).abs() < 1e-9);
         assert!((warp_timeline_seconds_at(&s, 80.0) - 70.0).abs() < 1e-9);
+    }
+
+    fn varispeed_song_with_region(
+        region_pitch: i32,
+        warp_enabled: bool,
+        warp_source_bpm: Option<f64>,
+    ) -> Song {
+        let mut s = song(120.0, vec![]);
+        s.regions.push(SongRegion {
+            id: "r1".into(),
+            name: "r1".into(),
+            start_seconds: 0.0,
+            end_seconds: 60.0,
+            transpose_semitones: region_pitch,
+            warp_enabled,
+            warp_source_bpm,
+        });
+        s
+    }
+
+    #[test]
+    fn audible_duration_unchanged_when_no_pitch_and_no_warp() {
+        let s = varispeed_song_with_region(0, false, None);
+        let d = audible_clip_duration_seconds(&s, 0.0, 10.0, true);
+        assert!((d - 10.0).abs() < 1e-9, "got {d}");
+    }
+
+    #[test]
+    fn audible_duration_halves_for_plus_12_semitones_when_track_allows_transpose() {
+        let s = varispeed_song_with_region(12, false, None);
+        let d = audible_clip_duration_seconds(&s, 0.0, 10.0, true);
+        assert!((d - 5.0).abs() < 1e-9, "got {d}");
+    }
+
+    #[test]
+    fn audible_duration_doubles_for_minus_12_semitones_when_track_allows_transpose() {
+        let s = varispeed_song_with_region(-12, false, None);
+        let d = audible_clip_duration_seconds(&s, 0.0, 10.0, true);
+        assert!((d - 20.0).abs() < 1e-9, "got {d}");
+    }
+
+    #[test]
+    fn audible_duration_under_varispeed_ignores_track_transpose_flag() {
+        // Opción 4: under no-warp, track_transpose_enabled is ignored so the
+        // track follows varispeed and stays aligned with the song grid.
+        // Both true/false produce the same duration.
+        let s = varispeed_song_with_region(12, false, None);
+        let d_enabled = audible_clip_duration_seconds(&s, 0.0, 10.0, true);
+        let d_disabled = audible_clip_duration_seconds(&s, 0.0, 10.0, false);
+        assert!((d_enabled - 5.0).abs() < 1e-9, "enabled got {d_enabled}");
+        assert!((d_disabled - 5.0).abs() < 1e-9, "disabled got {d_disabled}");
+    }
+
+    #[test]
+    fn audible_duration_under_warp_follows_warp_regardless_of_track_flag() {
+        // Under warp, both flag values follow warp ratio (Bungee absorbs
+        // pitch, but warp's time-stretch still applies — that's the whole
+        // point of letting NeverTranspose-style tracks coexist with warp).
+        let s = varispeed_song_with_region(12, true, Some(100.0));
+        let d_enabled = audible_clip_duration_seconds(&s, 0.0, 12.0, true);
+        let d_disabled = audible_clip_duration_seconds(&s, 0.0, 12.0, false);
+        assert!((d_enabled - 10.0).abs() < 1e-9, "enabled got {d_enabled}");
+        assert!(
+            (d_disabled - 10.0).abs() < 1e-9,
+            "disabled got {d_disabled}"
+        );
+    }
+
+    #[test]
+    fn source_seconds_at_view_is_inverse_of_warp_for_warp_region() {
+        let mut s = song(120.0, vec![]);
+        s.regions.push(SongRegion {
+            id: "r1".into(),
+            name: "r1".into(),
+            start_seconds: 10.0,
+            end_seconds: 70.0, // 60 source seconds
+            transpose_semitones: 0,
+            warp_enabled: true,
+            warp_source_bpm: Some(100.0), // ratio = 120/100 = 1.2 → view len 50s
+        });
+
+        // Before the region: identity.
+        assert!((source_seconds_at_view(&s, 5.0) - 5.0).abs() < 1e-9);
+        // Region start: identity (no shift yet).
+        assert!((source_seconds_at_view(&s, 10.0) - 10.0).abs() < 1e-9);
+        // Mid-region: view 35 = local view 25 → source = 10 + 25 * 1.2 = 40.
+        assert!((source_seconds_at_view(&s, 35.0) - 40.0).abs() < 1e-9);
+        // Region end (view 60 = source 70).
+        assert!((source_seconds_at_view(&s, 60.0) - 70.0).abs() < 1e-9);
+        // After the region: extra view seconds map 1:1.
+        assert!((source_seconds_at_view(&s, 70.0) - 80.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn source_seconds_at_view_is_inverse_of_warp_for_varispeed_region() {
+        let mut s = song(120.0, vec![]);
+        s.regions.push(SongRegion {
+            id: "r1".into(),
+            name: "r1".into(),
+            start_seconds: 10.0,
+            end_seconds: 20.0,       // 10 source seconds
+            transpose_semitones: 12, // pitch_scale = 2 → view len 5s
+            warp_enabled: false,
+            warp_source_bpm: None,
+        });
+
+        // Mid-region: view 12.5 = local view 2.5 → source = 10 + 2.5 * 2 = 15.
+        assert!((source_seconds_at_view(&s, 12.5) - 15.0).abs() < 1e-9);
+        // After region: view 15 = source 20 + (15 - 15) = 20.
+        assert!((source_seconds_at_view(&s, 15.0) - 20.0).abs() < 1e-9);
+        // Well after region: view 25 = source 30.
+        assert!((source_seconds_at_view(&s, 25.0) - 30.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn varispeed_region_shifts_marker_positions_after_it() {
+        // +12 semitones over [10, 20) halves the region's audible duration
+        // (5s instead of 10s). A marker at 30s should slide left by 5s.
+        let mut s = song(120.0, vec![]);
+        s.regions.push(SongRegion {
+            id: "r1".into(),
+            name: "r1".into(),
+            start_seconds: 10.0,
+            end_seconds: 20.0,
+            transpose_semitones: 12,
+            warp_enabled: false,
+            warp_source_bpm: None,
+        });
+        assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
+        assert!((warp_timeline_seconds_at(&s, 20.0) - 15.0).abs() < 1e-9);
+        assert!((warp_timeline_seconds_at(&s, 30.0) - 25.0).abs() < 1e-9);
     }
 
     #[test]

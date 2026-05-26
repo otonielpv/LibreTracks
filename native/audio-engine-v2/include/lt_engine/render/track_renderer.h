@@ -24,6 +24,10 @@ struct TrackRendererDiagnostics {
     // Non-zero means pitch/warp was needed but no voice existed — the clip
     // was silenced.
     std::uint64_t pitch_missing_stream_silence_count = 0;
+    // Per-path block counters. Incremented once per clip per render call.
+    std::uint64_t path_direct_count = 0;
+    std::uint64_t path_varispeed_count = 0;
+    std::uint64_t path_stretched_count = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -41,12 +45,14 @@ public:
     // into `out[0..num_out_channels-1]`, each buffer of length block_frames.
     // Accumulates into out (does not zero first).
     //
-    // Each clip is routed through one of two paths (decided per-block by
+    // Each clip is routed through one of three paths (decided per-block by
     // resolve_pitch_render_decision):
     //   - Direct:    read source as-is.
-    //   - Stretched: BungeeVoiceManager (single voice processes pitch and
-    //                warp in the same grain pipeline via render_block's
-    //                pitch_scale + time_ratio parameters).
+    //   - Varispeed: warp off + pitch != 0. Linear-interpolated resample;
+    //                changes pitch AND duration (no Bungee voice).
+    //   - Stretched: warp on. BungeeVoiceManager (single voice processes
+    //                pitch and warp in the same grain pipeline via
+    //                render_block's pitch_scale + time_ratio parameters).
     //
     // `track_is_silent` (default false): when true the renderer skips the
     // stretcher work and advances the voice's source cursor so its timeline
@@ -90,6 +96,12 @@ private:
     // scratch_l_/scratch_r_ starting at index 0 and returns how many were
     // actually written (== frames_to_read on success, 0 on miss).
     int render_path_direct(const ClipBlock& cb) noexcept;
+    // Varispeed: pitch != 0 with warp OFF. Reads `ceil(frames_to_read *
+    // pitch_scale)` source frames and linearly interpolates them down/up to
+    // the output. Source cursor is derived from the timeline position so the
+    // path is stateless across blocks.
+    int render_path_varispeed(const ClipBlock& cb,
+                              double           pitch_scale) noexcept;
     int render_path_stretched(const ClipBlock&     cb,
                                BungeeVoiceManager*  bungee_voices,
                                Semitones            effective_semitones,
@@ -123,6 +135,9 @@ private:
     static std::atomic<std::uint64_t> block_too_large_count_;
     static std::atomic<int> max_scratch_capacity_frames_;
     static std::atomic<std::uint64_t> pitch_missing_stream_silence_count_;
+    static std::atomic<std::uint64_t> path_direct_count_;
+    static std::atomic<std::uint64_t> path_varispeed_count_;
+    static std::atomic<std::uint64_t> path_stretched_count_;
 };
 
 } // namespace lt

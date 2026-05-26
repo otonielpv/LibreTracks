@@ -174,7 +174,9 @@ impl Engine {
             serde_json::from_str(&s).map_err(|e| EngineError::Serialization(e.to_string()))?;
         if !response.ok {
             return Err(EngineError::Internal(
-                response.error.unwrap_or_else(|| "source peaks unavailable".into()),
+                response
+                    .error
+                    .unwrap_or_else(|| "source peaks unavailable".into()),
             ));
         }
         Ok(SourcePeaks {

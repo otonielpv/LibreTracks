@@ -8,11 +8,13 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
+use libretracks_audio::{
+    AudioEngine, JumpTrigger, PendingMarkerJump, PlaybackState, TransitionType, VampMode,
+};
 use libretracks_core::{
-    region_warp_ratio_in_song, warp_timeline_duration_seconds, warp_timeline_seconds_at, Clip,
-    Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track, TrackKind,
-    MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
+    audible_clip_duration_seconds, effective_bpm_at, source_seconds_at_view,
+    warp_timeline_seconds_at, Clip, Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker,
+    Track, TrackKind, MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
 };
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary,
@@ -33,8 +35,9 @@ use crate::audio_engine::{jump_debug_logging_enabled, AudioController, PlaybackS
 use crate::error::DesktopError;
 use crate::midi::MidiManager;
 use crate::models::view::{
-    active_vamp_to_summary, empty_musical_position_summary, marker_to_summary,
-    musical_position_summary, pending_jump_to_summary, song_to_view, waveform_key_for_file_path,
+    active_vamp_to_summary, active_vamp_to_warped_summary, empty_musical_position_summary,
+    marker_to_warped_summary, musical_position_summary, pending_jump_to_summary,
+    pending_jump_to_warped_summary, song_to_view, waveform_key_for_file_path,
     waveform_summary_to_dto,
 };
 use crate::models::{
@@ -362,6 +365,71 @@ impl TransportClock {
             last_start_position_seconds: self.last_start_position_seconds,
             last_jump_position_seconds: self.last_jump_position_seconds,
         }
+    }
+}
+
+fn timeline_seconds_to_view(song: Option<&Song>, seconds: f64) -> f64 {
+    song.map(|song| warp_timeline_seconds_at(song, seconds))
+        .unwrap_or(seconds)
+}
+
+fn optional_timeline_seconds_to_view(song: Option<&Song>, seconds: Option<f64>) -> Option<f64> {
+    seconds.map(|seconds| timeline_seconds_to_view(song, seconds))
+}
+
+fn transport_clock_summary_to_view(
+    song: Option<&Song>,
+    summary: TransportClockSummary,
+) -> TransportClockSummary {
+    TransportClockSummary {
+        anchor_position_seconds: timeline_seconds_to_view(song, summary.anchor_position_seconds),
+        running: summary.running,
+        last_seek_position_seconds: optional_timeline_seconds_to_view(
+            song,
+            summary.last_seek_position_seconds,
+        ),
+        last_start_position_seconds: optional_timeline_seconds_to_view(
+            song,
+            summary.last_start_position_seconds,
+        ),
+        last_jump_position_seconds: optional_timeline_seconds_to_view(
+            song,
+            summary.last_jump_position_seconds,
+        ),
+    }
+}
+
+fn transport_drift_summary_to_view(
+    song: Option<&Song>,
+    sample: TransportDriftSummary,
+) -> TransportDriftSummary {
+    let transport_position_seconds =
+        timeline_seconds_to_view(song, sample.transport_position_seconds);
+    let engine_position_seconds = timeline_seconds_to_view(song, sample.engine_position_seconds);
+    let runtime_estimated_position_seconds = sample.runtime_estimated_position_seconds;
+    let transport_minus_engine_seconds = transport_position_seconds - engine_position_seconds;
+    let runtime_minus_transport_seconds = runtime_estimated_position_seconds
+        .map(|runtime_position| runtime_position - transport_position_seconds);
+    let runtime_minus_engine_seconds = runtime_estimated_position_seconds
+        .map(|runtime_position| runtime_position - engine_position_seconds);
+    let mut max_observed_delta_seconds = transport_minus_engine_seconds.abs();
+    if let Some(delta) = runtime_minus_transport_seconds {
+        max_observed_delta_seconds = max_observed_delta_seconds.max(delta.abs());
+    }
+    if let Some(delta) = runtime_minus_engine_seconds {
+        max_observed_delta_seconds = max_observed_delta_seconds.max(delta.abs());
+    }
+
+    TransportDriftSummary {
+        event: sample.event,
+        transport_position_seconds,
+        engine_position_seconds,
+        runtime_estimated_position_seconds,
+        runtime_running: sample.runtime_running,
+        transport_minus_engine_seconds,
+        runtime_minus_transport_seconds,
+        runtime_minus_engine_seconds,
+        max_observed_delta_seconds,
     }
 }
 
@@ -1227,8 +1295,10 @@ impl DesktopSession {
             PlaybackStartReason::InitialPlay
         };
 
+        let runtime_position_seconds =
+            self.runtime_seconds_for_engine_position(self.engine.position_seconds());
         audio.prepare_song_buffers_async(song_dir.clone(), song.clone());
-        audio.play(song_dir, song, self.engine.position_seconds(), start_reason)?;
+        audio.play(song_dir, song, runtime_position_seconds, start_reason)?;
         self.engine.play()?;
         self.transport_clock
             .start_from(self.engine.position_seconds());
@@ -1268,6 +1338,15 @@ impl DesktopSession {
         position_seconds: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        // The frontend passes the playhead position in view-time. The engine
+        // operates in source-time, so map back before seeking (otherwise a
+        // click after a stretched region lands on a different stored sample
+        // than the user pointed at).
+        let position_seconds = self
+            .engine
+            .song()
+            .map(|song| source_seconds_at_view(song, position_seconds))
+            .unwrap_or(position_seconds);
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
         self.engine.seek(position_seconds)?;
         if was_playing {
@@ -1317,12 +1396,14 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
-        let transport_song = self
-            .transport_timeline_song()
+        let source_song = self
+            .engine
+            .song()
+            .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let scheduled_jump = self.engine.schedule_marker_jump_with_song(
-            &transport_song,
+            &source_song,
             target_marker_id,
             trigger.clone(),
             transition.clone(),
@@ -1361,21 +1442,7 @@ impl DesktopSession {
                     self.last_native_scheduled_jump_executed_count
                 );
                 }
-                let target_seconds = transport_song
-                    .marker_by_id(&pending_jump.target_marker_id)
-                    .map(|marker| marker.start_seconds);
-                let trigger_seconds = pending_jump.execute_at_seconds;
-                audio.schedule_jump_at_frame(
-                    &pending_jump.target_marker_id,
-                    NativeJumpTarget {
-                        kind: NativeJumpTargetKind::Marker,
-                        id: Some(target_marker_id.to_string()),
-                        frame: None,
-                    },
-                    trigger_seconds,
-                    target_seconds,
-                    true,
-                )?;
+                self.schedule_native_marker_jump(audio, &source_song, &pending_jump)?;
             } else {
                 audio.cancel_scheduled_jumps()?;
             }
@@ -1395,12 +1462,14 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
-        let transport_song = self
-            .transport_timeline_song()
+        let source_song = self
+            .engine
+            .song()
+            .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let scheduled_jump = self.engine.schedule_region_jump_with_song(
-            &transport_song,
+            &source_song,
             target_region_id,
             trigger.clone(),
             transition.clone(),
@@ -1466,22 +1535,7 @@ impl DesktopSession {
                         self.last_native_scheduled_jump_executed_count
                     );
                 }
-                let target_seconds = transport_song
-                    .regions
-                    .iter()
-                    .find(|region| region.id == pending_jump.target_marker_id)
-                    .map(|region| region.start_seconds);
-                audio.schedule_jump_at_frame(
-                    &pending_jump.target_marker_id,
-                    NativeJumpTarget {
-                        kind: NativeJumpTargetKind::Region,
-                        id: Some(target_region_id.to_string()),
-                        frame: None,
-                    },
-                    pending_jump.execute_at_seconds,
-                    target_seconds,
-                    matches!(pending_jump.transition, TransitionType::FadeOut { .. }),
-                )?;
+                self.schedule_native_region_jump(audio, &source_song, &pending_jump)?;
             } else {
                 audio.cancel_scheduled_jumps()?;
             }
@@ -1514,6 +1568,128 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    fn schedule_native_marker_jump(
+        &self,
+        audio: &AudioController,
+        source_song: &Song,
+        pending_jump: &PendingMarkerJump,
+    ) -> Result<(), DesktopError> {
+        let target_seconds = source_song
+            .marker_by_id(&pending_jump.target_marker_id)
+            .map(|marker| warp_timeline_seconds_at(source_song, marker.start_seconds));
+        let trigger_seconds =
+            warp_timeline_seconds_at(source_song, pending_jump.execute_at_seconds);
+        if jump_debug_logging_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][state] native_marker_schedule target={} source_execute={:.9} view_execute={:.9} view_target={:?}",
+                pending_jump.target_marker_id,
+                pending_jump.execute_at_seconds,
+                trigger_seconds,
+                target_seconds
+            );
+        }
+        audio.schedule_jump_at_frame(
+            &pending_jump.target_marker_id,
+            NativeJumpTarget {
+                kind: NativeJumpTargetKind::Marker,
+                id: Some(pending_jump.target_marker_id.clone()),
+                frame: None,
+            },
+            trigger_seconds,
+            target_seconds,
+            true,
+        )
+    }
+
+    fn schedule_native_region_jump(
+        &self,
+        audio: &AudioController,
+        source_song: &Song,
+        pending_jump: &PendingMarkerJump,
+    ) -> Result<(), DesktopError> {
+        if pending_jump.trigger == JumpTrigger::RegionEnd {
+            return audio.schedule_region_end_jump(
+                &pending_jump.target_marker_id,
+                &pending_jump.target_marker_id,
+                matches!(pending_jump.transition, TransitionType::FadeOut { .. }),
+            );
+        }
+
+        let target_seconds = source_song
+            .regions
+            .iter()
+            .find(|region| region.id == pending_jump.target_marker_id)
+            .map(|region| warp_timeline_seconds_at(source_song, region.start_seconds));
+        let trigger_seconds =
+            warp_timeline_seconds_at(source_song, pending_jump.execute_at_seconds);
+        if jump_debug_logging_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][state] native_region_schedule target={} source_execute={:.9} view_execute={:.9} view_target={:?}",
+                pending_jump.target_marker_id,
+                pending_jump.execute_at_seconds,
+                trigger_seconds,
+                target_seconds
+            );
+        }
+        audio.schedule_jump_at_frame(
+            &pending_jump.target_marker_id,
+            NativeJumpTarget {
+                kind: NativeJumpTargetKind::Region,
+                id: Some(pending_jump.target_marker_id.clone()),
+                frame: None,
+            },
+            trigger_seconds,
+            target_seconds,
+            matches!(pending_jump.transition, TransitionType::FadeOut { .. }),
+        )
+    }
+
+    fn reschedule_pending_jump_after_song_update(
+        &mut self,
+        audio: &AudioController,
+        source_song: &Song,
+        pending_jump: PendingMarkerJump,
+    ) -> Result<(), DesktopError> {
+        if source_song
+            .marker_by_id(&pending_jump.target_marker_id)
+            .is_some()
+        {
+            let scheduled = self.engine.schedule_marker_jump_with_song(
+                source_song,
+                &pending_jump.target_marker_id,
+                pending_jump.trigger,
+                pending_jump.transition,
+            )?;
+            if let Some(next_pending) = scheduled.as_ref() {
+                self.schedule_native_marker_jump(audio, source_song, next_pending)?;
+            } else {
+                audio.cancel_scheduled_jumps()?;
+            }
+            return Ok(());
+        }
+
+        if source_song
+            .regions
+            .iter()
+            .any(|region| region.id == pending_jump.target_marker_id)
+        {
+            let scheduled = self.engine.schedule_region_jump_with_song(
+                source_song,
+                &pending_jump.target_marker_id,
+                pending_jump.trigger,
+                pending_jump.transition,
+            )?;
+            if let Some(next_pending) = scheduled.as_ref() {
+                self.schedule_native_region_jump(audio, source_song, next_pending)?;
+            } else {
+                audio.cancel_scheduled_jumps()?;
+            }
+            return Ok(());
+        }
+
+        audio.cancel_scheduled_jumps()
+    }
+
     pub fn move_clip(
         &mut self,
         clip_id: &str,
@@ -1525,6 +1701,8 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        // View-time → source-time conversion, see create_section_marker.
+        let timeline_start_seconds = source_seconds_at_view(&song, timeline_start_seconds);
         let clip = song
             .clips
             .iter_mut()
@@ -1553,6 +1731,8 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        // View-time → source-time conversion, see create_section_marker.
+        let timeline_start_seconds = source_seconds_at_view(&song, timeline_start_seconds);
         let clip = song
             .clips
             .iter_mut()
@@ -1747,8 +1927,12 @@ impl DesktopSession {
         for (index, (source_clip, timeline_start_seconds)) in source_clips.into_iter().enumerate() {
             let mut duplicated_clip = source_clip;
             duplicated_clip.id = format!("clip_{timestamp}_{index}");
-            duplicated_clip.timeline_start_seconds =
-                normalize_timeline_start_seconds(timeline_start_seconds);
+            // View → source first (warp-aware mapping), then normalize so the
+            // duplicated clip never lands at a negative timeline position.
+            // Mirrors the pattern used by paste_clips and create_section_marker.
+            duplicated_clip.timeline_start_seconds = normalize_timeline_start_seconds(
+                source_seconds_at_view(&song, timeline_start_seconds),
+            );
             song.clips.push(duplicated_clip);
         }
         refresh_song_duration(&mut song);
@@ -1768,7 +1952,12 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let start_seconds = start_seconds.max(0.0);
+        // The frontend hands us a click in view-time (the rendered timeline,
+        // after warp/varispeed). Markers/regions/clips are stored in
+        // source-time, so we have to undo the timeline mapping or the marker
+        // will land at the wrong stored offset inside or after a
+        // stretched region.
+        let start_seconds = source_seconds_at_view(&song, start_seconds).max(0.0);
         let marker_name = song.next_marker_name();
         song.section_markers.push(Marker {
             id: format!("section_{}", timestamp_suffix()),
@@ -1807,7 +1996,8 @@ impl DesktopSession {
             ));
         }
 
-        let start_seconds = start_seconds.max(0.0);
+        // View → source: see comment in create_section_marker.
+        let start_seconds = source_seconds_at_view(&song, start_seconds).max(0.0);
 
         let section = song
             .section_markers
@@ -1864,6 +2054,9 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        // View-time → source-time conversion, see create_section_marker.
+        let start_seconds = source_seconds_at_view(&song, start_seconds);
+        let end_seconds = source_seconds_at_view(&song, end_seconds);
         let (start_seconds, end_seconds) =
             sanitize_region_bounds(&song, start_seconds, end_seconds)?;
         let region_index = song.regions.len();
@@ -1920,6 +2113,9 @@ impl DesktopSession {
             .find(|region| region.id == region_id)
             .cloned()
             .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        // View-time → source-time conversion, see create_section_marker.
+        let start_seconds = source_seconds_at_view(&song, start_seconds);
+        let end_seconds = source_seconds_at_view(&song, end_seconds);
         let (start_seconds, end_seconds) =
             sanitize_region_bounds(&song, start_seconds, end_seconds)?;
         let updated_region = SongRegion {
@@ -1987,21 +2183,37 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let region = song
-            .regions
-            .iter_mut()
-            .find(|region| region.id == region_id)
-            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        let (live_warp_source_bpm, restore_tempo_on_disable) = {
+            let region = song
+                .regions
+                .iter_mut()
+                .find(|region| region.id == region_id)
+                .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
 
-        region.warp_enabled = warp_enabled;
-        if warp_source_bpm.is_some() {
-            region.warp_source_bpm = warp_source_bpm;
+            region.warp_enabled = warp_enabled;
+            if warp_source_bpm.is_some() {
+                region.warp_source_bpm = warp_source_bpm;
+            }
+
+            let restore_tempo_on_disable = if warp_enabled {
+                None
+            } else {
+                region
+                    .warp_source_bpm
+                    .map(|source_bpm| (region.start_seconds, source_bpm))
+            };
+
+            (region.warp_source_bpm, restore_tempo_on_disable)
+        };
+
+        if let Some((region_start_seconds, source_bpm)) = restore_tempo_on_disable {
+            set_song_tempo_at_source_position(&mut song, region_start_seconds, source_bpm);
         }
 
         // Push the realtime command first so the engine swaps in the new ratio
         // on the next audio block. Persist as a timeline change because warp
         // also remaps clip/region lengths in the runtime timeline.
-        audio.update_live_region_warp(region_id, warp_enabled, region.warp_source_bpm)?;
+        audio.update_live_region_warp(region_id, warp_enabled, live_warp_source_bpm)?;
         self.persist_song_update_internal(
             song,
             audio,
@@ -2040,20 +2252,35 @@ impl DesktopSession {
         let record_history =
             self.should_record_transpose_history(TransposeHistoryTarget::Region(region.id.clone()));
 
+        let changes_timeline = !region.warp_enabled;
         region.transpose_semitones = transpose_semitones;
-        audio.update_live_song_regions(&song)?;
-
-        // Send the realtime command first — C++ does the session clone + pitch rebuild
-        // internally via CmdSetRegionTranspose. MixerOnly then updates the Rust model
-        // without triggering a redundant LoadSession on top.
-        audio.update_live_region_transpose(region_id, transpose_semitones)?;
-        self.persist_song_update_internal(
-            song,
-            audio,
-            AudioChangeImpact::MixerOnly,
-            record_history,
-            true,
-        )?;
+        if jump_debug_logging_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][state] region_transpose region={region_id} semitones={transpose_semitones} changes_timeline={changes_timeline}"
+            );
+        }
+        if changes_timeline {
+            // Warp off means pitch is varispeed: changing semitones changes
+            // the rendered timeline length, so clips, regions and markers
+            // must all be resent in runtime/view time.
+            self.persist_song_update_internal(
+                song,
+                audio,
+                AudioChangeImpact::TimelineWindow,
+                record_history,
+                true,
+            )?;
+        } else {
+            // Warp absorbs duration, so region transpose is pitch-only.
+            audio.update_live_region_transpose(region_id, transpose_semitones)?;
+            self.persist_song_update_internal(
+                song,
+                audio,
+                AudioChangeImpact::MixerOnly,
+                record_history,
+                true,
+            )?;
+        }
         self.last_runtime_pitch = Some(audio.pitch_prepare_summary());
 
         Ok(self.snapshot())
@@ -2199,7 +2426,8 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let clamped_start_seconds = start_seconds.max(0.0);
+        // View-time → source-time conversion, see create_section_marker.
+        let clamped_start_seconds = source_seconds_at_view(&song, start_seconds).max(0.0);
 
         if clamped_start_seconds <= 0.0001 {
             song.bpm = bpm;
@@ -2291,7 +2519,8 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let clamped_start_seconds = start_seconds.max(0.0);
+        // View-time → source-time conversion, see create_section_marker.
+        let clamped_start_seconds = source_seconds_at_view(&song, start_seconds).max(0.0);
 
         if clamped_start_seconds <= 0.0001 {
             song.time_signature = signature.to_string();
@@ -2381,7 +2610,9 @@ impl DesktopSession {
         self.prime_waveform_cache(&song_dir, &loaded_song)?;
         audio.wait_until_sources_ready(Duration::from_secs(120))?;
         self.ensure_project_waveforms_ready(&song_dir, &loaded_song, audio)?;
-        audio.prepare_playback_at(loaded_song, self.current_position())?;
+        let runtime_position_seconds =
+            self.runtime_seconds_for_engine_position(self.current_position());
+        audio.prepare_playback_at(loaded_song, runtime_position_seconds)?;
         Ok(SongPackageImportResponse {
             snapshot: self.snapshot(),
             library_assets,
@@ -2522,7 +2753,19 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
-        for request in requests {
+        // Each request carries `timeline_start_seconds` in view-time (the
+        // user dragged the clip to a visible point on the timeline). Convert
+        // to source-time before append so warp/varispeed regions don't shift
+        // the clip away from where the user dropped it.
+        let mapped_requests: Vec<CreateClipRequest> = requests
+            .iter()
+            .map(|req| CreateClipRequest {
+                track_id: req.track_id.clone(),
+                file_path: req.file_path.clone(),
+                timeline_start_seconds: source_seconds_at_view(&song, req.timeline_start_seconds),
+            })
+            .collect();
+        for request in &mapped_requests {
             append_clip_to_song(&mut song, &song_dir, request)?;
         }
         refresh_song_duration(&mut song);
@@ -2686,6 +2929,8 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        // View-time → source-time conversion, see create_section_marker.
+        let split_seconds = source_seconds_at_view(&song, split_seconds);
         let clip_index = song
             .clips
             .iter()
@@ -2904,7 +3149,9 @@ impl DesktopSession {
                         disk_cache_mb,
                     );
                     self.ensure_project_waveforms_ready(&song_dir, &song, audio)?;
-                    audio.prepare_playback_at(song.clone(), self.current_position())?;
+                    let runtime_position_seconds =
+                        self.runtime_seconds_for_engine_position(self.current_position());
+                    audio.prepare_playback_at(song.clone(), runtime_position_seconds)?;
                     emit_project_load_progress(
                         app,
                         92,
@@ -3096,18 +3343,7 @@ impl DesktopSession {
                     .song()
                     .cloned()
                     .ok_or(DesktopError::NoSongLoaded)?;
-                if loaded_song
-                    .marker_by_id(&pending_jump.target_marker_id)
-                    .is_some()
-                {
-                    if position_seconds < pending_jump.execute_at_seconds {
-                        self.engine.schedule_marker_jump(
-                            &pending_jump.target_marker_id,
-                            pending_jump.trigger,
-                            pending_jump.transition,
-                        )?;
-                    }
-                }
+                self.reschedule_pending_jump_after_song_update(audio, &loaded_song, pending_jump)?;
             }
             return Ok(());
         }
@@ -3160,27 +3396,17 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         if let Some(pending_jump) = pending_jump {
-            if loaded_song
-                .marker_by_id(&pending_jump.target_marker_id)
-                .is_some()
-            {
-                if restored_position < pending_jump.execute_at_seconds {
-                    self.engine.schedule_marker_jump(
-                        &pending_jump.target_marker_id,
-                        pending_jump.trigger,
-                        pending_jump.transition,
-                    )?;
-                }
-            }
+            self.reschedule_pending_jump_after_song_update(audio, &loaded_song, pending_jump)?;
         }
 
         match playback_state {
             PlaybackState::Playing => {
                 self.engine.play()?;
                 match impact {
-                    AudioChangeImpact::MixerOnly
-                    | AudioChangeImpact::TransportOnly
-                    | AudioChangeImpact::TimelineWindow => {}
+                    AudioChangeImpact::MixerOnly | AudioChangeImpact::TransportOnly => {}
+                    AudioChangeImpact::TimelineWindow => {
+                        self.reposition_audio(audio, PlaybackStartReason::TransportResync)?
+                    }
                     AudioChangeImpact::StructureRebuild => {
                         self.restart_audio(audio, PlaybackStartReason::StructureRebuild)?
                     }
@@ -3359,17 +3585,12 @@ impl DesktopSession {
             .current_position(self.engine.playback_state())
     }
 
-    fn transport_timeline_song(&self) -> Option<Song> {
-        self.engine
-            .song()
-            .map(song_with_warped_timeline_for_transport)
-    }
-
     fn runtime_transport_position(&self, audio: &AudioController) -> Option<(f64, bool)> {
         if self.engine.playback_state() != PlaybackState::Playing {
             return None;
         }
 
+        let source_song = self.engine.song()?;
         let snapshot = audio.engine_snapshot().ok()?;
         if !matches!(
             snapshot.playback_state,
@@ -3379,9 +3600,16 @@ impl DesktopSession {
         }
 
         Some((
-            snapshot.current_seconds.max(0.0),
+            source_seconds_at_view(source_song, snapshot.current_seconds.max(0.0)),
             !snapshot.transport_pending_start,
         ))
+    }
+
+    fn runtime_seconds_for_engine_position(&self, position_seconds: f64) -> f64 {
+        self.engine
+            .song()
+            .map(|song| warp_timeline_seconds_at(song, position_seconds))
+            .unwrap_or(position_seconds)
     }
 
     fn sync_position(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
@@ -3393,6 +3621,16 @@ impl DesktopSession {
             return Ok(());
         }
 
+        if let Some((runtime_source_position, _running)) = self.runtime_transport_position(audio) {
+            self.engine
+                .sync_position_preserving_transport_state(runtime_source_position)?;
+            self.transport_clock
+                .reanchor_playing(runtime_source_position);
+            if self.engine.pending_marker_jump().is_some() {
+                return Ok(());
+            }
+        }
+
         let elapsed = self.transport_clock.elapsed_since_anchor();
         let previous_position = self.engine.position_seconds();
         let wrapped_by_vamp = self
@@ -3400,12 +3638,14 @@ impl DesktopSession {
             .active_vamp()
             .map(|active_vamp| previous_position + elapsed >= active_vamp.end_seconds)
             .unwrap_or(false);
-        let transport_song = self
-            .transport_timeline_song()
+        let source_song = self
+            .engine
+            .song()
+            .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         let (advanced_position, jump_executed) = self
             .engine
-            .advance_transport_with_song(&transport_song, elapsed)?;
+            .advance_transport_with_song(&source_song, elapsed)?;
 
         if let Some(duration_seconds) = self.engine.take_pending_fade_out_request() {
             audio.start_master_fade(0.0, duration_seconds)?;
@@ -3421,7 +3661,7 @@ impl DesktopSession {
             {
                 if let Some(target_position) = self
                     .engine
-                    .complete_pending_fade_jump_with_song(&transport_song)?
+                    .complete_pending_fade_jump_with_song(&source_song)?
                 {
                     self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
                     audio.start_master_fade(1.0, duration_seconds)?;
@@ -3492,12 +3732,14 @@ impl DesktopSession {
             TransitionType::FadeOut { duration_seconds } => Some(duration_seconds),
         };
 
-        let transport_song = self
-            .transport_timeline_song()
+        let source_song = self
+            .engine
+            .song()
+            .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         let Some(target_position) = self
             .engine
-            .complete_pending_native_jump_with_song(&transport_song)?
+            .complete_pending_native_jump_with_song(&source_song)?
         else {
             if jump_debug_logging_enabled() {
                 eprintln!(
@@ -3517,9 +3759,18 @@ impl DesktopSession {
         if let Some(duration_seconds) = fade_in_duration_seconds {
             audio.start_master_fade(1.0, duration_seconds)?;
         }
+        let runtime_source_position =
+            source_seconds_at_view(&source_song, snapshot.current_seconds.max(0.0));
+        self.engine
+            .sync_position_preserving_transport_state(runtime_source_position)?;
         self.transport_clock
-            .note_jump_while_playing(target_position);
-        self.capture_transport_drift_sample(audio, "native_jump", target_position, target_position);
+            .note_jump_while_playing(runtime_source_position);
+        self.capture_transport_drift_sample(
+            audio,
+            "native_jump",
+            runtime_source_position,
+            runtime_source_position,
+        );
         Ok(true)
     }
 
@@ -3577,7 +3828,8 @@ impl DesktopSession {
         runtime_transport: Option<(f64, bool)>,
     ) -> TransportSnapshot {
         let started_at = Instant::now();
-        let position_seconds = runtime_transport
+        let source_song = self.engine.song().cloned();
+        let raw_position_seconds = runtime_transport
             .map(|(position_seconds, _)| position_seconds)
             .unwrap_or_else(|| self.current_position());
         let mut transport_clock = self.transport_clock.summary();
@@ -3585,27 +3837,41 @@ impl DesktopSession {
             transport_clock.anchor_position_seconds = position_seconds;
             transport_clock.running = running;
         }
-        let transport_song = self.transport_timeline_song();
+        let position_seconds = timeline_seconds_to_view(source_song.as_ref(), raw_position_seconds);
+        let transport_clock =
+            transport_clock_summary_to_view(source_song.as_ref(), transport_clock);
+        let transport_song = source_song
+            .as_ref()
+            .map(song_with_warped_timeline_for_transport);
         let snapshot = TransportSnapshot {
             playback_state: playback_state_label(self.engine.playback_state()).to_string(),
             position_seconds,
-            current_marker: transport_song
-                .as_ref()
-                .and_then(|song| song.marker_at(position_seconds))
-                .map(|marker| marker_to_summary(&marker)),
-            pending_marker_jump: self
-                .engine
-                .pending_marker_jump()
-                .map(pending_jump_to_summary),
-            active_vamp: self.engine.active_vamp().map(active_vamp_to_summary),
-            musical_position: self
-                .transport_timeline_song()
+            current_marker: source_song.as_ref().and_then(|song| {
+                song.marker_at(raw_position_seconds)
+                    .map(|marker| marker_to_warped_summary(song, &marker))
+            }),
+            pending_marker_jump: self.engine.pending_marker_jump().map(|pending_jump| {
+                source_song
+                    .as_ref()
+                    .map(|song| pending_jump_to_warped_summary(song, pending_jump))
+                    .unwrap_or_else(|| pending_jump_to_summary(pending_jump))
+            }),
+            active_vamp: self.engine.active_vamp().map(|active_vamp| {
+                source_song
+                    .as_ref()
+                    .map(|song| active_vamp_to_warped_summary(song, active_vamp))
+                    .unwrap_or_else(|| active_vamp_to_summary(active_vamp))
+            }),
+            musical_position: transport_song
                 .as_ref()
                 .map(|song| musical_position_summary(song, position_seconds))
                 .unwrap_or_else(empty_musical_position_summary),
             transport_clock,
             pitch: self.last_runtime_pitch.clone().unwrap_or_default(),
-            last_drift_sample: self.last_drift_sample.clone(),
+            last_drift_sample: self
+                .last_drift_sample
+                .clone()
+                .map(|sample| transport_drift_summary_to_view(source_song.as_ref(), sample)),
             project_revision: self.project_revision,
             song_dir: self
                 .song_dir
@@ -3837,7 +4103,9 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        audio.seek(song, self.engine.position_seconds(), reason)?;
+        let runtime_position_seconds =
+            self.runtime_seconds_for_engine_position(self.engine.position_seconds());
+        audio.seek(song, runtime_position_seconds, reason)?;
         Ok(())
     }
 
@@ -3853,7 +4121,9 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         audio.replace_song_buffers(&song_dir, &song, "restart_audio")?;
-        audio.play(song_dir, song, self.engine.position_seconds(), reason)?;
+        let runtime_position_seconds =
+            self.runtime_seconds_for_engine_position(self.engine.position_seconds());
+        audio.play(song_dir, song, runtime_position_seconds, reason)?;
         Ok(())
     }
 }
@@ -4511,6 +4781,32 @@ fn timestamp_suffix() -> u128 {
         .unwrap_or(0)
 }
 
+fn set_song_tempo_at_source_position(song: &mut Song, start_seconds: f64, bpm: f64) {
+    if start_seconds <= 0.0001 {
+        song.bpm = bpm;
+        return;
+    }
+
+    if let Some(existing_marker) = song
+        .tempo_markers
+        .iter_mut()
+        .find(|marker| (marker.start_seconds - start_seconds).abs() < 0.0001)
+    {
+        existing_marker.bpm = bpm;
+    } else {
+        song.tempo_markers.push(TempoMarker {
+            id: format!("tempo_marker_{}", timestamp_suffix()),
+            start_seconds,
+            bpm,
+        });
+        song.tempo_markers.sort_by(|left, right| {
+            left.start_seconds
+                .partial_cmp(&right.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
+}
+
 fn validate_time_signature(signature: &str) -> Result<(), DesktopError> {
     let (numerator, denominator) = signature
         .split_once('/')
@@ -4857,13 +5153,30 @@ fn song_with_warped_timeline_for_transport(song: &Song) -> Song {
     let source_song = song.clone();
     let mut runtime = song.clone();
 
+    // Build a track_id -> transpose_enabled lookup so the per-clip varispeed
+    // path can read the right flag without scanning runtime.tracks N times.
+    let track_transpose_enabled: std::collections::HashMap<&str, bool> = source_song
+        .tracks
+        .iter()
+        .map(|track| (track.id.as_str(), track.transpose_enabled))
+        .collect();
+
     for clip in &mut runtime.clips {
         let source_start_seconds = clip.timeline_start_seconds;
+        let transpose_enabled = track_transpose_enabled
+            .get(clip.track_id.as_str())
+            .copied()
+            .unwrap_or(true);
+        // Ableton-style: warp-on clips follow warp; warp-off pitched clips
+        // shrink/expand by pitch_scale (varispeed). Clip START always uses
+        // the warp mapping so the musical grid stays consistent; only the
+        // clip's own duration absorbs varispeed.
         clip.timeline_start_seconds = warp_timeline_seconds_at(&source_song, source_start_seconds);
-        clip.duration_seconds = warp_timeline_duration_seconds(
+        clip.duration_seconds = audible_clip_duration_seconds(
             &source_song,
             source_start_seconds,
             clip.duration_seconds,
+            transpose_enabled,
         );
     }
 
@@ -4879,7 +5192,11 @@ fn song_with_warped_timeline_for_transport(song: &Song) -> Song {
         marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
     }
     for marker in &mut runtime.tempo_markers {
+        let source_start_seconds = marker.start_seconds;
         marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
+        if let Some(scale) = varispeed_scale_at_source_second(&source_song, source_start_seconds) {
+            marker.bpm *= scale;
+        }
     }
     for marker in &mut runtime.time_signature_markers {
         marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
@@ -4894,7 +5211,61 @@ fn song_with_warped_timeline_for_transport(song: &Song) -> Song {
             f64::max,
         )
         .max(1.0);
+    add_varispeed_tempo_boundaries(&source_song, &mut runtime);
     runtime
+}
+
+fn semitones_to_pitch_scale(semitones: i32) -> f64 {
+    let scale = 2.0_f64.powf(semitones as f64 / 12.0);
+    if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    }
+}
+
+fn varispeed_scale_at_source_second(song: &Song, source_seconds: f64) -> Option<f64> {
+    song.regions.iter().find_map(|region| {
+        if region.warp_enabled
+            || region.transpose_semitones == 0
+            || source_seconds < region.start_seconds
+            || source_seconds >= region.end_seconds
+        {
+            return None;
+        }
+        Some(semitones_to_pitch_scale(region.transpose_semitones))
+    })
+}
+
+fn add_varispeed_tempo_boundaries(source_song: &Song, runtime: &mut Song) {
+    let mut synthetic_markers = Vec::new();
+    for region in &source_song.regions {
+        if region.warp_enabled || region.transpose_semitones == 0 {
+            continue;
+        }
+        let scale = semitones_to_pitch_scale(region.transpose_semitones);
+        if (scale - 1.0).abs() < f64::EPSILON {
+            continue;
+        }
+        let view_start = warp_timeline_seconds_at(source_song, region.start_seconds);
+        let view_end = warp_timeline_seconds_at(source_song, region.end_seconds).max(view_start);
+        synthetic_markers.push(TempoMarker {
+            id: format!("{}_varispeed_start", region.id),
+            start_seconds: view_start,
+            bpm: effective_bpm_at(source_song, region.start_seconds) * scale,
+        });
+        synthetic_markers.push(TempoMarker {
+            id: format!("{}_varispeed_end", region.id),
+            start_seconds: view_end,
+            bpm: effective_bpm_at(source_song, region.end_seconds),
+        });
+    }
+    runtime.tempo_markers.extend(synthetic_markers);
+    runtime.tempo_markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 }
 
 fn song_has_active_warp(song: &Song) -> bool {
@@ -4903,7 +5274,6 @@ fn song_has_active_warp(song: &Song) -> bool {
             && region
                 .warp_source_bpm
                 .is_some_and(|bpm| bpm.is_finite() && bpm > 0.0)
-            && (region_warp_ratio_in_song(region, song) - 1.0).abs() > f64::EPSILON
     })
 }
 
@@ -5089,7 +5459,10 @@ mod tests {
     use std::{fs, path::Path, thread, time::Duration};
 
     use libretracks_audio::{JumpTrigger, PlaybackState, TransitionType};
-    use libretracks_core::{Clip, Marker, Song, SongRegion, TempoMarker, Track, TrackKind};
+    use libretracks_core::{
+        source_seconds_at_view, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion,
+        TempoMarker, Track, TrackKind,
+    };
     use libretracks_project::{
         create_song_folder, export_region_as_package, generate_waveform_summary, load_song,
         save_song, SONG_FILE_NAME,
@@ -5160,6 +5533,22 @@ mod tests {
             start_seconds: 1.0,
             digit: Some(1),
         });
+        song
+    }
+
+    fn demo_song_with_varispeed_region() -> Song {
+        let mut song = demo_song();
+        song.duration_seconds = 24.0;
+        song.regions = vec![SongRegion {
+            id: "region_varispeed".into(),
+            name: "Varispeed".into(),
+            start_seconds: 5.0,
+            end_seconds: 20.0,
+            transpose_semitones: 3,
+            warp_enabled: false,
+            warp_source_bpm: None,
+        }];
+        song.clips[0].duration_seconds = 24.0;
         song
     }
 
@@ -5508,6 +5897,102 @@ mod tests {
         assert_eq!(drift.transport_position_seconds, 2.75);
         assert_eq!(drift.engine_position_seconds, 2.75);
         assert_eq!(drift.transport_minus_engine_seconds, 0.0);
+    }
+
+    #[test]
+    fn snapshot_reports_seek_position_in_view_seconds_for_varispeed_region() {
+        let song = demo_song_with_varispeed_region();
+        let expected_source_seconds = source_seconds_at_view(&song, 10.0);
+        let mut session = DesktopSession::default();
+        session
+            .engine
+            .load_song(song)
+            .expect("song should load into engine");
+
+        let audio = crate::audio_engine::AudioController::default();
+        let snapshot = session.seek(10.0, &audio).expect("seek should succeed");
+
+        assert!(
+            (session.engine.position_seconds() - expected_source_seconds).abs() < 1e-9,
+            "engine should seek source-time"
+        );
+        assert!(
+            (snapshot.position_seconds - 10.0).abs() < 1e-9,
+            "snapshot should report view-time"
+        );
+        assert!(
+            (snapshot.transport_clock.anchor_position_seconds - 10.0).abs() < 1e-9,
+            "transport clock anchor should report view-time"
+        );
+        assert!(
+            (snapshot
+                .transport_clock
+                .last_seek_position_seconds
+                .expect("seek anchor should be recorded")
+                - 10.0)
+                .abs()
+                < 1e-9
+        );
+    }
+
+    #[test]
+    fn scheduled_jump_snapshot_reports_execute_time_in_view_seconds_for_varispeed_region() {
+        let mut song = demo_song_with_varispeed_region();
+        song.section_markers.push(Marker {
+            id: "section_target".into(),
+            name: "Target".into(),
+            start_seconds: 18.0,
+            digit: Some(1),
+        });
+        let expected_execute_seconds = warp_timeline_seconds_at(&song, 18.0);
+        let mut session = DesktopSession::default();
+        session
+            .engine
+            .load_song(song)
+            .expect("song should load into engine");
+
+        let audio = crate::audio_engine::AudioController::default();
+        session.seek(10.0, &audio).expect("seek should succeed");
+        let snapshot = session
+            .schedule_marker_jump(
+                "section_target",
+                JumpTrigger::NextMarker,
+                TransitionType::Instant,
+                &audio,
+            )
+            .expect("jump should schedule");
+
+        let pending = snapshot
+            .pending_marker_jump
+            .expect("pending jump should be exposed");
+        assert!(
+            (pending.execute_at_seconds - expected_execute_seconds).abs() < 1e-9,
+            "snapshot pending execute time should be view-time"
+        );
+    }
+
+    #[test]
+    fn transport_timeline_scales_bpm_inside_varispeed_region() {
+        let mut song = demo_song_with_varispeed_region();
+        song.bpm = 120.0;
+        song.regions[0].transpose_semitones = -2;
+        let runtime = super::song_with_warped_timeline_for_transport(&song);
+        let scale = 2.0_f64.powf(-2.0 / 12.0);
+        let start_marker = runtime
+            .tempo_markers
+            .iter()
+            .find(|marker| marker.id == "region_varispeed_varispeed_start")
+            .expect("varispeed start tempo marker should be injected");
+        let end_marker = runtime
+            .tempo_markers
+            .iter()
+            .find(|marker| marker.id == "region_varispeed_varispeed_end")
+            .expect("varispeed end tempo marker should be injected");
+
+        assert!((start_marker.start_seconds - 5.0).abs() < 1e-9);
+        assert!((start_marker.bpm - 120.0 * scale).abs() < 1e-9);
+        assert!((end_marker.bpm - 120.0).abs() < 1e-9);
+        assert!(end_marker.start_seconds > song.regions[0].end_seconds);
     }
 
     #[test]
@@ -7458,6 +7943,34 @@ mod tests {
         assert_eq!(song_view.tempo_markers.len(), 1);
         assert!((song_view.tempo_markers[0].start_seconds - 12.0).abs() < 0.0001);
         assert!((song_view.tempo_markers[0].bpm - 91.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn disabling_region_warp_restores_timeline_bpm_to_source_bpm() {
+        let mut session = session_with_song_dir("region-warp-disable-bpm-demo", demo_song());
+        let audio = crate::audio_engine::AudioController::default();
+
+        session
+            .update_song_tempo(91.0, &audio)
+            .expect("source tempo should update");
+        session
+            .update_song_region_warp("region_1", true, Some(91.0), &audio)
+            .expect("warp should enable");
+        session
+            .update_song_tempo(100.0, &audio)
+            .expect("timeline tempo should update while warped");
+        session
+            .update_song_region_warp("region_1", false, None, &audio)
+            .expect("warp should disable");
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist");
+
+        assert_eq!(song_view.bpm, 91.0);
+        assert_eq!(song_view.regions[0].warp_enabled, false);
+        assert_eq!(song_view.regions[0].warp_source_bpm, Some(91.0));
     }
 
     #[test]

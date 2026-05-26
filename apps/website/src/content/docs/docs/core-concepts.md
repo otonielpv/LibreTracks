@@ -40,9 +40,9 @@ Drag a clip edge to resize its region without changing the original audio file. 
 
 Song regions define named ranges on the timeline. They let one session hold several songs or show cues and are used by song jump controls.
 
-Each region also carries its own transpose value, so the same arrangement can move up or down in semitones without duplicating tracks or clips.
+Each region also carries its own transpose value and an independent warp toggle, so the same arrangement can move up or down in semitones — with or without changing duration — without duplicating tracks or clips. The exact interaction between these controls is documented in [Pitch, Warp & The T Button](./pitch-and-warp).
 
-Create a song region by selecting a region on the timeline, right-clicking it, and choosing `Create song from selection`. After that, adjust `Region Transpose` from the transport view when the song needs a different key.
+Create a song region by selecting a region on the timeline, right-clicking it, and choosing `Create song from selection`. After that, adjust `Region Transpose` and `Region Warp` from the transport view when the song needs a different key or tempo.
 
 ![Create a song region](/screenshots/Create-Region.png)
 

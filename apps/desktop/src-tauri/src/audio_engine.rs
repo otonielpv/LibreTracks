@@ -10,7 +10,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use libretracks_core::{warp_timeline_duration_seconds, warp_timeline_seconds_at, Song};
+use libretracks_core::{
+    audible_clip_duration_seconds, effective_bpm_at, warp_timeline_seconds_at, Song, TempoMarker,
+};
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     ClipUpdate, DeviceInfo, Engine, EngineCommand, EngineSnapshot, JumpTarget, JumpTargetKind,
@@ -795,14 +797,13 @@ impl AudioController {
                 })
                 .collect();
             let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
-            let tempo_markers = song
+            let tempo_markers = runtime_song
                 .tempo_markers
                 .iter()
-                .zip(runtime_song.tempo_markers.iter())
                 .map(|marker| TempoMarkerUpdate {
-                    id: marker.0.id.clone(),
-                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
-                    bpm: marker.0.bpm,
+                    id: marker.id.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                    bpm: marker.bpm,
                 })
                 .collect();
             let time_signature_markers = song
@@ -852,14 +853,13 @@ impl AudioController {
         self.with_engine_state("set_song_timing", None, |engine, state| {
             let runtime_song = song_with_warped_timeline(song);
             let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
-            let tempo_markers = song
+            let tempo_markers = runtime_song
                 .tempo_markers
                 .iter()
-                .zip(runtime_song.tempo_markers.iter())
                 .map(|marker| TempoMarkerUpdate {
-                    id: marker.0.id.clone(),
-                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
-                    bpm: marker.0.bpm,
+                    id: marker.id.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                    bpm: marker.bpm,
                 })
                 .collect();
             let time_signature_markers = song
@@ -1578,14 +1578,24 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
 fn song_with_warped_timeline(song: &Song) -> Song {
     let source_song = song.clone();
     let mut runtime = song.clone();
+    let track_transpose_enabled: HashMap<&str, bool> = source_song
+        .tracks
+        .iter()
+        .map(|track| (track.id.as_str(), track.transpose_enabled))
+        .collect();
 
     for clip in &mut runtime.clips {
         let source_start_seconds = clip.timeline_start_seconds;
+        let transpose_enabled = track_transpose_enabled
+            .get(clip.track_id.as_str())
+            .copied()
+            .unwrap_or(true);
         clip.timeline_start_seconds = warp_timeline_seconds_at(&source_song, source_start_seconds);
-        clip.duration_seconds = warp_timeline_duration_seconds(
+        clip.duration_seconds = audible_clip_duration_seconds(
             &source_song,
             source_start_seconds,
             clip.duration_seconds,
+            transpose_enabled,
         );
     }
 
@@ -1601,7 +1611,11 @@ fn song_with_warped_timeline(song: &Song) -> Song {
         marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
     }
     for marker in &mut runtime.tempo_markers {
+        let source_start_seconds = marker.start_seconds;
         marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
+        if let Some(scale) = varispeed_scale_at_source_second(&source_song, source_start_seconds) {
+            marker.bpm *= scale;
+        }
     }
     for marker in &mut runtime.time_signature_markers {
         marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
@@ -1616,7 +1630,61 @@ fn song_with_warped_timeline(song: &Song) -> Song {
             f64::max,
         );
     runtime.duration_seconds = max_clip_end.max(1.0);
+    add_varispeed_tempo_boundaries(&source_song, &mut runtime);
     runtime
+}
+
+fn semitones_to_pitch_scale(semitones: i32) -> f64 {
+    let scale = 2.0_f64.powf(semitones as f64 / 12.0);
+    if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    }
+}
+
+fn varispeed_scale_at_source_second(song: &Song, source_seconds: f64) -> Option<f64> {
+    song.regions.iter().find_map(|region| {
+        if region.warp_enabled
+            || region.transpose_semitones == 0
+            || source_seconds < region.start_seconds
+            || source_seconds >= region.end_seconds
+        {
+            return None;
+        }
+        Some(semitones_to_pitch_scale(region.transpose_semitones))
+    })
+}
+
+fn add_varispeed_tempo_boundaries(source_song: &Song, runtime: &mut Song) {
+    let mut synthetic_markers = Vec::new();
+    for region in &source_song.regions {
+        if region.warp_enabled || region.transpose_semitones == 0 {
+            continue;
+        }
+        let scale = semitones_to_pitch_scale(region.transpose_semitones);
+        if (scale - 1.0).abs() < f64::EPSILON {
+            continue;
+        }
+        let view_start = warp_timeline_seconds_at(source_song, region.start_seconds);
+        let view_end = warp_timeline_seconds_at(source_song, region.end_seconds).max(view_start);
+        synthetic_markers.push(TempoMarker {
+            id: format!("{}_varispeed_start", region.id),
+            start_seconds: view_start,
+            bpm: effective_bpm_at(source_song, region.start_seconds) * scale,
+        });
+        synthetic_markers.push(TempoMarker {
+            id: format!("{}_varispeed_end", region.id),
+            start_seconds: view_end,
+            bpm: effective_bpm_at(source_song, region.end_seconds),
+        });
+    }
+    runtime.tempo_markers.extend(synthetic_markers);
+    runtime.tempo_markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 }
 
 fn resolve_engine_source_id(song_dir: &Path, file_path: &str) -> String {
@@ -1678,6 +1746,8 @@ fn session_signature(song: &Song) -> String {
     song.duration_seconds.to_bits().hash(&mut hasher);
     song.tempo_markers.len().hash(&mut hasher);
     song.time_signature_markers.len().hash(&mut hasher);
+    song.regions.len().hash(&mut hasher);
+    song.section_markers.len().hash(&mut hasher);
     song.tracks.len().hash(&mut hasher);
     song.clips.len().hash(&mut hasher);
     for track in &song.tracks {
@@ -1713,6 +1783,18 @@ fn session_signature(song: &Song) -> String {
         marker.id.hash(&mut hasher);
         marker.start_seconds.to_bits().hash(&mut hasher);
         marker.signature.hash(&mut hasher);
+    }
+    for region in &song.regions {
+        region.id.hash(&mut hasher);
+        region.start_seconds.to_bits().hash(&mut hasher);
+        region.end_seconds.to_bits().hash(&mut hasher);
+        region.transpose_semitones.hash(&mut hasher);
+        region.warp_enabled.hash(&mut hasher);
+        region.warp_source_bpm.map(f64::to_bits).hash(&mut hasher);
+    }
+    for marker in &song.section_markers {
+        marker.id.hash(&mut hasher);
+        marker.start_seconds.to_bits().hash(&mut hasher);
     }
     format!("{:016x}", hasher.finish())
 }

@@ -2281,28 +2281,14 @@ export function TransportPanelContent() {
           targetRegionId,
           clampedTransposeSemitones,
         );
-        // Optimistic local mutation: we know exactly what changed (one field
-        // on one region) so we patch our local song view directly. The
-        // SongView in `song` is the source of truth for the toolbar / region
-        // selector UI; updating it here is what the user actually wants. We
-        // also pre-register the resulting project_revision so the
-        // revision-effect skips its refetch — there is nothing new on the
-        // server worth ~1.5s of IPC for a single semitone change.
-        optimisticallyAppliedRevisionsRef.current.add(
-          nextSnapshot.projectRevision,
-        );
-        setSong((previous) => {
-          if (!previous) return previous;
-          return {
-            ...previous,
-            projectRevision: nextSnapshot.projectRevision,
-            regions: previous.regions.map((region) =>
-              region.id === targetRegionId
-                ? { ...region, transposeSemitones: clampedTransposeSemitones }
-                : region,
-            ),
-          };
-        });
+        // Refetch the SongView: under the Ableton-style semantics, a region
+        // transpose change with warp OFF resizes every overlapping clip
+        // (varispeed shrinks/expands duration by 2^(st/12)). The old
+        // optimistic patch only touched the region's transposeSemitones and
+        // left clip durations stale, so the UI showed the wrong clip width
+        // until the next structural mutation. Skipping waveforms keeps this
+        // cheap (~50ms IPC).
+        await refreshSongView({ includeWaveforms: false, sync: true });
         applyPlaybackSnapshot(nextSnapshot);
         setStatus(
           t("transport.status.regionTransposeUpdated", {
@@ -2338,30 +2324,16 @@ export function TransportPanelContent() {
           nextEnabled,
           sourceBpm,
         );
-        optimisticallyAppliedRevisionsRef.current.add(
-          nextSnapshot.projectRevision,
-        );
-        setSong((previous) => {
-          if (!previous) return previous;
-          return {
-            ...previous,
-            projectRevision: nextSnapshot.projectRevision,
-            regions: previous.regions.map((region) =>
-              region.id === targetRegionId
-                ? {
-                    ...region,
-                    warpEnabled: nextEnabled,
-                    warpSourceBpm:
-                      sourceBpm !== null ? sourceBpm : region.warpSourceBpm,
-                  }
-                : region,
-            ),
-          };
-        });
+        // Refetch the SongView: toggling warp can flip overlapping clips
+        // between Bungee (warp-on) and Varispeed (warp-off + pitch), and
+        // both paths produce different audible durations than Direct. The
+        // old optimistic patch left clip widths stale until the next
+        // structural mutation.
+        await refreshSongView({ includeWaveforms: false, sync: true });
         applyPlaybackSnapshot(nextSnapshot);
       });
     },
-    [applyPlaybackSnapshot, runAction, selectedRegion, song],
+    [applyPlaybackSnapshot, refreshSongView, runAction, selectedRegion, song],
   );
 
   // Effective timeline BPM at the start of the selected region — the warp

@@ -38,10 +38,36 @@ TEST_CASE("pitch resolution combines song and clip transpose") {
     CHECK(resolve_effective_semitones(make_track(), make_clip(1), make_song(2), 0) == 3);
 }
 
-TEST_CASE("NeverTranspose forces zero regardless of song or clip transpose") {
+TEST_CASE("NeverTranspose only suppresses pitch when warp is active") {
+    // Under no-warp pitch IS time-stretch, so a NeverTranspose track must
+    // still follow the region's varispeed to stay aligned with the rest of
+    // the song. NeverTranspose only takes effect under warp, where Bungee
+    // decouples pitch from duration and the track can ignore the semitone
+    // shift while still following warp's time-stretch.
     auto track = make_track(TransposeBehavior::NeverTranspose);
-    CHECK(resolve_effective_semitones(track, make_clip(), make_song(2), 0) == 0);
-    CHECK(resolve_effective_semitones(track, make_clip(5), make_song(2), 0) == 0);
+    // Without warp: NeverTranspose is ignored, the song transpose applies.
+    CHECK(resolve_effective_semitones(track, make_clip(), make_song(2), 0) == 2);
+    CHECK(resolve_effective_semitones(track, make_clip(5), make_song(2), 0) == 7);
+
+    // With warp active: NeverTranspose takes effect, pitch is suppressed.
+    auto song_warp = make_song(2);
+    song_warp.bpm = 120.0;
+    Region region;
+    region.id = "r";
+    region.start_frame = 0;
+    region.end_frame = 48000;
+    region.warp_enabled = true;
+    region.warp_source_bpm = 100.0;
+    song_warp.regions.push_back(region);
+    CHECK(resolve_effective_semitones(track, make_clip(), song_warp, 0) == 0);
+    CHECK(resolve_effective_semitones(track, make_clip(5), song_warp, 0) == 0);
+
+    // Warp mode still suppresses pitch for NeverTranspose tracks when the
+    // ratio is exactly 1.0; the UI toggle means "preserve pitch", not only
+    // "use a non-identity time stretch".
+    song_warp.regions[0].warp_source_bpm = 120.0;
+    CHECK(resolve_effective_semitones(track, make_clip(), song_warp, 0) == 0);
+    CHECK(resolve_effective_semitones(track, make_clip(5), song_warp, 0) == 0);
 }
 
 TEST_CASE("pitch resolution clamps to product range") {
@@ -87,6 +113,117 @@ TEST_CASE("session adapter treats missing clip semitones as local zero") {
     const auto& clip = track.clips[0];
     CHECK(clip.semitones == 0);
     CHECK(resolve_effective_semitones(track, clip, song, 0) == 2);
+}
+
+TEST_CASE("path decision: no warp + no pitch -> Direct") {
+    auto song = make_song(0);
+    auto track = make_track();
+    auto clip = make_clip(0);
+    const auto d = resolve_pitch_render_decision(track, clip, song, 0);
+    CHECK(d.path == ClipPathKind::Direct);
+    CHECK(d.effective_semitones == 0);
+    CHECK(d.warp_active == false);
+    CHECK(d.pitch_scale == doctest::Approx(1.0));
+}
+
+TEST_CASE("path decision: no warp + pitch -> Varispeed") {
+    auto song = make_song(3);
+    auto track = make_track();
+    auto clip = make_clip(0);
+    const auto d = resolve_pitch_render_decision(track, clip, song, 0);
+    CHECK(d.path == ClipPathKind::Varispeed);
+    CHECK(d.effective_semitones == 3);
+    CHECK(d.warp_active == false);
+    CHECK(d.pitch_scale > 1.0);
+}
+
+TEST_CASE("path decision: warp + no pitch -> Stretched") {
+    auto song = make_song(0);
+    song.bpm = 120.0;
+    Region region;
+    region.id = "r";
+    region.start_frame = 0;
+    region.end_frame = 48000;
+    region.warp_enabled = true;
+    region.warp_source_bpm = 100.0;
+    song.regions.push_back(region);
+    auto track = make_track();
+    auto clip = make_clip(0);
+    const auto d = resolve_pitch_render_decision(track, clip, song, 0);
+    CHECK(d.path == ClipPathKind::Stretched);
+    CHECK(d.warp_active == true);
+    CHECK(d.warp_time_ratio == doctest::Approx(1.2));
+}
+
+TEST_CASE("path decision: warp + pitch -> Stretched (Bungee handles both)") {
+    auto song = make_song(0);
+    song.bpm = 120.0;
+    Region region;
+    region.id = "r";
+    region.start_frame = 0;
+    region.end_frame = 48000;
+    region.warp_enabled = true;
+    region.warp_source_bpm = 100.0;
+    region.transpose_semitones = 5;
+    song.regions.push_back(region);
+    auto track = make_track();
+    auto clip = make_clip(0);
+    const auto d = resolve_pitch_render_decision(track, clip, song, 0);
+    CHECK(d.path == ClipPathKind::Stretched);
+    CHECK(d.warp_active == true);
+    CHECK(d.effective_semitones == 5);
+}
+
+TEST_CASE("path decision: NeverTranspose + warp -> Stretched even though pitch is 0") {
+    auto song = make_song(7);
+    song.bpm = 120.0;
+    Region region;
+    region.id = "r";
+    region.start_frame = 0;
+    region.end_frame = 48000;
+    region.warp_enabled = true;
+    region.warp_source_bpm = 90.0;
+    song.regions.push_back(region);
+    auto track = make_track(TransposeBehavior::NeverTranspose);
+    auto clip = make_clip(0);
+    const auto d = resolve_pitch_render_decision(track, clip, song, 0);
+    CHECK(d.path == ClipPathKind::Stretched);
+    CHECK(d.effective_semitones == 0);
+    CHECK(d.warp_active == true);
+}
+
+TEST_CASE("path decision: NeverTranspose + unity-ratio warp suppresses pitch") {
+    auto song = make_song(7);
+    song.bpm = 120.0;
+    Region region;
+    region.id = "r";
+    region.start_frame = 0;
+    region.end_frame = 48000;
+    region.warp_enabled = true;
+    region.warp_source_bpm = 120.0;
+    song.regions.push_back(region);
+    auto track = make_track(TransposeBehavior::NeverTranspose);
+    auto clip = make_clip(0);
+    const auto d = resolve_pitch_render_decision(track, clip, song, 0);
+    CHECK(d.path == ClipPathKind::Stretched);
+    CHECK(d.effective_semitones == 0);
+    CHECK(d.warp_active == true);
+    CHECK(d.warp_time_ratio == doctest::Approx(1.0));
+    CHECK(d.pitch_scale == doctest::Approx(1.0));
+}
+
+TEST_CASE("path decision: NeverTranspose + no warp + region pitch -> Varispeed (track follows)") {
+    // Without warp, pitch IS time-stretch (varispeed). A NeverTranspose track
+    // that opted out would render at original duration and slip out of sync
+    // with the rest of the song, so we deliberately ignore NeverTranspose
+    // here — the track follows the region's varispeed.
+    auto song = make_song(0);
+    song.regions.push_back(Region{"r", "r", 0, 48000, 5});
+    auto track = make_track(TransposeBehavior::NeverTranspose);
+    auto clip = make_clip(0);
+    const auto d = resolve_pitch_render_decision(track, clip, song, 0);
+    CHECK(d.path == ClipPathKind::Varispeed);
+    CHECK(d.effective_semitones == 5);
 }
 
 TEST_CASE("session adapter keeps explicit clip semitones as local offset") {

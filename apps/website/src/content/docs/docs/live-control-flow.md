@@ -43,18 +43,15 @@ The trigger can be immediate, after a configured number of bars, or at the end o
 
 If you arm the wrong destination, press `Esc` immediately.
 
-## Transpose In Live Use
+## Transpose And Warp In Live Use
 
-LibreTracks can change pitch at two levels during rehearsal or show prep:
+`Region Transpose`, `Region Warp`, and the per-track `T` toggle decide how each clip sounds and how the timeline grid shifts. The interaction between these three is the same Ableton-style model — see [Pitch, Warp & The T Button](./pitch-and-warp) for the full decision table and grid behavior.
 
-- `Region Transpose` changes the key for the selected song region.
-- Track transpose enable lets you decide which tracks should follow that pitch change and which ones should stay untouched.
+In live use, the rule of thumb is:
 
-This is useful when guide tracks, click-related material, or fixed references should remain in place while musical stems move with the song.
-
-:::caution[Change pitch before playback when possible]
-Whenever you can, set the transpose **before pressing Play**. Changing pitch while a song is already playing forces LibreTracks to rebuild the pitch-engine voices in the background, and on modest CPUs that can cause brief audio dropouts or interference for a few seconds until the engine finishes preparing. In a live show, switch the key between songs or with playback stopped.
-:::
+- Change the key between songs or with playback stopped when you can — retiming pitch mid-playback can cause brief CPU spikes on modest machines.
+- Enable `Region Warp` when the band wants a tempo change without changing key, or when you need pitch changes that preserve clip length.
+- Use the per-track `T` toggle only with warp on, to keep a click or guide track in its original key while the rest of the song transposes.
 
 ## Mobile Remote
 

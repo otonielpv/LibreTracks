@@ -670,6 +670,30 @@ export function buildSongTempoRegions(
         bpm: null as number | null,
         timeSignature: marker.signature,
       })),
+    ...song.regions
+      .filter(
+        (region) =>
+          !region.warpEnabled &&
+          region.transposeSemitones !== 0 &&
+          region.startSeconds > 0,
+      )
+      .map((region) => ({
+        startSeconds: region.startSeconds,
+        bpm: null as number | null,
+        timeSignature: null as string | null,
+      })),
+    ...song.regions
+      .filter(
+        (region) =>
+          !region.warpEnabled &&
+          region.transposeSemitones !== 0 &&
+          region.endSeconds > 0,
+      )
+      .map((region) => ({
+        startSeconds: region.endSeconds,
+        bpm: null as number | null,
+        timeSignature: null as string | null,
+      })),
   ].sort((left, right) => left.startSeconds - right.startSeconds);
   const regions: SongTempoRegionSummary[] = [];
   let startSeconds = 0;
@@ -683,12 +707,13 @@ export function buildSongTempoRegions(
       continue;
     }
 
+    const displayBpm = applyVarispeedBpmAt(song, startSeconds, bpm);
     regions.push({
       id: `tempo-region-${startSeconds.toFixed(4)}`,
-      name: `Tempo ${bpm.toFixed(2)} ${timeSignature}`,
+      name: `Tempo ${displayBpm.toFixed(2)} ${timeSignature}`,
       startSeconds,
       endSeconds: marker.startSeconds,
-      bpm,
+      bpm: displayBpm,
       timeSignature,
       transposeSemitones: 0,
       warpEnabled: false,
@@ -699,12 +724,13 @@ export function buildSongTempoRegions(
     timeSignature = marker.timeSignature ?? timeSignature;
   }
 
+  const displayBpm = applyVarispeedBpmAt(song, startSeconds, bpm);
   regions.push({
     id: `tempo-region-${startSeconds.toFixed(4)}-tail`,
-    name: `Tempo ${bpm.toFixed(2)} ${timeSignature}`,
+    name: `Tempo ${displayBpm.toFixed(2)} ${timeSignature}`,
     startSeconds,
     endSeconds: Math.max(startSeconds, SONG_TEMPO_REGION_VISUAL_END_SECONDS),
-    bpm,
+    bpm: displayBpm,
     timeSignature,
     transposeSemitones: 0,
     warpEnabled: false,
@@ -726,6 +752,34 @@ export function getPrimarySongRegion(
 
 export function getSongBaseBpm(song: SongView | null | undefined): number {
   return song?.bpm ?? 120;
+}
+
+function semitonesToPitchScale(semitones: number): number {
+  const scale = 2 ** (semitones / 12);
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
+function varispeedScaleAt(
+  song: SongView | null | undefined,
+  positionSeconds: number,
+): number {
+  if (!song) return 1;
+  const region = song.regions.find(
+    (candidate) =>
+      !candidate.warpEnabled &&
+      candidate.transposeSemitones !== 0 &&
+      positionSeconds >= candidate.startSeconds &&
+      positionSeconds < candidate.endSeconds,
+  );
+  return region ? semitonesToPitchScale(region.transposeSemitones) : 1;
+}
+
+function applyVarispeedBpmAt(
+  song: SongView | null | undefined,
+  positionSeconds: number,
+  bpm: number,
+): number {
+  return bpm * varispeedScaleAt(song, positionSeconds);
 }
 
 /**
@@ -750,7 +804,7 @@ export function getEffectiveBpmAt(
       bestBpm = marker.bpm;
     }
   }
-  return bestBpm;
+  return applyVarispeedBpmAt(song, positionSeconds, bestBpm);
 }
 
 export function getSongBaseTimeSignature(

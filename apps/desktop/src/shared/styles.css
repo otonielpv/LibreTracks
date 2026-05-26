@@ -2935,6 +2935,21 @@ textarea {
   outline-offset: 1px;
 }
 
+.lt-region-warp-indicator {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  height: 0.9rem;
+  background: transparent;
+  color: rgb(255 226 171 / 0.9);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 0.9rem;
+  pointer-events: none;
+  text-align: center;
+  transform: translateY(-50%);
+}
+
 /* Resize handles overlaid on each end of a region hotspot. Wide enough to
    grab comfortably (6px) but only visible on hover/selection so the
    region UI stays clean at rest. Sit above the button background so the
@@ -3216,22 +3231,36 @@ textarea {
 
 .lt-control-group-warp .lt-control-popover-panel {
   min-width: 16rem;
-  max-width: 18rem;
 }
 
-.lt-control-group-warp .lt-control-popover-header {
-  gap: 0.5rem;
+.lt-control-group-warp .lt-control-group-body {
+  align-items: stretch;
+}
+
+.lt-control-group-warp .lt-control-group-details {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.lt-control-group-warp .lt-control-group-details > span {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .lt-control-group-warp .lt-control-popover-header > strong {
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
+  text-align: right;
 }
 
-.lt-control-group-warp .lt-control-group-details > span {
-  white-space: normal;
-  overflow-wrap: anywhere;
+.lt-warp-semantics-hint {
+  display: block;
+  color: rgba(186, 202, 197, 0.7);
+  font-size: 0.72rem;
+  line-height: 1.25;
+  margin-top: 0.35rem;
 }
 
 .lt-mono {

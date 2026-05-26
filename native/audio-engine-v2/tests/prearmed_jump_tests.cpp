@@ -86,7 +86,33 @@ void init_fixture(SourceManager& sources,
     song.id          = song_id;
     song.start_frame = 0;
     song.end_frame   = kClipLen;
+    song.bpm         = 120.0;
     song.transpose_semitones = transposed ? transpose_amount : 0;
+    // Phase-4 contract: Bungee voices (and therefore prearmed jumps) only
+    // exist for warp-active clips. Pitched tests need a warp region wrapping
+    // the song so the prearm path still has voices to prepare. The warp
+    // ratio cancels (source=target=120) — only the warp_enabled flag matters
+    // to keep this prearm test from regressing into a no-op.
+    // Only enroll a warp region when the test actually expects pitch — tests
+    // that pass `transpose_amount=0` deliberately assert "no audible pitch ->
+    // no Bungee voice / nothing to prearm", which must keep holding under
+    // Phase-4 too. With non-zero pitch, wrap the song in a warp region so the
+    // decision routes through Stretched (Bungee voice + prearm exercise).
+    if (transposed && transpose_amount != 0) {
+        Region region;
+        region.id              = "region-warp";
+        region.start_frame     = 0;
+        region.end_frame       = kClipLen;
+        region.warp_enabled    = true;
+        // Phase-4 routes pitch-only-no-warp through Varispeed. These prearm
+        // tests need the Stretched path (Bungee voice + prearm), which
+        // requires warp_active. Use a near-unity ratio so prefeed alignment
+        // checks (|p_onset - u_onset| <= 32 samples) still pass — the click
+        // can shift by at most ratio_delta * click_offset samples.
+        song.bpm               = 120.0;
+        region.warp_source_bpm = 120.0001;
+        song.regions.push_back(region);
+    }
     song.tracks.push_back(track);
     song.markers.push_back(Marker{marker_id, "M1", marker_frame});
 
@@ -958,7 +984,21 @@ TEST_CASE("PrearmedJumpManager prepare_target_now waits for streaming target blo
     song.id = "song-stream-prearm";
     song.start_frame = 0;
     song.end_frame = clip_len;
+    song.bpm = 120.0;
     song.transpose_semitones = kSemitones;
+    // Phase-4: pitch-only-no-warp now uses Varispeed, which does not build a
+    // Bungee voice and therefore is not prearmed. This test specifically
+    // exercises the streaming-source prearm path, so wrap the song in a
+    // near-unity warp region to keep the decision routed through Stretched.
+    {
+        Region region;
+        region.id              = "region-stream-prearm";
+        region.start_frame     = 0;
+        region.end_frame       = clip_len;
+        region.warp_enabled    = true;
+        region.warp_source_bpm = 120.0001;
+        song.regions.push_back(region);
+    }
     song.tracks.push_back(track);
     song.markers.push_back(Marker{"marker-stream-prearm", "Far", marker_frame});
     session.songs.push_back(song);

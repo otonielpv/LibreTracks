@@ -40,9 +40,9 @@ Arrastra el borde de un clip para redimensionar su region sin cambiar el archivo
 
 Las regiones de cancion definen rangos con nombre en el timeline. Permiten que una sesion contenga varias canciones o cues de show y se usan en los controles de salto de cancion.
 
-Cada region tambien guarda su propia transposicion, de modo que el mismo arreglo puede subir o bajar por semitonos sin duplicar pistas ni clips.
+Cada region tambien guarda su propia transposicion y un toggle de warp independiente, asi el mismo arreglo puede subir o bajar por semitonos — cambiando o no la duracion — sin duplicar pistas ni clips. La interaccion exacta entre estos controles esta documentada en [Pitch, warp y el boton T](./pitch-and-warp).
 
-Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`. Despues puedes ajustar `Region Transpose` desde la vista de transporte cuando la cancion necesite otra tonalidad.
+Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`. Despues puedes ajustar `Region Transpose` y `Region Warp` desde la vista de transporte cuando la cancion necesite otra tonalidad o tempo.
 
 ![Crear region de cancion](/screenshots/Create-Region.png)
 

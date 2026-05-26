@@ -43,18 +43,15 @@ El disparador puede ser inmediato, tras un numero de compases o al final de la c
 
 Si armas el destino equivocado, pulsa `Esc` inmediatamente.
 
-## Transposicion En Uso En Vivo
+## Transposicion Y Warp En Vivo
 
-LibreTracks puede cambiar el tono en dos niveles durante el ensayo o la preparacion del show:
+`Region Transpose`, `Region Warp` y el toggle `T` por pista deciden como suena cada clip y como se desplaza la rejilla del timeline. La interaccion entre los tres sigue el modelo de Ableton Live — consulta [Pitch, Warp y el boton T](./pitch-and-warp) para la tabla de decision completa y el comportamiento de la rejilla.
 
-- `Region Transpose` cambia la tonalidad de la region de cancion seleccionada.
-- La activacion de transposicion por pista te deja decidir que pistas deben seguir ese cambio y cuales deben quedarse intactas.
+En directo, la regla practica:
 
-Esto es util cuando guias, material de click o referencias fijas deben permanecer en su sitio mientras los stems musicales cambian con la cancion.
-
-:::caution[Cambia el tono antes de reproducir]
-Cuando es posible, ajusta la transposicion **antes de pulsar Play**. Si cambias el tono mientras la cancion ya esta sonando, LibreTracks tiene que reconstruir las voces del motor de pitch en segundo plano, y en equipos modestos eso puede producir pequeños cortes o interferencias durante unos segundos hasta que el motor termina de prepararse. Si estas en directo, hazlo entre canciones o con la reproduccion detenida.
-:::
+- Cambia de tonalidad entre canciones o con la reproduccion detenida cuando puedas — recolocar el pitch en pleno playback puede generar picos breves de CPU en equipos modestos.
+- Activa `Region Warp` cuando la banda pida cambio de tempo sin cambio de tono, o cuando necesites cambios de pitch que preserven la duracion del clip.
+- Usa el toggle `T` por pista solo con warp activado, para mantener una pista de click o guia en su tono original mientras el resto del tema transpone.
 
 ## Remote Movil
 

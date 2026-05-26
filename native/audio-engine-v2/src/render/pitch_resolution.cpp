@@ -48,41 +48,69 @@ Semitones resolve_effective_semitones(const Track& track,
                                       const Clip& clip,
                                       const Song& song,
                                       Frame timeline_frame) noexcept {
-    if (track.transpose_behavior == TransposeBehavior::NeverTranspose)
-        return 0;
-    return clamp_supported_semitones(resolve_region_transpose(song, timeline_frame) + clip.semitones);
+    const Semitones full = clamp_supported_semitones(
+        resolve_region_transpose(song, timeline_frame) + clip.semitones);
+    // NeverTranspose suppresses pitch whenever the region is in warp mode,
+    // even if the current BPM makes the ratio exactly 1.0. Warp mode
+    // decouples pitch from duration, so the track can ignore the semitone
+    // shift while still following the shared timeline.
+    if (track.transpose_behavior == TransposeBehavior::NeverTranspose) {
+        const Region* region = region_at_frame(song, timeline_frame);
+        if (region && region->warp_enabled && region->warp_source_bpm > 0.0)
+            return 0;
+    }
+    return full;
 }
 
 PitchRenderDecision resolve_pitch_render_decision(
     const Track& track, const Clip& clip, const Song& song, Frame timeline_frame) noexcept {
     PitchRenderDecision d;
+
+    const Region* region = region_at_frame(song, timeline_frame);
+    const bool warp_mode_active =
+        region && region->warp_enabled && region->warp_source_bpm > 0.0;
+    const double ratio = resolve_warp_time_ratio(song, timeline_frame);
+    if (warp_mode_active) {
+        d.warp_active = true;
+        d.warp_time_ratio = ratio > 0.0 && std::isfinite(ratio) ? ratio : 1.0;
+    }
+
     const bool never_transpose =
         track.transpose_behavior == TransposeBehavior::NeverTranspose;
-    if (never_transpose) {
-        d.is_never_transpose = true;
-        // Pitch stays at 0 (NeverTranspose tracks ignore the song/region
-        // transpose), but warp is a song-level concept: enabling warp on a
-        // region must time-stretch every overlapping clip regardless of
-        // whether the track lets the user pitch it. Fall through to compute
-        // warp_active below with effective_semitones still 0.
+    d.is_never_transpose = never_transpose;
+
+    // Pitch is ignored only when NeverTranspose AND warp is active. Under
+    // varispeed (no warp), NeverTranspose tracks still time-stretch so the
+    // grid stays aligned — they just don't gain a pitch shift on top, but
+    // since varispeed *is* time-stretch driven by pitch_scale, the duration
+    // matches even when the audible pitch is preserved by reading the source
+    // at the same advance rate without semitone shift would desync. The
+    // simplest coherent behaviour: under no-warp, NeverTranspose follows the
+    // region's transpose like everyone else.
+    if (never_transpose && d.warp_active) {
+        // Warp absorbs duration; ignore pitch safely.
+        d.effective_semitones = 0;
+        d.needs_pitch = false;
     } else {
         d.effective_semitones = clamp_supported_semitones(
             resolve_region_transpose(song, timeline_frame) + clip.semitones);
         d.needs_pitch = (d.effective_semitones != 0);
     }
 
-    const double ratio = resolve_warp_time_ratio(song, timeline_frame);
-    if (ratio > 0.0 && ratio != 1.0) {
-        d.warp_active = true;
-        d.warp_time_ratio = ratio;
-    }
+    d.pitch_scale = std::pow(2.0,
+        static_cast<double>(d.effective_semitones) / 12.0);
 
-    // Two paths: either direct copy, or stretched (a single Bungee voice
-    // handles pitch + warp simultaneously via render_block's pitch_scale +
-    // time_ratio parameters).
-    d.path = (d.warp_active || d.needs_pitch)
-        ? ClipPathKind::Stretched
-        : ClipPathKind::Direct;
+    // Ableton-style selection:
+    //   - warp on → Bungee (preserves duration, decouples pitch from speed)
+    //   - warp off + pitch → Varispeed (pitch changes speed; no Bungee voice)
+    //   - otherwise → Direct
+    if (d.warp_active) {
+        d.path = ClipPathKind::Stretched;
+    } else if (d.needs_pitch) {
+        d.path = ClipPathKind::Varispeed;
+    } else {
+        d.path = ClipPathKind::Direct;
+    }
     return d;
 }
 

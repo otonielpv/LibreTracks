@@ -35,7 +35,22 @@ Session make_one_transposed_clip_session(Semitones semitones) {
     song.name        = "song";
     song.start_frame = 0;
     song.end_frame   = kSR * 4;
+    song.bpm         = 120.0;
     song.transpose_semitones = semitones;
+    // Under the post-Phase-4 contract a Bungee voice is only built when the
+    // clip lives in a warp-active region (pitch-only-no-warp now goes through
+    // the cheap Varispeed render path). Wrap the whole song in a warp region
+    // so these voice-lifecycle tests still exercise the manager. The
+    // region's own transpose is left at 0 so the song-level transpose still
+    // drives the test's pitch parameter.
+    Region region;
+    region.id              = "region1";
+    region.name            = "region";
+    region.start_frame     = 0;
+    region.end_frame       = kSR * 4;
+    region.warp_enabled    = true;
+    region.warp_source_bpm = 100.0;
+    song.regions.push_back(region);
     Track track;
     track.id   = "trk1";
     track.kind = TrackKind::Audio;
