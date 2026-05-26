@@ -1,4 +1,4 @@
-import type { KeyboardEvent, RefObject } from "react";
+import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import { getSongBaseBpm, type PlaybackState, type SongView } from "./desktopApi";
@@ -10,7 +10,7 @@ type TimelineTopbarProps = {
   isProjectEmpty: boolean;
   tempoDraft: string;
   timeSignatureDraft: string;
-  tempoSourceLabel: string;
+  tempoSourceLabel: ReactNode;
   displayedBpm: number;
   displayedTimeSignature: string;
   song: SongView | null;
@@ -34,6 +34,7 @@ type TimelineTopbarProps = {
   metronomeEnabled: boolean;
   onToggleMetronome: () => void;
   onTempoDraftChange: (nextTempoDraft: string) => void;
+  onTempoDraftFocus?: () => void;
   onTapTempo: () => void;
   onTempoCommit: () => void;
   onTimeSignatureDraftChange: (nextSignatureDraft: string) => void;
@@ -73,6 +74,7 @@ export function TimelineTopbar({
   metronomeEnabled,
   onToggleMetronome,
   onTempoDraftChange,
+  onTempoDraftFocus,
   onTapTempo,
   onTempoCommit,
   onTimeSignatureDraftChange,
@@ -211,6 +213,7 @@ export function TimelineTopbar({
                 event.stopPropagation();
                 onMidiLearnTarget("param:tempo");
               }}
+              onFocus={onTempoDraftFocus}
               onChange={(event) => onTempoDraftChange(event.target.value)}
               onBlur={onTempoCommit}
               onKeyDown={handleTempoKeyDown}

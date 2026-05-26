@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { formatTransposeSemitones, type SongRegionSummary } from "./desktopApi";
@@ -40,7 +40,6 @@ type TimelineToolbarProps = {
   /** Effective timeline BPM at the start of the selected region. */
   selectedRegionEffectiveBpm: number;
   onSelectedRegionWarpToggle: (nextEnabled: boolean) => void;
-  onSelectedRegionWarpTargetBpmChange: (nextTargetBpm: number) => void;
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => void;
 };
@@ -137,7 +136,6 @@ export function TimelineToolbar({
   onSelectedRegionTransposeChange,
   selectedRegionEffectiveBpm,
   onSelectedRegionWarpToggle,
-  onSelectedRegionWarpTargetBpmChange,
   midiLearnMode,
   onMidiLearnTarget,
 }: TimelineToolbarProps) {
@@ -146,6 +144,24 @@ export function TimelineToolbar({
   const [openGroup, setOpenGroup] = useState<
     "jump" | "vamp" | "song" | "region" | "warp" | null
   >(null);
+  const toolbarRootRef = useRef<HTMLDivElement | null>(null);
+
+  // Close any open popover when the user clicks/taps outside the toolbar.
+  // Listening on pointerdown (capture) lets us react before the popover's
+  // own handlers re-open another group on the same gesture.
+  useEffect(() => {
+    if (openGroup === null) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const root = toolbarRootRef.current;
+      if (!root) return;
+      if (event.target instanceof Node && root.contains(event.target)) return;
+      setOpenGroup(null);
+    };
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [openGroup]);
   const controlsDisabled = isProjectEmpty && !learnModeActive;
   const jumpSummary =
     globalJumpMode === "after_bars"
@@ -188,7 +204,6 @@ export function TimelineToolbar({
       : t("timelineToolbar.regionWarpSummaryOff")
     : t("timelineToolbar.regionWarpNoSelection");
   const warpControlsDisabled = controlsDisabled || !selectedRegion;
-  const warpBpmInputDisabled = warpControlsDisabled || !warpEnabled;
 
   const handleModeButtonClick = (learnKey: string, commit: () => void) => {
     if (learnModeActive) {
@@ -200,7 +215,7 @@ export function TimelineToolbar({
   };
 
   return (
-    <div className="lt-timeline-topline">
+    <div className="lt-timeline-topline" ref={toolbarRootRef}>
       <div className="lt-timeline-meta">
         <div className="lt-timeline-controls lt-bottom-controls">
           <button
@@ -701,59 +716,6 @@ export function TimelineToolbar({
                       ? t("timelineToolbar.regionWarpToggleOn")
                       : t("timelineToolbar.regionWarpToggleOff")}
                   </button>
-                  <label className="lt-stepper-control">
-                    <span>{t("timelineToolbar.regionWarpTargetBpmLabel")}</span>
-                    <div className="lt-stepper-control-row">
-                      <button
-                        type="button"
-                        aria-label={t(
-                          "timelineToolbar.regionWarpTargetBpmDownAria",
-                        )}
-                        disabled={warpBpmInputDisabled}
-                        onClick={() => {
-                          onSelectedRegionWarpTargetBpmChange(
-                            Math.max(20, selectedRegionEffectiveBpm - 1),
-                          );
-                        }}
-                      >
-                        -
-                      </button>
-                      <input
-                        aria-label={t(
-                          "timelineToolbar.regionWarpTargetBpmAria",
-                        )}
-                        type="number"
-                        min={20}
-                        max={300}
-                        step={1}
-                        value={
-                          Number.isFinite(selectedRegionEffectiveBpm)
-                            ? selectedRegionEffectiveBpm.toFixed(1)
-                            : ""
-                        }
-                        disabled={warpBpmInputDisabled}
-                        onChange={(event) => {
-                          const parsed = Number(event.target.value);
-                          if (!Number.isFinite(parsed) || parsed <= 0) return;
-                          onSelectedRegionWarpTargetBpmChange(parsed);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        aria-label={t(
-                          "timelineToolbar.regionWarpTargetBpmUpAria",
-                        )}
-                        disabled={warpBpmInputDisabled}
-                        onClick={() => {
-                          onSelectedRegionWarpTargetBpmChange(
-                            Math.min(300, selectedRegionEffectiveBpm + 1),
-                          );
-                        }}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </label>
                 </>
               ) : (
                 <span>{t("timelineToolbar.regionWarpNoSelection")}</span>

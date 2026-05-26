@@ -413,11 +413,6 @@ const es = {
     regionWarpSourceBpmLabel: "BPM original",
     regionWarpSourceBpmDownAria: "Bajar 1 el BPM original",
     regionWarpSourceBpmUpAria: "Subir 1 el BPM original",
-    regionWarpTargetBpmAria:
-      "Nuevo BPM del timeline para la region seleccionada",
-    regionWarpTargetBpmLabel: "Nuevo BPM",
-    regionWarpTargetBpmDownAria: "Bajar 1 el nuevo BPM del timeline",
-    regionWarpTargetBpmUpAria: "Subir 1 el nuevo BPM del timeline",
     regionWarpNoSelection: "Selecciona una region para activar warp.",
     regionWarpRatioDisplay: "{{source}} → {{target}} (×{{ratio}})",
     cancelJump: "Cancelar salto",

@@ -397,6 +397,15 @@ export function TransportPanelContent() {
     useState<RemoteServerInfo | null>(null);
   const [tempoDraft, setTempoDraft] = useState("120");
   const [timeSignatureDraft, setTimeSignatureDraft] = useState("4/4");
+  // Re-render trigger when the playhead crosses into a different tempo region.
+  // displayPositionSecondsRef is updated per-frame without re-rendering, so the
+  // tempo input would otherwise stay frozen at the last region's BPM.
+  const [activeTempoRegionKey, setActiveTempoRegionKey] = useState<string>("");
+  // While the user is editing the tempo input, do not stomp their in-progress
+  // value with the effective BPM at the playhead. Cleared on blur.
+  const tempoDraftFocusedRef = useRef(false);
+  const tempoDraftDirtyRef = useRef(false);
+  const activeTempoRegionKeyRef = useRef("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
@@ -2355,37 +2364,6 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, runAction, selectedRegion, song],
   );
 
-  const handleSelectedRegionWarpTargetBpmChange = useCallback(
-    (nextTargetBpm: number) => {
-      if (!selectedRegion) return;
-      if (!Number.isFinite(nextTargetBpm)) return;
-      const clamped = Math.max(20, Math.min(300, nextTargetBpm));
-      const currentTargetBpm = getEffectiveBpmAt(
-        song,
-        selectedRegion.startSeconds,
-      );
-      if (Math.abs(clamped - currentTargetBpm) < 0.0001) return;
-      const tempoMarker = getEffectiveTempoMarkerAt(
-        song,
-        selectedRegion.startSeconds,
-      );
-      void runAction(async () => {
-        const nextSnapshot = tempoMarker
-          ? await upsertSongTempoMarker(
-              tempoMarker.sourceStartSeconds ?? tempoMarker.startSeconds,
-              clamped,
-            )
-          : await updateSongTempo(clamped);
-        optimisticallyAppliedRevisionsRef.current.add(
-          nextSnapshot.projectRevision,
-        );
-        await refreshSongView({ includeWaveforms: false, sync: true });
-        applyPlaybackSnapshot(nextSnapshot);
-      });
-    },
-    [applyPlaybackSnapshot, refreshSongView, runAction, selectedRegion, song],
-  );
-
   // Effective timeline BPM at the start of the selected region — the warp
   // panel uses this both for display (× ratio) and as the default source
   // BPM when the user enables warp for the first time.
@@ -2727,11 +2705,16 @@ export function TransportPanelContent() {
       return;
     }
 
-    setTempoDraft(
-      String(getEffectiveBpmAt(song, displayPositionSecondsRef.current)),
-    );
+    // Don't overwrite the input while the user is editing it — otherwise a
+    // playhead move into a different tempo region (or a project revision bump
+    // from an unrelated mutation) would yank the value out from under them.
+    if (!tempoDraftFocusedRef.current && !tempoDraftDirtyRef.current) {
+      setTempoDraft(
+        String(getEffectiveBpmAt(song, displayPositionSecondsRef.current)),
+      );
+    }
     setTimeSignatureDraft(getSongBaseTimeSignature(song));
-  }, [song, song?.projectRevision]);
+  }, [song, song?.projectRevision, activeTempoRegionKey]);
 
   useEffect(() => {
     let active = true;
@@ -3374,6 +3357,12 @@ export function TransportPanelContent() {
 
     displayPositionSecondsRef.current = clampedPosition;
 
+    const nextRegionKey = timingRegion?.id ?? "";
+    if (nextRegionKey !== activeTempoRegionKeyRef.current) {
+      activeTempoRegionKeyRef.current = nextRegionKey;
+      setActiveTempoRegionKey(nextRegionKey);
+    }
+
     if (transportReadoutTempoRef.current) {
       transportReadoutTempoRef.current.textContent = `${displayedTempo.toFixed(2)} BPM`;
     }
@@ -3710,11 +3699,24 @@ export function TransportPanelContent() {
   const musicalPositionLabel = song
     ? formatMusicalPosition(readoutPositionSeconds, song)
     : "1.1.00";
-  const tempoSourceLabel = readoutTempoRegion
-    ? t("transport.tempoSource.at", {
-        time: formatClock(readoutTempoRegion.startSeconds),
-      })
-    : t("transport.tempoSource.base");
+  // Render the "Tempo @ HH:MM:SS.cc" string with the time portion in a
+  // monospace span so digits don't jitter as the clock advances. The i18n
+  // string still uses {{time}} as a placeholder — we replace it manually.
+  const tempoSourceLabel = readoutTempoRegion ? (() => {
+    const sentinel = "TIME";
+    const timeText = formatClock(readoutTempoRegion.startSeconds);
+    const template = t("transport.tempoSource.at", { time: sentinel });
+    const [before = "", after = ""] = template.split(sentinel);
+    return (
+      <>
+        {before}
+        <span className="lt-mono">{timeText}</span>
+        {after}
+      </>
+    );
+  })() : (
+    t("transport.tempoSource.base")
+  );
   function handleTapTempo() {
     if (!song) {
       tapTempoTimesRef.current = [];
@@ -3738,6 +3740,7 @@ export function TransportPanelContent() {
       Math.min(MAX_SESSION_BPM, tappedBpm),
     );
     const nextBpm = Math.round(clampedBpm * 10) / 10;
+    tempoDraftDirtyRef.current = false;
     setTempoDraft(nextBpm.toFixed(1));
 
     const tempoPositionSeconds = displayPositionSecondsRef.current;
@@ -4087,6 +4090,7 @@ export function TransportPanelContent() {
             );
             await refreshSongView({ includeWaveforms: false, sync: true });
             applyPlaybackSnapshot(nextSnapshot);
+            tempoDraftDirtyRef.current = false;
             setTempoDraft(String(nextBpm));
             setStatus(
               positionSeconds <= 0.0001
@@ -4219,6 +4223,7 @@ export function TransportPanelContent() {
             );
             await refreshSongView({ includeWaveforms: false, sync: true });
             applyPlaybackSnapshot(nextSnapshot);
+            tempoDraftDirtyRef.current = false;
             setTempoDraft(String(nextBpm));
             setStatus(
               t("transport.status.tempoMarkerUpdated", {
@@ -7639,9 +7644,17 @@ export function TransportPanelContent() {
           onToggleMetronome={() =>
             handleMetronomeEnabledChange(!appSettings.metronomeEnabled)
           }
-          onTempoDraftChange={setTempoDraft}
+          onTempoDraftChange={(next) => {
+            tempoDraftDirtyRef.current = true;
+            setTempoDraft(next);
+          }}
+          onTempoDraftFocus={() => {
+            tempoDraftFocusedRef.current = true;
+          }}
           onTapTempo={handleTapTempo}
           onTempoCommit={() => {
+            tempoDraftFocusedRef.current = false;
+            tempoDraftDirtyRef.current = false;
             const nextBpm = Number(tempoDraft);
             const tempoPositionSeconds = readoutPositionSeconds;
             const currentBpm = getEffectiveBpmAt(song, tempoPositionSeconds);
@@ -7827,9 +7840,6 @@ export function TransportPanelContent() {
                     }
                     selectedRegionEffectiveBpm={selectedRegionEffectiveBpm}
                     onSelectedRegionWarpToggle={handleSelectedRegionWarpToggle}
-                    onSelectedRegionWarpTargetBpmChange={
-                      handleSelectedRegionWarpTargetBpmChange
-                    }
                     midiLearnMode={midiLearnMode}
                     onMidiLearnTarget={handleMidiLearnTarget}
                   />

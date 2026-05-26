@@ -3214,6 +3214,33 @@ textarea {
   min-width: 16rem;
 }
 
+.lt-control-group-warp .lt-control-popover-panel {
+  min-width: 16rem;
+  max-width: 18rem;
+}
+
+.lt-control-group-warp .lt-control-popover-header {
+  gap: 0.5rem;
+}
+
+.lt-control-group-warp .lt-control-popover-header > strong {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.lt-control-group-warp .lt-control-group-details > span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.lt-mono {
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Roboto Mono",
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+
 .lt-control-group-region .lt-control-group-body {
   align-items: stretch;
 }
