@@ -33,6 +33,10 @@ El transporte tambien es explicito. Saltos de marca, saltos de cancion, bucles V
 
 Las fuentes importadas grandes se preparan para reproduccion apoyada en disco. LibreTracks mantiene una cache limitada en RAM y lee por adelantado desde la cache del proyecto en disco, asi las sesiones multitrack mas grandes pueden cargar sin mantener cada fuente decodificada completa en memoria. La cache PCM tambien se reutiliza entre sesiones cuando el archivo no ha cambiado, y los archivos en formato nativo pueden transmitirse en sitio sin pasar por la cache cuando es posible, asi reabrir proyectos grandes es mucho mas rapido.
 
+Cada region de cancion puede cambiar tempo y tonalidad de forma independiente. Region Warp estira el audio para encajar con el BPM del timeline sin cambiar el tono, y Region Transpose desplaza el tono cambiando o no la duracion segun este el warp. Consulta [Pitch, warp y el boton T](./pitch-and-warp) para la tabla de decision completa.
+
+La edicion de clips soporta flujos al estilo Ableton: Ctrl/Cmd+click y Shift+click para seleccion multiple, arrastre en grupo con IPC agrupado, y magnets con Ctrl al arrastrar que pegan los bordes del clip al playhead, marcas, regiones y bordes de otros clips.
+
 LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, mostrando las novedades en el idioma de la app y un acceso directo a la pagina de descargas. La comprobacion tambien se puede lanzar manualmente desde `Configuracion - General`.
 
 ## Areas Principales

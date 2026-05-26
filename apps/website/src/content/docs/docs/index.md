@@ -33,6 +33,10 @@ Transport behavior is also explicit. Marker jumps, song jumps, Vamp loops, metro
 
 Large imported sources are prepared for disk-backed playback. LibreTracks keeps a bounded RAM cache and reads ahead from the project cache on disk, so larger multitrack sessions can load without requiring every decoded source to stay resident in memory. The PCM cache is also reused across sessions when the source file is unchanged, and native-format files can stream in place without going through the cache when possible, so re-opening big projects is much faster.
 
+Each song region can independently change tempo and key. Region Warp time-stretches the audio to the timeline BPM while keeping pitch intact, and Region Transpose shifts pitch with or without changing duration depending on whether warp is on. See [Pitch, Warp & The T Button](./pitch-and-warp) for the full decision table.
+
+Clip editing supports Ableton-style flows: Ctrl/Cmd+click and Shift+click for multi-selection, group drag with batched IPC, and Ctrl-during-drag magnets that snap clip edges to the playhead, markers, regions, and other clip edges.
+
 LibreTracks also notifies you in-app when a new version is published, with the changelog in the active app language and a shortcut to the downloads page. The check can be triggered manually from `Settings → General`.
 
 ## Main Areas
