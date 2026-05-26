@@ -13,8 +13,9 @@ use std::{
 use libretracks_core::{warp_timeline_duration_seconds, warp_timeline_seconds_at, Song};
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
-    DeviceInfo, Engine, EngineCommand, EngineSnapshot, JumpTarget, JumpTargetKind, JumpTrigger,
-    MarkerUpdate, RegionUpdate, SourcePeaks, TempoMarkerUpdate, TimeSignatureMarkerUpdate,
+    ClipUpdate, DeviceInfo, Engine, EngineCommand, EngineSnapshot, JumpTarget, JumpTargetKind,
+    JumpTrigger, MarkerUpdate, RegionUpdate, SourcePeaks, TempoMarkerUpdate,
+    TimeSignatureMarkerUpdate,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -116,7 +117,6 @@ pub enum PlaybackStartReason {
     ResumePlay,
     Seek,
     ImmediateJump,
-    TimelineWindow,
     StructureRebuild,
     TransportResync,
 }
@@ -661,6 +661,53 @@ impl AudioController {
         })
     }
 
+    pub fn update_live_song_clips(&self, song: &Song) -> Result<(), DesktopError> {
+        self.with_engine_state("set_song_clips", None, |engine, state| {
+            let resolved_song = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
+            let runtime_song = song_with_warped_timeline(&resolved_song);
+            let clips = runtime_song
+                .clips
+                .iter()
+                .map(|clip| ClipUpdate {
+                    id: clip.id.clone(),
+                    track_id: clip.track_id.clone(),
+                    source_id: clip.file_path.clone(),
+                    timeline_start_frame: seconds_to_frame_for_engine(
+                        engine,
+                        clip.timeline_start_seconds,
+                    ),
+                    source_start_frame: seconds_to_frame_for_engine(
+                        engine,
+                        clip.source_start_seconds,
+                    ),
+                    length_frames: seconds_to_frame_for_engine(engine, clip.duration_seconds),
+                    gain: clip.gain as f32,
+                    fade_in_frames: seconds_to_frame_for_engine(
+                        engine,
+                        clip.fade_in_seconds.unwrap_or(0.0),
+                    ),
+                    fade_out_frames: seconds_to_frame_for_engine(
+                        engine,
+                        clip.fade_out_seconds.unwrap_or(0.0),
+                    ),
+                    semitones: 0,
+                })
+                .collect();
+            engine.send_command(&EngineCommand::SetSongClips {
+                song_id: song.id.clone(),
+                clips,
+            })?;
+            state.last_sync = Some(AudioOperationSummary {
+                reason: Some("set_song_clips".into()),
+                elapsed_ms: 0.0,
+                scheduled_clips: song.clips.len(),
+                active_sinks: song.tracks.len(),
+                opened_files: 0,
+            });
+            Ok(())
+        })
+    }
+
     pub fn update_live_section_markers(&self, song: &Song) -> Result<(), DesktopError> {
         self.with_engine_state("set_song_markers", None, |engine, state| {
             let runtime_song = song_with_warped_timeline(song);
@@ -680,6 +727,116 @@ impl AudioController {
             })?;
             state.last_sync = Some(AudioOperationSummary {
                 reason: Some("set_song_markers".into()),
+                elapsed_ms: 0.0,
+                scheduled_clips: song.clips.len(),
+                active_sinks: song.tracks.len(),
+                opened_files: 0,
+            });
+            Ok(())
+        })
+    }
+
+    pub fn update_live_timeline_window(&self, song: &Song) -> Result<(), DesktopError> {
+        self.transport_timing_update_count
+            .fetch_add(1, Ordering::Relaxed);
+        self.with_engine_state("set_song_timeline_window", None, |engine, state| {
+            let resolved_song = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
+            let runtime_song = song_with_warped_timeline(&resolved_song);
+            let clips = runtime_song
+                .clips
+                .iter()
+                .map(|clip| ClipUpdate {
+                    id: clip.id.clone(),
+                    track_id: clip.track_id.clone(),
+                    source_id: clip.file_path.clone(),
+                    timeline_start_frame: seconds_to_frame_for_engine(
+                        engine,
+                        clip.timeline_start_seconds,
+                    ),
+                    source_start_frame: seconds_to_frame_for_engine(
+                        engine,
+                        clip.source_start_seconds,
+                    ),
+                    length_frames: seconds_to_frame_for_engine(engine, clip.duration_seconds),
+                    gain: clip.gain as f32,
+                    fade_in_frames: seconds_to_frame_for_engine(
+                        engine,
+                        clip.fade_in_seconds.unwrap_or(0.0),
+                    ),
+                    fade_out_frames: seconds_to_frame_for_engine(
+                        engine,
+                        clip.fade_out_seconds.unwrap_or(0.0),
+                    ),
+                    semitones: 0,
+                })
+                .collect();
+            let regions = song
+                .regions
+                .iter()
+                .zip(runtime_song.regions.iter())
+                .map(|region| RegionUpdate {
+                    id: region.0.id.clone(),
+                    name: region.0.name.clone(),
+                    start_frame: seconds_to_frame_for_engine(engine, region.1.start_seconds),
+                    end_frame: seconds_to_frame_for_engine(engine, region.1.end_seconds),
+                    transpose_semitones: region.0.transpose_semitones,
+                    warp_enabled: region.0.warp_enabled,
+                    warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
+                })
+                .collect();
+            let markers = song
+                .section_markers
+                .iter()
+                .zip(runtime_song.section_markers.iter())
+                .map(|marker| MarkerUpdate {
+                    id: marker.0.id.clone(),
+                    name: marker.0.name.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                })
+                .collect();
+            let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
+            let tempo_markers = song
+                .tempo_markers
+                .iter()
+                .zip(runtime_song.tempo_markers.iter())
+                .map(|marker| TempoMarkerUpdate {
+                    id: marker.0.id.clone(),
+                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                    bpm: marker.0.bpm,
+                })
+                .collect();
+            let time_signature_markers = song
+                .time_signature_markers
+                .iter()
+                .zip(runtime_song.time_signature_markers.iter())
+                .map(|marker| {
+                    let (beats_per_bar, beat_unit) =
+                        parse_engine_time_signature(&marker.0.signature)?;
+                    Ok(TimeSignatureMarkerUpdate {
+                        id: marker.0.id.clone(),
+                        frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                        beats_per_bar,
+                        beat_unit,
+                    })
+                })
+                .collect::<Result<Vec<_>, DesktopError>>()?;
+            engine.send_command(&EngineCommand::SetSongTimelineWindow {
+                song_id: song.id.clone(),
+                clips,
+                regions,
+                markers,
+                bpm: song.bpm,
+                beats_per_bar,
+                beat_unit,
+                tempo_markers,
+                time_signature_markers,
+            })?;
+            if state.loaded_session_signature.is_some() {
+                let resolved = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
+                state.loaded_session_signature = Some(session_signature(&resolved));
+            }
+            state.last_sync = Some(AudioOperationSummary {
+                reason: Some("set_song_timeline_window".into()),
                 elapsed_ms: 0.0,
                 scheduled_clips: song.clips.len(),
                 active_sinks: song.tracks.len(),
@@ -1688,7 +1845,6 @@ fn playback_reason_label(reason: PlaybackStartReason) -> &'static str {
         PlaybackStartReason::ResumePlay => "resume_play",
         PlaybackStartReason::Seek => "seek",
         PlaybackStartReason::ImmediateJump => "immediate_jump",
-        PlaybackStartReason::TimelineWindow => "timeline_window",
         PlaybackStartReason::StructureRebuild => "structure_rebuild",
         PlaybackStartReason::TransportResync => "transport_resync",
     }

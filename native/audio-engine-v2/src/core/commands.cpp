@@ -165,6 +165,26 @@ EngineCommand command_from_json(const std::string& raw) {
         return cmd;
     }
 
+    if (type == "SetSongClips") {
+        CmdSetSongClips cmd;
+        cmd.song_id = j.at("song_id").get<Id>();
+        for (const auto& item : j.at("clips")) {
+            CmdSetSongClips::ClipUpdate clip;
+            clip.id = item.at("id").get<Id>();
+            clip.track_id = item.at("track_id").get<Id>();
+            clip.source_id = item.at("source_id").get<Id>();
+            clip.timeline_start_frame = item.at("timeline_start_frame").get<Frame>();
+            clip.source_start_frame = item.at("source_start_frame").get<Frame>();
+            clip.length_frames = item.at("length_frames").get<Frame>();
+            clip.gain = item.value("gain", 1.0f);
+            clip.fade_in_frames = item.value("fade_in_frames", static_cast<Frame>(0));
+            clip.fade_out_frames = item.value("fade_out_frames", static_cast<Frame>(0));
+            clip.semitones = item.value("semitones", static_cast<Semitones>(0));
+            cmd.clips.push_back(std::move(clip));
+        }
+        return cmd;
+    }
+
     if (type == "SetSongMarkers") {
         CmdSetSongMarkers cmd;
         cmd.song_id = j.at("song_id").get<Id>();
@@ -184,6 +204,63 @@ EngineCommand command_from_json(const std::string& raw) {
         cmd.bpm = j.at("bpm").get<double>();
         cmd.beats_per_bar = j.at("beats_per_bar").get<int>();
         cmd.beat_unit = j.at("beat_unit").get<int>();
+        for (const auto& item : j.at("tempo_markers")) {
+            CmdSetSongTiming::TempoMarkerUpdate marker;
+            marker.id = item.at("id").get<Id>();
+            marker.frame = item.at("frame").get<Frame>();
+            marker.bpm = item.at("bpm").get<double>();
+            cmd.tempo_markers.push_back(std::move(marker));
+        }
+        for (const auto& item : j.at("time_signature_markers")) {
+            CmdSetSongTiming::TimeSignatureMarkerUpdate marker;
+            marker.id = item.at("id").get<Id>();
+            marker.frame = item.at("frame").get<Frame>();
+            marker.beats_per_bar = item.at("beats_per_bar").get<int>();
+            marker.beat_unit = item.at("beat_unit").get<int>();
+            cmd.time_signature_markers.push_back(std::move(marker));
+        }
+        return cmd;
+    }
+
+    if (type == "SetSongTimelineWindow") {
+        CmdSetSongTimelineWindow cmd;
+        cmd.song_id = j.at("song_id").get<Id>();
+        cmd.bpm = j.at("bpm").get<double>();
+        cmd.beats_per_bar = j.at("beats_per_bar").get<int>();
+        cmd.beat_unit = j.at("beat_unit").get<int>();
+        for (const auto& item : j.at("clips")) {
+            CmdSetSongClips::ClipUpdate clip;
+            clip.id = item.at("id").get<Id>();
+            clip.track_id = item.at("track_id").get<Id>();
+            clip.source_id = item.at("source_id").get<Id>();
+            clip.timeline_start_frame = item.at("timeline_start_frame").get<Frame>();
+            clip.source_start_frame = item.at("source_start_frame").get<Frame>();
+            clip.length_frames = item.at("length_frames").get<Frame>();
+            clip.gain = item.value("gain", 1.0f);
+            clip.fade_in_frames = item.value("fade_in_frames", static_cast<Frame>(0));
+            clip.fade_out_frames = item.value("fade_out_frames", static_cast<Frame>(0));
+            clip.semitones = item.value("semitones", static_cast<Semitones>(0));
+            cmd.clips.push_back(std::move(clip));
+        }
+        for (const auto& item : j.at("regions")) {
+            CmdSetSongRegions::RegionUpdate region;
+            region.id = item.at("id").get<Id>();
+            region.name = item.value("name", std::string{});
+            region.start_frame = item.at("start_frame").get<Frame>();
+            region.end_frame = item.at("end_frame").get<Frame>();
+            region.transpose_semitones =
+                item.value("transpose_semitones", static_cast<Semitones>(0));
+            region.warp_enabled = item.value("warp_enabled", false);
+            region.warp_source_bpm = item.value("warp_source_bpm", 0.0);
+            cmd.regions.push_back(std::move(region));
+        }
+        for (const auto& item : j.at("markers")) {
+            CmdSetSongMarkers::MarkerUpdate marker;
+            marker.id = item.at("id").get<Id>();
+            marker.name = item.value("name", std::string{});
+            marker.frame = item.at("frame").get<Frame>();
+            cmd.markers.push_back(std::move(marker));
+        }
         for (const auto& item : j.at("tempo_markers")) {
             CmdSetSongTiming::TempoMarkerUpdate marker;
             marker.id = item.at("id").get<Id>();

@@ -116,12 +116,27 @@ pub enum EngineCommand {
         song_id: String,
         regions: Vec<RegionUpdate>,
     },
+    SetSongClips {
+        song_id: String,
+        clips: Vec<ClipUpdate>,
+    },
     SetSongMarkers {
         song_id: String,
         markers: Vec<MarkerUpdate>,
     },
     SetSongTiming {
         song_id: String,
+        bpm: f64,
+        beats_per_bar: i32,
+        beat_unit: i32,
+        tempo_markers: Vec<TempoMarkerUpdate>,
+        time_signature_markers: Vec<TimeSignatureMarkerUpdate>,
+    },
+    SetSongTimelineWindow {
+        song_id: String,
+        clips: Vec<ClipUpdate>,
+        regions: Vec<RegionUpdate>,
+        markers: Vec<MarkerUpdate>,
         bpm: f64,
         beats_per_bar: i32,
         beat_unit: i32,
@@ -155,6 +170,21 @@ pub struct RegionUpdate {
     /// warp is disabled and the user has not configured a source BPM yet.
     #[serde(default)]
     pub warp_source_bpm: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClipUpdate {
+    pub id: String,
+    pub track_id: String,
+    pub source_id: String,
+    pub timeline_start_frame: i64,
+    pub source_start_frame: i64,
+    pub length_frames: i64,
+    pub gain: f32,
+    pub fade_in_frames: i64,
+    pub fade_out_frames: i64,
+    #[serde(default)]
+    pub semitones: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

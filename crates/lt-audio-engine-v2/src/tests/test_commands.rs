@@ -175,6 +175,37 @@ fn set_song_markers_round_trip() {
 // ── Track / mix ─────────────────────────────────────────────────────────────
 
 #[test]
+fn set_song_clips_round_trip() {
+    let cmd = EngineCommand::SetSongClips {
+        song_id: "song1".into(),
+        clips: vec![ClipUpdate {
+            id: "clip_a".into(),
+            track_id: "track_a".into(),
+            source_id: "D:/audio/song.wav".into(),
+            timeline_start_frame: 1024,
+            source_start_frame: 256,
+            length_frames: 48000,
+            gain: 0.75,
+            fade_in_frames: 128,
+            fade_out_frames: 256,
+            semitones: 0,
+        }],
+    };
+    let json = serde_json::to_string(&cmd).unwrap();
+    assert!(json.contains("\"type\":\"SetSongClips\""));
+    let rt: EngineCommand = serde_json::from_str(&json).unwrap();
+    assert!(matches!(
+        rt,
+        EngineCommand::SetSongClips { song_id, clips }
+            if song_id == "song1"
+                && clips.len() == 1
+                && clips[0].id == "clip_a"
+                && clips[0].timeline_start_frame == 1024
+                && clips[0].length_frames == 48000
+    ));
+}
+
+#[test]
 fn set_song_timing_round_trip() {
     let cmd = EngineCommand::SetSongTiming {
         song_id: "song1".into(),
@@ -212,6 +243,80 @@ fn set_song_timing_round_trip() {
             && (tempo_markers[0].bpm - 99.0).abs() < 1e-9
             && time_signature_markers.len() == 1
             && time_signature_markers[0].beats_per_bar == 3
+    ));
+}
+
+#[test]
+fn set_song_timeline_window_round_trip() {
+    let cmd = EngineCommand::SetSongTimelineWindow {
+        song_id: "song1".into(),
+        clips: vec![ClipUpdate {
+            id: "clip_a".into(),
+            track_id: "track_a".into(),
+            source_id: "D:/audio/song.wav".into(),
+            timeline_start_frame: 1024,
+            source_start_frame: 256,
+            length_frames: 48000,
+            gain: 0.75,
+            fade_in_frames: 128,
+            fade_out_frames: 256,
+            semitones: 0,
+        }],
+        regions: vec![RegionUpdate {
+            id: "region_a".into(),
+            name: "Verse".into(),
+            start_frame: 1024,
+            end_frame: 49024,
+            transpose_semitones: -2,
+            warp_enabled: true,
+            warp_source_bpm: 100.0,
+        }],
+        markers: vec![MarkerUpdate {
+            id: "section_a".into(),
+            name: "Verse".into(),
+            frame: 1024,
+        }],
+        bpm: 111.0,
+        beats_per_bar: 4,
+        beat_unit: 4,
+        tempo_markers: vec![TempoMarkerUpdate {
+            id: "tempo_a".into(),
+            frame: 1024,
+            bpm: 111.0,
+        }],
+        time_signature_markers: vec![TimeSignatureMarkerUpdate {
+            id: "sig_a".into(),
+            frame: 2048,
+            beats_per_bar: 6,
+            beat_unit: 8,
+        }],
+    };
+    let json = serde_json::to_string(&cmd).unwrap();
+    assert!(json.contains("\"type\":\"SetSongTimelineWindow\""));
+    let rt: EngineCommand = serde_json::from_str(&json).unwrap();
+    assert!(matches!(
+        rt,
+        EngineCommand::SetSongTimelineWindow {
+            song_id,
+            clips,
+            regions,
+            markers,
+            bpm,
+            beats_per_bar: 4,
+            beat_unit: 4,
+            tempo_markers,
+            time_signature_markers,
+        } if song_id == "song1"
+            && clips.len() == 1
+            && clips[0].length_frames == 48000
+            && regions.len() == 1
+            && regions[0].warp_enabled
+            && (regions[0].warp_source_bpm - 100.0).abs() < 1e-9
+            && markers.len() == 1
+            && (bpm - 111.0).abs() < 1e-9
+            && tempo_markers.len() == 1
+            && time_signature_markers.len() == 1
+            && time_signature_markers[0].beats_per_bar == 6
     ));
 }
 
@@ -403,6 +508,17 @@ fn all_commands_have_type_field() {
         EngineCommand::SetMetronomeEnabled { enabled: true },
         EngineCommand::SetSongTiming {
             song_id: "song1".into(),
+            bpm: 120.0,
+            beats_per_bar: 4,
+            beat_unit: 4,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+        },
+        EngineCommand::SetSongTimelineWindow {
+            song_id: "song1".into(),
+            clips: vec![],
+            regions: vec![],
+            markers: vec![],
             bpm: 120.0,
             beats_per_bar: 4,
             beat_unit: 4,

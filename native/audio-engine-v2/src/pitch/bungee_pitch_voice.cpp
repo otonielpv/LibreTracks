@@ -327,6 +327,10 @@ long long BungeePitchVoice::source_cursor() const noexcept {
     return impl_ ? impl_->source_cursor : 0;
 }
 
+void BungeePitchVoice::clear_queued_output() noexcept {
+    if (impl_) impl_->clear_fifo();
+}
+
 #else
 
 struct BungeePitchVoice::Impl {};
@@ -366,6 +370,7 @@ int BungeePitchVoice::render_block(const float* const*,
 
 void BungeePitchVoice::reset_source_cursor(long long) noexcept {}
 long long BungeePitchVoice::source_cursor() const noexcept { return 0; }
+void BungeePitchVoice::clear_queued_output() noexcept {}
 
 #endif
 

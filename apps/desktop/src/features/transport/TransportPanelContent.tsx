@@ -2376,10 +2376,14 @@ export function TransportPanelContent() {
               clamped,
             )
           : await updateSongTempo(clamped);
+        optimisticallyAppliedRevisionsRef.current.add(
+          nextSnapshot.projectRevision,
+        );
+        await refreshSongView({ includeWaveforms: false, sync: true });
         applyPlaybackSnapshot(nextSnapshot);
       });
     },
-    [applyPlaybackSnapshot, runAction, selectedRegion, song],
+    [applyPlaybackSnapshot, refreshSongView, runAction, selectedRegion, song],
   );
 
   // Effective timeline BPM at the start of the selected region — the warp
@@ -3756,6 +3760,10 @@ export function TransportPanelContent() {
             nextBpm,
           )
         : await updateSongTempo(nextBpm);
+      optimisticallyAppliedRevisionsRef.current.add(
+        nextSnapshot.projectRevision,
+      );
+      await refreshSongView({ includeWaveforms: false, sync: true });
       applyPlaybackSnapshot(nextSnapshot);
       setStatus(
         t("transport.status.tapTempoUpdated", {
@@ -4074,6 +4082,10 @@ export function TransportPanelContent() {
               positionSeconds <= 0.0001
                 ? await updateSongTempo(nextBpm)
                 : await upsertSongTempoMarker(positionSeconds, nextBpm);
+            optimisticallyAppliedRevisionsRef.current.add(
+              nextSnapshot.projectRevision,
+            );
+            await refreshSongView({ includeWaveforms: false, sync: true });
             applyPlaybackSnapshot(nextSnapshot);
             setTempoDraft(String(nextBpm));
             setStatus(
@@ -4202,6 +4214,10 @@ export function TransportPanelContent() {
               marker.sourceStartSeconds ?? marker.startSeconds,
               nextBpm,
             );
+            optimisticallyAppliedRevisionsRef.current.add(
+              nextSnapshot.projectRevision,
+            );
+            await refreshSongView({ includeWaveforms: false, sync: true });
             applyPlaybackSnapshot(nextSnapshot);
             setTempoDraft(String(nextBpm));
             setStatus(
@@ -7654,6 +7670,10 @@ export function TransportPanelContent() {
                     clampedBpm,
                   )
                 : await updateSongTempo(clampedBpm);
+              optimisticallyAppliedRevisionsRef.current.add(
+                nextSnapshot.projectRevision,
+              );
+              await refreshSongView({ includeWaveforms: false, sync: true });
               applyPlaybackSnapshot(nextSnapshot);
               setStatus(
                 t("transport.status.tempoUpdated", {

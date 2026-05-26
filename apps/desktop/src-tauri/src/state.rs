@@ -10,9 +10,9 @@ use std::{
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
 use libretracks_core::{
-    region_warp_ratio_in_song, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion,
-    TempoMarker, TimeSignatureMarker, Track, TrackKind, MAX_TRANSPOSE_SEMITONES,
-    MIN_TRANSPOSE_SEMITONES,
+    region_warp_ratio_in_song, warp_timeline_duration_seconds, warp_timeline_seconds_at, Clip,
+    Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track, TrackKind,
+    MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
 };
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary,
@@ -1317,8 +1317,12 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
+        let transport_song = self
+            .transport_timeline_song()
+            .ok_or(DesktopError::NoSongLoaded)?;
 
-        let scheduled_jump = self.engine.schedule_marker_jump(
+        let scheduled_jump = self.engine.schedule_marker_jump_with_song(
+            &transport_song,
             target_marker_id,
             trigger.clone(),
             transition.clone(),
@@ -1357,10 +1361,10 @@ impl DesktopSession {
                     self.last_native_scheduled_jump_executed_count
                 );
                 }
-                let target_seconds = self.engine.song().and_then(|song| {
-                    song.marker_by_id(&pending_jump.target_marker_id)
-                        .map(|marker| warp_timeline_seconds_at(song, marker.start_seconds))
-                });
+                let target_seconds = transport_song
+                    .marker_by_id(&pending_jump.target_marker_id)
+                    .map(|marker| marker.start_seconds);
+                let trigger_seconds = pending_jump.execute_at_seconds;
                 audio.schedule_jump_at_frame(
                     &pending_jump.target_marker_id,
                     NativeJumpTarget {
@@ -1368,7 +1372,7 @@ impl DesktopSession {
                         id: Some(target_marker_id.to_string()),
                         frame: None,
                     },
-                    pending_jump.execute_at_seconds,
+                    trigger_seconds,
                     target_seconds,
                     true,
                 )?;
@@ -1391,8 +1395,12 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         let was_playing = self.engine.playback_state() == PlaybackState::Playing;
+        let transport_song = self
+            .transport_timeline_song()
+            .ok_or(DesktopError::NoSongLoaded)?;
 
-        let scheduled_jump = self.engine.schedule_region_jump(
+        let scheduled_jump = self.engine.schedule_region_jump_with_song(
+            &transport_song,
             target_region_id,
             trigger.clone(),
             transition.clone(),
@@ -1458,6 +1466,11 @@ impl DesktopSession {
                         self.last_native_scheduled_jump_executed_count
                     );
                 }
+                let target_seconds = transport_song
+                    .regions
+                    .iter()
+                    .find(|region| region.id == pending_jump.target_marker_id)
+                    .map(|region| region.start_seconds);
                 audio.schedule_jump_at_frame(
                     &pending_jump.target_marker_id,
                     NativeJumpTarget {
@@ -1466,14 +1479,7 @@ impl DesktopSession {
                         frame: None,
                     },
                     pending_jump.execute_at_seconds,
-                    self.engine
-                        .song()
-                        .and_then(|song| {
-                            song.regions
-                                .iter()
-                                .find(|region| region.id == pending_jump.target_marker_id)
-                        })
-                        .map(|region| region.start_seconds),
+                    target_seconds,
                     matches!(pending_jump.transition, TransitionType::FadeOut { .. }),
                 )?;
             } else {
@@ -3113,12 +3119,11 @@ impl DesktopSession {
             }
             AudioChangeImpact::TimelineWindow | AudioChangeImpact::StructureRebuild => {
                 if playback_state == PlaybackState::Playing {
-                    let rebuild_reason = match impact {
-                        AudioChangeImpact::TimelineWindow => "timeline_window",
-                        AudioChangeImpact::StructureRebuild => "structure_rebuild",
-                        _ => "unknown",
-                    };
-                    audio.replace_song_buffers(&song_dir, &song, rebuild_reason)?;
+                    if impact == AudioChangeImpact::TimelineWindow {
+                        audio.update_live_timeline_window(&song)?;
+                    } else {
+                        audio.replace_song_buffers(&song_dir, &song, "structure_rebuild")?;
+                    }
                 } else {
                     // Not playing: still push the updated session to the engine so
                     // it can decode the newly-added sources in the background
@@ -3173,10 +3178,9 @@ impl DesktopSession {
             PlaybackState::Playing => {
                 self.engine.play()?;
                 match impact {
-                    AudioChangeImpact::MixerOnly | AudioChangeImpact::TransportOnly => {}
-                    AudioChangeImpact::TimelineWindow => {
-                        self.restart_audio(audio, PlaybackStartReason::TimelineWindow)?
-                    }
+                    AudioChangeImpact::MixerOnly
+                    | AudioChangeImpact::TransportOnly
+                    | AudioChangeImpact::TimelineWindow => {}
                     AudioChangeImpact::StructureRebuild => {
                         self.restart_audio(audio, PlaybackStartReason::StructureRebuild)?
                     }
@@ -3355,6 +3359,12 @@ impl DesktopSession {
             .current_position(self.engine.playback_state())
     }
 
+    fn transport_timeline_song(&self) -> Option<Song> {
+        self.engine
+            .song()
+            .map(song_with_warped_timeline_for_transport)
+    }
+
     fn runtime_transport_position(&self, audio: &AudioController) -> Option<(f64, bool)> {
         if self.engine.playback_state() != PlaybackState::Playing {
             return None;
@@ -3390,7 +3400,12 @@ impl DesktopSession {
             .active_vamp()
             .map(|active_vamp| previous_position + elapsed >= active_vamp.end_seconds)
             .unwrap_or(false);
-        let (advanced_position, jump_executed) = self.engine.advance_transport(elapsed)?;
+        let transport_song = self
+            .transport_timeline_song()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let (advanced_position, jump_executed) = self
+            .engine
+            .advance_transport_with_song(&transport_song, elapsed)?;
 
         if let Some(duration_seconds) = self.engine.take_pending_fade_out_request() {
             audio.start_master_fade(0.0, duration_seconds)?;
@@ -3404,7 +3419,10 @@ impl DesktopSession {
                 .pending_fade_elapsed_seconds()
                 .is_some_and(|elapsed_seconds| elapsed_seconds >= duration_seconds)
             {
-                if let Some(target_position) = self.engine.complete_pending_fade_jump()? {
+                if let Some(target_position) = self
+                    .engine
+                    .complete_pending_fade_jump_with_song(&transport_song)?
+                {
                     self.reposition_audio(audio, PlaybackStartReason::TransportResync)?;
                     audio.start_master_fade(1.0, duration_seconds)?;
                     self.transport_clock
@@ -3474,7 +3492,13 @@ impl DesktopSession {
             TransitionType::FadeOut { duration_seconds } => Some(duration_seconds),
         };
 
-        let Some(target_position) = self.engine.complete_pending_native_jump()? else {
+        let transport_song = self
+            .transport_timeline_song()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let Some(target_position) = self
+            .engine
+            .complete_pending_native_jump_with_song(&transport_song)?
+        else {
             if jump_debug_logging_enabled() {
                 eprintln!(
                     "[LT_JUMP_DEBUG][state] native_count_complete_returned_none pending_target={} execute_at_seconds={:.9}",
@@ -3561,14 +3585,13 @@ impl DesktopSession {
             transport_clock.anchor_position_seconds = position_seconds;
             transport_clock.running = running;
         }
+        let transport_song = self.transport_timeline_song();
         let snapshot = TransportSnapshot {
             playback_state: playback_state_label(self.engine.playback_state()).to_string(),
             position_seconds,
-            current_marker: self
-                .engine
-                .current_marker()
-                .ok()
-                .flatten()
+            current_marker: transport_song
+                .as_ref()
+                .and_then(|song| song.marker_at(position_seconds))
                 .map(|marker| marker_to_summary(&marker)),
             pending_marker_jump: self
                 .engine
@@ -3576,8 +3599,8 @@ impl DesktopSession {
                 .map(pending_jump_to_summary),
             active_vamp: self.engine.active_vamp().map(active_vamp_to_summary),
             musical_position: self
-                .engine
-                .song()
+                .transport_timeline_song()
+                .as_ref()
                 .map(|song| musical_position_summary(song, position_seconds))
                 .unwrap_or_else(empty_musical_position_summary),
             transport_clock,
@@ -4828,6 +4851,50 @@ fn refresh_song_duration(song: &mut Song) {
         .fold(0.0_f64, f64::max);
 
     song.duration_seconds = max_clip_end.max(1.0);
+}
+
+fn song_with_warped_timeline_for_transport(song: &Song) -> Song {
+    let source_song = song.clone();
+    let mut runtime = song.clone();
+
+    for clip in &mut runtime.clips {
+        let source_start_seconds = clip.timeline_start_seconds;
+        clip.timeline_start_seconds = warp_timeline_seconds_at(&source_song, source_start_seconds);
+        clip.duration_seconds = warp_timeline_duration_seconds(
+            &source_song,
+            source_start_seconds,
+            clip.duration_seconds,
+        );
+    }
+
+    for region in &mut runtime.regions {
+        let source_start_seconds = region.start_seconds;
+        let source_end_seconds = region.end_seconds;
+        region.start_seconds = warp_timeline_seconds_at(&source_song, source_start_seconds);
+        region.end_seconds = warp_timeline_seconds_at(&source_song, source_end_seconds)
+            .max(region.start_seconds + 0.001);
+    }
+
+    for marker in &mut runtime.section_markers {
+        marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
+    }
+    for marker in &mut runtime.tempo_markers {
+        marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
+    }
+    for marker in &mut runtime.time_signature_markers {
+        marker.start_seconds = warp_timeline_seconds_at(&source_song, marker.start_seconds);
+    }
+
+    runtime.duration_seconds = runtime
+        .clips
+        .iter()
+        .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
+        .fold(
+            warp_timeline_seconds_at(&source_song, source_song.duration_seconds),
+            f64::max,
+        )
+        .max(1.0);
+    runtime
 }
 
 fn song_has_active_warp(song: &Song) -> bool {

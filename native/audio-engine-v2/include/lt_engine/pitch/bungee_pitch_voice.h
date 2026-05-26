@@ -125,6 +125,7 @@ public:
     // clip.source_start_frame after configure for non-prearm builds.
     void      reset_source_cursor(long long source_frame) noexcept;
     long long source_cursor() const noexcept;
+    void      clear_queued_output() noexcept;
 
     // Re-arm the post-construction fade-in so the next `fade_ms` of OUTPUT
     // frames the caller receives are ramped from 0→1 (equal-power). Used by

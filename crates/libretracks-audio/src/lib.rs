@@ -207,7 +207,19 @@ impl AudioEngine {
         trigger: JumpTrigger,
         transition: TransitionType,
     ) -> Result<Option<PendingMarkerJump>, AudioEngineError> {
-        let song = self.ensure_song_loaded()?;
+        let song = self.ensure_song_loaded()?.clone();
+        self.schedule_marker_jump_with_song(&song, target_marker_id, trigger, transition)
+    }
+
+    pub fn schedule_marker_jump_with_song(
+        &mut self,
+        timeline_song: &Song,
+        target_marker_id: &str,
+        trigger: JumpTrigger,
+        transition: TransitionType,
+    ) -> Result<Option<PendingMarkerJump>, AudioEngineError> {
+        validate_song(timeline_song)?;
+        let song = timeline_song;
         let target_marker = find_marker(song, target_marker_id)?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
@@ -263,7 +275,19 @@ impl AudioEngine {
         trigger: JumpTrigger,
         transition: TransitionType,
     ) -> Result<Option<PendingMarkerJump>, AudioEngineError> {
-        let song = self.ensure_song_loaded()?;
+        let song = self.ensure_song_loaded()?.clone();
+        self.schedule_region_jump_with_song(&song, target_region_id, trigger, transition)
+    }
+
+    pub fn schedule_region_jump_with_song(
+        &mut self,
+        timeline_song: &Song,
+        target_region_id: &str,
+        trigger: JumpTrigger,
+        transition: TransitionType,
+    ) -> Result<Option<PendingMarkerJump>, AudioEngineError> {
+        validate_song(timeline_song)?;
+        let song = timeline_song;
         let target_region = find_region(song, target_region_id)?;
 
         if trigger == JumpTrigger::Immediate && transition == TransitionType::Instant {
@@ -389,11 +413,21 @@ impl AudioEngine {
         &mut self,
         delta_seconds: f64,
     ) -> Result<(f64, bool), AudioEngineError> {
+        let song = self.ensure_song_loaded()?.clone();
+        self.advance_transport_with_song(&song, delta_seconds)
+    }
+
+    pub fn advance_transport_with_song(
+        &mut self,
+        timeline_song: &Song,
+        delta_seconds: f64,
+    ) -> Result<(f64, bool), AudioEngineError> {
         if delta_seconds < 0.0 {
             return Err(AudioEngineError::PositionOutOfRange);
         }
 
-        let song = self.ensure_song_loaded()?.clone();
+        validate_song(timeline_song)?;
+        let song = timeline_song.clone();
         let mut next_position = self.position_seconds + delta_seconds;
         let mut jump_executed = false;
 
@@ -509,6 +543,14 @@ impl AudioEngine {
     }
 
     pub fn complete_pending_fade_jump(&mut self) -> Result<Option<f64>, AudioEngineError> {
+        let song = self.ensure_song_loaded()?.clone();
+        self.complete_pending_fade_jump_with_song(&song)
+    }
+
+    pub fn complete_pending_fade_jump_with_song(
+        &mut self,
+        timeline_song: &Song,
+    ) -> Result<Option<f64>, AudioEngineError> {
         let pending_jump = match self.pending_marker_jump.clone() {
             Some(pending_jump) => pending_jump,
             None => return Ok(None),
@@ -521,14 +563,23 @@ impl AudioEngine {
             return Ok(None);
         }
 
-        let song = self.ensure_song_loaded()?;
-        self.position_seconds = resolve_pending_jump_target_start_seconds(song, &pending_jump)?;
+        validate_song(timeline_song)?;
+        self.position_seconds =
+            resolve_pending_jump_target_start_seconds(timeline_song, &pending_jump)?;
         self.pending_marker_jump = None;
         self.pending_fade_jump = None;
         Ok(Some(self.position_seconds))
     }
 
     pub fn complete_pending_instant_jump(&mut self) -> Result<Option<f64>, AudioEngineError> {
+        let song = self.ensure_song_loaded()?.clone();
+        self.complete_pending_instant_jump_with_song(&song)
+    }
+
+    pub fn complete_pending_instant_jump_with_song(
+        &mut self,
+        timeline_song: &Song,
+    ) -> Result<Option<f64>, AudioEngineError> {
         let pending_jump = match self.pending_marker_jump.clone() {
             Some(pending_jump) => pending_jump,
             None => return Ok(None),
@@ -538,20 +589,30 @@ impl AudioEngine {
             return Ok(None);
         }
 
-        let song = self.ensure_song_loaded()?;
-        self.position_seconds = resolve_pending_jump_target_start_seconds(song, &pending_jump)?;
+        validate_song(timeline_song)?;
+        self.position_seconds =
+            resolve_pending_jump_target_start_seconds(timeline_song, &pending_jump)?;
         self.pending_marker_jump = None;
         self.pending_fade_jump = None;
         Ok(Some(self.position_seconds))
     }
 
     pub fn complete_pending_native_jump(&mut self) -> Result<Option<f64>, AudioEngineError> {
+        let song = self.ensure_song_loaded()?.clone();
+        self.complete_pending_native_jump_with_song(&song)
+    }
+
+    pub fn complete_pending_native_jump_with_song(
+        &mut self,
+        timeline_song: &Song,
+    ) -> Result<Option<f64>, AudioEngineError> {
         let pending_jump = match self.pending_marker_jump.clone() {
             Some(pending_jump) => pending_jump,
             None => return Ok(None),
         };
-        let song = self.ensure_song_loaded()?.clone();
-        self.position_seconds = resolve_pending_jump_target_start_seconds(&song, &pending_jump)?;
+        validate_song(timeline_song)?;
+        self.position_seconds =
+            resolve_pending_jump_target_start_seconds(timeline_song, &pending_jump)?;
         self.pending_marker_jump = None;
         self.pending_fade_jump = None;
         Ok(Some(self.position_seconds))

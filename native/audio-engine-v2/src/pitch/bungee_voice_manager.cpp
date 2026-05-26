@@ -618,6 +618,8 @@ void BungeeVoiceManager::retime_existing_for_session(
         }
         it->second->reset_source_cursor(
             static_cast<long long>(spec.source_frame));
+        it->second->clear_queued_output();
+        it->second->arm_fade_in(3);
         ++retimed;
     }
     if (bungee_debug_enabled()) {

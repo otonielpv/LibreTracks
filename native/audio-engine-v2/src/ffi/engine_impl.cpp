@@ -1911,15 +1911,87 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 if (changed) {
                     if (bungee_voices_ && bungee_voices_->is_available()
                         && source_manager_ && clock_) {
-                        auto seek_voice_map = bungee_voices_->build_seek_voice_map(
-                            clock_->position().frame,
-                            *next_session, *source_manager_);
-                        bungee_voices_->publish_prepared_voice_map_realtime(
-                            std::move(seek_voice_map));
+                        bungee_voices_->retime_existing_for_session(
+                            *next_session, *source_manager_,
+                            clock_->position().frame);
                     }
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
-                    if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                    if (mixer_) mixer_->swap_session_atomic(next_session);
+                    if (prearmed_jumps_) {
+                        const auto rev = prearm_revision_.fetch_add(1,
+                            std::memory_order_relaxed) + 1;
+                        prearmed_jumps_->prepare_all_targets_async(
+                            next_session, source_manager_.get(), rev);
+                    }
+                }
+            }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetSongClips>) {
+            if (session_) {
+                auto next_session = std::make_shared<Session>(*session_);
+                bool changed = false;
+                for (auto& song : next_session->songs) {
+                    if (song.id != c.song_id) continue;
+
+                    std::unordered_map<Id, std::vector<Clip>> by_track;
+                    by_track.reserve(song.tracks.size());
+                    for (const auto& update : c.clips) {
+                        Clip clip;
+                        clip.id = update.id;
+                        clip.source_id = update.source_id;
+                        clip.timeline_start_frame =
+                            std::max<Frame>(0, update.timeline_start_frame);
+                        clip.source_start_frame =
+                            std::max<Frame>(0, update.source_start_frame);
+                        clip.length_frames =
+                            std::max<Frame>(0, update.length_frames);
+                        clip.gain = update.gain;
+                        clip.fade_in_frames =
+                            std::max<Frame>(0, update.fade_in_frames);
+                        clip.fade_out_frames =
+                            std::max<Frame>(0, update.fade_out_frames);
+                        clip.semitones = update.semitones;
+                        by_track[update.track_id].push_back(std::move(clip));
+                    }
+
+                    for (auto& track : song.tracks) {
+                        auto it = by_track.find(track.id);
+                        if (it == by_track.end()) {
+                            track.clips.clear();
+                            continue;
+                        }
+                        auto& clips = it->second;
+                        std::sort(clips.begin(), clips.end(),
+                            [](const Clip& left, const Clip& right) {
+                                return left.timeline_start_frame
+                                    < right.timeline_start_frame;
+                        });
+                        track.clips = std::move(clips);
+                    }
+                    Frame max_end = song.start_frame + 1;
+                    for (const auto& track : song.tracks) {
+                        for (const auto& clip : track.clips) {
+                            max_end = std::max(
+                                max_end,
+                                clip.timeline_start_frame + clip.length_frames);
+                        }
+                    }
+                    song.end_frame = max_end;
+                    changed = true;
+                    break;
+                }
+                if (changed) {
+                    if (bungee_voices_ && bungee_voices_->is_available()
+                        && source_manager_ && clock_) {
+                        bungee_voices_->retime_existing_for_session(
+                            *next_session, *source_manager_,
+                            clock_->position().frame);
+                    }
+                    std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
+                    (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+                    if (mixer_) mixer_->swap_session_atomic(next_session);
                     if (prearmed_jumps_) {
                         const auto rev = prearm_revision_.fetch_add(1,
                             std::memory_order_relaxed) + 1;
@@ -1951,7 +2023,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 if (changed) {
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
-                    if (mixer_) mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                    if (mixer_) mixer_->swap_session_atomic(next_session);
                     if (prearmed_jumps_) {
                         const auto rev = prearm_revision_.fetch_add(1,
                             std::memory_order_relaxed) + 1;
@@ -2022,6 +2094,143 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
                     (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
                     if (mixer_) mixer_->swap_session_atomic(next_session);
+                    if (prearmed_jumps_) {
+                        const auto rev = prearm_revision_.fetch_add(1,
+                            std::memory_order_relaxed) + 1;
+                        prearmed_jumps_->prepare_all_targets_async(
+                            next_session, source_manager_.get(), rev);
+                    }
+                }
+            }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetSongTimelineWindow>) {
+            if (session_) {
+                auto next_session = std::make_shared<Session>(*session_);
+                bool changed = false;
+                for (auto& song : next_session->songs) {
+                    if (song.id != c.song_id) continue;
+
+                    std::unordered_map<Id, std::vector<Clip>> by_track;
+                    by_track.reserve(song.tracks.size());
+                    for (const auto& update : c.clips) {
+                        Clip clip;
+                        clip.id = update.id;
+                        clip.source_id = update.source_id;
+                        clip.timeline_start_frame =
+                            std::max<Frame>(0, update.timeline_start_frame);
+                        clip.source_start_frame =
+                            std::max<Frame>(0, update.source_start_frame);
+                        clip.length_frames =
+                            std::max<Frame>(0, update.length_frames);
+                        clip.gain = update.gain;
+                        clip.fade_in_frames =
+                            std::max<Frame>(0, update.fade_in_frames);
+                        clip.fade_out_frames =
+                            std::max<Frame>(0, update.fade_out_frames);
+                        clip.semitones = update.semitones;
+                        by_track[update.track_id].push_back(std::move(clip));
+                    }
+                    for (auto& track : song.tracks) {
+                        auto it = by_track.find(track.id);
+                        if (it == by_track.end()) {
+                            track.clips.clear();
+                            continue;
+                        }
+                        auto& clips = it->second;
+                        std::sort(clips.begin(), clips.end(),
+                            [](const Clip& left, const Clip& right) {
+                                return left.timeline_start_frame
+                                    < right.timeline_start_frame;
+                        });
+                        track.clips = std::move(clips);
+                    }
+                    Frame max_end = song.start_frame + 1;
+                    for (const auto& track : song.tracks) {
+                        for (const auto& clip : track.clips) {
+                            max_end = std::max(
+                                max_end,
+                                clip.timeline_start_frame + clip.length_frames);
+                        }
+                    }
+                    song.end_frame = max_end;
+
+                    song.regions.clear();
+                    song.regions.reserve(c.regions.size());
+                    for (const auto& update : c.regions) {
+                        Region region;
+                        region.id = update.id;
+                        region.name = update.name;
+                        region.start_frame = update.start_frame;
+                        region.end_frame = update.end_frame;
+                        region.transpose_semitones = update.transpose_semitones;
+                        region.warp_enabled = update.warp_enabled;
+                        region.warp_source_bpm = update.warp_source_bpm;
+                        song.regions.push_back(std::move(region));
+                    }
+
+                    song.markers.clear();
+                    song.markers.reserve(c.markers.size());
+                    for (const auto& update : c.markers) {
+                        Marker marker;
+                        marker.id = update.id;
+                        marker.name = update.name;
+                        marker.frame = update.frame;
+                        song.markers.push_back(std::move(marker));
+                    }
+
+                    song.bpm = std::clamp(c.bpm, 20.0, 300.0);
+                    song.beats_per_bar = std::max(1, c.beats_per_bar);
+                    song.beat_unit = std::max(1, c.beat_unit);
+                    song.tempo_markers.clear();
+                    song.tempo_markers.reserve(c.tempo_markers.size());
+                    for (const auto& update : c.tempo_markers) {
+                        TempoMarker marker;
+                        marker.id = update.id;
+                        marker.frame = std::max<Frame>(0, update.frame);
+                        marker.bpm = std::clamp(update.bpm, 20.0, 300.0);
+                        song.tempo_markers.push_back(std::move(marker));
+                    }
+                    std::sort(song.tempo_markers.begin(), song.tempo_markers.end(),
+                        [](const TempoMarker& left, const TempoMarker& right) {
+                            return left.frame < right.frame;
+                        });
+                    song.time_signature_markers.clear();
+                    song.time_signature_markers.reserve(c.time_signature_markers.size());
+                    for (const auto& update : c.time_signature_markers) {
+                        TimeSignatureMarker marker;
+                        marker.id = update.id;
+                        marker.frame = std::max<Frame>(0, update.frame);
+                        marker.beats_per_bar = std::max(1, update.beats_per_bar);
+                        marker.beat_unit = std::max(1, update.beat_unit);
+                        song.time_signature_markers.push_back(std::move(marker));
+                    }
+                    std::sort(song.time_signature_markers.begin(),
+                        song.time_signature_markers.end(),
+                        [](const TimeSignatureMarker& left,
+                           const TimeSignatureMarker& right) {
+                            return left.frame < right.frame;
+                        });
+
+                    changed = true;
+                    break;
+                }
+                if (changed) {
+                    if (bungee_voices_ && bungee_voices_->is_available()
+                        && source_manager_ && clock_) {
+                        bungee_voices_->retime_existing_for_session(
+                            *next_session, *source_manager_,
+                            clock_->position().frame);
+                    }
+                    std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
+                    (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+                    if (mixer_) mixer_->swap_session_atomic(next_session);
+                    if (prearmed_jumps_) {
+                        const auto rev = prearm_revision_.fetch_add(1,
+                            std::memory_order_relaxed) + 1;
+                        prearmed_jumps_->prepare_all_targets_async(
+                            next_session, source_manager_.get(), rev);
+                    }
                 }
             }
             return Result<void>::ok();

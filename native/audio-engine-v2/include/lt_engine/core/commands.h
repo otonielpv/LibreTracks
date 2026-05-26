@@ -121,6 +121,23 @@ struct CmdSetSongRegions {
     std::vector<RegionUpdate> regions;
 };
 
+struct CmdSetSongClips {
+    struct ClipUpdate {
+        Id    id;
+        Id    track_id;
+        Id    source_id;
+        Frame timeline_start_frame = 0;
+        Frame source_start_frame = 0;
+        Frame length_frames = 0;
+        Gain  gain = 1.0f;
+        Frame fade_in_frames = 0;
+        Frame fade_out_frames = 0;
+        Semitones semitones = 0;
+    };
+    Id song_id;
+    std::vector<ClipUpdate> clips;
+};
+
 struct CmdSetSongMarkers {
     struct MarkerUpdate {
         Id          id;
@@ -149,6 +166,18 @@ struct CmdSetSongTiming {
     int beat_unit = 4;
     std::vector<TempoMarkerUpdate> tempo_markers;
     std::vector<TimeSignatureMarkerUpdate> time_signature_markers;
+};
+
+struct CmdSetSongTimelineWindow {
+    Id song_id;
+    std::vector<CmdSetSongClips::ClipUpdate> clips;
+    std::vector<CmdSetSongRegions::RegionUpdate> regions;
+    std::vector<CmdSetSongMarkers::MarkerUpdate> markers;
+    double bpm = 120.0;
+    int beats_per_bar = 4;
+    int beat_unit = 4;
+    std::vector<CmdSetSongTiming::TempoMarkerUpdate> tempo_markers;
+    std::vector<CmdSetSongTiming::TimeSignatureMarkerUpdate> time_signature_markers;
 };
 
 // ---------------------------------------------------------------------------
@@ -187,7 +216,7 @@ using EngineCommand = std::variant<
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
     CmdSetMetronomeConfig,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetSongRegions,
-    CmdSetSongMarkers, CmdSetSongTiming,
+    CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize
 >;
 
