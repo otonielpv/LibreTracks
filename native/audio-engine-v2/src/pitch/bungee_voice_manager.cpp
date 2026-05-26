@@ -468,11 +468,22 @@ void prefeed_voice_with_source_audio(BungeePitchVoice& voice,
         fed += chunk;
     }
 
-    const int prime_target_frames = std::max(
+    // Target queued output equal to the renderer's lookahead. The audio
+    // thread's first read uses `cursor + latency_frames + queued_source`, so
+    // unless the FIFO already holds `latency_frames` of output Bungee will
+    // emit silence until grain alignment catches up (~140 ms at 44.1 kHz with
+    // hop=-1). The previous heuristic (~2048 frames) primed less than a
+    // quarter of the latency window, leaving an audible head silence on every
+    // Play/seek. Pick the larger of latency_frames and the prior heuristic so
+    // we never prime *less* than before, and cap at latency_frames * 2 to
+    // bound the budget when latency_frames itself is small.
+    const int prior_heuristic = std::max(
         max_in_frames,
         std::min(max_in_frames * 4, std::max(max_in_frames, sample_rate / 20)));
+    const int prime_target_frames = std::max(prior_heuristic, latency_frames);
     int primed_total = voice.queued_output_frames();
-    int prime_budget = prime_target_frames * 2;
+    int prime_budget = std::max(prime_target_frames * 2,
+                                latency_frames * 2);
     while (max_in_frames > 0
            && primed_total < prime_target_frames
            && prime_budget > 0) {
@@ -552,15 +563,32 @@ void BungeeVoiceManager::rebuild_for_session(const Session& session,
         warm_voice(*voice,
                    impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
                    spec.time_ratio);
-        // No prefeed here (rebuild_for_session is the cheap path) — but the
-        // renderer's first read uses `cursor + latency + queued`, so anchor
-        // the cursor at the spec's source position.
+        // Prefeed the voice with real source audio so the audio thread's
+        // first render_block returns aligned output instead of the ~140ms of
+        // silence that warm_voice (zero input) leaves in Bungee's output
+        // FIFO. Without this, the first Play after LoadSession suffers the
+        // same initial silence the seek path already avoids — they share the
+        // exact prefeed strategy below.
+        const double pitch_scale = semitones_to_pitch_scale(spec.effective_semitones);
+        const int latency_frames = static_cast<int>(voice->latency_frames());
+        const int compensation_frames =
+            voice->alignment_compensation_frames(pitch_scale);
+        const bool window_ready = ensure_seek_read_window_ready(
+            sources, spec, impl_->max_in_frames,
+            latency_frames, compensation_frames);
+        if (window_ready && spec.source) {
+            prefeed_voice_with_source_audio(
+                *voice, *spec.source, spec.source_frame,
+                impl_->sample_rate, impl_->channel_count, impl_->max_in_frames,
+                pitch_scale, spec.time_ratio);
+        }
         voice->reset_source_cursor(
             static_cast<long long>(spec.source_frame));
-        // warm_voice consumed the voice's initial fade window with zero
-        // input. Re-arm it so the audio thread's first real frames are
-        // ramped, masking Bungee's startup pop when a new clip voice appears.
-        voice->arm_fade_in();
+        // Voice is already primed with real audio above; ask for 0-frame
+        // fade-in. If the source window was not ready (very rare: source not
+        // yet decoded at session-build time), re-arm a short fade-in to mask
+        // the warm-only silence.
+        voice->arm_fade_in(window_ready ? 0 : 3);
         (*next)[spec.clip_id] = std::move(voice);
         ++built;
         impl_->voices_built_total.fetch_add(1, std::memory_order_relaxed);

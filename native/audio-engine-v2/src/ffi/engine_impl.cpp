@@ -115,6 +115,25 @@ const char* jump_trigger_name(JumpTrigger trigger) noexcept {
     return "Unknown";
 }
 
+// Ratio of source frames consumed per timeline frame for a given clip's
+// effective render path. Warp uses warp_time_ratio; varispeed uses pitch_scale
+// (the renderer reads source_frame + timeline_offset * pitch_scale). When both
+// are active (warp + transpose under Bungee), Bungee handles pitch internally
+// without changing source consumption rate, so only warp_time_ratio applies.
+double source_per_timeline_ratio(const PitchRenderDecision& decision) noexcept {
+    if (decision.warp_active) {
+        return decision.warp_time_ratio > 0.0 && std::isfinite(decision.warp_time_ratio)
+            ? decision.warp_time_ratio
+            : 1.0;
+    }
+    if (decision.path == ClipPathKind::Varispeed
+        && decision.pitch_scale > 0.0
+        && std::isfinite(decision.pitch_scale)) {
+        return decision.pitch_scale;
+    }
+    return 1.0;
+}
+
 Frame clip_source_frame_at_timeline(const Track& track,
                                     const Clip& clip,
                                     const Song& song,
@@ -123,7 +142,7 @@ Frame clip_source_frame_at_timeline(const Track& track,
         std::max<Frame>(0, timeline_frame - clip.timeline_start_frame);
     const auto decision = resolve_pitch_render_decision(
         track, clip, song, timeline_frame);
-    const double ratio = decision.warp_active ? decision.warp_time_ratio : 1.0;
+    const double ratio = source_per_timeline_ratio(decision);
     return clip.source_start_frame
         + static_cast<Frame>(static_cast<double>(timeline_offset) * ratio);
 }
@@ -136,7 +155,7 @@ int clip_source_frames_for_timeline_span(const Track& track,
     if (timeline_frames <= 0) return 0;
     const auto decision = resolve_pitch_render_decision(
         track, clip, song, timeline_frame);
-    const double ratio = decision.warp_active ? decision.warp_time_ratio : 1.0;
+    const double ratio = source_per_timeline_ratio(decision);
     return static_cast<int>(std::min<Frame>(
         static_cast<Frame>(std::ceil(static_cast<double>(timeline_frames) * ratio)),
         static_cast<Frame>(std::numeric_limits<int>::max())));
