@@ -2358,7 +2358,6 @@ export function TransportPanelContent() {
     t,
     setStatus,
     setActiveSidebarTab,
-    snapshotRef,
   });
 
   const {

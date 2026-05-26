@@ -494,25 +494,50 @@ impl DesktopSession {
         let song = build_empty_song(song_id, title);
 
         let default_directory = project_root(app).join("songs");
-        let target_song_file = FileDialog::new()
+        // The user picks the .ltsession name + parent location with the native
+        // save dialog. We then create a project folder named after the file
+        // stem and place the .ltsession (plus audio/, cache/) inside it —
+        // Ableton-style. This means a user can pick "MyShow.ltsession" in
+        // any folder without first having to create a MyShow/ subfolder.
+        let target_pick = FileDialog::new()
             .set_title("Crear proyecto")
             .set_directory(&default_directory)
             .add_filter("LibreTracks Session", &["ltsession"])
             .set_file_name(&default_project_file_name(&song.title))
             .save_file();
 
-        let Some(target_song_file) = target_song_file else {
+        let Some(target_pick) = target_pick else {
             return Ok(None);
         };
 
-        let song_dir = target_song_file
+        let parent_dir = target_pick
             .parent()
             .map(Path::to_path_buf)
             .ok_or_else(|| {
                 DesktopError::AudioCommand(
-                    "el archivo del proyecto debe vivir dentro de una carpeta".into(),
+                    "no se pudo determinar la carpeta destino".into(),
                 )
             })?;
+        let project_name = target_pick
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .map(str::to_owned)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| {
+                DesktopError::AudioCommand(
+                    "el nombre del proyecto no es valido".into(),
+                )
+            })?;
+
+        let song_dir = parent_dir.join(&project_name);
+        if song_dir.exists() {
+            return Err(DesktopError::AudioCommand(format!(
+                "ya existe una carpeta llamada \"{}\" en esa ubicacion. Elige otro nombre.",
+                project_name
+            )));
+        }
+        let target_song_file = song_dir.join(format!("{}.ltsession", project_name));
+
         fs::create_dir_all(song_dir.join("audio"))?;
         fs::create_dir_all(song_dir.join("cache").join("waveforms"))?;
         write_library_manifest(&song_dir, &[])?;
@@ -611,24 +636,46 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
-        let target_song_file = FileDialog::new()
+        let target_pick = FileDialog::new()
             .add_filter("LibreTracks Session", &["ltsession"])
             .set_title("Guardar proyecto como")
             .set_file_name(&default_project_file_name(&song.title))
             .save_file();
 
-        let Some(target_song_file) = target_song_file else {
+        let Some(target_pick) = target_pick else {
             return Ok(None);
         };
 
-        let target_song_dir = target_song_file
+        // Save As mirrors Create: the user picks <name>.ltsession in any
+        // folder, and we create a <name>/ subfolder containing the session
+        // file plus audio/ and cache/.
+        let parent_dir = target_pick
             .parent()
             .map(Path::to_path_buf)
             .ok_or_else(|| {
                 DesktopError::AudioCommand(
-                    "el archivo del proyecto debe vivir dentro de una carpeta".into(),
+                    "no se pudo determinar la carpeta destino".into(),
                 )
             })?;
+        let project_name = target_pick
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .map(str::to_owned)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| {
+                DesktopError::AudioCommand(
+                    "el nombre del proyecto no es valido".into(),
+                )
+            })?;
+
+        let target_song_dir = parent_dir.join(&project_name);
+        if target_song_dir.exists() && target_song_dir != source_song_dir {
+            return Err(DesktopError::AudioCommand(format!(
+                "ya existe una carpeta llamada \"{}\" en esa ubicacion. Elige otro nombre.",
+                project_name
+            )));
+        }
+        let target_song_file = target_song_dir.join(format!("{}.ltsession", project_name));
 
         let save_started_at = Instant::now();
         let library_assets = list_library_assets(&source_song_dir, Some(&song))?;

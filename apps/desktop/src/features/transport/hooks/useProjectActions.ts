@@ -1,4 +1,3 @@
-import type { MutableRefObject } from "react";
 import type { LibraryAssetSummary, TransportSnapshot } from "@libretracks/shared/models";
 import {
   createSong,
@@ -24,7 +23,6 @@ type UseProjectActionsProps = {
   t: (key: string, options?: Record<string, unknown>) => string;
   setStatus: (status: string) => void;
   setActiveSidebarTab: (tab: SidebarTab | null) => void;
-  snapshotRef: MutableRefObject<TransportSnapshot | null>;
 };
 
 export function useProjectActions({
@@ -36,7 +34,6 @@ export function useProjectActions({
   t,
   setStatus,
   setActiveSidebarTab,
-  snapshotRef,
 }: UseProjectActionsProps) {
   function handleCreateSongClick() {
     void runAction(
@@ -65,22 +62,25 @@ export function useProjectActions({
       async () => {
         setProjectViewHydrating(true);
         try {
-          // openProject() returns only after the backend has finished decoding
+          // openProject() returns null if the user cancels the native dialog.
+          // Otherwise it returns only after the backend has finished decoding
           // all sources AND prearmed Bungee voices — see
           // wait_for_project_audio_preparation in state.rs. So by the time we
           // continue, the engine is ready to Play instantly.
-          const nextSnapshot = (await openProject()) ?? snapshotRef.current;
+          const nextSnapshot = await openProject();
+          if (!nextSnapshot) {
+            setProjectViewHydrating(false);
+            return;
+          }
           const nextSong = await refreshSongView({ sync: true });
           applyPlaybackSnapshot(nextSnapshot);
           setActiveSidebarTab(null);
-          if (nextSong) {
-            // Wait two animation frames so React commits the new SongView and
-            // paints the tracks before we tear down the loading overlay —
-            // prevents the 1-2s flash of an empty timeline between the
-            // overlay closing and the tracks appearing.
-            await nextPaint();
-            setProjectViewHydrating(false);
-          }
+          // Wait two animation frames so React commits the new SongView and
+          // paints the tracks before we tear down the loading overlay —
+          // prevents the 1-2s flash of an empty timeline between the
+          // overlay closing and the tracks appearing.
+          await nextPaint();
+          setProjectViewHydrating(false);
         } catch (error) {
           setProjectViewHydrating(false);
           throw error;
