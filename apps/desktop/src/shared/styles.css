@@ -2465,7 +2465,7 @@ textarea {
 .lt-track-header.is-condensed .lt-track-mix-controls,
 .lt-track-header.is-micro .lt-track-mix-controls {
   display: grid;
-  grid-template-columns: minmax(40px, 90px) auto;
+  grid-template-columns: minmax(40px, 90px) minmax(88px, 1fr);
   grid-template-rows: auto auto;
   column-gap: 0.45rem;
   row-gap: 0.18rem;
@@ -2494,6 +2494,8 @@ textarea {
   grid-column: 2;
   grid-row: 1 / span 2;
   align-self: center;
+  width: 100%;
+  min-width: 0;
 }
 
 .lt-track-header.is-compact .lt-track-volume,
@@ -2548,7 +2550,8 @@ textarea {
 .lt-track-header.is-condensed .lt-audio-route-trigger,
 .lt-track-header.is-micro .lt-audio-route-trigger {
   height: 22px;
-  min-width: 64px;
+  min-width: 88px;
+  width: 100%;
   padding: 0 0.5rem;
   font-size: 9px;
 }
