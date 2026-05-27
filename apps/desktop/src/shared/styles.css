@@ -2339,314 +2339,223 @@ textarea {
 
 .lt-track-header-main {
   min-width: 0;
+  min-height: 0;
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 0.12rem;
-  overflow: hidden;
 }
 
 .lt-track-header-summary {
   min-height: 0;
   flex: 1 1 auto;
   display: flex;
-  align-items: stretch;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.lt-track-header.is-condensed {
-  gap: 0.35rem;
-  padding-top: 0.35rem;
-  padding-bottom: 0.35rem;
-}
-
-.lt-track-header.is-condensed .lt-track-title-row strong {
-  font-size: 11px;
-}
-
-.lt-track-header.is-condensed .lt-track-meta,
-.lt-track-header.is-condensed .lt-track-drop-hint {
-  font-size: 9px;
-}
-
-.lt-track-header.is-condensed .lt-track-control-row {
-  gap: 0.35rem;
-}
-
-.lt-track-header.is-condensed .lt-track-header-summary {
-  gap: 0.4rem;
-}
-
-.lt-track-header.is-condensed .lt-track-header-body,
-.lt-track-header.is-condensed .lt-track-header-content {
-  gap: 0.35rem;
-}
-
-.lt-track-header.is-condensed .lt-track-mix-controls {
-  gap: 0.2rem;
-  min-width: 96px;
-}
-
-.lt-track-header.is-condensed .lt-track-toggle-group button {
-  width: 20px;
-  height: 20px;
-  font-size: 9px;
-}
-
-.lt-track-header.is-condensed .lt-track-toggle-group {
-  grid-template-columns: repeat(2, 20px);
-  grid-auto-rows: 20px;
-}
-
-.lt-track-header.is-condensed .lt-track-volume,
-.lt-track-header.is-condensed .lt-track-pan {
-  gap: 0.3rem;
-}
-
-.lt-track-header.is-condensed .lt-track-volume span,
-.lt-track-header.is-condensed .lt-track-pan span {
-  font-size: 9px;
-}
-
-.lt-track-header.is-compact {
-  gap: 0.25rem;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.lt-track-header.is-compact .lt-track-title-row strong {
-  font-size: 10px;
-  line-height: 1;
-}
-
-.lt-track-header.is-compact .lt-track-meta,
-.lt-track-header.is-compact .lt-track-drop-hint {
-  display: none;
-}
-
-.lt-track-header.is-compact .lt-track-control-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: 14px 15px;
   align-items: center;
-  column-gap: 0.24rem;
-  row-gap: 0.1rem;
-  min-height: 31px;
-}
-
-.lt-track-header.is-compact .lt-track-header-summary {
-  flex: 0 0 auto;
-  gap: 0.35rem;
-}
-
-.lt-track-header.is-compact .lt-track-header-body,
-.lt-track-header.is-compact .lt-track-header-content {
-  gap: 0.08rem;
-}
-
-.lt-track-header.is-compact .lt-track-header-body {
-  padding: 0.18rem 0.36rem 0.16rem 0.5rem;
-}
-
-.lt-track-header.is-compact .lt-track-header-content {
-  display: grid;
-  grid-template-rows: 13px minmax(0, 1fr);
-}
-
-.lt-track-header.is-compact .lt-track-meter {
-  width: 8px;
-  flex-basis: 8px;
-  gap: 0.18rem;
-}
-
-.lt-track-header.is-compact .lt-track-mix-controls {
-  display: grid;
-  grid-template-columns: minmax(36px, 1fr) minmax(36px, 1fr);
-  grid-template-rows: 14px 15px;
-  align-items: center;
-  column-gap: 0.18rem;
-  row-gap: 0.1rem;
   min-width: 0;
 }
 
-.lt-track-header.is-compact .lt-track-toggle-group button {
-  width: 15px;
-  height: 15px;
-  font-size: 8px;
-}
+/* ---------------------------------------------------------------
+ * Compact/Condensed/Micro track-header layout
+ * Single shared layout: [M S T] [vol stacked over pan, no labels]
+ * [audio-to compact] [meter]. The micro bucket hides audio-to.
+ * --------------------------------------------------------------- */
 
-.lt-track-header.is-compact .lt-track-toggle-group {
-  display: flex;
-  align-items: center;
-  grid-column: 1;
-  grid-row: 1;
-  gap: 0.15rem;
-}
-
-.lt-track-header.is-compact .lt-track-volume,
-.lt-track-header.is-compact .lt-track-pan {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0.16rem;
-  min-height: 14px;
-}
-
-.lt-track-header.is-compact .lt-track-volume {
-  grid-column: 1;
-  grid-row: 1;
-  min-width: 0;
-}
-
-.lt-track-header.is-compact .lt-track-pan {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.lt-track-header.is-compact .lt-track-audio-to {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  min-width: 0;
-}
-
-.lt-track-header.is-compact .lt-track-volume span,
-.lt-track-header.is-compact .lt-track-pan span {
-  display: block;
-  font-size: 8px;
-  letter-spacing: 0.02em;
-}
-
-.lt-track-header.is-compact .lt-track-volume span,
-.lt-track-header.is-compact .lt-track-pan span {
-  flex: 0 0 auto;
-}
-
-.lt-track-header.is-compact .lt-track-audio-to span {
-  display: none;
-}
-
-.lt-track-header.is-compact .lt-audio-route-trigger {
-  height: 15px;
-  padding: 0 0.25rem;
-  font-size: 8px;
-}
-
-.lt-track-header.is-compact .lt-audio-route-trigger-caret {
-  font-size: 8px;
-}
-
-.lt-track-header.is-compact .lt-track-volume input[type="range"],
-.lt-track-header.is-compact .lt-track-pan input[type="range"] {
-  height: 3px;
-}
-
-.lt-track-header.is-compact .lt-track-volume input[type="range"]::-webkit-slider-thumb,
-.lt-track-header.is-compact .lt-track-pan input[type="range"]::-webkit-slider-thumb {
-  height: 10px;
-}
-
-.lt-track-header.is-compact .lt-folder-toggle {
-  width: 13px;
-  height: 13px;
-  font-size: 9px;
-}
-
+.lt-track-header.is-compact,
+.lt-track-header.is-condensed,
 .lt-track-header.is-micro {
   padding-top: 0;
   padding-bottom: 0;
-}
-
-.lt-track-header.is-micro .lt-track-header-body {
-  gap: 0.35rem;
-  padding: 0.2rem 0.45rem;
-}
-
-.lt-track-header.is-micro .lt-track-header-content {
-  display: grid;
-  grid-template-rows: 14px 20px;
-  gap: 0.12rem;
-}
-
-.lt-track-header.is-micro .lt-track-header-summary {
-  flex: 0 0 auto;
-  align-items: center;
-}
-
-.lt-track-header.is-micro .lt-track-title-row strong {
-  font-size: 10px;
-}
-
-.lt-track-header.is-micro .lt-track-meta,
-.lt-track-header.is-micro .lt-track-volume span {
-  display: none;
-}
-
-.lt-track-header.is-micro .lt-track-control-row {
-  min-height: 20px;
   gap: 0.25rem;
 }
 
-.lt-track-header.is-micro .lt-track-toggle-group {
-  display: flex;
-  gap: 0.2rem;
-}
-
-.lt-track-header.is-micro .lt-track-toggle-group button {
-  width: 18px;
-  height: 18px;
-  font-size: 8px;
-}
-
-.lt-track-header.is-micro .lt-track-mix-controls {
-  min-width: 0;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.22rem;
-}
-
-.lt-track-header.is-micro .lt-track-volume,
-.lt-track-header.is-micro .lt-track-pan {
-  gap: 0.2rem;
-}
-
-.lt-track-header.is-micro .lt-track-pan {
+.lt-track-header.is-compact .lt-track-meta,
+.lt-track-header.is-compact .lt-track-drop-hint,
+.lt-track-header.is-condensed .lt-track-meta,
+.lt-track-header.is-condensed .lt-track-drop-hint,
+.lt-track-header.is-micro .lt-track-meta,
+.lt-track-header.is-micro .lt-track-drop-hint {
   display: none;
 }
 
+.lt-track-header.is-compact .lt-track-header-body,
+.lt-track-header.is-condensed .lt-track-header-body,
+.lt-track-header.is-micro .lt-track-header-body {
+  padding: 0.3rem 0.35rem 0.32rem 0.25rem;
+  gap: 0.3rem;
+}
+
+.lt-track-header.is-compact .lt-track-header-content,
+.lt-track-header.is-condensed .lt-track-header-content,
+.lt-track-header.is-micro .lt-track-header-content {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.22rem;
+}
+
+.lt-track-header.is-compact .lt-track-header-summary,
+.lt-track-header.is-condensed .lt-track-header-summary,
+.lt-track-header.is-micro .lt-track-header-summary {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lt-track-header.is-compact .lt-track-title-row strong,
+.lt-track-header.is-condensed .lt-track-title-row strong,
+.lt-track-header.is-micro .lt-track-title-row strong {
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.lt-track-header.is-compact .lt-folder-toggle,
+.lt-track-header.is-condensed .lt-folder-toggle,
+.lt-track-header.is-micro .lt-folder-toggle {
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
+}
+
+/* Control row: 2 columns — toggles | mix-controls (which itself splits
+   into sliders column + audio-to column). */
+.lt-track-header.is-compact .lt-track-control-row,
+.lt-track-header.is-condensed .lt-track-control-row,
+.lt-track-header.is-micro .lt-track-control-row {
+  display: grid;
+  grid-template-columns: auto minmax(40px, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 0;
+}
+
+/* M/S/T as a 2x2 grid (T spans both columns), matches the mockup. */
+.lt-track-header.is-compact .lt-track-toggle-group,
+.lt-track-header.is-condensed .lt-track-toggle-group,
+.lt-track-header.is-micro .lt-track-toggle-group {
+  display: grid;
+  grid-template-columns: repeat(2, 18px);
+  grid-auto-rows: 14px;
+  gap: 0.12rem;
+  align-items: stretch;
+}
+
+.lt-track-header.is-compact .lt-track-toggle-group button,
+.lt-track-header.is-condensed .lt-track-toggle-group button,
+.lt-track-header.is-micro .lt-track-toggle-group button {
+  width: 18px;
+  height: 14px;
+  font-size: 8px;
+  border-radius: 2px;
+}
+
+/* Mix controls: 2-col grid — sliders stack on the left (bounded width
+   so they don't stretch full width), audio-to on the right spanning
+   both rows so the button sits to the right of the faders. */
+.lt-track-header.is-compact .lt-track-mix-controls,
+.lt-track-header.is-condensed .lt-track-mix-controls,
+.lt-track-header.is-micro .lt-track-mix-controls {
+  display: grid;
+  grid-template-columns: minmax(40px, 90px) auto;
+  grid-template-rows: auto auto;
+  column-gap: 0.45rem;
+  row-gap: 0.18rem;
+  align-items: center;
+  justify-content: start;
+  min-width: 0;
+}
+
+.lt-track-header.is-compact .lt-track-volume,
+.lt-track-header.is-condensed .lt-track-volume,
 .lt-track-header.is-micro .lt-track-volume {
-  flex: 1 1 42px;
-  min-width: 36px;
+  grid-column: 1;
+  grid-row: 1;
 }
 
+.lt-track-header.is-compact .lt-track-pan,
+.lt-track-header.is-condensed .lt-track-pan,
+.lt-track-header.is-micro .lt-track-pan {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.lt-track-header.is-compact .lt-track-audio-to,
+.lt-track-header.is-condensed .lt-track-audio-to,
 .lt-track-header.is-micro .lt-track-audio-to {
-  flex: 0 0 74px;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
 }
 
+.lt-track-header.is-compact .lt-track-volume,
+.lt-track-header.is-compact .lt-track-pan,
+.lt-track-header.is-condensed .lt-track-volume,
+.lt-track-header.is-condensed .lt-track-pan,
+.lt-track-header.is-micro .lt-track-volume,
+.lt-track-header.is-micro .lt-track-pan {
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+}
+
+.lt-track-header.is-compact .lt-track-volume span,
+.lt-track-header.is-compact .lt-track-pan span,
+.lt-track-header.is-condensed .lt-track-volume span,
+.lt-track-header.is-condensed .lt-track-pan span,
+.lt-track-header.is-micro .lt-track-volume span,
+.lt-track-header.is-micro .lt-track-pan span {
+  display: none;
+}
+
+.lt-track-header.is-compact .lt-track-volume input[type="range"],
+.lt-track-header.is-compact .lt-track-pan input[type="range"],
+.lt-track-header.is-condensed .lt-track-volume input[type="range"],
+.lt-track-header.is-condensed .lt-track-pan input[type="range"],
+.lt-track-header.is-micro .lt-track-volume input[type="range"],
+.lt-track-header.is-micro .lt-track-pan input[type="range"] {
+  height: 3px;
+  width: 100%;
+  min-width: 0;
+}
+
+.lt-track-header.is-compact .lt-track-volume input[type="range"]::-webkit-slider-thumb,
+.lt-track-header.is-compact .lt-track-pan input[type="range"]::-webkit-slider-thumb,
+.lt-track-header.is-condensed .lt-track-volume input[type="range"]::-webkit-slider-thumb,
+.lt-track-header.is-condensed .lt-track-pan input[type="range"]::-webkit-slider-thumb,
+.lt-track-header.is-micro .lt-track-volume input[type="range"]::-webkit-slider-thumb,
+.lt-track-header.is-micro .lt-track-pan input[type="range"]::-webkit-slider-thumb {
+  height: 10px;
+  width: 8px;
+}
+
+/* AUDIO TO: compact button at the right of the sliders, label hidden. */
+.lt-track-header.is-compact .lt-track-audio-to span,
+.lt-track-header.is-condensed .lt-track-audio-to span,
 .lt-track-header.is-micro .lt-track-audio-to span {
   display: none;
 }
 
+.lt-track-header.is-compact .lt-audio-route-trigger,
+.lt-track-header.is-condensed .lt-audio-route-trigger,
 .lt-track-header.is-micro .lt-audio-route-trigger {
-  height: 18px;
-  padding: 0 0.28rem;
-  font-size: 8px;
+  height: 22px;
+  min-width: 64px;
+  padding: 0 0.5rem;
+  font-size: 9px;
 }
 
-.lt-track-header.is-micro .lt-track-pan span {
-  flex: 0 0 1.4rem;
-  font-size: 8px;
+.lt-track-header.is-compact .lt-audio-route-trigger-caret,
+.lt-track-header.is-condensed .lt-audio-route-trigger-caret,
+.lt-track-header.is-micro .lt-audio-route-trigger-caret {
+  font-size: 9px;
 }
 
-.lt-track-header.is-micro .lt-track-volume input[type="range"],
-.lt-track-header.is-micro .lt-track-pan input[type="range"] {
-  height: 3px;
-}
-
-.lt-track-header.is-micro .lt-track-volume input[type="range"]::-webkit-slider-thumb,
-.lt-track-header.is-micro .lt-track-pan input[type="range"]::-webkit-slider-thumb {
-  height: 10px;
-  width: 7px;
+/* Meter sits at the far right of the header body (no change to the
+   meter rules themselves; it already lives outside .lt-track-header-content). */
+.lt-track-header.is-compact .lt-track-meter,
+.lt-track-header.is-condensed .lt-track-meter,
+.lt-track-header.is-micro .lt-track-meter {
+  width: 8px;
+  flex-basis: 8px;
 }
 
 .lt-track-header.is-micro .lt-track-meter {
@@ -2659,6 +2568,7 @@ textarea {
   align-items: center;
   gap: 0.25rem;
   min-width: 0;
+  flex-shrink: 0;
   overflow: hidden;
 }
 

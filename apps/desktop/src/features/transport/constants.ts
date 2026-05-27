@@ -6,6 +6,15 @@ export const TIMELINE_FIT_RIGHT_GUTTER_PX = 140;
 export const TRACK_HEIGHT_MIN = 60;
 export const TRACK_HEIGHT_MAX = 148;
 export const TRACK_HEIGHT_STEP = 8;
+
+export type TrackHeaderDensity = "is-micro" | "is-compact" | "is-condensed" | "";
+
+export function densityFromHeight(trackHeight: number): TrackHeaderDensity {
+  if (trackHeight <= 68) return "is-micro";
+  if (trackHeight <= 80) return "is-compact";
+  if (trackHeight <= 96) return "is-condensed";
+  return "";
+}
 export const RULER_HEIGHT = 132;
 export const ZOOM_MIN = 0.0625;
 export const ZOOM_MAX = 64;

@@ -1,5 +1,6 @@
 import type { MouseEvent as ReactMouseEvent, WheelEvent as ReactWheelEvent } from "react";
 
+import { densityFromHeight } from "./constants";
 import type { SongView } from "./desktopApi";
 import type { TimelineTrackSummary } from "./pendingAudioImports";
 import { TrackHeaderItem } from "./TrackHeaderItem";
@@ -89,8 +90,7 @@ export function TrackHeadersPane({
         {song?.tracks && visibleTracks.map((track) => {
           const isTrackSelected = selectedTrackIds.includes(track.id);
           const childCount = getTrackChildCount(track.id);
-          const trackDensityClass =
-            trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
+          const trackDensityClass = densityFromHeight(trackHeight);
 
           if (track.isPending) {
             return (
@@ -102,7 +102,7 @@ export function TrackHeadersPane({
               >
                 <div
                   className={`lt-track-header ${trackDensityClass} is-library-preview`}
-                  style={{ height: trackHeight, paddingLeft: 16 + track.depth * 22 }}
+                  style={{ height: trackHeight, paddingLeft: 8 + track.depth * 12 }}
                   aria-hidden="true"
                 >
                   <div className="lt-track-header-body">
@@ -175,7 +175,7 @@ export function TrackHeadersPane({
           >
             <div
               className={`lt-track-header ${previewTrackDensityClass} is-library-preview`}
-              style={{ height: trackHeight, paddingLeft: 16 }}
+              style={{ height: trackHeight, paddingLeft: 8 }}
               aria-hidden="true"
             >
               <div className="lt-track-header-body">

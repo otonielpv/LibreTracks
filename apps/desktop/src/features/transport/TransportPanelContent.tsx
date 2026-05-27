@@ -209,6 +209,7 @@ import type {
 import {
   CLIP_SNAP_RADIUS_PX,
   DEFAULT_TIMELINE_VIEWPORT_WIDTH,
+  densityFromHeight,
   DRAG_THRESHOLD_PX,
   DOM_EXTERNAL_DROP_PREVIEW_TTL_MS,
   HARDWARE_OUTPUT_CHANNEL_COUNT,
@@ -3825,8 +3826,7 @@ export function TransportPanelContent() {
     () => [...libraryAssets, ...pendingAudioImports.map(toPendingLibraryAsset)],
     [libraryAssets, pendingAudioImports],
   );
-  const previewTrackDensityClass =
-    trackHeight <= 76 ? "is-compact" : trackHeight <= 88 ? "is-condensed" : "";
+  const previewTrackDensityClass = densityFromHeight(trackHeight);
   const libraryPreviewRows = useMemo(() => {
     const rows = new Map<number, LibraryClipPreviewState[]>();
 

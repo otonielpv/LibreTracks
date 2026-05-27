@@ -119,7 +119,7 @@ function TrackHeaderItemComponent({
   const metaLabel = trackKind === "folder" ? t("trackHeader.childrenCount", { count: childCount }) : null;
   const headerStyle = {
     height: trackHeight,
-    paddingLeft: 16 + trackDepth * 22,
+    paddingLeft: 8 + trackDepth * 12,
     ...(trackColor ? { "--lt-track-color": trackColor } : {}),
   } as CSSProperties;
 
