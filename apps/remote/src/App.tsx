@@ -118,6 +118,7 @@ const PAN_CENTER_MAGNET = 0.08;
 const REMOTE_SIZE_STORAGE_KEY = "libretracks.remote.uiSize";
 const MAX_REMOTE_SIZE_LEVEL = 3;
 const TIMELINE_JITTER_RESET_THRESHOLD_SECONDS = 0.18;
+const READOUT_MIN_UPDATE_INTERVAL_MS = 1000 / 30;
 const STRINGS = getRemoteStrings();
 
 function readRemoteSizeLevel() {
@@ -565,24 +566,40 @@ function useTransportReadout(): TransportReadout {
   });
 
   const timelineRegions = useMemo(() => buildSongTempoRegions(songView), [songView]);
+  const snapshotRef = useRef(snapshot);
+  const songViewRef = useRef(songView);
+  const timelineRegionsRef = useRef(timelineRegions);
+  const snapshotReceivedAtMsRef = useRef(snapshotReceivedAtMs);
+  const lastReadoutCommitAtRef = useRef(0);
+
+  useEffect(() => {
+    snapshotRef.current = snapshot;
+    songViewRef.current = songView;
+    timelineRegionsRef.current = timelineRegions;
+    snapshotReceivedAtMsRef.current = snapshotReceivedAtMs;
+  }, [snapshot, songView, snapshotReceivedAtMs, timelineRegions]);
 
   useEffect(() => {
     let frameId = 0;
 
     const render = () => {
-      const positionSeconds = resolveLivePosition(snapshot, snapshotReceivedAtMs);
-      const currentRegion = getSongRegionAtPosition(songView, positionSeconds);
+      const currentSnapshot = snapshotRef.current;
+      const currentSongView = songViewRef.current;
+      const currentTimelineRegions = timelineRegionsRef.current;
+      const currentSnapshotReceivedAtMs = snapshotReceivedAtMsRef.current;
+      const positionSeconds = resolveLivePosition(currentSnapshot, currentSnapshotReceivedAtMs);
+      const currentRegion = getSongRegionAtPosition(currentSongView, positionSeconds);
       const tempoRegion =
-        getSongTempoRegionAtPosition(songView, positionSeconds) ??
-        timelineRegions[0] ?? {
-          bpm: songView?.bpm ?? 120,
-          timeSignature: songView?.timeSignature ?? "4/4",
+        getSongTempoRegionAtPosition(currentSongView, positionSeconds) ??
+        currentTimelineRegions[0] ?? {
+          bpm: currentSongView?.bpm ?? 120,
+          timeSignature: currentSongView?.timeSignature ?? "4/4",
         };
 
       const musicalPosition = currentRegion
         ? getCumulativeMusicalPosition(
             positionSeconds,
-            timelineRegions,
+            currentTimelineRegions,
             tempoRegion.bpm,
             tempoRegion.timeSignature,
           )
@@ -593,13 +610,33 @@ function useTransportReadout(): TransportReadout {
             subBeat: 0,
           };
 
-      setReadout({
+      const nextReadout = {
         positionSeconds,
         timecode: formatTimecode(positionSeconds),
         musicalDisplay: musicalPosition.display,
         bpm: tempoRegion.bpm,
         timeSignature: tempoRegion.timeSignature,
         regionName: currentRegion?.name ?? "--",
+      };
+
+      const isPlaying = currentSnapshot?.playbackState === "playing" && currentSnapshot.transportClock?.running === true;
+      const now = performance.now();
+
+      setReadout((currentReadout) => {
+        const intervalElapsed = now - lastReadoutCommitAtRef.current >= READOUT_MIN_UPDATE_INTERVAL_MS;
+        const displayChanged =
+          nextReadout.timecode !== currentReadout.timecode ||
+          nextReadout.musicalDisplay !== currentReadout.musicalDisplay ||
+          nextReadout.bpm !== currentReadout.bpm ||
+          nextReadout.timeSignature !== currentReadout.timeSignature ||
+          nextReadout.regionName !== currentReadout.regionName;
+
+        if (isPlaying && !intervalElapsed && !displayChanged) {
+          return currentReadout;
+        }
+
+        lastReadoutCommitAtRef.current = now;
+        return nextReadout;
       });
 
       frameId = window.requestAnimationFrame(render);
@@ -607,7 +644,7 @@ function useTransportReadout(): TransportReadout {
 
     frameId = window.requestAnimationFrame(render);
     return () => window.cancelAnimationFrame(frameId);
-  }, [snapshotReceivedAtMs, snapshot, songView, timelineRegions]);
+  }, []);
 
   return readout;
 }
@@ -625,6 +662,8 @@ const SharedTimeline = memo(function SharedTimeline({
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
+  const snapshotRef = useRef(snapshot);
+  const snapshotReceivedAtMsRef = useRef(snapshotReceivedAtMs);
   const visualPositionRef = useRef(0);
   const lastTimelinePlaybackRef = useRef<{ playing: boolean; positionSeconds: number }>({
     playing: false,
@@ -672,6 +711,11 @@ const SharedTimeline = memo(function SharedTimeline({
       : null;
 
   useEffect(() => {
+    snapshotRef.current = snapshot;
+    snapshotReceivedAtMsRef.current = snapshotReceivedAtMs;
+  }, [snapshot, snapshotReceivedAtMs]);
+
+  useEffect(() => {
     const updateWidth = () => {
       setViewportWidth(shellRef.current?.clientWidth ?? window.innerWidth);
     };
@@ -693,8 +737,9 @@ const SharedTimeline = memo(function SharedTimeline({
 
     const render = () => {
       const width = shellRef.current?.clientWidth ?? viewportWidth;
-      const rawPositionSeconds = resolveLivePosition(snapshot, snapshotReceivedAtMs);
-      const isPlaying = snapshot?.playbackState === "playing" && snapshot.transportClock?.running === true;
+      const currentSnapshot = snapshotRef.current;
+      const rawPositionSeconds = resolveLivePosition(currentSnapshot, snapshotReceivedAtMsRef.current);
+      const isPlaying = currentSnapshot?.playbackState === "playing" && currentSnapshot.transportClock?.running === true;
 
       if (!isPlaying) {
         visualPositionRef.current = rawPositionSeconds;
@@ -728,7 +773,7 @@ const SharedTimeline = memo(function SharedTimeline({
 
     frameId = window.requestAnimationFrame(render);
     return () => window.cancelAnimationFrame(frameId);
-  }, [contentWidth, snapshotReceivedAtMs, snapshot, viewportWidth]);
+  }, [contentWidth, viewportWidth]);
 
   return (
     <div ref={shellRef} className="timeline-shell timeline-shell-shared">
