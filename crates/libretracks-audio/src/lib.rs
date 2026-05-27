@@ -658,7 +658,7 @@ impl AudioEngine {
                 track_id: track.id.clone(),
                 track_name: track.name.clone(),
                 file_path: clip.file_path.clone(),
-                audio_to: track.audio_to.clone(),
+                audio_to: effective_track_audio_to(song, &track.id)?,
                 timeline_offset_seconds: position_seconds - clip.timeline_start_seconds,
                 gain: gain * clip.gain,
             });
@@ -1009,6 +1009,32 @@ fn effective_track_pan(song: &Song, track_id: &str) -> Result<f64, AudioEngineEr
     Ok(pan.clamp(-1.0, 1.0))
 }
 
+fn effective_track_audio_to(song: &Song, track_id: &str) -> Result<String, AudioEngineError> {
+    let mut track = find_track(song, track_id)?;
+    let mut depth = 0;
+
+    while depth < 8 {
+        let route = track.audio_to.trim().to_ascii_lowercase();
+        if !route.is_empty() && route != "inherit" {
+            return Ok(route);
+        }
+
+        let Some(parent_track_id) = track.parent_track_id.as_deref() else {
+            break;
+        };
+
+        let parent_track = find_track(song, parent_track_id)?;
+        if parent_track.kind != TrackKind::Folder {
+            return Err(AudioEngineError::TrackNotFound(parent_track_id.to_string()));
+        }
+
+        track = parent_track;
+        depth += 1;
+    }
+
+    Ok("master".to_string())
+}
+
 fn is_track_soloed_in_hierarchy(song: &Song, track: &Track) -> Result<bool, AudioEngineError> {
     if track.solo {
         return Ok(true);
@@ -1291,6 +1317,40 @@ mod tests {
             .expect("effective pan should resolve");
 
         assert!((pan + 1.0).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn active_clip_inherits_folder_audio_route() {
+        let mut song = demo_song();
+        song.tracks[0].audio_to = "ext:2-3".into();
+        song.tracks[1].audio_to = "inherit".into();
+
+        let mut engine = AudioEngine::new();
+        engine.load_song(song).expect("song should load");
+
+        let clips = engine
+            .active_clips_at(1.0)
+            .expect("active clips should resolve");
+
+        assert_eq!(clips.len(), 1);
+        assert_eq!(clips[0].audio_to, "ext:2-3");
+    }
+
+    #[test]
+    fn active_clip_child_route_overrides_folder_route() {
+        let mut song = demo_song();
+        song.tracks[0].audio_to = "ext:2-3".into();
+        song.tracks[1].audio_to = "master".into();
+
+        let mut engine = AudioEngine::new();
+        engine.load_song(song).expect("song should load");
+
+        let clips = engine
+            .active_clips_at(1.0)
+            .expect("active clips should resolve");
+
+        assert_eq!(clips.len(), 1);
+        assert_eq!(clips[0].audio_to, "master");
     }
 
     #[test]

@@ -465,6 +465,7 @@ const es = {
     audioToAria: "Audio To {{name}}",
     transposeEnableAria: "Activar la transposicion de tono en {{name}}",
     transposeDisableAria: "Desactivar la transposicion de tono en {{name}}",
+    inherited: "Heredado (Folder)",
     master: "Master",
     extOutMono: "Ext. Out {{channel}}",
     extOutStereo: "Ext. Out {{left}}/{{right}}",

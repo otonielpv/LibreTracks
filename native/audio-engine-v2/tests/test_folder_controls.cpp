@@ -41,6 +41,18 @@ void render_blocks(Mixer& mixer, TransportClock& clock, int n,
         mixer.render(out, 2, kBlock, clock.sample_rate());
 }
 
+void render_blocks_multi(Mixer& mixer, TransportClock& clock, int n,
+                         std::vector<std::vector<float>>& channels) {
+    std::vector<float*> output_ptrs;
+    output_ptrs.reserve(channels.size());
+    for (auto& channel : channels) {
+        channel.assign(kBlock, 0.f);
+        output_ptrs.push_back(channel.data());
+    }
+    for (int i = 0; i < n; ++i)
+        mixer.render(output_ptrs.data(), static_cast<int>(output_ptrs.size()), kBlock, clock.sample_rate());
+}
+
 void add_source(SourceManager& sources, const Id& id,
                 float amplitude = 0.5f, Frame dur = kSR * 4) {
     sources.register_source(id, "");
@@ -169,6 +181,48 @@ TEST_CASE("folder_pan_pans_children") {
     render_blocks(mixer, clock, 30, left, right);
     CHECK(peak(right) > 0.01f);
     CHECK(peak(left) < 0.005f);
+}
+
+TEST_CASE("folder_audio_route_is_inherited_by_children") {
+    SourceManager sources;
+    add_source(sources, "src-0");
+    auto session = folder_session(1);
+    session.songs[0].tracks[0].audio_to = "ext:2-3";
+    session.songs[0].tracks[1].audio_to = "inherit";
+    auto shared = std::make_shared<Session>(session);
+    TransportClock clock(kSR);
+    JumpScheduler scheduler;
+    Mixer mixer(shared, &sources, &clock, &scheduler);
+    clock.play();
+
+    std::vector<std::vector<float>> channels(4);
+    render_blocks_multi(mixer, clock, 20, channels);
+
+    CHECK(peak(channels[0]) < 0.005f);
+    CHECK(peak(channels[1]) < 0.005f);
+    CHECK(peak(channels[2]) > 0.01f);
+    CHECK(peak(channels[3]) > 0.01f);
+}
+
+TEST_CASE("child_audio_route_overrides_folder_route") {
+    SourceManager sources;
+    add_source(sources, "src-0");
+    auto session = folder_session(1);
+    session.songs[0].tracks[0].audio_to = "ext:2-3";
+    session.songs[0].tracks[1].audio_to = "master";
+    auto shared = std::make_shared<Session>(session);
+    TransportClock clock(kSR);
+    JumpScheduler scheduler;
+    Mixer mixer(shared, &sources, &clock, &scheduler);
+    clock.play();
+
+    std::vector<std::vector<float>> channels(4);
+    render_blocks_multi(mixer, clock, 20, channels);
+
+    CHECK(peak(channels[0]) > 0.01f);
+    CHECK(peak(channels[1]) > 0.01f);
+    CHECK(peak(channels[2]) < 0.005f);
+    CHECK(peak(channels[3]) < 0.005f);
 }
 
 // ---------------------------------------------------------------------------

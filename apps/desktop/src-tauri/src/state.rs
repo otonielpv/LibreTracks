@@ -2768,14 +2768,11 @@ impl DesktopSession {
             ));
         }
 
-        let audio_to = parent_track_id
-            .and_then(|parent_id| {
-                song.tracks
-                    .iter()
-                    .find(|track| track.id == parent_id)
-                    .map(|track| track.audio_to.clone())
-            })
-            .unwrap_or_else(|| "master".to_string());
+        let audio_to = if parent_track_id.is_some() {
+            "inherit".to_string()
+        } else {
+            "master".to_string()
+        };
 
         let track = Track {
             id: format!("track_{}", timestamp_suffix()),

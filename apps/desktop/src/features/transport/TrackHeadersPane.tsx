@@ -133,6 +133,7 @@ export function TrackHeadersPane({
                 trackId={track.id}
                 trackName={track.name}
                 trackKind={track.kind}
+                hasParent={Boolean(track.parentTrackId)}
                 trackDepth={track.depth}
                 trackColor={track.color}
                 childCount={childCount}

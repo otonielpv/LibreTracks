@@ -451,6 +451,7 @@ const en = {
     audioToAria: "Audio To {{name}}",
     transposeEnableAria: "Enable pitch transposition on {{name}}",
     transposeDisableAria: "Disable pitch transposition on {{name}}",
+    inherited: "Inherited (Folder)",
     master: "Master",
     extOutMono: "Ext. Out {{channel}}",
     extOutStereo: "Ext. Out {{left}}/{{right}}",

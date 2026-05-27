@@ -84,17 +84,51 @@ float soft_limit_output(float x) noexcept {
     return std::copysign(std::min(shaped, ceiling), x);
 }
 
-std::vector<int> route_channels(const std::string& audio_to, int available_channels) {
-    const int channels = std::max(1, available_channels);
-    std::string normalized = audio_to;
-    std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+std::string normalize_audio_route(std::string route) {
+    std::transform(route.begin(), route.end(), route.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    normalized.erase(normalized.begin(), std::find_if(normalized.begin(), normalized.end(), [](unsigned char c) {
+    route.erase(route.begin(), std::find_if(route.begin(), route.end(), [](unsigned char c) {
         return std::isspace(c) == 0;
     }));
-    normalized.erase(std::find_if(normalized.rbegin(), normalized.rend(), [](unsigned char c) {
+    route.erase(std::find_if(route.rbegin(), route.rend(), [](unsigned char c) {
         return std::isspace(c) == 0;
-    }).base(), normalized.end());
+    }).base(), route.end());
+    return route;
+}
+
+const Track* find_track_in_song(const Song& song, const Id& track_id) {
+    auto it = std::find_if(song.tracks.begin(), song.tracks.end(), [&](const Track& track) {
+        return track.id == track_id;
+    });
+    return it == song.tracks.end() ? nullptr : &(*it);
+}
+
+std::string resolve_effective_audio_route(const Track& track, const Song& song) {
+    const Track* current = &track;
+    int depth = 0;
+
+    while (current && depth < 8) {
+        const std::string route = normalize_audio_route(current->audio_to);
+        if (!route.empty() && route != "inherit")
+            return route;
+
+        if (current->parent_track_id.empty())
+            break;
+
+        const Track* parent = find_track_in_song(song, current->parent_track_id);
+        if (!parent || parent->kind != TrackKind::Folder)
+            break;
+
+        current = parent;
+        ++depth;
+    }
+
+    return "master";
+}
+
+std::vector<int> route_channels(const std::string& audio_to, int available_channels) {
+    const int channels = std::max(1, available_channels);
+    std::string normalized = normalize_audio_route(audio_to);
 
     auto stereo_pair = [channels](int start) {
         int first = std::max(0, std::min(start, channels - 1));
@@ -430,7 +464,7 @@ void Mixer::render_timeline_span(float** output_channels,
             track_meters_[ti].left_rms.store(static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames))), std::memory_order_relaxed);
             track_meters_[ti].right_rms.store(static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames))), std::memory_order_relaxed);
 
-            auto route = route_channels(track.audio_to, num_channels);
+            auto route = route_channels(resolve_effective_audio_route(track, song), num_channels);
             const int left_channel = route.empty() ? 0 : route[0];
             const int right_channel = route.size() > 1 ? route[1] : -1;
             const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;
@@ -702,7 +736,7 @@ void Mixer::render(float** output_channels,
                 track_meters_[ti].left_rms.store(static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames))), std::memory_order_relaxed);
                 track_meters_[ti].right_rms.store(static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames))), std::memory_order_relaxed);
 
-                auto route = route_channels(track.audio_to, num_channels);
+                auto route = route_channels(resolve_effective_audio_route(track, song), num_channels);
                 const int left_channel = route.empty() ? 0 : route[0];
                 const int right_channel = route.size() > 1 ? route[1] : -1;
                 const bool left_only_source = track_peak_l > 1.0e-7f && track_peak_r <= 1.0e-7f;

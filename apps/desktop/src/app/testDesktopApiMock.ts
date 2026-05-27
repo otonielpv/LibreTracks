@@ -1408,7 +1408,7 @@ export const testDesktopApiMock = {
         pan: 0,
         muted: false,
         solo: false,
-        audioTo: "master",
+        audioTo: args.parentTrackId ? "inherit" : "master",
         transposeEnabled: false,
       },
     );

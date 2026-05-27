@@ -26,6 +26,7 @@ type TrackHeaderItemProps = {
   trackId: string;
   trackName: string;
   trackKind: TrackKind;
+  hasParent: boolean;
   trackDepth: number;
   trackColor?: string | null;
   childCount: number;
@@ -64,6 +65,7 @@ function TrackHeaderItemComponent({
   trackId,
   trackName,
   trackKind,
+  hasParent,
   trackDepth,
   trackColor,
   childCount,
@@ -117,6 +119,17 @@ function TrackHeaderItemComponent({
   };
 
   const metaLabel = trackKind === "folder" ? t("trackHeader.childrenCount", { count: childCount }) : null;
+  const routeOptions = hasParent
+    ? [
+        {
+          value: "inherit",
+          label: t("trackHeader.inherited", {
+            defaultValue: "Inherited (Folder)",
+          }),
+        },
+        ...audioRoutingOptions,
+      ]
+    : audioRoutingOptions;
   const headerStyle = {
     height: trackHeight,
     paddingLeft: 8 + trackDepth * 12,
@@ -274,7 +287,7 @@ function TrackHeaderItemComponent({
                 <span>{t("trackHeader.audioTo", { defaultValue: "Audio To" })}</span>
                 <AudioRouteCombobox
                   value={audioTo}
-                  options={audioRoutingOptions}
+                  options={routeOptions}
                   ariaLabel={t("trackHeader.audioToAria", {
                     name: trackName,
                     defaultValue: `Audio To ${trackName}`,

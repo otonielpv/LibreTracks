@@ -98,6 +98,12 @@ export function isAudioDeviceVisibleForBackend(
 }
 
 export function formatAudioRouteLabel(route: string, t: TFunc) {
+  if (route === "inherit") {
+    return t("trackHeader.inherited", {
+      defaultValue: "Inherited (Folder)",
+    });
+  }
+
   if (route === "master") {
     return t("trackHeader.master", { defaultValue: "Master" });
   }
