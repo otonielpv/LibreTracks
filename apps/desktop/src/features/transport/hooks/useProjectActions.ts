@@ -16,6 +16,11 @@ type UseProjectActionsProps = {
   ) => Promise<void>;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   setProjectViewHydrating: (hydrating: boolean) => void;
+  setBusyFeedback: (feedback: {
+    message: string;
+    percent?: number;
+    detail?: string;
+  } | null) => void;
   refreshSongView: (options?: { sync?: boolean }) => Promise<unknown>;
   refreshLibraryState: (options?: {
     preserveAssets?: LibraryAssetSummary[];
@@ -29,6 +34,7 @@ export function useProjectActions({
   runAction,
   applyPlaybackSnapshot,
   setProjectViewHydrating,
+  setBusyFeedback,
   refreshSongView,
   refreshLibraryState,
   t,
@@ -61,6 +67,12 @@ export function useProjectActions({
     void runAction(
       async () => {
         setProjectViewHydrating(true);
+        setBusyFeedback({
+          message: t("transport.shell.loadingProject", {
+            defaultValue: "Opening project...",
+          }),
+          percent: 2,
+        });
         try {
           // openProject() returns null if the user cancels the native dialog.
           // Otherwise it returns only after the backend has finished decoding
@@ -70,8 +82,15 @@ export function useProjectActions({
           const nextSnapshot = await openProject();
           if (!nextSnapshot) {
             setProjectViewHydrating(false);
+            setBusyFeedback(null);
             return;
           }
+          setBusyFeedback({
+            message: t("transport.shell.loadingProjectView", {
+              defaultValue: "Loading project view...",
+            }),
+            percent: 96,
+          });
           const nextSong = await refreshSongView({ sync: true });
           applyPlaybackSnapshot(nextSnapshot);
           setActiveSidebarTab(null);
@@ -83,6 +102,7 @@ export function useProjectActions({
           setProjectViewHydrating(false);
         } catch (error) {
           setProjectViewHydrating(false);
+          setBusyFeedback(null);
           throw error;
         }
       },
@@ -94,13 +114,26 @@ export function useProjectActions({
     void runAction(
       async () => {
         setProjectViewHydrating(true);
+        setBusyFeedback({
+          message: t("transport.shell.importingProject", {
+            defaultValue: "Importing project...",
+          }),
+          percent: 2,
+        });
         try {
           const nextSnapshot = await pickAndImportSong();
           if (!nextSnapshot) {
             setProjectViewHydrating(false);
+            setBusyFeedback(null);
             return;
           }
 
+          setBusyFeedback({
+            message: t("transport.shell.loadingProjectView", {
+              defaultValue: "Loading project view...",
+            }),
+            percent: 96,
+          });
           const nextSong = await refreshSongView({ sync: true });
           applyPlaybackSnapshot(nextSnapshot);
           await refreshLibraryState();
@@ -112,6 +145,7 @@ export function useProjectActions({
           }
         } catch (error) {
           setProjectViewHydrating(false);
+          setBusyFeedback(null);
           throw error;
         }
       },

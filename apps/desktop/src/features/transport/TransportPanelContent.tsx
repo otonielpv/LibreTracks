@@ -2515,6 +2515,7 @@ export function TransportPanelContent() {
     runAction,
     applyPlaybackSnapshot,
     setProjectViewHydrating: setIsProjectViewHydrating,
+    setBusyFeedback,
     refreshSongView,
     refreshLibraryState,
     t,
