@@ -53,7 +53,7 @@ type RemoteSyncState = {
   songView: SongView | null;
   settings: AppSettings | null;
   meters: Record<string, AudioMeterLevel>;
-  receivedAtMs: number;
+  snapshotReceivedAtMs: number;
   setSnapshot: (snapshot: TransportSnapshot) => void;
   setSongView: (songView: SongView | null) => void;
   setSettings: (settings: AppSettings) => void;
@@ -153,20 +153,19 @@ const useRemoteSyncStore = create<RemoteSyncState>()(
     songView: null,
     settings: null,
     meters: {},
-    receivedAtMs: performance.now(),
+    snapshotReceivedAtMs: performance.now(),
     setSnapshot: (snapshot) => {
-      set({ snapshot, receivedAtMs: performance.now() });
+      set({ snapshot, snapshotReceivedAtMs: performance.now() });
     },
     setSongView: (songView) => {
-      set({ songView, receivedAtMs: performance.now() });
+      set({ songView });
     },
     setSettings: (settings) => {
-      set({ settings, receivedAtMs: performance.now() });
+      set({ settings });
     },
     setMeters: (meters) => {
       set({
         meters: Object.fromEntries(meters.map((meter) => [meter.trackId, meter])),
-        receivedAtMs: performance.now(),
       });
     },
   })),
@@ -555,7 +554,7 @@ function resolveLivePosition(snapshot: TransportSnapshot | null, receivedAtMs: n
 function useTransportReadout(): TransportReadout {
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
   const songView = useRemoteSyncStore((state) => state.songView);
-  const receivedAtMs = useRemoteSyncStore((state) => state.receivedAtMs);
+  const snapshotReceivedAtMs = useRemoteSyncStore((state) => state.snapshotReceivedAtMs);
   const [readout, setReadout] = useState<TransportReadout>({
     positionSeconds: 0,
     timecode: "00:00.00",
@@ -571,7 +570,7 @@ function useTransportReadout(): TransportReadout {
     let frameId = 0;
 
     const render = () => {
-      const positionSeconds = resolveLivePosition(snapshot, receivedAtMs);
+      const positionSeconds = resolveLivePosition(snapshot, snapshotReceivedAtMs);
       const currentRegion = getSongRegionAtPosition(songView, positionSeconds);
       const tempoRegion =
         getSongTempoRegionAtPosition(songView, positionSeconds) ??
@@ -608,7 +607,7 @@ function useTransportReadout(): TransportReadout {
 
     frameId = window.requestAnimationFrame(render);
     return () => window.cancelAnimationFrame(frameId);
-  }, [receivedAtMs, snapshot, songView, timelineRegions]);
+  }, [snapshotReceivedAtMs, snapshot, songView, timelineRegions]);
 
   return readout;
 }
@@ -616,12 +615,12 @@ function useTransportReadout(): TransportReadout {
 const SharedTimeline = memo(function SharedTimeline({
   songView,
   snapshot,
-  receivedAtMs,
+  snapshotReceivedAtMs,
   pendingJumpTargetId,
 }: {
   songView: SongView | null;
   snapshot: TransportSnapshot | null;
-  receivedAtMs: number;
+  snapshotReceivedAtMs: number;
   pendingJumpTargetId: string | null;
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -694,7 +693,7 @@ const SharedTimeline = memo(function SharedTimeline({
 
     const render = () => {
       const width = shellRef.current?.clientWidth ?? viewportWidth;
-      const rawPositionSeconds = resolveLivePosition(snapshot, receivedAtMs);
+      const rawPositionSeconds = resolveLivePosition(snapshot, snapshotReceivedAtMs);
       const isPlaying = snapshot?.playbackState === "playing" && snapshot.transportClock?.running === true;
 
       if (!isPlaying) {
@@ -729,7 +728,7 @@ const SharedTimeline = memo(function SharedTimeline({
 
     frameId = window.requestAnimationFrame(render);
     return () => window.cancelAnimationFrame(frameId);
-  }, [contentWidth, receivedAtMs, snapshot, viewportWidth]);
+  }, [contentWidth, snapshotReceivedAtMs, snapshot, viewportWidth]);
 
   return (
     <div ref={shellRef} className="timeline-shell timeline-shell-shared">
@@ -867,7 +866,7 @@ function TransportTopline() {
 function TransportChrome() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
-  const receivedAtMs = useRemoteSyncStore((state) => state.receivedAtMs);
+  const snapshotReceivedAtMs = useRemoteSyncStore((state) => state.snapshotReceivedAtMs);
   const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
   const readout = useTransportReadout();
 
@@ -903,7 +902,7 @@ function TransportChrome() {
       <SharedTimeline
         songView={songView}
         snapshot={snapshot}
-        receivedAtMs={receivedAtMs}
+        snapshotReceivedAtMs={snapshotReceivedAtMs}
         pendingJumpTargetId={pendingJumpTargetId}
       />
     </section>
