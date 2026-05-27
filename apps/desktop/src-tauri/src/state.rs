@@ -369,10 +369,6 @@ impl TransportClock {
     }
 }
 
-fn semitones_to_pitch_scale(semitones: i32) -> f64 {
-    2_f64.powf(f64::from(semitones) / 12.0)
-}
-
 fn timeline_seconds_to_view(song: Option<&Song>, seconds: f64) -> f64 {
     song.map(|song| warp_timeline_seconds_at(song, seconds))
         .unwrap_or(seconds)
