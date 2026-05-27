@@ -188,7 +188,10 @@ button {
 
 .remote-panel-mixer {
   display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   overflow: hidden;
+  padding-top: 0.9rem;
   padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
 }
 
@@ -1122,15 +1125,16 @@ button {
 }
 
 .mixer-scroll {
-  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
   width: 100%;
   display: flex;
-  align-items: stretch;
+  align-items: flex-end;
   gap: 0.8rem;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
-  padding: 0 0 0.5rem;
+  padding: 0 0 0.18rem;
   box-sizing: border-box;
 }
 
@@ -1147,6 +1151,15 @@ button {
   background: linear-gradient(180deg, rgb(35 35 35 / 0.98), rgb(22 22 22 / 0.98));
   padding: 0.95rem 0.8rem;
   box-sizing: border-box;
+}
+
+.mixer-strip.is-colored {
+  border-color: var(--folder-strip-border, rgb(255 255 255 / 0.06));
+  background: var(--folder-strip-bg, linear-gradient(180deg, rgb(35 35 35 / 0.98), rgb(22 22 22 / 0.98)));
+}
+
+.mixer-strip.is-colored .mixer-strip-header strong {
+  color: var(--folder-strip-accent, var(--text));
 }
 
 .mixer-strip.is-folder {
@@ -1755,6 +1768,7 @@ button {
 
 @media (max-height: 860px) {
   .remote-panel-mixer {
+    padding-top: 0.65rem;
     padding-bottom: calc(0.9rem + env(safe-area-inset-bottom));
   }
 

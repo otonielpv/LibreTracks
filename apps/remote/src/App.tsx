@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
@@ -105,6 +105,12 @@ type FolderPalette = {
   background: string;
   border: string;
   accent: string;
+};
+
+type RgbColor = {
+  r: number;
+  g: number;
+  b: number;
 };
 
 const CHROME_TIMELINE_PIXELS_PER_SECOND = BASE_PIXELS_PER_SECOND * 2.35;
@@ -321,20 +327,70 @@ function magnetizePanValue(value: number) {
   return Math.abs(value) <= PAN_CENTER_MAGNET ? 0 : value;
 }
 
-function hashTrackId(input: string) {
-  let hash = 0;
-  for (let index = 0; index < input.length; index += 1) {
-    hash = (hash * 31 + input.charCodeAt(index)) >>> 0;
-  }
-  return hash;
+function clampColorChannel(value: number) {
+  return Math.max(0, Math.min(255, Math.round(value)));
 }
 
-function folderPaletteFromId(trackId: string): FolderPalette {
-  const hue = hashTrackId(trackId) % 360;
+function mixColor(color: RgbColor, target: RgbColor, amount: number): RgbColor {
+  const safeAmount = Math.max(0, Math.min(1, amount));
   return {
-    background: `linear-gradient(180deg, hsl(${hue} 56% 20% / 0.95), hsl(${hue} 48% 12% / 0.96))`,
-    border: `hsl(${hue} 58% 40% / 0.32)`,
-    accent: `hsl(${hue} 72% 66%)`,
+    r: clampColorChannel(color.r + (target.r - color.r) * safeAmount),
+    g: clampColorChannel(color.g + (target.g - color.g) * safeAmount),
+    b: clampColorChannel(color.b + (target.b - color.b) * safeAmount),
+  };
+}
+
+function colorToRgba(color: RgbColor, alpha: number) {
+  return `rgba(${color.r}, ${color.g}, ${color.b}, ${Math.max(0, Math.min(1, alpha))})`;
+}
+
+function parseTrackColor(color: string | null | undefined): RgbColor | null {
+  const value = color?.trim();
+  if (!value) {
+    return null;
+  }
+
+  const shortHexMatch = /^#([\da-f]{3})$/i.exec(value);
+  if (shortHexMatch) {
+    const [r, g, b] = shortHexMatch[1].split("").map((channel) => Number.parseInt(`${channel}${channel}`, 16));
+    return { r, g, b };
+  }
+
+  const fullHexMatch = /^#([\da-f]{6})$/i.exec(value);
+  if (fullHexMatch) {
+    return {
+      r: Number.parseInt(fullHexMatch[1].slice(0, 2), 16),
+      g: Number.parseInt(fullHexMatch[1].slice(2, 4), 16),
+      b: Number.parseInt(fullHexMatch[1].slice(4, 6), 16),
+    };
+  }
+
+  const rgbMatch = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(?:\d*\.\d+|\d+))?\s*\)$/i.exec(value);
+  if (rgbMatch) {
+    return {
+      r: clampColorChannel(Number(rgbMatch[1])),
+      g: clampColorChannel(Number(rgbMatch[2])),
+      b: clampColorChannel(Number(rgbMatch[3])),
+    };
+  }
+
+  return null;
+}
+
+function paletteFromTrackColor(color: string | null | undefined): FolderPalette | null {
+  const baseColor = parseTrackColor(color);
+  if (!baseColor) {
+    return null;
+  }
+
+  const upperBackground = mixColor(baseColor, { r: 18, g: 18, b: 18 }, 0.7);
+  const lowerBackground = mixColor(baseColor, { r: 10, g: 10, b: 10 }, 0.82);
+  const accent = mixColor(baseColor, { r: 255, g: 255, b: 255 }, 0.12);
+
+  return {
+    background: `linear-gradient(180deg, ${colorToRgba(upperBackground, 0.96)}, ${colorToRgba(lowerBackground, 0.98)})`,
+    border: colorToRgba(baseColor, 0.34),
+    accent: colorToRgba(accent, 0.96),
   };
 }
 
@@ -344,7 +400,10 @@ function buildFolderPaletteMap(tracks: TrackSummary[]) {
 
   for (const track of tracks) {
     if (track.kind === "folder") {
-      paletteByTrackId.set(track.id, folderPaletteFromId(track.id));
+      const palette = paletteFromTrackColor(track.color);
+      if (palette) {
+        paletteByTrackId.set(track.id, palette);
+      }
     }
   }
 
@@ -553,41 +612,45 @@ function useTransportReadout(): TransportReadout {
   return readout;
 }
 
-function SharedTimeline({
+const SharedTimeline = memo(function SharedTimeline({
   songView,
-  positionSeconds,
+  snapshot,
+  receivedAtMs,
   pendingJumpTargetId,
-  pendingJump,
-  activeVamp,
 }: {
   songView: SongView | null;
-  positionSeconds: number;
+  snapshot: TransportSnapshot | null;
+  receivedAtMs: number;
   pendingJumpTargetId: string | null;
-  pendingJump: TransportSnapshot["pendingMarkerJump"];
-  activeVamp: TransportSnapshot["activeVamp"];
 }) {
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
-  const viewportWidth = typeof window !== "undefined" ? window.innerWidth - 32 : 1200;
+  const [viewportWidth, setViewportWidth] = useState(0);
   const durationSeconds = Math.max(songView?.durationSeconds ?? 0, 8);
   const regions = useMemo(() => buildSongTempoRegions(songView), [songView]);
-  const viewportStartSeconds = Math.max(0, positionSeconds - viewportWidth / CHROME_TIMELINE_PIXELS_PER_SECOND / 2);
-  const viewportEndSeconds = viewportStartSeconds + viewportWidth / CHROME_TIMELINE_PIXELS_PER_SECOND;
-  const grid = buildVisibleTimelineGrid({
-    durationSeconds,
-    bpm: songView?.bpm ?? 120,
-    timeSignature: songView?.timeSignature ?? "4/4",
-    regions,
-    zoomLevel: 8,
-    pixelsPerSecond: CHROME_TIMELINE_PIXELS_PER_SECOND,
-    viewportStartSeconds,
-    viewportEndSeconds,
-  });
+  const gridEndSeconds = Math.max(durationSeconds + 12, 24);
+  const grid = useMemo(
+    () =>
+      buildVisibleTimelineGrid({
+        durationSeconds,
+        bpm: songView?.bpm ?? 120,
+        timeSignature: songView?.timeSignature ?? "4/4",
+        regions,
+        zoomLevel: 8,
+        pixelsPerSecond: CHROME_TIMELINE_PIXELS_PER_SECOND,
+        viewportStartSeconds: 0,
+        viewportEndSeconds: gridEndSeconds,
+      }),
+    [durationSeconds, gridEndSeconds, regions, songView?.bpm, songView?.timeSignature],
+  );
   const contentWidth = Math.max(
-    viewportWidth * 1.5,
-    (Math.max(durationSeconds, viewportEndSeconds + 8) + 4) * CHROME_TIMELINE_PIXELS_PER_SECOND,
+    Math.max(viewportWidth, 1) * 1.5,
+    (Math.max(durationSeconds, gridEndSeconds) + 4) * CHROME_TIMELINE_PIXELS_PER_SECOND,
   );
   const markers = songView?.sectionMarkers ?? [];
   const timeLabelStepSeconds = durationSeconds > 300 ? 30 : durationSeconds > 120 ? 15 : 10;
+  const pendingJump = snapshot?.pendingMarkerJump ?? null;
+  const activeVamp = snapshot?.activeVamp ?? null;
   const pendingJumpX =
     pendingJump && Number.isFinite(pendingJump.executeAtSeconds)
       ? secondsToAbsoluteX(pendingJump.executeAtSeconds, CHROME_TIMELINE_PIXELS_PER_SECOND)
@@ -604,16 +667,46 @@ function SharedTimeline({
       : null;
 
   useEffect(() => {
-    const currentX = secondsToAbsoluteX(positionSeconds, CHROME_TIMELINE_PIXELS_PER_SECOND);
-    const centeredX = currentX - viewportWidth / 2;
+    const updateWidth = () => {
+      setViewportWidth(shellRef.current?.clientWidth ?? window.innerWidth);
+    };
 
-    if (rulerRef.current) {
-      rulerRef.current.style.transform = `translate3d(${-centeredX}px, 0, 0)`;
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined" || !shellRef.current) {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
     }
-  }, [positionSeconds, viewportWidth]);
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(shellRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    let frameId = 0;
+
+    const render = () => {
+      const width = shellRef.current?.clientWidth ?? viewportWidth;
+      const currentX = secondsToAbsoluteX(resolveLivePosition(snapshot, receivedAtMs), CHROME_TIMELINE_PIXELS_PER_SECOND);
+      const desiredTranslate = width / 2 - currentX;
+      const minTranslate = Math.min(0, width - contentWidth);
+      const maxTranslate = width / 2;
+      const translateX = Math.max(minTranslate, Math.min(maxTranslate, desiredTranslate));
+
+      if (rulerRef.current) {
+        rulerRef.current.style.transform = `translate3d(${translateX}px, 0, 0)`;
+      }
+
+      frameId = window.requestAnimationFrame(render);
+    };
+
+    frameId = window.requestAnimationFrame(render);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [contentWidth, receivedAtMs, snapshot, viewportWidth]);
 
   return (
-    <div className="timeline-shell timeline-shell-shared">
+    <div ref={shellRef} className="timeline-shell timeline-shell-shared">
       <div className="fixed-playhead" aria-hidden="true" />
       <div ref={rulerRef} className="timeline-ruler" style={{ width: contentWidth }}>
         <div className="timeline-header-row timeline-time-row">
@@ -689,7 +782,7 @@ function SharedTimeline({
       </div>
     </div>
   );
-}
+});
 
 function TransportControlButtons() {
   const settings = useRemoteSyncStore((state) => state.settings);
@@ -748,6 +841,7 @@ function TransportTopline() {
 function TransportChrome() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
+  const receivedAtMs = useRemoteSyncStore((state) => state.receivedAtMs);
   const pendingJumpTargetId = useOptimisticStore((state) => state.pendingJumpTargetId);
   const readout = useTransportReadout();
 
@@ -782,10 +876,9 @@ function TransportChrome() {
 
       <SharedTimeline
         songView={songView}
-        positionSeconds={readout.positionSeconds}
+        snapshot={snapshot}
+        receivedAtMs={receivedAtMs}
         pendingJumpTargetId={pendingJumpTargetId}
-        pendingJump={snapshot?.pendingMarkerJump ?? null}
-        activeVamp={snapshot?.activeVamp ?? null}
       />
     </section>
   );
@@ -1395,9 +1488,11 @@ function MeterBar({ trackId }: { trackId: string }) {
 function MixerStrip({
   track,
   palette,
+  inheritsParentPalette,
 }: {
   track: TrackSummary;
   palette: FolderPalette | null;
+  inheritsParentPalette: boolean;
 }) {
   const optimisticTrack = useOptimisticStore((state) => state.tracks[track.id]);
   const effectiveTrack = resolveEffectiveTrack(track, optimisticTrack);
@@ -1443,7 +1538,7 @@ function MixerStrip({
 
   return (
     <article
-      className={`mixer-strip ${track.kind === "folder" ? "is-folder" : ""} ${palette ? "is-folder-child" : ""}`}
+      className={`mixer-strip ${track.kind === "folder" ? "is-folder" : ""} ${palette ? "is-colored" : ""} ${inheritsParentPalette ? "is-folder-child" : ""}`}
       style={stripStyle}
     >
       <header className="mixer-strip-header">
@@ -1516,9 +1611,19 @@ function MixerView() {
   return (
     <section className="remote-panel remote-panel-mixer">
       <div className="mixer-scroll">
-        {tracks.map((track) => (
-          <MixerStrip key={track.id} track={track} palette={folderPaletteMap.get(track.id) ?? null} />
-        ))}
+        {tracks.map((track) => {
+          const directPalette = paletteFromTrackColor(track.color);
+          const inheritedPalette = directPalette ? null : (folderPaletteMap.get(track.id) ?? null);
+
+          return (
+            <MixerStrip
+              key={track.id}
+              track={track}
+              palette={directPalette ?? inheritedPalette}
+              inheritsParentPalette={inheritedPalette !== null}
+            />
+          );
+        })}
       </div>
     </section>
   );
