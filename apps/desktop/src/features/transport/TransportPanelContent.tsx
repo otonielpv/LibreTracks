@@ -1167,6 +1167,20 @@ export function TransportPanelContent() {
     [formatErrorStatus],
   );
 
+  const registerProjectLoadProgressListener = useCallback(async () => {
+    return listenToProjectLoadProgress((event) => {
+      const detail =
+        event.sourcesTotal > 0
+          ? `${event.sourcesReady}/${event.sourcesTotal} fuentes · RAM ${event.ramCacheMb} MB · disco ${event.diskCacheMb} MB`
+          : undefined;
+      setBusyFeedback({
+        message: event.message,
+        percent: event.percent,
+        detail,
+      });
+    });
+  }, []);
+
   const hydrateWaveformCacheFromSong = useCallback(
     (nextSong: SongView | null) => {
       const nextWaveforms = Object.fromEntries(
@@ -1357,21 +1371,7 @@ export function TransportPanelContent() {
 
     let active = true;
     let unlisten: (() => void) | null = null;
-    void listenToProjectLoadProgress((event) => {
-      if (!active) {
-        return;
-      }
-
-      const detail =
-        event.sourcesTotal > 0
-          ? `${event.sourcesReady}/${event.sourcesTotal} fuentes · RAM ${event.ramCacheMb} MB · disco ${event.diskCacheMb} MB`
-          : undefined;
-      setBusyFeedback({
-        message: event.message,
-        percent: event.percent,
-        detail,
-      });
-    }).then((dispose) => {
+    void registerProjectLoadProgressListener().then((dispose) => {
       if (!active) {
         dispose();
         return;
@@ -1383,7 +1383,7 @@ export function TransportPanelContent() {
       active = false;
       unlisten?.();
     };
-  }, []);
+  }, [registerProjectLoadProgressListener]);
 
   const persistAudioSettings = useCallback(
     (
@@ -2516,6 +2516,7 @@ export function TransportPanelContent() {
     applyPlaybackSnapshot,
     setProjectViewHydrating: setIsProjectViewHydrating,
     setBusyFeedback,
+    registerProjectLoadProgressListener,
     refreshSongView,
     refreshLibraryState,
     t,

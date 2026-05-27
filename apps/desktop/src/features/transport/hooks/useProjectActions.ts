@@ -1,6 +1,7 @@
 import type { LibraryAssetSummary, TransportSnapshot } from "@libretracks/shared/models";
 import {
   createSong,
+  listenToProjectLoadProgress,
   openProject,
   pickAndImportSong,
   saveProject,
@@ -21,6 +22,7 @@ type UseProjectActionsProps = {
     percent?: number;
     detail?: string;
   } | null) => void;
+  registerProjectLoadProgressListener: () => Promise<() => void>;
   refreshSongView: (options?: { sync?: boolean }) => Promise<unknown>;
   refreshLibraryState: (options?: {
     preserveAssets?: LibraryAssetSummary[];
@@ -35,6 +37,7 @@ export function useProjectActions({
   applyPlaybackSnapshot,
   setProjectViewHydrating,
   setBusyFeedback,
+  registerProjectLoadProgressListener,
   refreshSongView,
   refreshLibraryState,
   t,
@@ -66,6 +69,7 @@ export function useProjectActions({
   function handleOpenProjectClick() {
     void runAction(
       async () => {
+        let unlistenProjectProgress: (() => void) | null = null;
         setProjectViewHydrating(true);
         setBusyFeedback({
           message: t("transport.shell.loadingProject", {
@@ -74,6 +78,7 @@ export function useProjectActions({
           percent: 2,
         });
         try {
+          unlistenProjectProgress = await registerProjectLoadProgressListener();
           // openProject() returns null if the user cancels the native dialog.
           // Otherwise it returns only after the backend has finished decoding
           // all sources AND prearmed Bungee voices — see
@@ -104,6 +109,8 @@ export function useProjectActions({
           setProjectViewHydrating(false);
           setBusyFeedback(null);
           throw error;
+        } finally {
+          unlistenProjectProgress?.();
         }
       },
       { busy: true },
@@ -113,6 +120,7 @@ export function useProjectActions({
   function handleImportSongClick() {
     void runAction(
       async () => {
+        let unlistenProjectProgress: (() => void) | null = null;
         setProjectViewHydrating(true);
         setBusyFeedback({
           message: t("transport.shell.importingProject", {
@@ -121,6 +129,7 @@ export function useProjectActions({
           percent: 2,
         });
         try {
+          unlistenProjectProgress = await registerProjectLoadProgressListener();
           const nextSnapshot = await pickAndImportSong();
           if (!nextSnapshot) {
             setProjectViewHydrating(false);
@@ -147,6 +156,8 @@ export function useProjectActions({
           setProjectViewHydrating(false);
           setBusyFeedback(null);
           throw error;
+        } finally {
+          unlistenProjectProgress?.();
         }
       },
       { busy: true },
