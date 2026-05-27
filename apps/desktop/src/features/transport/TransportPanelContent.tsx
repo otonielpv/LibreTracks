@@ -305,6 +305,115 @@ function resolveSharedTimelineColor(tracks: TrackSummary[]) {
     : null;
 }
 
+type TimelineColorPopoverProps = {
+  x: number;
+  y: number;
+  title: string;
+  initialColor: string;
+  onApply: (color: string) => Promise<void>;
+  onDismiss: () => void;
+};
+
+function TimelineColorPopover({
+  x,
+  y,
+  title,
+  initialColor,
+  onApply,
+  onDismiss,
+}: TimelineColorPopoverProps) {
+  const [draftColor, setDraftColor] = useState(initialColor);
+
+  useEffect(() => {
+    setDraftColor(initialColor);
+  }, [initialColor]);
+
+  const normalizedColor = normalizeTimelineColorInput(draftColor) ?? "#3CDDC7";
+
+  return (
+    <div
+      className="lt-color-popover"
+      style={{ left: x, top: y }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <strong>{title}</strong>
+      <div
+        className="lt-color-popover-preview"
+        style={{ background: normalizedColor }}
+        aria-hidden="true"
+      />
+      <div className="lt-color-popover-swatches">
+        {TIMELINE_COLOR_PRESETS.map((preset) => (
+          <button
+            key={preset.value}
+            type="button"
+            className="lt-color-popover-swatch"
+            style={{ background: preset.value }}
+            aria-label={preset.label}
+            title={preset.label}
+            onClick={() => setDraftColor(preset.value)}
+          />
+        ))}
+      </div>
+      <label className="lt-color-popover-hex">
+        <span>HEX</span>
+        <input
+          type="text"
+          value={draftColor}
+          spellCheck={false}
+          onChange={(event) => {
+            setDraftColor(event.currentTarget.value);
+          }}
+          onBlur={() => {
+            setDraftColor((current) => normalizeTimelineColorInput(current) ?? normalizedColor);
+          }}
+        />
+      </label>
+      <label className="lt-color-popover-picker">
+        <span>Selector</span>
+        <input
+          type="color"
+          value={normalizedColor}
+          aria-label="Selector de color"
+          onInput={(event) => {
+            const nextColor = normalizeTimelineColorInput(
+              event.currentTarget.value,
+            );
+            if (nextColor) {
+              setDraftColor(nextColor);
+            }
+          }}
+          onChange={(event) => {
+            const nextColor = normalizeTimelineColorInput(
+              event.currentTarget.value,
+            );
+            if (nextColor) {
+              setDraftColor(nextColor);
+            }
+          }}
+        />
+      </label>
+      <div className="lt-color-popover-actions">
+        <button type="button" onClick={onDismiss}>
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const color = normalizeTimelineColorInput(draftColor);
+            onDismiss();
+            if (color) {
+              void onApply(color);
+            }
+          }}
+        >
+          Aplicar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function getEffectiveTempoMarkerAt(
   song: SongView | null | undefined,
   positionSeconds: number,
@@ -449,7 +558,7 @@ export function TransportPanelContent() {
     x: number;
     y: number;
     title: string;
-    color: string;
+    initialColor: string;
     onApply: (color: string) => Promise<void>;
   } | null>(null);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
@@ -4588,7 +4697,7 @@ export function TransportPanelContent() {
       x: position.x + 12,
       y: position.y + 12,
       title,
-      color: normalizeTimelineColorInput(initialColor) ?? "#3CDDC7",
+      initialColor: normalizeTimelineColorInput(initialColor) ?? "#3CDDC7",
       onApply: onColor,
     });
   }
@@ -8789,119 +8898,16 @@ export function TransportPanelContent() {
               onDismiss={() => setContextMenu(null)}
             />
 
-            {colorPickerPopover
-              ? (() => {
-                  const normalizedColor =
-                    normalizeTimelineColorInput(colorPickerPopover.color) ??
-                    "#3CDDC7";
-
-                  return (
-                    <div
-                      className="lt-color-popover"
-                      style={{
-                        left: colorPickerPopover.x,
-                        top: colorPickerPopover.y,
-                      }}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <strong>{colorPickerPopover.title}</strong>
-                      <div
-                        className="lt-color-popover-preview"
-                        style={{ background: normalizedColor }}
-                        aria-hidden="true"
-                      />
-                      <div className="lt-color-popover-swatches">
-                        {TIMELINE_COLOR_PRESETS.map((preset) => (
-                          <button
-                            key={preset.value}
-                            type="button"
-                            className="lt-color-popover-swatch"
-                            style={{ background: preset.value }}
-                            aria-label={preset.label}
-                            title={preset.label}
-                            onClick={() =>
-                              setColorPickerPopover((current) =>
-                                current
-                                  ? { ...current, color: preset.value }
-                                  : current,
-                              )
-                            }
-                          />
-                        ))}
-                      </div>
-                      <label className="lt-color-popover-hex">
-                        <span>HEX</span>
-                        <input
-                          type="text"
-                          value={colorPickerPopover.color}
-                          spellCheck={false}
-                          onChange={(event) => {
-                            const nextColor = event.currentTarget.value;
-                            setColorPickerPopover((current) =>
-                              current
-                                ? { ...current, color: nextColor }
-                                : current,
-                            );
-                          }}
-                          onBlur={() =>
-                            setColorPickerPopover((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    color:
-                                      normalizeTimelineColorInput(
-                                        current.color,
-                                      ) ?? normalizedColor,
-                                  }
-                                : current,
-                            )
-                          }
-                        />
-                      </label>
-                      <label className="lt-color-popover-picker">
-                        <span>Selector</span>
-                        <input
-                          type="color"
-                          value={normalizedColor}
-                          aria-label="Selector de color"
-                          onChange={(event) => {
-                            const nextColor = normalizeTimelineColorInput(
-                              event.currentTarget.value,
-                            );
-                            setColorPickerPopover((current) =>
-                              current && nextColor
-                                ? { ...current, color: nextColor }
-                                : current,
-                            );
-                          }}
-                        />
-                      </label>
-                      <div className="lt-color-popover-actions">
-                        <button
-                          type="button"
-                          onClick={() => setColorPickerPopover(null)}
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const color = normalizeTimelineColorInput(
-                              colorPickerPopover.color,
-                            );
-                            setColorPickerPopover(null);
-                            if (color) {
-                              void colorPickerPopover.onApply(color);
-                            }
-                          }}
-                        >
-                          Aplicar
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()
-              : null}
+            {colorPickerPopover ? (
+              <TimelineColorPopover
+                x={colorPickerPopover.x}
+                y={colorPickerPopover.y}
+                title={colorPickerPopover.title}
+                initialColor={colorPickerPopover.initialColor}
+                onApply={colorPickerPopover.onApply}
+                onDismiss={() => setColorPickerPopover(null)}
+              />
+            ) : null}
 
             {missingFilePaths.length > 0 ? (
               <button
