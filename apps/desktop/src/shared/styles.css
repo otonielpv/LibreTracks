@@ -2509,12 +2509,12 @@ textarea {
   min-width: 0;
 }
 
-.lt-track-header.is-compact .lt-track-volume span,
-.lt-track-header.is-compact .lt-track-pan span,
-.lt-track-header.is-condensed .lt-track-volume span,
-.lt-track-header.is-condensed .lt-track-pan span,
-.lt-track-header.is-micro .lt-track-volume span,
-.lt-track-header.is-micro .lt-track-pan span {
+.lt-track-header.is-compact .lt-track-volume > span,
+.lt-track-header.is-compact .lt-track-pan > span,
+.lt-track-header.is-condensed .lt-track-volume > span,
+.lt-track-header.is-condensed .lt-track-pan > span,
+.lt-track-header.is-micro .lt-track-volume > span,
+.lt-track-header.is-micro .lt-track-pan > span {
   display: none;
 }
 
@@ -2540,9 +2540,9 @@ textarea {
 }
 
 /* AUDIO TO: compact button at the right of the sliders, label hidden. */
-.lt-track-header.is-compact .lt-track-audio-to span,
-.lt-track-header.is-condensed .lt-track-audio-to span,
-.lt-track-header.is-micro .lt-track-audio-to span {
+.lt-track-header.is-compact .lt-track-audio-to > span,
+.lt-track-header.is-condensed .lt-track-audio-to > span,
+.lt-track-header.is-micro .lt-track-audio-to > span {
   display: none;
 }
 
@@ -2752,26 +2752,26 @@ textarea {
   min-width: 0;
 }
 
-.lt-track-volume span,
-.lt-track-pan span,
-.lt-track-audio-to span {
+.lt-track-volume > span,
+.lt-track-pan > span,
+.lt-track-audio-to > span {
   color: #bacac5;
   font: 600 10px/1 "Space Grotesk", sans-serif;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-.lt-track-volume span {
+.lt-track-volume > span {
   flex: 0 0 1.9rem;
 }
 
-.lt-track-pan span {
+.lt-track-pan > span {
   flex: 0 0 1.9rem;
   white-space: nowrap;
   text-align: left;
 }
 
-.lt-track-audio-to span {
+.lt-track-audio-to > span {
   flex: 0 0 3.25rem;
   white-space: nowrap;
 }
