@@ -691,8 +691,52 @@ const SharedTimeline = memo(function SharedTimeline({
     Math.max(viewportWidth, 1) * 1.5,
     (Math.max(durationSeconds, gridEndSeconds) + 4) * CHROME_TIMELINE_PIXELS_PER_SECOND,
   );
+  const viewportDurationSeconds = Math.max(1, viewportWidth / CHROME_TIMELINE_PIXELS_PER_SECOND);
+  const renderCenterSeconds = resolveLivePosition(snapshot, snapshotReceivedAtMs);
+  const renderWindowStartSeconds = Math.max(0, renderCenterSeconds - viewportDurationSeconds * 1.5);
+  const renderWindowEndSeconds = Math.max(
+    renderWindowStartSeconds + viewportDurationSeconds * 3,
+    renderCenterSeconds + viewportDurationSeconds * 1.5,
+  );
   const markers = songView?.sectionMarkers ?? [];
   const timeLabelStepSeconds = durationSeconds > 300 ? 30 : durationSeconds > 120 ? 15 : 10;
+  const visibleTimeLabels = useMemo(() => {
+    const labels: number[] = [];
+    const startIndex = Math.max(0, Math.floor(renderWindowStartSeconds / timeLabelStepSeconds) - 1);
+    const endIndex = Math.ceil(renderWindowEndSeconds / timeLabelStepSeconds) + 1;
+
+    for (let index = startIndex; index <= endIndex; index += 1) {
+      labels.push(index * timeLabelStepSeconds);
+    }
+
+    return labels;
+  }, [renderWindowEndSeconds, renderWindowStartSeconds, timeLabelStepSeconds]);
+  const visibleBarMarkers = useMemo(
+    () =>
+      grid.markers.filter(
+        (marker) =>
+          marker.isBarStart &&
+          marker.seconds >= renderWindowStartSeconds &&
+          marker.seconds <= renderWindowEndSeconds,
+      ),
+    [grid.markers, renderWindowEndSeconds, renderWindowStartSeconds],
+  );
+  const visibleGridMarkers = useMemo(
+    () =>
+      grid.markers.filter(
+        (marker) => marker.seconds >= renderWindowStartSeconds && marker.seconds <= renderWindowEndSeconds,
+      ),
+    [grid.markers, renderWindowEndSeconds, renderWindowStartSeconds],
+  );
+  const visibleSectionMarkers = useMemo(
+    () =>
+      markers.filter(
+        (marker) =>
+          marker.startSeconds >= renderWindowStartSeconds - viewportDurationSeconds * 0.25 &&
+          marker.startSeconds <= renderWindowEndSeconds + viewportDurationSeconds * 0.25,
+      ),
+    [markers, renderWindowEndSeconds, renderWindowStartSeconds, viewportDurationSeconds],
+  );
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
   const activeVamp = snapshot?.activeVamp ?? null;
   const pendingJumpX =
@@ -780,39 +824,32 @@ const SharedTimeline = memo(function SharedTimeline({
       <div className="fixed-playhead" aria-hidden="true" />
       <div ref={rulerRef} className="timeline-ruler" style={{ width: contentWidth }}>
         <div className="timeline-header-row timeline-time-row">
-          {Array.from({ length: Math.ceil((durationSeconds + timeLabelStepSeconds) / timeLabelStepSeconds) }).map(
-            (_, index) => {
-              const seconds = index * timeLabelStepSeconds;
-              return (
-                <span
-                  key={`time-label-${seconds}`}
-                  className="timeline-top-label is-time"
-                  style={{ left: `${secondsToAbsoluteX(seconds, CHROME_TIMELINE_PIXELS_PER_SECOND)}px` }}
-                >
-                  {formatTimelineSecondLabel(seconds)}
-                </span>
-              );
-            },
-          )}
+          {visibleTimeLabels.map((seconds) => (
+            <span
+              key={`time-label-${seconds}`}
+              className="timeline-top-label is-time"
+              style={{ left: `${secondsToAbsoluteX(seconds, CHROME_TIMELINE_PIXELS_PER_SECOND)}px` }}
+            >
+              {formatTimelineSecondLabel(seconds)}
+            </span>
+          ))}
         </div>
 
         <div className="timeline-header-row timeline-bars-row">
-          {grid.markers
-            .filter((marker) => marker.isBarStart)
-            .map((marker) => (
-              <span
-                key={`bar-label-${marker.seconds}`}
-                className="timeline-top-label is-bar"
-                style={{ left: `${secondsToAbsoluteX(marker.seconds, CHROME_TIMELINE_PIXELS_PER_SECOND)}px` }}
-              >
-                {marker.barNumber}
-              </span>
-            ))}
+          {visibleBarMarkers.map((marker) => (
+            <span
+              key={`bar-label-${marker.seconds}`}
+              className="timeline-top-label is-bar"
+              style={{ left: `${secondsToAbsoluteX(marker.seconds, CHROME_TIMELINE_PIXELS_PER_SECOND)}px` }}
+            >
+              {marker.barNumber}
+            </span>
+          ))}
         </div>
 
         <div className="timeline-grid">
           {activeVampStyle ? <span className="timeline-vamp-range" style={activeVampStyle} /> : null}
-          {grid.markers.map((marker) => (
+          {visibleGridMarkers.map((marker) => (
             <span
               key={`grid-${marker.seconds}`}
               className={marker.isBarStart ? "timeline-line is-bar" : "timeline-line"}
@@ -837,7 +874,7 @@ const SharedTimeline = memo(function SharedTimeline({
         ) : null}
 
         <div className="timeline-markers">
-          {markers.map((marker) => (
+          {visibleSectionMarkers.map((marker) => (
             <span
               key={`marker-${marker.id}`}
               className={`timeline-marker timeline-marker-mini ${pendingJumpTargetId === marker.id ? "is-target" : ""}`}
