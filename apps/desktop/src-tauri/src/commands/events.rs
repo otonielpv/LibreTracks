@@ -7,6 +7,7 @@ use crate::models::TransportSnapshot;
 use crate::state::{DesktopSession, DesktopState, WaveformReadyEvent, WAVEFORM_READY_EVENT};
 
 const TRANSPORT_LIFECYCLE_EVENT: &str = "transport:lifecycle";
+const PROJECT_LOAD_COMPLETE_EVENT: &str = "project:load-complete";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +16,13 @@ struct TransportLifecycleEventPayload {
     snapshot: TransportSnapshot,
     anchor_position_seconds: f64,
     emitted_at_unix_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectLoadCompleteEventPayload {
+    pub snapshot: Option<TransportSnapshot>,
+    pub error: Option<String>,
 }
 
 fn transport_anchor_position(snapshot: &TransportSnapshot) -> f64 {
@@ -43,6 +51,15 @@ pub(crate) fn emit_transport_lifecycle_event(
 
     if let Err(error) = app.emit(TRANSPORT_LIFECYCLE_EVENT, payload) {
         eprintln!("[libretracks-transport] failed to emit lifecycle event: {error}");
+    }
+}
+
+pub(crate) fn emit_project_load_complete_event(
+    app: &AppHandle,
+    payload: ProjectLoadCompleteEventPayload,
+) {
+    if let Err(error) = app.emit(PROJECT_LOAD_COMPLETE_EVENT, payload) {
+        eprintln!("[libretracks-project] failed to emit load-complete event: {error}");
     }
 }
 

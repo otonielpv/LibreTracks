@@ -8,6 +8,7 @@ import type {
   DesktopPerformanceSnapshot,
   LibraryAssetSummary,
   LibraryImportProgressEvent,
+  ProjectLoadCompleteEvent,
   MidiRawMessage,
   ProjectLoadProgressEvent,
   RemoteServerInfo,
@@ -65,6 +66,15 @@ export async function listenToProjectLoadProgress(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<ProjectLoadProgressEvent>("project:load-progress", (event) => {
+    handler(event.payload);
+  });
+}
+
+async function listenToProjectLoadComplete(
+  handler: (event: ProjectLoadCompleteEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<ProjectLoadCompleteEvent>("project:load-complete", (event) => {
     handler(event.payload);
   });
 }
@@ -249,7 +259,38 @@ export async function deleteSongTimeSignatureMarker(markerId: string): Promise<T
 }
 
 export async function openProject(): Promise<TransportSnapshot | null> {
-  return invokeCommand<TransportSnapshot | null>("open_project_from_dialog");
+  let dispose: (() => void) | null = null;
+  const clearListener = () => {
+    const unlisten: (() => void) | null = dispose;
+    dispose = null;
+    if (unlisten) {
+      unlisten();
+    }
+  };
+  const completion = new Promise<TransportSnapshot | null>((resolve, reject) => {
+    void listenToProjectLoadComplete((event) => {
+      clearListener();
+      if (event.error) {
+        reject(new Error(event.error));
+        return;
+      }
+      resolve(event.snapshot);
+    }).then((unlisten) => {
+      dispose = unlisten;
+    }, reject);
+  });
+
+  try {
+    const started = await invokeCommand<boolean>("start_open_project_from_dialog");
+    if (!started) {
+      clearListener();
+      return null;
+    }
+    return await completion;
+  } catch (error) {
+    clearListener();
+    throw error;
+  }
 }
 
 export async function pickAndImportSong(): Promise<TransportSnapshot | null> {

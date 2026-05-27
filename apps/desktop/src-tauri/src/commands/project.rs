@@ -1,6 +1,11 @@
-use tauri::{AppHandle, State};
+use std::thread;
 
-use crate::commands::events::emit_ready_library_waveforms;
+use tauri::{AppHandle, Manager, State};
+
+use crate::commands::events::{
+    emit_project_load_complete_event, emit_ready_library_waveforms,
+    emit_transport_lifecycle_event, ProjectLoadCompleteEventPayload,
+};
 use crate::error::DesktopError;
 use crate::models::{LibraryAssetSummary, SongPackageImportResponse, SongView, TransportSnapshot};
 use crate::state::{
@@ -104,6 +109,57 @@ pub fn open_project_from_dialog(
     session
         .open_project_from_dialog(&app, &state.audio)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
+    let song_file = FileDialog::new()
+        .add_filter("LibreTracks Session", &["ltsession"])
+        .set_title("Selecciona session.ltsession")
+        .pick_file();
+
+    let Some(song_file) = song_file else {
+        return Ok(false);
+    };
+
+    let worker_app = app.clone();
+    thread::spawn(move || {
+        let state = worker_app.state::<DesktopState>();
+        let result = (|| -> Result<TransportSnapshot, String> {
+            let mut session = state
+                .session
+                .lock()
+                .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+            let snapshot = session
+                .open_project_from_path(&worker_app, &state.audio, song_file)
+                .map_err(|error| error.to_string())?;
+            Ok(snapshot)
+        })();
+
+        match result {
+            Ok(snapshot) => {
+                emit_transport_lifecycle_event(&worker_app, "sync", &snapshot);
+                emit_project_load_complete_event(
+                    &worker_app,
+                    ProjectLoadCompleteEventPayload {
+                        snapshot: Some(snapshot),
+                        error: None,
+                    },
+                );
+            }
+            Err(error) => {
+                emit_project_load_complete_event(
+                    &worker_app,
+                    ProjectLoadCompleteEventPayload {
+                        snapshot: None,
+                        error: Some(error),
+                    },
+                );
+            }
+        }
+    });
+
+    Ok(true)
 }
 
 #[tauri::command]

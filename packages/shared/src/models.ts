@@ -318,6 +318,11 @@ export type TransportLifecycleEvent = {
   emittedAtUnixMs: number;
 };
 
+export type ProjectLoadCompleteEvent = {
+  snapshot: TransportSnapshot | null;
+  error: string | null;
+};
+
 export type AudioMeterLevel = {
   trackId: string;
   leftPeak: number;

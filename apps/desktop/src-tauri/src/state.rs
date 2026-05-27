@@ -746,6 +746,15 @@ impl DesktopSession {
             return Ok(None);
         };
 
+        self.open_project_from_path(app, audio, song_file).map(Some)
+    }
+
+    pub fn open_project_from_path(
+        &mut self,
+        app: &AppHandle,
+        audio: &AudioController,
+        song_file: PathBuf,
+    ) -> Result<TransportSnapshot, DesktopError> {
         let song_dir = song_file
             .parent()
             .map(std::path::Path::to_path_buf)
@@ -759,7 +768,7 @@ impl DesktopSession {
         self.song_file_path = Some(song_file);
         self.wait_for_project_audio_preparation(app, audio)?;
 
-        Ok(Some(self.snapshot()))
+        Ok(self.snapshot())
     }
 
     pub fn import_song_from_dialog(
@@ -3393,7 +3402,7 @@ impl DesktopSession {
             if started_at.elapsed() >= PREARM_TIMEOUT {
                 return Ok(());
             }
-            let progress_percent = if prearm.active_target_total > 0 {
+            let active_progress = if prearm.active_target_total > 0 {
                 let completed = prearm
                     .active_target_completed
                     .min(prearm.active_target_total) as f32;
@@ -3403,7 +3412,14 @@ impl DesktopSession {
                 let elapsed_secs = (started_at.elapsed().as_millis() / 1_000).min(7) as f32;
                 (elapsed_secs / 7.0).clamp(0.0, 1.0)
             };
-            let percent = 92_u8 + (progress_percent * 7.0).round() as u8;
+            // Reserve 99% for the moment the worker is actually idle. This
+            // prevents the UI from showing 99% while there is still a long
+            // tail of target preparation work left.
+            let percent = if idle {
+                99
+            } else {
+                92_u8 + (active_progress * 6.0).floor() as u8
+            };
             if percent != last_emitted_percent {
                 last_emitted_percent = percent;
                 let ram_cache_mb = (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
@@ -3411,7 +3427,7 @@ impl DesktopSession {
                     (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
                 emit_project_load_progress(
                     app,
-                    percent.min(99),
+                    percent,
                     "Preparando voces para reproduccion instantanea...".into(),
                     ready,
                     total,
