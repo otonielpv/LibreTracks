@@ -118,8 +118,19 @@ const PAN_CENTER_MAGNET = 0.08;
 const REMOTE_SIZE_STORAGE_KEY = "libretracks.remote.uiSize";
 const MAX_REMOTE_SIZE_LEVEL = 3;
 const TIMELINE_JITTER_RESET_THRESHOLD_SECONDS = 0.18;
+const TIMELINE_CORRECTION_SNAP_THRESHOLD_SECONDS = 0.32;
+const TIMELINE_FORWARD_CORRECTION_PER_SECOND = 10;
 const READOUT_MIN_UPDATE_INTERVAL_MS = 1000 / 30;
 const STRINGS = getRemoteStrings();
+
+function isTimelineDebugEnabled() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const query = new URLSearchParams(window.location.search);
+  return query.get("timelineDebug") === "1" || window.localStorage.getItem("libretracks.remote.timelineDebug") === "1";
+}
 
 function readRemoteSizeLevel() {
   if (typeof window === "undefined") {
@@ -664,7 +675,17 @@ const SharedTimeline = memo(function SharedTimeline({
   const rulerRef = useRef<HTMLDivElement | null>(null);
   const snapshotRef = useRef(snapshot);
   const snapshotReceivedAtMsRef = useRef(snapshotReceivedAtMs);
+  const visibleGridMarkerCountRef = useRef(0);
+  const visibleSectionMarkerCountRef = useRef(0);
   const visualPositionRef = useRef(0);
+  const lastFrameAtMsRef = useRef<number | null>(null);
+  const lastDebugLogAtMsRef = useRef(0);
+  const debugStatsRef = useRef({
+    frameCount: 0,
+    snapshotCount: 0,
+    accumulatedCorrectionSeconds: 0,
+    maxCorrectionSeconds: 0,
+  });
   const lastTimelinePlaybackRef = useRef<{ playing: boolean; positionSeconds: number }>({
     playing: false,
     positionSeconds: 0,
@@ -739,6 +760,7 @@ const SharedTimeline = memo(function SharedTimeline({
   );
   const pendingJump = snapshot?.pendingMarkerJump ?? null;
   const activeVamp = snapshot?.activeVamp ?? null;
+  const timelineDebugEnabled = isTimelineDebugEnabled();
   const pendingJumpX =
     pendingJump && Number.isFinite(pendingJump.executeAtSeconds)
       ? secondsToAbsoluteX(pendingJump.executeAtSeconds, CHROME_TIMELINE_PIXELS_PER_SECOND)
@@ -757,7 +779,16 @@ const SharedTimeline = memo(function SharedTimeline({
   useEffect(() => {
     snapshotRef.current = snapshot;
     snapshotReceivedAtMsRef.current = snapshotReceivedAtMs;
+
+    if (timelineDebugEnabled && snapshot) {
+      debugStatsRef.current.snapshotCount += 1;
+    }
   }, [snapshot, snapshotReceivedAtMs]);
+
+  useEffect(() => {
+    visibleGridMarkerCountRef.current = visibleGridMarkers.length;
+    visibleSectionMarkerCountRef.current = visibleSectionMarkers.length;
+  }, [visibleGridMarkers.length, visibleSectionMarkers.length]);
 
   useEffect(() => {
     const updateWidth = () => {
@@ -779,28 +810,76 @@ const SharedTimeline = memo(function SharedTimeline({
   useEffect(() => {
     let frameId = 0;
 
-    const render = () => {
+    const render = (frameAtMs: number) => {
       const width = shellRef.current?.clientWidth ?? viewportWidth;
       const currentSnapshot = snapshotRef.current;
       const rawPositionSeconds = resolveLivePosition(currentSnapshot, snapshotReceivedAtMsRef.current);
       const isPlaying = currentSnapshot?.playbackState === "playing" && currentSnapshot.transportClock?.running === true;
+      const lastFrameAtMs = lastFrameAtMsRef.current;
+      const deltaSeconds = lastFrameAtMs === null ? 0 : Math.min(0.05, Math.max(0, frameAtMs - lastFrameAtMs) / 1000);
+      lastFrameAtMsRef.current = frameAtMs;
 
       if (!isPlaying) {
         visualPositionRef.current = rawPositionSeconds;
+      } else if (lastFrameAtMs !== null) {
+        visualPositionRef.current += deltaSeconds;
       } else if (!lastTimelinePlaybackRef.current.playing) {
         visualPositionRef.current = rawPositionSeconds;
-      } else {
-        const backwardsDelta = visualPositionRef.current - rawPositionSeconds;
-        visualPositionRef.current =
-          backwardsDelta > TIMELINE_JITTER_RESET_THRESHOLD_SECONDS
-            ? rawPositionSeconds
-            : Math.max(visualPositionRef.current, rawPositionSeconds);
       }
+
+      if (isPlaying && !lastTimelinePlaybackRef.current.playing) {
+        visualPositionRef.current = rawPositionSeconds;
+      } else if (isPlaying) {
+        const correctionSeconds = rawPositionSeconds - visualPositionRef.current;
+        if (
+          correctionSeconds > TIMELINE_CORRECTION_SNAP_THRESHOLD_SECONDS ||
+          correctionSeconds < -TIMELINE_JITTER_RESET_THRESHOLD_SECONDS
+        ) {
+          visualPositionRef.current = rawPositionSeconds;
+        } else if (correctionSeconds > 0) {
+          visualPositionRef.current +=
+            correctionSeconds * Math.min(1, deltaSeconds * TIMELINE_FORWARD_CORRECTION_PER_SECOND);
+        }
+
+        if (timelineDebugEnabled) {
+          debugStatsRef.current.accumulatedCorrectionSeconds += Math.abs(correctionSeconds);
+          debugStatsRef.current.maxCorrectionSeconds = Math.max(
+            debugStatsRef.current.maxCorrectionSeconds,
+            Math.abs(correctionSeconds),
+          );
+        }
+      }
+
+      visualPositionRef.current = Math.max(0, visualPositionRef.current);
 
       lastTimelinePlaybackRef.current = {
         playing: isPlaying,
         positionSeconds: rawPositionSeconds,
       };
+
+      if (timelineDebugEnabled) {
+        debugStatsRef.current.frameCount += 1;
+        if (frameAtMs - lastDebugLogAtMsRef.current >= 1000) {
+          const elapsedMs = Math.max(1, frameAtMs - lastDebugLogAtMsRef.current || 1000);
+          const averageCorrectionMs =
+            (debugStatsRef.current.accumulatedCorrectionSeconds * 1000) /
+            Math.max(1, debugStatsRef.current.frameCount);
+          console.info("[remote timeline]", {
+            fps: Number(((debugStatsRef.current.frameCount * 1000) / elapsedMs).toFixed(1)),
+            snapshotHz: Number(((debugStatsRef.current.snapshotCount * 1000) / elapsedMs).toFixed(1)),
+            avgCorrectionMs: Number(averageCorrectionMs.toFixed(2)),
+            maxCorrectionMs: Number((debugStatsRef.current.maxCorrectionSeconds * 1000).toFixed(2)),
+            visibleGridMarkers: visibleGridMarkerCountRef.current,
+            visibleSectionMarkers: visibleSectionMarkerCountRef.current,
+            viewportWidth,
+          });
+          debugStatsRef.current.frameCount = 0;
+          debugStatsRef.current.snapshotCount = 0;
+          debugStatsRef.current.accumulatedCorrectionSeconds = 0;
+          debugStatsRef.current.maxCorrectionSeconds = 0;
+          lastDebugLogAtMsRef.current = frameAtMs;
+        }
+      }
 
       const currentX = secondsToAbsoluteX(visualPositionRef.current, CHROME_TIMELINE_PIXELS_PER_SECOND);
       const desiredTranslate = width / 2 - currentX;
@@ -816,8 +895,11 @@ const SharedTimeline = memo(function SharedTimeline({
     };
 
     frameId = window.requestAnimationFrame(render);
-    return () => window.cancelAnimationFrame(frameId);
-  }, [contentWidth, viewportWidth]);
+    return () => {
+      lastFrameAtMsRef.current = null;
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [contentWidth, timelineDebugEnabled, viewportWidth]);
 
   return (
     <div ref={shellRef} className="timeline-shell timeline-shell-shared">
