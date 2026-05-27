@@ -3393,11 +3393,17 @@ impl DesktopSession {
             if started_at.elapsed() >= PREARM_TIMEOUT {
                 return Ok(());
             }
-            // Walk 92 → 99 over the wait so the user sees movement even
-            // though we don't know the exact total number of targets being
-            // prearmed.
-            let elapsed_secs = (started_at.elapsed().as_millis() / 1_000).min(7) as u8;
-            let percent = 92_u8 + elapsed_secs;
+            let progress_percent = if prearm.active_target_total > 0 {
+                let completed = prearm
+                    .active_target_completed
+                    .min(prearm.active_target_total) as f32;
+                let total = prearm.active_target_total as f32;
+                (completed / total).clamp(0.0, 1.0)
+            } else {
+                let elapsed_secs = (started_at.elapsed().as_millis() / 1_000).min(7) as f32;
+                (elapsed_secs / 7.0).clamp(0.0, 1.0)
+            };
+            let percent = 92_u8 + (progress_percent * 7.0).round() as u8;
             if percent != last_emitted_percent {
                 last_emitted_percent = percent;
                 let ram_cache_mb = (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;

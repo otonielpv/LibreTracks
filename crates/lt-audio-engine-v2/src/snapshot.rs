@@ -77,6 +77,10 @@ pub struct PrearmedJumpsSnapshot {
     pub posted_count: u64,
     #[serde(default)]
     pub completed_count: u64,
+    #[serde(default)]
+    pub active_target_total: u64,
+    #[serde(default)]
+    pub active_target_completed: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

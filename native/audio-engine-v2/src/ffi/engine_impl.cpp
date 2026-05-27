@@ -873,6 +873,8 @@ std::string EngineImpl::get_snapshot() const {
         snap.prearmed_jumps.last_completed_revision = pd.last_completed_revision;
         snap.prearmed_jumps.posted_count = pd.posted_count;
         snap.prearmed_jumps.completed_count = pd.completed_count;
+        snap.prearmed_jumps.active_target_total = pd.active_target_total;
+        snap.prearmed_jumps.active_target_completed = pd.active_target_completed;
     }
 
     return snapshot_to_json(snap);

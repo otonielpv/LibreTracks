@@ -506,6 +506,8 @@ struct PrearmedJumpManager::Impl {
     // "another job came in after the one I was waiting for" cleanly.
     std::atomic<std::uint64_t> posted_count{0};
     std::atomic<std::uint64_t> completed_count{0};
+    std::atomic<std::uint64_t> active_target_total{0};
+    std::atomic<std::uint64_t> active_target_completed{0};
 
     // Drop one prepared set (the oldest by insertion order). Caller holds mtx.
     void evict_one_oldest_locked() {
@@ -702,6 +704,14 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
 
     std::unordered_set<PrearmTargetKey, PrearmTargetKeyHash> kept;
     kept.reserve(32);
+    std::uint64_t target_total = 0;
+    for (const auto& song : session.songs) {
+        target_total += static_cast<std::uint64_t>(song.markers.size());
+        target_total += static_cast<std::uint64_t>(song.regions.size());
+        target_total += 1;
+    }
+    impl_->active_target_total.store(target_total, std::memory_order_release);
+    impl_->active_target_completed.store(0, std::memory_order_release);
 
     // build_one: prime voices targeting `target_frame` and insert into the
     // prepared_map. Skips if a valid set already exists for the same key.
@@ -709,85 +719,90 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
                           const Song& song,
                           const Id& target_id,
                           Frame target_frame) {
-        PrearmTargetKey key;
-        key.kind             = kind;
-        key.song_id          = song.id;
-        key.target_id        = target_id;
-        key.timeline_frame   = target_frame;
-        key.sample_rate      = sample_rate;
-        key.block_size       = max_in_frames;
-        key.session_revision = session_revision;
-        kept.insert(key);
+        auto build_for_target = [&]() {
+            PrearmTargetKey key;
+            key.kind             = kind;
+            key.song_id          = song.id;
+            key.target_id        = target_id;
+            key.timeline_frame   = target_frame;
+            key.sample_rate      = sample_rate;
+            key.block_size       = max_in_frames;
+            key.session_revision = session_revision;
+            kept.insert(key);
 
-        auto it = impl_->prepared_map.find(key);
-        if (it != impl_->prepared_map.end() && it->second && it->second->valid)
-            return; // already prepared
+            auto it = impl_->prepared_map.find(key);
+            if (it != impl_->prepared_map.end() && it->second && it->second->valid)
+                return;
 
-        g.unlock();
-        auto br  = build_prepared_set(kind, song, target_id, target_frame,
-                                       sources, sample_rate,
-                                       channel_count,
-                                       max_in_frames, session_revision);
-        g.lock();
-        if (session_revision != impl_->current_revision)
-            return;
-        it = impl_->prepared_map.find(key);
-        if (it != impl_->prepared_map.end() && it->second && it->second->valid)
-            return;
-        auto set = std::move(br.set);
+            g.unlock();
+            auto br  = build_prepared_set(kind, song, target_id, target_frame,
+                                           sources, sample_rate,
+                                           channel_count,
+                                           max_in_frames, session_revision);
+            g.lock();
+            if (session_revision != impl_->current_revision)
+                return;
+            it = impl_->prepared_map.find(key);
+            if (it != impl_->prepared_map.end() && it->second && it->second->valid)
+                return;
+            auto set = std::move(br.set);
 
-        // If sources weren't loaded for some audible clips, skip inserting
-        // this set entirely so source_ready can retry cleanly without a
-        // stale empty entry sitting in the cache. The user's jump will fall
-        // through to prepare_target_now (also misses) → reactive rebuild.
-        if (br.unloaded_clips_skipped > 0) {
-            if (prearm_log_enabled()) {
-                lt_debug_log(
-                    "[PREARM] skip_unloaded kind=%s song=%s id=%s frame=%lld unloaded_clips=%d\n",
-                    target_kind_label(kind), song.id.c_str(),
-                    target_id.c_str(), static_cast<long long>(target_frame),
-                    br.unloaded_clips_skipped);
+            // If sources weren't loaded for some audible clips, skip inserting
+            // this set entirely so source_ready can retry cleanly without a
+            // stale empty entry sitting in the cache. The user's jump will fall
+            // through to prepare_target_now (also misses) → reactive rebuild.
+            if (br.unloaded_clips_skipped > 0) {
+                if (prearm_log_enabled()) {
+                    lt_debug_log(
+                        "[PREARM] skip_unloaded kind=%s song=%s id=%s frame=%lld unloaded_clips=%d\n",
+                        target_kind_label(kind), song.id.c_str(),
+                        target_id.c_str(), static_cast<long long>(target_frame),
+                        br.unloaded_clips_skipped);
+                }
+                return;
             }
-            return;
-        }
 
-        if (!set->valid) {
-            impl_->prepare_failed_total.fetch_add(1, std::memory_order_relaxed);
-            if (prearm_log_enabled()) {
-                lt_debug_log(
-                    "[PREARM] prepare_failed kind=%s song=%s id=%s frame=%lld\n",
-                    target_kind_label(kind), song.id.c_str(),
-                    target_id.c_str(), static_cast<long long>(target_frame));
+            if (!set->valid) {
+                impl_->prepare_failed_total.fetch_add(1, std::memory_order_relaxed);
+                if (prearm_log_enabled()) {
+                    lt_debug_log(
+                        "[PREARM] prepare_failed kind=%s song=%s id=%s frame=%lld\n",
+                        target_kind_label(kind), song.id.c_str(),
+                        target_id.c_str(), static_cast<long long>(target_frame));
+                }
+            } else {
+                impl_->prepared_total.fetch_add(1, std::memory_order_relaxed);
+                if (prearm_log_enabled()) {
+                    lt_debug_log(
+                        "[PREARM] prepared kind=%s song=%s id=%s frame=%lld voices=%zu\n",
+                        target_kind_label(kind), song.id.c_str(),
+                        target_id.c_str(), static_cast<long long>(target_frame),
+                        set->tracks.size());
+                }
             }
-        } else {
-            impl_->prepared_total.fetch_add(1, std::memory_order_relaxed);
-            if (prearm_log_enabled()) {
-                lt_debug_log(
-                    "[PREARM] prepared kind=%s song=%s id=%s frame=%lld voices=%zu\n",
-                    target_kind_label(kind), song.id.c_str(),
-                    target_id.c_str(), static_cast<long long>(target_frame),
-                    set->tracks.size());
+
+            if (set->valid && set->tracks.empty())
+                return;
+
+            impl_->prepared_map[key] = std::move(set);
+            impl_->insertion_order.push_back(key);
+
+            // Phase 7: enforce cap. Evict oldest until we're at or below the cap.
+            while (static_cast<int>(impl_->prepared_map.size())
+                    > impl_->max_prepared_targets) {
+                const std::size_t before = impl_->prepared_map.size();
+                impl_->evict_one_oldest_locked();
+                if (impl_->prepared_map.size() == before) break;
+                if (prearm_log_enabled()) {
+                    lt_debug_log(
+                        "[PREARM] evicted_oldest (over cap=%d, now=%zu)\n",
+                        impl_->max_prepared_targets, impl_->prepared_map.size());
+                }
             }
-        }
+        };
 
-        if (set->valid && set->tracks.empty())
-            return;
-
-        impl_->prepared_map[key] = std::move(set);
-        impl_->insertion_order.push_back(key);
-
-        // Phase 7: enforce cap. Evict oldest until we're at or below the cap.
-        while (static_cast<int>(impl_->prepared_map.size())
-                > impl_->max_prepared_targets) {
-            const std::size_t before = impl_->prepared_map.size();
-            impl_->evict_one_oldest_locked();
-            if (impl_->prepared_map.size() == before) break; // safety
-            if (prearm_log_enabled()) {
-                lt_debug_log(
-                    "[PREARM] evicted_oldest (over cap=%d, now=%zu)\n",
-                    impl_->max_prepared_targets, impl_->prepared_map.size());
-            }
-        }
+        build_for_target();
+        impl_->active_target_completed.fetch_add(1, std::memory_order_acq_rel);
     };
 
     for (const auto& song : session.songs) {
@@ -819,6 +834,8 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
             ++it;
         }
     }
+
+    impl_->active_target_completed.store(target_total, std::memory_order_release);
 }
 
 std::unique_ptr<PreparedJumpVoiceSet>
@@ -921,6 +938,10 @@ PrearmedJumpManager::diagnostics() const noexcept {
         impl_->last_completed_revision.load(std::memory_order_acquire);
     d.posted_count    = impl_->posted_count.load(std::memory_order_acquire);
     d.completed_count = impl_->completed_count.load(std::memory_order_acquire);
+    d.active_target_total =
+        impl_->active_target_total.load(std::memory_order_acquire);
+    d.active_target_completed =
+        impl_->active_target_completed.load(std::memory_order_acquire);
     {
         std::lock_guard<std::mutex> wlk(impl_->worker_mtx);
         if (impl_->pending_job.has_value())

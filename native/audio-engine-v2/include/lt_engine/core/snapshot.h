@@ -148,6 +148,8 @@ struct EngineSnapshot {
         std::uint64_t last_completed_revision = 0;
         std::uint64_t posted_count            = 0;
         std::uint64_t completed_count         = 0;
+        std::uint64_t active_target_total     = 0;
+        std::uint64_t active_target_completed = 0;
     } prearmed_jumps;
 };
 
