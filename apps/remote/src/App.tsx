@@ -132,6 +132,16 @@ function isTimelineDebugEnabled() {
   return query.get("timelineDebug") === "1" || window.localStorage.getItem("libretracks.remote.timelineDebug") === "1";
 }
 
+function getTransportRepositionToken(snapshot: TransportSnapshot | null) {
+  const transportClock = snapshot?.transportClock;
+  return [
+    snapshot?.playbackState ?? "none",
+    transportClock?.lastSeekPositionSeconds ?? "none",
+    transportClock?.lastJumpPositionSeconds ?? "none",
+    transportClock?.lastStartPositionSeconds ?? "none",
+  ].join("|");
+}
+
 function readRemoteSizeLevel() {
   if (typeof window === "undefined") {
     return 0;
@@ -678,6 +688,7 @@ const SharedTimeline = memo(function SharedTimeline({
   const visibleGridMarkerCountRef = useRef(0);
   const visibleSectionMarkerCountRef = useRef(0);
   const visualPositionRef = useRef(0);
+  const lastTransportRepositionTokenRef = useRef(getTransportRepositionToken(snapshot));
   const lastFrameAtMsRef = useRef<number | null>(null);
   const lastDebugLogAtMsRef = useRef(0);
   const debugStatsRef = useRef({
@@ -813,13 +824,21 @@ const SharedTimeline = memo(function SharedTimeline({
     const render = (frameAtMs: number) => {
       const width = shellRef.current?.clientWidth ?? viewportWidth;
       const currentSnapshot = snapshotRef.current;
+      const repositionToken = getTransportRepositionToken(currentSnapshot);
+      const explicitTransportReposition = repositionToken !== lastTransportRepositionTokenRef.current;
       const rawPositionSeconds = resolveLivePosition(currentSnapshot, snapshotReceivedAtMsRef.current);
       const isPlaying = currentSnapshot?.playbackState === "playing" && currentSnapshot.transportClock?.running === true;
       const lastFrameAtMs = lastFrameAtMsRef.current;
       const deltaSeconds = lastFrameAtMs === null ? 0 : Math.min(0.05, Math.max(0, frameAtMs - lastFrameAtMs) / 1000);
       lastFrameAtMsRef.current = frameAtMs;
 
+      if (explicitTransportReposition) {
+        lastTransportRepositionTokenRef.current = repositionToken;
+      }
+
       if (!isPlaying) {
+        visualPositionRef.current = rawPositionSeconds;
+      } else if (explicitTransportReposition) {
         visualPositionRef.current = rawPositionSeconds;
       } else if (lastFrameAtMs !== null) {
         visualPositionRef.current += deltaSeconds;
@@ -831,9 +850,11 @@ const SharedTimeline = memo(function SharedTimeline({
         visualPositionRef.current = rawPositionSeconds;
       } else if (isPlaying) {
         const correctionSeconds = rawPositionSeconds - visualPositionRef.current;
-        if (
-          correctionSeconds > TIMELINE_CORRECTION_SNAP_THRESHOLD_SECONDS ||
-          correctionSeconds < -TIMELINE_JITTER_RESET_THRESHOLD_SECONDS
+        if (correctionSeconds > TIMELINE_CORRECTION_SNAP_THRESHOLD_SECONDS) {
+          visualPositionRef.current = rawPositionSeconds;
+        } else if (
+          correctionSeconds < -TIMELINE_JITTER_RESET_THRESHOLD_SECONDS &&
+          explicitTransportReposition
         ) {
           visualPositionRef.current = rawPositionSeconds;
         } else if (correctionSeconds > 0) {
