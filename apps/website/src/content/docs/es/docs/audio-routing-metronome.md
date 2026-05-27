@@ -19,6 +19,8 @@ Los cambios de canal usan un flujo explicito de **Aplicar** / **Descartar**: cad
 
 Desde la cabecera de cada pista puedes rutear a `Master` o directamente a cualquiera de los destinos `Ext. Out` mono o estereo que tengas activados.
 
+Las pistas hijas dentro de una carpeta tambien pueden usar `Inherited (Folder)`. En ese modo, la hija sigue automaticamente la salida de la carpeta, asi puedes mover un grupo completo de click o guia entre buses cambiando solo la carpeta.
+
 ![Menu de routing de pista](/screenshots/Track-Audio-Route.png)
 
 Routing habitual:
@@ -26,6 +28,7 @@ Routing habitual:
 - Stems y playback musical a `Master`.
 - Click, count-ins, cues habladas o guias a una salida externa de cue.
 - Salidas de cue independientes del fader de Master.
+- Carpeta enviada a una salida externa y pistas hijas en `Inherited (Folder)` para un setup mas rapido.
 
 ## Rutas Internas
 

@@ -61,4 +61,6 @@ Open `Remote` in the desktop app, then scan the QR code or open the displayed UR
 
 The remote exposes transport, marker jumps, song jumps, Vamp controls, song transition mode, region navigation, transpose controls, and a mixer view for volume, pan, mute, and solo.
 
+The mixer view now behaves more like a live utility surface: it keeps draft volume and pan changes responsive while you drag, shows per-track meters, offers a quick center action for pan, and mirrors folder color grouping so it is easier to identify groups from a phone.
+
 ![Remote mixer](/screenshots/Remote_Mixer.png)

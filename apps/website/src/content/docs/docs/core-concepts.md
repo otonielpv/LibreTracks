@@ -20,6 +20,8 @@ Virtual folders group assets by song, set, scene, section, or instrumentation wi
 
 Use folder tracks for related stems such as drums, band tracks, choirs, backing vocals, or auxiliary playback. Use audio tracks for lanes that contain clips.
 
+Folder tracks can also own the output route for the whole group. Child tracks may stay on `Inherited (Folder)` so the folder decides whether the group goes to `Master` or to a cue output, which is useful for click, guide, or monitor buses.
+
 ![Tracks and folders](/screenshots/Tracks-Folder.gif)
 
 ## Clips And Timeline Editing
@@ -29,6 +31,8 @@ Clips are non-destructive timeline references to source audio. You can drag asse
 Select clips and use `Ctrl + C` / `Ctrl + V` to copy and paste them. Use `Ctrl + D` when you want to duplicate the selected clips directly at the next timeline position.
 
 Drag a clip edge to resize its region without changing the original audio file. When `Snap to Grid` is enabled, hold `Alt` while moving the playhead to place it freely without snapping to the grid.
+
+Tracks and clips can be color-coded from the context menu. Multi-selected tracks can receive the same color in one action, so large shows are easier to organize by song, section, or role.
 
 ![Duplicate a clip](/screenshots/DuplicateTrack.png)
 

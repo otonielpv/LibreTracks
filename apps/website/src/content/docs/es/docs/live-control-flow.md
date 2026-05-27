@@ -61,4 +61,6 @@ Abre `Remote` en la app desktop y escanea el codigo QR o abre la URL mostrada de
 
 El remote incluye transporte, saltos de marca, saltos de cancion, Vamp, modo de transicion, navegacion entre regiones, controles de transposicion y una vista de mixer para volumen, paneo, mute y solo.
 
+La vista de mixer ahora se comporta mas como una superficie util de directo: mantiene el movimiento de volumen y paneo fluido mientras arrastras, muestra medidores por pista, ofrece una accion rapida para centrar el paneo y replica la agrupacion por color de las carpetas para identificar grupos mejor desde el movil.
+
 ![Mixer remote](/screenshots/Remote_Mixer.png)

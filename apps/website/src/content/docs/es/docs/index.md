@@ -3,7 +3,7 @@ title: Documentacion de LibreTracks
 description: Documentacion tecnica y de usuario para LibreTracks.
 ---
 
-LibreTracks es una workstation desktop de playback multitrack para musicos en vivo, directores musicales y playback engineers. Esta pensada para preparar el show con antelacion, guardar la sesion y tocar con routing, marcas, saltos, controles de transposicion, MIDI y remote movil de forma predecible.
+LibreTracks es una workstation desktop de playback multitrack para musicos en vivo, directores musicales y playback engineers. Esta pensada para preparar el show con antelacion, guardar la sesion y tocar con routing, marcas, saltos, controles de transposicion, timeline con colores, MIDI y remote movil de forma predecible.
 
 ![Timeline de proyecto en LibreTracks](/screenshots/Proyecto.png)
 
@@ -35,7 +35,9 @@ Las fuentes importadas grandes se preparan para reproduccion apoyada en disco. L
 
 Cada region de cancion puede cambiar tempo y tonalidad de forma independiente. Region Warp estira el audio para encajar con el BPM del timeline sin cambiar el tono, y Region Transpose desplaza el tono cambiando o no la duracion segun este el warp. Consulta [Pitch, warp y el boton T](./pitch-and-warp) para la tabla de decision completa.
 
-La edicion de clips soporta flujos al estilo Ableton: Ctrl/Cmd+click y Shift+click para seleccion multiple, arrastre en grupo con IPC agrupado, y magnets con Ctrl al arrastrar que pegan los bordes del clip al playhead, marcas, regiones y bordes de otros clips.
+La edicion de clips soporta flujos al estilo Ableton: Ctrl/Cmd+click y Shift+click para seleccion multiple, arrastre en grupo con IPC agrupado, y magnets con Ctrl al arrastrar que pegan los bordes del clip al playhead, marcas, regiones y bordes de otros clips. Ademas, pistas y clips pueden colorearse desde el menu contextual para leer sesiones densas mas rapido.
+
+Las folder tracks tambien pueden actuar como dueñas del routing: las pistas hijas pueden dejar su salida en `Inherited (Folder)` para seguir automaticamente el bus de la carpeta, manteniendo la misma agrupacion visual en el timeline desktop y en el mixer remote.
 
 LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, mostrando las novedades en el idioma de la app y un acceso directo a la pagina de descargas. La comprobacion tambien se puede lanzar manualmente desde `Configuracion - General`.
 
@@ -43,6 +45,6 @@ LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, m
 
 - `Configuracion`: dispositivo de audio, frecuencia de muestreo, tamano de buffer, salidas hardware, metronomo y MIDI Learn.
 - `Biblioteca`: assets importados y carpetas virtuales.
-- `Timeline`: pistas, clips, regiones de cancion, transposicion por region, marcas, compases y edicion con rejilla.
-- `Remote`: superficie web local para transporte, saltos, Vamp, transposicion y mixer.
+- `Timeline`: pistas, clips, regiones de cancion, transposicion por region, marcas, compases, edicion con rejilla y organizacion por color.
+- `Remote`: superficie web local para transporte, saltos, Vamp, transposicion y un mixer con medidores y pistas agrupadas visualmente.
 - `Archivo`: importar canciones/paquetes y exportar canciones preparadas.

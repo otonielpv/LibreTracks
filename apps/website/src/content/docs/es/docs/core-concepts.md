@@ -20,6 +20,8 @@ Las carpetas virtuales agrupan assets por cancion, set, escena, seccion o instru
 
 Usa folder tracks para stems relacionados como bateria, tracks de banda, coros, voces de apoyo o playback auxiliar. Usa audio tracks para lanes que contienen clips.
 
+Las folder tracks tambien pueden ser las duenas del routing del grupo. Las pistas hijas pueden quedarse en `Inherited (Folder)` para que la carpeta decida si todo va a `Master` o a una salida de cue, algo util para buses de click, guia o monitores.
+
 ![Tracks y carpetas](/screenshots/Tracks-Folder.gif)
 
 ## Clips Y Edicion De Timeline
@@ -29,6 +31,8 @@ Los clips son referencias no destructivas a archivos de audio. Puedes arrastrar 
 Selecciona clips y usa `Ctrl + C` / `Ctrl + V` para copiarlos y pegarlos. Usa `Ctrl + D` cuando quieras duplicar los clips seleccionados directamente en la siguiente posicion del timeline.
 
 Arrastra el borde de un clip para redimensionar su region sin cambiar el archivo de audio original. Cuando `Snap to Grid` esta activado, manten `Alt` mientras mueves el playhead para colocarlo libremente sin ajustar a la rejilla.
+
+Pistas y clips tambien pueden colorearse desde el menu contextual. Si seleccionas varias pistas, puedes aplicar el mismo color de una sola vez para organizar shows grandes por cancion, bloque o funcion.
 
 ![Duplicar un clip](/screenshots/DuplicateTrack.png)
 

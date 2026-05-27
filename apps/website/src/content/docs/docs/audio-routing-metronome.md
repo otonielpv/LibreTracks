@@ -19,6 +19,8 @@ Channel changes use an explicit **Apply** / **Discard** flow: ticks update the d
 
 Track headers can then route each track to `Master` or directly to any of the enabled mono/stereo `Ext. Out` destinations.
 
+Child tracks inside a folder can also use `Inherited (Folder)`. In that mode, the child follows the folder output automatically, so you can move a whole click or guide group between buses by changing the folder once.
+
 ![Track routing menu](/screenshots/Track-Audio-Route.png)
 
 Typical routing:
@@ -26,6 +28,7 @@ Typical routing:
 - Playback stems to `Master`.
 - Click, count-ins, spoken cues, or guide tracks to an external cue output.
 - Cue outputs kept independent from the Master fader.
+- Folder bus on an external output, with child tracks left on `Inherited (Folder)` for faster setup.
 
 ## Routing Strings
 

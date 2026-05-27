@@ -3,7 +3,7 @@ title: LibreTracks Documentation
 description: User and technical documentation for LibreTracks.
 ---
 
-LibreTracks is a desktop multitrack playback workstation for live musicians, music directors, and playback engineers. It is built for preparing a show in advance, saving the session, and performing with predictable audio routing, markers, jumps, transposition controls, MIDI, and a mobile remote.
+LibreTracks is a desktop multitrack playback workstation for live musicians, music directors, and playback engineers. It is built for preparing a show in advance, saving the session, and performing with predictable audio routing, markers, jumps, transposition controls, color-coded timelines, MIDI, and a mobile remote.
 
 ![LibreTracks project timeline](/screenshots/Proyecto.png)
 
@@ -35,7 +35,9 @@ Large imported sources are prepared for disk-backed playback. LibreTracks keeps 
 
 Each song region can independently change tempo and key. Region Warp time-stretches the audio to the timeline BPM while keeping pitch intact, and Region Transpose shifts pitch with or without changing duration depending on whether warp is on. See [Pitch, Warp & The T Button](./pitch-and-warp) for the full decision table.
 
-Clip editing supports Ableton-style flows: Ctrl/Cmd+click and Shift+click for multi-selection, group drag with batched IPC, and Ctrl-during-drag magnets that snap clip edges to the playhead, markers, regions, and other clip edges.
+Clip editing supports Ableton-style flows: Ctrl/Cmd+click and Shift+click for multi-selection, group drag with batched IPC, and Ctrl-during-drag magnets that snap clip edges to the playhead, markers, regions, and other clip edges. Tracks and clips can also be color-coded from the context menu, which makes dense sessions easier to scan.
+
+Folder tracks can act as grouped route owners: child tracks may leave their output on `Inherited (Folder)` so the whole group follows the folder bus automatically while keeping the same visual grouping in the desktop timeline and remote mixer.
 
 LibreTracks also notifies you in-app when a new version is published, with the changelog in the active app language and a shortcut to the downloads page. The check can be triggered manually from `Settings → General`.
 
@@ -43,6 +45,6 @@ LibreTracks also notifies you in-app when a new version is published, with the c
 
 - `Settings`: audio device, sample rate, buffer size, hardware outputs, metronome, and MIDI Learn.
 - `Library`: imported audio assets and virtual folders.
-- `Timeline`: audio tracks, folder tracks, clips, song regions, per-region transpose, markers, time signatures, and grid editing.
-- `Remote`: local web control surface for transport, jumps, Vamp, transpose, and mixer.
+- `Timeline`: audio tracks, folder tracks, clips, song regions, per-region transpose, markers, time signatures, grid editing, and color-coded organization.
+- `Remote`: local web control surface for transport, jumps, Vamp, transpose, and a mixer with meters and grouped track color cues.
 - `File`: import songs/packages and export prepared songs.
