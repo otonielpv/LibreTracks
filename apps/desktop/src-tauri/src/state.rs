@@ -1158,16 +1158,18 @@ impl DesktopSession {
         let serialize_ms = serialize_started.elapsed().as_millis();
         self.perf_metrics.song_view_build_millis = build_ms;
         self.perf_metrics.song_view_bytes = bytes;
-        eprintln!(
-            "[SONG_VIEW_PERF] build_ms={} serialize_ms={} bytes={} include_wfs={} clips={} tracks={} regions={}",
-            build_ms,
-            serialize_ms,
-            bytes,
-            include_waveforms,
-            song_view.as_ref().map(|v| v.clips.len()).unwrap_or(0),
-            song_view.as_ref().map(|v| v.tracks.len()).unwrap_or(0),
-            song_view.as_ref().map(|v| v.regions.len()).unwrap_or(0),
-        );
+        if jump_debug_logging_enabled() {
+            eprintln!(
+                "[SONG_VIEW_PERF] build_ms={} serialize_ms={} bytes={} include_wfs={} clips={} tracks={} regions={}",
+                build_ms,
+                serialize_ms,
+                bytes,
+                include_waveforms,
+                song_view.as_ref().map(|v| v.clips.len()).unwrap_or(0),
+                song_view.as_ref().map(|v| v.tracks.len()).unwrap_or(0),
+                song_view.as_ref().map(|v| v.regions.len()).unwrap_or(0),
+            );
+        }
         Ok(song_view)
     }
 
