@@ -3451,18 +3451,47 @@ impl DesktopSession {
             //     OR the session legitimately has zero targets (no markers /
             //     regions), in which case prepared_total stays 0 and we'll
             //     bail via the timeout / no-targets check.
+            let has_prepared_targets = prearm.ready_count > 0 || prearm.prepared_total > 0;
+            let has_no_targets = prearm.active_target_total == 0
+                && prearm.ready_count == 0
+                && prearm.prepared_total == 0;
             let idle = !prearm.worker_busy
-                && prearm.posted_count >= MIN_POSTS
-                && prearm.completed_count >= prearm.posted_count;
+                && prearm.completed_count >= prearm.posted_count
+                && (prearm.posted_count >= MIN_POSTS || has_prepared_targets || has_no_targets);
             if idle {
                 stable_polls = stable_polls.saturating_add(1);
                 if stable_polls >= STABLE_REQUIRED {
+                    append_project_load_debug_line(
+                        app,
+                        &format!(
+                            "[backend:prearm] idle posted={} completed={} ready_count={} prepared_total={} active_completed={}/{}",
+                            prearm.posted_count,
+                            prearm.completed_count,
+                            prearm.ready_count,
+                            prearm.prepared_total,
+                            prearm.active_target_completed,
+                            prearm.active_target_total,
+                        ),
+                    );
                     return Ok(());
                 }
             } else {
                 stable_polls = 0;
             }
             if started_at.elapsed() >= PREARM_TIMEOUT {
+                append_project_load_debug_line(
+                    app,
+                    &format!(
+                        "[backend:prearm] timeout posted={} completed={} ready_count={} prepared_total={} active_completed={}/{} worker_busy={}",
+                        prearm.posted_count,
+                        prearm.completed_count,
+                        prearm.ready_count,
+                        prearm.prepared_total,
+                        prearm.active_target_completed,
+                        prearm.active_target_total,
+                        prearm.worker_busy,
+                    ),
+                );
                 return Ok(());
             }
             let active_progress = if prearm.active_target_total > 0 {
