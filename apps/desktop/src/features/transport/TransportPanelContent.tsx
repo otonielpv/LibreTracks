@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { flushSync } from "react-dom";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -4543,7 +4542,7 @@ export function TransportPanelContent() {
     };
   });
 
-  function handleTrackHeadersWheel(event: ReactWheelEvent<HTMLDivElement>) {
+  function handleTrackHeadersWheel(event: WheelEvent) {
     if (event.defaultPrevented) {
       return;
     }

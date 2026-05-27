@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent, WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 
 import { densityFromHeight } from "./constants";
 import type { SongView } from "./desktopApi";
@@ -19,7 +19,7 @@ type TrackHeadersPaneProps = {
   collapsedFolders: Set<string>;
   previewTrackDensityClass: string;
   libraryPreviewRows: LibraryPreviewRow[];
-  onHeadersWheel: (event: ReactWheelEvent<HTMLDivElement>) => void;
+  onHeadersWheel: (event: WheelEvent) => void;
   getTrackChildCount: (trackId: string) => number;
   onSelectTrack: (trackId: string, trackName: string, event: ReactMouseEvent<HTMLDivElement>) => void;
   onOpenContextMenu: (event: ReactMouseEvent<HTMLDivElement>, trackId: string) => void;
@@ -62,6 +62,20 @@ export function TrackHeadersPane({
   audioRoutingOptions,
   onAudioToChange,
 }: TrackHeadersPaneProps) {
+  const headersListRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const headersList = headersListRef.current;
+    if (!headersList) {
+      return;
+    }
+
+    headersList.addEventListener("wheel", onHeadersWheel, { passive: false });
+    return () => {
+      headersList.removeEventListener("wheel", onHeadersWheel);
+    };
+  }, [onHeadersWheel]);
+
   return (
     <div
       className="lt-track-headers-pane"
@@ -85,7 +99,7 @@ export function TrackHeadersPane({
       <div
         className="lt-track-headers-list"
         aria-hidden={!song}
-        onWheel={onHeadersWheel}
+        ref={headersListRef}
       >
         {song?.tracks && visibleTracks.map((track) => {
           const isTrackSelected = selectedTrackIds.includes(track.id);

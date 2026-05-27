@@ -202,7 +202,7 @@ describe("App / timeline-tracks", () => {
     expect((shell as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
   });
 
-  it("registers non-passive native wheel listeners on timeline interaction surfaces", async () => {
+  it("registers non-passive native wheel listeners on timeline interaction surfaces, including track headers", async () => {
     const addEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, "addEventListener");
 
     await renderApp();
@@ -212,7 +212,7 @@ describe("App / timeline-tracks", () => {
         type === "wheel" && typeof options === "object" && options !== null && "passive" in options,
     );
 
-    expect(wheelCalls.length).toBeGreaterThanOrEqual(2);
+    expect(wheelCalls.length).toBeGreaterThanOrEqual(3);
     expect(
       wheelCalls.some(
         ([, , options]) =>
