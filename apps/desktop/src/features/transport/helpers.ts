@@ -125,6 +125,49 @@ export function formatAudioRouteLabel(route: string, t: TFunc) {
   return route;
 }
 
+export function filterOutputChannelsForOutputCount(
+  channels: readonly number[],
+  outputChannelCount: number,
+) {
+  const channelCount = Math.max(
+    1,
+    Math.min(64, Math.floor(outputChannelCount) || 1),
+  );
+
+  return Array.from(
+    new Set(
+      channels
+        .map((channel) => Math.floor(channel))
+        .filter(
+          (channel) =>
+            Number.isFinite(channel) &&
+            channel >= 0 &&
+            channel < channelCount,
+        ),
+    ),
+  ).sort((left, right) => left - right);
+}
+
+export function normalizeEnabledOutputChannelsForOutputCount(
+  channels: readonly number[],
+  outputChannelCount: number,
+  fallbackChannels: readonly number[] = [0, 1],
+) {
+  const normalizedChannels = filterOutputChannelsForOutputCount(
+    channels,
+    outputChannelCount,
+  );
+  if (normalizedChannels.length > 0) {
+    return normalizedChannels;
+  }
+
+  const normalizedFallback = filterOutputChannelsForOutputCount(
+    fallbackChannels,
+    outputChannelCount,
+  );
+  return normalizedFallback.length > 0 ? normalizedFallback : [0];
+}
+
 export function buildAudioRoutingOptions(enabledChannels: number[], t: TFunc) {
   const channels = Array.from(new Set(enabledChannels)).sort(
     (left, right) => left - right,

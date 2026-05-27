@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateTapTempoBpm,
+  filterOutputChannelsForOutputCount,
   isAudioDeviceVisibleForBackend,
   nextTapTempoTimes,
+  normalizeEnabledOutputChannelsForOutputCount,
   selectNativeDropCandidate,
   type NativeDropCandidateDebug,
   type NativeDropCoordinateMode,
 } from "./TransportPanelContent";
+import { buildAudioRoutingOptions } from "./helpers";
 import {
   buildTimelineDropPreviewGeometry,
   resolveExternalDropGuideLeft,
@@ -132,6 +135,38 @@ describe("isAudioDeviceVisibleForBackend", () => {
   it("shows ASIO devices only when ASIO is explicitly selected", () => {
     expect(isAudioDeviceVisibleForBackend({ backend: "asio" }, "asio")).toBe(true);
     expect(isAudioDeviceVisibleForBackend({ backend: "wasapi" }, "asio")).toBe(false);
+  });
+});
+
+describe("output channel routing helpers", () => {
+  it("drops channels that are not available on the selected output device", () => {
+    expect(
+      filterOutputChannelsForOutputCount([0, 1, 2, 3, 63], 2),
+    ).toEqual([0, 1]);
+  });
+
+  it("falls back to the first available outputs when a device change leaves no valid channels", () => {
+    expect(normalizeEnabledOutputChannelsForOutputCount([8, 9], 2)).toEqual([
+      0, 1,
+    ]);
+    expect(normalizeEnabledOutputChannelsForOutputCount([8, 9], 1)).toEqual([
+      0,
+    ]);
+  });
+
+  it("builds track routing options only from channels active on the current device", () => {
+    const t = (_key: string, options?: Record<string, unknown>) =>
+      String(options?.defaultValue ?? "");
+    const activeChannels = normalizeEnabledOutputChannelsForOutputCount(
+      Array.from({ length: 64 }, (_, index) => index),
+      2,
+    );
+
+    expect(
+      buildAudioRoutingOptions(activeChannels, t).map(
+        (option) => option.value,
+      ),
+    ).toEqual(["master", "ext:0-1", "ext:0", "ext:1"]);
   });
 });
 

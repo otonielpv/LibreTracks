@@ -237,6 +237,7 @@ import {
   clamp,
   clipDisplayName,
   describeNativeDropElement,
+  filterOutputChannelsForOutputCount,
   findClip,
   findMidiMappingKeyForMessage,
   findPreviousFolderTrack,
@@ -256,6 +257,7 @@ import {
   libraryAssetFileName,
   mergeOptimisticClipsByTrack,
   nativeClientPointCandidates,
+  normalizeEnabledOutputChannelsForOutputCount,
   resolveNativeAudioImportPayloads,
   resolveTrackDropState,
   rulerClientXToSeconds,
@@ -433,7 +435,9 @@ function getEffectiveTempoMarkerAt(
 
 // Backward-compatible re-exports (TransportPanelContent.test.ts imports these)
 export {
+  filterOutputChannelsForOutputCount,
   isAudioDeviceVisibleForBackend,
+  normalizeEnabledOutputChannelsForOutputCount,
   selectNativeDropCandidate,
   getNativeCandidatePointerDelta,
 } from "./helpers";
@@ -5747,6 +5751,8 @@ export function TransportPanelContent() {
     const descriptor = audioDeviceDescriptors.find(
       (device) => device.stableId === nextValue,
     );
+    const nextOutputChannelCount =
+      descriptor?.maxOutputChannels ?? selectedOutputChannelCount;
     const currentSampleRate = appSettingsRef.current.outputSampleRate;
     const sampleRateSupported =
       currentSampleRate === null ||
@@ -5759,6 +5765,10 @@ export function TransportPanelContent() {
         selectedOutputDeviceId: descriptor?.stableId ?? null,
         selectedOutputDeviceName: descriptor?.name ?? null,
         outputSampleRate: nextOutputSampleRate,
+        enabledOutputChannels: normalizeEnabledOutputChannelsForOutputCount(
+          appSettingsRef.current.enabledOutputChannels,
+          nextOutputChannelCount,
+        ),
       }),
       !sampleRateSupported && currentSampleRate !== null
         ? t("transport.status.outputSampleRateResetUnsupported", {
@@ -5848,7 +5858,12 @@ export function TransportPanelContent() {
     enabled: boolean,
   ) {
     setEnabledOutputChannelsDraft((previous) => {
-      const next = new Set(previous);
+      const next = new Set(
+        filterOutputChannelsForOutputCount(
+          previous,
+          selectedOutputChannelCount,
+        ),
+      );
       if (enabled) {
         next.add(channelIndex);
       } else {
@@ -5859,8 +5874,10 @@ export function TransportPanelContent() {
   }
 
   function handleCommitEnabledOutputChannels() {
-    const draft = enabledOutputChannelsDraft;
-    const nextChannels = draft.length ? draft : [0, 1];
+    const nextChannels = normalizeEnabledOutputChannelsForOutputCount(
+      enabledOutputChannelsDraft,
+      selectedOutputChannelCount,
+    );
     persistAudioSettings(
       normalizeAppSettings({
         ...appSettingsRef.current,
@@ -7839,18 +7856,6 @@ export function TransportPanelContent() {
     null;
   const selectedMidiInputDevice = appSettings.selectedMidiDevice ?? "";
   const selectedLocale = appSettings.locale ?? "";
-  const audioRoutingOptions = useMemo(
-    () => buildAudioRoutingOptions(appSettings.enabledOutputChannels, t),
-    [appSettings.enabledOutputChannels, t],
-  );
-  const enabledOutputChannelsDirty = useMemo(() => {
-    const persisted = appSettings.enabledOutputChannels;
-    if (persisted.length !== enabledOutputChannelsDraft.length) return true;
-    for (let i = 0; i < persisted.length; i += 1) {
-      if (persisted[i] !== enabledOutputChannelsDraft[i]) return true;
-    }
-    return false;
-  }, [appSettings.enabledOutputChannels, enabledOutputChannelsDraft]);
   const selectedOutputChannelCount = Math.max(
     1,
     Math.min(
@@ -7865,6 +7870,43 @@ export function TransportPanelContent() {
         HARDWARE_OUTPUT_CHANNEL_COUNT,
     ),
   );
+  const effectiveEnabledOutputChannels = useMemo(
+    () =>
+      normalizeEnabledOutputChannelsForOutputCount(
+        appSettings.enabledOutputChannels,
+        selectedOutputChannelCount,
+      ),
+    [appSettings.enabledOutputChannels, selectedOutputChannelCount],
+  );
+  const enabledOutputChannelsDraftForDevice = useMemo(
+    () =>
+      filterOutputChannelsForOutputCount(
+        enabledOutputChannelsDraft,
+        selectedOutputChannelCount,
+      ),
+    [enabledOutputChannelsDraft, selectedOutputChannelCount],
+  );
+  const audioRoutingOptions = useMemo(
+    () => buildAudioRoutingOptions(effectiveEnabledOutputChannels, t),
+    [effectiveEnabledOutputChannels, t],
+  );
+  const enabledOutputChannelsDirty = useMemo(() => {
+    if (
+      effectiveEnabledOutputChannels.length !==
+      enabledOutputChannelsDraftForDevice.length
+    ) {
+      return true;
+    }
+    for (let i = 0; i < effectiveEnabledOutputChannels.length; i += 1) {
+      if (
+        effectiveEnabledOutputChannels[i] !==
+        enabledOutputChannelsDraftForDevice[i]
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }, [effectiveEnabledOutputChannels, enabledOutputChannelsDraftForDevice]);
   const selectedAudioOutputDeviceMissing = Boolean(
     appSettings.selectedOutputDeviceId &&
     !audioDeviceDescriptors.some(
@@ -8846,7 +8888,7 @@ export function TransportPanelContent() {
               onOutputSampleRateChange={handleOutputSampleRateChange}
               onOutputBufferSizeChange={handleOutputBufferSizeChange}
               onEnabledOutputChannelChange={handleEnabledOutputChannelChange}
-              enabledOutputChannelsDraft={enabledOutputChannelsDraft}
+              enabledOutputChannelsDraft={enabledOutputChannelsDraftForDevice}
               enabledOutputChannelsDirty={enabledOutputChannelsDirty}
               onCommitEnabledOutputChannels={handleCommitEnabledOutputChannels}
               onDiscardEnabledOutputChannels={
