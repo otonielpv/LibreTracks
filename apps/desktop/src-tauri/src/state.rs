@@ -761,12 +761,21 @@ impl DesktopSession {
             .ok_or_else(|| {
                 DesktopError::AudioCommand("session.ltsession must live inside a folder".into())
             })?;
+        append_project_load_debug_line(
+            app,
+            &format!(
+                "[backend:open] start song_file={} song_dir={}",
+                song_file.to_string_lossy(),
+                song_dir.to_string_lossy(),
+            ),
+        );
         let song = load_song_from_file(&song_file)?;
 
         emit_project_load_progress(app, 10, "Leyendo proyecto...".into(), 0, 0, 0, 0);
         self.load_song_from_path(song, song_dir, audio)?;
         self.song_file_path = Some(song_file);
         self.wait_for_project_audio_preparation(app, audio)?;
+        append_project_load_debug_line(app, "[backend:open] finished");
 
         Ok(self.snapshot())
     }
@@ -3195,6 +3204,7 @@ impl DesktopSession {
         let started_at = Instant::now();
         let mut last_ready = usize::MAX;
         let mut last_total = usize::MAX;
+        let mut last_heartbeat_second = u64::MAX;
 
         loop {
             // engine_snapshot() uses try_lock and returns Err if the lock is
@@ -3204,6 +3214,17 @@ impl DesktopSession {
             let snapshot = match audio.engine_snapshot() {
                 Ok(s) => s,
                 Err(_) => {
+                    let elapsed_seconds = started_at.elapsed().as_secs();
+                    if elapsed_seconds != last_heartbeat_second {
+                        last_heartbeat_second = elapsed_seconds;
+                        append_project_load_debug_line(
+                            app,
+                            &format!(
+                                "[backend:wait] snapshot contention elapsed={}s",
+                                elapsed_seconds,
+                            ),
+                        );
+                    }
                     if started_at.elapsed() >= TIMEOUT {
                         return Ok(());
                     }
@@ -3258,11 +3279,39 @@ impl DesktopSession {
                 );
             }
 
+            let elapsed_seconds = started_at.elapsed().as_secs();
+            if elapsed_seconds != last_heartbeat_second {
+                last_heartbeat_second = elapsed_seconds;
+                append_project_load_debug_line(
+                    app,
+                    &format!(
+                        "[backend:wait] elapsed={}s ready={}/{} failures={} ram={}MB disk={}MB statuses={}",
+                        elapsed_seconds,
+                        ready,
+                        total,
+                        failures,
+                        ram_cache_mb,
+                        disk_cache_mb,
+                        snapshot
+                            .source_states
+                            .iter()
+                            .take(6)
+                            .map(|source| source.status.as_str())
+                            .collect::<Vec<_>>()
+                            .join(","),
+                    ),
+                );
+            }
+
             // Empty project (no sources): give the engine a brief moment to
             // register sources from LoadSession, then short-circuit straight
             // to 100% so the loader doesn't hang on "Inicializando..." forever
             // for projects that legitimately contain no audio.
             if total == 0 && started_at.elapsed() >= Duration::from_millis(300) {
+                append_project_load_debug_line(
+                    app,
+                    "[backend:wait] total remained 0 after 300ms, short-circuiting to ready",
+                );
                 emit_project_load_progress(
                     app,
                     100,
@@ -3276,6 +3325,13 @@ impl DesktopSession {
             }
 
             if total > 0 && ready >= total {
+                append_project_load_debug_line(
+                    app,
+                    &format!(
+                        "[backend:wait] all sources ready ready={}/{} entering waveform/prearm",
+                        ready, total,
+                    ),
+                );
                 let song_opt = self.engine.song().cloned();
                 if let Some(song) = song_opt {
                     let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
@@ -3330,6 +3386,13 @@ impl DesktopSession {
                 return Ok(());
             }
             if started_at.elapsed() >= TIMEOUT {
+                append_project_load_debug_line(
+                    app,
+                    &format!(
+                        "[backend:wait] timeout ready={}/{} percent={}",
+                        ready, total, percent,
+                    ),
+                );
                 emit_project_load_progress(
                     app,
                     percent,
@@ -4346,6 +4409,33 @@ fn emit_library_import_progress(app: &AppHandle, percent: u8, message: String) {
     }
 }
 
+fn append_project_load_debug_line(app: &AppHandle, line: &str) {
+    let Ok(log_dir) = app.path().app_data_dir() else {
+        return;
+    };
+    if fs::create_dir_all(&log_dir).is_err() {
+        return;
+    }
+
+    let log_path = log_dir.join("project-load-debug.log");
+    let Ok(mut file) = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    else {
+        return;
+    };
+
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    let _ = std::io::Write::write_all(
+        &mut file,
+        format!("[{timestamp_ms}] {line}\n").as_bytes(),
+    );
+}
+
 fn emit_project_load_progress(
     app: &AppHandle,
     percent: u8,
@@ -4355,6 +4445,18 @@ fn emit_project_load_progress(
     ram_cache_mb: usize,
     disk_cache_mb: usize,
 ) {
+    append_project_load_debug_line(
+        app,
+        &format!(
+            "[backend:emit] percent={} ready={}/{} ram={}MB disk={}MB message={}",
+            percent.min(100),
+            sources_ready,
+            sources_total,
+            ram_cache_mb,
+            disk_cache_mb,
+            message,
+        ),
+    );
     let payload = ProjectLoadProgressEvent {
         percent: percent.min(100),
         message,

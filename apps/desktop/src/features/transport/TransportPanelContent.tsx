@@ -75,6 +75,7 @@ import {
   importAudioFilesFromPaths,
   importSongPackage,
   isTauriApp,
+  appendDebugLog,
   listenToMidiRawMessage,
   listenToProjectLoadProgress,
   listenToSettingsUpdated,
@@ -1169,6 +1170,9 @@ export function TransportPanelContent() {
 
   const registerProjectLoadProgressListener = useCallback(async () => {
     return listenToProjectLoadProgress((event) => {
+      void appendDebugLog(
+        `[frontend:progress] percent=${event.percent} ready=${event.sourcesReady}/${event.sourcesTotal} ram=${event.ramCacheMb}MB disk=${event.diskCacheMb}MB message=${event.message}`,
+      ).catch(() => {});
       const detail =
         event.sourcesTotal > 0
           ? `${event.sourcesReady}/${event.sourcesTotal} fuentes · RAM ${event.ramCacheMb} MB · disco ${event.diskCacheMb} MB`

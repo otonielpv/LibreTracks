@@ -1,7 +1,7 @@
 import type { LibraryAssetSummary, TransportSnapshot } from "@libretracks/shared/models";
 import {
+  appendDebugLog,
   createSong,
-  listenToProjectLoadProgress,
   openProject,
   pickAndImportSong,
   saveProject,
@@ -71,6 +71,7 @@ export function useProjectActions({
       async () => {
         let unlistenProjectProgress: (() => void) | null = null;
         setProjectViewHydrating(true);
+        void appendDebugLog("[frontend:open] handleOpenProjectClick start").catch(() => {});
         setBusyFeedback({
           message: t("transport.shell.loadingProject", {
             defaultValue: "Opening project...",
@@ -79,12 +80,16 @@ export function useProjectActions({
         });
         try {
           unlistenProjectProgress = await registerProjectLoadProgressListener();
+          void appendDebugLog("[frontend:open] progress listener registered").catch(() => {});
           // openProject() returns null if the user cancels the native dialog.
           // Otherwise it returns only after the backend has finished decoding
           // all sources AND prearmed Bungee voices — see
           // wait_for_project_audio_preparation in state.rs. So by the time we
           // continue, the engine is ready to Play instantly.
           const nextSnapshot = await openProject();
+          void appendDebugLog(
+            `[frontend:open] openProject resolved hasSnapshot=${Boolean(nextSnapshot)}`,
+          ).catch(() => {});
           if (!nextSnapshot) {
             setProjectViewHydrating(false);
             setBusyFeedback(null);
@@ -97,6 +102,9 @@ export function useProjectActions({
             percent: 96,
           });
           const nextSong = await refreshSongView({ sync: true });
+          void appendDebugLog(
+            `[frontend:open] refreshSongView resolved hasSong=${Boolean(nextSong)}`,
+          ).catch(() => {});
           applyPlaybackSnapshot(nextSnapshot);
           setActiveSidebarTab(null);
           // Wait two animation frames so React commits the new SongView and
@@ -106,10 +114,14 @@ export function useProjectActions({
           await nextPaint();
           setProjectViewHydrating(false);
         } catch (error) {
+          void appendDebugLog(
+            `[frontend:open] error=${error instanceof Error ? error.message : String(error)}`,
+          ).catch(() => {});
           setProjectViewHydrating(false);
           setBusyFeedback(null);
           throw error;
         } finally {
+          void appendDebugLog("[frontend:open] cleanup").catch(() => {});
           unlistenProjectProgress?.();
         }
       },
