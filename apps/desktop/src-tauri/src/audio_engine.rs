@@ -314,6 +314,7 @@ impl ControllerState {
 pub struct AudioController {
     state: Mutex<ControllerState>,
     sender: mpsc::Sender<AudioCommand>,
+    remote_handle: Mutex<Option<RemoteServerHandle>>,
     meter_thread_started: AtomicBool,
     meter_thread_stop: Arc<AtomicBool>,
     meter_thread: Mutex<Option<JoinHandle<()>>>,
@@ -364,6 +365,7 @@ impl AudioController {
         Self {
             state: Mutex::new(ControllerState::new()),
             sender,
+            remote_handle: Mutex::new(None),
             meter_thread_started: AtomicBool::new(false),
             meter_thread_stop: Arc::new(AtomicBool::new(false)),
             meter_thread: Mutex::new(None),
@@ -395,7 +397,12 @@ impl AudioController {
                 let controller = unsafe { &*(controller_addr as *const AudioController) };
                 if let Ok(levels) = controller.current_meter_levels() {
                     if !levels.is_empty() {
-                        let _ = app_handle.emit("audio:meters", levels);
+                        let _ = app_handle.emit("audio:meters", &levels);
+                        if let Ok(remote_handle) = controller.remote_handle.lock() {
+                            if let Some(remote_handle) = remote_handle.as_ref() {
+                                remote_handle.publish_meters(&levels);
+                            }
+                        }
                     }
                 }
                 thread::sleep(std::time::Duration::from_millis(33));
@@ -406,7 +413,11 @@ impl AudioController {
         }
     }
 
-    pub fn attach_remote_handle(&self, _remote_handle: RemoteServerHandle) {}
+    pub fn attach_remote_handle(&self, remote_handle: RemoteServerHandle) {
+        if let Ok(mut slot) = self.remote_handle.lock() {
+            *slot = Some(remote_handle);
+        }
+    }
 
     pub(crate) fn command_sender(&self) -> mpsc::Sender<AudioCommand> {
         self.sender.clone()

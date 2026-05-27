@@ -1710,6 +1710,10 @@ function MixerStrip({
 }) {
   const optimisticTrack = useOptimisticStore((state) => state.tracks[track.id]);
   const effectiveTrack = resolveEffectiveTrack(track, optimisticTrack);
+  const [draftPan, setDraftPan] = useState(effectiveTrack.pan);
+  const [draftVolume, setDraftVolume] = useState(effectiveTrack.volume);
+  const panInteractionRef = useRef(false);
+  const volumeInteractionRef = useRef(false);
   const stripStyle = palette
     ? ({
         "--folder-strip-bg": palette.background,
@@ -1717,6 +1721,18 @@ function MixerStrip({
         "--folder-strip-accent": palette.accent,
       } as CSSProperties)
     : undefined;
+
+  useEffect(() => {
+    if (!panInteractionRef.current) {
+      setDraftPan(effectiveTrack.pan);
+    }
+  }, [effectiveTrack.pan]);
+
+  useEffect(() => {
+    if (!volumeInteractionRef.current) {
+      setDraftVolume(effectiveTrack.volume);
+    }
+  }, [effectiveTrack.volume]);
 
   const pushMixUpdate = (patch: TrackOptimisticState) => {
     useOptimisticStore.getState().setTrackState(track.id, patch);
@@ -1750,6 +1766,34 @@ function MixerStrip({
     });
   };
 
+  const updateDraftPan = (value: number) => {
+    const nextPan = magnetizePanValue(value);
+    panInteractionRef.current = true;
+    setDraftPan(nextPan);
+    pushMixUpdate({ pan: nextPan });
+  };
+
+  const commitDraftPan = (value: number) => {
+    const nextPan = magnetizePanValue(value);
+    panInteractionRef.current = false;
+    setDraftPan(nextPan);
+    commitTrackUpdate({ pan: nextPan });
+  };
+
+  const updateDraftVolume = (value: number) => {
+    const nextVolume = Math.max(0, Math.min(1, value));
+    volumeInteractionRef.current = true;
+    setDraftVolume(nextVolume);
+    pushMixUpdate({ volume: nextVolume });
+  };
+
+  const commitDraftVolume = (value: number) => {
+    const nextVolume = Math.max(0, Math.min(1, value));
+    volumeInteractionRef.current = false;
+    setDraftVolume(nextVolume);
+    commitTrackUpdate({ volume: nextVolume });
+  };
+
   return (
     <article
       className={`mixer-strip ${track.kind === "folder" ? "is-folder" : ""} ${palette ? "is-colored" : ""} ${inheritsParentPalette ? "is-folder-child" : ""}`}
@@ -1769,9 +1813,15 @@ function MixerStrip({
           min={-1}
           max={1}
           step={0.01}
-          value={effectiveTrack.pan}
-          onInput={(event) => pushMixUpdate({ pan: magnetizePanValue(Number(event.currentTarget.value)) })}
-          onPointerUp={(event) => commitTrackUpdate({ pan: magnetizePanValue(Number(event.currentTarget.value)) })}
+          value={draftPan}
+          onChange={(event) => updateDraftPan(Number(event.currentTarget.value))}
+          onInput={(event) => updateDraftPan(Number(event.currentTarget.value))}
+          onPointerDown={() => {
+            panInteractionRef.current = true;
+          }}
+          onPointerUp={(event) => commitDraftPan(Number(event.currentTarget.value))}
+          onPointerCancel={(event) => commitDraftPan(Number(event.currentTarget.value))}
+          onLostPointerCapture={(event) => commitDraftPan(Number(event.currentTarget.value))}
         />
       </div>
 
@@ -1783,9 +1833,15 @@ function MixerStrip({
           min={0}
           max={1}
           step={0.01}
-          value={effectiveTrack.volume}
-          onInput={(event) => pushMixUpdate({ volume: Number(event.currentTarget.value) })}
-          onPointerUp={(event) => commitTrackUpdate({ volume: Number(event.currentTarget.value) })}
+          value={draftVolume}
+          onChange={(event) => updateDraftVolume(Number(event.currentTarget.value))}
+          onInput={(event) => updateDraftVolume(Number(event.currentTarget.value))}
+          onPointerDown={() => {
+            volumeInteractionRef.current = true;
+          }}
+          onPointerUp={(event) => commitDraftVolume(Number(event.currentTarget.value))}
+          onPointerCancel={(event) => commitDraftVolume(Number(event.currentTarget.value))}
+          onLostPointerCapture={(event) => commitDraftVolume(Number(event.currentTarget.value))}
         />
       </div>
 
