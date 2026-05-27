@@ -34,6 +34,17 @@ async function invokeCommand<T>(command: string, args?: Record<string, unknown>)
   return invoke<T>(command, args);
 }
 
+function isTransientAudioStateLockError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("state locked");
+}
+
+async function waitForMs(delayMs: number): Promise<void> {
+  await new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
+}
+
 export async function listenToTransportLifecycle(
   handler: (event: TransportLifecycleEvent) => void,
 ): Promise<() => void> {
@@ -113,9 +124,23 @@ export async function getTransportSnapshot(): Promise<TransportSnapshot> {
 export async function getSongView(
   options?: { includeWaveforms?: boolean },
 ): Promise<SongView | null> {
-  return invokeCommand<SongView | null>("get_song_view", {
+  const args = {
     includeWaveforms: options?.includeWaveforms ?? true,
-  });
+  };
+  const maxAttempts = 6;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await invokeCommand<SongView | null>("get_song_view", args);
+    } catch (error) {
+      if (!isTransientAudioStateLockError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await waitForMs(attempt * 25);
+    }
+  }
+
+  return null;
 }
 
 export async function getWaveformSummaries(
