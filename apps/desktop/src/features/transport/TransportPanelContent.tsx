@@ -291,26 +291,18 @@ function normalizeTimelineColorInput(value: string | null | undefined) {
   return /^[\da-f]{6}$/i.test(hex) ? `#${hex.toUpperCase()}` : null;
 }
 
-function clampTimelineColorChannel(value: number) {
-  return clamp(Math.round(value), 0, 255);
-}
+function resolveSharedTimelineColor(tracks: TrackSummary[]) {
+  if (tracks.length === 0) {
+    return null;
+  }
 
-function timelineColorToRgb(value: string) {
-  const normalized = normalizeTimelineColorInput(value) ?? "#3CDDC7";
-  return {
-    r: Number.parseInt(normalized.slice(1, 3), 16),
-    g: Number.parseInt(normalized.slice(3, 5), 16),
-    b: Number.parseInt(normalized.slice(5, 7), 16),
-  };
-}
-
-function rgbToTimelineColor(rgb: { r: number; g: number; b: number }) {
-  return `#${[rgb.r, rgb.g, rgb.b]
-    .map((channel) =>
-      clampTimelineColorChannel(channel).toString(16).padStart(2, "0"),
-    )
-    .join("")
-    .toUpperCase()}`;
+  const [firstTrack, ...remainingTracks] = tracks;
+  const firstColor = normalizeTimelineColorInput(firstTrack.color);
+  return remainingTracks.every(
+    (track) => normalizeTimelineColorInput(track.color) === firstColor,
+  )
+    ? firstColor
+    : null;
 }
 
 function getEffectiveTempoMarkerAt(
@@ -4670,6 +4662,52 @@ export function TransportPanelContent() {
     });
   }
 
+  async function handleSetTrackColors(
+    tracks: TrackSummary[],
+    color: string | null,
+  ) {
+    if (tracks.length === 0) {
+      return;
+    }
+
+    if (tracks.length === 1) {
+      await handleSetTrackColor(tracks[0], color);
+      return;
+    }
+
+    await runAction(async () => {
+      let nextSnapshot: Awaited<ReturnType<typeof updateTrackColor>> | null =
+        null;
+      const trackIds = new Set(tracks.map((track) => track.id));
+
+      for (const track of tracks) {
+        nextSnapshot = await updateTrackColor({
+          trackId: track.id,
+          color,
+        });
+      }
+
+      if (!nextSnapshot) {
+        return;
+      }
+
+      optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
+      setSong((previous) =>
+        previous
+          ? {
+              ...previous,
+              projectRevision: nextSnapshot.projectRevision,
+              tracks: previous.tracks.map((candidate) =>
+                trackIds.has(candidate.id) ? { ...candidate, color } : candidate,
+              ),
+            }
+          : previous,
+      );
+      applyPlaybackSnapshot(nextSnapshot);
+      setStatus(`Track colors updated: ${tracks.length}`);
+    });
+  }
+
   async function handleSetClipColor(clip: ClipSummary, color: string | null) {
     await runAction(async () => {
       const nextSnapshot = await updateClipColor(clip.id, color);
@@ -4811,6 +4849,22 @@ export function TransportPanelContent() {
     ];
   }
 
+  function multiTrackContextMenu(tracks: TrackSummary[]) {
+    const currentColor = resolveSharedTimelineColor(tracks);
+    return [
+      {
+        label: "Seleccionar color...",
+        swatch: currentColor ?? undefined,
+        onSelect: () =>
+          openColorMenu(
+            `Color: ${tracks.length} tracks`,
+            currentColor,
+            (color) => handleSetTrackColors(tracks, color),
+          ),
+      },
+    ];
+  }
+
   function globalTrackListContextMenu() {
     return [
       {
@@ -4881,6 +4935,23 @@ export function TransportPanelContent() {
   ) {
     const track = findTrack(songRef.current, trackId);
     if (!track) {
+      return;
+    }
+
+    const currentSelection = useTimelineUIStore.getState().selectedTrackIds;
+    const selectedTracks = currentSelection
+      .map((selectedTrackId) => findTrack(songRef.current, selectedTrackId))
+      .filter((candidate): candidate is TrackSummary => candidate !== null);
+
+    if (
+      currentSelection.includes(track.id) &&
+      selectedTracks.length > 1
+    ) {
+      openMenu(
+        event,
+        `${selectedTracks.length} tracks`,
+        multiTrackContextMenu(selectedTracks),
+      );
       return;
     }
 
@@ -8723,12 +8794,6 @@ export function TransportPanelContent() {
                   const normalizedColor =
                     normalizeTimelineColorInput(colorPickerPopover.color) ??
                     "#3CDDC7";
-                  const rgb = timelineColorToRgb(normalizedColor);
-                  const colorChannels = [
-                    { key: "r", label: "R" },
-                    { key: "g", label: "G" },
-                    { key: "b", label: "B" },
-                  ] as const;
 
                   return (
                     <div
@@ -8793,41 +8858,24 @@ export function TransportPanelContent() {
                           }
                         />
                       </label>
-                      {colorChannels.map((channel) => (
-                        <label
-                          key={channel.key}
-                          className="lt-color-popover-channel"
-                        >
-                          <span>{channel.label}</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={255}
-                            value={rgb[channel.key]}
-                            onChange={(event) => {
-                              const nextValue = Number(
-                                event.currentTarget.value,
-                              );
-                              setColorPickerPopover((current) => {
-                                if (!current) {
-                                  return current;
-                                }
-                                const currentRgb = timelineColorToRgb(
-                                  current.color,
-                                );
-                                return {
-                                  ...current,
-                                  color: rgbToTimelineColor({
-                                    ...currentRgb,
-                                    [channel.key]: nextValue,
-                                  }),
-                                };
-                              });
-                            }}
-                          />
-                          <small>{rgb[channel.key]}</small>
-                        </label>
-                      ))}
+                      <label className="lt-color-popover-picker">
+                        <span>Selector</span>
+                        <input
+                          type="color"
+                          value={normalizedColor}
+                          aria-label="Selector de color"
+                          onChange={(event) => {
+                            const nextColor = normalizeTimelineColorInput(
+                              event.currentTarget.value,
+                            );
+                            setColorPickerPopover((current) =>
+                              current && nextColor
+                                ? { ...current, color: nextColor }
+                                : current,
+                            );
+                          }}
+                        />
+                      </label>
                       <div className="lt-color-popover-actions">
                         <button
                           type="button"

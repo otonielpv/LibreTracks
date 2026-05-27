@@ -269,6 +269,53 @@ describe("App / timeline-tracks", () => {
     expect(screen.getByText("New track")).toBeTruthy();
   });
 
+  it("keeps multi-track selection on right click and only shows color change", async () => {
+    const { container } = await renderApp();
+    const rhythmHeader = getTrackHeader(container, "Rhythm");
+    const keysHeader = getTrackHeader(container, "Keys");
+
+    await act(async () => {
+      fireEvent.click(rhythmHeader);
+      fireEvent.click(keysHeader, { ctrlKey: true });
+    });
+
+    expect(rhythmHeader.className).toContain("is-selected");
+    expect(keysHeader.className).toContain("is-selected");
+
+    await act(async () => {
+      fireEvent.contextMenu(keysHeader, { clientX: 220, clientY: 320 });
+    });
+
+    expect(rhythmHeader.className).toContain("is-selected");
+    expect(keysHeader.className).toContain("is-selected");
+
+    const contextMenu = container.querySelector(".lt-context-menu") as HTMLElement | null;
+    expect(contextMenu).toBeTruthy();
+    const buttons = within(contextMenu as HTMLElement).getAllByRole("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent).toContain("Seleccionar color...");
+  });
+
+  it("uses a native color input for custom track colors", async () => {
+    const { container } = await renderApp();
+    const keysHeader = getTrackHeader(container, "Keys");
+
+    await act(async () => {
+      fireEvent.contextMenu(keysHeader, { clientX: 180, clientY: 300 });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Seleccionar color..." }));
+    });
+
+    const colorPopover = container.querySelector(".lt-color-popover") as HTMLElement | null;
+    expect(colorPopover).toBeTruthy();
+    expect(
+      colorPopover?.querySelector('input[type="color"]'),
+    ).toBeTruthy();
+    expect(colorPopover?.querySelectorAll('input[type="range"]').length).toBe(0);
+  });
+
   it("reorders tracks vertically from the header drag handle", async () => {
     const { container } = await renderApp();
     mockTrackRowDragGeometry(container);

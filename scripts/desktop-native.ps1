@@ -38,12 +38,35 @@ $useFFmpeg = if ($env:LIBRETRACKS_ENGINE_V2_FFMPEG -match '^(1|true|TRUE|yes|YES
 # desktop build unless explicitly requested so warp uses the Bungee path.
 $useRubberBand = if ($env:LIBRETRACKS_ENGINE_V2_RUBBERBAND -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
 $vcpkgManifestFeatures = if ($useRubberBand -eq "ON") { "rubberband" } else { "" }
+
+function Test-CandidateChildPath {
+  param(
+    [string]$BasePath,
+    [Parameter(Mandatory = $true)]
+    [string]$ChildPath
+  )
+
+  if (-not $BasePath) {
+    return $false
+  }
+
+  try {
+    if (-not (Test-Path -LiteralPath $BasePath -PathType Container -ErrorAction Stop)) {
+      return $false
+    }
+
+    return Test-Path -LiteralPath (Join-Path -Path $BasePath -ChildPath $ChildPath) -ErrorAction Stop
+  } catch {
+    return $false
+  }
+}
+
 $bungeeCandidates = @(
   $env:LT_BUNGEE_DIR,
   (Join-Path $env:USERPROFILE "Downloads\bungee-v2.4.24"),
   (Join-Path $repoRoot "vendor\bungee")
 ) | Where-Object { $_ }
-$bungeeDir = $bungeeCandidates | Where-Object { Test-Path (Join-Path $_ "include\bungee\Bungee.h") } | Select-Object -First 1
+$bungeeDir = $bungeeCandidates | Where-Object { Test-CandidateChildPath $_ "include\bungee\Bungee.h" } | Select-Object -First 1
 $useBungee = if ($useBungeeRequested -eq "ON" -and $bungeeDir) { "ON" } else { "OFF" }
 
 # ASIO SDK auto-detect - same pattern as Bungee. JUCE's ASIO module needs
@@ -55,7 +78,7 @@ $asioCandidates = @(
   "D:\Repos\asiosdk",
   (Join-Path $repoRoot "vendor\asiosdk")
 ) | Where-Object { $_ }
-$asioSdkDir = $asioCandidates | Where-Object { Test-Path (Join-Path $_ "common\iasiodrv.h") } | Select-Object -First 1
+$asioSdkDir = $asioCandidates | Where-Object { Test-CandidateChildPath $_ "common\iasiodrv.h" } | Select-Object -First 1
 $engineV2BuildName = if ($useBungeeRequested -eq "ON") {
   if ($useFFmpeg -eq "ON") { "build-bungee-on-ffmpeg" } else { "build-bungee-on" }
 } else {
