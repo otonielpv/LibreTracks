@@ -564,9 +564,13 @@ function resolveLivePosition(snapshot: TransportSnapshot | null, receivedAtMs: n
 
   const transportClock = snapshot.transportClock;
   if (snapshot.playbackState === "playing" && transportClock?.running) {
+    const playbackRate =
+      Number.isFinite(transportClock.playbackRate) && transportClock.playbackRate !== undefined
+        ? Math.max(0, transportClock.playbackRate)
+        : 1;
     return Math.max(
       0,
-      transportClock.anchorPositionSeconds + (performance.now() - receivedAtMs) / 1000,
+      transportClock.anchorPositionSeconds + ((performance.now() - receivedAtMs) / 1000) * playbackRate,
     );
   }
 

@@ -12,7 +12,7 @@ use libretracks_audio::{
     AudioEngine, JumpTrigger, PendingMarkerJump, PlaybackState, TransitionType, VampMode,
 };
 use libretracks_core::{
-    audible_clip_duration_seconds, effective_bpm_at, source_seconds_at_view,
+    audible_clip_duration_seconds, effective_bpm_at, region_warp_ratio_in_song, source_seconds_at_view,
     warp_timeline_seconds_at, Clip, Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker,
     Track, TrackKind, MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
 };
@@ -360,6 +360,7 @@ impl TransportClock {
     fn summary(&self) -> TransportClockSummary {
         TransportClockSummary {
             anchor_position_seconds: self.anchor_position_seconds,
+            playback_rate: 1.0,
             running: self.anchor_started_at.is_some(),
             last_seek_position_seconds: self.last_seek_position_seconds,
             last_start_position_seconds: self.last_start_position_seconds,
@@ -368,9 +369,56 @@ impl TransportClock {
     }
 }
 
+fn semitones_to_pitch_scale(semitones: i32) -> f64 {
+    2_f64.powf(f64::from(semitones) / 12.0)
+}
+
 fn timeline_seconds_to_view(song: Option<&Song>, seconds: f64) -> f64 {
     song.map(|song| warp_timeline_seconds_at(song, seconds))
         .unwrap_or(seconds)
+}
+
+fn timeline_playback_rate_to_view(song: Option<&Song>, source_seconds: f64) -> f64 {
+    let Some(song) = song else {
+        return 1.0;
+    };
+
+    if !source_seconds.is_finite() {
+        return 1.0;
+    }
+
+    let active_region = song
+        .regions
+        .iter()
+        .filter(|region| {
+            region.start_seconds.is_finite()
+                && region.end_seconds.is_finite()
+                && source_seconds >= region.start_seconds
+                && source_seconds < region.end_seconds
+        })
+        .max_by(|left, right| {
+            left.start_seconds
+                .partial_cmp(&right.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+    let Some(region) = active_region else {
+        return 1.0;
+    };
+
+    let ratio = if region.warp_enabled {
+        region_warp_ratio_in_song(region, song)
+    } else if region.transpose_semitones != 0 {
+        semitones_to_pitch_scale(region.transpose_semitones)
+    } else {
+        1.0
+    };
+
+    if ratio.is_finite() && ratio > 0.0 {
+        1.0 / ratio
+    } else {
+        1.0
+    }
 }
 
 fn optional_timeline_seconds_to_view(song: Option<&Song>, seconds: Option<f64>) -> Option<f64> {
@@ -381,8 +429,10 @@ fn transport_clock_summary_to_view(
     song: Option<&Song>,
     summary: TransportClockSummary,
 ) -> TransportClockSummary {
+    let source_anchor_position_seconds = summary.anchor_position_seconds;
     TransportClockSummary {
-        anchor_position_seconds: timeline_seconds_to_view(song, summary.anchor_position_seconds),
+        anchor_position_seconds: timeline_seconds_to_view(song, source_anchor_position_seconds),
+        playback_rate: timeline_playback_rate_to_view(song, source_anchor_position_seconds),
         running: summary.running,
         last_seek_position_seconds: optional_timeline_seconds_to_view(
             song,

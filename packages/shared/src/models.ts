@@ -287,6 +287,7 @@ export type TransportSnapshot = {
   };
   transportClock?: {
     anchorPositionSeconds: number;
+    playbackRate?: number;
     running: boolean;
     lastSeekPositionSeconds?: number | null;
     lastStartPositionSeconds?: number | null;

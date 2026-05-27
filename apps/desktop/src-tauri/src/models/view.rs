@@ -57,6 +57,7 @@ pub struct PitchPrepareSummary {
 #[serde(rename_all = "camelCase")]
 pub struct TransportClockSummary {
     pub anchor_position_seconds: f64,
+    pub playback_rate: f64,
     pub running: bool,
     pub last_seek_position_seconds: Option<f64>,
     pub last_start_position_seconds: Option<f64>,
