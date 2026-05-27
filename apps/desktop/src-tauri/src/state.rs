@@ -3455,18 +3455,26 @@ impl DesktopSession {
             let has_no_targets = prearm.active_target_total == 0
                 && prearm.ready_count == 0
                 && prearm.prepared_total == 0;
-            let idle = !prearm.worker_busy
-                && prearm.completed_count >= prearm.posted_count
+            let active_targets_complete = prearm.active_target_total == 0
+                || prearm.active_target_completed >= prearm.active_target_total;
+            let counters_idle = prearm.completed_count >= prearm.posted_count
                 && (prearm.posted_count >= MIN_POSTS || has_prepared_targets || has_no_targets);
+            let latest_revision_complete = prearm.latest_posted_revision > 0
+                && prearm.last_completed_revision >= prearm.latest_posted_revision
+                && active_targets_complete
+                && (has_prepared_targets || has_no_targets);
+            let idle = !prearm.worker_busy && (counters_idle || latest_revision_complete);
             if idle {
                 stable_polls = stable_polls.saturating_add(1);
                 if stable_polls >= STABLE_REQUIRED {
                     append_project_load_debug_line(
                         app,
                         &format!(
-                            "[backend:prearm] idle posted={} completed={} ready_count={} prepared_total={} active_completed={}/{}",
+                            "[backend:prearm] idle posted={} completed={} latest_revision={}/{} ready_count={} prepared_total={} active_completed={}/{}",
                             prearm.posted_count,
                             prearm.completed_count,
+                            prearm.last_completed_revision,
+                            prearm.latest_posted_revision,
                             prearm.ready_count,
                             prearm.prepared_total,
                             prearm.active_target_completed,
@@ -3482,9 +3490,11 @@ impl DesktopSession {
                 append_project_load_debug_line(
                     app,
                     &format!(
-                        "[backend:prearm] timeout posted={} completed={} ready_count={} prepared_total={} active_completed={}/{} worker_busy={}",
+                        "[backend:prearm] timeout posted={} completed={} latest_revision={}/{} ready_count={} prepared_total={} active_completed={}/{} worker_busy={}",
                         prearm.posted_count,
                         prearm.completed_count,
+                        prearm.last_completed_revision,
+                        prearm.latest_posted_revision,
                         prearm.ready_count,
                         prearm.prepared_total,
                         prearm.active_target_completed,
