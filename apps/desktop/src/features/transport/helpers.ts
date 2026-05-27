@@ -224,6 +224,10 @@ export function humanizeLibraryTrackName(filePath: string) {
   );
 }
 
+export function clipDisplayName(clip: Pick<ClipSummary, "filePath" | "trackName">) {
+  return humanizeLibraryTrackName(clip.filePath) || clip.trackName;
+}
+
 export async function waitForUiPaint() {
   await new Promise<void>((resolve) => {
     window.requestAnimationFrame(() => resolve());
@@ -492,7 +496,8 @@ function isClipStructurallyEqual(left: ClipSummary, right: ClipSummary) {
     left.sourceStartSeconds === right.sourceStartSeconds &&
     left.sourceWindowDurationSeconds === right.sourceWindowDurationSeconds &&
     left.sourceDurationSeconds === right.sourceDurationSeconds &&
-    left.durationSeconds === right.durationSeconds
+    left.durationSeconds === right.durationSeconds &&
+    left.color === right.color
   );
 }
 

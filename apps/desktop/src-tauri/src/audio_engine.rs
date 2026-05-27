@@ -1078,10 +1078,8 @@ impl AudioController {
                     let device_exists = engine
                         .list_devices()
                         .map(|devs| {
-                            devs.iter().any(|d| {
-                                d.device_id == device_id
-                                    || d.device_name == device_id
-                            })
+                            devs.iter()
+                                .any(|d| d.device_id == device_id || d.device_name == device_id)
                         })
                         .unwrap_or(false);
                     if device_exists {
@@ -1838,6 +1836,7 @@ mod tests {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".into(),
+                color: None,
             }],
             clips: vec![Clip {
                 id: "clip".into(),
@@ -1849,6 +1848,7 @@ mod tests {
                 gain: 1.0,
                 fade_in_seconds: None,
                 fade_out_seconds: None,
+                color: None,
             }],
             section_markers: vec![],
         }

@@ -1,4 +1,4 @@
-import { memo, type MouseEvent as ReactMouseEvent } from "react";
+import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AudioRouteCombobox } from "./AudioRouteCombobox";
@@ -27,6 +27,7 @@ type TrackHeaderItemProps = {
   trackName: string;
   trackKind: TrackKind;
   trackDepth: number;
+  trackColor?: string | null;
   childCount: number;
   trackHeight: number;
   panValue: number;
@@ -64,6 +65,7 @@ function TrackHeaderItemComponent({
   trackName,
   trackKind,
   trackDepth,
+  trackColor,
   childCount,
   trackHeight,
   panValue,
@@ -115,11 +117,16 @@ function TrackHeaderItemComponent({
   };
 
   const metaLabel = trackKind === "folder" ? t("trackHeader.childrenCount", { count: childCount }) : null;
+  const headerStyle = {
+    height: trackHeight,
+    paddingLeft: 16 + trackDepth * 22,
+    ...(trackColor ? { "--lt-track-color": trackColor } : {}),
+  } as CSSProperties;
 
   return (
     <div
       className={`lt-track-header ${densityClass} ${isSelected ? "is-selected" : ""} ${effectiveTrackSolo ? "is-solo" : ""} ${trackKind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${isDragging ? "is-dragging" : ""}`}
-      style={{ height: trackHeight, paddingLeft: 16 + trackDepth * 22 }}
+      style={headerStyle}
       role="button"
       tabIndex={0}
       onMouseDown={handleMouseDown}
@@ -291,6 +298,7 @@ function areTrackHeaderPropsEqual(previous: TrackHeaderItemProps, next: TrackHea
     previous.trackName === next.trackName &&
     previous.trackKind === next.trackKind &&
     previous.trackDepth === next.trackDepth &&
+    previous.trackColor === next.trackColor &&
     previous.childCount === next.childCount &&
     previous.trackHeight === next.trackHeight &&
     previous.panValue === next.panValue &&

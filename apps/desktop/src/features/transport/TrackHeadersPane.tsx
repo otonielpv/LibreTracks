@@ -134,6 +134,7 @@ export function TrackHeadersPane({
                 trackName={track.name}
                 trackKind={track.kind}
                 trackDepth={track.depth}
+                trackColor={track.color}
                 childCount={childCount}
                 trackHeight={trackHeight}
                 panValue={track.pan}

@@ -144,6 +144,7 @@ fn main() {
             commands::timeline::move_clips_live_batch,
             commands::timeline::delete_clip,
             commands::timeline::update_clip_window,
+            commands::timeline::update_clip_color,
             commands::timeline::duplicate_clip,
             commands::timeline::duplicate_clips,
             commands::timeline::split_clip,
@@ -171,6 +172,7 @@ fn main() {
             commands::timeline::update_track_mix_realtime,
             commands::timeline::commit_track_mix_change,
             commands::timeline::update_track,
+            commands::timeline::update_track_color,
             commands::timeline::update_track_transpose_enabled,
             commands::timeline::delete_track,
             // ── Engine v2 commands (only available with `audio-engine-v2` feature) ──

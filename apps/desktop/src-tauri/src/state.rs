@@ -510,23 +510,16 @@ impl DesktopSession {
             return Ok(None);
         };
 
-        let parent_dir = target_pick
-            .parent()
-            .map(Path::to_path_buf)
-            .ok_or_else(|| {
-                DesktopError::AudioCommand(
-                    "no se pudo determinar la carpeta destino".into(),
-                )
-            })?;
+        let parent_dir = target_pick.parent().map(Path::to_path_buf).ok_or_else(|| {
+            DesktopError::AudioCommand("no se pudo determinar la carpeta destino".into())
+        })?;
         let project_name = target_pick
             .file_stem()
             .and_then(|stem| stem.to_str())
             .map(str::to_owned)
             .filter(|name| !name.is_empty())
             .ok_or_else(|| {
-                DesktopError::AudioCommand(
-                    "el nombre del proyecto no es valido".into(),
-                )
+                DesktopError::AudioCommand("el nombre del proyecto no es valido".into())
             })?;
 
         let song_dir = parent_dir.join(&project_name);
@@ -649,23 +642,16 @@ impl DesktopSession {
         // Save As mirrors Create: the user picks <name>.ltsession in any
         // folder, and we create a <name>/ subfolder containing the session
         // file plus audio/ and cache/.
-        let parent_dir = target_pick
-            .parent()
-            .map(Path::to_path_buf)
-            .ok_or_else(|| {
-                DesktopError::AudioCommand(
-                    "no se pudo determinar la carpeta destino".into(),
-                )
-            })?;
+        let parent_dir = target_pick.parent().map(Path::to_path_buf).ok_or_else(|| {
+            DesktopError::AudioCommand("no se pudo determinar la carpeta destino".into())
+        })?;
         let project_name = target_pick
             .file_stem()
             .and_then(|stem| stem.to_str())
             .map(str::to_owned)
             .filter(|name| !name.is_empty())
             .ok_or_else(|| {
-                DesktopError::AudioCommand(
-                    "el nombre del proyecto no es valido".into(),
-                )
+                DesktopError::AudioCommand("el nombre del proyecto no es valido".into())
             })?;
 
         let target_song_dir = parent_dir.join(&project_name);
@@ -2754,6 +2740,7 @@ impl DesktopSession {
             solo: false,
             transpose_enabled: true,
             audio_to,
+            color: None,
         };
 
         insert_track(
@@ -2867,6 +2854,58 @@ impl DesktopSession {
     }
 
     /// Kept for backwards-compat alias — delegates to update_track_metadata.
+    pub fn update_track_color(
+        &mut self,
+        track_id: &str,
+        color: Option<&str>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        self.push_history_entry();
+        self.redo_stack.clear();
+
+        let color = normalize_ui_color(color)?;
+        let track = self
+            .engine
+            .song_mut()?
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
+        track.color = color;
+
+        self.perf_metrics.song_save_millis = 0;
+        self.project_revision = self.project_revision.saturating_add(1);
+        audio.record_commit_model_only();
+        Ok(self.snapshot())
+    }
+
+    pub fn update_clip_color(
+        &mut self,
+        clip_id: &str,
+        color: Option<&str>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        self.push_history_entry();
+        self.redo_stack.clear();
+
+        let color = normalize_ui_color(color)?;
+        let clip = self
+            .engine
+            .song_mut()?
+            .clips
+            .iter_mut()
+            .find(|clip| clip.id == clip_id)
+            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
+        clip.color = color;
+
+        self.perf_metrics.song_save_millis = 0;
+        self.project_revision = self.project_revision.saturating_add(1);
+        audio.record_commit_model_only();
+        Ok(self.snapshot())
+    }
+
     #[allow(dead_code)]
     pub fn update_track_name_only(
         &mut self,
@@ -5181,6 +5220,7 @@ fn append_clip_to_song(
         gain: 1.0,
         fade_in_seconds: None,
         fade_out_seconds: None,
+        color: None,
     });
 
     Ok(())
@@ -5344,6 +5384,21 @@ fn sanitize_region_bounds(
     }
 
     Ok((clamped_start_seconds, clamped_end_seconds))
+}
+
+fn normalize_ui_color(color: Option<&str>) -> Result<Option<String>, DesktopError> {
+    let Some(color) = color.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+
+    let hex = color.strip_prefix('#').unwrap_or(color);
+    if hex.len() != 6 || !hex.as_bytes().iter().all(u8::is_ascii_hexdigit) {
+        return Err(DesktopError::AudioCommand(
+            "color must be a #RRGGBB hex value".into(),
+        ));
+    }
+
+    Ok(Some(format!("#{}", hex.to_ascii_uppercase())))
 }
 
 fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
@@ -5556,6 +5611,7 @@ mod tests {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
+                color: None,
             }],
             clips: vec![Clip {
                 id: "clip_1".into(),
@@ -5567,6 +5623,7 @@ mod tests {
                 gain: 1.0,
                 fade_in_seconds: None,
                 fade_out_seconds: None,
+                color: None,
             }],
             section_markers: vec![],
         }
@@ -5730,6 +5787,7 @@ mod tests {
                 solo: false,
                 transpose_enabled: false,
                 audio_to: "master".to_string(),
+                color: None,
             },
         );
         // Make the audio track a child of the folder.
@@ -5807,6 +5865,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
+                    color: None,
                 },
                 Track {
                     id: "track_child_a".into(),
@@ -5819,6 +5878,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
+                    color: None,
                 },
                 Track {
                     id: "track_folder_b".into(),
@@ -5831,6 +5891,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
+                    color: None,
                 },
                 Track {
                     id: "track_child_b".into(),
@@ -5843,6 +5904,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
+                    color: None,
                 },
             ],
             clips: vec![],
@@ -6234,6 +6296,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
+                    color: None,
                 },
                 Track {
                     id: "track-drums_01".into(),
@@ -6246,6 +6309,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
+                    color: None,
                 },
             ],
             clips: vec![],

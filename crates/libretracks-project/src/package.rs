@@ -383,6 +383,7 @@ fn import_song_package_from_archive<R: Read + Seek>(
             solo: false,
             transpose_enabled: track.transpose_enabled,
             audio_to: "master".to_string(),
+            color: track.color.clone(),
         });
         track_ids_by_name.insert(track.name.clone(), track_id);
     }
@@ -408,6 +409,7 @@ fn import_song_package_from_archive<R: Read + Seek>(
             gain: clip.gain,
             fade_in_seconds: clip.fade_in_seconds,
             fade_out_seconds: clip.fade_out_seconds,
+            color: clip.color.clone(),
         });
     }
 

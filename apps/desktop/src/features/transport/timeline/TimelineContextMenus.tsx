@@ -30,6 +30,13 @@ export function TimelineContextMenus({
             void action.onSelect();
           }}
         >
+          {action.swatch ? (
+            <span
+              className="lt-context-menu-swatch"
+              style={{ background: action.swatch }}
+              aria-hidden="true"
+            />
+          ) : null}
           {action.label}
         </button>
       ))}

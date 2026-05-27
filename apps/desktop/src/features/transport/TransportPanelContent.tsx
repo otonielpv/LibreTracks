@@ -100,6 +100,7 @@ import {
   setMetronomeVolumeRealtime,
   splitClip,
   stopTransport,
+  updateClipColor,
   updateAudioSettings,
   updateSectionMarker,
   updateSongRegion,
@@ -108,6 +109,7 @@ import {
   updateSongTempo,
   updateSongTimeSignature,
   updateTrack,
+  updateTrackColor,
   updateTrackMixRealtime,
   commitTrackMixChange,
   updateTrackTransposeEnabled,
@@ -232,6 +234,7 @@ import {
   buildMemoizedClipsByTrack,
   buildVisibleTracks,
   clamp,
+  clipDisplayName,
   describeNativeDropElement,
   findClip,
   findMidiMappingKeyForMessage,
@@ -267,6 +270,47 @@ const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
 const TAP_TEMPO_RESET_MS = 2500;
 const TAP_TEMPO_MAX_TAPS = 8;
+const TIMELINE_COLOR_PRESETS = [
+  { label: "Rojo", value: "#E35D5B" },
+  { label: "Ambar", value: "#E0A83A" },
+  { label: "Verde", value: "#57B66C" },
+  { label: "Cian", value: "#3CDDC7" },
+  { label: "Azul", value: "#5C8CE6" },
+  { label: "Violeta", value: "#9C73E6" },
+  { label: "Rosa", value: "#DF6FA8" },
+] as const;
+
+function normalizeTimelineColorInput(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return null;
+  }
+
+  const hex = trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
+  return /^[\da-f]{6}$/i.test(hex) ? `#${hex.toUpperCase()}` : null;
+}
+
+function clampTimelineColorChannel(value: number) {
+  return clamp(Math.round(value), 0, 255);
+}
+
+function timelineColorToRgb(value: string) {
+  const normalized = normalizeTimelineColorInput(value) ?? "#3CDDC7";
+  return {
+    r: Number.parseInt(normalized.slice(1, 3), 16),
+    g: Number.parseInt(normalized.slice(3, 5), 16),
+    b: Number.parseInt(normalized.slice(5, 7), 16),
+  };
+}
+
+function rgbToTimelineColor(rgb: { r: number; g: number; b: number }) {
+  return `#${[rgb.r, rgb.g, rgb.b]
+    .map((channel) =>
+      clampTimelineColorChannel(channel).toString(16).padStart(2, "0"),
+    )
+    .join("")
+    .toUpperCase()}`;
+}
 
 function getEffectiveTempoMarkerAt(
   song: SongView | null | undefined,
@@ -407,6 +451,14 @@ export function TransportPanelContent() {
   const tempoDraftDirtyRef = useRef(false);
   const activeTempoRegionKeyRef = useRef("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const contextMenuPositionRef = useRef({ x: 0, y: 0 });
+  const [colorPickerPopover, setColorPickerPopover] = useState<{
+    x: number;
+    y: number;
+    title: string;
+    color: string;
+    onApply: (color: string) => Promise<void>;
+  } | null>(null);
   const [openTopMenu, setOpenTopMenu] = useState<"file" | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
@@ -788,6 +840,11 @@ export function TransportPanelContent() {
   const setMidiLearnMode = useTimelineUIStore(
     (state) => state.setMidiLearnMode,
   );
+  useEffect(() => {
+    if (trackHeight < TRACK_HEIGHT_MIN) {
+      setTrackHeight(TRACK_HEIGHT_MIN);
+    }
+  }, [setTrackHeight, trackHeight]);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const menuBarRef = useRef<HTMLDivElement | null>(null);
   const laneAreaRef = useRef<HTMLDivElement | null>(null);
@@ -2902,13 +2959,17 @@ export function TransportPanelContent() {
       }
       if (
         event.target instanceof HTMLElement &&
-        event.target.closest(".lt-context-menu")
+        event.target.closest(".lt-context-menu, .lt-color-popover")
       ) {
         return;
       }
       setContextMenu(null);
+      setColorPickerPopover(null);
     };
-    const closeMenuOnBlur = () => setContextMenu(null);
+    const closeMenuOnBlur = () => {
+      setContextMenu(null);
+      setColorPickerPopover(null);
+    };
 
     window.addEventListener("pointerdown", closeMenu);
     window.addEventListener("blur", closeMenuOnBlur);
@@ -3155,7 +3216,9 @@ export function TransportPanelContent() {
               setStatus(
                 t("transport.status.clipsMoved", {
                   count: movedCount,
-                  name: primaryClip?.trackName ?? primaryClipId,
+                  name: primaryClip
+                    ? clipDisplayName(primaryClip)
+                    : primaryClipId,
                   defaultValue: "Moved {{count}} clips ({{name}}).",
                 }),
               );
@@ -3191,7 +3254,9 @@ export function TransportPanelContent() {
               const clip = findClip(songRef.current, activeClipDrag.clipId);
               setStatus(
                 t("transport.status.clipMoved", {
-                  name: clip?.trackName ?? activeClipDrag.clipId,
+                  name: clip
+                    ? clipDisplayName(clip)
+                    : activeClipDrag.clipId,
                 }),
               );
             } finally {
@@ -4337,13 +4402,51 @@ export function TransportPanelContent() {
     );
   }
 
+  function handleTimelineViewportDoubleClick(
+    event: ReactMouseEvent<HTMLDivElement> | MouseEvent,
+  ) {
+    const viewport =
+      event.currentTarget instanceof HTMLDivElement
+        ? event.currentTarget
+        : timelineScrollViewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const bounds = viewport.getBoundingClientRect();
+    const measuredScrollbarWidth = viewport.offsetWidth - viewport.clientWidth;
+    const scrollbarWidth = Math.max(measuredScrollbarWidth, 14);
+
+    if (event.clientX >= bounds.right - scrollbarWidth - 2) {
+      event.preventDefault();
+      applyTrackHeight(TRACK_HEIGHT_MIN);
+    }
+  }
+
+  useEffect(() => {
+    const viewport = timelineScrollViewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const handleDoubleClick = (event: MouseEvent) => {
+      handleTimelineViewportDoubleClick(event);
+    };
+    viewport.addEventListener("dblclick", handleDoubleClick);
+    return () => {
+      viewport.removeEventListener("dblclick", handleDoubleClick);
+    };
+  });
+
   function handleTrackHeadersWheel(event: ReactWheelEvent<HTMLDivElement>) {
     if (event.defaultPrevented) {
       return;
     }
 
     if (event.ctrlKey || event.metaKey) {
-      event.preventDefault();
+      if (event.cancelable) {
+        event.preventDefault();
+      }
       applyTrackHeight(
         trackHeight +
           (event.deltaY < 0 ? TRACK_HEIGHT_STEP : -TRACK_HEIGHT_STEP),
@@ -4357,7 +4460,9 @@ export function TransportPanelContent() {
       return;
     }
 
-    event.preventDefault();
+    if (event.cancelable) {
+      event.preventDefault();
+    }
     updateCameraX(
       cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0),
       {
@@ -4434,6 +4539,11 @@ export function TransportPanelContent() {
   ) {
     event.preventDefault();
     event.stopPropagation();
+    contextMenuPositionRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+    setColorPickerPopover(null);
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
@@ -4476,6 +4586,110 @@ export function TransportPanelContent() {
     });
   }
 
+  function openCustomColorPopover(
+    title: string,
+    initialColor: string | null | undefined,
+    onColor: (color: string) => Promise<void>,
+  ) {
+    const position = contextMenuPositionRef.current;
+    setColorPickerPopover({
+      x: position.x + 12,
+      y: position.y + 12,
+      title,
+      color: normalizeTimelineColorInput(initialColor) ?? "#3CDDC7",
+      onApply: onColor,
+    });
+  }
+
+  function colorPickerActions(args: {
+    title: string;
+    currentColor?: string | null;
+    onColor: (color: string | null) => Promise<void>;
+  }): ContextMenuAction[] {
+    return [
+      ...TIMELINE_COLOR_PRESETS.map((preset) => ({
+        label: `${preset.label}${args.currentColor === preset.value ? " (actual)" : ""}`,
+        swatch: preset.value,
+        onSelect: () => args.onColor(preset.value),
+      })),
+      {
+        label: "Personalizado...",
+        swatch: args.currentColor ?? "#3CDDC7",
+        onSelect: () =>
+          openCustomColorPopover(args.title, args.currentColor, (color) =>
+            args.onColor(color),
+          ),
+      },
+      {
+        label: "Quitar color",
+        disabled: !args.currentColor,
+        onSelect: () => args.onColor(null),
+      },
+    ];
+  }
+
+  function openColorMenu(
+    title: string,
+    currentColor: string | null | undefined,
+    onColor: (color: string | null) => Promise<void>,
+  ) {
+    const position = contextMenuPositionRef.current;
+    const nextPosition = {
+      x: position.x + 12,
+      y: position.y + 12,
+    };
+    contextMenuPositionRef.current = nextPosition;
+    setContextMenu({
+      x: nextPosition.x,
+      y: nextPosition.y,
+      title,
+      actions: colorPickerActions({ title, currentColor, onColor }),
+    });
+  }
+
+  async function handleSetTrackColor(track: TrackSummary, color: string | null) {
+    await runAction(async () => {
+      const nextSnapshot = await updateTrackColor({
+        trackId: track.id,
+        color,
+      });
+      optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
+      setSong((previous) =>
+        previous
+          ? {
+              ...previous,
+              projectRevision: nextSnapshot.projectRevision,
+              tracks: previous.tracks.map((candidate) =>
+                candidate.id === track.id ? { ...candidate, color } : candidate,
+              ),
+            }
+          : previous,
+      );
+      applyPlaybackSnapshot(nextSnapshot);
+      setStatus(`Track color updated: ${track.name}`);
+    });
+  }
+
+  async function handleSetClipColor(clip: ClipSummary, color: string | null) {
+    await runAction(async () => {
+      const nextSnapshot = await updateClipColor(clip.id, color);
+      optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
+      setSong((previous) =>
+        previous
+          ? {
+              ...previous,
+              projectRevision: nextSnapshot.projectRevision,
+              clips: previous.clips.map((candidate) =>
+                candidate.id === clip.id ? { ...candidate, color } : candidate,
+              ),
+            }
+          : previous,
+      );
+      applyPlaybackSnapshot(nextSnapshot);
+      setStatus(`Clip color updated: ${clipDisplayName(clip)}`);
+    });
+  }
+
   function trackContextMenu(track: TrackSummary) {
     const currentSong = songRef.current;
     if (!currentSong) {
@@ -4515,6 +4729,14 @@ export function TransportPanelContent() {
             setStatus(t("transport.status.trackRenamed", { name: nextName }));
           });
         },
+      },
+      {
+        label: "Seleccionar color...",
+        swatch: track.color ?? undefined,
+        onSelect: () =>
+          openColorMenu(`Color: ${track.name}`, track.color, (color) =>
+            handleSetTrackColor(track, color),
+          ),
       },
       {
         label: t("common.delete"),
@@ -4838,6 +5060,7 @@ export function TransportPanelContent() {
 
   function clipContextMenu(clip: ClipSummary) {
     const currentCursorSeconds = displayPositionSecondsRef.current;
+    const clipName = clipDisplayName(clip);
     const canSplit =
       currentCursorSeconds > clip.timelineStartSeconds &&
       currentCursorSeconds < clip.timelineStartSeconds + clip.durationSeconds;
@@ -4874,10 +5097,18 @@ export function TransportPanelContent() {
             );
             await duplicateClipGroup(sourceClips, sourceEndSeconds);
             setStatus(
-              t("transport.status.clipDuplicated", { name: clip.trackName }),
+              t("transport.status.clipDuplicated", { name: clipName }),
             );
           });
         },
+      },
+      {
+        label: "Seleccionar color...",
+        swatch: clip.color ?? undefined,
+        onSelect: () =>
+          openColorMenu(`Color: ${clipName}`, clip.color, (color) =>
+            handleSetClipColor(clip, color),
+          ),
       },
       {
         label: t("common.delete"),
@@ -4887,7 +5118,7 @@ export function TransportPanelContent() {
             applyPlaybackSnapshot(nextSnapshot);
             setSelectedClipId(null);
             setStatus(
-              t("transport.status.clipDeleted", { name: clip.trackName }),
+              t("transport.status.clipDeleted", { name: clipName }),
             );
           });
         },
@@ -5101,7 +5332,7 @@ export function TransportPanelContent() {
 
     if (hitClip) {
       selectClip(hitClip.id, track.id);
-      openMenu(event, hitClip.trackName, clipContextMenu(hitClip));
+      openMenu(event, clipDisplayName(hitClip), clipContextMenu(hitClip));
       return;
     }
 
@@ -7920,6 +8151,7 @@ export function TransportPanelContent() {
                     <div
                       className="lt-timeline-scroll-viewport"
                       ref={timelineScrollViewportRef}
+                      onDoubleClick={handleTimelineViewportDoubleClick}
                     >
                       <div className="lt-timeline-main-grid">
                         <TrackHeadersPane
@@ -8485,6 +8717,143 @@ export function TransportPanelContent() {
               contextMenu={contextMenu}
               onDismiss={() => setContextMenu(null)}
             />
+
+            {colorPickerPopover
+              ? (() => {
+                  const normalizedColor =
+                    normalizeTimelineColorInput(colorPickerPopover.color) ??
+                    "#3CDDC7";
+                  const rgb = timelineColorToRgb(normalizedColor);
+                  const colorChannels = [
+                    { key: "r", label: "R" },
+                    { key: "g", label: "G" },
+                    { key: "b", label: "B" },
+                  ] as const;
+
+                  return (
+                    <div
+                      className="lt-color-popover"
+                      style={{
+                        left: colorPickerPopover.x,
+                        top: colorPickerPopover.y,
+                      }}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <strong>{colorPickerPopover.title}</strong>
+                      <div
+                        className="lt-color-popover-preview"
+                        style={{ background: normalizedColor }}
+                        aria-hidden="true"
+                      />
+                      <div className="lt-color-popover-swatches">
+                        {TIMELINE_COLOR_PRESETS.map((preset) => (
+                          <button
+                            key={preset.value}
+                            type="button"
+                            className="lt-color-popover-swatch"
+                            style={{ background: preset.value }}
+                            aria-label={preset.label}
+                            title={preset.label}
+                            onClick={() =>
+                              setColorPickerPopover((current) =>
+                                current
+                                  ? { ...current, color: preset.value }
+                                  : current,
+                              )
+                            }
+                          />
+                        ))}
+                      </div>
+                      <label className="lt-color-popover-hex">
+                        <span>HEX</span>
+                        <input
+                          type="text"
+                          value={colorPickerPopover.color}
+                          spellCheck={false}
+                          onChange={(event) => {
+                            const nextColor = event.currentTarget.value;
+                            setColorPickerPopover((current) =>
+                              current
+                                ? { ...current, color: nextColor }
+                                : current,
+                            );
+                          }}
+                          onBlur={() =>
+                            setColorPickerPopover((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    color:
+                                      normalizeTimelineColorInput(
+                                        current.color,
+                                      ) ?? normalizedColor,
+                                  }
+                                : current,
+                            )
+                          }
+                        />
+                      </label>
+                      {colorChannels.map((channel) => (
+                        <label
+                          key={channel.key}
+                          className="lt-color-popover-channel"
+                        >
+                          <span>{channel.label}</span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={255}
+                            value={rgb[channel.key]}
+                            onChange={(event) => {
+                              const nextValue = Number(
+                                event.currentTarget.value,
+                              );
+                              setColorPickerPopover((current) => {
+                                if (!current) {
+                                  return current;
+                                }
+                                const currentRgb = timelineColorToRgb(
+                                  current.color,
+                                );
+                                return {
+                                  ...current,
+                                  color: rgbToTimelineColor({
+                                    ...currentRgb,
+                                    [channel.key]: nextValue,
+                                  }),
+                                };
+                              });
+                            }}
+                          />
+                          <small>{rgb[channel.key]}</small>
+                        </label>
+                      ))}
+                      <div className="lt-color-popover-actions">
+                        <button
+                          type="button"
+                          onClick={() => setColorPickerPopover(null)}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const color = normalizeTimelineColorInput(
+                              colorPickerPopover.color,
+                            );
+                            setColorPickerPopover(null);
+                            if (color) {
+                              void colorPickerPopover.onApply(color);
+                            }
+                          }}
+                        >
+                          Aplicar
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
+              : null}
 
             {missingFilePaths.length > 0 ? (
               <button

@@ -252,6 +252,7 @@ pub fn import_wav_song(
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
+                color: None,
             })
             .collect(),
         clips: imported_files
@@ -266,6 +267,7 @@ pub fn import_wav_song(
                 gain: 1.0,
                 fade_in_seconds: None,
                 fade_out_seconds: None,
+                color: None,
             })
             .collect(),
         section_markers: vec![],
@@ -329,6 +331,7 @@ pub fn append_wav_files_to_song(
             solo: false,
             transpose_enabled: true,
             audio_to: "master".to_string(),
+            color: None,
         });
 
         next_song.clips.push(Clip {
@@ -344,6 +347,7 @@ pub fn append_wav_files_to_song(
             gain: 1.0,
             fade_in_seconds: None,
             fade_out_seconds: None,
+            color: None,
         });
 
         let new_duration = next_song

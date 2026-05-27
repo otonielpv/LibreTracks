@@ -428,6 +428,13 @@ export async function updateClipWindow(
   });
 }
 
+export async function updateClipColor(
+  clipId: string,
+  color: string | null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_clip_color", { clipId, color });
+}
+
 export async function duplicateClip(
   clipId: string,
   timelineStartSeconds: number,
@@ -563,6 +570,13 @@ export async function updateTrack(args: {
   name?: string;
 }): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("update_track", args);
+}
+
+export async function updateTrackColor(args: {
+  trackId: string;
+  color: string | null;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_track_color", args);
 }
 
 export async function commitTrackMixChange(args: {

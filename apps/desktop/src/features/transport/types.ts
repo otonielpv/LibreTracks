@@ -66,6 +66,7 @@ export type NativeDropCandidateDebug = {
 export type ContextMenuAction = {
   label: string;
   disabled?: boolean;
+  swatch?: string;
   onSelect: () => void | Promise<void>;
 };
 

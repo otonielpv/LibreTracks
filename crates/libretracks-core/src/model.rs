@@ -96,6 +96,8 @@ pub struct Track {
     pub transpose_enabled: bool,
     #[serde(default = "default_audio_to", alias = "outputBusId")]
     pub audio_to: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 pub fn default_audio_to() -> String {
@@ -114,6 +116,8 @@ pub struct Clip {
     pub gain: f64,
     pub fade_in_seconds: Option<f64>,
     pub fade_out_seconds: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

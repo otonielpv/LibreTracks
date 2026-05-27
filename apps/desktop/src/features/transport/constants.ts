@@ -3,7 +3,7 @@ import type { MidiLearnCommand } from "./types";
 export const HEADER_WIDTH = 260;
 export const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
 export const TIMELINE_FIT_RIGHT_GUTTER_PX = 140;
-export const TRACK_HEIGHT_MIN = 68;
+export const TRACK_HEIGHT_MIN = 60;
 export const TRACK_HEIGHT_MAX = 148;
 export const TRACK_HEIGHT_STEP = 8;
 export const RULER_HEIGHT = 132;

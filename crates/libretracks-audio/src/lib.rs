@@ -1075,6 +1075,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "ext:2-3".to_string(),
+                    color: None,
                 },
                 Track {
                     id: "track_click".into(),
@@ -1087,6 +1088,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "ext:2-3".to_string(),
+                    color: None,
                 },
                 Track {
                     id: "folder_main".into(),
@@ -1099,6 +1101,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
+                    color: None,
                 },
                 Track {
                     id: "track_drums".into(),
@@ -1111,6 +1114,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
+                    color: None,
                 },
             ],
             clips: vec![
@@ -1124,6 +1128,7 @@ mod tests {
                     gain: 1.0,
                     fade_in_seconds: None,
                     fade_out_seconds: None,
+                    color: None,
                 },
                 Clip {
                     id: "clip_drums".into(),
@@ -1135,6 +1140,7 @@ mod tests {
                     gain: 0.9,
                     fade_in_seconds: None,
                     fade_out_seconds: None,
+                    color: None,
                 },
             ],
             section_markers: vec![
@@ -1222,6 +1228,7 @@ mod tests {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
+                color: None,
             }],
             clips: vec![Clip {
                 id: "clip_main".into(),
@@ -1233,6 +1240,7 @@ mod tests {
                 gain: 1.0,
                 fade_in_seconds: None,
                 fade_out_seconds: None,
+                color: None,
             }],
             section_markers: vec![
                 Marker {

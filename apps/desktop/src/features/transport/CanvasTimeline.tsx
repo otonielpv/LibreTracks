@@ -40,6 +40,11 @@ import {
   type TimelineViewportMetrics,
   type TrackSceneSnapshot,
 } from "./Renderer/TimelineRenderer";
+import {
+  TRACK_HEIGHT_MAX,
+  TRACK_HEIGHT_MIN,
+  TRACK_HEIGHT_STEP,
+} from "./constants";
 import { BASE_PIXELS_PER_SECOND, type TimelineGrid } from "./timelineMath";
 import { secondsToScreenX } from "./timelineMath";
 
@@ -189,6 +194,7 @@ function buildClipSceneSignature(
               clip.id,
               clip.trackId,
               clip.waveformKey,
+              clip.color ?? "",
               formatClipSignatureNumber(clip.timelineStartSeconds),
               formatClipSignatureNumber(clip.sourceStartSeconds),
               formatClipSignatureNumber(clip.sourceWindowDurationSeconds),
@@ -361,9 +367,9 @@ export function TimelineRulerCanvas({
       panCommitDelayMs: 100,
       zoomCommitDelayMs: 100,
       zoomMultiplier: 1.2,
-      trackHeightStep: 8,
-      trackHeightMin: 68,
-      trackHeightMax: 148,
+      trackHeightStep: TRACK_HEIGHT_STEP,
+      trackHeightMin: TRACK_HEIGHT_MIN,
+      trackHeightMax: TRACK_HEIGHT_MAX,
       onPreviewCameraX: onNativeCameraXPreview,
       onCommitCameraX: onNativeCameraXCommit,
       onPreviewZoom: onNativeZoomPreview,
@@ -645,9 +651,9 @@ export function TimelineTrackCanvas({
       panCommitDelayMs: 100,
       zoomCommitDelayMs: 100,
       zoomMultiplier: 1.2,
-      trackHeightStep: 8,
-      trackHeightMin: 68,
-      trackHeightMax: 148,
+      trackHeightStep: TRACK_HEIGHT_STEP,
+      trackHeightMin: TRACK_HEIGHT_MIN,
+      trackHeightMax: TRACK_HEIGHT_MAX,
       onPreviewCameraX: onNativeCameraXPreview,
       onCommitCameraX: onNativeCameraXCommit,
       onPreviewZoom: onNativeZoomPreview,

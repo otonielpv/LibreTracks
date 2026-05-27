@@ -276,6 +276,7 @@ mod tests {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: crate::model::default_audio_to(),
+                color: None,
             }],
             clips: vec![Clip {
                 id: "c".into(),
@@ -287,6 +288,7 @@ mod tests {
                 gain: 1.0,
                 fade_in_seconds: None,
                 fade_out_seconds: None,
+                color: None,
             }],
             section_markers: vec![],
         }

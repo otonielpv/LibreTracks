@@ -76,6 +76,7 @@ export type TrackSummary = {
   solo: boolean;
   audioTo: string;
   transposeEnabled: boolean;
+  color?: string | null;
 };
 
 export function formatTransposeSemitones(value: number): string {
@@ -99,6 +100,7 @@ export type ClipSummary = {
   sourceDurationSeconds: number;
   durationSeconds: number;
   gain: number;
+  color?: string | null;
 };
 
 export type SongView = {

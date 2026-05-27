@@ -1,5 +1,6 @@
 import type { SongView } from "../desktopApi";
 import { getPendingClipLabel, type TimelineClipSummary, type TimelineTrackSummary } from "../pendingAudioImports";
+import { clipDisplayName } from "../helpers";
 import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
 import { clamp, secondsToScreenX } from "../timelineMath";
 import {
@@ -102,14 +103,14 @@ export function drawTrackClipsLayer(
     const childCount = snapshot.song.tracks.filter((candidate) => candidate.parentTrackId === track.id).length;
 
     if (track.kind === "folder") {
-      context.fillStyle = "rgba(32, 31, 31, 0.78)";
+      context.fillStyle = track.color ? `${track.color}33` : "rgba(32, 31, 31, 0.78)";
       context.fillRect(
         8,
         trackTop,
         Math.max(0, snapshot.width - 16),
         snapshot.trackHeight,
       );
-      context.fillStyle = "#bacac5";
+      context.fillStyle = track.color ?? "#bacac5";
       context.font = '600 10px "Space Grotesk", sans-serif';
       context.textBaseline = "middle";
       context.fillText(
@@ -143,7 +144,7 @@ export function drawTrackClipsLayer(
       const isSelected =
         snapshot.selectedClipId === clip.id || snapshot.selectedClipIds.includes(clip.id);
 
-      context.fillStyle = "rgba(210, 212, 209, 0.92)";
+      context.fillStyle = clip.color ?? track.color ?? "rgba(210, 212, 209, 0.92)";
       context.strokeStyle =
         isSelected ? "rgba(87, 241, 219, 0.9)" : "rgba(12, 12, 12, 0.28)";
       context.lineWidth = isSelected ? 1.5 : 1;
@@ -203,6 +204,15 @@ export function drawTrackClipsLayer(
           );
         }
         context.restore();
+        if (clip.color || track.color) {
+          context.save();
+          context.beginPath();
+          context.roundRect(clippedLeft, clipTop, visibleWidth, clipHeight, 2);
+          context.clip();
+          context.fillStyle = `${clip.color ?? track.color}30`;
+          context.fillRect(clippedLeft, clipTop, visibleWidth, clipHeight);
+          context.restore();
+        }
       } else {
         drawWaveformPlaceholder(context, clippedLeft, visibleWidth, clipTop, clipHeight);
       }
@@ -219,7 +229,7 @@ export function drawTrackClipsLayer(
         context.fillStyle = "rgba(36, 38, 36, 0.95)";
         context.font = '600 10px "Space Grotesk", sans-serif';
         context.textBaseline = "middle";
-        context.fillText(clip.trackName, clippedLeft + 12, clipTop + 13);
+        context.fillText(clipDisplayName(clip), clippedLeft + 12, clipTop + 13);
         context.restore();
       }
     }
@@ -239,7 +249,9 @@ export function drawTrackClipsLayer(
 
 export function buildTrackStructureSignature(song: SongView, visibleTracks: TimelineTrackSummary[]) {
   const trackStructureSignature = song.tracks
-    .map((track) => [track.id, track.kind, track.parentTrackId ?? "root"].join(":"))
+    .map((track) =>
+      [track.id, track.kind, track.parentTrackId ?? "root", track.color ?? ""].join(":"),
+    )
     .join("|");
   const visibleTrackOrderSignature = visibleTracks.map((track) => track.id).join("|");
   return `${trackStructureSignature}#visible=${visibleTrackOrderSignature}`;

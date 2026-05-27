@@ -212,4 +212,29 @@ describe("drawTrackClipsLayer", () => {
       ),
     ).toBe(false);
   });
+
+  it("labels clips from their file name instead of the destination track", () => {
+    const context = createContextSpy();
+    const snapshot = createSnapshot(true);
+    snapshot.clipsByTrack["track-1"] = [
+      {
+        ...snapshot.clipsByTrack["track-1"][0],
+        filePath: "audio/metronomo.wav",
+        waveformKey: "audio/lead.wav",
+      },
+    ];
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    expect(
+      (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([text]) => text === "Metronomo",
+      ),
+    ).toBe(true);
+    expect(
+      (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([text]) => text === "Lead",
+      ),
+    ).toBe(false);
+  });
 });

@@ -71,6 +71,7 @@ mod tests {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "ext:2-3".to_string(),
+                color: None,
             }],
             clips: vec![Clip {
                 id: "clip_click".into(),
@@ -82,6 +83,7 @@ mod tests {
                 gain: 1.0,
                 fade_in_seconds: None,
                 fade_out_seconds: None,
+                color: None,
             }],
             section_markers: vec![Marker {
                 id: "section_intro".into(),

@@ -115,6 +115,22 @@ pub fn update_clip_window(
 }
 
 #[tauri::command]
+pub fn update_clip_color(
+    clip_id: String,
+    color: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_clip_color(&clip_id, color.as_deref(), &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn duplicate_clip(
     clip_id: String,
     timeline_start_seconds: f64,
@@ -490,6 +506,22 @@ pub fn update_track(
     let name = name.unwrap_or_default();
     session
         .update_track_metadata(&track_id, &name, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_track_color(
+    track_id: String,
+    color: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_track_color(&track_id, color.as_deref(), &state.audio)
         .map_err(|error| error.to_string())
 }
 

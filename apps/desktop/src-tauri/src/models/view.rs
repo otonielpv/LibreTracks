@@ -141,6 +141,7 @@ pub struct TrackSummary {
     pub solo: bool,
     pub transpose_enabled: bool,
     pub audio_to: String,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -194,6 +195,7 @@ pub struct ClipSummary {
     pub source_duration_seconds: f64,
     pub duration_seconds: f64,
     pub gain: f64,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -360,6 +362,7 @@ pub(crate) fn song_to_view(
                 solo: track.solo,
                 transpose_enabled: track.transpose_enabled,
                 audio_to: track.audio_to.clone(),
+                color: track.color.clone(),
             })
             .collect(),
         waveforms,
@@ -415,6 +418,7 @@ pub(crate) fn clip_to_summary(
             track_transpose_enabled,
         ),
         gain: clip.gain,
+        color: clip.color.clone(),
     }
 }
 
