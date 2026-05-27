@@ -117,6 +117,7 @@ const CHROME_TIMELINE_PIXELS_PER_SECOND = BASE_PIXELS_PER_SECOND * 2.35;
 const PAN_CENTER_MAGNET = 0.08;
 const REMOTE_SIZE_STORAGE_KEY = "libretracks.remote.uiSize";
 const MAX_REMOTE_SIZE_LEVEL = 3;
+const TIMELINE_JITTER_RESET_THRESHOLD_SECONDS = 0.18;
 const STRINGS = getRemoteStrings();
 
 function readRemoteSizeLevel() {
@@ -625,6 +626,11 @@ const SharedTimeline = memo(function SharedTimeline({
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
+  const visualPositionRef = useRef(0);
+  const lastTimelinePlaybackRef = useRef<{ playing: boolean; positionSeconds: number }>({
+    playing: false,
+    positionSeconds: 0,
+  });
   const [viewportWidth, setViewportWidth] = useState(0);
   const durationSeconds = Math.max(songView?.durationSeconds ?? 0, 8);
   const regions = useMemo(() => buildSongTempoRegions(songView), [songView]);
@@ -688,7 +694,27 @@ const SharedTimeline = memo(function SharedTimeline({
 
     const render = () => {
       const width = shellRef.current?.clientWidth ?? viewportWidth;
-      const currentX = secondsToAbsoluteX(resolveLivePosition(snapshot, receivedAtMs), CHROME_TIMELINE_PIXELS_PER_SECOND);
+      const rawPositionSeconds = resolveLivePosition(snapshot, receivedAtMs);
+      const isPlaying = snapshot?.playbackState === "playing" && snapshot.transportClock?.running === true;
+
+      if (!isPlaying) {
+        visualPositionRef.current = rawPositionSeconds;
+      } else if (!lastTimelinePlaybackRef.current.playing) {
+        visualPositionRef.current = rawPositionSeconds;
+      } else {
+        const backwardsDelta = visualPositionRef.current - rawPositionSeconds;
+        visualPositionRef.current =
+          backwardsDelta > TIMELINE_JITTER_RESET_THRESHOLD_SECONDS
+            ? rawPositionSeconds
+            : Math.max(visualPositionRef.current, rawPositionSeconds);
+      }
+
+      lastTimelinePlaybackRef.current = {
+        playing: isPlaying,
+        positionSeconds: rawPositionSeconds,
+      };
+
+      const currentX = secondsToAbsoluteX(visualPositionRef.current, CHROME_TIMELINE_PIXELS_PER_SECOND);
       const desiredTranslate = width / 2 - currentX;
       const minTranslate = Math.min(0, width - contentWidth);
       const maxTranslate = width / 2;
