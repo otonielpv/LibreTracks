@@ -3914,9 +3914,33 @@ textarea {
   padding: 1rem;
 }
 
+.busy-overlay-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
 .busy-overlay-card strong {
   display: block;
   margin-bottom: 0.25rem;
+  flex: 1;
+}
+
+.busy-overlay-spinner {
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 999px;
+  border: 2px solid rgb(87 241 219 / 0.18);
+  border-top-color: #57f1db;
+  flex-shrink: 0;
+  animation: lt-library-progress-spin 0.8s linear infinite;
+}
+
+.busy-overlay-percent {
+  color: rgb(87 241 219 / 0.82);
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .busy-overlay-card p {
@@ -3943,6 +3967,33 @@ textarea {
   height: 100%;
   background: #5fd0a5;
   transition: width 160ms ease;
+  position: relative;
+}
+
+.busy-overlay-progress span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.08) 35%,
+    rgb(255 255 255 / 0.22) 50%,
+    rgb(255 255 255 / 0.08) 65%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: busy-overlay-progress-sheen 1.2s ease-in-out infinite;
+}
+
+@keyframes busy-overlay-progress-sheen {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
 }
 
 .lt-import-overlay {

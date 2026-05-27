@@ -7972,7 +7972,15 @@ export function TransportPanelContent() {
         {isShellBusy ? (
           <div className="busy-overlay" aria-live="polite">
             <div className="busy-overlay-card">
-              <strong>{t("transport.shell.busyTitle")}</strong>
+              <div className="busy-overlay-heading">
+                <span className="busy-overlay-spinner" aria-hidden="true" />
+                <strong>{t("transport.shell.busyTitle")}</strong>
+                {typeof busyFeedback?.percent === "number" ? (
+                  <span className="busy-overlay-percent">
+                    {Math.max(0, Math.min(100, Math.round(busyFeedback.percent)))}%
+                  </span>
+                ) : null}
+              </div>
               <p>
                 {busyFeedback?.message ?? t("transport.shell.busyDescription")}
               </p>
@@ -7983,6 +7991,7 @@ export function TransportPanelContent() {
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={Math.round(busyFeedback.percent)}
+                  aria-valuetext={busyFeedback.message}
                 >
                   <span
                     style={{
