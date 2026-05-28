@@ -3122,24 +3122,11 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
         self.prime_waveform_cache(&song_dir, &loaded_song)?;
         eprintln!(
-            "[libretracks-import] waiting for sources ready timeout_ms={} ",
-            Duration::from_secs(120).as_millis()
+            "[libretracks-import] deferred post-import source/waveform preparation (non-blocking)"
         );
-        audio.wait_until_sources_ready(Duration::from_secs(120))?;
-        eprintln!("[libretracks-import] sources ready");
-        self.ensure_project_waveforms_ready(&song_dir, &loaded_song, audio)?;
-        eprintln!("[libretracks-import] waveform readiness ensured");
-        let runtime_position_seconds =
-            self.runtime_seconds_for_engine_position(self.current_position());
         eprintln!(
-            "[libretracks-import] prepare playback at runtime_position_seconds={:.3}",
-            runtime_position_seconds
+            "[libretracks-import] deferred eager playback prearm after external import (non-blocking)"
         );
-        if let Err(error) = audio.prepare_playback_at(loaded_song, runtime_position_seconds) {
-            eprintln!(
-                "[libretracks-import] prepare_playback_at failed after external import: {error}"
-            );
-        }
 
         let library_assets = list_library_assets(&song_dir, self.engine.song())?;
         eprintln!(

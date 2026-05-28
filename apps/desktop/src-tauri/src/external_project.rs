@@ -366,8 +366,9 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
         ));
     }
 
-    normalize_section_markers(&mut section_markers);
     normalize_regions(&mut regions);
+    normalize_section_markers(&mut section_markers);
+    filter_region_end_boundary_section_markers(&mut section_markers, &regions);
     normalize_tempo_markers(&mut tempo_markers);
     normalize_time_signature_markers(&mut time_signature_markers);
 
@@ -1151,6 +1152,25 @@ fn normalize_section_markers(markers: &mut Vec<ReaperSectionMarker>) {
     *markers = deduped;
 }
 
+fn filter_region_end_boundary_section_markers(
+    markers: &mut Vec<ReaperSectionMarker>,
+    regions: &[ReaperRegion],
+) {
+    markers.retain(|marker| {
+        let trimmed = marker.name.trim();
+        if trimmed.is_empty() || !trimmed.chars().all(|character| character.is_ascii_digit()) {
+            return true;
+        }
+
+        // Some Reaper projects serialize synthetic numeric markers at the
+        // same timestamp as a region end. They are not user section markers,
+        // so skip importing them to avoid trailing labels like "1".
+        !regions
+            .iter()
+            .any(|region| (region.end_seconds - marker.start_seconds).abs() <= 0.0001)
+    });
+}
+
 fn normalize_regions(regions: &mut Vec<ReaperRegion>) {
     regions.retain(|region| {
         region.start_seconds.is_finite()
@@ -1501,6 +1521,7 @@ mod tests {
     MARKER 1 252.92307692307693 "" 1
     MARKER 2 12.92307692307692 Intro 0 0 1 R {BBBB} 0
     MARKER 3 31.38461538461538 Verso 0 0 1 R {CCCC} 0
+    MARKER 4 252.92307692307693 "1" 0 0 1 R {DDDD} 0
     <TRACK
         NAME "CLICK"
         <ITEM
@@ -1521,6 +1542,12 @@ mod tests {
                 assert_eq!(parsed.bpm, Some(130.0));
                 assert_eq!(parsed.section_markers.len(), 2);
                 assert_eq!(parsed.section_markers[0].name, "Intro");
+                assert!(
+                    !parsed
+                        .section_markers
+                        .iter()
+                        .any(|marker| marker.name.trim() == "1")
+                );
                 assert_eq!(parsed.regions.len(), 1);
                 assert_eq!(parsed.regions[0].name, "Song Name");
                 assert!((parsed.regions[0].start_seconds - 0.0).abs() < 0.0001);
