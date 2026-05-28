@@ -8254,6 +8254,12 @@ export function TransportPanelContent() {
                       <button type="button" onClick={handleOpenProjectClick}>
                         {t("common.open")}
                       </button>
+                      <button
+                        type="button"
+                        onClick={handleImportExternalProjectClick}
+                      >
+                        {t("timelineTopbar.importExternalProject")}
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -88,6 +88,7 @@ export function TimelineTopbar({
   const fallbackBpm = getSongBaseBpm(song);
   const playbackStateLabel = t(`transport.playbackState.${playbackState}`);
   const learnModeActive = midiLearnMode !== null;
+  const canOpenFileMenu = canPersistProject;
 
   const handleTempoKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") {
@@ -110,14 +111,20 @@ export function TimelineTopbar({
               type="button"
               className="lt-top-menu-trigger"
               aria-haspopup="menu"
-              aria-expanded={openTopMenu === "file"}
-              onClick={() => onToggleTopMenu("file")}
+              aria-expanded={canOpenFileMenu && openTopMenu === "file"}
+              disabled={!canOpenFileMenu}
+              onClick={() => {
+                if (!canOpenFileMenu) {
+                  return;
+                }
+                onToggleTopMenu("file");
+              }}
             >
               <span className="lt-button-label">{t("timelineTopbar.fileMenu")}</span>
               <span className="material-symbols-outlined" aria-hidden="true">arrow_drop_down</span>
             </button>
 
-            {openTopMenu === "file" ? (
+            {canOpenFileMenu && openTopMenu === "file" ? (
               <div className="lt-top-menu-dropdown" role="menu" aria-label={t("timelineTopbar.fileMenu")}>
                 <button
                   type="button"
