@@ -6506,6 +6506,36 @@ fn copy_project_audio_files(
         fs::copy(source_path, target_path)?;
     }
 
+    // Preserve ready waveform summaries when cloning/saving projects. Without
+    // this, an imported project can finish preparation in the source folder
+    // but still show "Analyzing waveform..." after Save As because the target
+    // project starts without the generated .peaks cache.
+    let mut copied_waveform_keys = std::collections::HashSet::<String>::new();
+    for clip in &song.clips {
+        copied_waveform_keys.insert(waveform_key_for_file_path(&clip.file_path));
+    }
+    for file_path in library_file_paths {
+        copied_waveform_keys.insert(waveform_key_for_file_path(file_path));
+    }
+
+    for waveform_key in copied_waveform_keys {
+        let source_waveform_path = waveform_file_path(source_song_dir, &waveform_key);
+        if !source_waveform_path.exists() {
+            continue;
+        }
+
+        let target_waveform_path = waveform_file_path(target_song_dir, &waveform_key);
+        if source_waveform_path == target_waveform_path {
+            continue;
+        }
+
+        if let Some(parent) = target_waveform_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        fs::copy(source_waveform_path, target_waveform_path)?;
+    }
+
     Ok(())
 }
 
