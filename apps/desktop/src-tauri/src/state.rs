@@ -1295,7 +1295,7 @@ impl DesktopSession {
         &mut self,
         waveform_keys: &[String],
         background_generation: Option<(&WaveformGenerationQueue, &AppHandle)>,
-        audio: Option<&AudioController>,
+        _audio: Option<&AudioController>,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_waveform_keys = self
@@ -1317,20 +1317,9 @@ impl DesktopSession {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(waveform_key, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
-                    if let Ok(summary) =
-                        self.load_waveform_summary_cached(&song_dir, waveform_key, true)
-                    {
-                        summaries.push(waveform_summary_to_dto(waveform_key, summary));
-                        continue;
-                    }
-                    if let Some(audio) = audio {
-                        if let Ok(summary) =
-                            self.load_native_waveform_summary(&song_dir, waveform_key, audio)
-                        {
-                            summaries.push(waveform_summary_to_dto(waveform_key, summary));
-                            continue;
-                        }
-                    }
+                    // Keep this endpoint non-blocking for the UI thread:
+                    // expensive regeneration (disk scan + decode/native peaks)
+                    // is delegated to the background waveform worker.
                     if let Some((waveform_jobs, app)) = background_generation {
                         waveform_jobs.enqueue(
                             app.clone(),
@@ -1351,7 +1340,7 @@ impl DesktopSession {
         file_paths: &[String],
         waveform_jobs: &WaveformGenerationQueue,
         app: &AppHandle,
-        audio: &AudioController,
+        _audio: &AudioController,
     ) -> Result<Vec<WaveformSummaryDto>, DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let valid_library_paths = collect_library_file_paths(&song_dir, self.engine.song())?
@@ -1369,18 +1358,8 @@ impl DesktopSession {
                 Ok(summary) => summaries.push(waveform_summary_to_dto(&normalized_path, summary)),
                 Err(DesktopError::Project(ProjectError::Io(_)))
                 | Err(DesktopError::Project(ProjectError::InvalidWaveformSummary(_))) => {
-                    if let Ok(summary) =
-                        self.load_waveform_summary_cached(&song_dir, &normalized_path, true)
-                    {
-                        summaries.push(waveform_summary_to_dto(&normalized_path, summary));
-                        continue;
-                    }
-                    if let Ok(summary) =
-                        self.load_native_waveform_summary(&song_dir, &normalized_path, audio)
-                    {
-                        summaries.push(waveform_summary_to_dto(&normalized_path, summary));
-                        continue;
-                    }
+                    // Library waveform hydration should not block UI: enqueue
+                    // background generation and stream completion via event.
                     waveform_jobs.enqueue(
                         app.clone(),
                         song_dir.clone(),
