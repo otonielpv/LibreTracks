@@ -1,5 +1,10 @@
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+use flate2::read::GzDecoder;
+use quick_xml::events::{BytesStart, Event};
+use quick_xml::Reader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExternalProjectKind {
@@ -413,6 +418,566 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
     })
 }
 
+pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
+    let root = path
+        .parent()
+        .ok_or_else(|| "no se pudo resolver la carpeta del proyecto Ableton".to_string())?;
+    let xml = read_ableton_xml(path)?;
+
+    let mut reader = Reader::from_str(&xml);
+    reader.config_mut().trim_text(true);
+    let mut buffer = Vec::<u8>::new();
+
+    let mut stack = Vec::<String>::new();
+    let mut track_builders = Vec::<AbletonTrackBuilder>::new();
+    let mut current_track: Option<AbletonTrackBuilder> = None;
+    let mut current_clip: Option<AbletonClipBuilder> = None;
+    let mut current_locator: Option<AbletonLocatorBuilder> = None;
+
+    let mut title: Option<String> = None;
+    let mut bpm: Option<f64> = None;
+    let mut signature_numerator: Option<u32> = None;
+    let mut signature_denominator: Option<u32> = None;
+
+    let mut section_markers = Vec::<ReaperSectionMarker>::new();
+    let mut tempo_markers = Vec::<ReaperTempoMarker>::new();
+    let mut time_signature_markers = Vec::<ReaperTimeSignatureMarker>::new();
+
+    loop {
+        match reader.read_event_into(&mut buffer) {
+            Ok(Event::Start(start)) => {
+                let tag = decode_tag_name(start.name().as_ref());
+                let attributes = collect_attributes(&start);
+
+                handle_ableton_node(
+                    root,
+                    &stack,
+                    &tag,
+                    &attributes,
+                    false,
+                    &mut title,
+                    &mut bpm,
+                    &mut signature_numerator,
+                    &mut signature_denominator,
+                    &mut current_track,
+                    &mut current_clip,
+                    &mut current_locator,
+                    &mut section_markers,
+                    &mut tempo_markers,
+                    &mut time_signature_markers,
+                );
+
+                stack.push(tag);
+            }
+            Ok(Event::Empty(empty)) => {
+                let tag = decode_tag_name(empty.name().as_ref());
+                let attributes = collect_attributes(&empty);
+
+                handle_ableton_node(
+                    root,
+                    &stack,
+                    &tag,
+                    &attributes,
+                    true,
+                    &mut title,
+                    &mut bpm,
+                    &mut signature_numerator,
+                    &mut signature_denominator,
+                    &mut current_track,
+                    &mut current_clip,
+                    &mut current_locator,
+                    &mut section_markers,
+                    &mut tempo_markers,
+                    &mut time_signature_markers,
+                );
+            }
+            Ok(Event::End(end)) => {
+                let tag = decode_tag_name(end.name().as_ref());
+                if tag.eq_ignore_ascii_case("AudioClip") {
+                    if let (Some(track), Some(clip)) = (current_track.as_mut(), current_clip.take()) {
+                        if let Some(item) = build_ableton_item(clip) {
+                            track.items.push(item);
+                        }
+                    }
+                } else if tag.eq_ignore_ascii_case("AudioTrack") {
+                    if let Some(track) = current_track.take() {
+                        track_builders.push(track);
+                    }
+                } else if tag.eq_ignore_ascii_case("Locator") {
+                    if let Some(locator) = current_locator.take() {
+                        if let Some(section) = build_ableton_locator(locator) {
+                            section_markers.push(section);
+                        }
+                    }
+                }
+
+                if let Some(last) = stack.pop() {
+                    if !last.eq_ignore_ascii_case(&tag) {
+                        while let Some(next) = stack.pop() {
+                            if next.eq_ignore_ascii_case(&tag) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Ok(_) => {}
+            Err(error) => {
+                return Err(format!("no se pudo parsear el XML de Ableton: {error}"));
+            }
+        }
+
+        buffer.clear();
+    }
+
+    if let (Some(track), Some(clip)) = (current_track.as_mut(), current_clip.take()) {
+        if let Some(item) = build_ableton_item(clip) {
+            track.items.push(item);
+        }
+    }
+    if let Some(track) = current_track.take() {
+        track_builders.push(track);
+    }
+    if let Some(locator) = current_locator.take() {
+        if let Some(section) = build_ableton_locator(locator) {
+            section_markers.push(section);
+        }
+    }
+
+    let mut tracks = track_builders
+        .into_iter()
+        .enumerate()
+        .map(|(index, builder)| build_ableton_track(builder, index))
+        .collect::<Vec<_>>();
+    tracks.retain(|track| !track.items.is_empty());
+
+    if tracks.is_empty() {
+        return Err("el proyecto Ableton no contiene pistas de audio importables".to_string());
+    }
+
+    if let (Some(numerator), Some(denominator)) = (signature_numerator, signature_denominator) {
+        time_signature_markers.push(ReaperTimeSignatureMarker {
+            start_seconds: 0.0,
+            signature: format!("{numerator}/{denominator}"),
+        });
+    }
+
+    normalize_section_markers(&mut section_markers);
+    normalize_tempo_markers(&mut tempo_markers);
+    normalize_time_signature_markers(&mut time_signature_markers);
+
+    if bpm.is_none() {
+        bpm = tempo_markers
+            .iter()
+            .find(|marker| marker.start_seconds <= 0.0001)
+            .map(|marker| marker.bpm)
+            .or_else(|| tempo_markers.first().map(|marker| marker.bpm));
+    }
+
+    let time_signature = time_signature_markers
+        .iter()
+        .find(|marker| marker.start_seconds <= 0.0001)
+        .map(|marker| marker.signature.clone())
+        .or_else(|| {
+            time_signature_markers
+                .first()
+                .map(|marker| marker.signature.clone())
+        });
+
+    let mut regions = section_markers
+        .windows(2)
+        .map(|pair| ReaperRegion {
+            name: pair[0].name.clone(),
+            start_seconds: pair[0].start_seconds,
+            end_seconds: pair[1].start_seconds.max(pair[0].start_seconds + 0.001),
+        })
+        .collect::<Vec<_>>();
+    normalize_regions(&mut regions);
+
+    let duration_seconds = tracks
+        .iter()
+        .flat_map(|track| track.items.iter())
+        .map(|item| item.position_seconds + item.length_seconds)
+        .fold(0.0_f64, f64::max)
+        .max(
+            section_markers
+                .iter()
+                .map(|marker| marker.start_seconds)
+                .fold(0.0_f64, f64::max),
+        )
+        .max(
+            tempo_markers
+                .iter()
+                .map(|marker| marker.start_seconds)
+                .fold(0.0_f64, f64::max),
+        )
+        .max(
+            time_signature_markers
+                .iter()
+                .map(|marker| marker.start_seconds)
+                .fold(0.0_f64, f64::max),
+        )
+        .max(1.0);
+
+    if regions.is_empty() {
+        let project_title = title
+            .as_ref()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "Ableton Import".to_string());
+        regions.push(ReaperRegion {
+            name: project_title,
+            start_seconds: 0.0,
+            end_seconds: duration_seconds,
+        });
+    }
+
+    let title = title
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            path.file_stem()
+                .and_then(|value| value.to_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| value.to_string())
+        })
+        .unwrap_or_else(|| "Ableton Import".to_string());
+
+    Ok(ReaperProject {
+        title,
+        bpm,
+        time_signature,
+        duration_seconds,
+        section_markers,
+        regions,
+        tempo_markers,
+        time_signature_markers,
+        tracks,
+    })
+}
+
+#[derive(Debug, Clone)]
+struct AbletonTrackBuilder {
+    name: Option<String>,
+    volume: f64,
+    pan: f64,
+    muted: bool,
+    solo: bool,
+    items: Vec<ReaperItem>,
+}
+
+impl Default for AbletonTrackBuilder {
+    fn default() -> Self {
+        Self {
+            name: None,
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            items: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AbletonClipBuilder {
+    current_start: Option<f64>,
+    current_end: Option<f64>,
+    source_start_seconds: Option<f64>,
+    gain: f64,
+    file_path: Option<PathBuf>,
+}
+
+impl Default for AbletonClipBuilder {
+    fn default() -> Self {
+        Self {
+            current_start: None,
+            current_end: None,
+            source_start_seconds: None,
+            gain: 1.0,
+            file_path: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct AbletonLocatorBuilder {
+    name: Option<String>,
+    time: Option<f64>,
+}
+
+fn read_ableton_xml(path: &Path) -> Result<String, String> {
+    let raw = fs::read(path).map_err(|error| format!("no se pudo leer el archivo .als: {error}"))?;
+    if let Ok(xml) = String::from_utf8(raw.clone()) {
+        if xml.trim_start().starts_with('<') {
+            return Ok(xml);
+        }
+    }
+
+    let mut decoder = GzDecoder::new(raw.as_slice());
+    let mut xml = String::new();
+    decoder
+        .read_to_string(&mut xml)
+        .map_err(|error| format!("no se pudo descomprimir el archivo .als: {error}"))?;
+    if xml.trim_start().starts_with('<') {
+        Ok(xml)
+    } else {
+        Err("el archivo .als no contiene XML valido".to_string())
+    }
+}
+
+fn decode_tag_name(name: &[u8]) -> String {
+    let raw = String::from_utf8_lossy(name);
+    raw.rsplit(':').next().unwrap_or(raw.as_ref()).to_string()
+}
+
+fn collect_attributes(start: &BytesStart<'_>) -> Vec<(String, String)> {
+    start
+        .attributes()
+        .flatten()
+        .map(|attribute| {
+            (
+                String::from_utf8_lossy(attribute.key.as_ref()).to_string(),
+                String::from_utf8_lossy(attribute.value.as_ref()).to_string(),
+            )
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_ableton_node(
+    root: &Path,
+    stack: &[String],
+    tag: &str,
+    attributes: &[(String, String)],
+    is_empty: bool,
+    title: &mut Option<String>,
+    bpm: &mut Option<f64>,
+    signature_numerator: &mut Option<u32>,
+    signature_denominator: &mut Option<u32>,
+    current_track: &mut Option<AbletonTrackBuilder>,
+    current_clip: &mut Option<AbletonClipBuilder>,
+    current_locator: &mut Option<AbletonLocatorBuilder>,
+    section_markers: &mut Vec<ReaperSectionMarker>,
+    tempo_markers: &mut Vec<ReaperTempoMarker>,
+    time_signature_markers: &mut Vec<ReaperTimeSignatureMarker>,
+) {
+    if tag.eq_ignore_ascii_case("AudioTrack") {
+        *current_track = Some(AbletonTrackBuilder::default());
+        return;
+    }
+    if tag.eq_ignore_ascii_case("AudioClip") {
+        *current_clip = Some(AbletonClipBuilder::default());
+        return;
+    }
+    if tag.eq_ignore_ascii_case("Locator") {
+        *current_locator = Some(AbletonLocatorBuilder::default());
+        return;
+    }
+
+    let value = attributes
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("Value"))
+        .map(|(_, value)| value.as_str());
+
+    if tag.eq_ignore_ascii_case("FloatEvent") {
+        if let (Some(time), Some(marker_bpm)) = (
+            attr_f64(attributes, "Time"),
+            attr_f64(attributes, "Value").map(|value| value.max(20.0)),
+        ) {
+            if stack_contains(stack, "TempoAutomation") || stack_contains(stack, "Tempo") {
+                tempo_markers.push(ReaperTempoMarker {
+                    start_seconds: time.max(0.0),
+                    bpm: marker_bpm,
+                });
+            }
+        }
+    }
+
+    if tag.eq_ignore_ascii_case("TimeSignatureEvent") {
+        let time = attr_f64(attributes, "Time").unwrap_or(0.0).max(0.0);
+        let numerator = attr_u32(attributes, "Numerator");
+        let denominator = attr_u32(attributes, "Denominator");
+        if let (Some(n), Some(d)) = (numerator, denominator) {
+            if n > 0 && d > 0 {
+                time_signature_markers.push(ReaperTimeSignatureMarker {
+                    start_seconds: time,
+                    signature: format!("{n}/{d}"),
+                });
+            }
+        }
+    }
+
+    if let Some(track) = current_track.as_mut() {
+        if let Some(node_value) = value {
+            if tag.eq_ignore_ascii_case("EffectiveName") || tag.eq_ignore_ascii_case("UserName") {
+                if !node_value.trim().is_empty() {
+                    track.name = Some(node_value.trim().to_string());
+                }
+            }
+            if tag.eq_ignore_ascii_case("Manual") && parent_is(stack, "Volume") {
+                if let Ok(parsed) = node_value.parse::<f64>() {
+                    track.volume = parsed.max(0.0);
+                }
+            }
+            if tag.eq_ignore_ascii_case("Manual") && parent_is(stack, "Pan") {
+                if let Ok(parsed) = node_value.parse::<f64>() {
+                    track.pan = parsed.clamp(-1.0, 1.0);
+                }
+            }
+            if (tag.eq_ignore_ascii_case("On") || tag.eq_ignore_ascii_case("Mute"))
+                && parent_is(stack, "Mixer")
+            {
+                if let Ok(parsed) = node_value.parse::<f64>() {
+                    track.muted = parsed <= 0.0;
+                }
+            }
+            if tag.eq_ignore_ascii_case("Solo") && parent_is(stack, "Mixer") {
+                if let Ok(parsed) = node_value.parse::<f64>() {
+                    track.solo = parsed > 0.0;
+                }
+            }
+        }
+    }
+
+    if let Some(clip) = current_clip.as_mut() {
+        if let Some(node_value) = value {
+            if tag.eq_ignore_ascii_case("CurrentStart") {
+                clip.current_start = node_value.parse::<f64>().ok().map(|value| value.max(0.0));
+            } else if tag.eq_ignore_ascii_case("CurrentEnd") {
+                clip.current_end = node_value.parse::<f64>().ok().map(|value| value.max(0.0));
+            } else if tag.eq_ignore_ascii_case("StartRelative")
+                || tag.eq_ignore_ascii_case("SourceStart")
+                || tag.eq_ignore_ascii_case("Start")
+            {
+                clip.source_start_seconds =
+                    node_value.parse::<f64>().ok().map(|value| value.max(0.0));
+            } else if tag.eq_ignore_ascii_case("Path")
+                || tag.eq_ignore_ascii_case("FilePath")
+                || tag.eq_ignore_ascii_case("RelativePath")
+            {
+                if !node_value.trim().is_empty() {
+                    clip.file_path = Some(resolve_ableton_path(root, node_value));
+                }
+            } else if tag.eq_ignore_ascii_case("Manual") && parent_is(stack, "Volume") {
+                if let Ok(parsed) = node_value.parse::<f64>() {
+                    clip.gain = parsed.max(0.0);
+                }
+            }
+        }
+    }
+
+    if let Some(locator) = current_locator.as_mut() {
+        if let Some(node_value) = value {
+            if tag.eq_ignore_ascii_case("Name") {
+                if !node_value.trim().is_empty() {
+                    locator.name = Some(node_value.trim().to_string());
+                }
+            } else if tag.eq_ignore_ascii_case("Time") {
+                locator.time = node_value.parse::<f64>().ok().map(|value| value.max(0.0));
+            }
+        }
+    }
+
+    if let Some(node_value) = value {
+        if tag.eq_ignore_ascii_case("Manual") && parent_is(stack, "Tempo") {
+            if let Ok(parsed) = node_value.parse::<f64>() {
+                *bpm = Some(parsed.max(20.0));
+            }
+        }
+
+        if tag.eq_ignore_ascii_case("Name") && stack_contains(stack, "LiveSet") {
+            if title.is_none() && !node_value.trim().is_empty() {
+                *title = Some(node_value.trim().to_string());
+            }
+        }
+
+        if tag.eq_ignore_ascii_case("Numerator") && stack_contains(stack, "TimeSignature") {
+            *signature_numerator = node_value.parse::<u32>().ok().filter(|value| *value > 0);
+        }
+        if tag.eq_ignore_ascii_case("Denominator") && stack_contains(stack, "TimeSignature") {
+            *signature_denominator = node_value.parse::<u32>().ok().filter(|value| *value > 0);
+        }
+    }
+
+    if is_empty && tag.eq_ignore_ascii_case("Locator") {
+        if let Some(locator) = current_locator.take() {
+            if let Some(section) = build_ableton_locator(locator) {
+                section_markers.push(section);
+            }
+        }
+    }
+}
+
+fn build_ableton_item(builder: AbletonClipBuilder) -> Option<ReaperItem> {
+    let file_path = builder.file_path?;
+    let position_seconds = builder.current_start.unwrap_or(0.0).max(0.0);
+    let end_seconds = builder.current_end.unwrap_or(position_seconds);
+    let length_seconds = (end_seconds - position_seconds).max(0.0);
+    if length_seconds <= 0.0 {
+        return None;
+    }
+
+    Some(ReaperItem {
+        position_seconds,
+        length_seconds,
+        source_start_seconds: builder.source_start_seconds.unwrap_or(0.0).max(0.0),
+        source_path: file_path,
+        gain: builder.gain.max(0.0),
+        muted: false,
+    })
+}
+
+fn build_ableton_locator(locator: AbletonLocatorBuilder) -> Option<ReaperSectionMarker> {
+    let start_seconds = locator.time?.max(0.0);
+    let name = locator
+        .name
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "Marker".to_string());
+    Some(ReaperSectionMarker {
+        name,
+        start_seconds,
+    })
+}
+
+fn resolve_ableton_path(root: &Path, value: &str) -> PathBuf {
+    let path = Path::new(value);
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    root.join(path)
+}
+
+fn parent_is(stack: &[String], expected_parent: &str) -> bool {
+    stack
+        .last()
+        .map(|parent| parent.eq_ignore_ascii_case(expected_parent))
+        .unwrap_or(false)
+}
+
+fn stack_contains(stack: &[String], expected: &str) -> bool {
+    stack
+        .iter()
+        .any(|node| node.eq_ignore_ascii_case(expected))
+}
+
+fn attr_f64(attributes: &[(String, String)], key: &str) -> Option<f64> {
+    attributes
+        .iter()
+        .find(|(attribute_key, _)| attribute_key.eq_ignore_ascii_case(key))
+        .and_then(|(_, value)| value.parse::<f64>().ok())
+}
+
+fn attr_u32(attributes: &[(String, String)], key: &str) -> Option<u32> {
+    attributes
+        .iter()
+        .find(|(attribute_key, _)| attribute_key.eq_ignore_ascii_case(key))
+        .and_then(|(_, value)| value.parse::<u32>().ok())
+}
+
 #[derive(Debug, Clone)]
 enum ReaperProjectMarkerEvent {
     Section(ReaperSectionMarker),
@@ -688,6 +1253,21 @@ fn build_track(builder: ReaperTrackBuilder, index: usize) -> ReaperTrack {
     }
 }
 
+fn build_ableton_track(builder: AbletonTrackBuilder, index: usize) -> ReaperTrack {
+    ReaperTrack {
+        name: builder
+            .name
+            .map(|name| name.trim().to_string())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| format!("Track {}", index + 1)),
+        volume: builder.volume.max(0.0),
+        pan: builder.pan.clamp(-1.0, 1.0),
+        muted: builder.muted,
+        solo: builder.solo,
+        items: builder.items,
+    }
+}
+
 fn build_item(builder: ReaperItemBuilder) -> Option<ReaperItem> {
     let source_path = builder.source_path?;
     if builder.length_seconds <= 0.0 {
@@ -746,7 +1326,10 @@ fn resolve_source_path(root: &Path, value: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{detect_external_project_kind, parse_reaper_project, ExternalProjectKind};
+    use super::{
+        detect_external_project_kind, parse_ableton_project, parse_reaper_project,
+        ExternalProjectKind,
+    };
     use std::fs;
 
     #[test]
@@ -822,4 +1405,83 @@ mod tests {
         assert_eq!(parsed.tracks[0].items[0].source_start_seconds, 0.5);
         assert!(parsed.tracks[0].items[0].source_path.ends_with("audio/stem.wav"));
     }
+
+        #[test]
+        fn parses_ableton_tracks_and_locators() {
+                let temp = tempfile::tempdir().expect("tempdir");
+                let project_path = temp.path().join("demo.als");
+                let source_path = temp.path().join("audio").join("stem.wav");
+                fs::create_dir_all(source_path.parent().expect("audio dir")).expect("mkdir");
+                fs::write(&source_path, b"wav").expect("write wav");
+
+                let als = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Ableton>
+    <LiveSet>
+        <MasterTrack>
+            <Mixer>
+                <Tempo>
+                    <Manual Value="123.0"/>
+                </Tempo>
+            </Mixer>
+        </MasterTrack>
+        <Locators>
+            <Locator>
+                <Name Value="Intro"/>
+                <Time Value="4.0"/>
+            </Locator>
+            <Locator>
+                <Name Value="Verse"/>
+                <Time Value="12.0"/>
+            </Locator>
+        </Locators>
+        <Tracks>
+            <AudioTrack>
+                <Name>
+                    <EffectiveName Value="Pad"/>
+                </Name>
+                <DeviceChain>
+                    <Mixer>
+                        <Volume><Manual Value="0.75"/></Volume>
+                        <Pan><Manual Value="0.1"/></Pan>
+                        <On Value="1"/>
+                        <Solo Value="0"/>
+                    </Mixer>
+                    <MainSequencer>
+                        <ClipTimeable>
+                            <ArrangerAutomation>
+                                <Events>
+                                    <AudioClip>
+                                        <CurrentStart Value="8.0"/>
+                                        <CurrentEnd Value="16.0"/>
+                                        <StartRelative Value="0.5"/>
+                                        <SampleRef>
+                                            <FileRef>
+                                                <Path Value="audio/stem.wav"/>
+                                            </FileRef>
+                                        </SampleRef>
+                                    </AudioClip>
+                                </Events>
+                            </ArrangerAutomation>
+                        </ClipTimeable>
+                    </MainSequencer>
+                </DeviceChain>
+            </AudioTrack>
+        </Tracks>
+    </LiveSet>
+</Ableton>
+"#;
+                fs::write(&project_path, als).expect("write als");
+
+                let parsed = parse_ableton_project(&project_path).expect("parse ableton");
+                assert_eq!(parsed.bpm, Some(123.0));
+                assert_eq!(parsed.tracks.len(), 1);
+                assert_eq!(parsed.tracks[0].name, "Pad");
+                assert_eq!(parsed.tracks[0].items.len(), 1);
+                assert_eq!(parsed.tracks[0].items[0].position_seconds, 8.0);
+                assert_eq!(parsed.tracks[0].items[0].length_seconds, 8.0);
+                assert_eq!(parsed.section_markers.len(), 2);
+                assert_eq!(parsed.section_markers[0].name, "Intro");
+                assert_eq!(parsed.regions.len(), 1);
+                assert_eq!(parsed.regions[0].name, "Intro");
+        }
 }

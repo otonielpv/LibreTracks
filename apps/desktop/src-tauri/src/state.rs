@@ -34,7 +34,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::audio_engine::{jump_debug_logging_enabled, AudioController, PlaybackStartReason};
 use crate::error::DesktopError;
 use crate::external_project::{
-    detect_external_project_kind, parse_reaper_project, ExternalProjectKind, ReaperProject,
+    detect_external_project_kind, parse_ableton_project, parse_reaper_project,
+    ExternalProjectKind, ReaperProject,
 };
 use crate::midi::MidiManager;
 use crate::models::view::{
@@ -2760,10 +2761,11 @@ impl DesktopSession {
                     parse_reaper_project(project_path).map_err(DesktopError::AudioCommand)?;
                 self.import_reaper_project(parsed, insert_at_seconds, audio)
             }
-            ExternalProjectKind::Ableton => Err(DesktopError::AudioCommand(
-                "importacion de Ableton Live (.als) aun no implementada en esta version"
-                    .to_string(),
-            )),
+            ExternalProjectKind::Ableton => {
+                let parsed =
+                    parse_ableton_project(project_path).map_err(DesktopError::AudioCommand)?;
+                self.import_reaper_project(parsed, insert_at_seconds, audio)
+            }
         }
     }
 
