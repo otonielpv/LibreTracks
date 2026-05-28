@@ -1556,9 +1556,21 @@ fn load_resolved_song(
     let runtime_song = song_with_warped_timeline(song);
     let project_json = serde_json::to_string(&runtime_song)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    eprintln!(
+        "[libretracks-import] audio LoadSession dispatch clips={} tracks={} markers={} regions={} json_bytes={}",
+        runtime_song.clips.len(),
+        runtime_song.tracks.len(),
+        runtime_song.section_markers.len(),
+        runtime_song.regions.len(),
+        project_json.len()
+    );
     engine
         .send_command(&EngineCommand::LoadSession { project_json })
-        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        .map_err(|error| {
+            eprintln!("[libretracks-import] audio LoadSession failed: {error}");
+            DesktopError::AudioCommand(error.to_string())
+        })?;
+    eprintln!("[libretracks-import] audio LoadSession ok");
     state.loaded_session_signature = Some(signature);
     Ok(())
 }

@@ -47,6 +47,7 @@ pub fn pick_and_import_song_from_dialog(
 pub fn pick_and_import_external_project_from_dialog(
     state: State<'_, DesktopState>,
 ) -> Result<Option<SongPackageImportResponse>, String> {
+    eprintln!("[libretracks-import] command wizard import start");
     let target_pick = FileDialog::new()
         .add_filter("LibreTracks Session", &["ltsession"])
         .set_title("Elige donde guardar el proyecto importado")
@@ -54,8 +55,13 @@ pub fn pick_and_import_external_project_from_dialog(
         .save_file();
 
     let Some(target_pick) = target_pick else {
+        eprintln!("[libretracks-import] command wizard import cancelled at save target picker");
         return Ok(None);
     };
+    eprintln!(
+        "[libretracks-import] wizard target selected={} ",
+        target_pick.to_string_lossy()
+    );
 
     let picked_file = FileDialog::new()
         .add_filter("Proyecto Reaper", &["rpp"])
@@ -64,8 +70,13 @@ pub fn pick_and_import_external_project_from_dialog(
         .pick_file();
 
     let Some(project_file) = picked_file else {
+        eprintln!("[libretracks-import] command wizard import cancelled at external project picker");
         return Ok(None);
     };
+    eprintln!(
+        "[libretracks-import] wizard source selected={} ",
+        project_file.to_string_lossy()
+    );
 
     let mut session = state
         .session
@@ -79,12 +90,21 @@ pub fn pick_and_import_external_project_from_dialog(
             &state.audio,
         )
         .map_err(|error| error.to_string())?;
+    eprintln!("[libretracks-import] wizard import_external_project finished; saving-as target");
     let snapshot = session
         .save_project_as_to_path(&target_pick)
         .map_err(|error| error.to_string())?;
+    eprintln!(
+        "[libretracks-import] wizard save_project_as_to_path finished revision={}",
+        snapshot.project_revision
+    );
     let library_assets = session
         .get_library_assets()
         .map_err(|error| error.to_string())?;
+    eprintln!(
+        "[libretracks-import] command wizard import done assets={}",
+        library_assets.len()
+    );
 
     Ok(Some(SongPackageImportResponse {
         snapshot,
@@ -96,6 +116,7 @@ pub fn pick_and_import_external_project_from_dialog(
 pub fn pick_and_import_external_project_into_session_from_dialog(
     state: State<'_, DesktopState>,
 ) -> Result<Option<SongPackageImportResponse>, String> {
+    eprintln!("[libretracks-import] command session import start");
     let picked_file = FileDialog::new()
         .add_filter("Proyecto Reaper", &["rpp"])
         .add_filter("Proyecto Ableton Live", &["als"])
@@ -103,8 +124,13 @@ pub fn pick_and_import_external_project_into_session_from_dialog(
         .pick_file();
 
     let Some(project_file) = picked_file else {
+        eprintln!("[libretracks-import] command session import cancelled at external project picker");
         return Ok(None);
     };
+    eprintln!(
+        "[libretracks-import] session source selected={} ",
+        project_file.to_string_lossy()
+    );
 
     let mut session = state
         .session
@@ -118,6 +144,11 @@ pub fn pick_and_import_external_project_into_session_from_dialog(
             &state.audio,
         )
         .map_err(|error| error.to_string())?;
+    eprintln!(
+        "[libretracks-import] command session import done revision={} assets={}",
+        response.snapshot.project_revision,
+        response.library_assets.len()
+    );
 
     Ok(Some(response))
 }

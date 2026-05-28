@@ -2766,25 +2766,75 @@ impl DesktopSession {
         insert_at_seconds: f64,
         audio: &AudioController,
     ) -> Result<SongPackageImportResponse, DesktopError> {
+        let started_at = Instant::now();
         let project_path = Path::new(project_path);
+        eprintln!(
+            "[libretracks-import] begin external import path={} insert_at_seconds={:.3}",
+            project_path.to_string_lossy(),
+            insert_at_seconds
+        );
         let kind = detect_external_project_kind(project_path).ok_or_else(|| {
             DesktopError::AudioCommand(
                 "formato no soportado. Usa un .rpp (Reaper) o .als (Ableton Live)".into(),
             )
         })?;
+        eprintln!("[libretracks-import] detected kind={kind:?}");
 
-        match kind {
+        let result = match kind {
             ExternalProjectKind::Reaper => {
+                let parse_started = Instant::now();
                 let parsed =
                     parse_reaper_project(project_path).map_err(DesktopError::AudioCommand)?;
+                eprintln!(
+                    "[libretracks-import] parsed reaper title={} tracks={} regions={} markers={} tempo_markers={} time_signature_markers={} duration={:.3}s parse_ms={}",
+                    parsed.title,
+                    parsed.tracks.len(),
+                    parsed.regions.len(),
+                    parsed.section_markers.len(),
+                    parsed.tempo_markers.len(),
+                    parsed.time_signature_markers.len(),
+                    parsed.duration_seconds,
+                    parse_started.elapsed().as_millis()
+                );
                 self.import_reaper_project(parsed, insert_at_seconds, audio)
             }
             ExternalProjectKind::Ableton => {
+                let parse_started = Instant::now();
                 let parsed =
                     parse_ableton_project(project_path).map_err(DesktopError::AudioCommand)?;
+                eprintln!(
+                    "[libretracks-import] parsed ableton title={} tracks={} regions={} markers={} tempo_markers={} time_signature_markers={} duration={:.3}s parse_ms={}",
+                    parsed.title,
+                    parsed.tracks.len(),
+                    parsed.regions.len(),
+                    parsed.section_markers.len(),
+                    parsed.tempo_markers.len(),
+                    parsed.time_signature_markers.len(),
+                    parsed.duration_seconds,
+                    parse_started.elapsed().as_millis()
+                );
                 self.import_reaper_project(parsed, insert_at_seconds, audio)
             }
+        };
+
+        match &result {
+            Ok(response) => {
+                eprintln!(
+                    "[libretracks-import] external import completed revision={} assets={} total_ms={}",
+                    response.snapshot.project_revision,
+                    response.library_assets.len(),
+                    started_at.elapsed().as_millis()
+                );
+            }
+            Err(error) => {
+                eprintln!(
+                    "[libretracks-import] external import failed after {}ms: {error}",
+                    started_at.elapsed().as_millis()
+                );
+            }
         }
+
+        result
     }
 
     fn import_reaper_project(
@@ -2793,6 +2843,12 @@ impl DesktopSession {
         insert_at_seconds: f64,
         audio: &AudioController,
     ) -> Result<SongPackageImportResponse, DesktopError> {
+        let started_at = Instant::now();
+        eprintln!(
+            "[libretracks-import] import_reaper_project start title={} insert_at_seconds={:.3}",
+            project.title,
+            insert_at_seconds
+        );
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let current_song = self
             .engine
@@ -2820,6 +2876,10 @@ impl DesktopSession {
                 "el proyecto Reaper no contiene items de audio importables".into(),
             ));
         }
+        eprintln!(
+            "[libretracks-import] source discovery unique_paths={}",
+            source_paths.len()
+        );
 
         let import_payloads = source_paths
             .iter()
@@ -2843,6 +2903,10 @@ impl DesktopSession {
 
         let imported_assets =
             import_audio_files_from_paths_to_library(&song_dir, Some(&current_song), &import_payloads)?;
+        eprintln!(
+            "[libretracks-import] imported assets count={}",
+            imported_assets.len()
+        );
 
         let mut imported_path_by_source = HashMap::<String, String>::new();
         for (source_path, imported_asset) in source_paths.iter().zip(imported_assets.iter()) {
@@ -2914,6 +2978,11 @@ impl DesktopSession {
                 "no se pudieron convertir clips de Reaper".into(),
             ));
         }
+        eprintln!(
+            "[libretracks-import] arrangement materialized tracks_added={} clips_added={}",
+            next_song.tracks.len().saturating_sub(current_song.tracks.len()),
+            created_clip_count
+        );
 
         let is_empty_session = current_song.tracks.is_empty() && current_song.clips.is_empty();
 
@@ -3017,7 +3086,9 @@ impl DesktopSession {
             .duration_seconds
             .max(insert_at_seconds + project.duration_seconds.max(1.0));
 
+        eprintln!("[libretracks-import] persisting song update (structure rebuild)");
         self.persist_song_update(next_song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        eprintln!("[libretracks-import] persist_song_update completed");
 
         let loaded_song = self
             .engine
@@ -3025,10 +3096,20 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         self.prime_waveform_cache(&song_dir, &loaded_song)?;
+        eprintln!(
+            "[libretracks-import] waiting for sources ready timeout_ms={} ",
+            Duration::from_secs(120).as_millis()
+        );
         audio.wait_until_sources_ready(Duration::from_secs(120))?;
+        eprintln!("[libretracks-import] sources ready");
         self.ensure_project_waveforms_ready(&song_dir, &loaded_song, audio)?;
+        eprintln!("[libretracks-import] waveform readiness ensured");
         let runtime_position_seconds =
             self.runtime_seconds_for_engine_position(self.current_position());
+        eprintln!(
+            "[libretracks-import] prepare playback at runtime_position_seconds={:.3}",
+            runtime_position_seconds
+        );
         if let Err(error) = audio.prepare_playback_at(loaded_song, runtime_position_seconds) {
             eprintln!(
                 "[libretracks-import] prepare_playback_at failed after external import: {error}"
@@ -3036,6 +3117,11 @@ impl DesktopSession {
         }
 
         let library_assets = list_library_assets(&song_dir, self.engine.song())?;
+        eprintln!(
+            "[libretracks-import] import_reaper_project done assets={} total_ms={}",
+            library_assets.len(),
+            started_at.elapsed().as_millis()
+        );
         Ok(SongPackageImportResponse {
             snapshot: self.snapshot(),
             library_assets,
