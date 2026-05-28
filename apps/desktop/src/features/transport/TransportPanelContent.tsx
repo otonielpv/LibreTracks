@@ -2515,6 +2515,7 @@ export function TransportPanelContent() {
     handleCreateSongClick,
     handleOpenProjectClick,
     handleImportSongClick,
+    handleImportExternalProjectClick,
   } = useProjectActions({
     runAction,
     applyPlaybackSnapshot,
@@ -8080,6 +8081,7 @@ export function TransportPanelContent() {
           onCreateSong={handleCreateSongClick}
           onOpenProject={handleOpenProjectClick}
           onImportSong={handleImportSongClick}
+          onImportExternalProject={handleImportExternalProjectClick}
           onSaveProject={handleSaveProjectClick}
           onSaveProjectAs={handleSaveProjectAsClick}
           onStopTransport={() =>

@@ -322,6 +322,12 @@ export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
   return invokeCommand<TransportSnapshot | null>("pick_and_import_song_from_dialog");
 }
 
+export async function pickAndImportExternalProject(): Promise<SongPackageImportResponse | null> {
+  return invokeCommand<SongPackageImportResponse | null>(
+    "pick_and_import_external_project_from_dialog",
+  );
+}
+
 export async function importLibraryAssetsFromDialog(): Promise<LibraryAssetSummary[] | null> {
   return invokeCommand<LibraryAssetSummary[] | null>("import_library_assets_from_dialog");
 }

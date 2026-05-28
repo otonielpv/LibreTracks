@@ -100,6 +100,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     deleteSongTempoMarker: vi.fn(testDesktopApiMock.deleteSongTempoMarker),
     openProject: vi.fn(testDesktopApiMock.openProject),
     pickAndImportSong: vi.fn(testDesktopApiMock.pickAndImportSong),
+    pickAndImportExternalProject: vi.fn(testDesktopApiMock.pickAndImportExternalProject),
     importLibraryAssetsFromDialog: vi.fn(testDesktopApiMock.importLibraryAssetsFromDialog),
     importAudioFilesFromPaths: vi.fn(testDesktopApiMock.importAudioFilesFromPaths),
     importAudioFilesFromBytes: vi.fn(testDesktopApiMock.importAudioFilesFromBytes),

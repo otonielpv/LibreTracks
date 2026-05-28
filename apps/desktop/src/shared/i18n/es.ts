@@ -328,6 +328,8 @@ const es = {
       settingsLanguageSystem: "Idioma ajustado al predeterminado del sistema.",
       libraryImportStarting: "Preparando importacion de assets...",
       songImported: "Cancion importada en la sesion actual.",
+      externalProjectImported:
+        "Proyecto de Reaper/Ableton importado en la sesion actual.",
       packageImportedAt: "Paquete importado en {{time}}.",
       externalDropMixed:
         "Suelta un paquete de cancion o archivos de audio, no ambos.",
@@ -357,6 +359,7 @@ const es = {
     newProject: "Nuevo proyecto",
     open: "Abrir",
     importSong: "Importar cancion",
+    importExternalProject: "Importar Reaper/Ableton",
     save: "Guardar",
     saveAs: "Guardar como",
     bpmLabel: "BPM",

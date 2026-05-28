@@ -25,6 +25,7 @@ type TimelineTopbarProps = {
   onCreateSong: () => void;
   onOpenProject: () => void;
   onImportSong: () => void;
+  onImportExternalProject: () => void;
   onSaveProject: () => void;
   onSaveProjectAs: () => void;
   onStopTransport: () => void;
@@ -65,6 +66,7 @@ export function TimelineTopbar({
   onCreateSong,
   onOpenProject,
   onImportSong,
+  onImportExternalProject,
   onSaveProject,
   onSaveProjectAs,
   onStopTransport,
@@ -155,6 +157,19 @@ export function TimelineTopbar({
                   }}
                 >
                   <span>{t("timelineTopbar.importSong")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    if (learnModeActive) {
+                      onMidiLearnTarget("action:open_project");
+                      return;
+                    }
+                    onTopMenuAction(onImportExternalProject);
+                  }}
+                >
+                  <span>{t("timelineTopbar.importExternalProject")}</span>
                 </button>
                 <div className="lt-top-menu-separator" aria-hidden="true" />
                 <button
