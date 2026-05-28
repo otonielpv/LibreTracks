@@ -4037,6 +4037,36 @@ impl DesktopSession {
         self.last_native_scheduled_jump_executed_count = executed_count;
 
         let Some(pending_jump) = self.engine.pending_marker_jump().cloned() else {
+            if let Some(active_vamp) = self.engine.active_vamp().cloned() {
+                let source_song = self
+                    .engine
+                    .song()
+                    .cloned()
+                    .ok_or(DesktopError::NoSongLoaded)?;
+                let runtime_source_position =
+                    source_seconds_at_view(&source_song, snapshot.current_seconds.max(0.0));
+                if jump_debug_logging_enabled() {
+                    eprintln!(
+                        "[LT_JUMP_DEBUG][state] native_vamp_jump_completed runtime={:.9} vamp_start={:.9} vamp_end={:.9}",
+                        runtime_source_position,
+                        active_vamp.start_seconds,
+                        active_vamp.end_seconds
+                    );
+                }
+                self.engine
+                    .sync_position_preserving_transport_state(runtime_source_position)?;
+                self.transport_clock
+                    .note_jump_while_playing(runtime_source_position);
+                self.capture_transport_drift_sample(
+                    audio,
+                    "native_vamp_jump",
+                    runtime_source_position,
+                    runtime_source_position,
+                );
+                self.schedule_native_vamp_jump(audio, &source_song, &active_vamp)?;
+                return Ok(true);
+            }
+
             if jump_debug_logging_enabled() {
                 eprintln!("[LT_JUMP_DEBUG][state] native_count_without_pending_jump");
             }
