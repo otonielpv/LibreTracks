@@ -4553,7 +4553,11 @@ impl DesktopSession {
                 .load_waveform_summary_cached(song_dir, &key, true)
                 .is_err()
             {
-                let _ = self.load_native_waveform_summary(song_dir, &key, audio)?;
+                if let Err(error) = self.load_native_waveform_summary(song_dir, &key, audio) {
+                    eprintln!(
+                        "[libretracks-waveform] native peaks fallback failed for {key}: {error}"
+                    );
+                }
             }
         }
 
