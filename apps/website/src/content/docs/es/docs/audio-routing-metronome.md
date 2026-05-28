@@ -21,6 +21,8 @@ Desde la cabecera de cada pista puedes rutear a `Master` o directamente a cualqu
 
 Las pistas hijas dentro de una carpeta tambien pueden usar `Inherited (Folder)`. En ese modo, la hija sigue automaticamente la salida de la carpeta, asi puedes mover un grupo completo de click o guia entre buses cambiando solo la carpeta.
 
+Cuando anades o mueves un track dentro de una carpeta, LibreTracks ahora pone automaticamente esa pista en `Inherited (Folder)`. Despues puedes cambiar el routing manualmente en cualquier momento.
+
 ![Menu de routing de pista](/screenshots/Track-Audio-Route.png)
 
 Routing habitual:

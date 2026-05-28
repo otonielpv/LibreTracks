@@ -1466,9 +1466,14 @@ export const testDesktopApiMock = {
     }
 
     const block = tracks.splice(startIndex, endIndex - startIndex);
+    const nextParentTrackId = args.parentTrackId ?? null;
+    const previousParentTrackId = block[0]?.parentTrackId ?? null;
+    const shouldForceInheritRoute =
+      nextParentTrackId !== null && previousParentTrackId !== nextParentTrackId;
     block[0] = {
       ...block[0],
-      parentTrackId: args.parentTrackId ?? null,
+      parentTrackId: nextParentTrackId,
+      audioTo: shouldForceInheritRoute ? "inherit" : block[0].audioTo,
     };
 
     const insertIndex = args.insertBeforeTrackId
@@ -1491,7 +1496,7 @@ export const testDesktopApiMock = {
             }
           }
 
-          return getTrackInsertIndex(null, args.parentTrackId ?? null);
+          return getTrackInsertIndex(null, nextParentTrackId);
         })();
 
     tracks.splice(insertIndex, 0, ...block);

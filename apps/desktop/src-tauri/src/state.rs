@@ -5158,7 +5158,15 @@ fn reparent_track(
         return Err(DesktopError::InvalidTrackParent);
     }
 
+    let previous_parent_track_id = root_track.parent_track_id.clone();
+    let should_force_inherit_route =
+        parent_track_id.is_some() && previous_parent_track_id.as_deref() != parent_track_id;
+
     root_track.parent_track_id = parent_track_id.map(str::to_string);
+    if should_force_inherit_route {
+        root_track.audio_to = "inherit".to_string();
+    }
+
     let insert_index = resolve_insert_index(
         tracks,
         insert_after_track_id,
@@ -6469,6 +6477,58 @@ mod tests {
                 "track_child_a"
             ]
         );
+    }
+
+    #[test]
+    fn reparent_track_sets_inherit_route_when_entering_new_folder() {
+        let mut tracks = hierarchy_song().tracks;
+        let folder_b = tracks
+            .iter_mut()
+            .find(|track| track.id == "track_folder_b")
+            .expect("folder should exist");
+        folder_b.audio_to = "ext:2-3".to_string();
+
+        super::reparent_track(
+            &mut tracks,
+            "track_folder_b",
+            Some("track_child_a"),
+            None,
+            Some("track_folder_a"),
+        )
+        .expect("moving into a folder should succeed");
+
+        let moved = tracks
+            .iter()
+            .find(|track| track.id == "track_folder_b")
+            .expect("moved track should exist");
+        assert_eq!(moved.parent_track_id.as_deref(), Some("track_folder_a"));
+        assert_eq!(moved.audio_to, "inherit");
+    }
+
+    #[test]
+    fn reparent_track_keeps_manual_route_when_reordering_inside_same_folder() {
+        let mut tracks = hierarchy_song().tracks;
+        let child_a = tracks
+            .iter_mut()
+            .find(|track| track.id == "track_child_a")
+            .expect("child should exist");
+        child_a.audio_to = "ext:2-3".to_string();
+
+        super::reparent_track(
+            &mut tracks,
+            "track_child_a",
+            None,
+            Some("track_child_b"),
+            Some("track_folder_a"),
+        )
+        .expect("reordering inside same folder should succeed");
+
+        let moved = tracks
+            .iter()
+            .find(|track| track.id == "track_child_a")
+            .expect("moved track should exist");
+        assert_eq!(moved.parent_track_id.as_deref(), Some("track_folder_a"));
+        assert_eq!(moved.audio_to, "ext:2-3");
     }
 
     #[test]

@@ -21,6 +21,8 @@ Track headers can then route each track to `Master` or directly to any of the en
 
 Child tracks inside a folder can also use `Inherited (Folder)`. In that mode, the child follows the folder output automatically, so you can move a whole click or guide group between buses by changing the folder once.
 
+When you add or move a track into a folder, LibreTracks now sets that track route to `Inherited (Folder)` automatically. After that, you can still change the track route manually at any time.
+
 ![Track routing menu](/screenshots/Track-Audio-Route.png)
 
 Typical routing:
