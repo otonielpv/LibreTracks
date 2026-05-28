@@ -273,6 +273,7 @@ const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
 const TAP_TEMPO_RESET_MS = 2500;
 const TAP_TEMPO_MAX_TAPS = 8;
+const WAVEFORM_REQUEST_BATCH_SIZE = 4;
 const TIMELINE_COLOR_PRESETS = [
   { label: "Rojo", value: "#E35D5B" },
   { label: "Ambar", value: "#E0A83A" },
@@ -1025,6 +1026,7 @@ export function TransportPanelContent() {
   // one render — multiple revision bumps during the initial load can race
   // and all try to fetch waveforms before the first setSong commits.
   const waveformsHydratedRef = useRef(false);
+  const inFlightWaveformKeysRef = useRef(new Set<string>());
   // When the frontend applies a mutation optimistically (transpose, mute,
   // gain commit, …), it already knows the resulting state. We record the
   // backend project_revision that the mutation will produce so the
@@ -2402,6 +2404,8 @@ export function TransportPanelContent() {
         return;
       }
 
+      inFlightWaveformKeysRef.current.delete(event.waveformKey);
+
       setWaveformCache((current) => ({
         ...current,
         [event.waveformKey]: event.summary,
@@ -2640,6 +2644,7 @@ export function TransportPanelContent() {
         setSong(null);
         setIsProjectViewHydrating(false);
         waveformsHydratedRef.current = false;
+        inFlightWaveformKeysRef.current.clear();
         return;
       }
 
@@ -2701,6 +2706,7 @@ export function TransportPanelContent() {
           previousProjectIdentity.songId !== nextProjectIdentity.songId));
 
     if (shouldResetProjectScopedState) {
+      inFlightWaveformKeysRef.current.clear();
       setWaveformCache(
         Object.fromEntries(
           (song?.waveforms ?? []).map((summary) => [
@@ -2776,16 +2782,25 @@ export function TransportPanelContent() {
         )
         .filter((waveformKey) => {
           const summary = waveformCache[waveformKey];
-          return !summary;
+          return !summary && !inFlightWaveformKeysRef.current.has(waveformKey);
         });
 
       if (!missingWaveformKeys.length) {
         return;
       }
 
-      const summaries = await getLibraryWaveformSummaries(missingWaveformKeys);
+      const batchKeys = missingWaveformKeys.slice(0, WAVEFORM_REQUEST_BATCH_SIZE);
+      for (const waveformKey of batchKeys) {
+        inFlightWaveformKeysRef.current.add(waveformKey);
+      }
+
+      const summaries = await getLibraryWaveformSummaries(batchKeys);
       if (!active || !summaries.length) {
         return;
+      }
+
+      for (const summary of summaries) {
+        inFlightWaveformKeysRef.current.delete(summary.waveformKey);
       }
 
       setWaveformCache((current) => ({
@@ -2872,19 +2887,28 @@ export function TransportPanelContent() {
         )
         .filter((waveformKey) => {
           const summary = waveformCache[waveformKey];
-          return !summary;
+          return !summary && !inFlightWaveformKeysRef.current.has(waveformKey);
         });
 
       if (!missingWaveformKeys.length) {
         return;
       }
 
-      const summaries = await getWaveformSummaries(missingWaveformKeys);
+      const batchKeys = missingWaveformKeys.slice(0, WAVEFORM_REQUEST_BATCH_SIZE);
+      for (const waveformKey of batchKeys) {
+        inFlightWaveformKeysRef.current.add(waveformKey);
+      }
+
+      const summaries = await getWaveformSummaries(batchKeys);
       if (!active) {
         return;
       }
       if (!summaries.length) {
         return;
+      }
+
+      for (const summary of summaries) {
+        inFlightWaveformKeysRef.current.delete(summary.waveformKey);
       }
 
       setWaveformCache((current) => ({
