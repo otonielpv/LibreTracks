@@ -51,6 +51,12 @@ pub struct ReaperTimeSignatureMarker {
 }
 
 #[derive(Debug, Clone)]
+struct ReaperRegionBoundary {
+    name: String,
+    start_seconds: f64,
+}
+
+#[derive(Debug, Clone)]
 pub struct ReaperTrack {
     pub name: String,
     pub volume: f64,
@@ -136,6 +142,7 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
     let mut time_signature = None;
     let mut section_markers = Vec::<ReaperSectionMarker>::new();
     let mut regions = Vec::<ReaperRegion>::new();
+    let mut region_boundaries = Vec::<ReaperRegionBoundary>::new();
     let mut tempo_markers = Vec::<ReaperTempoMarker>::new();
     let mut time_signature_markers = Vec::<ReaperTimeSignatureMarker>::new();
     let mut tracks = Vec::new();
@@ -315,6 +322,9 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
                     match event {
                         ReaperProjectMarkerEvent::Section(section) => section_markers.push(section),
                         ReaperProjectMarkerEvent::Region(region) => regions.push(region),
+                        ReaperProjectMarkerEvent::RegionBoundary(boundary) => {
+                            region_boundaries.push(boundary)
+                        }
                     }
                 }
                 continue;
@@ -342,6 +352,20 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
         return Err("el proyecto Reaper no contiene pistas importables".to_string());
     }
 
+    let source_duration_seconds = tracks
+        .iter()
+        .flat_map(|track| track.items.iter())
+        .map(|item| item.position_seconds + item.length_seconds)
+        .fold(0.0_f64, f64::max)
+        .max(1.0);
+
+    if !region_boundaries.is_empty() {
+        regions.extend(build_regions_from_boundaries(
+            &region_boundaries,
+            source_duration_seconds,
+        ));
+    }
+
     normalize_section_markers(&mut section_markers);
     normalize_regions(&mut regions);
     normalize_tempo_markers(&mut tempo_markers);
@@ -366,11 +390,7 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
             });
     }
 
-    let duration_seconds = tracks
-        .iter()
-        .flat_map(|track| track.items.iter())
-        .map(|item| item.position_seconds + item.length_seconds)
-        .fold(0.0_f64, f64::max)
+    let duration_seconds = source_duration_seconds
         .max(
             regions
                 .iter()
@@ -982,6 +1002,7 @@ fn attr_u32(attributes: &[(String, String)], key: &str) -> Option<u32> {
 enum ReaperProjectMarkerEvent {
     Section(ReaperSectionMarker),
     Region(ReaperRegion),
+    RegionBoundary(ReaperRegionBoundary),
 }
 
 #[derive(Debug, Clone)]
@@ -1010,15 +1031,20 @@ fn parse_project_marker_line(line: &str) -> Option<ReaperProjectMarkerEvent> {
         .unwrap_or(0);
 
     if region_flag == 1 {
-        let end_seconds = tokens
-            .get(5)
-            .and_then(|value| value.parse::<f64>().ok())
-            .map(|value| value.max(start_seconds + 0.001))
-            .unwrap_or(start_seconds + 0.001);
-        return Some(ReaperProjectMarkerEvent::Region(ReaperRegion {
+        let explicit_end = tokens.get(5).and_then(|value| value.parse::<f64>().ok());
+        if let Some(end_seconds) = explicit_end {
+            if end_seconds > start_seconds + 0.001 {
+                return Some(ReaperProjectMarkerEvent::Region(ReaperRegion {
+                    name,
+                    start_seconds,
+                    end_seconds,
+                }));
+            }
+        }
+
+        return Some(ReaperProjectMarkerEvent::RegionBoundary(ReaperRegionBoundary {
             name,
             start_seconds,
-            end_seconds,
         }));
     }
 
@@ -1154,6 +1180,60 @@ fn normalize_regions(regions: &mut Vec<ReaperRegion>) {
         deduped.push(region);
     }
     *regions = deduped;
+}
+
+fn build_regions_from_boundaries(
+    boundaries: &[ReaperRegionBoundary],
+    source_duration_seconds: f64,
+) -> Vec<ReaperRegion> {
+    let mut sorted = boundaries.to_vec();
+    sorted.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut deduped = Vec::<ReaperRegionBoundary>::new();
+    for boundary in sorted {
+        if let Some(existing) = deduped
+            .iter_mut()
+            .find(|existing| (existing.start_seconds - boundary.start_seconds).abs() <= 0.0001)
+        {
+            if existing.name.trim().is_empty() && !boundary.name.trim().is_empty() {
+                existing.name = boundary.name;
+            }
+            continue;
+        }
+        deduped.push(boundary);
+    }
+
+    let mut regions = Vec::<ReaperRegion>::new();
+    for (index, boundary) in deduped.iter().enumerate() {
+        let next_start = deduped
+            .get(index + 1)
+            .map(|next| next.start_seconds)
+            .unwrap_or(source_duration_seconds)
+            .max(boundary.start_seconds + 0.001);
+
+        let has_next = deduped.get(index + 1).is_some();
+        if !has_next && boundary.name.trim().is_empty() {
+            continue;
+        }
+
+        let region_name = if boundary.name.trim().is_empty() {
+            format!("Region {}", index + 1)
+        } else {
+            boundary.name.clone()
+        };
+
+        regions.push(ReaperRegion {
+            name: region_name,
+            start_seconds: boundary.start_seconds.max(0.0),
+            end_seconds: next_start,
+        });
+    }
+
+    regions
 }
 
 fn normalize_tempo_markers(markers: &mut Vec<ReaperTempoMarker>) {
@@ -1405,6 +1485,47 @@ mod tests {
         assert_eq!(parsed.tracks[0].items[0].source_start_seconds, 0.5);
         assert!(parsed.tracks[0].items[0].source_path.ends_with("audio/stem.wav"));
     }
+
+        #[test]
+        fn parses_reaper_region_boundaries_without_explicit_end_times() {
+                let temp = tempfile::tempdir().expect("tempdir");
+                let project_path = temp.path().join("demo-boundaries.rpp");
+                let source_path = temp.path().join("audio").join("stem.wav");
+                fs::create_dir_all(source_path.parent().expect("audio dir")).expect("mkdir");
+                fs::write(&source_path, b"wav").expect("write wav");
+
+                let rpp = r#"
+<REAPER_PROJECT 0.1 "7.09/win64" 1779953811
+    TEMPO 130 4 4
+    MARKER 1 0 "Song Name" 1 0 1 R {AAAA} 0
+    MARKER 1 252.92307692307693 "" 1
+    MARKER 2 12.92307692307692 Intro 0 0 1 R {BBBB} 0
+    MARKER 3 31.38461538461538 Verso 0 0 1 R {CCCC} 0
+    <TRACK
+        NAME "CLICK"
+        <ITEM
+            POSITION 0
+            LENGTH 252.93697916666665
+            SOFFS 0
+            VOLPAN 1 0 0 0 0
+            <SOURCE MP3
+                FILE "audio/stem.wav" 1
+            >
+        >
+    >
+>
+"#;
+                fs::write(&project_path, rpp).expect("write rpp");
+
+                let parsed = parse_reaper_project(&project_path).expect("parse");
+                assert_eq!(parsed.bpm, Some(130.0));
+                assert_eq!(parsed.section_markers.len(), 2);
+                assert_eq!(parsed.section_markers[0].name, "Intro");
+                assert_eq!(parsed.regions.len(), 1);
+                assert_eq!(parsed.regions[0].name, "Song Name");
+                assert!((parsed.regions[0].start_seconds - 0.0).abs() < 0.0001);
+                assert!((parsed.regions[0].end_seconds - 252.92307692307693).abs() < 0.001);
+        }
 
         #[test]
         fn parses_ableton_tracks_and_locators() {
