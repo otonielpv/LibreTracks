@@ -524,7 +524,7 @@ impl AudioEngine {
                         active_vamp.end_seconds
                     );
                 }
-                next_position = active_vamp.start_seconds + overshoot.rem_euclid(vamp_duration);
+                next_position = active_vamp.start_seconds;
             }
         }
 
@@ -1749,7 +1749,7 @@ mod tests {
     }
 
     #[test]
-    fn advance_transport_wraps_inside_the_active_vamp_using_overshoot() {
+    fn advance_transport_wraps_inside_the_active_vamp_to_vamp_start() {
         let mut engine = AudioEngine::new();
         engine.load_song(demo_song()).expect("song should load");
         engine.seek(6.5).expect("seek should work");
@@ -1761,7 +1761,7 @@ mod tests {
             .advance_transport(2.0)
             .expect("transport should wrap inside vamp");
 
-        assert!((position - 0.5).abs() < 0.0001);
+        assert!((position - 0.0).abs() < 0.0001);
         assert!(!jump_executed);
     }
 

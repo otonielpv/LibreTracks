@@ -3888,17 +3888,17 @@ impl DesktopSession {
 
         let elapsed = self.transport_clock.elapsed_since_anchor();
         let previous_position = self.engine.position_seconds();
-        let wrapped_by_vamp = self
-            .engine
-            .active_vamp()
-            .map(|active_vamp| previous_position + elapsed >= active_vamp.end_seconds)
-            .unwrap_or(false);
+        let wrapped_vamp_start = self.engine.active_vamp().and_then(|active_vamp| {
+            (previous_position + elapsed >= active_vamp.end_seconds)
+                .then_some(active_vamp.start_seconds)
+        });
+        let wrapped_by_vamp = wrapped_vamp_start.is_some();
         let source_song = self
             .engine
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let (advanced_position, jump_executed) = self
+        let (mut advanced_position, jump_executed) = self
             .engine
             .advance_transport_with_song(&source_song, elapsed)?;
 
@@ -3934,6 +3934,21 @@ impl DesktopSession {
 
             self.transport_clock.reanchor_playing(advanced_position);
             return Ok(());
+        }
+
+        if wrapped_by_vamp && !jump_executed {
+            if let Some(vamp_start_seconds) = wrapped_vamp_start {
+                if jump_debug_logging_enabled() {
+                    eprintln!(
+                        "[LT_JUMP_DEBUG][state] vamp_wrap_quantized previous={:.9} computed={:.9} quantized={:.9}",
+                        previous_position,
+                        advanced_position,
+                        vamp_start_seconds
+                    );
+                }
+                self.engine.seek(vamp_start_seconds)?;
+                advanced_position = vamp_start_seconds;
+            }
         }
 
         if jump_executed || wrapped_by_vamp {
