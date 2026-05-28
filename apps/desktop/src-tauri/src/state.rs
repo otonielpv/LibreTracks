@@ -536,6 +536,55 @@ struct WaveformCacheToken {
 }
 
 impl DesktopSession {
+    pub fn ensure_song_loaded_for_external_import(
+        &mut self,
+        app: &AppHandle,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        if self.engine.song().is_some() {
+            return Ok(());
+        }
+
+        let base_dir = project_root(app).join("imports");
+        fs::create_dir_all(&base_dir)?;
+
+        let mut attempt = 0_u32;
+        let (song_dir, song_file_path) = loop {
+            let suffix = timestamp_suffix();
+            let folder_name = if attempt == 0 {
+                format!("import-session-{suffix}")
+            } else {
+                format!("import-session-{suffix}-{attempt}")
+            };
+            let candidate_dir = base_dir.join(&folder_name);
+            if !candidate_dir.exists() {
+                break (
+                    candidate_dir.clone(),
+                    candidate_dir.join("import-session.ltsession"),
+                );
+            }
+            attempt = attempt.saturating_add(1);
+        };
+
+        fs::create_dir_all(song_dir.join("audio"))?;
+        fs::create_dir_all(song_dir.join("cache").join("waveforms"))?;
+        write_library_manifest(&song_dir, &[])?;
+
+        let song = build_empty_song(
+            format!("song_import_{}", timestamp_suffix()),
+            "Import Reaper/Ableton".to_string(),
+        );
+        save_song_to_file(&song_file_path, &song)?;
+        self.load_song_from_path(song, song_dir, audio)?;
+        self.song_file_path = Some(song_file_path);
+
+        eprintln!(
+            "[libretracks-import] bootstrap empty session created for wizard import"
+        );
+
+        Ok(())
+    }
+
     pub fn create_song(
         &mut self,
         app: &AppHandle,

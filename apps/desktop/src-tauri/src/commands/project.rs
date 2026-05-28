@@ -45,6 +45,7 @@ pub fn pick_and_import_song_from_dialog(
 
 #[tauri::command]
 pub fn pick_and_import_external_project_from_dialog(
+    app: AppHandle,
     state: State<'_, DesktopState>,
 ) -> Result<Option<SongPackageImportResponse>, String> {
     eprintln!("[libretracks-import] command wizard import start");
@@ -82,6 +83,9 @@ pub fn pick_and_import_external_project_from_dialog(
         .session
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .ensure_song_loaded_for_external_import(&app, &state.audio)
+        .map_err(|error| error.to_string())?;
     let insert_at_seconds = session.transport_position_seconds();
     session
         .import_external_project(
