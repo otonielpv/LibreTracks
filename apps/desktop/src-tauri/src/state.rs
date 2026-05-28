@@ -3184,6 +3184,10 @@ impl DesktopSession {
             self.last_transport_pitch_sync_at = Some(now);
         }
 
+        if playback_is_running {
+            return Ok(self.snapshot_with_runtime_transport(audio));
+        }
+
         Ok(self.snapshot())
     }
 
