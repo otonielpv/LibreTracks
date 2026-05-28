@@ -31,7 +31,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::to_vec;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::audio_engine::{jump_debug_logging_enabled, AudioController, PlaybackStartReason};
+use crate::audio_engine::{
+    audio_debug_logging_enabled, jump_debug_logging_enabled, AudioController, PlaybackStartReason,
+};
 use crate::error::DesktopError;
 use crate::external_project::{
     detect_external_project_kind, parse_ableton_project, parse_reaper_project,
@@ -2773,6 +2775,14 @@ impl DesktopSession {
             project_path.to_string_lossy(),
             insert_at_seconds
         );
+        let audio_debug_raw = std::env::var("LIBRETRACKS_AUDIO_DEBUG")
+            .ok()
+            .unwrap_or_else(|| "<unset>".to_string());
+        let audio_debug_enabled = audio_debug_logging_enabled();
+        eprintln!(
+            "[libretracks-import] env LIBRETRACKS_AUDIO_DEBUG raw={} enabled={}",
+            audio_debug_raw, audio_debug_enabled
+        );
         let kind = detect_external_project_kind(project_path).ok_or_else(|| {
             DesktopError::AudioCommand(
                 "formato no soportado. Usa un .rpp (Reaper) o .als (Ableton Live)".into(),
@@ -2928,20 +2938,57 @@ impl DesktopSession {
             .map(|clip| clip.id.clone())
             .collect::<HashSet<_>>();
 
+        let import_debug_enabled = audio_debug_logging_enabled();
+        if import_debug_enabled {
+            let mut simulated_depth = 0_i32;
+            let mut max_depth = 0_i32;
+            let mut folder_tracks = 0_usize;
+            for track in &project.tracks {
+                if track.folder_depth_delta > 0 {
+                    folder_tracks += 1;
+                }
+                simulated_depth = (simulated_depth + track.folder_depth_delta).max(0);
+                max_depth = max_depth.max(simulated_depth);
+            }
+            eprintln!(
+                "[libretracks-import] debug hierarchy input_tracks={} folder_tracks={} max_folder_depth={}",
+                project.tracks.len(),
+                folder_tracks,
+                max_depth
+            );
+        }
+
         let mut created_clip_count = 0usize;
+        let mut folder_stack = Vec::<String>::new();
         for track in project.tracks {
+            let parent_track_id = folder_stack.last().cloned();
             let track_id = unique_song_entity_id("track", &track.name, &mut used_track_ids);
+            if import_debug_enabled {
+                eprintln!(
+                    "[libretracks-import] debug track name={} parent={} folder_depth_delta={} items={}",
+                    track.name,
+                    parent_track_id
+                        .as_deref()
+                        .unwrap_or("<none>"),
+                    track.folder_depth_delta,
+                    track.items.len()
+                );
+            }
             next_song.tracks.push(Track {
                 id: track_id.clone(),
                 name: track.name.clone(),
                 kind: TrackKind::Audio,
-                parent_track_id: None,
+                parent_track_id: parent_track_id.clone(),
                 volume: track.volume.max(0.0),
                 pan: track.pan.clamp(-1.0, 1.0),
                 muted: track.muted,
                 solo: track.solo,
                 transpose_enabled: true,
-                audio_to: "master".to_string(),
+                audio_to: if parent_track_id.is_some() {
+                    "inherit".to_string()
+                } else {
+                    "master".to_string()
+                },
                 color: None,
             });
 
@@ -2970,6 +3017,26 @@ impl DesktopSession {
                     color: None,
                 });
                 created_clip_count += 1;
+            }
+
+            if track.folder_depth_delta > 0 {
+                for _ in 0..track.folder_depth_delta {
+                    folder_stack.push(track_id.clone());
+                }
+            } else if track.folder_depth_delta < 0 {
+                for _ in 0..(-track.folder_depth_delta) {
+                    if folder_stack.pop().is_none() {
+                        break;
+                    }
+                }
+            }
+
+            if import_debug_enabled {
+                eprintln!(
+                    "[libretracks-import] debug folder_stack_depth={} after track_id={}",
+                    folder_stack.len(),
+                    track_id
+                );
             }
         }
 

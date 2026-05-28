@@ -63,6 +63,7 @@ pub struct ReaperTrack {
     pub pan: f64,
     pub muted: bool,
     pub solo: bool,
+    pub folder_depth_delta: i32,
     pub items: Vec<ReaperItem>,
 }
 
@@ -83,6 +84,7 @@ struct ReaperTrackBuilder {
     pan: f64,
     muted: bool,
     solo: bool,
+    folder_depth_delta: i32,
     items: Vec<ReaperItem>,
 }
 
@@ -94,6 +96,7 @@ impl Default for ReaperTrackBuilder {
             pan: 0.0,
             muted: false,
             solo: false,
+            folder_depth_delta: 0,
             items: Vec::new(),
         }
     }
@@ -300,6 +303,14 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
                     .and_then(|value| value.parse::<i32>().ok())
                     .map(|value| value != 0)
                     .unwrap_or(false);
+                continue;
+            }
+            if line.starts_with("I_FOLDERDEPTH ") {
+                let parts = tokenize_space_separated(line);
+                track.folder_depth_delta = parts
+                    .get(1)
+                    .and_then(|value| value.parse::<i32>().ok())
+                    .unwrap_or(0);
                 continue;
             }
         } else {
@@ -1349,6 +1360,7 @@ fn build_track(builder: ReaperTrackBuilder, index: usize) -> ReaperTrack {
         pan: builder.pan.clamp(-1.0, 1.0),
         muted: builder.muted,
         solo: builder.solo,
+        folder_depth_delta: builder.folder_depth_delta,
         items: builder.items,
     }
 }
@@ -1364,6 +1376,7 @@ fn build_ableton_track(builder: AbletonTrackBuilder, index: usize) -> ReaperTrac
         pan: builder.pan.clamp(-1.0, 1.0),
         muted: builder.muted,
         solo: builder.solo,
+        folder_depth_delta: 0,
         items: builder.items,
     }
 }
@@ -1504,6 +1517,45 @@ mod tests {
         assert_eq!(parsed.tracks[0].items[0].length_seconds, 8.0);
         assert_eq!(parsed.tracks[0].items[0].source_start_seconds, 0.5);
         assert!(parsed.tracks[0].items[0].source_path.ends_with("audio/stem.wav"));
+                assert_eq!(parsed.tracks[0].folder_depth_delta, 0);
+        }
+
+        #[test]
+        fn parses_reaper_folder_depth_hierarchy_markers() {
+                let temp = tempfile::tempdir().expect("tempdir");
+                let project_path = temp.path().join("demo-folders.rpp");
+                let source_path = temp.path().join("audio").join("stem.wav");
+                fs::create_dir_all(source_path.parent().expect("audio dir")).expect("mkdir");
+                fs::write(&source_path, b"wav").expect("write wav");
+
+                let rpp = r#"
+<REAPER_PROJECT 0.1 "7.0/x64" 1710000000
+    <TRACK
+        NAME "Folder"
+        I_FOLDERDEPTH 1
+    >
+    <TRACK
+        NAME "Child"
+        I_FOLDERDEPTH -1
+        <ITEM
+            POSITION 1.0
+            LENGTH 2.0
+            <SOURCE WAVE
+                FILE "audio/stem.wav"
+            >
+        >
+    >
+>
+"#;
+                fs::write(&project_path, rpp).expect("write rpp");
+
+                let parsed = parse_reaper_project(&project_path).expect("parse");
+                assert_eq!(parsed.tracks.len(), 2);
+                assert_eq!(parsed.tracks[0].name, "Folder");
+                assert_eq!(parsed.tracks[0].folder_depth_delta, 1);
+                assert_eq!(parsed.tracks[1].name, "Child");
+                assert_eq!(parsed.tracks[1].folder_depth_delta, -1);
+                assert_eq!(parsed.tracks[1].items.len(), 1);
     }
 
         #[test]
