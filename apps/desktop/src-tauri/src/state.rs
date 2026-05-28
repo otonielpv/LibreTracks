@@ -9,7 +9,8 @@ use std::{
 };
 
 use libretracks_audio::{
-    AudioEngine, JumpTrigger, PendingMarkerJump, PlaybackState, TransitionType, VampMode,
+    ActiveVamp, AudioEngine, JumpTrigger, PendingMarkerJump, PlaybackState, TransitionType,
+    VampMode,
 };
 use libretracks_core::{
     audible_clip_duration_seconds, effective_bpm_at, region_warp_ratio_in_song, source_seconds_at_view,
@@ -1664,7 +1665,45 @@ impl DesktopSession {
         self.engine.cancel_section_jump();
         audio.cancel_scheduled_jumps()?;
         self.engine.toggle_vamp(mode)?;
+        if self.engine.playback_state() == PlaybackState::Playing {
+            if let (Some(source_song), Some(active_vamp)) =
+                (self.engine.song(), self.engine.active_vamp())
+            {
+                self.schedule_native_vamp_jump(audio, source_song, active_vamp)?;
+            }
+        }
         Ok(self.snapshot())
+    }
+
+    fn schedule_native_vamp_jump(
+        &self,
+        audio: &AudioController,
+        source_song: &Song,
+        active_vamp: &ActiveVamp,
+    ) -> Result<(), DesktopError> {
+        let trigger_seconds = warp_timeline_seconds_at(source_song, active_vamp.end_seconds);
+        let target_seconds =
+            Some(warp_timeline_seconds_at(source_song, active_vamp.start_seconds));
+        if jump_debug_logging_enabled() {
+            eprintln!(
+                "[LT_JUMP_DEBUG][state] native_vamp_schedule source_start={:.9} source_end={:.9} view_trigger={:.9} view_target={:.9}",
+                active_vamp.start_seconds,
+                active_vamp.end_seconds,
+                trigger_seconds,
+                target_seconds.unwrap_or(trigger_seconds)
+            );
+        }
+        audio.schedule_jump_at_frame(
+            "__lt_vamp_loop__",
+            NativeJumpTarget {
+                kind: NativeJumpTargetKind::Frame,
+                id: None,
+                frame: None,
+            },
+            trigger_seconds,
+            target_seconds,
+            true,
+        )
     }
 
     fn schedule_native_marker_jump(
@@ -3881,6 +3920,12 @@ impl DesktopSession {
                 .sync_position_preserving_transport_state(runtime_source_position)?;
             self.transport_clock
                 .reanchor_playing(runtime_source_position);
+            if let (Some(source_song), Some(active_vamp)) =
+                (self.engine.song(), self.engine.active_vamp())
+            {
+                self.schedule_native_vamp_jump(audio, source_song, active_vamp)?;
+                return Ok(());
+            }
             if self.engine.pending_marker_jump().is_some() {
                 return Ok(());
             }
