@@ -208,7 +208,14 @@ export function useProjectActions({
           applyPlaybackSnapshot(result.snapshot);
           await refreshLibraryState({ preserveAssets: result.libraryAssets ?? undefined });
           setActiveSidebarTab(null);
-          setStatus(t("transport.status.externalProjectImported"));
+          setStatus(
+            result.snapshot.songFilePath
+              ? t("transport.status.externalProjectImportedAndSavedAt", {
+                  path: result.snapshot.songFilePath,
+                })
+              : t("transport.status.externalProjectImportedAndSaved"),
+          );
+
           if (nextSong) {
             await nextPaint();
             setProjectViewHydrating(false);

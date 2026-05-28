@@ -49,6 +49,7 @@ const en = {
       emptyTitle: "Create or open a session",
       emptyDescription:
         "Start a new session or open an existing one. Import WAV assets later from the Library panel and drag them onto the timeline only when you want to arrange them.",
+      choosingProjectLocation: "Choose where to save the imported project...",
       pendingJump: "Armed: {{markerName}} | {{trigger}}",
       contextSelectionTitle: "Selection {{start}} - {{end}}",
       contextTimelineTitle: "Timeline {{time}}",
@@ -317,6 +318,12 @@ const en = {
       songImported: "Song imported into the current session.",
       externalProjectImported:
         "Reaper/Ableton project imported into the current session.",
+      externalProjectImportedAndSaved:
+        "Reaper/Ableton project imported and saved.",
+      externalProjectImportedAndSavedAt:
+        "Reaper/Ableton project imported and saved to {{path}}.",
+      externalProjectImportedNeedsSave:
+        "Reaper/Ableton project imported. Save it with Save As when ready.",
       packageImportedAt: "Package imported at {{time}}.",
       externalDropMixed: "Drop either a song package or audio files, not both.",
       externalDropUnsupported:

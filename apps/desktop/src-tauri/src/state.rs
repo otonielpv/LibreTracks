@@ -672,7 +672,6 @@ impl DesktopSession {
     }
 
     pub fn save_project_as(&mut self) -> Result<Option<TransportSnapshot>, DesktopError> {
-        let source_song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let song = self
             .engine
             .song()
@@ -688,6 +687,21 @@ impl DesktopSession {
         let Some(target_pick) = target_pick else {
             return Ok(None);
         };
+
+        let snapshot = self.save_project_as_to_path(&target_pick)?;
+        Ok(Some(snapshot))
+    }
+
+    pub fn save_project_as_to_path(
+        &mut self,
+        target_pick: &Path,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let source_song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
 
         // Save As mirrors Create: the user picks <name>.ltsession in any
         // folder, and we create a <name>/ subfolder containing the session
@@ -733,7 +747,7 @@ impl DesktopSession {
         self.song_file_path = Some(target_song_file);
         self.prime_waveform_cache(&target_song_dir, &song)?;
 
-        Ok(Some(self.snapshot()))
+        Ok(self.snapshot())
     }
 
     pub fn open_project_from_dialog(

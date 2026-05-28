@@ -47,6 +47,16 @@ pub fn pick_and_import_song_from_dialog(
 pub fn pick_and_import_external_project_from_dialog(
     state: State<'_, DesktopState>,
 ) -> Result<Option<SongPackageImportResponse>, String> {
+    let target_pick = FileDialog::new()
+        .add_filter("LibreTracks Session", &["ltsession"])
+        .set_title("Elige donde guardar el proyecto importado")
+        .set_file_name("Proyecto importado.ltsession")
+        .save_file();
+
+    let Some(target_pick) = target_pick else {
+        return Ok(None);
+    };
+
     let picked_file = FileDialog::new()
         .add_filter("Proyecto Reaper", &["rpp"])
         .add_filter("Proyecto Ableton Live", &["als"])
@@ -62,14 +72,24 @@ pub fn pick_and_import_external_project_from_dialog(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
     let insert_at_seconds = session.transport_position_seconds();
-    let response = session
+    session
         .import_external_project(
             project_file.to_string_lossy().as_ref(),
             insert_at_seconds,
             &state.audio,
         )
         .map_err(|error| error.to_string())?;
-    Ok(Some(response))
+    let snapshot = session
+        .save_project_as_to_path(&target_pick)
+        .map_err(|error| error.to_string())?;
+    let library_assets = session
+        .get_library_assets()
+        .map_err(|error| error.to_string())?;
+
+    Ok(Some(SongPackageImportResponse {
+        snapshot,
+        library_assets,
+    }))
 }
 
 #[tauri::command]
