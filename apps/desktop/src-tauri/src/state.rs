@@ -3077,6 +3077,7 @@ impl DesktopSession {
         }
 
         normalize_imported_section_markers(&mut next_song.section_markers);
+        ensure_unique_imported_song_entity_ids(&mut next_song);
         next_song.regions.sort_by(|left, right| {
             left.start_seconds
                 .partial_cmp(&right.start_seconds)
@@ -3085,6 +3086,30 @@ impl DesktopSession {
         next_song.duration_seconds = next_song
             .duration_seconds
             .max(insert_at_seconds + project.duration_seconds.max(1.0));
+
+        // Engine session validation requires markers to be strictly inside the
+        // song range (`marker.frame < song.end_frame`) and regions to be
+        // bounded by song end. External DAWs often place a marker exactly at
+        // project end, so clamp imported boundaries to a safe epsilon.
+        let max_timeline_seconds = (next_song.duration_seconds - 0.001).max(0.0);
+        for marker in &mut next_song.section_markers {
+            marker.start_seconds = marker.start_seconds.clamp(0.0, max_timeline_seconds);
+        }
+        next_song.regions.retain_mut(|region| {
+            let start = region.start_seconds.clamp(0.0, max_timeline_seconds);
+            let mut end = region.end_seconds.max(start + 0.001);
+            if end > next_song.duration_seconds {
+                end = next_song.duration_seconds;
+            }
+            if end <= start {
+                return false;
+            }
+            region.start_seconds = start;
+            region.end_seconds = end;
+            true
+        });
+        normalize_imported_section_markers(&mut next_song.section_markers);
+        ensure_unique_imported_song_entity_ids(&mut next_song);
 
         eprintln!("[libretracks-import] persisting song update (structure rebuild)");
         self.persist_song_update(next_song, audio, AudioChangeImpact::StructureRebuild, true)?;
@@ -6226,6 +6251,50 @@ fn normalize_imported_section_markers(markers: &mut Vec<Marker>) {
     }
 
     *markers = deduped;
+}
+
+fn ensure_unique_imported_song_entity_ids(song: &mut Song) {
+    let mut used = HashSet::<String>::new();
+
+    used.insert(song.id.clone());
+    for track in &song.tracks {
+        used.insert(track.id.clone());
+    }
+    for clip in &song.clips {
+        used.insert(clip.id.clone());
+    }
+
+    for marker in &mut song.section_markers {
+        if marker.id.trim().is_empty() || !used.insert(marker.id.clone()) {
+            marker.id = unique_song_entity_id("marker_import", &marker.name, &mut used);
+        }
+    }
+
+    for region in &mut song.regions {
+        if region.id.trim().is_empty() || !used.insert(region.id.clone()) {
+            region.id = unique_song_entity_id("region_import", &region.name, &mut used);
+        }
+    }
+
+    for marker in &mut song.tempo_markers {
+        if marker.id.trim().is_empty() || !used.insert(marker.id.clone()) {
+            marker.id = unique_song_entity_id(
+                "tempo_marker_import",
+                &format!("{:.3}", marker.start_seconds),
+                &mut used,
+            );
+        }
+    }
+
+    for marker in &mut song.time_signature_markers {
+        if marker.id.trim().is_empty() || !used.insert(marker.id.clone()) {
+            marker.id = unique_song_entity_id(
+                "time_signature_marker_import",
+                &marker.signature,
+                &mut used,
+            );
+        }
+    }
 }
 
 fn default_project_file_name(title: &str) -> String {
