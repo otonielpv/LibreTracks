@@ -328,6 +328,12 @@ export async function pickAndImportExternalProject(): Promise<SongPackageImportR
   );
 }
 
+export async function pickAndImportExternalProjectIntoSession(): Promise<SongPackageImportResponse | null> {
+  return invokeCommand<SongPackageImportResponse | null>(
+    "pick_and_import_external_project_into_session_from_dialog",
+  );
+}
+
 export async function importLibraryAssetsFromDialog(): Promise<LibraryAssetSummary[] | null> {
   return invokeCommand<LibraryAssetSummary[] | null>("import_library_assets_from_dialog");
 }

@@ -2516,6 +2516,7 @@ export function TransportPanelContent() {
     handleOpenProjectClick,
     handleImportSongClick,
     handleImportExternalProjectClick,
+    handleImportExternalProjectWizardClick,
   } = useProjectActions({
     runAction,
     applyPlaybackSnapshot,
@@ -8256,7 +8257,7 @@ export function TransportPanelContent() {
                       </button>
                       <button
                         type="button"
-                        onClick={handleImportExternalProjectClick}
+                        onClick={handleImportExternalProjectWizardClick}
                       >
                         {t("timelineTopbar.importExternalProject")}
                       </button>

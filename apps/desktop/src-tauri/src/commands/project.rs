@@ -93,6 +93,36 @@ pub fn pick_and_import_external_project_from_dialog(
 }
 
 #[tauri::command]
+pub fn pick_and_import_external_project_into_session_from_dialog(
+    state: State<'_, DesktopState>,
+) -> Result<Option<SongPackageImportResponse>, String> {
+    let picked_file = FileDialog::new()
+        .add_filter("Proyecto Reaper", &["rpp"])
+        .add_filter("Proyecto Ableton Live", &["als"])
+        .set_title("Selecciona un proyecto externo (.rpp o .als)")
+        .pick_file();
+
+    let Some(project_file) = picked_file else {
+        return Ok(None);
+    };
+
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    let insert_at_seconds = session.transport_position_seconds();
+    let response = session
+        .import_external_project(
+            project_file.to_string_lossy().as_ref(),
+            insert_at_seconds,
+            &state.audio,
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(Some(response))
+}
+
+#[tauri::command]
 pub fn create_song(
     app: AppHandle,
     state: State<'_, DesktopState>,

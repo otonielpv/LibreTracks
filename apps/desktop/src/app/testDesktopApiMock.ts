@@ -891,6 +891,11 @@ export const testDesktopApiMock = {
       snapshot: buildSnapshot(),
       libraryAssets: state.libraryAssets,
     } satisfies SongPackageImportResponse),
+  pickAndImportExternalProjectIntoSession: async () =>
+    clone({
+      snapshot: buildSnapshot(),
+      libraryAssets: state.libraryAssets,
+    } satisfies SongPackageImportResponse),
   importLibraryAssetsFromDialog: async () => clone(state.libraryAssets),
   importAudioFilesFromPaths: async (
     files: Array<{ fileName: string; sourcePath: string }>,
