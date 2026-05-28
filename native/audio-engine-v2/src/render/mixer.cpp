@@ -516,9 +516,9 @@ void Mixer::render_timeline_span(float** output_channels,
                       clock_->sample_rate(), timeline_frame, session.get());
 
     const bool was_pending_start = clock_->pending_start();
-    clock_->advance(num_frames);
     if (was_pending_start)
         clock_->clear_pending_start();
+    clock_->advance(num_frames);
 }
 
 void Mixer::render(float** output_channels,
@@ -780,9 +780,9 @@ void Mixer::render(float** output_channels,
                           clock_->sample_rate(), timeline_frame, session.get());
 
         const bool was_pending_start = clock_->pending_start();
-        clock_->advance(num_frames);
         if (was_pending_start)
             clock_->clear_pending_start();
+        clock_->advance(num_frames);
     }
 
     // Apply crossfade ramp (Phase 7).
