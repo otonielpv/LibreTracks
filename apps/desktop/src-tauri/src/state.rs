@@ -856,6 +856,7 @@ impl DesktopSession {
     ) -> Result<Option<TransportSnapshot>, DesktopError> {
         let package_file = FileDialog::new()
             .add_filter("LibreTracks Package", &["ltpkg"])
+            .add_filter("Reaper/Ableton Project", &["rpp", "als"])
             .add_filter("Reaper Project", &["rpp"])
             .add_filter("Ableton Live Project", &["als"])
             .set_title("Selecciona un paquete .ltpkg o proyecto externo (.rpp/.als)")

@@ -65,6 +65,7 @@ pub fn pick_and_import_external_project_from_dialog(
     );
 
     let picked_file = FileDialog::new()
+        .add_filter("Proyecto Reaper/Ableton", &["rpp", "als"])
         .add_filter("Proyecto Reaper", &["rpp"])
         .add_filter("Proyecto Ableton Live", &["als"])
         .set_title("Selecciona un proyecto externo (.rpp o .als)")
@@ -122,6 +123,7 @@ pub fn pick_and_import_external_project_into_session_from_dialog(
 ) -> Result<Option<SongPackageImportResponse>, String> {
     eprintln!("[libretracks-import] command session import start");
     let picked_file = FileDialog::new()
+        .add_filter("Proyecto Reaper/Ableton", &["rpp", "als"])
         .add_filter("Proyecto Reaper", &["rpp"])
         .add_filter("Proyecto Ableton Live", &["als"])
         .set_title("Selecciona un proyecto externo (.rpp o .als)")
