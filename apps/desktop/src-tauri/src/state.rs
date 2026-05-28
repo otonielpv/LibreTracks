@@ -886,6 +886,7 @@ impl DesktopSession {
                 );
                 let imported =
                     self.import_external_project(&package_path, self.current_position(), audio)?;
+                self.wait_for_project_audio_preparation(app, audio)?;
                 Ok(Some(imported.snapshot))
             }
             _ => {
@@ -4111,6 +4112,14 @@ impl DesktopSession {
             }
             thread::sleep(POLL_INTERVAL);
         }
+    }
+
+    pub fn finalize_project_audio_preparation(
+        &mut self,
+        app: &AppHandle,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        self.wait_for_project_audio_preparation(app, audio)
     }
 
     fn persist_song_update(

@@ -95,6 +95,11 @@ pub fn pick_and_import_external_project_from_dialog(
             &state.audio,
         )
         .map_err(|error| error.to_string())?;
+    eprintln!("[libretracks-import] wizard waiting for post-import audio preparation");
+    session
+        .finalize_project_audio_preparation(&app, &state.audio)
+        .map_err(|error| error.to_string())?;
+    eprintln!("[libretracks-import] wizard post-import audio preparation completed");
     eprintln!("[libretracks-import] wizard import_external_project finished; saving-as target");
     let snapshot = session
         .save_project_as_to_path(&target_pick)
@@ -119,6 +124,7 @@ pub fn pick_and_import_external_project_from_dialog(
 
 #[tauri::command]
 pub fn pick_and_import_external_project_into_session_from_dialog(
+    app: AppHandle,
     state: State<'_, DesktopState>,
 ) -> Result<Option<SongPackageImportResponse>, String> {
     eprintln!("[libretracks-import] command session import start");
@@ -150,6 +156,11 @@ pub fn pick_and_import_external_project_into_session_from_dialog(
             &state.audio,
         )
         .map_err(|error| error.to_string())?;
+    eprintln!("[libretracks-import] session waiting for post-import audio preparation");
+    session
+        .finalize_project_audio_preparation(&app, &state.audio)
+        .map_err(|error| error.to_string())?;
+    eprintln!("[libretracks-import] session post-import audio preparation completed");
     eprintln!(
         "[libretracks-import] command session import done revision={} assets={}",
         response.snapshot.project_revision,
