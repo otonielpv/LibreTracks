@@ -2895,60 +2895,99 @@ impl DesktopSession {
             ));
         }
 
-        if let Some(project_bpm) = project.bpm {
-            let is_empty_session = current_song.tracks.is_empty() && current_song.clips.is_empty();
-            if is_empty_session {
-                next_song.bpm = project_bpm;
-            } else if (effective_bpm_at(&next_song, insert_at_seconds) - project_bpm).abs() > 0.001
-            {
-                next_song.tempo_markers.push(TempoMarker {
-                    id: format!("tempo_marker_import_{}", timestamp_suffix()),
-                    start_seconds: insert_at_seconds,
-                    bpm: project_bpm,
-                });
-                next_song.tempo_markers.sort_by(|left, right| {
-                    left.start_seconds
-                        .partial_cmp(&right.start_seconds)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
-            }
-        }
+        let is_empty_session = current_song.tracks.is_empty() && current_song.clips.is_empty();
 
-        if let Some(time_signature) = project.time_signature.as_ref() {
-            let is_empty_session = current_song.tracks.is_empty() && current_song.clips.is_empty();
-            if is_empty_session {
-                next_song.time_signature = time_signature.clone();
-            } else {
-                let has_marker_at_insert = next_song.time_signature_markers.iter().any(|marker| {
-                    (marker.start_seconds - insert_at_seconds).abs() < 0.0001
-                        && marker.signature == *time_signature
-                });
-                let has_same_song_signature = next_song.time_signature == *time_signature
-                    && insert_at_seconds <= 0.0001;
-                if !has_marker_at_insert && !has_same_song_signature {
-                    next_song.time_signature_markers.push(TimeSignatureMarker {
-                        id: format!("time_signature_marker_import_{}", timestamp_suffix()),
-                        start_seconds: insert_at_seconds,
-                        signature: time_signature.clone(),
-                    });
-                    next_song.time_signature_markers.sort_by(|left, right| {
-                        left.start_seconds
-                            .partial_cmp(&right.start_seconds)
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    });
+        // Import full Reaper tempo map. For empty sessions, the first marker at
+        // t=0 becomes the song base BPM and later points become tempo markers.
+        if project.tempo_markers.is_empty() {
+            if let Some(project_bpm) = project.bpm {
+                if is_empty_session {
+                    next_song.bpm = project_bpm;
+                } else if (effective_bpm_at(&next_song, insert_at_seconds) - project_bpm).abs() > 0.001
+                {
+                    upsert_imported_tempo_marker(&mut next_song, insert_at_seconds, project_bpm);
+                }
+            }
+        } else {
+            for tempo_marker in &project.tempo_markers {
+                let marker_start_seconds = insert_at_seconds + tempo_marker.start_seconds.max(0.0);
+                if is_empty_session && marker_start_seconds <= 0.0001 {
+                    next_song.bpm = tempo_marker.bpm;
+                } else {
+                    upsert_imported_tempo_marker(
+                        &mut next_song,
+                        marker_start_seconds,
+                        tempo_marker.bpm,
+                    );
                 }
             }
         }
 
-        next_song.regions.push(SongRegion {
-            id: format!("region_import_{}", timestamp_suffix()),
-            name: project.title.clone(),
-            start_seconds: insert_at_seconds,
-            end_seconds: insert_at_seconds + project.duration_seconds.max(1.0),
-            transpose_semitones: 0,
-            warp_enabled: false,
-            warp_source_bpm: None,
-        });
+        // Import full Reaper time signature map with strict ordering guarantees.
+        if project.time_signature_markers.is_empty() {
+            if let Some(time_signature) = project.time_signature.as_ref() {
+                if is_empty_session {
+                    next_song.time_signature = time_signature.clone();
+                } else {
+                    upsert_imported_time_signature_marker(
+                        &mut next_song,
+                        insert_at_seconds,
+                        time_signature,
+                    );
+                }
+            }
+        } else {
+            for time_signature_marker in &project.time_signature_markers {
+                let marker_start_seconds =
+                    insert_at_seconds + time_signature_marker.start_seconds.max(0.0);
+                if is_empty_session && marker_start_seconds <= 0.0001 {
+                    next_song.time_signature = time_signature_marker.signature.clone();
+                } else {
+                    upsert_imported_time_signature_marker(
+                        &mut next_song,
+                        marker_start_seconds,
+                        &time_signature_marker.signature,
+                    );
+                }
+            }
+        }
+
+        for section_marker in &project.section_markers {
+            append_imported_section_marker(
+                &mut next_song,
+                insert_at_seconds + section_marker.start_seconds.max(0.0),
+                &section_marker.name,
+            );
+        }
+
+        if project.regions.is_empty() {
+            next_song.regions.push(SongRegion {
+                id: format!("region_import_{}", timestamp_suffix()),
+                name: project.title.clone(),
+                start_seconds: insert_at_seconds,
+                end_seconds: insert_at_seconds + project.duration_seconds.max(1.0),
+                transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
+            });
+        } else {
+            for imported_region in &project.regions {
+                next_song.regions.push(SongRegion {
+                    id: format!("region_import_{}", timestamp_suffix()),
+                    name: imported_region.name.clone(),
+                    start_seconds: insert_at_seconds + imported_region.start_seconds.max(0.0),
+                    end_seconds: insert_at_seconds
+                        + imported_region
+                            .end_seconds
+                            .max(imported_region.start_seconds + 0.001),
+                    transpose_semitones: 0,
+                    warp_enabled: false,
+                    warp_source_bpm: None,
+                });
+            }
+        }
+
+        normalize_imported_section_markers(&mut next_song.section_markers);
         next_song.regions.sort_by(|left, right| {
             left.start_seconds
                 .partial_cmp(&right.start_seconds)
@@ -5982,6 +6021,97 @@ fn unique_song_entity_id(prefix: &str, seed: &str, used: &mut HashSet<String>) -
         }
         index += 1;
     }
+}
+
+fn upsert_imported_tempo_marker(song: &mut Song, start_seconds: f64, bpm: f64) {
+    let start_seconds = start_seconds.max(0.0);
+    if let Some(existing_marker) = song
+        .tempo_markers
+        .iter_mut()
+        .find(|marker| (marker.start_seconds - start_seconds).abs() <= 0.0001)
+    {
+        existing_marker.bpm = bpm;
+        return;
+    }
+
+    song.tempo_markers.push(TempoMarker {
+        id: format!("tempo_marker_import_{}", timestamp_suffix()),
+        start_seconds,
+        bpm,
+    });
+    song.tempo_markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+}
+
+fn upsert_imported_time_signature_marker(song: &mut Song, start_seconds: f64, signature: &str) {
+    let start_seconds = start_seconds.max(0.0);
+
+    if start_seconds <= 0.0001 {
+        song.time_signature = signature.to_string();
+        return;
+    }
+
+    if let Some(existing_marker) = song
+        .time_signature_markers
+        .iter_mut()
+        .find(|marker| (marker.start_seconds - start_seconds).abs() <= 0.0001)
+    {
+        existing_marker.signature = signature.to_string();
+        return;
+    }
+
+    song.time_signature_markers.push(TimeSignatureMarker {
+        id: format!("time_signature_marker_import_{}", timestamp_suffix()),
+        start_seconds,
+        signature: signature.to_string(),
+    });
+    song.time_signature_markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+}
+
+fn append_imported_section_marker(song: &mut Song, start_seconds: f64, name: &str) {
+    let start_seconds = start_seconds.max(0.0);
+    if song
+        .section_markers
+        .iter()
+        .any(|marker| (marker.start_seconds - start_seconds).abs() <= 0.0001)
+    {
+        return;
+    }
+
+    song.section_markers.push(Marker {
+        id: format!("marker_import_{}", timestamp_suffix()),
+        name: name.trim().to_string(),
+        start_seconds,
+        digit: None,
+    });
+}
+
+fn normalize_imported_section_markers(markers: &mut Vec<Marker>) {
+    markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut deduped = Vec::<Marker>::new();
+    for marker in markers.drain(..) {
+        if deduped
+            .iter()
+            .any(|existing| (existing.start_seconds - marker.start_seconds).abs() <= 0.0001)
+        {
+            continue;
+        }
+        deduped.push(marker);
+    }
+
+    *markers = deduped;
 }
 
 fn default_project_file_name(title: &str) -> String {

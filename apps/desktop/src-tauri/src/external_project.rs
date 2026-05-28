@@ -13,7 +13,36 @@ pub struct ReaperProject {
     pub bpm: Option<f64>,
     pub time_signature: Option<String>,
     pub duration_seconds: f64,
+    pub section_markers: Vec<ReaperSectionMarker>,
+    pub regions: Vec<ReaperRegion>,
+    pub tempo_markers: Vec<ReaperTempoMarker>,
+    pub time_signature_markers: Vec<ReaperTimeSignatureMarker>,
     pub tracks: Vec<ReaperTrack>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReaperSectionMarker {
+    pub name: String,
+    pub start_seconds: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReaperRegion {
+    pub name: String,
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReaperTempoMarker {
+    pub start_seconds: f64,
+    pub bpm: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReaperTimeSignatureMarker {
+    pub start_seconds: f64,
+    pub signature: String,
 }
 
 #[derive(Debug, Clone)]
@@ -100,15 +129,53 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
 
     let mut bpm = None;
     let mut time_signature = None;
+    let mut section_markers = Vec::<ReaperSectionMarker>::new();
+    let mut regions = Vec::<ReaperRegion>::new();
+    let mut tempo_markers = Vec::<ReaperTempoMarker>::new();
+    let mut time_signature_markers = Vec::<ReaperTimeSignatureMarker>::new();
     let mut tracks = Vec::new();
 
     let mut current_track: Option<ReaperTrackBuilder> = None;
     let mut current_item: Option<ReaperItemBuilder> = None;
     let mut source_depth = 0_u32;
+    let mut tempo_env_depth = 0_u32;
 
     for raw_line in content.lines() {
         let line = raw_line.trim();
         if line.is_empty() {
+            continue;
+        }
+
+        if line.starts_with("<TEMPOENVEX") {
+            tempo_env_depth = 1;
+            continue;
+        }
+
+        if tempo_env_depth > 0 {
+            if line.starts_with('<') {
+                tempo_env_depth = tempo_env_depth.saturating_add(1);
+                continue;
+            }
+
+            if line == ">" {
+                tempo_env_depth = tempo_env_depth.saturating_sub(1);
+                continue;
+            }
+
+            if line.starts_with("PT ") {
+                if let Some(point) = parse_tempo_env_point(line) {
+                    tempo_markers.push(ReaperTempoMarker {
+                        start_seconds: point.start_seconds,
+                        bpm: point.bpm,
+                    });
+                    if let Some(signature) = point.signature {
+                        time_signature_markers.push(ReaperTimeSignatureMarker {
+                            start_seconds: point.start_seconds,
+                            signature,
+                        });
+                    }
+                }
+            }
             continue;
         }
 
@@ -237,6 +304,23 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
                 }
                 continue;
             }
+
+            if line.starts_with("MARKER ") {
+                if let Some(event) = parse_project_marker_line(line) {
+                    match event {
+                        ReaperProjectMarkerEvent::Section(section) => section_markers.push(section),
+                        ReaperProjectMarkerEvent::Region(region) => regions.push(region),
+                    }
+                }
+                continue;
+            }
+
+            if line.starts_with("REGION ") {
+                if let Some(region) = parse_project_region_line(line) {
+                    regions.push(region);
+                }
+                continue;
+            }
         }
     }
 
@@ -253,11 +337,59 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
         return Err("el proyecto Reaper no contiene pistas importables".to_string());
     }
 
+    normalize_section_markers(&mut section_markers);
+    normalize_regions(&mut regions);
+    normalize_tempo_markers(&mut tempo_markers);
+    normalize_time_signature_markers(&mut time_signature_markers);
+
+    if bpm.is_none() {
+        bpm = tempo_markers
+            .iter()
+            .find(|marker| marker.start_seconds <= 0.0001)
+            .map(|marker| marker.bpm)
+            .or_else(|| tempo_markers.first().map(|marker| marker.bpm));
+    }
+    if time_signature.is_none() {
+        time_signature = time_signature_markers
+            .iter()
+            .find(|marker| marker.start_seconds <= 0.0001)
+            .map(|marker| marker.signature.clone())
+            .or_else(|| {
+                time_signature_markers
+                    .first()
+                    .map(|marker| marker.signature.clone())
+            });
+    }
+
     let duration_seconds = tracks
         .iter()
         .flat_map(|track| track.items.iter())
         .map(|item| item.position_seconds + item.length_seconds)
         .fold(0.0_f64, f64::max)
+        .max(
+            regions
+                .iter()
+                .map(|region| region.end_seconds)
+                .fold(0.0_f64, f64::max),
+        )
+        .max(
+            section_markers
+                .iter()
+                .map(|marker| marker.start_seconds)
+                .fold(0.0_f64, f64::max),
+        )
+        .max(
+            tempo_markers
+                .iter()
+                .map(|marker| marker.start_seconds)
+                .fold(0.0_f64, f64::max),
+        )
+        .max(
+            time_signature_markers
+                .iter()
+                .map(|marker| marker.start_seconds)
+                .fold(0.0_f64, f64::max),
+        )
         .max(1.0);
 
     let title = path
@@ -273,8 +405,272 @@ pub fn parse_reaper_project(path: &Path) -> Result<ReaperProject, String> {
         bpm,
         time_signature,
         duration_seconds,
+        section_markers,
+        regions,
+        tempo_markers,
+        time_signature_markers,
         tracks,
     })
+}
+
+#[derive(Debug, Clone)]
+enum ReaperProjectMarkerEvent {
+    Section(ReaperSectionMarker),
+    Region(ReaperRegion),
+}
+
+#[derive(Debug, Clone)]
+struct TempoEnvPoint {
+    start_seconds: f64,
+    bpm: f64,
+    signature: Option<String>,
+}
+
+fn parse_project_marker_line(line: &str) -> Option<ReaperProjectMarkerEvent> {
+    let tokens = tokenize_reaper_line(line);
+    if tokens.len() < 4 {
+        return None;
+    }
+
+    let start_seconds = tokens.get(2)?.parse::<f64>().ok()?.max(0.0);
+    let name = tokens
+        .get(3)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "Marker".to_string());
+
+    let region_flag = tokens
+        .get(4)
+        .and_then(|value| value.parse::<i32>().ok())
+        .unwrap_or(0);
+
+    if region_flag == 1 {
+        let end_seconds = tokens
+            .get(5)
+            .and_then(|value| value.parse::<f64>().ok())
+            .map(|value| value.max(start_seconds + 0.001))
+            .unwrap_or(start_seconds + 0.001);
+        return Some(ReaperProjectMarkerEvent::Region(ReaperRegion {
+            name,
+            start_seconds,
+            end_seconds,
+        }));
+    }
+
+    Some(ReaperProjectMarkerEvent::Section(ReaperSectionMarker {
+        name,
+        start_seconds,
+    }))
+}
+
+fn parse_project_region_line(line: &str) -> Option<ReaperRegion> {
+    let tokens = tokenize_reaper_line(line);
+    if tokens.len() < 5 {
+        return None;
+    }
+
+    let start_seconds = tokens.get(2)?.parse::<f64>().ok()?.max(0.0);
+    let end_seconds = tokens
+        .get(3)
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value.max(start_seconds + 0.001))?;
+    let name = tokens
+        .get(4)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "Region".to_string());
+
+    Some(ReaperRegion {
+        name,
+        start_seconds,
+        end_seconds,
+    })
+}
+
+fn parse_tempo_env_point(line: &str) -> Option<TempoEnvPoint> {
+    let tokens = tokenize_reaper_line(line);
+    if tokens.len() < 3 {
+        return None;
+    }
+
+    let start_seconds = tokens.get(1)?.parse::<f64>().ok()?.max(0.0);
+    let bpm = tokens
+        .get(2)
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value.max(20.0))?;
+    let signature = extract_time_signature_from_pt(&tokens);
+
+    Some(TempoEnvPoint {
+        start_seconds,
+        bpm,
+        signature,
+    })
+}
+
+fn extract_time_signature_from_pt(tokens: &[String]) -> Option<String> {
+    if tokens.len() < 7 {
+        return None;
+    }
+
+    for index in 3..tokens.len().saturating_sub(1) {
+        let Some(numerator) = tokens.get(index).and_then(|value| value.parse::<u32>().ok()) else {
+            continue;
+        };
+        let Some(denominator) = tokens
+            .get(index + 1)
+            .and_then(|value| value.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        if numerator == 0 || denominator == 0 {
+            continue;
+        }
+        if denominator == 1
+            || denominator == 2
+            || denominator == 4
+            || denominator == 8
+            || denominator == 16
+            || denominator == 32
+        {
+            return Some(format!("{numerator}/{denominator}"));
+        }
+    }
+
+    None
+}
+
+fn normalize_section_markers(markers: &mut Vec<ReaperSectionMarker>) {
+    markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+
+    let mut deduped = Vec::<ReaperSectionMarker>::new();
+    for marker in markers.drain(..) {
+        if deduped.iter().any(|existing| {
+            (existing.start_seconds - marker.start_seconds).abs() <= 0.0001
+                && existing.name.eq_ignore_ascii_case(&marker.name)
+        }) {
+            continue;
+        }
+        deduped.push(marker);
+    }
+    *markers = deduped;
+}
+
+fn normalize_regions(regions: &mut Vec<ReaperRegion>) {
+    regions.retain(|region| {
+        region.start_seconds.is_finite()
+            && region.end_seconds.is_finite()
+            && region.end_seconds > region.start_seconds
+    });
+    regions.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                left.end_seconds
+                    .partial_cmp(&right.end_seconds)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    });
+
+    let mut deduped = Vec::<ReaperRegion>::new();
+    for region in regions.drain(..) {
+        if deduped.iter().any(|existing| {
+            (existing.start_seconds - region.start_seconds).abs() <= 0.0001
+                && (existing.end_seconds - region.end_seconds).abs() <= 0.0001
+                && existing.name.eq_ignore_ascii_case(&region.name)
+        }) {
+            continue;
+        }
+        deduped.push(region);
+    }
+    *regions = deduped;
+}
+
+fn normalize_tempo_markers(markers: &mut Vec<ReaperTempoMarker>) {
+    markers.retain(|marker| marker.start_seconds.is_finite() && marker.bpm.is_finite());
+    markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut deduped = Vec::<ReaperTempoMarker>::new();
+    for marker in markers.drain(..) {
+        if let Some(existing) = deduped
+            .iter_mut()
+            .find(|existing| (existing.start_seconds - marker.start_seconds).abs() <= 0.0001)
+        {
+            existing.bpm = marker.bpm;
+            continue;
+        }
+        deduped.push(marker);
+    }
+    *markers = deduped;
+}
+
+fn normalize_time_signature_markers(markers: &mut Vec<ReaperTimeSignatureMarker>) {
+    markers.retain(|marker| {
+        marker.start_seconds.is_finite() && parse_time_signature(&marker.signature).is_some()
+    });
+    markers.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut deduped = Vec::<ReaperTimeSignatureMarker>::new();
+    for marker in markers.drain(..) {
+        if let Some(existing) = deduped
+            .iter_mut()
+            .find(|existing| (existing.start_seconds - marker.start_seconds).abs() <= 0.0001)
+        {
+            existing.signature = marker.signature;
+            continue;
+        }
+        deduped.push(marker);
+    }
+    *markers = deduped;
+}
+
+fn parse_time_signature(signature: &str) -> Option<(u32, u32)> {
+    let (numerator, denominator) = signature.split_once('/')?;
+    let numerator = numerator.parse::<u32>().ok()?;
+    let denominator = denominator.parse::<u32>().ok()?;
+    if numerator == 0 || denominator == 0 {
+        return None;
+    }
+    Some((numerator, denominator))
+}
+
+fn tokenize_reaper_line(line: &str) -> Vec<String> {
+    let mut tokens = Vec::<String>::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+
+    for character in line.chars() {
+        match character {
+            '"' => {
+                in_quotes = !in_quotes;
+            }
+            ' ' | '\t' if !in_quotes => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            _ => current.push(character),
+        }
+    }
+
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    tokens
 }
 
 fn build_track(builder: ReaperTrackBuilder, index: usize) -> ReaperTrack {
@@ -380,6 +776,12 @@ mod tests {
         let rpp = r#"
 <REAPER_PROJECT 0.1 "6.80/x64" 1710000000
   TEMPO 128 4 4
+    MARKER 1 4.0 "Intro"
+    MARKER 2 8.0 "Verse" 1 16.0
+    <TEMPOENVEX
+        PT 0.0 128.0 1 0 0 4 4
+        PT 16.0 132.0 1 0 0 3 4
+    >
   <TRACK
     NAME "Pad"
     VOLPAN 0.75 0.1 -1 -1 1
@@ -401,6 +803,17 @@ mod tests {
         let parsed = parse_reaper_project(&project_path).expect("parse");
         assert_eq!(parsed.bpm, Some(128.0));
         assert_eq!(parsed.time_signature.as_deref(), Some("4/4"));
+        assert_eq!(parsed.section_markers.len(), 1);
+        assert_eq!(parsed.section_markers[0].name, "Intro");
+        assert_eq!(parsed.regions.len(), 1);
+        assert_eq!(parsed.regions[0].name, "Verse");
+        assert_eq!(parsed.regions[0].start_seconds, 8.0);
+        assert_eq!(parsed.regions[0].end_seconds, 16.0);
+        assert_eq!(parsed.tempo_markers.len(), 2);
+        assert_eq!(parsed.tempo_markers[0].start_seconds, 0.0);
+        assert_eq!(parsed.tempo_markers[0].bpm, 128.0);
+        assert_eq!(parsed.time_signature_markers.len(), 2);
+        assert_eq!(parsed.time_signature_markers[1].signature, "3/4");
         assert_eq!(parsed.tracks.len(), 1);
         assert_eq!(parsed.tracks[0].name, "Pad");
         assert_eq!(parsed.tracks[0].items.len(), 1);
