@@ -3007,6 +3007,10 @@ impl DesktopSession {
                 }
             }
         }
+        let inferred_folder_parent_indices = inferred_parent_by_index
+            .values()
+            .copied()
+            .collect::<HashSet<_>>();
 
         if import_debug_enabled {
             eprintln!(
@@ -3028,22 +3032,32 @@ impl DesktopSession {
             } else {
                 folder_stack.last().cloned()
             };
+            let is_folder_track = if use_inferred_folder_groups {
+                inferred_folder_parent_indices.contains(&track_index)
+            } else {
+                track.folder_depth_delta > 0
+            };
             let track_id = unique_song_entity_id("track", &track.name, &mut used_track_ids);
             if import_debug_enabled {
                 eprintln!(
-                    "[libretracks-import] debug track name={} parent={} folder_depth_delta={} items={}",
+                    "[libretracks-import] debug track name={} parent={} folder_depth_delta={} items={} kind={}",
                     track.name,
                     parent_track_id
                         .as_deref()
                         .unwrap_or("<none>"),
                     track.folder_depth_delta,
-                    track.items.len()
+                    track.items.len(),
+                    if is_folder_track { "folder" } else { "audio" }
                 );
             }
             next_song.tracks.push(Track {
                 id: track_id.clone(),
                 name: track.name.clone(),
-                kind: TrackKind::Audio,
+                kind: if is_folder_track {
+                    TrackKind::Folder
+                } else {
+                    TrackKind::Audio
+                },
                 parent_track_id: parent_track_id.clone(),
                 volume: track.volume.max(0.0),
                 pan: track.pan.clamp(-1.0, 1.0),
