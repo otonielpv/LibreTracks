@@ -2987,10 +2987,47 @@ impl DesktopSession {
             );
         }
 
+        let imported_tracks = project.tracks;
+        let use_inferred_folder_groups = imported_tracks
+            .iter()
+            .all(|track| track.folder_depth_delta == 0)
+            && imported_tracks.iter().any(|track| track.items.is_empty())
+            && imported_tracks.iter().any(|track| !track.items.is_empty());
+
+        let mut inferred_parent_by_index = HashMap::<usize, usize>::new();
+        if use_inferred_folder_groups {
+            let mut active_parent_index = None::<usize>;
+            for (index, track) in imported_tracks.iter().enumerate() {
+                if track.items.is_empty() {
+                    active_parent_index = Some(index);
+                    continue;
+                }
+                if let Some(parent_index) = active_parent_index {
+                    inferred_parent_by_index.insert(index, parent_index);
+                }
+            }
+        }
+
+        if import_debug_enabled {
+            eprintln!(
+                "[libretracks-import] debug folder strategy explicit_depth={} inferred_groups={}",
+                !use_inferred_folder_groups,
+                use_inferred_folder_groups
+            );
+        }
+
         let mut created_clip_count = 0usize;
         let mut folder_stack = Vec::<String>::new();
-        for track in project.tracks {
-            let parent_track_id = folder_stack.last().cloned();
+        let mut imported_track_ids_by_index = Vec::<String>::new();
+        for (track_index, track) in imported_tracks.into_iter().enumerate() {
+            let parent_track_id = if use_inferred_folder_groups {
+                inferred_parent_by_index
+                    .get(&track_index)
+                    .and_then(|parent_index| imported_track_ids_by_index.get(*parent_index))
+                    .cloned()
+            } else {
+                folder_stack.last().cloned()
+            };
             let track_id = unique_song_entity_id("track", &track.name, &mut used_track_ids);
             if import_debug_enabled {
                 eprintln!(
@@ -3020,6 +3057,7 @@ impl DesktopSession {
                 },
                 color: None,
             });
+            imported_track_ids_by_index.push(track_id.clone());
 
             for item in track.items {
                 if item.muted {
@@ -3048,14 +3086,16 @@ impl DesktopSession {
                 created_clip_count += 1;
             }
 
-            if track.folder_depth_delta > 0 {
-                for _ in 0..track.folder_depth_delta {
-                    folder_stack.push(track_id.clone());
-                }
-            } else if track.folder_depth_delta < 0 {
-                for _ in 0..(-track.folder_depth_delta) {
-                    if folder_stack.pop().is_none() {
-                        break;
+            if !use_inferred_folder_groups {
+                if track.folder_depth_delta > 0 {
+                    for _ in 0..track.folder_depth_delta {
+                        folder_stack.push(track_id.clone());
+                    }
+                } else if track.folder_depth_delta < 0 {
+                    for _ in 0..(-track.folder_depth_delta) {
+                        if folder_stack.pop().is_none() {
+                            break;
+                        }
                     }
                 }
             }
