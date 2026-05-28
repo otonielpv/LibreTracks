@@ -2749,7 +2749,11 @@ impl DesktopSession {
         self.ensure_project_waveforms_ready(&song_dir, &loaded_song, audio)?;
         let runtime_position_seconds =
             self.runtime_seconds_for_engine_position(self.current_position());
-        audio.prepare_playback_at(loaded_song, runtime_position_seconds)?;
+        if let Err(error) = audio.prepare_playback_at(loaded_song, runtime_position_seconds) {
+            eprintln!(
+                "[libretracks-import] prepare_playback_at failed after package import: {error}"
+            );
+        }
         Ok(SongPackageImportResponse {
             snapshot: self.snapshot(),
             library_assets,
@@ -3025,7 +3029,11 @@ impl DesktopSession {
         self.ensure_project_waveforms_ready(&song_dir, &loaded_song, audio)?;
         let runtime_position_seconds =
             self.runtime_seconds_for_engine_position(self.current_position());
-        audio.prepare_playback_at(loaded_song, runtime_position_seconds)?;
+        if let Err(error) = audio.prepare_playback_at(loaded_song, runtime_position_seconds) {
+            eprintln!(
+                "[libretracks-import] prepare_playback_at failed after external import: {error}"
+            );
+        }
 
         let library_assets = list_library_assets(&song_dir, self.engine.song())?;
         Ok(SongPackageImportResponse {
