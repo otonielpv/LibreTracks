@@ -6,6 +6,7 @@
 mod audio_engine;
 mod commands;
 mod error;
+mod external_project;
 mod midi;
 mod models;
 mod remote;
@@ -119,6 +120,7 @@ fn main() {
             commands::project::export_region_as_package,
             commands::project::export_region_rendered_audio,
             commands::project::import_song_package,
+            commands::project::import_external_project,
             commands::project::resolve_missing_file,
             commands::library::delete_library_asset,
             commands::library::move_library_asset,
@@ -130,6 +132,7 @@ fn main() {
             commands::project::open_project_from_dialog,
             commands::project::start_open_project_from_dialog,
             commands::project::pick_and_import_song_from_dialog,
+            commands::project::pick_and_import_external_project_from_dialog,
             commands::transport::play_transport,
             commands::transport::pause_transport,
             commands::transport::stop_transport,

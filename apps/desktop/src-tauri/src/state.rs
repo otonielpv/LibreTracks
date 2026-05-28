@@ -33,6 +33,9 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio_engine::{jump_debug_logging_enabled, AudioController, PlaybackStartReason};
 use crate::error::DesktopError;
+use crate::external_project::{
+    detect_external_project_kind, parse_reaper_project, ExternalProjectKind, ReaperProject,
+};
 use crate::midi::MidiManager;
 use crate::models::view::{
     active_vamp_to_summary, active_vamp_to_warped_summary, empty_musical_position_summary,
@@ -787,7 +790,9 @@ impl DesktopSession {
     ) -> Result<Option<TransportSnapshot>, DesktopError> {
         let package_file = FileDialog::new()
             .add_filter("LibreTracks Package", &["ltpkg"])
-            .set_title("Selecciona un paquete .ltpkg")
+            .add_filter("Reaper Project", &["rpp"])
+            .add_filter("Ableton Live Project", &["als"])
+            .set_title("Selecciona un paquete .ltpkg o proyecto externo (.rpp/.als)")
             .pick_file();
 
         let Some(package_file) = package_file else {
@@ -801,16 +806,34 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let package_path = package_file.to_string_lossy().into_owned();
-        emit_project_load_progress(app, 5, "Leyendo paquete...".into(), 0, 0, 0, 0);
-        // Import the package WITHOUT blocking on source decode — that's what
-        // wait_for_project_audio_preparation does, with live progress events.
-        // Otherwise the user only sees the loading bar at the very end, after
-        // sources have already been decoded silently.
-        let inserted =
-            self.import_song_package_no_wait(&package_path, self.current_position(), audio)?;
-        self.wait_for_project_audio_preparation(app, audio)?;
+        match detect_external_project_kind(&package_file) {
+            Some(ExternalProjectKind::Reaper) | Some(ExternalProjectKind::Ableton) => {
+                emit_project_load_progress(
+                    app,
+                    5,
+                    "Leyendo proyecto externo...".into(),
+                    0,
+                    0,
+                    0,
+                    0,
+                );
+                let imported =
+                    self.import_external_project(&package_path, self.current_position(), audio)?;
+                Ok(Some(imported.snapshot))
+            }
+            _ => {
+                emit_project_load_progress(app, 5, "Leyendo paquete...".into(), 0, 0, 0, 0);
+                // Import the package WITHOUT blocking on source decode — that's what
+                // wait_for_project_audio_preparation does, with live progress events.
+                // Otherwise the user only sees the loading bar at the very end, after
+                // sources have already been decoded silently.
+                let inserted =
+                    self.import_song_package_no_wait(&package_path, self.current_position(), audio)?;
+                self.wait_for_project_audio_preparation(app, audio)?;
 
-        Ok(Some(inserted.snapshot))
+                Ok(Some(inserted.snapshot))
+            }
+        }
     }
 
     pub fn import_library_assets_from_dialog(
@@ -2718,6 +2741,244 @@ impl DesktopSession {
         })
     }
 
+    pub fn import_external_project(
+        &mut self,
+        project_path: &str,
+        insert_at_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<SongPackageImportResponse, DesktopError> {
+        let project_path = Path::new(project_path);
+        let kind = detect_external_project_kind(project_path).ok_or_else(|| {
+            DesktopError::AudioCommand(
+                "formato no soportado. Usa un .rpp (Reaper) o .als (Ableton Live)".into(),
+            )
+        })?;
+
+        match kind {
+            ExternalProjectKind::Reaper => {
+                let parsed =
+                    parse_reaper_project(project_path).map_err(DesktopError::AudioCommand)?;
+                self.import_reaper_project(parsed, insert_at_seconds, audio)
+            }
+            ExternalProjectKind::Ableton => Err(DesktopError::AudioCommand(
+                "importacion de Ableton Live (.als) aun no implementada en esta version"
+                    .to_string(),
+            )),
+        }
+    }
+
+    fn import_reaper_project(
+        &mut self,
+        project: ReaperProject,
+        insert_at_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<SongPackageImportResponse, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let current_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let insert_at_seconds = insert_at_seconds.max(0.0);
+
+        let mut source_paths = Vec::<PathBuf>::new();
+        let mut seen_sources = HashSet::<String>::new();
+        for track in &project.tracks {
+            for item in &track.items {
+                if item.muted {
+                    continue;
+                }
+                let source_key = normalize_external_source_key(&item.source_path);
+                if seen_sources.insert(source_key) {
+                    source_paths.push(item.source_path.clone());
+                }
+            }
+        }
+
+        if source_paths.is_empty() {
+            return Err(DesktopError::AudioCommand(
+                "el proyecto Reaper no contiene items de audio importables".into(),
+            ));
+        }
+
+        let import_payloads = source_paths
+            .iter()
+            .map(|source_path| {
+                let file_name = source_path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .ok_or_else(|| {
+                        DesktopError::AudioCommand(format!(
+                            "ruta de audio invalida en Reaper: {}",
+                            source_path.to_string_lossy()
+                        ))
+                    })?
+                    .to_string();
+                Ok(AudioFilePathImportPayload {
+                    file_name,
+                    source_path: source_path.to_string_lossy().to_string(),
+                })
+            })
+            .collect::<Result<Vec<_>, DesktopError>>()?;
+
+        let imported_assets =
+            import_audio_files_from_paths_to_library(&song_dir, Some(&current_song), &import_payloads)?;
+
+        let mut imported_path_by_source = HashMap::<String, String>::new();
+        for (source_path, imported_asset) in source_paths.iter().zip(imported_assets.iter()) {
+            imported_path_by_source.insert(
+                normalize_external_source_key(source_path),
+                imported_asset.file_path.clone(),
+            );
+        }
+
+        let mut next_song = current_song.clone();
+        let mut used_track_ids = next_song
+            .tracks
+            .iter()
+            .map(|track| track.id.clone())
+            .collect::<HashSet<_>>();
+        let mut used_clip_ids = next_song
+            .clips
+            .iter()
+            .map(|clip| clip.id.clone())
+            .collect::<HashSet<_>>();
+
+        let mut created_clip_count = 0usize;
+        for track in project.tracks {
+            let track_id = unique_song_entity_id("track", &track.name, &mut used_track_ids);
+            next_song.tracks.push(Track {
+                id: track_id.clone(),
+                name: track.name.clone(),
+                kind: TrackKind::Audio,
+                parent_track_id: None,
+                volume: track.volume.max(0.0),
+                pan: track.pan.clamp(-1.0, 1.0),
+                muted: track.muted,
+                solo: track.solo,
+                transpose_enabled: true,
+                audio_to: "master".to_string(),
+                color: None,
+            });
+
+            for item in track.items {
+                if item.muted {
+                    continue;
+                }
+                let Some(imported_file_path) = imported_path_by_source
+                    .get(&normalize_external_source_key(&item.source_path))
+                    .cloned()
+                else {
+                    continue;
+                };
+
+                let clip_id = unique_song_entity_id("clip", &track.name, &mut used_clip_ids);
+                next_song.clips.push(Clip {
+                    id: clip_id,
+                    track_id: track_id.clone(),
+                    file_path: imported_file_path,
+                    timeline_start_seconds: insert_at_seconds + item.position_seconds,
+                    source_start_seconds: item.source_start_seconds,
+                    duration_seconds: item.length_seconds,
+                    gain: item.gain.max(0.0),
+                    fade_in_seconds: None,
+                    fade_out_seconds: None,
+                    color: None,
+                });
+                created_clip_count += 1;
+            }
+        }
+
+        if created_clip_count == 0 {
+            return Err(DesktopError::AudioCommand(
+                "no se pudieron convertir clips de Reaper".into(),
+            ));
+        }
+
+        if let Some(project_bpm) = project.bpm {
+            let is_empty_session = current_song.tracks.is_empty() && current_song.clips.is_empty();
+            if is_empty_session {
+                next_song.bpm = project_bpm;
+            } else if (effective_bpm_at(&next_song, insert_at_seconds) - project_bpm).abs() > 0.001
+            {
+                next_song.tempo_markers.push(TempoMarker {
+                    id: format!("tempo_marker_import_{}", timestamp_suffix()),
+                    start_seconds: insert_at_seconds,
+                    bpm: project_bpm,
+                });
+                next_song.tempo_markers.sort_by(|left, right| {
+                    left.start_seconds
+                        .partial_cmp(&right.start_seconds)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+        }
+
+        if let Some(time_signature) = project.time_signature.as_ref() {
+            let is_empty_session = current_song.tracks.is_empty() && current_song.clips.is_empty();
+            if is_empty_session {
+                next_song.time_signature = time_signature.clone();
+            } else {
+                let has_marker_at_insert = next_song.time_signature_markers.iter().any(|marker| {
+                    (marker.start_seconds - insert_at_seconds).abs() < 0.0001
+                        && marker.signature == *time_signature
+                });
+                let has_same_song_signature = next_song.time_signature == *time_signature
+                    && insert_at_seconds <= 0.0001;
+                if !has_marker_at_insert && !has_same_song_signature {
+                    next_song.time_signature_markers.push(TimeSignatureMarker {
+                        id: format!("time_signature_marker_import_{}", timestamp_suffix()),
+                        start_seconds: insert_at_seconds,
+                        signature: time_signature.clone(),
+                    });
+                    next_song.time_signature_markers.sort_by(|left, right| {
+                        left.start_seconds
+                            .partial_cmp(&right.start_seconds)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                }
+            }
+        }
+
+        next_song.regions.push(SongRegion {
+            id: format!("region_import_{}", timestamp_suffix()),
+            name: project.title.clone(),
+            start_seconds: insert_at_seconds,
+            end_seconds: insert_at_seconds + project.duration_seconds.max(1.0),
+            transpose_semitones: 0,
+            warp_enabled: false,
+            warp_source_bpm: None,
+        });
+        next_song.regions.sort_by(|left, right| {
+            left.start_seconds
+                .partial_cmp(&right.start_seconds)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        next_song.duration_seconds = next_song
+            .duration_seconds
+            .max(insert_at_seconds + project.duration_seconds.max(1.0));
+
+        self.persist_song_update(next_song, audio, AudioChangeImpact::StructureRebuild, true)?;
+
+        let loaded_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        self.prime_waveform_cache(&song_dir, &loaded_song)?;
+        audio.wait_until_sources_ready(Duration::from_secs(120))?;
+        self.ensure_project_waveforms_ready(&song_dir, &loaded_song, audio)?;
+        let runtime_position_seconds =
+            self.runtime_seconds_for_engine_position(self.current_position());
+        audio.prepare_playback_at(loaded_song, runtime_position_seconds)?;
+
+        let library_assets = list_library_assets(&song_dir, self.engine.song())?;
+        Ok(SongPackageImportResponse {
+            snapshot: self.snapshot(),
+            library_assets,
+        })
+    }
+
     // Same as `import_song_package` but skips the blocking source-ready wait
     // and waveform/playback prep — the caller (the dialog flow) drives those
     // through `wait_for_project_audio_preparation` so the loading bar can show
@@ -3833,6 +4094,10 @@ impl DesktopSession {
         )?;
 
         Ok(self.snapshot())
+    }
+
+    pub fn transport_position_seconds(&self) -> f64 {
+        self.current_position()
     }
 
     fn current_position(&self) -> f64 {
@@ -5695,6 +5960,27 @@ pub(crate) fn slugify(value: &str) -> String {
         "song".to_string()
     } else {
         trimmed.to_string()
+    }
+}
+
+fn normalize_external_source_key(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/").to_ascii_lowercase()
+}
+
+fn unique_song_entity_id(prefix: &str, seed: &str, used: &mut HashSet<String>) -> String {
+    let slug_seed = slugify(seed);
+    let base = if slug_seed.is_empty() { "item" } else { &slug_seed };
+    let mut index = 0_u32;
+    loop {
+        let candidate = if index == 0 {
+            format!("{prefix}_{base}")
+        } else {
+            format!("{prefix}_{base}_{index}")
+        };
+        if used.insert(candidate.clone()) {
+            return candidate;
+        }
+        index += 1;
     }
 }
 
