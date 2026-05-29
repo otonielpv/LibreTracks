@@ -122,6 +122,7 @@ import {
 import { getSystemLanguage } from "../../shared/i18n";
 import { TimelineCanvasPane } from "./TimelineCanvasPane";
 import { useRenderCounter } from "./perf/useRenderCounter";
+import { CompactView } from "./CompactView";
 import { TimelineToolbar } from "./TimelineToolbar";
 import { TimelineTopbar } from "./TimelineTopbar";
 import { TrackHeadersPane } from "./TrackHeadersPane";
@@ -2553,6 +2554,87 @@ export function TransportPanelContent() {
   const selectedRegionEffectiveBpm = selectedRegion
     ? getEffectiveBpmAt(song, selectedRegion.startSeconds)
     : getSongBaseBpm(song);
+
+  // For the compact view: which tracks have at least one clip whose start
+  // falls inside each region. Built once per snapshot so the grid stays
+  // O(songs × tracks) instead of O(songs × tracks × clips) at render time.
+  const trackActivityByRegion = useMemo(() => {
+    const activity: Record<string, Set<string>> = {};
+    if (!song) return activity;
+    for (const region of song.regions) {
+      const set = new Set<string>();
+      for (const clip of song.clips) {
+        if (
+          clip.timelineStartSeconds >= region.startSeconds &&
+          clip.timelineStartSeconds < region.endSeconds
+        ) {
+          set.add(clip.trackId);
+        }
+      }
+      activity[region.id] = set;
+    }
+    return activity;
+  }, [song]);
+
+  // The compact view needs a per-region master-gain commit that knows its
+  // region id directly (the toolbar version reads selectedRegion from
+  // context). We adapt the existing handlers to accept an explicit id.
+  const handleCompactMasterGainChange = useCallback(
+    (regionId: string, gain: number) => {
+      const clamped = Math.max(0, Math.min(2, gain));
+      useTransportStore
+        .getState()
+        .setOptimisticRegionMaster(regionId, clamped);
+      void updateLiveRegionMasterGain(regionId, clamped).catch(() => {
+        // best-effort; commit reconciles
+      });
+    },
+    [],
+  );
+
+  const handleCompactMasterGainCommit = useCallback(
+    (regionId: string) => {
+      const optimistic =
+        useTransportStore.getState().optimisticRegionMaster[regionId];
+      if (optimistic === undefined) return;
+      void runAction(async () => {
+        try {
+          const nextSnapshot = await updateSongRegionMasterGain(
+            regionId,
+            optimistic,
+          );
+          applyPlaybackSnapshot(nextSnapshot);
+        } finally {
+          useTransportStore
+            .getState()
+            .setOptimisticRegionMaster(regionId, null);
+        }
+      });
+    },
+    [applyPlaybackSnapshot, runAction],
+  );
+
+  // Drop file into a (song, track) cell. Not implemented in this preview
+  // pass — the upstream library-asset flow handles file-to-clip lifting in
+  // a way that's worth porting deliberately rather than recreating here.
+  // Logs the intent so we can verify the wiring while iterating.
+  const handleCompactDropFileIntoCell = useCallback(
+    (
+      regionId: string,
+      trackId: string,
+      file: File,
+      timelineStartSeconds: number,
+    ) => {
+      // TODO(step 5.4): import file via the same asset-create path the DAW
+      // view uses, then call createClipsBatch with the right placement.
+      // eslint-disable-next-line no-console
+      console.warn(
+        "Compact view drop is not wired yet",
+        { regionId, trackId, fileName: file.name, timelineStartSeconds },
+      );
+    },
+    [],
+  );
 
   const {
     handleSaveProjectClick,
@@ -8922,6 +9004,25 @@ export function TransportPanelContent() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Compact view preview (step 5.1 of the song-model plan).
+                      Rendered alongside the linear DAW timeline rather than
+                      replacing it so the user can sanity-check the layout
+                      before we wire up the view-mode toggle (step 5.2). */}
+                  {song ? (
+                    <CompactView
+                      regions={song.regions}
+                      tracks={song.tracks}
+                      playheadSeconds={
+                        snapshotRef.current?.positionSeconds ?? 0
+                      }
+                      trackActivityByRegion={trackActivityByRegion}
+                      onMasterGainChange={handleCompactMasterGainChange}
+                      onMasterGainCommit={handleCompactMasterGainCommit}
+                      onDropFileIntoCell={handleCompactDropFileIntoCell}
+                      onSnapshotApplied={applyPlaybackSnapshot}
+                    />
+                  ) : null}
                 </section>
               )}
             </div>

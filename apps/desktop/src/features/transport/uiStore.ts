@@ -6,9 +6,14 @@ export type SongJumpTrigger = "immediate" | "region_end" | "after_bars";
 export type SongTransitionMode = "instant" | "fade_out";
 export type VampMode = "section" | "bars";
 
+/** Top-level view mode. The DAW view is the linear timeline; Compact is the
+ * Ableton-Session-style grid where every column is a song. */
+export type ViewMode = "daw" | "compact";
+
 export const TIMELINE_DEFAULT_ZOOM_LEVEL = 7;
 export const TIMELINE_DEFAULT_TRACK_HEIGHT = 76;
 export const TIMELINE_DEFAULT_SNAP_ENABLED = true;
+export const DEFAULT_VIEW_MODE: ViewMode = "daw";
 
 type TimelineUIState = {
   cameraX: number;
@@ -20,6 +25,9 @@ type TimelineUIState = {
   selectedSectionId: string | null;
   snapEnabled: boolean;
   midiLearnMode: string | null;
+  viewMode: ViewMode;
+  setViewMode: (mode: ViewMode) => void;
+  toggleViewMode: () => void;
   setCameraX: (cameraX: number) => void;
   setZoomLevel: (zoomLevel: number | ((currentZoomLevel: number) => number)) => void;
   setTrackHeight: (trackHeight: number | ((currentTrackHeight: number) => number)) => void;
@@ -48,6 +56,15 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     selectedSectionId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     midiLearnMode: null,
+    viewMode: DEFAULT_VIEW_MODE,
+    setViewMode: (viewMode) => {
+      set({ viewMode });
+    },
+    toggleViewMode: () => {
+      set((state) => ({
+        viewMode: state.viewMode === "daw" ? "compact" : "daw",
+      }));
+    },
     setCameraX: (cameraX) => {
       set({ cameraX: Number.isFinite(cameraX) ? Math.max(0, cameraX) : 0 });
     },
