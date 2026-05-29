@@ -108,6 +108,13 @@ pub struct SongRegionSummary {
     pub transpose_semitones: i32,
     pub warp_enabled: bool,
     pub warp_source_bpm: Option<f64>,
+    pub master: SongMasterSummary,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongMasterSummary {
+    pub gain: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -520,6 +527,9 @@ pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionS
         transpose_semitones: region.transpose_semitones,
         warp_enabled: region.warp_enabled,
         warp_source_bpm: region.warp_source_bpm,
+        master: SongMasterSummary {
+            gain: region.master.gain,
+        },
     }
 }
 
