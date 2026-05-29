@@ -46,6 +46,7 @@ type TimelineKeyboardShortcutsProps = {
   ) => Promise<TransportSnapshot>;
   setStatus: (status: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
+  toggleViewMode: () => void;
 };
 
 export function useTimelineKeyboardShortcuts({
@@ -69,9 +70,29 @@ export function useTimelineKeyboardShortcuts({
   scheduleRegionJumpWithOptions,
   setStatus,
   t,
+  toggleViewMode,
 }: TimelineKeyboardShortcutsProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Tab toggles between DAW and Compact view, Ableton-style. Skip when
+      // the user is typing or when modifier keys are held (Ctrl+Tab is the
+      // browser/OS tab-switch shortcut and Shift+Tab is reverse focus
+      // traversal — we don't want to steal either).
+      if (
+        event.key === "Tab" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        !event.altKey
+      ) {
+        if (isTextEntryTarget(event.target)) {
+          return;
+        }
+        event.preventDefault();
+        toggleViewMode();
+        return;
+      }
+
       if (event.code === "Space") {
         if (isTextEntryTarget(event.target)) {
           return;
@@ -304,5 +325,6 @@ export function useTimelineKeyboardShortcuts({
     pasteCopiedClips,
     snapshotRef,
     t,
+    toggleViewMode,
   ]);
 }

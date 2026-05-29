@@ -192,6 +192,8 @@ type TimelineToolbarProps = {
   onSelectedRegionWarpToggle: (nextEnabled: boolean) => void;
   onSelectedRegionMasterGainChange: (nextMasterGain: number) => void;
   onSelectedRegionMasterGainCommit: () => void;
+  viewMode: "daw" | "compact";
+  onToggleViewMode: () => void;
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => void;
 };
@@ -290,6 +292,8 @@ export function TimelineToolbar({
   onSelectedRegionWarpToggle,
   onSelectedRegionMasterGainChange,
   onSelectedRegionMasterGainCommit,
+  viewMode,
+  onToggleViewMode,
   midiLearnMode,
   onMidiLearnTarget,
 }: TimelineToolbarProps) {
@@ -389,6 +393,27 @@ export function TimelineToolbar({
     <div className="lt-timeline-topline" ref={toolbarRootRef}>
       <div className="lt-timeline-meta">
         <div className="lt-timeline-controls lt-bottom-controls">
+          <button
+            type="button"
+            className={`lt-icon-button ${viewMode === "compact" ? "is-active" : ""}`}
+            aria-label={
+              viewMode === "compact"
+                ? "Cambiar a vista DAW"
+                : "Cambiar a vista compacta"
+            }
+            aria-pressed={viewMode === "compact"}
+            title={
+              viewMode === "compact"
+                ? "Vista compacta (pulsa Tab para volver a DAW)"
+                : "Vista DAW (pulsa Tab para cambiar a compacta)"
+            }
+            onClick={onToggleViewMode}
+          >
+            <span className="material-symbols-outlined">
+              {viewMode === "compact" ? "view_timeline" : "view_module"}
+            </span>
+          </button>
+
           <button
             type="button"
             className={`lt-icon-button ${snapEnabled ? "is-active" : ""}`}

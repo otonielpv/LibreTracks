@@ -4474,16 +4474,12 @@ textarea {
    ───────────────────────────────────────────────────────────────────────── */
 .lt-compact-view {
   width: 100%;
-  /* Preview mode (step 5.1): the compact grid lives below the DAW timeline,
-     so cap its height so the DAW doesn't get pushed off-screen. Step 5.2
-     will replace this with the full lt-main-stage area once the view-mode
-     toggle swaps DAW and Compact instead of stacking them. */
-  max-height: 22rem;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 1rem;
   background: rgb(8 10 11);
-  border-top: 1px solid rgba(186, 202, 197, 0.12);
-  margin-top: 0.5rem;
 }
 
 .lt-compact-view-grid {

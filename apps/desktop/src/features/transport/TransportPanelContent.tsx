@@ -663,6 +663,8 @@ export function TransportPanelContent() {
   const trackHeight = useTimelineUIStore((state) => state.trackHeight);
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
   const midiLearnMode = useTimelineUIStore((state) => state.midiLearnMode);
+  const viewMode = useTimelineUIStore((state) => state.viewMode);
+  const toggleViewMode = useTimelineUIStore((state) => state.toggleViewMode);
   const midiLearnCommandRows = useMemo(
     () =>
       MIDI_LEARN_COMMANDS.map((command) => ({
@@ -3265,6 +3267,7 @@ export function TransportPanelContent() {
     scheduleRegionJumpWithOptions,
     setStatus,
     t,
+    toggleViewMode,
   });
 
   useEffect(() => {
@@ -8441,10 +8444,13 @@ export function TransportPanelContent() {
                     onSelectedRegionMasterGainCommit={
                       handleSelectedRegionMasterGainCommit
                     }
+                    viewMode={viewMode}
+                    onToggleViewMode={toggleViewMode}
                     midiLearnMode={midiLearnMode}
                     onMidiLearnTarget={handleMidiLearnTarget}
                   />
 
+                  {viewMode === "daw" ? (
                   <div
                     className="lt-timeline-shell"
                     ref={timelineShellRef}
@@ -9005,11 +9011,13 @@ export function TransportPanelContent() {
                     </div>
                   </div>
 
-                  {/* Compact view preview (step 5.1 of the song-model plan).
-                      Rendered alongside the linear DAW timeline rather than
-                      replacing it so the user can sanity-check the layout
-                      before we wire up the view-mode toggle (step 5.2). */}
-                  {song ? (
+                  ) : null}
+
+                  {/* Compact view replaces the DAW timeline when the user
+                      toggles view mode (toolbar button or Tab key). The
+                      backend snapshot powering both views is the same; the
+                      two components are pure projections of song state. */}
+                  {viewMode === "compact" && song ? (
                     <CompactView
                       regions={song.regions}
                       tracks={song.tracks}
