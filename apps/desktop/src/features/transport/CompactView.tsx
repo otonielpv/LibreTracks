@@ -321,8 +321,9 @@ function CompactSongColumnComponent({
               </span>
               <span
                 className="lt-compact-clip-track-name"
-                title={clip.trackName}
+                title={`Track: ${clip.trackName}`}
               >
+                <span className="lt-compact-clip-track-label">Track:</span>{" "}
                 {clip.trackName}
               </span>
             </div>

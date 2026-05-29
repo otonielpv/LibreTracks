@@ -4682,8 +4682,15 @@ textarea {
   text-overflow: ellipsis;
 }
 
+/* The "Track:" prefix label inside a clip entry. Slightly more muted than
+   the track name itself so the eye lands on the name, not the label. */
+.lt-compact-clip-track-label {
+  color: rgba(186, 202, 197, 0.45);
+  font-weight: 400;
+}
+
 .lt-compact-clip-track-name {
-  color: rgba(186, 202, 197, 0.6);
+  color: rgba(186, 202, 197, 0.78);
   font: 500 9px/1.2 "Space Grotesk", sans-serif;
   letter-spacing: 0.06em;
   text-transform: uppercase;
