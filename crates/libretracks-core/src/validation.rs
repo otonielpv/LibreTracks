@@ -82,6 +82,16 @@ pub enum DomainError {
     },
     #[error("region {region_id} has invalid master gain {gain}")]
     InvalidRegionMasterGain { region_id: String, gain: String },
+    #[error("clip {clip_id} at {clip_start_seconds}s falls outside every region")]
+    ClipOutsideAnyRegion {
+        clip_id: String,
+        clip_start_seconds: String,
+    },
+    #[error("clip {clip_id} spans the boundary between region {region_id} and the next region")]
+    ClipCrossesRegionBoundary {
+        clip_id: String,
+        region_id: String,
+    },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -176,6 +186,38 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
                 clip_id: clip.id.clone(),
                 track_id: clip.track_id.clone(),
             });
+        }
+
+        // Invariant: every clip lives inside exactly one region.
+        // - The start of the clip (clip.timeline_start_seconds) must fall in
+        //   [region.start, region.end) of some region.
+        // - The end of the clip (start + duration) must fall in the same
+        //   region; spanning a boundary is rejected.
+        // Songs with no regions skip this check so empty-project bootstrap is
+        // valid. The auto-create-region flow in the desktop layer guarantees
+        // any non-empty timeline has at least one region.
+        if !song.regions.is_empty() {
+            let clip_start = clip.timeline_start_seconds;
+            let clip_end = clip_start + clip.duration_seconds;
+            let containing_region = song
+                .regions
+                .iter()
+                .find(|region| clip_start >= region.start_seconds && clip_start < region.end_seconds);
+            let containing_region = match containing_region {
+                Some(region) => region,
+                None => {
+                    return Err(DomainError::ClipOutsideAnyRegion {
+                        clip_id: clip.id.clone(),
+                        clip_start_seconds: format!("{}", clip_start),
+                    });
+                }
+            };
+            if clip_end > containing_region.end_seconds {
+                return Err(DomainError::ClipCrossesRegionBoundary {
+                    clip_id: clip.id.clone(),
+                    region_id: containing_region.id.clone(),
+                });
+            }
         }
     }
 

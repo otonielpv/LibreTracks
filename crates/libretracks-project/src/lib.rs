@@ -468,16 +468,25 @@ mod tests {
         let existing_audio_path = song_dir.join("audio").join("click.wav");
         write_test_wav(&existing_audio_path, 44_100, 2, 2);
 
+        // The original fixture had clip.duration=4.0 spanning past
+        // region.end=2.0, which the new "clip inside one region" invariant
+        // rejects. Pin both to 2.0 so the clip fits and the test still
+        // covers the append-without-replace behaviour it was written for.
         let mut song = demo_song();
         song.duration_seconds = 4.0;
         song.regions[0].end_seconds = 2.0;
-        song.clips[0].duration_seconds = 4.0;
+        song.clips[0].duration_seconds = 2.0;
         save_song(&song_dir, &song).expect("song should save");
 
         let imports_dir = root.path().join("imports");
         fs::create_dir_all(&imports_dir).expect("imports dir should exist");
         let duplicate_click_path = imports_dir.join("click.wav");
-        write_test_wav(&duplicate_click_path, 44_100, 2, 3);
+        // Keep the appended clip short enough to fit inside the existing
+        // region (ends at 2s). Auto-extending the region to make room for
+        // a longer clip lives in step 4.4 of the song-model plan; this
+        // test only covers the append-without-replace behaviour, so
+        // shorter audio is fine.
+        write_test_wav(&duplicate_click_path, 44_100, 2, 1);
 
         let appended_song =
             append_wav_files_to_song(&song_dir, &song, &[duplicate_click_path.clone()], |_, _| {})

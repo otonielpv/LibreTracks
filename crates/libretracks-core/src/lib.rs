@@ -134,6 +134,59 @@ mod tests {
     }
 
     #[test]
+    fn rejects_clip_that_falls_outside_every_region() {
+        // valid_song() has region [0, 240). Move the clip start beyond
+        // the region so no region contains its start.
+        let mut song = valid_song();
+        song.clips[0].timeline_start_seconds = 300.0;
+        song.clips[0].duration_seconds = 10.0;
+
+        let error = validate_song(&song).expect_err("song should be invalid");
+        assert!(
+            error.to_string().contains("falls outside every region"),
+            "expected outside-region error, got: {error}"
+        );
+    }
+
+    #[test]
+    fn rejects_clip_that_crosses_a_region_boundary() {
+        // valid_song() has region [0, 240). Insert a second region [240, 360)
+        // so the boundary is real, then make the clip extend across it.
+        let mut song = valid_song();
+        song.regions.push(SongRegion {
+            id: "region_outro".into(),
+            name: "Outro".into(),
+            start_seconds: 240.0,
+            end_seconds: 360.0,
+            transpose_semitones: 0,
+            warp_enabled: false,
+            warp_source_bpm: None,
+            master: SongMaster::default(),
+        });
+        // Clip starts inside region_intro [0, 240) but extends past 240.
+        song.clips[0].timeline_start_seconds = 230.0;
+        song.clips[0].duration_seconds = 30.0;
+
+        let error = validate_song(&song).expect_err("song should be invalid");
+        assert!(
+            error.to_string().contains("spans the boundary"),
+            "expected boundary error, got: {error}"
+        );
+    }
+
+    #[test]
+    fn allows_clip_when_song_has_no_regions() {
+        // Empty-regions edge case: a song bootstrap with clips but no
+        // regions yet should still validate. Auto-create-region logic at
+        // the desktop layer is responsible for materialising the region
+        // before the song is persisted long-term.
+        let mut song = valid_song();
+        song.regions.clear();
+
+        assert!(validate_song(&song).is_ok());
+    }
+
+    #[test]
     fn serializes_song_to_json() {
         let song = valid_song();
         let json = serde_json::to_string_pretty(&song).expect("song should serialize");
