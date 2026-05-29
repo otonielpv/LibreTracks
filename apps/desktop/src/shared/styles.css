@@ -5010,13 +5010,20 @@ textarea {
 .lt-compact-clip-menu-item {
   display: block;
   width: 100%;
+  /* Prevent flex column shrinking from compressing each item vertically.
+     Without this, a long submenu inside the 14rem max-height list gets
+     each item squished and the descenders/ascenders of the track name
+     get clipped. */
+  flex: 0 0 auto;
+  min-height: 1.6rem;
+  box-sizing: border-box;
   text-align: left;
   padding: 0.4rem 0.55rem;
   background: transparent;
   border: 0;
   border-radius: 2px;
   color: #e5e2e1;
-  font: 500 11px/1.2 "Space Grotesk", sans-serif;
+  font: 500 11px/1.4 "Space Grotesk", sans-serif;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
