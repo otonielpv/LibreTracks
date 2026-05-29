@@ -4360,6 +4360,10 @@ textarea {
    Slider sits on top of a horizontal meter bar so the user reads gain
    position and post-master peak level at a glance.
    ───────────────────────────────────────────────────────────────────────── */
+.lt-control-group-master .lt-control-popover-panel {
+  min-width: 16rem;
+}
+
 .lt-master-gain-row {
   align-items: center;
   width: 100%;
@@ -4368,16 +4372,26 @@ textarea {
 .lt-region-master-fader {
   position: relative;
   flex: 1 1 auto;
-  min-width: 8rem;
-  display: flex;
-  align-items: center;
+  min-width: 10rem;
+  display: block;
+  height: 28px;
+}
+
+/* The popover's default ".lt-stepper-control-row input { width: 4rem }" would
+   collapse the range slider into a thumb-only square — override to fill the
+   fader column so the meter bar and slider track align. */
+.lt-stepper-control-row input.lt-region-master-fader-slider {
+  width: 100%;
+  height: 28px;
 }
 
 .lt-region-master-fader-meter {
   position: absolute;
-  inset: 50% 0 auto 0;
+  top: 50%;
+  left: 0;
+  right: 0;
   transform: translateY(-50%);
-  height: 0.45rem;
+  height: 0.55rem;
   border-radius: 2px;
   background: rgb(20 26 25 / 0.85);
   overflow: hidden;
@@ -4396,15 +4410,45 @@ textarea {
 }
 
 .lt-region-master-fader-slider {
-  position: relative;
-  width: 100%;
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
   background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  z-index: 1;
 }
 
 .lt-region-master-fader-slider::-webkit-slider-runnable-track {
+  height: 0.55rem;
   background: transparent;
+  border-radius: 2px;
 }
 
 .lt-region-master-fader-slider::-moz-range-track {
+  height: 0.55rem;
   background: transparent;
+  border-radius: 2px;
+}
+
+.lt-region-master-fader-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0.6rem;
+  height: 1.1rem;
+  margin-top: -0.275rem;
+  border: 0;
+  border-radius: 2px;
+  background: #f3f0ef;
+  cursor: ew-resize;
+}
+
+.lt-region-master-fader-slider::-moz-range-thumb {
+  width: 0.6rem;
+  height: 1.1rem;
+  border: 0;
+  border-radius: 2px;
+  background: #f3f0ef;
+  cursor: ew-resize;
 }
