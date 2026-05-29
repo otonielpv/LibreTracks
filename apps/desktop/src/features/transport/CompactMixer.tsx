@@ -69,6 +69,26 @@ type CompactMixerStripProps = {
   handlers: CompactMixerHandlers;
 };
 
+// Snap thresholds: when the slider lands within this fraction of the
+// snap target, the value pulls to the target. 3% of the slider range
+// matches the "feels-magnetic" zone in Ableton and most other DAWs.
+const VOLUME_SNAP_TARGET = 1.0;
+const VOLUME_SNAP_RANGE = 1.0; // slider runs 0..1
+const VOLUME_SNAP_THRESHOLD = VOLUME_SNAP_RANGE * 0.03;
+const PAN_SNAP_TARGET = 0.0;
+const PAN_SNAP_RANGE = 2.0; // slider runs -1..1
+const PAN_SNAP_THRESHOLD = PAN_SNAP_RANGE * 0.03;
+
+function applySnap(
+  value: number,
+  target: number,
+  threshold: number,
+  bypass: boolean,
+): number {
+  if (bypass) return value;
+  return Math.abs(value - target) <= threshold ? target : value;
+}
+
 function CompactMixerStripComponent({
   track,
   audioRoutingOptions,
@@ -87,11 +107,37 @@ function CompactMixerStripComponent({
   const volume = effectiveNumber(optimisticMix?.volume, track.volume);
   const pan = effectiveNumber(optimisticMix?.pan, track.pan);
 
+  // Track Shift state via global key listeners so the slider's onChange
+  // can read it without the event object: ChangeEvent doesn't carry
+  // modifier flags. Pressing Shift while dragging temporarily disables
+  // the snap so the user can adjust right across unity / centre.
+  const shiftPressedRef = useRef(false);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Shift") shiftPressedRef.current = true;
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Shift") shiftPressedRef.current = false;
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
   const handleVolumeInput = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const next = Number(event.target.value);
       if (!Number.isFinite(next)) return;
-      handlers.onVolumeChange(track.id, next);
+      const snapped = applySnap(
+        next,
+        VOLUME_SNAP_TARGET,
+        VOLUME_SNAP_THRESHOLD,
+        shiftPressedRef.current,
+      );
+      handlers.onVolumeChange(track.id, snapped);
     },
     [handlers, track.id],
   );
@@ -100,10 +146,30 @@ function CompactMixerStripComponent({
     (event: ChangeEvent<HTMLInputElement>) => {
       const next = Number(event.target.value);
       if (!Number.isFinite(next)) return;
-      handlers.onPanChange(track.id, next);
+      const snapped = applySnap(
+        next,
+        PAN_SNAP_TARGET,
+        PAN_SNAP_THRESHOLD,
+        shiftPressedRef.current,
+      );
+      handlers.onPanChange(track.id, snapped);
     },
     [handlers, track.id],
   );
+
+  // Double-click resets to the snap target — Ableton-style "reset to unity"
+  // for the fader and "reset to centre" for the pan. After the reset we
+  // also commit so the snapshot reflects the new value immediately rather
+  // than waiting for the next pointer-up.
+  const handleVolumeDoubleClick = useCallback(() => {
+    handlers.onVolumeChange(track.id, VOLUME_SNAP_TARGET);
+    handlers.onCommitVolume(track.id);
+  }, [handlers, track.id]);
+
+  const handlePanDoubleClick = useCallback(() => {
+    handlers.onPanChange(track.id, PAN_SNAP_TARGET);
+    handlers.onCommitPan(track.id);
+  }, [handlers, track.id]);
 
   const handleAudioToChange = useCallback(
     (event: ChangeEvent<HTMLSelectElement>) => {
@@ -174,6 +240,7 @@ function CompactMixerStripComponent({
           value={volume}
           aria-label={`Volume ${track.name}`}
           onChange={handleVolumeInput}
+          onDoubleClick={handleVolumeDoubleClick}
           onPointerUp={() => handlers.onCommitVolume(track.id)}
           onPointerCancel={() => handlers.onCommitVolume(track.id)}
           onKeyUp={(event) => {
@@ -195,6 +262,7 @@ function CompactMixerStripComponent({
           value={pan}
           aria-label={`Pan ${track.name}`}
           onChange={handlePanInput}
+          onDoubleClick={handlePanDoubleClick}
           onPointerUp={() => handlers.onCommitPan(track.id)}
           onPointerCancel={() => handlers.onCommitPan(track.id)}
           onKeyUp={(event) => {
