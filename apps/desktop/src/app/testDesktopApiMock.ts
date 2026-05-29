@@ -1323,6 +1323,12 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
+  updateLiveRegionMasterGain: async (
+    _regionId: string,
+    _masterGain: number,
+  ) => {
+    // Mock: realtime stream is a no-op (no audio engine in tests).
+  },
   updateSongRegionMasterGain: async (regionId: string, masterGain: number) => {
     replaceSong({
       ...state.song,

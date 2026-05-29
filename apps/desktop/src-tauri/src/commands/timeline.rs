@@ -319,6 +319,24 @@ pub fn update_song_region_warp(
         .map_err(|error| error.to_string())
 }
 
+/// Realtime master-gain stream during drag. Bridge-only: pushes the value to
+/// the engine and returns immediately. No model write, no snapshot, no undo.
+/// Use `update_song_region_master_gain` on pointer-up to commit the value.
+#[tauri::command]
+pub fn update_live_region_master_gain(
+    region_id: String,
+    master_gain: f64,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    if !master_gain.is_finite() || master_gain < 0.0 {
+        return Err("master gain must be a finite, non-negative number".into());
+    }
+    state
+        .audio
+        .update_live_region_master_gain(&region_id, master_gain as f32)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub fn update_song_region_master_gain(
     region_id: String,

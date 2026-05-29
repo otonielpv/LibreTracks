@@ -580,7 +580,23 @@ export async function updateSongRegionWarp(
 }
 
 /**
- * Update the master fader gain for a song region. `masterGain` is a linear
+ * Realtime stream of region master gain during a slider drag. Bridge-only:
+ * the engine receives the new value but the model is not written and no
+ * snapshot is returned. Call `updateSongRegionMasterGain` on pointer-up to
+ * commit the value (writes model, records undo, returns snapshot).
+ */
+export async function updateLiveRegionMasterGain(
+  regionId: string,
+  masterGain: number,
+): Promise<void> {
+  return invokeCommand<void>("update_live_region_master_gain", {
+    regionId,
+    masterGain,
+  });
+}
+
+/**
+ * Commit the master fader gain for a song region. `masterGain` is a linear
  * multiplier: 1.0 means unity, 0.0 means silent. Must be finite and >= 0.
  */
 export async function updateSongRegionMasterGain(

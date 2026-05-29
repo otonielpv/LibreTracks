@@ -27,16 +27,20 @@ export type MeterDictionary = Record<string, TrackMeterState>;
 
 export type RegionMeterDictionary = Record<string, number>;
 
+export type OptimisticRegionMasterDictionary = Record<string, number>;
+
 type TransportStore = {
   meters: MeterDictionary;
   regionMeters: RegionMeterDictionary;
   playback: TransportSnapshot | null;
   optimisticMix: Record<string, OptimisticMixState>;
+  optimisticRegionMaster: OptimisticRegionMasterDictionary;
   pendingAudioImports: PendingAudioImport[];
   setMeters: (meters: MeterDictionary) => void;
   setRegionMeters: (meters: RegionMeterDictionary) => void;
   setPlaybackState: (playback: TransportSnapshot | null) => void;
   setOptimisticMix: (trackId: string, mix: OptimisticMixState | null) => void;
+  setOptimisticRegionMaster: (regionId: string, gain: number | null) => void;
   addPendingAudioImports: (imports: PendingAudioImport[]) => void;
   updatePendingAudioImportStatus: (
     ids: string[],
@@ -152,12 +156,31 @@ export const useTransportStore = create<TransportStore>()(
     regionMeters: {},
     playback: null,
     optimisticMix: {},
+    optimisticRegionMaster: {},
     pendingAudioImports: [],
     setMeters: (meters) => {
       set({ meters });
     },
     setRegionMeters: (regionMeters) => {
       set({ regionMeters });
+    },
+    setOptimisticRegionMaster: (regionId, gain) => {
+      set((state) => {
+        if (gain === null) {
+          if (!(regionId in state.optimisticRegionMaster)) {
+            return state;
+          }
+          const next = { ...state.optimisticRegionMaster };
+          delete next[regionId];
+          return { optimisticRegionMaster: next };
+        }
+        return {
+          optimisticRegionMaster: {
+            ...state.optimisticRegionMaster,
+            [regionId]: gain,
+          },
+        };
+      });
     },
     setPlaybackState: (playback) => {
       set((state) =>

@@ -103,6 +103,7 @@ import {
   updateClipColor,
   updateAudioSettings,
   updateSectionMarker,
+  updateLiveRegionMasterGain,
   updateSongRegion,
   updateSongRegionMasterGain,
   updateSongRegionTranspose,
@@ -2505,27 +2506,46 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, refreshSongView, runAction, selectedRegion, song],
   );
 
-  // Master gain handler: simple replace + IPC. Mixer applies the new gain on
-  // the next audio block (atomic session swap on the C++ side). No timeline
-  // refetch needed — the change is mixer-only.
+  // Master gain handlers follow the track-volume pattern: during drag the
+  // slider writes an optimistic value to the store (so the thumb tracks the
+  // pointer with no IPC delay) and streams realtime updates to the engine;
+  // on pointer-up we commit (writes model, records undo, returns snapshot).
   const handleSelectedRegionMasterGainChange = useCallback(
     (nextMasterGain: number) => {
       if (!selectedRegion) return;
       const clamped = Math.max(0, Math.min(2, nextMasterGain));
-      if (Math.abs(clamped - (selectedRegion.master?.gain ?? 1.0)) < 1e-6) {
-        return;
-      }
       const targetRegionId = selectedRegion.id;
-      void runAction(async () => {
-        const nextSnapshot = await updateSongRegionMasterGain(
-          targetRegionId,
-          clamped,
-        );
-        applyPlaybackSnapshot(nextSnapshot);
+      useTransportStore
+        .getState()
+        .setOptimisticRegionMaster(targetRegionId, clamped);
+      void updateLiveRegionMasterGain(targetRegionId, clamped).catch(() => {
+        // Realtime stream is best-effort; commit on pointer-up will
+        // reconcile the truth.
       });
     },
-    [applyPlaybackSnapshot, runAction, selectedRegion],
+    [selectedRegion],
   );
+
+  const handleSelectedRegionMasterGainCommit = useCallback(() => {
+    if (!selectedRegion) return;
+    const targetRegionId = selectedRegion.id;
+    const optimistic =
+      useTransportStore.getState().optimisticRegionMaster[targetRegionId];
+    if (optimistic === undefined) return;
+    void runAction(async () => {
+      try {
+        const nextSnapshot = await updateSongRegionMasterGain(
+          targetRegionId,
+          optimistic,
+        );
+        applyPlaybackSnapshot(nextSnapshot);
+      } finally {
+        useTransportStore
+          .getState()
+          .setOptimisticRegionMaster(targetRegionId, null);
+      }
+    });
+  }, [applyPlaybackSnapshot, runAction, selectedRegion]);
 
   // Effective timeline BPM at the start of the selected region — the warp
   // panel uses this both for display (× ratio) and as the default source
@@ -8335,6 +8355,9 @@ export function TransportPanelContent() {
                     onSelectedRegionWarpToggle={handleSelectedRegionWarpToggle}
                     onSelectedRegionMasterGainChange={
                       handleSelectedRegionMasterGainChange
+                    }
+                    onSelectedRegionMasterGainCommit={
+                      handleSelectedRegionMasterGainCommit
                     }
                     midiLearnMode={midiLearnMode}
                     onMidiLearnTarget={handleMidiLearnTarget}

@@ -24,6 +24,7 @@ type RegionMasterFaderProps = {
   masterGain: number;
   disabled: boolean;
   onChange: (nextGain: number) => void;
+  onCommit: () => void;
 };
 
 function RegionMasterFaderComponent({
@@ -31,6 +32,7 @@ function RegionMasterFaderComponent({
   masterGain,
   disabled,
   onChange,
+  onCommit,
 }: RegionMasterFaderProps) {
   const meterFillRef = useRef<HTMLDivElement | null>(null);
   const animationStateRef = useRef({
@@ -132,6 +134,24 @@ function RegionMasterFaderComponent({
         value={masterGain}
         disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value) || 0)}
+        onPointerUp={() => onCommit()}
+        onPointerCancel={() => onCommit()}
+        onKeyUp={(event) => {
+          // Commit on arrow-key release so keyboard users get undo entries
+          // matching what mouse users get on pointer-up.
+          if (
+            event.key === "ArrowUp" ||
+            event.key === "ArrowDown" ||
+            event.key === "ArrowLeft" ||
+            event.key === "ArrowRight" ||
+            event.key === "PageUp" ||
+            event.key === "PageDown" ||
+            event.key === "Home" ||
+            event.key === "End"
+          ) {
+            onCommit();
+          }
+        }}
       />
     </div>
   );
@@ -171,6 +191,7 @@ type TimelineToolbarProps = {
   selectedRegionEffectiveBpm: number;
   onSelectedRegionWarpToggle: (nextEnabled: boolean) => void;
   onSelectedRegionMasterGainChange: (nextMasterGain: number) => void;
+  onSelectedRegionMasterGainCommit: () => void;
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => void;
 };
@@ -268,6 +289,7 @@ export function TimelineToolbar({
   selectedRegionEffectiveBpm,
   onSelectedRegionWarpToggle,
   onSelectedRegionMasterGainChange,
+  onSelectedRegionMasterGainCommit,
   midiLearnMode,
   onMidiLearnTarget,
 }: TimelineToolbarProps) {
@@ -337,7 +359,14 @@ export function TimelineToolbar({
     : t("timelineToolbar.regionWarpNoSelection");
   const warpControlsDisabled = controlsDisabled || !selectedRegion;
 
-  const masterGain = selectedRegion?.master?.gain ?? 1.0;
+  // Read the optimistic value (set during drag) if present, otherwise fall
+  // back to the snapshot value. This is what lets the thumb track the
+  // pointer with no IPC delay — same pattern as TrackMixer volume.
+  const optimisticMasterGain = useTransportStore((state) =>
+    selectedRegion ? state.optimisticRegionMaster[selectedRegion.id] : undefined,
+  );
+  const masterGain =
+    optimisticMasterGain ?? selectedRegion?.master?.gain ?? 1.0;
   const masterGainDb =
     masterGain > 0 ? 20 * Math.log10(masterGain) : Number.NEGATIVE_INFINITY;
   const masterSummary = selectedRegion
@@ -792,6 +821,7 @@ export function TimelineToolbar({
                     masterGain={masterGain}
                     disabled={masterControlsDisabled}
                     onChange={onSelectedRegionMasterGainChange}
+                    onCommit={onSelectedRegionMasterGainCommit}
                   />
                   <button
                     type="button"

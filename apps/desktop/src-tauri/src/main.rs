@@ -158,6 +158,7 @@ fn main() {
             commands::timeline::update_song_region,
             commands::timeline::update_song_region_transpose,
             commands::timeline::update_song_region_warp,
+            commands::timeline::update_live_region_master_gain,
             commands::timeline::update_song_region_master_gain,
             commands::timeline::delete_song_region,
             commands::timeline::assign_section_marker_digit,
