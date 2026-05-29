@@ -2557,19 +2557,26 @@ export function TransportPanelContent() {
     ? getEffectiveBpmAt(song, selectedRegion.startSeconds)
     : getSongBaseBpm(song);
 
-  // For the compact view: which clips of each track fall inside each region.
-  // The structure is region_id → track_id → clip[] (sorted by timeline_start).
-  // Used both for the "is this cell active" question (set has entries) and
-  // for showing a clip name / count inside the cell. Built once per
-  // snapshot so the grid stays cheap to render.
-  const clipsByRegionAndTrack = useMemo(() => {
+  // For the compact view: the flat list of clips that fall inside each
+  // region, sorted by the track ordering of the project (so the column
+  // reads top-to-bottom in the same order the user sees tracks in the DAW
+  // header pane). Each entry carries the clip name + the track name so the
+  // cell can label which track the clip belongs to without a separate
+  // label column.
+  const clipsByRegion = useMemo(() => {
     const byRegion: Record<
       string,
-      Record<string, { id: string; name: string }[]>
+      { id: string; clipName: string; trackId: string; trackName: string }[]
     > = {};
     if (!song) return byRegion;
+    const trackOrderIndex = new Map<string, number>();
+    const trackNameById = new Map<string, string>();
+    song.tracks.forEach((track, index) => {
+      trackOrderIndex.set(track.id, index);
+      trackNameById.set(track.id, track.name);
+    });
     for (const region of song.regions) {
-      byRegion[region.id] = {};
+      byRegion[region.id] = [];
     }
     for (const clip of song.clips) {
       const region = song.regions.find(
@@ -2578,11 +2585,24 @@ export function TransportPanelContent() {
           clip.timelineStartSeconds < r.endSeconds,
       );
       if (!region) continue;
-      const slot = (byRegion[region.id][clip.trackId] ??= []);
       const fileName =
         clip.filePath?.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") ??
         clip.id;
-      slot.push({ id: clip.id, name: fileName });
+      byRegion[region.id].push({
+        id: clip.id,
+        clipName: fileName,
+        trackId: clip.trackId,
+        trackName: trackNameById.get(clip.trackId) ?? clip.trackId,
+      });
+    }
+    // Sort each region's clip list by the track order of the project so
+    // the column reflects the DAW's vertical track layout.
+    for (const regionId of Object.keys(byRegion)) {
+      byRegion[regionId].sort((a, b) => {
+        const ia = trackOrderIndex.get(a.trackId) ?? Number.MAX_SAFE_INTEGER;
+        const ib = trackOrderIndex.get(b.trackId) ?? Number.MAX_SAFE_INTEGER;
+        return ia - ib;
+      });
     }
     return byRegion;
   }, [song]);
@@ -2625,14 +2645,14 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, runAction],
   );
 
-  // Drop file into a (song, track) cell. Not implemented in this preview
-  // pass — the upstream library-asset flow handles file-to-clip lifting in
-  // a way that's worth porting deliberately rather than recreating here.
-  // Logs the intent so we can verify the wiring while iterating.
+  // Drop file into a song column. The redesigned compact view (step 5.5)
+  // no longer has per-(song, track) cells — the user drops onto the song
+  // and the system infers the track from the audio metadata or assigns it
+  // to a new track. The library-asset pipeline will land in step 5.4;
+  // until then we log the intent to verify the wiring.
   const handleCompactDropFileIntoCell = useCallback(
     (
       regionId: string,
-      trackId: string,
       file: File,
       timelineStartSeconds: number,
     ) => {
@@ -2641,7 +2661,7 @@ export function TransportPanelContent() {
       // eslint-disable-next-line no-console
       console.warn(
         "Compact view drop is not wired yet",
-        { regionId, trackId, fileName: file.name, timelineStartSeconds },
+        { regionId, fileName: file.name, timelineStartSeconds },
       );
     },
     [],
@@ -9033,10 +9053,21 @@ export function TransportPanelContent() {
                       playheadSeconds={
                         snapshotRef.current?.positionSeconds ?? 0
                       }
-                      clipsByRegionAndTrack={clipsByRegionAndTrack}
+                      clipsByRegion={clipsByRegion}
+                      audioRoutingOptions={audioRoutingOptions}
+                      mixerHandlers={{
+                        onToggleMute: handleTrackHeaderMuteToggle,
+                        onToggleSolo: handleTrackHeaderSoloToggle,
+                        onToggleTranspose: handleTrackHeaderTransposeToggle,
+                        onVolumeChange: handleTrackHeaderVolumeChange,
+                        onCommitVolume: handleTrackHeaderVolumeCommit,
+                        onPanChange: handleTrackHeaderPanChange,
+                        onCommitPan: handleTrackHeaderPanCommit,
+                        onAudioToChange: handleTrackAudioToChange,
+                      }}
                       onMasterGainChange={handleCompactMasterGainChange}
                       onMasterGainCommit={handleCompactMasterGainCommit}
-                      onDropFileIntoCell={handleCompactDropFileIntoCell}
+                      onDropFileIntoSong={handleCompactDropFileIntoCell}
                       onSnapshotApplied={applyPlaybackSnapshot}
                     />
                   ) : null}

@@ -4468,33 +4468,45 @@ textarea {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Compact view — Ableton-Session-style grid where columns are songs and
-   rows are tracks. Lives parallel to the linear DAW timeline; the user
-   toggles between them via the toolbar button or the Tab key.
+   Compact view — two zones stacked vertically:
+   - Top: horizontal list of song columns. Each has a header (name + master
+     fader + post-master meter) and below it a vertical stack of the clips
+     that live inside that song, ordered the same way the DAW shows tracks.
+   - Bottom: horizontal-scroll mixer that lays out one vertical channel
+     strip per project track (reused via CompactMixer.tsx so the DAW view
+     can mount it too).
    ───────────────────────────────────────────────────────────────────────── */
 .lt-compact-view {
   width: 100%;
   height: 100%;
-  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  overflow: auto;
-  padding: 1rem;
   background: rgb(8 10 11);
 }
 
-.lt-compact-view-grid {
-  display: grid;
-  /* Columns are set inline from CompactView via gridTemplateColumns so the
-     number of song columns is always correct. The fallback here keeps the
-     empty-project state laid out reasonably while inline styles attach. */
-  grid-template-columns: minmax(8rem, max-content) 1fr 8rem;
-  gap: 0.25rem;
+.lt-compact-songs {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
   align-items: stretch;
 }
 
-.lt-compact-view-corner,
-.lt-compact-cell-spacer {
-  background: transparent;
+.lt-compact-song-column {
+  flex: 0 0 14rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+}
+
+.lt-compact-song-column.is-active .lt-compact-song-header {
+  border-color: rgb(87 241 219 / 0.65);
+  box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.35);
 }
 
 .lt-compact-song-header {
@@ -4505,11 +4517,6 @@ textarea {
   background: rgb(20 26 25 / 0.85);
   border: 1px solid rgba(186, 202, 197, 0.12);
   border-radius: 2px;
-}
-
-.lt-compact-song-header.is-active {
-  border-color: rgb(87 241 219 / 0.65);
-  box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.35);
 }
 
 .lt-compact-song-name {
@@ -4599,7 +4606,57 @@ textarea {
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45);
 }
 
+.lt-compact-song-clip-stack {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  background: rgb(14 17 18 / 0.5);
+  border: 1px solid rgba(186, 202, 197, 0.08);
+  border-radius: 2px;
+}
+
+.lt-compact-song-clip-stack-empty {
+  margin: auto;
+  text-align: center;
+  color: rgba(186, 202, 197, 0.5);
+  font: 500 10px/1.4 "Space Grotesk", sans-serif;
+  letter-spacing: 0.05em;
+}
+
+.lt-compact-clip-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0.55rem;
+  background: rgb(20 26 25 / 0.85);
+  border: 1px solid rgba(186, 202, 197, 0.1);
+  border-radius: 2px;
+}
+
+.lt-compact-clip-name {
+  color: #e5e2e1;
+  font: 500 11px/1.2 "Space Grotesk", sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lt-compact-clip-track-name {
+  color: rgba(186, 202, 197, 0.6);
+  font: 500 9px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .lt-compact-view-add-song {
+  flex: 0 0 8rem;
   align-self: stretch;
   border: 1px dashed rgba(186, 202, 197, 0.25);
   border-radius: 2px;
@@ -4610,7 +4667,6 @@ textarea {
   text-transform: uppercase;
   cursor: pointer;
   padding: 0 0.7rem;
-  min-height: 4rem;
 }
 
 .lt-compact-view-add-song:hover {
@@ -4618,67 +4674,154 @@ textarea {
   color: #57f1db;
 }
 
-.lt-compact-track-label {
+/* ─── Bottom mixer ────────────────────────────────────────────────────── */
+.lt-compact-mixer {
+  flex: 0 0 auto;
+  border-top: 1px solid rgba(186, 202, 197, 0.12);
+  padding: 0.5rem 1rem;
+  background: rgb(11 13 14);
+  overflow: hidden;
+}
+
+.lt-compact-mixer-strips {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.25rem;
+}
+
+.lt-compact-mixer-strip {
+  /* --track-accent is set inline from the track's color when present. */
+  --track-accent: rgba(186, 202, 197, 0.18);
+  flex: 0 0 5.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem 0.45rem 0.5rem;
+  background: rgb(14 17 18 / 0.85);
+  border: 1px solid rgba(186, 202, 197, 0.1);
+  border-left: 3px solid var(--track-accent);
+  border-radius: 2px;
+}
+
+.lt-compact-mixer-strip-name {
+  color: #e5e2e1;
+  font: 600 10px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lt-compact-mixer-strip-toggles {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.lt-compact-mixer-toggle {
+  flex: 1 1 0;
+  height: 1.3rem;
+  padding: 0;
+  border: 1px solid rgba(186, 202, 197, 0.18);
+  border-radius: 2px;
+  background: transparent;
+  color: #bacac5;
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
+.lt-compact-mixer-toggle.is-on.is-mute {
+  background: rgb(255 95 95 / 0.85);
+  border-color: rgb(255 95 95 / 0.85);
+  color: #0e0e0e;
+}
+
+.lt-compact-mixer-toggle.is-on.is-solo {
+  background: rgb(255 196 87 / 0.85);
+  border-color: rgb(255 196 87 / 0.85);
+  color: #0e0e0e;
+}
+
+.lt-compact-mixer-toggle.is-on.is-transpose {
+  background: rgb(87 241 219 / 0.85);
+  border-color: rgb(87 241 219 / 0.85);
+  color: #0e0e0e;
+}
+
+.lt-compact-mixer-fader-wrap {
+  flex: 1 1 auto;
+  min-height: 6rem;
+  display: flex;
+  justify-content: center;
+}
+
+/* Vertical fader: rotate the native <input type=range> with writing-mode
+   so the thumb travels bottom→top as expected for a mixer fader. */
+.lt-compact-mixer-fader {
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 1.2rem;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: ns-resize;
+}
+
+.lt-compact-mixer-pan-wrap {
   display: flex;
   align-items: center;
-  padding: 0.5rem 0.7rem;
-  color: #e5e2e1;
-  font: 500 11px/1.2 "Space Grotesk", sans-serif;
-  letter-spacing: 0.06em;
-  background: rgb(15 18 19 / 0.7);
-  border-radius: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.lt-compact-cell {
-  min-height: 2.4rem;
-  border: 1px solid rgba(186, 202, 197, 0.08);
-  border-radius: 2px;
-  background: rgb(14 17 18 / 0.6);
-  position: relative;
-  transition: border-color 80ms linear, background 80ms linear;
-}
-
-.lt-compact-cell.is-active {
-  background: rgb(20 26 25 / 0.85);
-  border-color: rgba(87, 241, 219, 0.2);
-}
-
-.lt-compact-cell.is-empty {
+.lt-compact-mixer-pan {
+  width: 100%;
+  height: 0.8rem;
+  margin: 0;
+  padding: 0;
   background: transparent;
-  border-style: dashed;
-  border-color: rgba(186, 202, 197, 0.06);
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: ew-resize;
 }
 
-.lt-compact-cell:hover {
-  border-color: rgb(87 241 219 / 0.55);
+.lt-compact-mixer-pan::-webkit-slider-runnable-track,
+.lt-compact-mixer-pan::-moz-range-track {
+  height: 0.3rem;
+  background: rgb(15 18 19);
+  border: 0;
+  border-radius: 2px;
 }
 
-/* The first clip's filename lives at the top of the cell so the user can
-   tell at a glance which audio populates this (track, song) pair. If there
-   are several clips on the same track inside the same song, a small "+N"
-   badge in the corner hints at the rest. */
-.lt-compact-cell-name {
-  position: absolute;
-  inset: 0.35rem 0.4rem auto 0.5rem;
-  color: #e5e2e1;
-  font: 500 11px/1.2 "Space Grotesk", sans-serif;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  pointer-events: none;
+.lt-compact-mixer-pan::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0.55rem;
+  height: 0.8rem;
+  margin-top: -0.25rem;
+  border: 0;
+  border-radius: 1px;
+  background: #f3f0ef;
 }
 
-.lt-compact-cell-extra {
-  position: absolute;
-  right: 0.4rem;
-  bottom: 0.3rem;
+.lt-compact-mixer-pan::-moz-range-thumb {
+  width: 0.55rem;
+  height: 0.8rem;
+  border: 0;
+  border-radius: 1px;
+  background: #f3f0ef;
+}
+
+.lt-compact-mixer-audio-to {
+  width: 100%;
+  height: 1.4rem;
+  padding: 0 0.3rem;
+  background: rgb(15 18 19);
   color: #bacac5;
-  font: 600 10px/1 "Space Grotesk", sans-serif;
-  letter-spacing: 0.04em;
-  opacity: 0.65;
-  pointer-events: none;
+  border: 1px solid rgba(186, 202, 197, 0.12);
+  border-radius: 2px;
+  font: 500 10px/1 "Space Grotesk", sans-serif;
 }
