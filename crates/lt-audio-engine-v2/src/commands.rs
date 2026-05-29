@@ -112,6 +112,12 @@ pub enum EngineCommand {
         warp_enabled: bool,
         warp_source_bpm: f64,
     },
+    /// Per-song master fader. The mixer multiplies the post-mix bus by this
+    /// value while the playhead lies inside the region.
+    SetRegionMasterGain {
+        region_id: String,
+        master_gain: f32,
+    },
     SetSongRegions {
         song_id: String,
         regions: Vec<RegionUpdate>,
@@ -170,6 +176,14 @@ pub struct RegionUpdate {
     /// warp is disabled and the user has not configured a source BPM yet.
     #[serde(default)]
     pub warp_source_bpm: f64,
+    /// Per-song master fader gain. Defaults to unity if absent for back-compat
+    /// with engine snapshots that predate the master fader.
+    #[serde(default = "default_region_master_gain")]
+    pub master_gain: f32,
+}
+
+fn default_region_master_gain() -> f32 {
+    1.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

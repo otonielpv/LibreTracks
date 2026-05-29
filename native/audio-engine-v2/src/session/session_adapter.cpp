@@ -309,6 +309,12 @@ Result<Session> session_from_project_json(const std::string& project_json,
                     region.transpose_semitones = value_any<Semitones>(jr, "transpose_semitones", "transposeSemitones", 0);
                     region.warp_enabled = value_any<bool>(jr, "warp_enabled", "warpEnabled", false);
                     region.warp_source_bpm = value_any<double>(jr, "warp_source_bpm", "warpSourceBpm", 0.0);
+                    // Per-region master fader (nested SongMaster struct). Falls
+                    // back to unity if the project predates the field.
+                    if (jr.contains("master") && jr.at("master").is_object()) {
+                        const auto& master = jr.at("master");
+                        region.master_gain = master.value("gain", 1.0f);
+                    }
                     // Only add the region if end_frame > start_frame (otherwise it is malformed
                     // and would never match in resolve_region_transpose).
                     if (region.end_frame > region.start_frame)

@@ -2426,6 +2426,36 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    pub fn update_song_region_master_gain(
+        &mut self,
+        region_id: &str,
+        master_gain: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if !master_gain.is_finite() || master_gain < 0.0 {
+            return Err(DesktopError::AudioCommand(
+                "master gain must be a finite, non-negative number".into(),
+            ));
+        }
+
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let region = song
+            .regions
+            .iter_mut()
+            .find(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        region.master.gain = master_gain;
+
+        audio.update_live_region_master_gain(region_id, master_gain as f32)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn update_track_transpose_enabled(
         &mut self,
         track_id: &str,

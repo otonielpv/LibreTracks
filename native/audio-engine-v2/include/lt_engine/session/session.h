@@ -129,6 +129,10 @@ struct Region {
     // regardless of `warp_enabled`, mirroring the Rust validation.
     bool   warp_enabled    = false;
     double warp_source_bpm = 0.0;
+
+    // Per-song master fader. The mixer multiplies the post-mix bus by this
+    // value while the playhead lies inside the region. Defaults to unity.
+    float master_gain = 1.0f;
 };
 
 // ---------------------------------------------------------------------------

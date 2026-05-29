@@ -789,6 +789,9 @@ void Mixer::render(float** output_channels,
     if (!fade_processed_in_split)
         fade_.process(output_channels, num_channels, num_frames);
 
+    apply_region_master_gain(output_channels, num_channels, num_frames,
+                              session.get(), timeline_frame);
+
     apply_master_gain(output_channels, num_channels, num_frames);
 
     // Peak meters.
@@ -893,6 +896,37 @@ void Mixer::prepare_render_resources(int max_block_frames) noexcept {
 
 void Mixer::trigger_crossfade() noexcept {
     fade_.trigger_crossfade();
+}
+
+void Mixer::apply_region_master_gain(float** output_channels,
+                                       int num_channels,
+                                       int num_frames,
+                                       const Session* session,
+                                       Frame timeline_frame) noexcept {
+    if (!session || num_channels <= 0 || num_frames <= 0)
+        return;
+    // Find the region covering the playhead. Regions are sorted and
+    // non-overlapping per validate_song, so the first match wins.
+    float gain = 1.0f;
+    bool found = false;
+    for (const auto& song : session->songs) {
+        for (const auto& region : song.regions) {
+            if (timeline_frame >= region.start_frame
+                && timeline_frame < region.end_frame) {
+                gain = region.master_gain;
+                found = true;
+                break;
+            }
+        }
+        if (found) break;
+    }
+    if (!found || std::abs(gain - 1.0f) <= 0.000001f)
+        return;
+    for (int ch = 0; ch < num_channels; ++ch) {
+        if (!output_channels[ch]) continue;
+        for (int f = 0; f < num_frames; ++f)
+            output_channels[ch][f] *= gain;
+    }
 }
 
 void Mixer::apply_master_gain(float** output_channels, int num_channels, int num_frames) noexcept {

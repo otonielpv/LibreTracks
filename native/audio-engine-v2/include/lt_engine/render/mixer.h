@@ -198,6 +198,13 @@ private:
                               int output_offset,
                               const std::shared_ptr<const Session>& session) noexcept;
     void apply_master_gain(float** output_channels, int num_channels, int num_frames) noexcept;
+    // Multiplies the post-mix bus by the master_gain of whichever region
+    // contains `timeline_frame`. No-op if no region covers the playhead.
+    void apply_region_master_gain(float** output_channels,
+                                   int num_channels,
+                                   int num_frames,
+                                   const Session* session,
+                                   Frame timeline_frame) noexcept;
     TrackControlState* control_for_track(const Id& track_id) noexcept;
     const TrackControlState* control_for_track(const Id& track_id) const noexcept;
     int control_index_for_track(const Id& track_id) const noexcept;

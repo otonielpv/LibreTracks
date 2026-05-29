@@ -320,6 +320,22 @@ pub fn update_song_region_warp(
 }
 
 #[tauri::command]
+pub fn update_song_region_master_gain(
+    region_id: String,
+    master_gain: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_song_region_master_gain(&region_id, master_gain, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn delete_song_region(
     region_id: String,
     state: State<'_, DesktopState>,

@@ -642,6 +642,20 @@ impl AudioController {
         })
     }
 
+    pub fn update_live_region_master_gain(
+        &self,
+        region_id: &str,
+        master_gain: f32,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("set_region_master_gain", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetRegionMasterGain {
+                region_id: region_id.into(),
+                master_gain,
+            })?;
+            Ok(())
+        })
+    }
+
     pub fn update_live_song_regions(&self, song: &Song) -> Result<(), DesktopError> {
         self.with_engine_state("set_song_regions", None, |engine, state| {
             let runtime_song = song_with_warped_timeline(song);
@@ -657,6 +671,7 @@ impl AudioController {
                     transpose_semitones: region.0.transpose_semitones,
                     warp_enabled: region.0.warp_enabled,
                     warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
+                    master_gain: region.0.master.gain as f32,
                 })
                 .collect();
             engine.send_command(&EngineCommand::SetSongRegions {
@@ -795,6 +810,7 @@ impl AudioController {
                     transpose_semitones: region.0.transpose_semitones,
                     warp_enabled: region.0.warp_enabled,
                     warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
+                    master_gain: region.0.master.gain as f32,
                 })
                 .collect();
             let markers = song

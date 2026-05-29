@@ -107,6 +107,13 @@ struct CmdSetRegionWarp {
     double warp_source_bpm = 0.0;
 };
 
+// Per-song master fader. Hot-applied — the mixer multiplies the output of
+// every track by `master_gain` of the region active under the playhead.
+struct CmdSetRegionMasterGain {
+    Id    region_id;
+    float master_gain = 1.0f;
+};
+
 struct CmdSetSongRegions {
     struct RegionUpdate {
         Id          id;
@@ -116,6 +123,7 @@ struct CmdSetSongRegions {
         Semitones   transpose_semitones = 0;
         bool        warp_enabled = false;
         double      warp_source_bpm = 0.0;
+        float       master_gain = 1.0f;
     };
     Id song_id;
     std::vector<RegionUpdate> regions;
@@ -215,7 +223,7 @@ using EngineCommand = std::variant<
     CmdSetTrackTransposeEnabled, CmdStartMasterFade,
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
     CmdSetMetronomeConfig,
-    CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetSongRegions,
+    CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize
 >;

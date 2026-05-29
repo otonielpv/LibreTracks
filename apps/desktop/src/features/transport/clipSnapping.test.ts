@@ -44,6 +44,7 @@ describe("buildClipSnapAnchors", () => {
           transposeSemitones: 0,
           warpEnabled: false,
           warpSourceBpm: null,
+          master: { gain: 1.0 },
         },
       ],
       clips: [

@@ -569,6 +569,20 @@ export async function updateSongRegionWarp(
   });
 }
 
+/**
+ * Update the master fader gain for a song region. `masterGain` is a linear
+ * multiplier: 1.0 means unity, 0.0 means silent. Must be finite and >= 0.
+ */
+export async function updateSongRegionMasterGain(
+  regionId: string,
+  masterGain: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_song_region_master_gain", {
+    regionId,
+    masterGain,
+  });
+}
+
 export async function deleteSongRegion(regionId: string): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("delete_song_region", { regionId });
 }

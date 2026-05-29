@@ -270,6 +270,7 @@ fn set_song_timeline_window_round_trip() {
             transpose_semitones: -2,
             warp_enabled: true,
             warp_source_bpm: 100.0,
+            master_gain: 1.0,
         }],
         markers: vec![MarkerUpdate {
             id: "section_a".into(),

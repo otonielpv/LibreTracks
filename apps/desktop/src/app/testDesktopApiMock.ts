@@ -152,6 +152,7 @@ function buildInitialSong(): SongView {
         transposeSemitones: 0,
         warpEnabled: false,
         warpSourceBpm: null,
+        master: { gain: 1.0 },
       },
     ],
     tracks: [
@@ -487,6 +488,7 @@ function buildSongTempoRegions(
       transposeSemitones: 0,
       warpEnabled: false,
       warpSourceBpm: null,
+      master: { gain: 1.0 },
       bpm,
       timeSignature,
     });
@@ -503,6 +505,7 @@ function buildSongTempoRegions(
     transposeSemitones: 0,
     warpEnabled: false,
     warpSourceBpm: null,
+    master: { gain: 1.0 },
     bpm,
     timeSignature,
   });
@@ -701,6 +704,7 @@ function createRegionFromSelection(
     transposeSemitones: 0,
     warpEnabled: false,
     warpSourceBpm: null,
+    master: { gain: 1.0 },
   };
 }
 
@@ -1314,6 +1318,17 @@ export const testDesktopApiMock = {
               startSeconds: args.startSeconds ?? region.startSeconds,
               endSeconds: args.endSeconds ?? region.endSeconds,
             }
+          : region,
+      ),
+    });
+    return clone(buildSnapshot());
+  },
+  updateSongRegionMasterGain: async (regionId: string, masterGain: number) => {
+    replaceSong({
+      ...state.song,
+      regions: state.song.regions.map((region) =>
+        region.id === regionId
+          ? { ...region, master: { gain: masterGain } }
           : region,
       ),
     });

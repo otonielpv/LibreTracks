@@ -1907,6 +1907,27 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             }
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdSetRegionMasterGain>) {
+            if (session_) {
+                auto next_session = std::make_shared<Session>(*session_);
+                bool changed = false;
+                for (auto& song : next_session->songs) {
+                    for (auto& region : song.regions) {
+                        if (region.id != c.region_id) continue;
+                        region.master_gain = c.master_gain;
+                        changed = true;
+                        break;
+                    }
+                    if (changed) break;
+                }
+                if (changed) {
+                    std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
+                    (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
+                    if (mixer_) mixer_->swap_session_atomic(next_session);
+                }
+            }
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdSetSongRegions>) {
             if (session_) {
                 auto next_session = std::make_shared<Session>(*session_);
@@ -1924,6 +1945,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         region.transpose_semitones = update.transpose_semitones;
                         region.warp_enabled = update.warp_enabled;
                         region.warp_source_bpm = update.warp_source_bpm;
+                        region.master_gain = update.master_gain;
                         song.regions.push_back(std::move(region));
                     }
                     changed = true;
@@ -2187,6 +2209,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         region.transpose_semitones = update.transpose_semitones;
                         region.warp_enabled = update.warp_enabled;
                         region.warp_source_bpm = update.warp_source_bpm;
+                        region.master_gain = update.master_gain;
                         song.regions.push_back(std::move(region));
                     }
 

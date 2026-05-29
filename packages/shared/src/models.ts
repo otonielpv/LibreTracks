@@ -19,6 +19,12 @@ export type SectionMarkerSummary = {
   digit?: number | null;
 };
 
+export type SongMasterSummary = {
+  /** Linear gain multiplier applied by the mixer to the post-mix bus while the
+   * playhead lies inside this region. 1.0 means unity. */
+  gain: number;
+};
+
 export type SongRegionSummary = {
   id: string;
   name: string;
@@ -32,6 +38,9 @@ export type SongRegionSummary = {
   /** Original BPM of the source audio at unity speed. May be persisted while
    * `warpEnabled` is false so toggling preserves the user's value. */
   warpSourceBpm: number | null;
+  /** Per-song master fader. Defaults to `{ gain: 1.0 }` if the project
+   * predates the field. */
+  master: SongMasterSummary;
 };
 
 export type SongTempoRegionSummary = SongRegionSummary & TimelineRegion;
@@ -726,6 +735,7 @@ export function buildSongTempoRegions(
       transposeSemitones: 0,
       warpEnabled: false,
       warpSourceBpm: null,
+      master: { gain: 1.0 },
     });
     startSeconds = marker.startSeconds;
     bpm = marker.bpm ?? bpm;
@@ -743,6 +753,7 @@ export function buildSongTempoRegions(
     transposeSemitones: 0,
     warpEnabled: false,
     warpSourceBpm: null,
+    master: { gain: 1.0 },
   });
 
   return regions;

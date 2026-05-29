@@ -104,6 +104,7 @@ import {
   updateAudioSettings,
   updateSectionMarker,
   updateSongRegion,
+  updateSongRegionMasterGain,
   updateSongRegionTranspose,
   updateSongRegionWarp,
   updateSongTempo,
@@ -2500,6 +2501,28 @@ export function TransportPanelContent() {
       });
     },
     [applyPlaybackSnapshot, refreshSongView, runAction, selectedRegion, song],
+  );
+
+  // Master gain handler: simple replace + IPC. Mixer applies the new gain on
+  // the next audio block (atomic session swap on the C++ side). No timeline
+  // refetch needed — the change is mixer-only.
+  const handleSelectedRegionMasterGainChange = useCallback(
+    (nextMasterGain: number) => {
+      if (!selectedRegion) return;
+      const clamped = Math.max(0, Math.min(2, nextMasterGain));
+      if (Math.abs(clamped - (selectedRegion.master?.gain ?? 1.0)) < 1e-6) {
+        return;
+      }
+      const targetRegionId = selectedRegion.id;
+      void runAction(async () => {
+        const nextSnapshot = await updateSongRegionMasterGain(
+          targetRegionId,
+          clamped,
+        );
+        applyPlaybackSnapshot(nextSnapshot);
+      });
+    },
+    [applyPlaybackSnapshot, runAction, selectedRegion],
   );
 
   // Effective timeline BPM at the start of the selected region — the warp
@@ -8308,6 +8331,9 @@ export function TransportPanelContent() {
                     }
                     selectedRegionEffectiveBpm={selectedRegionEffectiveBpm}
                     onSelectedRegionWarpToggle={handleSelectedRegionWarpToggle}
+                    onSelectedRegionMasterGainChange={
+                      handleSelectedRegionMasterGainChange
+                    }
                     midiLearnMode={midiLearnMode}
                     onMidiLearnTarget={handleMidiLearnTarget}
                   />

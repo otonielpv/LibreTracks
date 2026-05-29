@@ -40,6 +40,7 @@ type TimelineToolbarProps = {
   /** Effective timeline BPM at the start of the selected region. */
   selectedRegionEffectiveBpm: number;
   onSelectedRegionWarpToggle: (nextEnabled: boolean) => void;
+  onSelectedRegionMasterGainChange: (nextMasterGain: number) => void;
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => void;
 };
@@ -136,13 +137,14 @@ export function TimelineToolbar({
   onSelectedRegionTransposeChange,
   selectedRegionEffectiveBpm,
   onSelectedRegionWarpToggle,
+  onSelectedRegionMasterGainChange,
   midiLearnMode,
   onMidiLearnTarget,
 }: TimelineToolbarProps) {
   const { t } = useTranslation();
   const learnModeActive = midiLearnMode !== null;
   const [openGroup, setOpenGroup] = useState<
-    "jump" | "vamp" | "song" | "region" | "warp" | null
+    "jump" | "vamp" | "song" | "region" | "warp" | "master" | null
   >(null);
   const toolbarRootRef = useRef<HTMLDivElement | null>(null);
 
@@ -204,6 +206,16 @@ export function TimelineToolbar({
       : t("timelineToolbar.regionWarpSummaryOff")
     : t("timelineToolbar.regionWarpNoSelection");
   const warpControlsDisabled = controlsDisabled || !selectedRegion;
+
+  const masterGain = selectedRegion?.master?.gain ?? 1.0;
+  const masterGainDb =
+    masterGain > 0 ? 20 * Math.log10(masterGain) : Number.NEGATIVE_INFINITY;
+  const masterSummary = selectedRegion
+    ? `${masterGain.toFixed(2)}× (${
+        Number.isFinite(masterGainDb) ? `${masterGainDb.toFixed(1)} dB` : "-∞ dB"
+      })`
+    : t("timelineToolbar.regionTransposeNoSelection");
+  const masterControlsDisabled = controlsDisabled || !selectedRegion;
 
   const handleModeButtonClick = (learnKey: string, commit: () => void) => {
     if (learnModeActive) {
@@ -684,6 +696,65 @@ export function TimelineToolbar({
                       }}
                     >
                       +
+                    </button>
+                  </div>
+                </label>
+              ) : (
+                <span>{t("timelineToolbar.regionTransposeNoSelection")}</span>
+              )
+            }
+          />
+
+          <ControlGroup
+            title="Master"
+            summary={masterSummary}
+            open={openGroup === "master"}
+            onToggleOpen={() =>
+              setOpenGroup((current) =>
+                current === "master" ? null : "master",
+              )
+            }
+            className="lt-control-group-master"
+            details={
+              selectedRegion ? (
+                <label className="lt-stepper-control">
+                  <span>Master gain</span>
+                  <div className="lt-stepper-control-row">
+                    <input
+                      aria-label="Region master gain"
+                      type="range"
+                      min={0}
+                      max={2}
+                      step={0.01}
+                      value={masterGain}
+                      disabled={masterControlsDisabled}
+                      onChange={(event) =>
+                        onSelectedRegionMasterGainChange(
+                          Number(event.target.value) || 0,
+                        )
+                      }
+                    />
+                    <input
+                      aria-label="Region master gain numeric"
+                      type="number"
+                      min={0}
+                      max={2}
+                      step={0.01}
+                      value={masterGain.toFixed(2)}
+                      disabled={masterControlsDisabled}
+                      onChange={(event) =>
+                        onSelectedRegionMasterGainChange(
+                          Math.max(0, Number(event.target.value) || 0),
+                        )
+                      }
+                    />
+                    <button
+                      type="button"
+                      aria-label="Reset master gain to unity"
+                      disabled={masterControlsDisabled}
+                      onClick={() => onSelectedRegionMasterGainChange(1.0)}
+                    >
+                      0 dB
                     </button>
                   </div>
                 </label>
