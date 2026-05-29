@@ -9,7 +9,8 @@ use crate::commands::events::{
 use crate::error::DesktopError;
 use crate::models::{LibraryAssetSummary, SongPackageImportResponse, SongView, TransportSnapshot};
 use crate::state::{
-    AudioFileImportPayload, AudioFilePathImportPayload, CreateClipRequest, DesktopState,
+    AudioFileImportPayload, AudioFilePathImportPayload, CreateClipRequest,
+    CreateClipWithAutoTrackRequest, DesktopState,
 };
 use rfd::FileDialog;
 
@@ -199,6 +200,35 @@ pub fn create_clips_batch(
 
     let snapshot = session
         .create_clips_batch(&requests, &state.audio)
+        .map_err(|error| error.to_string())?;
+
+    if let Some(song_dir) = snapshot.song_dir.as_deref() {
+        let requested_paths = requests
+            .iter()
+            .map(|request| request.file_path.clone())
+            .collect::<Vec<_>>();
+        emit_ready_library_waveforms(&app, &state, &mut session, song_dir, &requested_paths)?;
+    }
+
+    Ok(snapshot)
+}
+
+/// Drop one or more audio files into a compact-view song column. The
+/// state layer creates an auto track per file; the file stem becomes
+/// the track name. Used by the compact view's drop handler.
+#[tauri::command]
+pub fn create_clips_with_auto_tracks(
+    app: AppHandle,
+    requests: Vec<CreateClipWithAutoTrackRequest>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    let snapshot = session
+        .create_clips_with_auto_tracks(&requests, &state.audio)
         .map_err(|error| error.to_string())?;
 
     if let Some(song_dir) = snapshot.song_dir.as_deref() {

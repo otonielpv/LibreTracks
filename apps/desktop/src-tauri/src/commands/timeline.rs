@@ -29,6 +29,25 @@ pub fn move_clip(
         .map_err(|error| error.to_string())
 }
 
+/// Reassign a clip to a different track. Backs the compact view's right-
+/// click "Mover a track…" submenu. If the original track was auto-created
+/// and loses its only clip in the process, it is removed automatically.
+#[tauri::command]
+pub fn move_clip_to_track(
+    clip_id: String,
+    target_track_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .move_clip_to_track(&clip_id, &target_track_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub fn move_clip_live(
     clip_id: String,

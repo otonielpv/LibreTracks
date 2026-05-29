@@ -488,6 +488,16 @@ pub struct CreateClipRequest {
     pub timeline_start_seconds: f64,
 }
 
+/// Drop request from the compact view's song column: an audio file with no
+/// associated track. The state layer creates an auto track per file
+/// (`auto_created = true`) with the file stem as the track name.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateClipWithAutoTrackRequest {
+    pub file_path: String,
+    pub timeline_start_seconds: f64,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClipMoveRequest {
@@ -1861,6 +1871,7 @@ impl DesktopSession {
             .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
         clip.timeline_start_seconds = new_start;
         prune_empty_regions(&mut song);
+        prune_auto_created_empty_tracks(&mut song);
         refresh_song_duration(&mut song);
 
         self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
@@ -1901,6 +1912,7 @@ impl DesktopSession {
             .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
         clip.timeline_start_seconds = new_start;
         prune_empty_regions(&mut song);
+        prune_auto_created_empty_tracks(&mut song);
         refresh_song_duration(&mut song);
 
         self.persist_song_update_internal(
@@ -1931,6 +1943,7 @@ impl DesktopSession {
 
         apply_clip_moves_with_region_reshape(&mut song, moves)?;
         prune_empty_regions(&mut song);
+        prune_auto_created_empty_tracks(&mut song);
         refresh_song_duration(&mut song);
         self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
 
@@ -1957,6 +1970,7 @@ impl DesktopSession {
 
         apply_clip_moves_with_region_reshape(&mut song, moves)?;
         prune_empty_regions(&mut song);
+        prune_auto_created_empty_tracks(&mut song);
         refresh_song_duration(&mut song);
 
         self.persist_song_update_internal(
@@ -1992,8 +2006,54 @@ impl DesktopSession {
         // single persist_song_update so undo restores the clip AND the
         // region together.
         prune_empty_regions(&mut song);
+        prune_auto_created_empty_tracks(&mut song);
 
         refresh_song_duration(&mut song);
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    /// Reassign a clip to a different track without changing its position
+    /// on the timeline. Backs the compact view's right-click "Mover a
+    /// track…" submenu. If the clip's original track was auto-created and
+    /// loses its only clip in the process, the track is removed from the
+    /// project so the mixer doesn't accumulate one-shot tracks.
+    pub fn move_clip_to_track(
+        &mut self,
+        clip_id: &str,
+        target_track_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        let target_kind = song
+            .tracks
+            .iter()
+            .find(|track| track.id == target_track_id)
+            .map(|track| track.kind)
+            .ok_or_else(|| DesktopError::TrackNotFound(target_track_id.to_string()))?;
+        if target_kind == libretracks_core::TrackKind::Folder {
+            return Err(DesktopError::AudioCommand(
+                "no se puede mover un clip a un folder".into(),
+            ));
+        }
+
+        let clip = song
+            .clips
+            .iter_mut()
+            .find(|clip| clip.id == clip_id)
+            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
+        if clip.track_id == target_track_id {
+            return Ok(self.snapshot());
+        }
+        clip.track_id = target_track_id.to_string();
+
+        prune_auto_created_empty_tracks(&mut song);
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
         Ok(self.snapshot())
@@ -3022,6 +3082,67 @@ impl DesktopSession {
         }
         refresh_song_duration(&mut song);
 
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+
+        Ok(self.snapshot())
+    }
+
+    /// Drop a list of audio files onto a song column in the compact view.
+    /// Each file gets its own auto-created audio track (named after the
+    /// file stem), and a clip pointing at that track. All clips land at
+    /// the same `timeline_start_seconds` — the start of the target song —
+    /// per the user's request "drop N files into a column → N rows".
+    pub fn create_clips_with_auto_tracks(
+        &mut self,
+        requests: &[CreateClipWithAutoTrackRequest],
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if requests.is_empty() {
+            return Ok(self.snapshot());
+        }
+
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        for (offset, request) in requests.iter().enumerate() {
+            let source_start_seconds =
+                source_seconds_at_view(&song, request.timeline_start_seconds);
+            let track_name = file_stem_for_auto_track(&request.file_path);
+            let track_id = format!(
+                "track_{}_{}",
+                timestamp_suffix(),
+                song.tracks.len() + offset,
+            );
+            song.tracks.push(libretracks_core::Track {
+                id: track_id.clone(),
+                name: track_name,
+                kind: libretracks_core::TrackKind::Audio,
+                parent_track_id: None,
+                volume: 1.0,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+                transpose_enabled: true,
+                audio_to: "master".to_string(),
+                color: None,
+                auto_created: true,
+            });
+            append_clip_to_song(
+                &mut song,
+                &song_dir,
+                &CreateClipRequest {
+                    track_id,
+                    file_path: request.file_path.clone(),
+                    timeline_start_seconds: source_start_seconds,
+                },
+            )?;
+        }
+
+        refresh_song_duration(&mut song);
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
         Ok(self.snapshot())
@@ -5783,6 +5904,48 @@ fn prune_empty_regions(song: &mut Song) {
             clip.timeline_start_seconds >= region.start_seconds
                 && clip.timeline_start_seconds < region.end_seconds
         })
+    });
+}
+
+/// Remove any track whose `auto_created` flag is set and that holds no clip
+/// at all. User-created tracks (auto_created = false) are left alone even
+/// when empty — the user may want a placeholder before they drop audio in.
+///
+/// Used by every flow that can leave a track empty: delete_clip, the move-
+/// clip paths, and the upcoming move_clip_to_track. A track auto-created
+/// for a single audio drop disappears the moment the user moves that clip
+/// to another track, leaving the mixer view tidy without an explicit
+/// "delete track" step.
+/// Strip the directory path and extension off a file path to derive a
+/// reasonable initial track name. "audio/kick.wav" → "kick". Falls back to
+/// the raw path if nothing sensible remains.
+fn file_stem_for_auto_track(file_path: &str) -> String {
+    let normalised = file_path.replace('\\', "/");
+    let basename = normalised.rsplit('/').next().unwrap_or(&normalised);
+    let stem = match basename.rfind('.') {
+        Some(idx) if idx > 0 => &basename[..idx],
+        _ => basename,
+    };
+    let trimmed = stem.trim();
+    if trimmed.is_empty() {
+        return file_path.to_string();
+    }
+    trimmed.to_string()
+}
+
+fn prune_auto_created_empty_tracks(song: &mut Song) {
+    let used_track_ids: std::collections::HashSet<&str> = song
+        .clips
+        .iter()
+        .map(|clip| clip.track_id.as_str())
+        .collect();
+    // Folder tracks are kept around even when "empty" — a folder with no
+    // children is still a structural choice. We only prune leaf audio
+    // tracks that the system created and nobody is using.
+    song.tracks.retain(|track| {
+        !(track.auto_created
+            && track.kind != libretracks_core::TrackKind::Folder
+            && !used_track_ids.contains(track.id.as_str()))
     });
 }
 
