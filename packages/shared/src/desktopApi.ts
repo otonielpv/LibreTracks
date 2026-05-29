@@ -11,6 +11,7 @@ import type {
   ProjectLoadCompleteEvent,
   MidiRawMessage,
   ProjectLoadProgressEvent,
+  RegionMeterLevel,
   RemoteServerInfo,
   SongView,
   SongPackageImportResponse,
@@ -59,6 +60,15 @@ export async function listenToAudioMeters(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<AudioMeterLevel[]>("audio:meters", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenToRegionMeters(
+  handler: (levels: RegionMeterLevel[]) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<RegionMeterLevel[]>("audio:region_meters", (event) => {
     handler(event.payload);
   });
 }

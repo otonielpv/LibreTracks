@@ -65,6 +65,14 @@ struct TrackMeterValues {
     float right_rms   = 0.f;
 };
 
+// Post-master meter for a single region. `peak` is max(|L|, |R|) of the
+// post-region-master-gain signal, smoothed by a release filter so the bar
+// decays rather than snapping off when the playhead leaves the region.
+struct RegionMeterValues {
+    Id    region_id;
+    float peak = 0.f;
+};
+
 struct SourcePreparationInfo {
     Id          source_id;
     std::string status;   // "queued" | "running" | "completed" | "failed"
@@ -121,6 +129,7 @@ struct EngineSnapshot {
     // Meters
     MeterValues        meters;
     std::vector<TrackMeterValues> track_meters;
+    std::vector<RegionMeterValues> region_meters;
 
     // Source preparation
     std::vector<SourcePreparationInfo> source_states;

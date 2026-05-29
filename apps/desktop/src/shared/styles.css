@@ -4354,3 +4354,57 @@ textarea {
 ::-webkit-scrollbar-thumb:hover {
   background: #3c4a46;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Per-song master fader inside the timeline toolbar's Master ControlGroup.
+   Slider sits on top of a horizontal meter bar so the user reads gain
+   position and post-master peak level at a glance.
+   ───────────────────────────────────────────────────────────────────────── */
+.lt-master-gain-row {
+  align-items: center;
+  width: 100%;
+}
+
+.lt-region-master-fader {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 8rem;
+  display: flex;
+  align-items: center;
+}
+
+.lt-region-master-fader-meter {
+  position: absolute;
+  inset: 50% 0 auto 0;
+  transform: translateY(-50%);
+  height: 0.45rem;
+  border-radius: 2px;
+  background: rgb(20 26 25 / 0.85);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.lt-region-master-fader-meter-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg,
+    rgb(87 241 219 / 0.6) 0%,
+    rgb(87 241 219 / 0.9) 65%,
+    rgb(255 196 87 / 0.95) 88%,
+    rgb(255 95 95 / 1) 100%);
+  transition: opacity 80ms linear;
+}
+
+.lt-region-master-fader-slider {
+  position: relative;
+  width: 100%;
+  background: transparent;
+}
+
+.lt-region-master-fader-slider::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.lt-region-master-fader-slider::-moz-range-track {
+  background: transparent;
+}

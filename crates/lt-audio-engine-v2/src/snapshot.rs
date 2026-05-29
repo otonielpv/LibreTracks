@@ -35,6 +35,9 @@ pub struct EngineSnapshot {
     pub track_meters: Vec<TrackMeterValues>,
 
     #[serde(default)]
+    pub region_meters: Vec<RegionMeterValues>,
+
+    #[serde(default)]
     pub source_states: Vec<SourcePreparationInfo>,
     #[serde(default)]
     pub source_cache: SourceCacheSnapshot,
@@ -151,6 +154,12 @@ pub struct TrackMeterValues {
     pub right_peak: f32,
     pub left_rms: f32,
     pub right_rms: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RegionMeterValues {
+    pub region_id: String,
+    pub peak: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

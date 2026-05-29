@@ -338,6 +338,13 @@ export type AudioMeterLevel = {
   rightPeak: number;
 };
 
+export type RegionMeterLevel = {
+  regionId: string;
+  /** Linear peak amplitude (max(|L|, |R|)) of the post-region-master signal,
+   * smoothed by a 200ms release in the engine. 0 means silence or inactive. */
+  peak: number;
+};
+
 export type MidiBinding = {
   status: number;
   data1: number;

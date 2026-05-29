@@ -1,13 +1,143 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+  meterDbToDisplayScale,
+  peakToMeterDb,
+  stepMeterDb,
+  DEFAULT_METER_FALLOFF_DB_PER_SECOND,
+  METER_ACTIVE_EPSILON_DB,
+  METER_MIN_DB,
+} from "@libretracks/shared/meterBallistics";
+
 import { formatTransposeSemitones, type SongRegionSummary } from "./desktopApi";
+import { useTransportStore } from "./store";
 import type {
   GlobalJumpMode,
   SongJumpTrigger,
   SongTransitionMode,
   VampMode,
 } from "./uiStore";
+
+type RegionMasterFaderProps = {
+  regionId: string;
+  masterGain: number;
+  disabled: boolean;
+  onChange: (nextGain: number) => void;
+};
+
+function RegionMasterFaderComponent({
+  regionId,
+  masterGain,
+  disabled,
+  onChange,
+}: RegionMasterFaderProps) {
+  const meterFillRef = useRef<HTMLDivElement | null>(null);
+  const animationStateRef = useRef({
+    frameId: null as number | null,
+    lastFrameAt: 0,
+    currentDb: METER_MIN_DB,
+    targetDb: METER_MIN_DB,
+  });
+
+  useEffect(() => {
+    const animationState = animationStateRef.current;
+
+    const applyFill = () => {
+      const element = meterFillRef.current;
+      if (!element) return;
+      const scale = meterDbToDisplayScale(animationState.currentDb);
+      element.style.width = `${(scale * 100).toFixed(2)}%`;
+      element.style.opacity = scale > 0 ? "1" : "0";
+    };
+
+    const stopAnimation = () => {
+      if (animationState.frameId !== null) {
+        cancelAnimationFrame(animationState.frameId);
+        animationState.frameId = null;
+      }
+      animationState.lastFrameAt = 0;
+    };
+
+    const step = (now: number) => {
+      const elapsed =
+        animationState.lastFrameAt > 0 ? now - animationState.lastFrameAt : 16.67;
+      animationState.lastFrameAt = now;
+      animationState.currentDb = stepMeterDb(
+        animationState.currentDb,
+        animationState.targetDb,
+        elapsed,
+        DEFAULT_METER_FALLOFF_DB_PER_SECOND,
+      );
+      applyFill();
+      const settled =
+        Math.abs(animationState.currentDb - animationState.targetDb) <
+        METER_ACTIVE_EPSILON_DB;
+      if (settled) {
+        animationState.currentDb = animationState.targetDb;
+        applyFill();
+        stopAnimation();
+        return;
+      }
+      animationState.frameId = requestAnimationFrame(step);
+    };
+
+    const scheduleAnimation = () => {
+      if (animationState.frameId !== null) return;
+      animationState.frameId = requestAnimationFrame(step);
+    };
+
+    const updateTarget = (rawPeak: number) => {
+      animationState.targetDb = peakToMeterDb(rawPeak);
+      scheduleAnimation();
+    };
+
+    const initialPeak = useTransportStore.getState().regionMeters[regionId] ?? 0;
+    animationState.currentDb = peakToMeterDb(initialPeak);
+    animationState.targetDb = animationState.currentDb;
+    applyFill();
+
+    const unsubscribe = useTransportStore.subscribe(
+      (state) => state.regionMeters[regionId] ?? 0,
+      (peak) => {
+        updateTarget(peak);
+      },
+    );
+
+    return () => {
+      unsubscribe();
+      stopAnimation();
+      animationState.currentDb = METER_MIN_DB;
+      animationState.targetDb = METER_MIN_DB;
+      const element = meterFillRef.current;
+      if (element) {
+        element.style.width = "0%";
+        element.style.opacity = "0";
+      }
+    };
+  }, [regionId]);
+
+  return (
+    <div className="lt-region-master-fader">
+      <div className="lt-region-master-fader-meter" aria-hidden="true">
+        <div className="lt-region-master-fader-meter-fill" ref={meterFillRef} />
+      </div>
+      <input
+        className="lt-range-input lt-region-master-fader-slider"
+        aria-label="Region master gain"
+        type="range"
+        min={0}
+        max={2}
+        step={0.01}
+        value={masterGain}
+        disabled={disabled}
+        onChange={(event) => onChange(Number(event.target.value) || 0)}
+      />
+    </div>
+  );
+}
+
+const RegionMasterFader = memo(RegionMasterFaderComponent);
 
 type TimelineToolbarProps = {
   snapEnabled: boolean;
@@ -645,6 +775,40 @@ export function TimelineToolbar({
           </ControlGroup>
 
           <ControlGroup
+            title="Master"
+            summary={masterSummary}
+            open={openGroup === "master"}
+            onToggleOpen={() =>
+              setOpenGroup((current) =>
+                current === "master" ? null : "master",
+              )
+            }
+            className="lt-control-group-master"
+            details={
+              selectedRegion ? (
+                <div className="lt-stepper-control-row lt-master-gain-row">
+                  <RegionMasterFader
+                    regionId={selectedRegion.id}
+                    masterGain={masterGain}
+                    disabled={masterControlsDisabled}
+                    onChange={onSelectedRegionMasterGainChange}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Reset master gain to unity"
+                    disabled={masterControlsDisabled}
+                    onClick={() => onSelectedRegionMasterGainChange(1.0)}
+                  >
+                    0 dB
+                  </button>
+                </div>
+              ) : (
+                <span>{t("timelineToolbar.regionTransposeNoSelection")}</span>
+              )
+            }
+          />
+
+          <ControlGroup
             title={t("timelineToolbar.regionTransposeLabel")}
             summary={regionSummary}
             open={openGroup === "region"}
@@ -696,65 +860,6 @@ export function TimelineToolbar({
                       }}
                     >
                       +
-                    </button>
-                  </div>
-                </label>
-              ) : (
-                <span>{t("timelineToolbar.regionTransposeNoSelection")}</span>
-              )
-            }
-          />
-
-          <ControlGroup
-            title="Master"
-            summary={masterSummary}
-            open={openGroup === "master"}
-            onToggleOpen={() =>
-              setOpenGroup((current) =>
-                current === "master" ? null : "master",
-              )
-            }
-            className="lt-control-group-master"
-            details={
-              selectedRegion ? (
-                <label className="lt-stepper-control">
-                  <span>Master gain</span>
-                  <div className="lt-stepper-control-row">
-                    <input
-                      aria-label="Region master gain"
-                      type="range"
-                      min={0}
-                      max={2}
-                      step={0.01}
-                      value={masterGain}
-                      disabled={masterControlsDisabled}
-                      onChange={(event) =>
-                        onSelectedRegionMasterGainChange(
-                          Number(event.target.value) || 0,
-                        )
-                      }
-                    />
-                    <input
-                      aria-label="Region master gain numeric"
-                      type="number"
-                      min={0}
-                      max={2}
-                      step={0.01}
-                      value={masterGain.toFixed(2)}
-                      disabled={masterControlsDisabled}
-                      onChange={(event) =>
-                        onSelectedRegionMasterGainChange(
-                          Math.max(0, Number(event.target.value) || 0),
-                        )
-                      }
-                    />
-                    <button
-                      type="button"
-                      aria-label="Reset master gain to unity"
-                      disabled={masterControlsDisabled}
-                      onClick={() => onSelectedRegionMasterGainChange(1.0)}
-                    >
-                      0 dB
                     </button>
                   </div>
                 </label>

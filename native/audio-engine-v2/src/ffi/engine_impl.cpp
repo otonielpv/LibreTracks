@@ -746,6 +746,7 @@ std::string EngineImpl::get_snapshot() const {
         snap.meters.left_rms   = m.left_rms;
         snap.meters.right_rms  = m.right_rms;
         snap.track_meters      = mixer_->track_meters();
+        snap.region_meters     = mixer_->region_meters();
         snap.cpu.callback_duration_ms = mixer_->callback_duration_ms();
         snap.cpu.callback_duration_max_ms = mixer_->callback_duration_max_ms();
         snap.cpu.callback_count       = mixer_->callback_count();

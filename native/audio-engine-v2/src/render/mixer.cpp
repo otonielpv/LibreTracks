@@ -905,28 +905,89 @@ void Mixer::apply_region_master_gain(float** output_channels,
                                        Frame timeline_frame) noexcept {
     if (!session || num_channels <= 0 || num_frames <= 0)
         return;
-    // Find the region covering the playhead. Regions are sorted and
-    // non-overlapping per validate_song, so the first match wins.
+
+    // Refresh region-slot mapping. The session pointer can swap atomically
+    // between blocks (CmdSetRegionMasterGain swaps it), so we rebuild the
+    // slot table cheaply per block instead of relying on rebuild_control_slots.
+    int region_count = 0;
+    int active_index = -1;
     float gain = 1.0f;
-    bool found = false;
     for (const auto& song : session->songs) {
         for (const auto& region : song.regions) {
+            if (region_count >= kMaxRegions) break;
+            auto& slot = region_meters_[static_cast<std::size_t>(region_count)];
+            slot.region_id = region.id;
             if (timeline_frame >= region.start_frame
                 && timeline_frame < region.end_frame) {
+                active_index = region_count;
                 gain = region.master_gain;
-                found = true;
-                break;
+            }
+            ++region_count;
+        }
+        if (region_count >= kMaxRegions) break;
+    }
+    region_meter_count_.store(region_count, std::memory_order_release);
+
+    const bool gain_is_unity = std::abs(gain - 1.0f) <= 0.000001f;
+    if (active_index >= 0 && !gain_is_unity) {
+        for (int ch = 0; ch < num_channels; ++ch) {
+            if (!output_channels[ch]) continue;
+            for (int f = 0; f < num_frames; ++f)
+                output_channels[ch][f] *= gain;
+        }
+    }
+
+    // Compute the post-gain peak of the active region (mono max(|L|, |R|))
+    // and apply a 200ms release to every other slot so inactive bars decay
+    // smoothly toward zero instead of snapping off when the playhead crosses
+    // a region boundary.
+    float block_peak = 0.f;
+    if (active_index >= 0) {
+        for (int ch = 0; ch < std::min(num_channels, 2); ++ch) {
+            if (!output_channels[ch]) continue;
+            for (int f = 0; f < num_frames; ++f) {
+                const float v = std::abs(output_channels[ch][f]);
+                if (v > block_peak) block_peak = v;
             }
         }
-        if (found) break;
     }
-    if (!found || std::abs(gain - 1.0f) <= 0.000001f)
-        return;
-    for (int ch = 0; ch < num_channels; ++ch) {
-        if (!output_channels[ch]) continue;
-        for (int f = 0; f < num_frames; ++f)
-            output_channels[ch][f] *= gain;
+
+    const int sr = clock_ ? std::max(1, clock_->sample_rate()) : 48000;
+    // exp(-num_frames / (release_seconds * sample_rate)), release = 200ms.
+    const float release_coef = std::exp(
+        -static_cast<float>(num_frames) / (0.2f * static_cast<float>(sr)));
+
+    for (int i = 0; i < region_count; ++i) {
+        auto& slot = region_meters_[static_cast<std::size_t>(i)];
+        const float prev = slot.peak.load(std::memory_order_relaxed);
+        float next;
+        if (i == active_index) {
+            // Peak follows the block: rise instantly to the new peak if higher,
+            // otherwise fall by release_coef. Standard PPM behaviour.
+            next = (block_peak >= prev)
+                ? block_peak
+                : prev * release_coef;
+        } else {
+            next = prev * release_coef;
+            if (next < 1e-6f) next = 0.f;
+        }
+        slot.peak.store(next, std::memory_order_relaxed);
     }
+}
+
+std::vector<RegionMeterValues> Mixer::region_meters() const {
+    std::vector<RegionMeterValues> values;
+    int count = region_meter_count_.load(std::memory_order_acquire);
+    count = std::max(0, std::min(count, kMaxRegions));
+    values.reserve(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; ++i) {
+        const auto& slot = region_meters_[static_cast<std::size_t>(i)];
+        RegionMeterValues out;
+        out.region_id = slot.region_id;
+        out.peak = slot.peak.load(std::memory_order_relaxed);
+        values.push_back(std::move(out));
+    }
+    return values;
 }
 
 void Mixer::apply_master_gain(float** output_channels, int num_channels, int num_frames) noexcept {

@@ -72,6 +72,7 @@ public:
     // Meter read (from UI thread — relaxed atomic).
     MeterValues meters() const noexcept;
     std::vector<TrackMeterValues> track_meters() const;
+    std::vector<RegionMeterValues> region_meters() const;
 
     // Diagnostic counters.
     int    callback_count()          const noexcept;
@@ -160,6 +161,18 @@ private:
     };
     std::array<TrackMeterSlot, kMaxTracks> track_meters_;
     std::atomic<int> track_meter_count_{0};
+
+    // Per-region meters. Updated inside apply_region_master_gain so the value
+    // reflects the post-master signal of whichever region holds the playhead.
+    // Inactive regions decay toward zero with a fixed release time so the bar
+    // doesn't snap off when crossing region boundaries.
+    static constexpr int kMaxRegions = 128;
+    struct RegionMeterSlot {
+        Id region_id;
+        std::atomic<float> peak{0.f};
+    };
+    std::array<RegionMeterSlot, kMaxRegions> region_meters_;
+    std::atomic<int> region_meter_count_{0};
 
     // Callback stats.
     std::atomic<int>    callback_count_{0};

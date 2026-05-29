@@ -112,6 +112,13 @@ pub struct AudioMeterLevel {
     pub right_peak: f32,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegionMeterLevel {
+    pub region_id: String,
+    pub peak: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlaybackStartReason {
@@ -403,6 +410,11 @@ impl AudioController {
                                 remote_handle.publish_meters(&levels);
                             }
                         }
+                    }
+                }
+                if let Ok(region_levels) = controller.current_region_meter_levels() {
+                    if !region_levels.is_empty() {
+                        let _ = app_handle.emit("audio:region_meters", &region_levels);
                     }
                 }
                 thread::sleep(std::time::Duration::from_millis(33));
@@ -1405,6 +1417,29 @@ impl AudioController {
                 track_id: meter.track_id,
                 left_peak: meter.left_peak,
                 right_peak: meter.right_peak,
+            })
+            .collect())
+    }
+
+    fn current_region_meter_levels(&self) -> Result<Vec<RegionMeterLevel>, DesktopError> {
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(vec![]),
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err(DesktopError::AudioCommand(
+                    "audio v2 state lock poisoned".into(),
+                ))
+            }
+        };
+        let snapshot = ensure_engine(&mut state)?
+            .get_snapshot()
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        Ok(snapshot
+            .region_meters
+            .into_iter()
+            .map(|meter| RegionMeterLevel {
+                region_id: meter.region_id,
+                peak: meter.peak,
             })
             .collect())
     }

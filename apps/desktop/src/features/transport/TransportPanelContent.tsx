@@ -159,6 +159,7 @@ import { SettingsPanel } from "./panels/SettingsPanel";
 import { RemotePanel } from "./panels/RemotePanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
+import { useRegionMeters } from "./hooks/useRegionMeters";
 import { useLibraryActions } from "./hooks/useLibraryActions";
 import { useTransportLifecycle } from "./hooks/useTransportLifecycle";
 import { useTransportPolling } from "./hooks/useTransportPolling";
@@ -2382,6 +2383,7 @@ export function TransportPanelContent() {
   });
 
   useAudioMeters();
+  useRegionMeters();
 
   useEffect(() => {
     if (!isTauriApp) {

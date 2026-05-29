@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
-import type { AudioMeterLevel, TransportSnapshot } from "./desktopApi";
+import type {
+  AudioMeterLevel,
+  RegionMeterLevel,
+  TransportSnapshot,
+} from "./desktopApi";
 import type {
   PendingAudioImport,
   PendingAudioImportStatus,
@@ -21,12 +25,16 @@ export type OptimisticMixState = Partial<{
 
 export type MeterDictionary = Record<string, TrackMeterState>;
 
+export type RegionMeterDictionary = Record<string, number>;
+
 type TransportStore = {
   meters: MeterDictionary;
+  regionMeters: RegionMeterDictionary;
   playback: TransportSnapshot | null;
   optimisticMix: Record<string, OptimisticMixState>;
   pendingAudioImports: PendingAudioImport[];
   setMeters: (meters: MeterDictionary) => void;
+  setRegionMeters: (meters: RegionMeterDictionary) => void;
   setPlaybackState: (playback: TransportSnapshot | null) => void;
   setOptimisticMix: (trackId: string, mix: OptimisticMixState | null) => void;
   addPendingAudioImports: (imports: PendingAudioImport[]) => void;
@@ -49,6 +57,18 @@ export function meterDictionaryFromLevels(
       leftPeak: level.leftPeak,
       rightPeak: level.rightPeak,
     };
+  }
+
+  return meters;
+}
+
+export function regionMeterDictionaryFromLevels(
+  levels: RegionMeterLevel[],
+): RegionMeterDictionary {
+  const meters: RegionMeterDictionary = {};
+
+  for (const level of levels) {
+    meters[level.regionId] = level.peak;
   }
 
   return meters;
@@ -129,11 +149,15 @@ function shouldPublishPlaybackSnapshot(
 export const useTransportStore = create<TransportStore>()(
   subscribeWithSelector((set) => ({
     meters: {},
+    regionMeters: {},
     playback: null,
     optimisticMix: {},
     pendingAudioImports: [],
     setMeters: (meters) => {
       set({ meters });
+    },
+    setRegionMeters: (regionMeters) => {
+      set({ regionMeters });
     },
     setPlaybackState: (playback) => {
       set((state) =>
