@@ -4761,8 +4761,37 @@ textarea {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  align-items: stretch;
   justify-content: center;
+  gap: 0.25rem;
   overflow: hidden;
+}
+
+/* Post-fader peak meter that sits next to the vertical fader. Fill grows
+   bottom→top via height %; the gradient matches the master fader meter
+   so the two views read consistently. */
+.lt-compact-mixer-meter {
+  flex: 0 0 0.4rem;
+  position: relative;
+  align-self: stretch;
+  background: rgb(15 18 19);
+  border-radius: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.lt-compact-mixer-meter-fill {
+  width: 100%;
+  height: 0;
+  background: linear-gradient(0deg,
+    rgb(87 241 219 / 0.6) 0%,
+    rgb(87 241 219 / 0.9) 65%,
+    rgb(255 196 87 / 0.95) 88%,
+    rgb(255 95 95 / 1) 100%);
+  transition: opacity 80ms linear;
 }
 
 /* Vertical fader: rotate the native <input type=range> with writing-mode
