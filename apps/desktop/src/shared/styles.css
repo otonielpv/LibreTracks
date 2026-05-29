@@ -4643,27 +4643,42 @@ textarea {
 
 .lt-compact-cell.is-active {
   background: rgb(20 26 25 / 0.85);
-  border-color: rgba(186, 202, 197, 0.18);
+  border-color: rgba(87, 241, 219, 0.2);
 }
 
 .lt-compact-cell.is-empty {
   background: transparent;
   border-style: dashed;
+  border-color: rgba(186, 202, 197, 0.06);
 }
 
 .lt-compact-cell:hover {
   border-color: rgb(87 241 219 / 0.55);
 }
 
-/* A thin vertical bar on the left edge of the cell that says "this track
-   contributes clips to this song". Borrowed from Ableton Session View where
-   a clip slot also has a tiny stripe rather than filling the slot. */
-.lt-compact-cell-marker {
+/* The first clip's filename lives at the top of the cell so the user can
+   tell at a glance which audio populates this (track, song) pair. If there
+   are several clips on the same track inside the same song, a small "+N"
+   badge in the corner hints at the rest. */
+.lt-compact-cell-name {
   position: absolute;
-  left: 0.35rem;
-  top: 0.4rem;
-  bottom: 0.4rem;
-  width: 0.25rem;
-  background: rgb(87 241 219 / 0.75);
-  border-radius: 1px;
+  inset: 0.35rem 0.4rem auto 0.5rem;
+  color: #e5e2e1;
+  font: 500 11px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.lt-compact-cell-extra {
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0.3rem;
+  color: #bacac5;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
+  pointer-events: none;
 }

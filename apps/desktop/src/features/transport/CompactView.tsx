@@ -29,9 +29,14 @@ type CompactViewProps = {
   tracks: TrackSummary[];
   /** Linear timeline position so we can highlight the active song. */
   playheadSeconds: number;
-  /** Map of trackId → 1 if any clip on that track starts inside the given
-   * region. Provided by the parent because it already has the SongView. */
-  trackActivityByRegion: Record<string, Set<string>>;
+  /** region_id → track_id → list of clips (sorted by timeline_start) that
+   * fall inside that song on that track. Provided by the parent because it
+   * already has the SongView. Empty arrays / missing keys mean "no clip in
+   * this cell" — the cell renders as an empty drop target. */
+  clipsByRegionAndTrack: Record<
+    string,
+    Record<string, { id: string; name: string }[]>
+  >;
   /** Fired when the user wants to commit the master gain for a region. */
   onMasterGainChange: (regionId: string, gain: number) => void;
   onMasterGainCommit: (regionId: string) => void;
@@ -65,7 +70,7 @@ function CompactViewComponent({
   regions,
   tracks,
   playheadSeconds,
-  trackActivityByRegion,
+  clipsByRegionAndTrack,
   onMasterGainChange,
   onMasterGainCommit,
   onDropFileIntoCell,
@@ -80,12 +85,14 @@ function CompactViewComponent({
   const visibleTracks = useMemo(() => {
     const usedTrackIds = new Set<string>();
     for (const region of regions) {
-      const activity = trackActivityByRegion[region.id];
-      if (!activity) continue;
-      for (const trackId of activity) usedTrackIds.add(trackId);
+      const perTrack = clipsByRegionAndTrack[region.id];
+      if (!perTrack) continue;
+      for (const trackId of Object.keys(perTrack)) {
+        if (perTrack[trackId].length > 0) usedTrackIds.add(trackId);
+      }
     }
     return tracks.filter((track) => usedTrackIds.has(track.id));
-  }, [regions, tracks, trackActivityByRegion]);
+  }, [regions, tracks, clipsByRegionAndTrack]);
 
   const handleAddSong = useCallback(async () => {
     try {
@@ -99,7 +106,10 @@ function CompactViewComponent({
 
   // Explicit grid template so React doesn't have to rely on auto-fill.
   // Columns: [track-label] [song 1] [song 2] ... [song N] [+ add song].
-  const gridTemplateColumns = `minmax(8rem, max-content) repeat(${regions.length}, minmax(10rem, 1fr)) 8rem`;
+  // Each song column is sized between a comfortable minimum and a fixed cap
+  // so a project with a single song doesn't stretch its column across the
+  // whole screen — extra width simply stays empty to the right.
+  const gridTemplateColumns = `minmax(8rem, max-content) repeat(${regions.length}, minmax(10rem, 14rem)) 8rem`;
 
   // Suppress unused-import warning for t() until we localise the button copy.
   void t;
@@ -140,7 +150,7 @@ function CompactViewComponent({
             key={track.id}
             track={track}
             regions={regions}
-            trackActivityByRegion={trackActivityByRegion}
+            clipsByRegionAndTrack={clipsByRegionAndTrack}
             onDropFileIntoCell={onDropFileIntoCell}
           />
         ))}
@@ -275,7 +285,10 @@ const CompactSongHeader = memo(CompactSongHeaderComponent);
 type CompactTrackRowProps = {
   track: TrackSummary;
   regions: SongRegionSummary[];
-  trackActivityByRegion: Record<string, Set<string>>;
+  clipsByRegionAndTrack: Record<
+    string,
+    Record<string, { id: string; name: string }[]>
+  >;
   onDropFileIntoCell: (
     regionId: string,
     trackId: string,
@@ -287,7 +300,7 @@ type CompactTrackRowProps = {
 function CompactTrackRowComponent({
   track,
   regions,
-  trackActivityByRegion,
+  clipsByRegionAndTrack,
   onDropFileIntoCell,
 }: CompactTrackRowProps) {
   return (
@@ -296,14 +309,15 @@ function CompactTrackRowComponent({
         {track.name}
       </div>
       {regions.map((region) => {
-        const active = trackActivityByRegion[region.id]?.has(track.id) ?? false;
+        const clips =
+          clipsByRegionAndTrack[region.id]?.[track.id] ?? [];
         return (
           <CompactCell
             key={`${region.id}:${track.id}`}
             regionId={region.id}
             trackId={track.id}
             regionStart={region.startSeconds}
-            isActive={active}
+            clips={clips}
             onDropFile={onDropFileIntoCell}
           />
         );
@@ -321,7 +335,7 @@ type CompactCellProps = {
   regionId: string;
   trackId: string;
   regionStart: number;
-  isActive: boolean;
+  clips: { id: string; name: string }[];
   onDropFile: (
     regionId: string,
     trackId: string,
@@ -334,7 +348,7 @@ function CompactCellComponent({
   regionId,
   trackId,
   regionStart,
-  isActive,
+  clips,
   onDropFile,
 }: CompactCellProps) {
   const handleDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
@@ -354,13 +368,30 @@ function CompactCellComponent({
     [onDropFile, regionId, trackId, regionStart],
   );
 
+  // The cell shows the name of the first clip the track has in this song;
+  // if there are several, a "+N" badge hints at the others. This replaces
+  // the previous "thin teal stripe" marker that didn't tell the user what
+  // actually lives in the cell.
+  const primary = clips[0];
+  const extraCount = clips.length - 1;
+  const isActive = clips.length > 0;
+
   return (
     <div
       className={`lt-compact-cell ${isActive ? "is-active" : "is-empty"}`}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      {isActive ? <span className="lt-compact-cell-marker" /> : null}
+      {primary ? (
+        <span className="lt-compact-cell-name" title={primary.name}>
+          {primary.name}
+        </span>
+      ) : null}
+      {extraCount > 0 ? (
+        <span className="lt-compact-cell-extra" aria-hidden="true">
+          +{extraCount}
+        </span>
+      ) : null}
     </div>
   );
 }

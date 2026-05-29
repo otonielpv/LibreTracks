@@ -2557,25 +2557,34 @@ export function TransportPanelContent() {
     ? getEffectiveBpmAt(song, selectedRegion.startSeconds)
     : getSongBaseBpm(song);
 
-  // For the compact view: which tracks have at least one clip whose start
-  // falls inside each region. Built once per snapshot so the grid stays
-  // O(songs × tracks) instead of O(songs × tracks × clips) at render time.
-  const trackActivityByRegion = useMemo(() => {
-    const activity: Record<string, Set<string>> = {};
-    if (!song) return activity;
+  // For the compact view: which clips of each track fall inside each region.
+  // The structure is region_id → track_id → clip[] (sorted by timeline_start).
+  // Used both for the "is this cell active" question (set has entries) and
+  // for showing a clip name / count inside the cell. Built once per
+  // snapshot so the grid stays cheap to render.
+  const clipsByRegionAndTrack = useMemo(() => {
+    const byRegion: Record<
+      string,
+      Record<string, { id: string; name: string }[]>
+    > = {};
+    if (!song) return byRegion;
     for (const region of song.regions) {
-      const set = new Set<string>();
-      for (const clip of song.clips) {
-        if (
-          clip.timelineStartSeconds >= region.startSeconds &&
-          clip.timelineStartSeconds < region.endSeconds
-        ) {
-          set.add(clip.trackId);
-        }
-      }
-      activity[region.id] = set;
+      byRegion[region.id] = {};
     }
-    return activity;
+    for (const clip of song.clips) {
+      const region = song.regions.find(
+        (r) =>
+          clip.timelineStartSeconds >= r.startSeconds &&
+          clip.timelineStartSeconds < r.endSeconds,
+      );
+      if (!region) continue;
+      const slot = (byRegion[region.id][clip.trackId] ??= []);
+      const fileName =
+        clip.filePath?.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") ??
+        clip.id;
+      slot.push({ id: clip.id, name: fileName });
+    }
+    return byRegion;
   }, [song]);
 
   // The compact view needs a per-region master-gain commit that knows its
@@ -9024,7 +9033,7 @@ export function TransportPanelContent() {
                       playheadSeconds={
                         snapshotRef.current?.positionSeconds ?? 0
                       }
-                      trackActivityByRegion={trackActivityByRegion}
+                      clipsByRegionAndTrack={clipsByRegionAndTrack}
                       onMasterGainChange={handleCompactMasterGainChange}
                       onMasterGainCommit={handleCompactMasterGainCommit}
                       onDropFileIntoCell={handleCompactDropFileIntoCell}
