@@ -1860,6 +1860,7 @@ impl DesktopSession {
             .find(|clip| clip.id == clip_id)
             .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
         clip.timeline_start_seconds = new_start;
+        prune_empty_regions(&mut song);
         refresh_song_duration(&mut song);
 
         self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
@@ -1883,13 +1884,23 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
         // View-time → source-time conversion, see create_section_marker.
         let timeline_start_seconds = source_seconds_at_view(&song, timeline_start_seconds);
+        let new_start = normalize_timeline_start_seconds(timeline_start_seconds);
+        let clip_duration = song
+            .clips
+            .iter()
+            .find(|clip| clip.id == clip_id)
+            .map(|clip| clip.duration_seconds)
+            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
+
+        ensure_region_covers_clip(&mut song, new_start, new_start + clip_duration)?;
+
         let clip = song
             .clips
             .iter_mut()
             .find(|clip| clip.id == clip_id)
             .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
-
-        clip.timeline_start_seconds = normalize_timeline_start_seconds(timeline_start_seconds);
+        clip.timeline_start_seconds = new_start;
+        prune_empty_regions(&mut song);
         refresh_song_duration(&mut song);
 
         self.persist_song_update_internal(
@@ -1918,16 +1929,8 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
-        for request in moves {
-            let clip = song
-                .clips
-                .iter_mut()
-                .find(|clip| clip.id == request.clip_id)
-                .ok_or_else(|| DesktopError::ClipNotFound(request.clip_id.clone()))?;
-            clip.timeline_start_seconds =
-                normalize_timeline_start_seconds(request.timeline_start_seconds);
-        }
-
+        apply_clip_moves_with_region_reshape(&mut song, moves)?;
+        prune_empty_regions(&mut song);
         refresh_song_duration(&mut song);
         self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
 
@@ -1952,16 +1955,8 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
 
-        for request in moves {
-            let clip = song
-                .clips
-                .iter_mut()
-                .find(|clip| clip.id == request.clip_id)
-                .ok_or_else(|| DesktopError::ClipNotFound(request.clip_id.clone()))?;
-            clip.timeline_start_seconds =
-                normalize_timeline_start_seconds(request.timeline_start_seconds);
-        }
-
+        apply_clip_moves_with_region_reshape(&mut song, moves)?;
+        prune_empty_regions(&mut song);
         refresh_song_duration(&mut song);
 
         self.persist_song_update_internal(
@@ -1991,6 +1986,12 @@ impl DesktopSession {
         if song.clips.len() == clip_count {
             return Err(DesktopError::ClipNotFound(clip_id.to_string()));
         }
+
+        // Per the song-model plan (step 4.5), a region that loses its
+        // last clip is auto-deleted. The whole operation rides on a
+        // single persist_song_update so undo restores the clip AND the
+        // region together.
+        prune_empty_regions(&mut song);
 
         refresh_song_duration(&mut song);
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
@@ -5668,6 +5669,50 @@ fn ensure_region_covers_clip(
     });
     sort_song_regions(&mut song.regions);
     Ok(())
+}
+
+/// Apply a batch of clip moves with the same per-clip region reshaping the
+/// single-clip path uses. Moves are applied in order so the region layout
+/// after each clip's reshape is visible to the next. Failure on any single
+/// move aborts the whole batch — callers see a single all-or-nothing
+/// outcome, matching how the user perceives a multi-select drag.
+fn apply_clip_moves_with_region_reshape(
+    song: &mut Song,
+    moves: &[ClipMoveRequest],
+) -> Result<(), DesktopError> {
+    for request in moves {
+        let new_start = normalize_timeline_start_seconds(request.timeline_start_seconds);
+        let clip_duration = song
+            .clips
+            .iter()
+            .find(|clip| clip.id == request.clip_id)
+            .map(|clip| clip.duration_seconds)
+            .ok_or_else(|| DesktopError::ClipNotFound(request.clip_id.clone()))?;
+        ensure_region_covers_clip(song, new_start, new_start + clip_duration)?;
+        let clip = song
+            .clips
+            .iter_mut()
+            .find(|clip| clip.id == request.clip_id)
+            .ok_or_else(|| DesktopError::ClipNotFound(request.clip_id.clone()))?;
+        clip.timeline_start_seconds = new_start;
+    }
+    Ok(())
+}
+
+/// Drop any region that no longer has at least one clip whose start falls
+/// inside it. Per the song-model plan (step 4.5), a song that loses its last
+/// clip ceases to exist — the user does not have to clean it up by hand.
+///
+/// The size of surviving regions is left alone (user request: "if clips are
+/// moved leave the size as-is, the user can adjust"). Only completely empty
+/// regions are removed.
+fn prune_empty_regions(song: &mut Song) {
+    song.regions.retain(|region| {
+        song.clips.iter().any(|clip| {
+            clip.timeline_start_seconds >= region.start_seconds
+                && clip.timeline_start_seconds < region.end_seconds
+        })
+    });
 }
 
 fn refresh_song_duration(song: &mut Song) {
