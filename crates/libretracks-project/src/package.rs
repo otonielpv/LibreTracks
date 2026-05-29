@@ -432,6 +432,7 @@ fn import_song_package_from_archive<R: Read + Seek>(
         transpose_semitones: manifest.region_transpose_semitones,
         warp_enabled: false,
         warp_source_bpm: None,
+        master: libretracks_core::SongMaster::default(),
     });
     next_song.regions.sort_by(|left, right| {
         left.start_seconds

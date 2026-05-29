@@ -1088,6 +1088,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
             }],
             tracks: vec![
                 Track {
@@ -1223,6 +1224,7 @@ mod tests {
                     transpose_semitones: 0,
                     warp_enabled: false,
                     warp_source_bpm: None,
+                    master: libretracks_core::SongMaster::default(),
                 },
                 SongRegion {
                     id: "region_bridge".into(),
@@ -1232,6 +1234,7 @@ mod tests {
                     transpose_semitones: 0,
                     warp_enabled: false,
                     warp_source_bpm: None,
+                    master: libretracks_core::SongMaster::default(),
                 },
                 SongRegion {
                     id: "region_outro".into(),
@@ -1241,6 +1244,7 @@ mod tests {
                     transpose_semitones: 0,
                     warp_enabled: false,
                     warp_source_bpm: None,
+                    master: libretracks_core::SongMaster::default(),
                 },
             ],
             tracks: vec![Track {

@@ -2216,6 +2216,7 @@ impl DesktopSession {
             transpose_semitones: 0,
             warp_enabled: false,
             warp_source_bpm: None,
+            master: libretracks_core::SongMaster::default(),
         };
 
         replace_song_region_range(&mut song, region);
@@ -2264,6 +2265,7 @@ impl DesktopSession {
             transpose_semitones: existing_region.transpose_semitones,
             warp_enabled: existing_region.warp_enabled,
             warp_source_bpm: existing_region.warp_source_bpm,
+            master: existing_region.master.clone(),
         };
 
         // Drop the OLD copy of this region before delegating to
@@ -5738,6 +5740,7 @@ fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
                 transpose_semitones: region.transpose_semitones,
                 warp_enabled: region.warp_enabled,
                 warp_source_bpm: region.warp_source_bpm,
+                master: region.master.clone(),
             });
         }
 
@@ -5756,6 +5759,7 @@ fn replace_song_region_range(song: &mut Song, replacement: SongRegion) {
                 transpose_semitones: region.transpose_semitones,
                 warp_enabled: region.warp_enabled,
                 warp_source_bpm: region.warp_source_bpm,
+                master: region.master.clone(),
             });
         }
     }
@@ -5909,6 +5913,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
             }],
             tracks: vec![Track {
                 id: "track_1".into(),
@@ -5961,6 +5966,7 @@ mod tests {
             transpose_semitones: 3,
             warp_enabled: false,
             warp_source_bpm: None,
+            master: libretracks_core::SongMaster::default(),
         }];
         song.clips[0].duration_seconds = 24.0;
         song
@@ -6044,6 +6050,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
             },
             SongRegion {
                 id: "region_2".into(),
@@ -6053,6 +6060,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
             },
             SongRegion {
                 id: "region_3".into(),
@@ -6062,6 +6070,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
             },
         ];
         song.clips[0].duration_seconds = 18.0;
@@ -6162,6 +6171,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
             }],
             tracks: vec![
                 Track {
@@ -6645,6 +6655,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
             }],
             tracks: vec![
                 Track {

@@ -3,8 +3,8 @@ pub mod validation;
 pub mod warp;
 
 pub use model::{
-    default_audio_to, parse_audio_output_route, Clip, Marker, Project, Song, SongRegion,
-    TempoMarker, TempoMetadata, TempoSource, TimeSignatureMarker, Track, TrackKind,
+    default_audio_to, parse_audio_output_route, Clip, Marker, Project, Song, SongMaster,
+    SongRegion, TempoMarker, TempoMetadata, TempoSource, TimeSignatureMarker, Track, TrackKind,
 };
 pub use validation::{
     validate_song, DomainError, MAX_TRANSPOSE_SEMITONES, MAX_WARP_SOURCE_BPM,
@@ -18,8 +18,8 @@ pub use warp::{
 #[cfg(test)]
 mod tests {
     use crate::{
-        validate_song, Clip, Marker, Song, SongRegion, Track, TrackKind, MAX_TRANSPOSE_SEMITONES,
-        MIN_TRANSPOSE_SEMITONES,
+        validate_song, Clip, Marker, Song, SongMaster, SongRegion, Track, TrackKind,
+        MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
     };
 
     fn valid_song() -> Song {
@@ -41,6 +41,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                master: SongMaster::default(),
             }],
             tracks: vec![
                 Track {
@@ -108,6 +109,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: false,
             warp_source_bpm: None,
+            master: SongMaster::default(),
         });
 
         assert!(validate_song(&song).is_ok());

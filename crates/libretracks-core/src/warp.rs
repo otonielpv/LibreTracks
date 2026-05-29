@@ -250,6 +250,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: enabled,
             warp_source_bpm: source_bpm,
+            master: crate::model::SongMaster::default(),
         }
     }
 
@@ -380,6 +381,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: true,
             warp_source_bpm: Some(120.0),
+            master: crate::model::SongMaster::default(),
         };
         s.regions.push(r.clone());
         let ratio = region_warp_ratio_in_song(&r, &s);
@@ -400,6 +402,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: true,
             warp_source_bpm: Some(100.0),
+            master: crate::model::SongMaster::default(),
         });
 
         assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
@@ -421,6 +424,7 @@ mod tests {
             transpose_semitones: region_pitch,
             warp_enabled,
             warp_source_bpm,
+            master: crate::model::SongMaster::default(),
         });
         s
     }
@@ -484,6 +488,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: true,
             warp_source_bpm: Some(100.0), // ratio = 120/100 = 1.2 → view len 50s
+            master: crate::model::SongMaster::default(),
         });
 
         // Before the region: identity.
@@ -509,6 +514,7 @@ mod tests {
             transpose_semitones: 12, // pitch_scale = 2 → view len 5s
             warp_enabled: false,
             warp_source_bpm: None,
+            master: crate::model::SongMaster::default(),
         });
 
         // Mid-region: view 12.5 = local view 2.5 → source = 10 + 2.5 * 2 = 15.
@@ -532,6 +538,7 @@ mod tests {
             transpose_semitones: 12,
             warp_enabled: false,
             warp_source_bpm: None,
+            master: crate::model::SongMaster::default(),
         });
         assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
         assert!((warp_timeline_seconds_at(&s, 20.0) - 15.0).abs() < 1e-9);
@@ -549,6 +556,7 @@ mod tests {
             transpose_semitones: 0,
             warp_enabled: true,
             warp_source_bpm: Some(120.0),
+            master: crate::model::SongMaster::default(),
         });
 
         let duration = warp_timeline_duration_seconds(&s, 0.0, 12.0);

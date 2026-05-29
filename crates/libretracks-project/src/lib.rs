@@ -59,6 +59,7 @@ mod tests {
                 transpose_semitones: 0,
                 warp_enabled: false,
                 warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
             }],
             tracks: vec![Track {
                 id: "track_click".into(),

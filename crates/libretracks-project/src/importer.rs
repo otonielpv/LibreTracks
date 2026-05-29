@@ -238,6 +238,7 @@ pub fn import_wav_song(
             transpose_semitones: 0,
             warp_enabled: false,
             warp_source_bpm: None,
+            master: libretracks_core::SongMaster::default(),
         }],
         tracks: imported_files
             .iter()

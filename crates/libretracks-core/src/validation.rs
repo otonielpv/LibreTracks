@@ -80,6 +80,8 @@ pub enum DomainError {
         region_id: String,
         source_bpm: String,
     },
+    #[error("region {region_id} has invalid master gain {gain}")]
+    InvalidRegionMasterGain { region_id: String, gain: String },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -134,6 +136,13 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
                     region_id: region.id.clone(),
                 });
             }
+        }
+
+        if !region.master.gain.is_finite() || region.master.gain < 0.0 {
+            return Err(DomainError::InvalidRegionMasterGain {
+                region_id: region.id.clone(),
+                gain: format!("{}", region.master.gain),
+            });
         }
 
         previous_region_id = Some(region.id.as_str());

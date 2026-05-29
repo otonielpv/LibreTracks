@@ -72,6 +72,20 @@ pub struct SongRegion {
     /// configured value.
     #[serde(default)]
     pub warp_source_bpm: Option<f64>,
+    #[serde(default)]
+    pub master: SongMaster,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SongMaster {
+    pub gain: f64,
+}
+
+impl Default for SongMaster {
+    fn default() -> Self {
+        Self { gain: 1.0 }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
