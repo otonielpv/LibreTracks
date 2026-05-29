@@ -1103,6 +1103,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "ext:2-3".to_string(),
                     color: None,
+                    auto_created: false,
                 },
                 Track {
                     id: "track_click".into(),
@@ -1116,6 +1117,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "ext:2-3".to_string(),
                     color: None,
+                    auto_created: false,
                 },
                 Track {
                     id: "folder_main".into(),
@@ -1129,6 +1131,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
                     color: None,
+                    auto_created: false,
                 },
                 Track {
                     id: "track_drums".into(),
@@ -1142,6 +1145,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
                     color: None,
+                    auto_created: false,
                 },
             ],
             clips: vec![
@@ -1259,6 +1263,7 @@ mod tests {
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
                 color: None,
+                auto_created: false,
             }],
             // One clip per region so each respects the "clip inside one
             // region" invariant. Together they cover the full timeline

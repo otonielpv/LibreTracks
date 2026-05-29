@@ -278,6 +278,7 @@ mod tests {
                 transpose_enabled: true,
                 audio_to: crate::model::default_audio_to(),
                 color: None,
+                auto_created: false,
             }],
             clips: vec![Clip {
                 id: "c".into(),

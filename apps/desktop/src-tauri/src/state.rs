@@ -2958,6 +2958,7 @@ impl DesktopSession {
             transpose_enabled: true,
             audio_to,
             color: None,
+            auto_created: false,
         };
 
         insert_track(
@@ -6189,6 +6190,7 @@ mod tests {
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
                 color: None,
+                auto_created: false,
             }],
             clips: vec![Clip {
                 id: "clip_1".into(),
@@ -6369,6 +6371,7 @@ mod tests {
                 transpose_enabled: false,
                 audio_to: "master".to_string(),
                 color: None,
+                auto_created: false,
             },
         );
         // Make the audio track a child of the folder.
@@ -6448,6 +6451,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
                     color: None,
+                    auto_created: false,
                 },
                 Track {
                     id: "track_child_a".into(),
@@ -6461,6 +6465,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
                     color: None,
+                    auto_created: false,
                 },
                 Track {
                     id: "track_folder_b".into(),
@@ -6474,6 +6479,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
                     color: None,
+                    auto_created: false,
                 },
                 Track {
                     id: "track_child_b".into(),
@@ -6487,6 +6493,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
                     color: None,
+                    auto_created: false,
                 },
             ],
             clips: vec![],
@@ -6932,6 +6939,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
                     color: None,
+                    auto_created: false,
                 },
                 Track {
                     id: "track-drums_01".into(),
@@ -6945,6 +6953,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "master".to_string(),
                     color: None,
+                    auto_created: false,
                 },
             ],
             clips: vec![],

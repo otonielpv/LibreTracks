@@ -56,6 +56,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "master".into(),
                     color: None,
+                    auto_created: false,
                 },
                 Track {
                     id: "track_click".into(),
@@ -69,6 +70,7 @@ mod tests {
                     transpose_enabled: true,
                     audio_to: "ext:2-3".into(),
                     color: None,
+                    auto_created: false,
                 },
             ],
             clips: vec![Clip {

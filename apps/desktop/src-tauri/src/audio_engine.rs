@@ -1899,6 +1899,7 @@ mod tests {
                 transpose_enabled: true,
                 audio_to: "master".into(),
                 color: None,
+                auto_created: false,
             }],
             clips: vec![Clip {
                 id: "clip".into(),

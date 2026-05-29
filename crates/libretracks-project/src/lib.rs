@@ -73,6 +73,7 @@ mod tests {
                 transpose_enabled: true,
                 audio_to: "ext:2-3".to_string(),
                 color: None,
+                auto_created: false,
             }],
             clips: vec![Clip {
                 id: "clip_click".into(),

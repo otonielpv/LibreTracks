@@ -510,6 +510,7 @@ mod tests {
                 transpose_enabled: true,
                 audio_to: "master".into(),
                 color: None,
+                auto_created: false,
             }],
             clips: vec![],
             section_markers: vec![],

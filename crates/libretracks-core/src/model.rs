@@ -112,6 +112,13 @@ pub struct Track {
     pub audio_to: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Tracks marked auto_created are removed automatically the moment they
+    /// no longer hold any clip. Set when a track is conjured by a drop into
+    /// the compact view's song column (one audio file → one auto track).
+    /// Tracks the user created explicitly (DAW track header, library drop
+    /// with a target_track_id) stay false and survive becoming empty.
+    #[serde(default)]
+    pub auto_created: bool,
 }
 
 pub fn default_audio_to() -> String {

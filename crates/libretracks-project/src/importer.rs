@@ -254,6 +254,7 @@ pub fn import_wav_song(
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
                 color: None,
+                auto_created: false,
             })
             .collect(),
         clips: imported_files
@@ -333,6 +334,7 @@ pub fn append_wav_files_to_song(
             transpose_enabled: true,
             audio_to: "master".to_string(),
             color: None,
+            auto_created: false,
         });
 
         next_song.clips.push(Clip {

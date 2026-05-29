@@ -384,6 +384,7 @@ fn import_song_package_from_archive<R: Read + Seek>(
             transpose_enabled: track.transpose_enabled,
             audio_to: "master".to_string(),
             color: track.color.clone(),
+            auto_created: false,
         });
         track_ids_by_name.insert(track.name.clone(), track_id);
     }
