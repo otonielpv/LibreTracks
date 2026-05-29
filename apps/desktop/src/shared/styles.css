@@ -4676,7 +4676,11 @@ textarea {
 
 /* ─── Bottom mixer ────────────────────────────────────────────────────── */
 .lt-compact-mixer {
-  flex: 0 0 auto;
+  /* Fixed height so the mixer takes its share of the viewport and the songs
+     above keep the rest. Without this cap, the strip's vertical fader pulls
+     the whole zone to fill the available height, squishing the songs to a
+     1-px strip at the top. */
+  flex: 0 0 16rem;
   border-top: 1px solid rgba(186, 202, 197, 0.12);
   padding: 0.5rem 1rem;
   background: rgb(11 13 14);
@@ -4686,6 +4690,7 @@ textarea {
 .lt-compact-mixer-strips {
   display: flex;
   gap: 0.4rem;
+  height: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 0.25rem;
@@ -4703,6 +4708,8 @@ textarea {
   border: 1px solid rgba(186, 202, 197, 0.1);
   border-left: 3px solid var(--track-accent);
   border-radius: 2px;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .lt-compact-mixer-strip-name {
@@ -4752,9 +4759,10 @@ textarea {
 
 .lt-compact-mixer-fader-wrap {
   flex: 1 1 auto;
-  min-height: 6rem;
+  min-height: 0;
   display: flex;
   justify-content: center;
+  overflow: hidden;
 }
 
 /* Vertical fader: rotate the native <input type=range> with writing-mode
