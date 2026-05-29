@@ -27,6 +27,19 @@ type RegionMasterFaderProps = {
   onCommit: () => void;
 };
 
+// Master fader snaps to unity (1.0) within ±3% of the slider range (0..2),
+// matching the compact view's master snap so both views feel identical.
+// Holding Shift while dragging bypasses the snap; double-click resets.
+const MASTER_SNAP_TARGET = 1.0;
+const MASTER_SNAP_THRESHOLD = 2.0 * 0.03;
+
+function applyMasterSnap(value: number, bypass: boolean): number {
+  if (bypass) return value;
+  return Math.abs(value - MASTER_SNAP_TARGET) <= MASTER_SNAP_THRESHOLD
+    ? MASTER_SNAP_TARGET
+    : value;
+}
+
 function RegionMasterFaderComponent({
   regionId,
   masterGain,
@@ -35,6 +48,21 @@ function RegionMasterFaderComponent({
   onCommit,
 }: RegionMasterFaderProps) {
   const meterFillRef = useRef<HTMLDivElement | null>(null);
+  const shiftPressedRef = useRef(false);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Shift") shiftPressedRef.current = true;
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Shift") shiftPressedRef.current = false;
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
   const animationStateRef = useRef({
     frameId: null as number | null,
     lastFrameAt: 0,
@@ -133,7 +161,14 @@ function RegionMasterFaderComponent({
         step={0.01}
         value={masterGain}
         disabled={disabled}
-        onChange={(event) => onChange(Number(event.target.value) || 0)}
+        onChange={(event) => {
+          const next = Number(event.target.value) || 0;
+          onChange(applyMasterSnap(next, shiftPressedRef.current));
+        }}
+        onDoubleClick={() => {
+          onChange(MASTER_SNAP_TARGET);
+          onCommit();
+        }}
         onPointerUp={() => onCommit()}
         onPointerCancel={() => onCommit()}
         onKeyUp={(event) => {

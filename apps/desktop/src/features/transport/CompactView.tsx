@@ -392,6 +392,19 @@ type CompactSongHeaderProps = {
   onPlay: () => void;
 };
 
+// Master fader snaps to unity (1.0) within ±3% of full range (0..2), so the
+// magnetic zone is [0.94, 1.06]. Shift bypasses, double-click resets.
+const MASTER_SNAP_TARGET = 1.0;
+const MASTER_SNAP_RANGE = 2.0;
+const MASTER_SNAP_THRESHOLD = MASTER_SNAP_RANGE * 0.03;
+
+function applyMasterSnap(value: number, bypass: boolean): number {
+  if (bypass) return value;
+  return Math.abs(value - MASTER_SNAP_TARGET) <= MASTER_SNAP_THRESHOLD
+    ? MASTER_SNAP_TARGET
+    : value;
+}
+
 function CompactSongHeaderComponent({
   region,
   isActive,
@@ -399,6 +412,23 @@ function CompactSongHeaderComponent({
   onMasterGainCommit,
   onPlay,
 }: CompactSongHeaderProps) {
+  // Track Shift state via window listeners so the slider's onChange can
+  // read it; same pattern as the CompactMixerStrip volume / pan.
+  const shiftPressedRef = useRef(false);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Shift") shiftPressedRef.current = true;
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Shift") shiftPressedRef.current = false;
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
   const optimistic = useTransportStore((state) =>
     state.optimisticRegionMaster[region.id],
   );
@@ -490,9 +520,14 @@ function CompactSongHeaderComponent({
           step={0.01}
           value={gain}
           aria-label={`Master gain for ${region.name}`}
-          onChange={(event) =>
-            onMasterGainChange(Number(event.target.value) || 0)
-          }
+          onChange={(event) => {
+            const next = Number(event.target.value) || 0;
+            onMasterGainChange(applyMasterSnap(next, shiftPressedRef.current));
+          }}
+          onDoubleClick={() => {
+            onMasterGainChange(MASTER_SNAP_TARGET);
+            onMasterGainCommit();
+          }}
           onPointerUp={onMasterGainCommit}
           onPointerCancel={onMasterGainCommit}
           onKeyUp={(event) => {
