@@ -4519,7 +4519,19 @@ textarea {
   border-radius: 2px;
 }
 
+/* Header row aligns the play button next to the song name so the user
+   can trigger the song's jump-to-region exactly the way the Shift+digit
+   shortcut does, without leaving the compact view. */
+.lt-compact-song-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
 .lt-compact-song-name {
+  flex: 1 1 auto;
+  min-width: 0;
   color: #e5e2e1;
   font: 600 11px/1.2 "Space Grotesk", sans-serif;
   letter-spacing: 0.08em;
@@ -4527,6 +4539,31 @@ textarea {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.lt-compact-song-play {
+  flex: 0 0 auto;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(186, 202, 197, 0.25);
+  border-radius: 2px;
+  background: transparent;
+  color: #57f1db;
+  cursor: pointer;
+}
+
+.lt-compact-song-play:hover {
+  background: rgb(87 241 219 / 0.18);
+  border-color: rgb(87 241 219 / 0.65);
+}
+
+.lt-compact-song-play .material-symbols-outlined {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .lt-compact-song-master {
@@ -4714,11 +4751,13 @@ textarea {
 
 .lt-compact-mixer-strip-name {
   color: #e5e2e1;
-  font: 600 10px/1.2 "Space Grotesk", sans-serif;
+  font: 600 10px/1.3 "Space Grotesk", sans-serif;
   letter-spacing: 0.04em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-height: 1.1rem;
+  flex: 0 0 auto;
 }
 
 .lt-compact-mixer-strip-toggles {

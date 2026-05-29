@@ -72,6 +72,10 @@ type CompactViewProps = {
   /** Fired from the per-clip context menu in the song column. */
   onMoveClipToTrack: (clipId: string, targetTrackId: string) => void;
   onDeleteClip: (clipId: string) => void;
+  /** Fired from the per-column play button. Honours the project's global
+   * song-jump configuration (trigger + transition mode) — same path the
+   * Shift+digit keyboard shortcut uses. */
+  onPlaySong: (regionId: string, regionName: string) => void;
   /** Fired after a successful createEmptySong so the snapshot is applied
    * by whoever owns runAction / applyPlaybackSnapshot upstream. */
   onSnapshotApplied: (snapshot: TransportSnapshot) => void;
@@ -108,6 +112,7 @@ function CompactViewComponent({
   onDropLibraryAssetsIntoSong,
   onMoveClipToTrack,
   onDeleteClip,
+  onPlaySong,
   onSnapshotApplied,
 }: CompactViewProps) {
   const handleAddSong = useCallback(async () => {
@@ -154,6 +159,7 @@ function CompactViewComponent({
             }
             onMoveClipToTrack={onMoveClipToTrack}
             onDeleteClip={onDeleteClip}
+            onPlay={() => onPlaySong(region.id, region.name)}
           />
         ))}
         <button
@@ -191,6 +197,7 @@ type CompactSongColumnProps = {
   ) => void;
   onMoveClipToTrack: (clipId: string, targetTrackId: string) => void;
   onDeleteClip: (clipId: string) => void;
+  onPlay: () => void;
 };
 
 function CompactSongColumnComponent({
@@ -204,6 +211,7 @@ function CompactSongColumnComponent({
   onDropLibraryAssets,
   onMoveClipToTrack,
   onDeleteClip,
+  onPlay,
 }: CompactSongColumnProps) {
   const [contextMenu, setContextMenu] = useState<{
     clipId: string;
@@ -294,6 +302,7 @@ function CompactSongColumnComponent({
         isActive={isActive}
         onMasterGainChange={onMasterGainChange}
         onMasterGainCommit={onMasterGainCommit}
+        onPlay={onPlay}
       />
       <div className="lt-compact-song-clip-stack">
         {clips.length === 0 ? (
@@ -379,6 +388,7 @@ type CompactSongHeaderProps = {
   isActive: boolean;
   onMasterGainChange: (gain: number) => void;
   onMasterGainCommit: () => void;
+  onPlay: () => void;
 };
 
 function CompactSongHeaderComponent({
@@ -386,6 +396,7 @@ function CompactSongHeaderComponent({
   isActive,
   onMasterGainChange,
   onMasterGainCommit,
+  onPlay,
 }: CompactSongHeaderProps) {
   const optimistic = useTransportStore((state) =>
     state.optimisticRegionMaster[region.id],
@@ -452,8 +463,19 @@ function CompactSongHeaderComponent({
     <div
       className={`lt-compact-song-header ${isActive ? "is-active" : ""}`}
     >
-      <div className="lt-compact-song-name" title={region.name}>
-        {region.name}
+      <div className="lt-compact-song-name-row">
+        <button
+          type="button"
+          className="lt-compact-song-play"
+          aria-label={`Reproducir ${region.name}`}
+          title={`Reproducir ${region.name} (respeta la transición global)`}
+          onClick={onPlay}
+        >
+          <span className="material-symbols-outlined">play_arrow</span>
+        </button>
+        <div className="lt-compact-song-name" title={region.name}>
+          {region.name}
+        </div>
       </div>
       <div className="lt-compact-song-master">
         <div className="lt-compact-song-meter" aria-hidden="true">

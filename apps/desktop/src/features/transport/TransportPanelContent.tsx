@@ -2797,6 +2797,20 @@ export function TransportPanelContent() {
     handleSelectedRegionTransposeChange,
   });
 
+  // Per-song play button in the compact view: routes through the same
+  // scheduleRegionJumpWithOptions path the Shift+digit keyboard shortcut
+  // uses, so the user gets exactly the global "song jump" behaviour
+  // (immediate / after-bars / region-end + instant / fade-out transition)
+  // configured from the toolbar.
+  const handleCompactPlaySong = useCallback(
+    (regionId: string, regionName: string) => {
+      void runAction(async () => {
+        await scheduleRegionJumpWithOptions(regionId, regionName);
+      });
+    },
+    [runAction, scheduleRegionJumpWithOptions],
+  );
+
   useEffect(() => {
     const selectedMidiDevice = appSettings.selectedMidiDevice;
     if (!selectedMidiDevice) {
@@ -9165,6 +9179,7 @@ export function TransportPanelContent() {
                       }
                       onMoveClipToTrack={handleCompactMoveClipToTrack}
                       onDeleteClip={handleCompactDeleteClip}
+                      onPlaySong={handleCompactPlaySong}
                       onSnapshotApplied={applyPlaybackSnapshot}
                     />
                   ) : null}
