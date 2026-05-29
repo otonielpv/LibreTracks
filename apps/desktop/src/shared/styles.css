@@ -4369,29 +4369,33 @@ textarea {
   width: 100%;
 }
 
+/* The fader is a flex item that fills the popover row. Sized via min-width
+   so it survives shrinking on narrow popovers; max-width keeps it from
+   stealing all the space when a wider popover is used. */
 .lt-region-master-fader {
   position: relative;
   flex: 1 1 auto;
-  min-width: 10rem;
-  display: block;
-  height: 28px;
+  min-width: 8rem;
+  display: grid;
+  /* The grid holds the meter and slider in the same cell; both fill the area
+     and stack via z-index instead of fighting for layout. */
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  align-items: center;
+  height: 1.4rem;
 }
 
-/* The popover's default ".lt-stepper-control-row input { width: 4rem }" would
-   collapse the range slider into a thumb-only square — override to fill the
-   fader column so the meter bar and slider track align. */
-.lt-stepper-control-row input.lt-region-master-fader-slider {
-  width: 100%;
-  height: 28px;
+.lt-region-master-fader-meter,
+.lt-region-master-fader-slider {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .lt-region-master-fader-meter {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  transform: translateY(-50%);
-  height: 0.55rem;
+  position: relative;
+  align-self: center;
+  height: 0.7rem;
+  width: 100%;
   border-radius: 2px;
   background: rgb(20 26 25 / 0.85);
   overflow: hidden;
@@ -4409,46 +4413,56 @@ textarea {
   transition: opacity 80ms linear;
 }
 
+/* The slider sits on top of the meter in the same grid cell. Track is
+   invisible so the meter shows through; the thumb is the visible affordance.
+   Override the popover's input width:4rem rule with high specificity. */
+.lt-stepper-control-row input[type="range"].lt-region-master-fader-slider,
 .lt-region-master-fader-slider {
-  position: absolute;
-  inset: 0;
+  width: 100%;
+  height: 1.4rem;
   margin: 0;
   padding: 0;
   background: transparent;
   -webkit-appearance: none;
   appearance: none;
+  position: relative;
   z-index: 1;
+  cursor: ew-resize;
 }
 
 .lt-region-master-fader-slider::-webkit-slider-runnable-track {
-  height: 0.55rem;
+  height: 0.7rem;
   background: transparent;
+  border: 0;
   border-radius: 2px;
 }
 
 .lt-region-master-fader-slider::-moz-range-track {
-  height: 0.55rem;
+  height: 0.7rem;
   background: transparent;
+  border: 0;
   border-radius: 2px;
 }
 
 .lt-region-master-fader-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 0.6rem;
-  height: 1.1rem;
-  margin-top: -0.275rem;
+  width: 0.55rem;
+  height: 1.4rem;
+  /* WebKit anchors the thumb on the track baseline; pull it up so its center
+     aligns with the track center. (track_height - thumb_height) / 2 = -0.35rem. */
+  margin-top: -0.35rem;
   border: 0;
   border-radius: 2px;
   background: #f3f0ef;
-  cursor: ew-resize;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45);
 }
 
 .lt-region-master-fader-slider::-moz-range-thumb {
-  width: 0.6rem;
-  height: 1.1rem;
+  width: 0.55rem;
+  height: 1.4rem;
   border: 0;
   border-radius: 2px;
   background: #f3f0ef;
-  cursor: ew-resize;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45);
 }
