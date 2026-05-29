@@ -129,7 +129,7 @@ mod tests {
         save_song(&song_dir, &demo_song()).expect("song should save");
 
         let json = fs::read_to_string(song_file_path(&song_dir)).expect("song file should exist");
-        assert!(json.contains("\"version\": 5"));
+        assert!(json.contains("\"version\": 6"));
         assert!(json.contains("\"timeSignature\""));
         assert!(json.contains("\"regions\""));
         assert!(json.contains("\"timelineStartSeconds\""));
