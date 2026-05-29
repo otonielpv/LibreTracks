@@ -97,11 +97,17 @@ function CompactViewComponent({
     }
   }, [onSnapshotApplied]);
 
+  // Explicit grid template so React doesn't have to rely on auto-fill.
+  // Columns: [track-label] [song 1] [song 2] ... [song N] [+ add song].
+  const gridTemplateColumns = `minmax(8rem, max-content) repeat(${regions.length}, minmax(10rem, 1fr)) 8rem`;
+
+  // Suppress unused-import warning for t() until we localise the button copy.
+  void t;
+
   return (
     <div className="lt-compact-view">
-      <div className="lt-compact-view-grid">
-        {/* Top-left empty corner sized to match the master row + track-label
-            column so the grid lines line up. */}
+      <div className="lt-compact-view-grid" style={{ gridTemplateColumns }}>
+        {/* Top-left empty corner — column 1 of the header row. */}
         <div className="lt-compact-view-corner" aria-hidden="true" />
 
         {/* Header row: one cell per song with name + master fader. */}
@@ -118,16 +124,17 @@ function CompactViewComponent({
           />
         ))}
 
-        {/* "+ Nueva canción" cell at the end of the header row. */}
+        {/* "+ Nueva canción" cell — last column of the header row. */}
         <button
           type="button"
           className="lt-compact-view-add-song"
           onClick={handleAddSong}
         >
-          {t("transport.menu.createSongRegionFromSelection") /* placeholder copy */}
+          + Nueva canción
         </button>
 
-        {/* Track rows: label column on the left, then one cell per song. */}
+        {/* Track rows: label column on the left, then one cell per song,
+            then an empty spacer aligning with the "+ add song" column. */}
         {visibleTracks.map((track) => (
           <CompactTrackRow
             key={track.id}

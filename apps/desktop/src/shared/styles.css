@@ -4474,20 +4474,24 @@ textarea {
    ───────────────────────────────────────────────────────────────────────── */
 .lt-compact-view {
   width: 100%;
-  height: 100%;
+  /* Preview mode (step 5.1): the compact grid lives below the DAW timeline,
+     so cap its height so the DAW doesn't get pushed off-screen. Step 5.2
+     will replace this with the full lt-main-stage area once the view-mode
+     toggle swaps DAW and Compact instead of stacking them. */
+  max-height: 22rem;
   overflow: auto;
   padding: 1rem;
   background: rgb(8 10 11);
+  border-top: 1px solid rgba(186, 202, 197, 0.12);
+  margin-top: 0.5rem;
 }
 
 .lt-compact-view-grid {
   display: grid;
-  /* First column = track labels; remaining columns = one per song; trailing
-     column for the "+ Nueva canción" button. Sized via grid-template-columns
-     inline in TSX once we know how many songs there are — fall back to
-     auto-fill so the empty-project state still renders. */
-  grid-template-columns:
-    minmax(8rem, max-content) repeat(auto-fill, minmax(10rem, 1fr));
+  /* Columns are set inline from CompactView via gridTemplateColumns so the
+     number of song columns is always correct. The fallback here keeps the
+     empty-project state laid out reasonably while inline styles attach. */
+  grid-template-columns: minmax(8rem, max-content) 1fr 8rem;
   gap: 0.25rem;
   align-items: stretch;
 }
