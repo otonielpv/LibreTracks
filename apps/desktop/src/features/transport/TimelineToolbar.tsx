@@ -123,7 +123,7 @@ function RegionMasterFaderComponent({
         <div className="lt-region-master-fader-meter-fill" ref={meterFillRef} />
       </div>
       <input
-        className="lt-range-input lt-region-master-fader-slider"
+        className="lt-region-master-fader-slider"
         aria-label="Region master gain"
         type="range"
         min={0}
