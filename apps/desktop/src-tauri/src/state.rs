@@ -1841,13 +1841,25 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
         // View-time → source-time conversion, see create_section_marker.
         let timeline_start_seconds = source_seconds_at_view(&song, timeline_start_seconds);
+        let new_start = normalize_timeline_start_seconds(timeline_start_seconds);
+        let clip_duration = song
+            .clips
+            .iter()
+            .find(|clip| clip.id == clip_id)
+            .map(|clip| clip.duration_seconds)
+            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
+
+        // Reshape the regions first (auto-create or auto-extend) so the
+        // move never produces a transient state where the clip lives
+        // outside every region.
+        ensure_region_covers_clip(&mut song, new_start, new_start + clip_duration)?;
+
         let clip = song
             .clips
             .iter_mut()
             .find(|clip| clip.id == clip_id)
             .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
-
-        clip.timeline_start_seconds = normalize_timeline_start_seconds(timeline_start_seconds);
+        clip.timeline_start_seconds = new_start;
         refresh_song_duration(&mut song);
 
         self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
@@ -5551,12 +5563,20 @@ fn append_clip_to_song(
     let wav_metadata =
         read_audio_metadata(resolve_audio_file_path(song_dir, &normalized_file_path))?;
     let clip_id = format!("clip_{}_{}", timestamp_suffix(), song.clips.len());
+    let clip_start = normalize_timeline_start_seconds(request.timeline_start_seconds);
+    let clip_end = clip_start + wav_metadata.duration_seconds;
+
+    // Enforce the "clip lives inside one region" invariant by either
+    // extending the region the clip lands in, or creating a new region
+    // around it when it falls between songs. A clip whose span would
+    // invade a neighbouring song is rejected.
+    ensure_region_covers_clip(song, clip_start, clip_end)?;
 
     song.clips.push(Clip {
         id: clip_id,
         track_id: request.track_id.clone(),
         file_path: normalized_file_path,
-        timeline_start_seconds: normalize_timeline_start_seconds(request.timeline_start_seconds),
+        timeline_start_seconds: clip_start,
         source_start_seconds: 0.0,
         duration_seconds: wav_metadata.duration_seconds,
         gain: 1.0,
@@ -5565,6 +5585,88 @@ fn append_clip_to_song(
         color: None,
     });
 
+    Ok(())
+}
+
+/// Make sure exactly one region covers `[clip_start, clip_end)`.
+///
+/// Cases handled (with the user-facing contract from steps 4.3 + 4.4 of the
+/// song-model plan):
+///
+/// 1. A region already contains `[clip_start, clip_end)` end-to-end. No-op.
+/// 2. A region contains `clip_start` but the clip overflows its end. Extend
+///    that region's end to `clip_end`. If the new end would overlap a
+///    following region, the drop is rejected (the user's clip would invade
+///    the next song).
+/// 3. The clip falls outside every region. Create a fresh region around it,
+///    unless that new region would overlap a neighbour, in which case the
+///    drop is rejected.
+///
+/// We never shift `clip_start` backward into an earlier region's tail — the
+/// invariant is about containment, and a clip whose start sits at exactly
+/// `region.end` belongs to whatever follows, not to that region.
+fn ensure_region_covers_clip(
+    song: &mut Song,
+    clip_start: f64,
+    clip_end: f64,
+) -> Result<(), DesktopError> {
+    if clip_end <= clip_start {
+        return Err(DesktopError::AudioCommand(
+            "clip must have a positive duration".into(),
+        ));
+    }
+
+    // Pre-sort so neighbour lookups are deterministic.
+    sort_song_regions(&mut song.regions);
+
+    // Case 1 / 2: clip starts inside an existing region.
+    if let Some(idx) = song
+        .regions
+        .iter()
+        .position(|region| clip_start >= region.start_seconds && clip_start < region.end_seconds)
+    {
+        let region_end = song.regions[idx].end_seconds;
+        if clip_end <= region_end {
+            return Ok(());
+        }
+        // Need to extend forward. Reject if a following region sits before
+        // clip_end — extending would either overlap it (invariant break)
+        // or implicitly delete it (data loss).
+        if let Some(next) = song.regions.get(idx + 1) {
+            if clip_end > next.start_seconds {
+                return Err(DesktopError::AudioCommand(
+                    "clip would extend into the next song; move it earlier or shorten it".into(),
+                ));
+            }
+        }
+        song.regions[idx].end_seconds = clip_end;
+        return Ok(());
+    }
+
+    // Case 3: clip is outside every region. Build a fresh region. Reject if
+    // its bounds would straddle a neighbour.
+    if let Some(neighbour) = song
+        .regions
+        .iter()
+        .find(|region| !(clip_end <= region.start_seconds || clip_start >= region.end_seconds))
+    {
+        return Err(DesktopError::AudioCommand(format!(
+            "clip overlaps song '{}' but does not lie inside it; move it earlier or later",
+            neighbour.name
+        )));
+    }
+    let region_index = song.regions.len();
+    song.regions.push(SongRegion {
+        id: format!("region_{}_{}", timestamp_suffix(), region_index),
+        name: format!("Song {}", region_index + 1),
+        start_seconds: clip_start,
+        end_seconds: clip_end,
+        transpose_semitones: 0,
+        warp_enabled: false,
+        warp_source_bpm: None,
+        master: libretracks_core::SongMaster::default(),
+    });
+    sort_song_regions(&mut song.regions);
     Ok(())
 }
 
