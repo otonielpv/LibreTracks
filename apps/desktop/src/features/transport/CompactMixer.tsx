@@ -1,4 +1,11 @@
-import { memo, useCallback, useEffect, useRef, type ChangeEvent } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 
 import {
   meterDbToDisplayScale,
@@ -171,6 +178,11 @@ function CompactMixerStripComponent({
     handlers.onCommitPan(track.id);
   }, [handlers, track.id]);
 
+  // Tooltip flag used to show the current pan value while the user drags
+  // the slider, the way Ableton overlays the numeric value next to the
+  // thumb. Set on pointerdown, cleared on pointerup/cancel.
+  const [isPanDragging, setIsPanDragging] = useState(false);
+
   const handleAudioToChange = useCallback(
     (event: ChangeEvent<HTMLSelectElement>) => {
       handlers.onAudioToChange(track.id, event.target.value);
@@ -251,24 +263,48 @@ function CompactMixerStripComponent({
       </div>
 
       {/* Pan slider. Horizontal so it doesn't claim more height inside the
-          already-tall strip. -1 → L, 0 → C, +1 → R. */}
+          already-tall strip. -1 → L, 0 → C, +1 → R. The guide row above
+          shows L/C/R tick labels so the user reads the slider without
+          touching it, and a tooltip floats over the thumb while dragging. */}
       <div className="lt-compact-mixer-pan-wrap">
-        <input
-          type="range"
-          className="lt-compact-mixer-pan"
-          min={-1}
-          max={1}
-          step={0.01}
-          value={pan}
-          aria-label={`Pan ${track.name}`}
-          onChange={handlePanInput}
-          onDoubleClick={handlePanDoubleClick}
-          onPointerUp={() => handlers.onCommitPan(track.id)}
-          onPointerCancel={() => handlers.onCommitPan(track.id)}
-          onKeyUp={(event) => {
-            if (isStepperKey(event.key)) handlers.onCommitPan(track.id);
-          }}
-        />
+        <div className="lt-compact-mixer-pan-guides" aria-hidden="true">
+          <span className="lt-compact-mixer-pan-guide is-left">L</span>
+          <span className="lt-compact-mixer-pan-guide is-centre">C</span>
+          <span className="lt-compact-mixer-pan-guide is-right">R</span>
+        </div>
+        <div className="lt-compact-mixer-pan-track">
+          <input
+            type="range"
+            className="lt-compact-mixer-pan"
+            min={-1}
+            max={1}
+            step={0.01}
+            value={pan}
+            aria-label={`Pan ${track.name}`}
+            onChange={handlePanInput}
+            onDoubleClick={handlePanDoubleClick}
+            onPointerDown={() => setIsPanDragging(true)}
+            onPointerUp={() => {
+              setIsPanDragging(false);
+              handlers.onCommitPan(track.id);
+            }}
+            onPointerCancel={() => {
+              setIsPanDragging(false);
+              handlers.onCommitPan(track.id);
+            }}
+            onKeyUp={(event) => {
+              if (isStepperKey(event.key)) handlers.onCommitPan(track.id);
+            }}
+          />
+          {isPanDragging ? (
+            <div
+              className="lt-compact-mixer-pan-tooltip"
+              style={{ left: `${((pan + 1) / 2) * 100}%` }}
+            >
+              {formatPan(pan)}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <select
@@ -403,6 +439,17 @@ function effectiveNumber(
   fallback: number,
 ): number {
   return optimistic ?? fallback;
+}
+
+/** Pan value formatter for the drag tooltip: "C" at centre, "L 50" /
+ * "R 32" otherwise. The numeric value is the percent of the half-range, so
+ * pan = -0.5 reads as "L 50". Matches the convention used by Ableton's
+ * pan tooltip. */
+function formatPan(value: number): string {
+  if (Math.abs(value) < 0.001) return "C";
+  const side = value < 0 ? "L" : "R";
+  const magnitude = Math.round(Math.abs(value) * 100);
+  return `${side} ${magnitude}`;
 }
 
 function isStepperKey(key: string) {

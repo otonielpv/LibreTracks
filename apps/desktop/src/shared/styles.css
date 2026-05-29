@@ -4811,10 +4811,62 @@ textarea {
 
 .lt-compact-mixer-pan-wrap {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+}
+
+.lt-compact-mixer-pan-guides {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  color: rgba(186, 202, 197, 0.55);
+  font: 700 8px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 0.15rem;
+}
+
+.lt-compact-mixer-pan-guide {
+  text-align: center;
+}
+
+.lt-compact-mixer-pan-guide.is-left {
+  text-align: left;
+}
+
+.lt-compact-mixer-pan-guide.is-right {
+  text-align: right;
+}
+
+/* Track wrapper used both as the slider's positioning context and as the
+   reference frame for the floating drag tooltip. The centre / extremes
+   tick marks are painted as a background gradient under the slider so the
+   guides line up exactly with the slider's reachable range. */
+.lt-compact-mixer-pan-track {
+  position: relative;
+  height: 0.8rem;
+}
+
+.lt-compact-mixer-pan-track::before {
+  content: "";
+  position: absolute;
+  inset: 0.35rem 0 auto 0;
+  height: 0.3rem;
+  border-radius: 2px;
+  background:
+    /* centre tick: 1px white-ish */
+    linear-gradient(90deg,
+      transparent calc(50% - 1px),
+      rgba(186, 202, 197, 0.55) calc(50% - 1px),
+      rgba(186, 202, 197, 0.55) calc(50% + 1px),
+      transparent calc(50% + 1px)),
+    /* base bar */
+    rgb(15 18 19);
+  pointer-events: none;
 }
 
 .lt-compact-mixer-pan {
+  position: relative;
   width: 100%;
   height: 0.8rem;
   margin: 0;
@@ -4823,12 +4875,13 @@ textarea {
   -webkit-appearance: none;
   appearance: none;
   cursor: ew-resize;
+  z-index: 1;
 }
 
 .lt-compact-mixer-pan::-webkit-slider-runnable-track,
 .lt-compact-mixer-pan::-moz-range-track {
   height: 0.3rem;
-  background: rgb(15 18 19);
+  background: transparent;
   border: 0;
   border-radius: 2px;
 }
@@ -4850,6 +4903,22 @@ textarea {
   border: 0;
   border-radius: 1px;
   background: #f3f0ef;
+}
+
+.lt-compact-mixer-pan-tooltip {
+  position: absolute;
+  bottom: calc(100% + 0.35rem);
+  transform: translateX(-50%);
+  padding: 0.2rem 0.45rem;
+  background: rgb(15 18 19);
+  border: 1px solid rgba(186, 202, 197, 0.25);
+  border-radius: 2px;
+  color: #e5e2e1;
+  font: 600 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .lt-compact-mixer-audio-to {
