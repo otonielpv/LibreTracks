@@ -2239,6 +2239,76 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Create an empty song (region) at the end of the current timeline,
+    /// separated from the previous song by one bar of silence. The region
+    /// itself is one bar wide so it's visible in the DAW view; the moment
+    /// the user drops a clip into it the region will resize to fit (see
+    /// ensure_region_covers_clip).
+    ///
+    /// Only used by the compact view's "+ Nueva canción" button. In the
+    /// DAW view, regions are still created implicitly when clips drop onto
+    /// empty timeline.
+    pub fn create_empty_song(
+        &mut self,
+        name: Option<&str>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        // Anchor: end of the last existing region (in source-time), or 0 if
+        // this is the first song in the project.
+        let anchor_source_seconds = song
+            .regions
+            .iter()
+            .map(|region| region.end_seconds)
+            .fold(0.0_f64, f64::max);
+
+        // One bar of silence + one bar of region, both in source-time so
+        // they survive warp without shifting visually.
+        let bar_seconds = bar_seconds_at(&song, anchor_source_seconds);
+        let start_seconds = anchor_source_seconds + bar_seconds;
+        let end_seconds = start_seconds + bar_seconds;
+
+        let region_index = song.regions.len();
+        let region_name = name
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                let locale = audio
+                    .current_settings()
+                    .ok()
+                    .and_then(|settings| settings.locale)
+                    .map(|locale| locale.to_ascii_lowercase());
+                match locale.as_deref() {
+                    Some("es") => format!("Canción {}", region_index + 1),
+                    _ => format!("Song {}", region_index + 1),
+                }
+            });
+
+        let region = SongRegion {
+            id: format!("region_{}_{}", timestamp_suffix(), region_index),
+            name: region_name,
+            start_seconds,
+            end_seconds,
+            transpose_semitones: 0,
+            warp_enabled: false,
+            warp_source_bpm: None,
+            master: libretracks_core::SongMaster::default(),
+        };
+
+        song.regions.push(region);
+        sort_song_regions(&mut song.regions);
+        audio.update_live_song_regions(&song)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn update_song_region(
         &mut self,
         region_id: &str,
@@ -5713,6 +5783,21 @@ fn prune_empty_regions(song: &mut Song) {
                 && clip.timeline_start_seconds < region.end_seconds
         })
     });
+}
+
+/// Duration of one bar at `position_seconds` (in source-time), derived from
+/// the song's effective BPM at that point and the song's base time signature
+/// numerator. Used by create_empty_song to space new songs by one bar of
+/// silence regardless of tempo.
+fn bar_seconds_at(song: &Song, position_seconds: f64) -> f64 {
+    let bpm = libretracks_core::effective_bpm_at(song, position_seconds).max(1.0);
+    let beats_per_bar = song
+        .time_signature
+        .split_once('/')
+        .and_then(|(num, _)| num.trim().parse::<u32>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(4) as f64;
+    (beats_per_bar * 60.0) / bpm
 }
 
 fn refresh_song_duration(song: &mut Song) {

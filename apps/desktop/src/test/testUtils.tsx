@@ -125,6 +125,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     duplicateClip: vi.fn(testDesktopApiMock.duplicateClip),
     splitClip: vi.fn(testDesktopApiMock.splitClip),
     createSongRegion: vi.fn(testDesktopApiMock.createSongRegion),
+    createEmptySong: vi.fn(testDesktopApiMock.createEmptySong),
     updateSongRegion: vi.fn(testDesktopApiMock.updateSongRegion),
     updateLiveRegionMasterGain: vi.fn(testDesktopApiMock.updateLiveRegionMasterGain),
     updateSongRegionMasterGain: vi.fn(testDesktopApiMock.updateSongRegionMasterGain),

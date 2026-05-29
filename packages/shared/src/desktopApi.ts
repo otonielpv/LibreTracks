@@ -538,6 +538,17 @@ export async function createSongRegion(
   return invokeCommand<TransportSnapshot>("create_song_region", { startSeconds, endSeconds });
 }
 
+/**
+ * Append an empty song (region) to the project. Backs the compact view's
+ * "+ Nueva canción" button. The new song is placed one bar after the last
+ * existing song's end (or at the timeline start when the project has no
+ * songs yet) and is itself one bar wide so it shows up in the DAW view.
+ * It resizes to fit when the user drops the first clip into it.
+ */
+export async function createEmptySong(name?: string): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("create_empty_song", { name: name ?? null });
+}
+
 export async function updateSongRegion(
   regionId: string,
   name: string,

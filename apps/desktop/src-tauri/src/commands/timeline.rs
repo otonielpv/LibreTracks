@@ -268,6 +268,26 @@ pub fn create_song_region(
         .map_err(|error| error.to_string())
 }
 
+/// Append a fresh empty song to the project. Backs the compact view's
+/// "+ Nueva canción" button. The new song is placed one bar after the
+/// previous one's end (or at t=0 for the first song) and is itself one
+/// bar wide so it's visible in the DAW view immediately; it resizes to
+/// fit the first clip dropped into it.
+#[tauri::command]
+pub fn create_empty_song(
+    name: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .create_empty_song(name.as_deref(), &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub fn update_song_region(
     region_id: String,

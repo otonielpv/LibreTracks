@@ -155,6 +155,7 @@ fn main() {
             commands::timeline::update_section_marker,
             commands::timeline::delete_section_marker,
             commands::timeline::create_song_region,
+            commands::timeline::create_empty_song,
             commands::timeline::update_song_region,
             commands::timeline::update_song_region_transpose,
             commands::timeline::update_song_region_warp,

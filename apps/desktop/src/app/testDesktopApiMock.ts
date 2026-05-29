@@ -1302,6 +1302,37 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
+  createEmptySong: async (name?: string) => {
+    const bpm = state.song.bpm > 0 ? state.song.bpm : 120;
+    const beatsPerBar = (() => {
+      const [num] = (state.song.timeSignature ?? "4/4").split("/");
+      const parsed = Number(num);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 4;
+    })();
+    const barSeconds = (beatsPerBar * 60) / bpm;
+    const anchor = state.song.regions.reduce(
+      (max, region) => (region.endSeconds > max ? region.endSeconds : max),
+      0,
+    );
+    const startSeconds = anchor + barSeconds;
+    const endSeconds = startSeconds + barSeconds;
+    const index = state.song.regions.length;
+    const region = {
+      id: nextId("region"),
+      name: name?.trim() || `Song ${index + 1}`,
+      startSeconds,
+      endSeconds,
+      transposeSemitones: 0,
+      warpEnabled: false,
+      warpSourceBpm: null,
+      master: { gain: 1.0 },
+    };
+    replaceSong({
+      ...state.song,
+      regions: [...state.song.regions, region],
+    });
+    return clone(buildSnapshot());
+  },
   updateSongRegion: async (args: {
     regionId: string;
     name?: string;
