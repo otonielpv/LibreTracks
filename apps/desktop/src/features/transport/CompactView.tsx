@@ -1,8 +1,12 @@
 import {
   memo,
   useCallback,
+  useEffect,
+  useMemo,
   useRef,
+  useState,
   type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 
 import {
@@ -18,6 +22,7 @@ import {
   CompactMixer,
   type CompactMixerHandlers,
 } from "./CompactMixer";
+import { LIBRARY_ASSET_DRAG_MIME } from "./dragDrop";
 import {
   createEmptySong,
   type SongRegionSummary,
@@ -51,15 +56,22 @@ type CompactViewProps = {
   /** Fired when the user wants to commit the master gain for a region. */
   onMasterGainChange: (regionId: string, gain: number) => void;
   onMasterGainCommit: (regionId: string) => void;
-  /** Fired when the user drops a file into a song's clip stack. The
-   * specific (region, track) mapping is established by the parent: we hand
-   * over the song id and the timeline position and the parent decides
-   * what track to land on. Wired in step 5.4. */
-  onDropFileIntoSong: (
+  /** Fired when the user drops one or more files (from the OS file
+   * explorer) into a song's clip stack. The parent translates each File
+   * into an auto-track + clip via createClipsWithAutoTracks. The drop
+   * landing position is the song's start. */
+  onDropOsFilesIntoSong: (regionId: string, files: File[]) => void;
+  /** Fired when the user drags a library asset onto a song column. The
+   * payload mirrors the LibrarySidebarPanel drag payload (file path +
+   * cached duration). The parent translates this into createClipsWithAutoTracks
+   * using the resolved file paths. */
+  onDropLibraryAssetsIntoSong: (
     regionId: string,
-    file: File,
-    timelineStartSeconds: number,
+    payload: Array<{ filePath: string; durationSeconds?: number }>,
   ) => void;
+  /** Fired from the per-clip context menu in the song column. */
+  onMoveClipToTrack: (clipId: string, targetTrackId: string) => void;
+  onDeleteClip: (clipId: string) => void;
   /** Fired after a successful createEmptySong so the snapshot is applied
    * by whoever owns runAction / applyPlaybackSnapshot upstream. */
   onSnapshotApplied: (snapshot: TransportSnapshot) => void;
@@ -92,7 +104,10 @@ function CompactViewComponent({
   mixerHandlers,
   onMasterGainChange,
   onMasterGainCommit,
-  onDropFileIntoSong,
+  onDropOsFilesIntoSong,
+  onDropLibraryAssetsIntoSong,
+  onMoveClipToTrack,
+  onDeleteClip,
   onSnapshotApplied,
 }: CompactViewProps) {
   const handleAddSong = useCallback(async () => {
@@ -105,6 +120,17 @@ function CompactViewComponent({
     }
   }, [onSnapshotApplied]);
 
+  // Build a "move to track" submenu list once per snapshot — every clip's
+  // context menu uses the same set, sorted by the project's track order.
+  // Folder tracks are excluded since clips can't live on folders.
+  const moveTargets = useMemo(
+    () =>
+      tracks
+        .filter((track) => track.kind === "audio")
+        .map((track) => ({ id: track.id, name: track.name })),
+    [tracks],
+  );
+
   return (
     <div className="lt-compact-view">
       {/* Top zone: songs + master + clip stacks. Horizontal scroll when
@@ -115,15 +141,19 @@ function CompactViewComponent({
             key={region.id}
             region={region}
             clips={clipsByRegion[region.id] ?? []}
+            moveTargets={moveTargets}
             isActive={
               playheadSeconds >= region.startSeconds &&
               playheadSeconds < region.endSeconds
             }
             onMasterGainChange={(gain) => onMasterGainChange(region.id, gain)}
             onMasterGainCommit={() => onMasterGainCommit(region.id)}
-            onDropFile={(file) =>
-              onDropFileIntoSong(region.id, file, region.startSeconds)
+            onDropOsFiles={(files) => onDropOsFilesIntoSong(region.id, files)}
+            onDropLibraryAssets={(payload) =>
+              onDropLibraryAssetsIntoSong(region.id, payload)
             }
+            onMoveClipToTrack={onMoveClipToTrack}
+            onDeleteClip={onDeleteClip}
           />
         ))}
         <button
@@ -151,20 +181,53 @@ export const CompactView = memo(CompactViewComponent);
 type CompactSongColumnProps = {
   region: SongRegionSummary;
   clips: CompactClipEntry[];
+  moveTargets: Array<{ id: string; name: string }>;
   isActive: boolean;
   onMasterGainChange: (gain: number) => void;
   onMasterGainCommit: () => void;
-  onDropFile: (file: File) => void;
+  onDropOsFiles: (files: File[]) => void;
+  onDropLibraryAssets: (
+    payload: Array<{ filePath: string; durationSeconds?: number }>,
+  ) => void;
+  onMoveClipToTrack: (clipId: string, targetTrackId: string) => void;
+  onDeleteClip: (clipId: string) => void;
 };
 
 function CompactSongColumnComponent({
   region,
   clips,
+  moveTargets,
   isActive,
   onMasterGainChange,
   onMasterGainCommit,
-  onDropFile,
+  onDropOsFiles,
+  onDropLibraryAssets,
+  onMoveClipToTrack,
+  onDeleteClip,
 }: CompactSongColumnProps) {
+  const [contextMenu, setContextMenu] = useState<{
+    clipId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // Close the context menu on any outside click or escape, the way most
+  // native menus behave. Listening on the window so we don't have to weave
+  // a backdrop element through the grid layout.
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [contextMenu]);
+
   const handleDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
@@ -173,12 +236,52 @@ function CompactSongColumnComponent({
   const handleDrop = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
       event.preventDefault();
-      const file = event.dataTransfer.files?.[0];
-      if (!file) return;
-      onDropFile(file);
+      const types = Array.from(event.dataTransfer.types ?? []);
+
+      // Library-asset drag: same MIME the DAW uses. The payload is a JSON
+      // array of { file_path, durationSeconds } records.
+      if (types.includes(LIBRARY_ASSET_DRAG_MIME)) {
+        try {
+          const raw = event.dataTransfer.getData(LIBRARY_ASSET_DRAG_MIME);
+          const payload = JSON.parse(raw) as Array<{
+            file_path: string;
+            durationSeconds?: number;
+          }>;
+          if (payload.length > 0) {
+            onDropLibraryAssets(
+              payload.map((item) => ({
+                filePath: item.file_path,
+                durationSeconds: item.durationSeconds,
+              })),
+            );
+          }
+        } catch {
+          // Malformed payload — ignore the drop.
+        }
+        return;
+      }
+
+      // OS file drag: the browser exposes File objects directly.
+      const files = Array.from(event.dataTransfer.files ?? []);
+      if (files.length > 0) {
+        onDropOsFiles(files);
+      }
     },
-    [onDropFile],
+    [onDropLibraryAssets, onDropOsFiles],
   );
+
+  const openContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>, clipId: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setContextMenu({ clipId, x: event.clientX, y: event.clientY });
+    },
+    [],
+  );
+
+  const activeClip = contextMenu
+    ? clips.find((clip) => clip.id === contextMenu.clipId)
+    : null;
 
   return (
     <div
@@ -199,7 +302,11 @@ function CompactSongColumnComponent({
           </div>
         ) : (
           clips.map((clip) => (
-            <div className="lt-compact-clip-entry" key={clip.id}>
+            <div
+              className="lt-compact-clip-entry"
+              key={clip.id}
+              onContextMenu={(event) => openContextMenu(event, clip.id)}
+            >
               <span className="lt-compact-clip-name" title={clip.clipName}>
                 {clip.clipName}
               </span>
@@ -213,6 +320,54 @@ function CompactSongColumnComponent({
           ))
         )}
       </div>
+
+      {contextMenu && activeClip ? (
+        <div
+          className="lt-compact-clip-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          // Stop pointerdown bubbling so opening the submenu doesn't close
+          // the parent menu via the window listener above.
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="lt-compact-clip-menu-group">
+            <div className="lt-compact-clip-menu-label">Mover a track</div>
+            <div className="lt-compact-clip-menu-list">
+              {moveTargets
+                .filter((target) => target.id !== activeClip.trackId)
+                .map((target) => (
+                  <button
+                    key={target.id}
+                    type="button"
+                    className="lt-compact-clip-menu-item"
+                    onClick={() => {
+                      onMoveClipToTrack(activeClip.id, target.id);
+                      setContextMenu(null);
+                    }}
+                  >
+                    {target.name}
+                  </button>
+                ))}
+              {moveTargets.filter((t) => t.id !== activeClip.trackId).length ===
+              0 ? (
+                <div className="lt-compact-clip-menu-empty">
+                  No hay otras tracks disponibles
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="lt-compact-clip-menu-divider" aria-hidden="true" />
+          <button
+            type="button"
+            className="lt-compact-clip-menu-item is-destructive"
+            onClick={() => {
+              onDeleteClip(activeClip.id);
+              setContextMenu(null);
+            }}
+          >
+            Eliminar clip
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

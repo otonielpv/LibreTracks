@@ -4833,3 +4833,91 @@ textarea {
   border-radius: 2px;
   font: 500 10px/1 "Space Grotesk", sans-serif;
 }
+
+/* Context menu shown when the user right-clicks a clip entry inside a
+   compact-view song column. Floats above the column via fixed position
+   so it can hang over the bottom mixer without being clipped. */
+.lt-compact-clip-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 12rem;
+  max-width: 18rem;
+  padding: 0.4rem 0;
+  background: rgb(15 18 19);
+  border: 1px solid rgba(186, 202, 197, 0.18);
+  border-radius: 3px;
+  box-shadow: 0 6px 22px rgb(0 0 0 / 0.45);
+}
+
+.lt-compact-clip-menu-group {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0.25rem;
+}
+
+.lt-compact-clip-menu-label {
+  padding: 0.4rem 0.55rem 0.3rem;
+  color: #bacac5;
+  font: 600 9px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-compact-clip-menu-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.lt-compact-clip-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.55rem;
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+  color: #e5e2e1;
+  font: 500 11px/1.2 "Space Grotesk", sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lt-compact-clip-menu-item:hover {
+  background: rgb(87 241 219 / 0.18);
+  color: #57f1db;
+}
+
+.lt-compact-clip-menu-item.is-destructive {
+  margin: 0 0.25rem;
+  color: rgb(255 95 95);
+}
+
+.lt-compact-clip-menu-item.is-destructive:hover {
+  background: rgb(255 95 95 / 0.18);
+  color: rgb(255 95 95);
+}
+
+.lt-compact-clip-menu-empty {
+  padding: 0.4rem 0.55rem;
+  color: rgba(186, 202, 197, 0.55);
+  font: 500 11px/1.2 "Space Grotesk", sans-serif;
+  font-style: italic;
+}
+
+.lt-compact-clip-menu-divider {
+  margin: 0.35rem 0;
+  border-top: 1px solid rgba(186, 202, 197, 0.1);
+}
+
+/* Subtle hover state for the right-clickable clip entries themselves. */
+.lt-compact-clip-entry {
+  cursor: context-menu;
+}
+
+.lt-compact-clip-entry:hover {
+  border-color: rgba(87, 241, 219, 0.35);
+}

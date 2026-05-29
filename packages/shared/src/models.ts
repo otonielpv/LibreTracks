@@ -86,6 +86,12 @@ export type TrackSummary = {
   audioTo: string;
   transposeEnabled: boolean;
   color?: string | null;
+  /** True for tracks the system conjured because a clip needed a home (e.g.
+   * drop into the compact view's song column). Auto-tracks are removed
+   * automatically the moment their last clip leaves them — user-created
+   * tracks never disappear on their own. Optional + defaults to false for
+   * back-compat with older snapshots that lacked the field. */
+  autoCreated?: boolean;
 };
 
 export function formatTransposeSemitones(value: number): string {

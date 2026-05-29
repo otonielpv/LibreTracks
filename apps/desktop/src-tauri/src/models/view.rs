@@ -150,6 +150,7 @@ pub struct TrackSummary {
     pub transpose_enabled: bool,
     pub audio_to: String,
     pub color: Option<String>,
+    pub auto_created: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -371,6 +372,7 @@ pub(crate) fn song_to_view(
                 transpose_enabled: track.transpose_enabled,
                 audio_to: track.audio_to.clone(),
                 color: track.color.clone(),
+                auto_created: track.auto_created,
             })
             .collect(),
         waveforms,

@@ -137,6 +137,10 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     createTrack: vi.fn(testDesktopApiMock.createTrack),
     createClip: vi.fn(testDesktopApiMock.createClip),
     createClipsBatch: vi.fn(testDesktopApiMock.createClipsBatch),
+    createClipsWithAutoTracks: vi.fn(
+      testDesktopApiMock.createClipsWithAutoTracks,
+    ),
+    moveClipToTrack: vi.fn(testDesktopApiMock.moveClipToTrack),
     moveTrack: vi.fn(testDesktopApiMock.moveTrack),
     updateTrack: vi.fn(testDesktopApiMock.updateTrack),
     updateTrackMixRealtime: vi.fn(testDesktopApiMock.updateTrackMixRealtime),

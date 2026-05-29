@@ -47,6 +47,8 @@ import {
   assignSectionMarkerDigit,
   cancelMarkerJump,
   createClipsBatch,
+  createClipsWithAutoTracks,
+  moveClipToTrack,
   createLibraryFolder,
   createSectionMarker,
   createSongRegion,
@@ -2645,26 +2647,116 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, runAction],
   );
 
-  // Drop file into a song column. The redesigned compact view (step 5.5)
-  // no longer has per-(song, track) cells — the user drops onto the song
-  // and the system infers the track from the audio metadata or assigns it
-  // to a new track. The library-asset pipeline will land in step 5.4;
-  // until then we log the intent to verify the wiring.
-  const handleCompactDropFileIntoCell = useCallback(
+  // Drop handlers for the compact view's song columns. Two flavours:
+  //
+  //  - OS file drag: the user dragged audio files from Explorer / Finder
+  //    straight into a song column. We run them through the same import
+  //    pipeline the DAW uses (resolveNativeAudioImportPayloads → backend
+  //    importAudioFiles*), then send the resulting library paths to
+  //    createClipsWithAutoTracks so each file lands on its own auto-track.
+  //
+  //  - Library asset drag: the LibrarySidebarPanel emits the same payload
+  //    the DAW timeline already consumes. Each entry already carries a
+  //    file_path inside the project folder, so we skip the import step
+  //    and go straight to createClipsWithAutoTracks.
+  //
+  // In both cases the new clip lands at the song's start_seconds. The
+  // backend extends the region if the clip is longer than the existing
+  // placeholder (step 4.4) and prunes the auto-track later if the user
+  // moves the clip off it.
+  const handleCompactDropOsFilesIntoSong = useCallback(
+    (regionId: string, files: File[]) => {
+      const region = song?.regions.find((r) => r.id === regionId);
+      if (!region) return;
+      const dropSeconds = region.startSeconds;
+      void runAction(async () => {
+        const nativePayloads = isTauriApp
+          ? resolveNativeAudioImportPayloads(files)
+          : null;
+        let importedAssets: LibraryAssetSummary[] = [];
+        if (nativePayloads) {
+          importedAssets = await importAudioFilesFromPaths(nativePayloads);
+        } else {
+          const byteloads = await Promise.all(
+            files.map(async (file) => ({
+              fileName: file.name,
+              bytes: new Uint8Array(await file.arrayBuffer()),
+            })),
+          );
+          importedAssets = await importAudioFilesFromBytes(byteloads);
+        }
+        mergeLibraryAssets(importedAssets);
+        await refreshLibraryState({ preserveAssets: importedAssets });
+        if (importedAssets.length === 0) return;
+        const snapshot = await createClipsWithAutoTracks(
+          importedAssets.map((asset) => ({
+            filePath: asset.filePath,
+            timelineStartSeconds: dropSeconds,
+          })),
+        );
+        applyPlaybackSnapshot(snapshot);
+        setStatus(
+          importedAssets.length === 1
+            ? t("transport.status.clipAdded", {
+                name: importedAssets[0].fileName,
+              })
+            : t("transport.status.clipsAdded", {
+                count: importedAssets.length,
+              }),
+        );
+      });
+    },
+    [
+      applyPlaybackSnapshot,
+      mergeLibraryAssets,
+      refreshLibraryState,
+      runAction,
+      setStatus,
+      song,
+      t,
+    ],
+  );
+
+  const handleCompactDropLibraryAssetsIntoSong = useCallback(
     (
       regionId: string,
-      file: File,
-      timelineStartSeconds: number,
+      payload: Array<{ filePath: string; durationSeconds?: number }>,
     ) => {
-      // TODO(step 5.4): import file via the same asset-create path the DAW
-      // view uses, then call createClipsBatch with the right placement.
-      // eslint-disable-next-line no-console
-      console.warn(
-        "Compact view drop is not wired yet",
-        { regionId, fileName: file.name, timelineStartSeconds },
-      );
+      const region = song?.regions.find((r) => r.id === regionId);
+      if (!region || payload.length === 0) return;
+      const dropSeconds = region.startSeconds;
+      void runAction(async () => {
+        const snapshot = await createClipsWithAutoTracks(
+          payload.map((item) => ({
+            filePath: item.filePath,
+            timelineStartSeconds: dropSeconds,
+          })),
+        );
+        applyPlaybackSnapshot(snapshot);
+      });
     },
-    [],
+    [applyPlaybackSnapshot, runAction, song],
+  );
+
+  // Per-clip context menu handlers from the compact view.
+  const handleCompactMoveClipToTrack = useCallback(
+    (clipId: string, targetTrackId: string) => {
+      void runAction(async () => {
+        const snapshot = await moveClipToTrack({ clipId, targetTrackId });
+        applyPlaybackSnapshot(snapshot);
+      });
+    },
+    [applyPlaybackSnapshot, runAction],
+  );
+
+  const handleCompactDeleteClip = useCallback(
+    (clipId: string) => {
+      void runAction(async () => {
+        const snapshot = await deleteClip(clipId);
+        applyPlaybackSnapshot(snapshot);
+      });
+    },
+    [applyPlaybackSnapshot, runAction],
   );
 
   const {
@@ -9067,7 +9159,12 @@ export function TransportPanelContent() {
                       }}
                       onMasterGainChange={handleCompactMasterGainChange}
                       onMasterGainCommit={handleCompactMasterGainCommit}
-                      onDropFileIntoSong={handleCompactDropFileIntoCell}
+                      onDropOsFilesIntoSong={handleCompactDropOsFilesIntoSong}
+                      onDropLibraryAssetsIntoSong={
+                        handleCompactDropLibraryAssetsIntoSong
+                      }
+                      onMoveClipToTrack={handleCompactMoveClipToTrack}
+                      onDeleteClip={handleCompactDeleteClip}
                       onSnapshotApplied={applyPlaybackSnapshot}
                     />
                   ) : null}

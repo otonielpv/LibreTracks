@@ -672,6 +672,39 @@ export async function createClipsBatch(args: CreateClipArgs[]): Promise<Transpor
   return invokeCommand<TransportSnapshot>("create_clips_batch", { requests: args });
 }
 
+export type CreateClipWithAutoTrackArgs = {
+  filePath: string;
+  timelineStartSeconds: number;
+};
+
+/**
+ * Drop one or more audio files into a compact-view song column. The backend
+ * creates one auto-track per file (name = file stem) and one clip per
+ * auto-track, all landing at the same `timelineStartSeconds`. Auto-tracks
+ * are deleted automatically the moment their clip is moved elsewhere or
+ * removed (so the mixer doesn't accumulate one-shot tracks).
+ */
+export async function createClipsWithAutoTracks(
+  args: CreateClipWithAutoTrackArgs[],
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("create_clips_with_auto_tracks", {
+    requests: args,
+  });
+}
+
+/**
+ * Reassign a clip to a different track without moving its timeline position.
+ * Backs the compact-view right-click "Mover a track…" submenu. When the
+ * clip's previous track was auto-created and loses its only clip, the track
+ * is removed in the same operation (undo restores both).
+ */
+export async function moveClipToTrack(args: {
+  clipId: string;
+  targetTrackId: string;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("move_clip_to_track", args);
+}
+
 export async function moveTrack(args: {
   trackId: string;
   insertAfterTrackId?: string | null;
