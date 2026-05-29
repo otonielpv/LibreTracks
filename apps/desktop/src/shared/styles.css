@@ -4659,9 +4659,15 @@ textarea {
   border-color: rgb(87 241 219 / 0.55);
 }
 
+/* A thin vertical bar on the left edge of the cell that says "this track
+   contributes clips to this song". Borrowed from Ableton Session View where
+   a clip slot also has a tiny stripe rather than filling the slot. */
 .lt-compact-cell-marker {
   position: absolute;
-  inset: 0.4rem;
-  background: rgb(87 241 219 / 0.65);
-  border-radius: 2px;
+  left: 0.35rem;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  width: 0.25rem;
+  background: rgb(87 241 219 / 0.75);
+  border-radius: 1px;
 }

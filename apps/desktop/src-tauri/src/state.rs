@@ -2217,10 +2217,10 @@ impl DesktopSession {
             .and_then(|settings| settings.locale)
             .map(|locale| locale.to_ascii_lowercase())
             .map(|locale| match locale.as_str() {
-                "es" => format!("Canción {region_index}"),
-                _ => format!("Song {region_index}"),
+                "es" => format!("Canción {}", region_index + 1),
+                _ => format!("Song {}", region_index + 1),
             })
-            .unwrap_or_else(|| format!("Song {region_index}"));
+            .unwrap_or_else(|| format!("Song {}", region_index + 1));
         let region = SongRegion {
             id: format!("region_{}_{}", timestamp_suffix(), region_index),
             name: region_name,
