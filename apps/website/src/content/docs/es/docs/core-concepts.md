@@ -24,6 +24,10 @@ Las folder tracks tambien pueden ser las duenas del routing del grupo. Las pista
 
 ![Tracks y carpetas](/screenshots/Tracks-Folder.gif)
 
+### Pistas Auto-Creadas
+
+Las pistas que el sistema creo automaticamente — normalmente porque soltaste un archivo de audio sobre una zona vacia en la [Vista Compacta](./compact-view) — llevan un flag interno `auto_created`. Se comportan como cualquier otra pista al editar, pero **se borran automaticamente cuando pierden su ultimo clip**. Las pistas creadas a mano nunca se borran solas, aunque queden vacias. Este comportamiento mantiene el proyecto limpio mientras experimentas con drops rapidos, sin comprometerte a conservar cada carril que tuvo brevemente un clip.
+
 ## Clips Y Edicion De Timeline
 
 Los clips son referencias no destructivas a archivos de audio. Puedes arrastrar assets desde Biblioteca, soltar audio externo directamente en el timeline, mover clips, duplicar secciones repetidas y cortar en el cursor sin reescribir el WAV original.
@@ -40,15 +44,21 @@ Pistas y clips tambien pueden colorearse desde el menu contextual. Si selecciona
 
 ![Control Snap to Grid](/screenshots/Snap-To-Grid-Button.png)
 
-## Regiones De Cancion
+## Regiones De Cancion — El Contenedor Principal
 
-Las regiones de cancion definen rangos con nombre en el timeline. Permiten que una sesion contenga varias canciones o cues de show y se usan en los controles de salto de cancion.
+La region de cancion es el **contenedor principal** de un proyecto LibreTracks. La sesion contiene canciones; las canciones contienen clips; los clips viven en pistas. Cada clip pertenece a una sola region de cancion y no puede cruzar su limite final — el motor rechaza cualquier movimiento que rompa esa invariante.
 
-Cada region tambien guarda su propia transposicion y un toggle de warp independiente, asi el mismo arreglo puede subir o bajar por semitonos — cambiando o no la duracion — sin duplicar pistas ni clips. La interaccion exacta entre estos controles esta documentada en [Pitch, warp y el boton T](./pitch-and-warp).
+Consecuencias practicas:
 
-Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`. Despues puedes ajustar `Region Transpose` y `Region Warp` desde la vista de transporte cuando la cancion necesite otra tonalidad o tempo.
+- Las canciones se pueden **reordenar, renombrar, exportar y borrar** como una unidad. Borrar una cancion elimina los clips de dentro y los tempo markers en su mismo rango, y purga las pistas auto-creadas que se queden vacias.
+- El **BPM efectivo** de una cancion lo decide el tempo marker mas reciente al inicio de la region; si no hay marker, se usa el BPM global del proyecto. Al crear una cancion vacia se ancla automaticamente un tempo marker a su `start` para que no herede el tempo de la cancion anterior.
+- Cada region tambien guarda su propia transposicion y un toggle de warp independiente, asi el mismo arreglo puede subir o bajar por semitonos — cambiando o no la duracion — sin duplicar pistas ni clips. La interaccion exacta entre estos controles esta documentada en [Pitch, warp y el boton T](./pitch-and-warp).
+
+Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`. Tambien puedes crear una cancion vacia desde el boton `+ Nueva cancion` de la Vista Compacta, o importar un paquete `.ltpkg` previamente exportado como una cancion appendeada al final. Despues puedes ajustar `Region Transpose` y `Region Warp` desde la vista de transporte cuando la cancion necesite otra tonalidad o tempo.
 
 ![Crear region de cancion](/screenshots/Create-Region.png)
+
+Para el flujo completo orientado a canciones — canciones como columnas, fader Master por cancion, drag-and-drop de audio y paquetes, y multi-seleccion de pistas en el mixer — ver [Vista Compacta](./compact-view).
 
 ## Marcas Y Cambios De Compas
 

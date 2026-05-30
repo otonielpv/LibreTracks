@@ -13,6 +13,8 @@ Use LibreTracks when the show needs prepared audio files, a clear timeline, dedi
 
 LibreTracks is not a production DAW. Produce and mix stems in Reaper, Ableton Live, Logic, Cubase, or another studio tool, then bring prepared audio into LibreTracks for the live playback rig.
 
+The project model is **song-first**: songs (song regions) are the primary container, with clips and tracks living inside them. The desktop app offers two equivalent projections of that model — the linear [DAW timeline](./core-concepts) for arranging and the [Compact View](./compact-view) for rehearsing, performing, and quickly importing or exporting individual songs as `.ltpkg` packages.
+
 ## Core Live Workflow
 
 1. Import audio into `Library`.
@@ -44,7 +46,8 @@ LibreTracks also notifies you in-app when a new version is published, with the c
 ## Main Areas
 
 - `Settings`: audio device, sample rate, buffer size, hardware outputs, metronome, and MIDI Learn.
-- `Library`: imported audio assets and virtual folders.
-- `Timeline`: audio tracks, folder tracks, clips, song regions, per-region transpose, markers, time signatures, grid editing, and color-coded organization.
+- `Library`: imported audio assets and virtual folders. Collapsed-folder state persists across sessions.
+- `Timeline (DAW view)`: audio tracks, folder tracks, clips, song regions, per-region transpose, markers, time signatures, grid editing, and color-coded organization.
+- `Compact View`: Session-style projection of the same model — one column per song with its own master fader, a shared horizontal mixer at the bottom, drag-and-drop assets / `.ltpkg` packages, and multi-select track reordering. See [Compact View](./compact-view).
 - `Remote`: local web control surface for transport, jumps, Vamp, transpose, and a mixer with meters and grouped track color cues.
 - `File`: import songs/packages and export prepared songs.

@@ -13,6 +13,8 @@ Usa LibreTracks cuando el show necesita audios preparados, un timeline claro, sa
 
 LibreTracks no pretende ser una DAW de produccion. Produce y mezcla stems en Reaper, Ableton Live, Logic, Cubase u otra herramienta de estudio, y trae los audios preparados a LibreTracks para el rig de directo.
 
+El modelo del proyecto es **song-first**: las canciones (regiones de cancion) son el contenedor principal, y los clips y pistas viven dentro de ellas. La app de escritorio ofrece dos proyecciones equivalentes de ese modelo — el [timeline lineal (vista DAW)](./core-concepts) para arreglar y la [Vista Compacta](./compact-view) para ensayar, tocar y importar / exportar canciones individuales como paquetes `.ltpkg` de forma rapida.
+
 ## Flujo Principal
 
 1. Importa audio en `Biblioteca`.
@@ -44,7 +46,8 @@ LibreTracks ademas avisa dentro de la app cuando se publica una nueva version, m
 ## Areas Principales
 
 - `Configuracion`: dispositivo de audio, frecuencia de muestreo, tamano de buffer, salidas hardware, metronomo y MIDI Learn.
-- `Biblioteca`: assets importados y carpetas virtuales.
-- `Timeline`: pistas, clips, regiones de cancion, transposicion por region, marcas, compases, edicion con rejilla y organizacion por color.
+- `Biblioteca`: assets importados y carpetas virtuales. El estado expandido/colapsado de las carpetas se conserva entre sesiones.
+- `Timeline (vista DAW)`: pistas, clips, regiones de cancion, transposicion por region, marcas, compases, edicion con rejilla y organizacion por color.
+- `Vista Compacta`: proyeccion estilo Session del mismo modelo — una columna por cancion con su propio fader Master, mixer horizontal compartido abajo, drag-and-drop de audio y paquetes `.ltpkg`, y reordenacion de pistas con multi-seleccion. Ver [Vista Compacta](./compact-view).
 - `Remote`: superficie web local para transporte, saltos, Vamp, transposicion y un mixer con medidores y pistas agrupadas visualmente.
 - `Archivo`: importar canciones/paquetes y exportar canciones preparadas.

@@ -24,6 +24,10 @@ Folder tracks can also own the output route for the whole group. Child tracks ma
 
 ![Tracks and folders](/screenshots/Tracks-Folder.gif)
 
+### Auto-Created Tracks
+
+Tracks that the system created on your behalf — typically because you dropped an audio file onto an empty area in the [Compact View](./compact-view) — carry an internal `auto_created` flag. They behave like any other track for editing, but **they are removed automatically the moment they lose their last clip**. Manually-created tracks are never deleted on their own, even when empty. This keeps the project clean while you experiment with rapid drops without committing to keeping every lane that briefly held a clip.
+
 ## Clips And Timeline Editing
 
 Clips are non-destructive timeline references to source audio. You can drag assets from the Library, drop external audio directly onto the timeline, move clips, duplicate repeated sections, and split clips at the cursor without rewriting the original WAV.
@@ -40,15 +44,21 @@ Tracks and clips can be color-coded from the context menu. Multi-selected tracks
 
 ![Snap to Grid control](/screenshots/Snap-To-Grid-Button.png)
 
-## Song Regions
+## Song Regions — The Primary Container
 
-Song regions define named ranges on the timeline. They let one session hold several songs or show cues and are used by song jump controls.
+A song region is the **primary container** in a LibreTracks project. The session holds songs; songs hold clips; clips live in tracks. Every clip belongs to exactly one song region and is not allowed to cross its end boundary — the engine rejects any move that would break that invariant.
 
-Each region also carries its own transpose value and an independent warp toggle, so the same arrangement can move up or down in semitones — with or without changing duration — without duplicating tracks or clips. The exact interaction between these controls is documented in [Pitch, Warp & The T Button](./pitch-and-warp).
+What follows from this:
 
-Create a song region by selecting a region on the timeline, right-clicking it, and choosing `Create song from selection`. After that, adjust `Region Transpose` and `Region Warp` from the transport view when the song needs a different key or tempo.
+- Songs can be **reordered, renamed, exported, and deleted** as a unit. Deleting a song removes the clips inside it and the tempo markers in the same range, and prunes any auto-created tracks that go empty as a result.
+- A song's **effective BPM** comes from the nearest preceding tempo marker at its start; if there is none, the project's global BPM applies. Creating an empty song automatically pins a tempo marker at its `start` so the new song does not inherit the previous song's tempo.
+- Each region also carries its own transpose value and an independent warp toggle, so the same arrangement can move up or down in semitones — with or without changing duration — without duplicating tracks or clips. The exact interaction between these controls is documented in [Pitch, Warp & The T Button](./pitch-and-warp).
+
+Create a song region by selecting a range on the timeline, right-clicking it, and choosing `Create song from selection`. You can also create an empty song from the Compact View's `+ New song` button, or import a previously-exported `.ltpkg` package as a new song appended at the end. After that, adjust `Region Transpose` and `Region Warp` from the transport view when the song needs a different key or tempo.
 
 ![Create a song region](/screenshots/Create-Region.png)
+
+For the full song-first workflow — songs as columns, per-song master fader, drag-and-drop of audio and packages, and track multi-selection in the mixer — see [Compact View](./compact-view).
 
 ## Markers And Meter Changes
 
