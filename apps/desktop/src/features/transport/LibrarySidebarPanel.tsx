@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -76,6 +77,53 @@ export function LibrarySidebarPanel({
   const { t } = useTranslation();
   const [selectedAssetPaths, setSelectedAssetPaths] = useState<string[]>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  // Persisted set of folder paths the user has collapsed. We store only
+  // the collapsed ones so freshly-created folders default to expanded
+  // without having to seed them. The empty string represents the root
+  // group. Persistence is plain localStorage — Zustand would be
+  // overkill for a single boolean per folder.
+  const [collapsedFolderPaths, setCollapsedFolderPaths] = useState<
+    Set<string>
+  >(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem(
+        "libretracks.library.collapsedFolders",
+      );
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? new Set(parsed as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "libretracks.library.collapsedFolders",
+        JSON.stringify(Array.from(collapsedFolderPaths)),
+      );
+    } catch {
+      // Quota / private-mode → just lose persistence this session.
+    }
+  }, [collapsedFolderPaths]);
+  const setFolderCollapsed = useCallback(
+    (folderPath: string, collapsed: boolean) => {
+      setCollapsedFolderPaths((current) => {
+        const isCurrentlyCollapsed = current.has(folderPath);
+        if (isCurrentlyCollapsed === collapsed) return current;
+        const next = new Set(current);
+        if (collapsed) {
+          next.add(folderPath);
+        } else {
+          next.delete(folderPath);
+        }
+        return next;
+      });
+    },
+    [],
+  );
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const selectionAnchorRef = useRef<string | null>(null);
 
@@ -459,7 +507,16 @@ export function LibrarySidebarPanel({
 
         {!isLoading && (assets.length || folders.length) ? (
           <div className="lt-library-asset-groups">
-            <details className="lt-library-root-group" open>
+            <details
+              className="lt-library-root-group"
+              open={!collapsedFolderPaths.has("")}
+              onToggle={(event) =>
+                setFolderCollapsed(
+                  "",
+                  !(event.currentTarget as HTMLDetailsElement).open,
+                )
+              }
+            >
               <summary
                 className={`lt-library-folder-summary ${dragTargetFolderPath === null ? "is-drag-target" : ""}`}
                 data-library-folder-drop-target="true"
@@ -476,7 +533,17 @@ export function LibrarySidebarPanel({
             </details>
 
             {folderGroups.map((group) => (
-              <details key={group.folderPath} className="lt-library-folder-group" open>
+              <details
+                key={group.folderPath}
+                className="lt-library-folder-group"
+                open={!collapsedFolderPaths.has(group.folderPath)}
+                onToggle={(event) =>
+                  setFolderCollapsed(
+                    group.folderPath,
+                    !(event.currentTarget as HTMLDetailsElement).open,
+                  )
+                }
+              >
                 <summary
                   className={`lt-library-folder-summary ${dragTargetFolderPath === group.folderPath ? "is-drag-target" : ""}`}
                   data-library-folder-drop-target="true"

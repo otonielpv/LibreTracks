@@ -412,7 +412,7 @@ export function TimelineToolbar({
     ? `${masterGain.toFixed(2)}× (${
         Number.isFinite(masterGainDb) ? `${masterGainDb.toFixed(1)} dB` : "-∞ dB"
       })`
-    : t("timelineToolbar.regionTransposeNoSelection");
+    : t("timelineToolbar.regionMasterNoSelection");
   const masterControlsDisabled = controlsDisabled || !selectedRegion;
 
   const handleModeButtonClick = (learnKey: string, commit: () => void) => {
@@ -892,6 +892,12 @@ export function TimelineToolbar({
             </div>
           </ControlGroup>
 
+          {/* The Master gain control is hidden in compact view because
+              each song column already exposes its own master fader at
+              the top, making the toolbar control redundant. The Region
+              transposition + Warp groups stay visible — those have no
+              equivalent on the compact column header. */}
+          {viewMode === "daw" ? (
           <ControlGroup
             title="Master"
             summary={masterSummary}
@@ -922,10 +928,11 @@ export function TimelineToolbar({
                   </button>
                 </div>
               ) : (
-                <span>{t("timelineToolbar.regionTransposeNoSelection")}</span>
+                <span>{t("timelineToolbar.regionMasterNoSelection")}</span>
               )
             }
           />
+          ) : null}
 
           <ControlGroup
             title={t("timelineToolbar.regionTransposeLabel")}

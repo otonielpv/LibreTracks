@@ -9741,6 +9741,8 @@ export function TransportPanelContent() {
                       selectedTrackIds={selectedTrackIds}
                       onTrackSelect={handleTrackHeaderSelect}
                       onTrackDragStart={handleTrackHeaderDragStart}
+                      selectedRegionId={selectedRegionId}
+                      onSelectRegion={setSelectedRegionId}
                     />
                   ) : null}
                 </section>

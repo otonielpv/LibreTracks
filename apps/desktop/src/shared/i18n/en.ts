@@ -394,6 +394,7 @@ const en = {
     regionTransposeDownAria: "Transpose selected region down one semitone",
     regionTransposeUpAria: "Transpose selected region up one semitone",
     regionTransposeNoSelection: "Select a region to change pitch.",
+    regionMasterNoSelection: "Select a region to adjust the master volume.",
     regionWarpLabel: "Region Warp",
     regionWarpSummaryOff: "Off",
     regionWarpToggleAria: "Toggle warp for the selected region",

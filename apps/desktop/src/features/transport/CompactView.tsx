@@ -85,6 +85,13 @@ type CompactViewProps = {
     event: ReactMouseEvent<HTMLDivElement>,
     trackId: string,
   ) => void;
+  /** Id of the currently-selected song region, or null when nothing
+   * is selected. Mirrors the project selection so the compact header
+   * can paint `is-selected` consistently with the DAW. */
+  selectedRegionId: string | null;
+  /** Click on a song header selects that region project-wide. The
+   * toolbar's Transpose/Warp/Master groups bind to this selection. */
+  onSelectRegion: (regionId: string) => void;
   /** Fired when the user wants to commit the master gain for a region. */
   onMasterGainChange: (regionId: string, gain: number) => void;
   onMasterGainCommit: (regionId: string) => void;
@@ -206,6 +213,8 @@ function CompactViewComponent({
   selectedTrackIds,
   onTrackSelect,
   onTrackDragStart,
+  selectedRegionId,
+  onSelectRegion,
 }: CompactViewProps) {
   const isPackageDragOver = dragPreview?.isPackage === true;
 
@@ -274,6 +283,8 @@ function CompactViewComponent({
                 ? dragPreview.count
                 : 0
             }
+            isSelected={selectedRegionId === region.id}
+            onSelect={() => onSelectRegion(region.id)}
           />
         ))}
         {/* Ghost column previewed while the user drags a .ltpkg over the
@@ -355,6 +366,13 @@ type CompactSongColumnProps = {
    * `dragPreview`. 0 means no drag — render the empty-state hint if
    * the column has no clips. */
   placeholderCount: number;
+  /** True when this region is the currently-selected region in the
+   * project. Drives the header's `is-selected` styling. */
+  isSelected: boolean;
+  /** Called when the user clicks the header background — selects the
+   * region so the toolbar's Transpose/Warp/Master controls bind to
+   * it. */
+  onSelect: () => void;
 };
 
 function CompactSongColumnComponent({
@@ -375,6 +393,8 @@ function CompactSongColumnComponent({
   onExport,
   bpm,
   placeholderCount,
+  isSelected,
+  onSelect,
 }: CompactSongColumnProps) {
   const [contextMenu, setContextMenu] = useState<{
     clipId: string;
@@ -485,6 +505,8 @@ function CompactSongColumnComponent({
         onSetBpm={onSetBpm}
         onDelete={onDelete}
         onExport={onExport}
+        isSelected={isSelected}
+        onSelect={onSelect}
       />
       <div
         className={
@@ -610,6 +632,15 @@ type CompactSongHeaderProps = {
   onSetBpm: () => void;
   onDelete: () => void;
   onExport: () => void;
+  /** True when this region matches the project selection. Drives the
+   * `is-selected` styling so the user sees which song the toolbar's
+   * Transpose / Warp / Master controls are bound to. */
+  isSelected: boolean;
+  /** Click on the header (anywhere except the play button or fader)
+   * selects the region — same selection slot the DAW uses, so the
+   * Transposition / Warp / Master groups in the toolbar pick this up
+   * automatically. */
+  onSelect: () => void;
 };
 
 // Master fader snaps to unity (1.0) within ±3% of full range (0..2), so the
@@ -636,6 +667,8 @@ function CompactSongHeaderComponent({
   onSetBpm,
   onDelete,
   onExport,
+  isSelected,
+  onSelect,
 }: CompactSongHeaderProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -737,10 +770,22 @@ function CompactSongHeaderComponent({
     },
   );
 
+  // Click on the header (anywhere but the play button or the fader)
+  // selects the region. We listen on the root with a check that the
+  // event reached us un-stopped — the play button and master fader
+  // call stopPropagation when they handle the click, so this only
+  // fires for clicks on the header's body.
+  const handleHeaderClick = useCallback(() => {
+    onSelect();
+  }, [onSelect]);
+
   return (
     <div
-      className={`lt-compact-song-header ${isActive ? "is-active" : ""}`}
+      className={`lt-compact-song-header ${isActive ? "is-active" : ""} ${
+        isSelected ? "is-selected" : ""
+      }`}
       onContextMenu={openMenu}
+      onClick={handleHeaderClick}
     >
       <div className="lt-compact-song-name-row">
         <button
@@ -748,7 +793,12 @@ function CompactSongHeaderComponent({
           className="lt-compact-song-play"
           aria-label={`Reproducir ${region.name}`}
           title={`Reproducir ${region.name} (respeta la transición global)`}
-          onClick={onPlay}
+          onClick={(event) => {
+            // Don't bubble to the header — the play button shouldn't
+            // also select the region, only transport-jump to it.
+            event.stopPropagation();
+            onPlay();
+          }}
         >
           <span className="material-symbols-outlined">play_arrow</span>
         </button>
@@ -813,7 +863,13 @@ function CompactSongHeaderComponent({
           </button>
         </div>
       ) : null}
-      <div className="lt-compact-song-master">
+      <div
+        className="lt-compact-song-master"
+        // The master fader sits inside the clickable header. Swallow
+        // clicks so dragging or double-clicking the fader doesn't
+        // re-fire the header's selection handler.
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="lt-compact-song-meter" aria-hidden="true">
           <div className="lt-compact-song-meter-fill" ref={meterFillRef} />
         </div>
