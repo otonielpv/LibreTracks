@@ -2962,7 +2962,13 @@ export function TransportPanelContent() {
     return () => {
       window.removeEventListener("resize", updateViewportWidth);
     };
-  }, [song?.tracks.length]);
+    // viewMode is in the deps so that toggling back to the DAW remounts
+    // the timeline shell with fresh refs — without it the ResizeObserver
+    // would still be wired to the previous (now-unmounted) shell element
+    // and the lane viewport would stay frozen at whatever width it had
+    // before the compact view took over. Result on a wide window:
+    // ~1/3 of the timeline visible, big black gap to the right.
+  }, [song?.tracks.length, viewMode]);
 
   useEffect(() => {
     let active = true;
