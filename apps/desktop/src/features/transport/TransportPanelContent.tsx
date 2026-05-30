@@ -2891,6 +2891,62 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, runAction, setStatus],
   );
 
+  // Delete a song from the compact view. Confirms via window.confirm when
+  // the song still holds clips since the backend will take them with it
+  // (the new delete_song_region also evicts clips inside the region and
+  // tempo markers that lived in its range). Same pattern the DAW's
+  // songRegionContextMenu uses.
+  const handleCompactDeleteSong = useCallback(
+    (regionId: string) => {
+      const currentSong = songRef.current;
+      const currentRegion = currentSong?.regions.find(
+        (region) => region.id === regionId,
+      );
+      if (!currentSong || !currentRegion) return;
+      const clipCount = currentSong.clips.filter(
+        (clip) =>
+          clip.timelineStartSeconds >= currentRegion.startSeconds &&
+          clip.timelineStartSeconds < currentRegion.endSeconds,
+      ).length;
+      if (clipCount > 0) {
+        const confirmed = window.confirm(
+          `Borrar canción "${currentRegion.name}" y sus ${clipCount} ${
+            clipCount === 1 ? "clip" : "clips"
+          }?`,
+        );
+        if (!confirmed) return;
+      }
+      void runAction(async () => {
+        const snapshot = await deleteSongRegion(regionId);
+        applyPlaybackSnapshot(snapshot);
+        setSelectedRegionId(null);
+        setStatus(`Canción "${currentRegion.name}" eliminada`);
+      });
+    },
+    [applyPlaybackSnapshot, runAction, setSelectedRegionId, setStatus],
+  );
+
+  // Export the song as a LibreTracks package (.ltpkg). Reuses the exact
+  // same backend command the DAW's "Exportar Canción" right-click action
+  // calls, so the output format and file-dialog flow are identical
+  // regardless of which view triggered the export.
+  const handleCompactExportSong = useCallback(
+    (regionId: string) => {
+      const currentRegion = songRef.current?.regions.find(
+        (region) => region.id === regionId,
+      );
+      if (!currentRegion) return;
+      void runAction(
+        async () => {
+          await exportRegionAsPackage(regionId);
+          setStatus(`Paquete exportado para ${currentRegion.name}`);
+        },
+        { busy: true },
+      );
+    },
+    [runAction, setStatus],
+  );
+
   useEffect(() => {
     const selectedMidiDevice = appSettings.selectedMidiDevice;
     if (!selectedMidiDevice) {
@@ -9298,6 +9354,8 @@ export function TransportPanelContent() {
                       onPlaySong={handleCompactPlaySong}
                       onRenameSong={handleCompactRenameSong}
                       onSetSongBpm={handleCompactSetSongBpm}
+                      onDeleteSong={handleCompactDeleteSong}
+                      onExportSong={handleCompactExportSong}
                       bpmByRegion={bpmByRegion}
                       onSnapshotApplied={applyPlaybackSnapshot}
                     />

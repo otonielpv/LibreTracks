@@ -2363,6 +2363,32 @@ impl DesktopSession {
 
         song.regions.push(region);
         sort_song_regions(&mut song.regions);
+
+        // Anchor the new song to the project's global bpm so it doesn't
+        // inherit the previous song's tempo marker. Without this any tempo
+        // marker the user placed earlier would still be in effect at the
+        // new song's start. We add the marker only when the new song is not
+        // at t=0 (markers at the very start collapse into song.bpm anyway,
+        // see upsert_song_tempo_marker for the same threshold) and only if
+        // there isn't already a marker at the same position.
+        if start_seconds > 0.0001
+            && !song
+                .tempo_markers
+                .iter()
+                .any(|marker| (marker.start_seconds - start_seconds).abs() < 0.0001)
+        {
+            song.tempo_markers.push(TempoMarker {
+                id: format!("tempo_marker_{}", timestamp_suffix()),
+                start_seconds,
+                bpm: song.bpm,
+            });
+            song.tempo_markers.sort_by(|left, right| {
+                left.start_seconds
+                    .partial_cmp(&right.start_seconds)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+
         audio.update_live_song_regions(&song)?;
         self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
 
@@ -2653,10 +2679,38 @@ impl DesktopSession {
             .position(|region| region.id == region_id)
             .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
 
+        // Snapshot the region bounds before removing so we can also evict
+        // any clips and tempo markers that live inside its range. Without
+        // this the clips would survive past the region's removal and break
+        // the "clip lives inside one region" invariant (step 4.1), and
+        // stale tempo markers would keep affecting playback at positions
+        // the user thought were gone with the song.
+        let region_start = song.regions[region_index].start_seconds;
+        let region_end = song.regions[region_index].end_seconds;
+
         song.regions.remove(region_index);
+        song.clips.retain(|clip| {
+            clip.timeline_start_seconds < region_start
+                || clip.timeline_start_seconds >= region_end
+        });
+        song.tempo_markers.retain(|marker| {
+            marker.start_seconds < region_start || marker.start_seconds >= region_end
+        });
+
         sort_song_regions(&mut song.regions);
+        // Pruning auto-created tracks whose only clip(s) lived inside the
+        // deleted region keeps the mixer view tidy without an extra round
+        // trip — same prune we already apply on clip move / delete paths.
+        prune_auto_created_empty_tracks(&mut song);
+        refresh_song_duration(&mut song);
+
         audio.update_live_song_regions(&song)?;
-        self.persist_song_update(song, audio, AudioChangeImpact::TransportOnly, true)?;
+        self.persist_song_update(
+            song,
+            audio,
+            AudioChangeImpact::StructureRebuild,
+            true,
+        )?;
 
         Ok(self.snapshot())
     }

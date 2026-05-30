@@ -91,6 +91,16 @@ type CompactViewProps = {
    * touches the global project BPM, so reordering songs never silently
    * changes which tempo applies to which section. */
   onSetSongBpm: (regionId: string) => void;
+  /** Fired from the song-column right-click menu. Deletes the song and
+   * everything that lives inside its range (clips + tempo markers).
+   * The confirm prompt lives in the parent so the destructive-action
+   * copy can stay consistent with the DAW version of this action. */
+  onDeleteSong: (regionId: string) => void;
+  /** Fired from the song-column right-click menu. Exports the song as a
+   * LibreTracks package (.ltpkg). Reuses the exact same backend command
+   * the DAW's right-click "Exportar Cancion" uses, so the file dialog
+   * and output format are identical between views. */
+  onExportSong: (regionId: string) => void;
   /** Effective BPM at each song's start_seconds, computed by the parent so
    * the column reads "what tempo plays here" without re-doing the marker
    * resolution at render time. Empty / missing values fall back to the
@@ -136,6 +146,8 @@ function CompactViewComponent({
   onPlaySong,
   onRenameSong,
   onSetSongBpm,
+  onDeleteSong,
+  onExportSong,
   bpmByRegion,
   onSnapshotApplied,
 }: CompactViewProps) {
@@ -186,6 +198,8 @@ function CompactViewComponent({
             onPlay={() => onPlaySong(region.id, region.name)}
             onRename={() => onRenameSong(region.id)}
             onSetBpm={() => onSetSongBpm(region.id)}
+            onDelete={() => onDeleteSong(region.id)}
+            onExport={() => onExportSong(region.id)}
             bpm={bpmByRegion[region.id]}
           />
         ))}
@@ -228,6 +242,8 @@ type CompactSongColumnProps = {
   onPlay: () => void;
   onRename: () => void;
   onSetBpm: () => void;
+  onDelete: () => void;
+  onExport: () => void;
   bpm: number | undefined;
 };
 
@@ -245,6 +261,8 @@ function CompactSongColumnComponent({
   onPlay,
   onRename,
   onSetBpm,
+  onDelete,
+  onExport,
   bpm,
 }: CompactSongColumnProps) {
   const [contextMenu, setContextMenu] = useState<{
@@ -345,6 +363,8 @@ function CompactSongColumnComponent({
         onPlay={onPlay}
         onRename={onRename}
         onSetBpm={onSetBpm}
+        onDelete={onDelete}
+        onExport={onExport}
       />
       <div className="lt-compact-song-clip-stack">
         {clips.length === 0 ? (
@@ -435,6 +455,8 @@ type CompactSongHeaderProps = {
   onPlay: () => void;
   onRename: () => void;
   onSetBpm: () => void;
+  onDelete: () => void;
+  onExport: () => void;
 };
 
 // Master fader snaps to unity (1.0) within ±3% of full range (0..2), so the
@@ -459,6 +481,8 @@ function CompactSongHeaderComponent({
   onPlay,
   onRename,
   onSetBpm,
+  onDelete,
+  onExport,
 }: CompactSongHeaderProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -612,6 +636,27 @@ function CompactSongHeaderComponent({
             }}
           >
             Cambiar BPM…
+          </button>
+          <button
+            type="button"
+            className="lt-compact-clip-menu-item"
+            onClick={() => {
+              setContextMenu(null);
+              onExport();
+            }}
+          >
+            Exportar canción
+          </button>
+          <div className="lt-compact-clip-menu-divider" aria-hidden="true" />
+          <button
+            type="button"
+            className="lt-compact-clip-menu-item is-destructive"
+            onClick={() => {
+              setContextMenu(null);
+              onDelete();
+            }}
+          >
+            Eliminar canción
           </button>
         </div>
       ) : null}
