@@ -713,6 +713,52 @@ export function resolveTrackDropState(
   };
 }
 
+/**
+ * Horizontal-strip variant of resolveTrackDropState used by the compact
+ * mixer. The DAW lays tracks out as a vertical stack so "before/after"
+ * maps to top/bottom of the hovered row; in the compact mixer strips
+ * are side-by-side so the same gesture maps to left/right of the
+ * hovered strip. The `inside-folder` semantics are identical — the
+ * middle 40% (30%..70%) of the strip drops the dragged tracks as
+ * children of the hovered folder, edges drop them on either side.
+ */
+export function resolveCompactTrackDropState(
+  song: SongView,
+  draggingTrackId: string,
+  clientX: number,
+  clientY: number,
+): TrackDropState {
+  const hoveredStrip = document
+    .elementFromPoint(clientX, clientY)
+    ?.closest(".lt-compact-mixer-strip") as HTMLElement | null;
+  const targetTrackId = hoveredStrip?.dataset.trackId ?? null;
+  if (!hoveredStrip || !targetTrackId || targetTrackId === draggingTrackId) {
+    return null;
+  }
+
+  const targetTrack = findTrack(song, targetTrackId);
+  if (!targetTrack || isTrackDescendant(song, targetTrackId, draggingTrackId)) {
+    return null;
+  }
+
+  const bounds = hoveredStrip.getBoundingClientRect();
+  const horizontalRatio =
+    bounds.width > 0 ? (clientX - bounds.left) / bounds.width : 0.5;
+  const mode =
+    targetTrack.kind === "folder" &&
+    horizontalRatio >= 0.3 &&
+    horizontalRatio <= 0.7
+      ? "inside-folder"
+      : horizontalRatio < 0.5
+        ? "before"
+        : "after";
+
+  return {
+    targetTrackId,
+    mode,
+  };
+}
+
 export function rulerPointerToSeconds(
   event: MouseEvent | { clientX: number },
   element: HTMLElement,

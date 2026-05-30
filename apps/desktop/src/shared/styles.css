@@ -4916,6 +4916,52 @@ textarea {
   padding-left: 0.6rem;
 }
 
+/* Selected strip: a teal box-shadow inset + brighter background to
+   mirror the DAW track header's selection signal. We use box-shadow
+   instead of overriding `border` so the existing accent on the left
+   stays intact. */
+.lt-compact-mixer-strip.is-selected {
+  background: rgb(17 21 22 / 0.95);
+  box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.7);
+}
+
+/* While being dragged, fade slightly and let mouse move through so the
+   underlying drop indicator on the target strip stays visible. */
+.lt-compact-mixer-strip.is-dragging {
+  opacity: 0.55;
+}
+
+/* Drop indicators. before/after paint a thick teal line on the left
+   or right edge of the hovered strip — the horizontal analogue of
+   the DAW's top/bottom lines. inside-folder lights up the whole
+   strip background so it's unmistakable the dragged tracks will
+   land as children. */
+.lt-compact-mixer-strip.is-drop-before::after,
+.lt-compact-mixer-strip.is-drop-after::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 3px;
+  background: #57f1db;
+  box-shadow: 0 0 6px rgb(87 241 219 / 0.7);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.lt-compact-mixer-strip.is-drop-before::after {
+  left: -2px;
+}
+
+.lt-compact-mixer-strip.is-drop-after::after {
+  right: -2px;
+}
+
+.lt-compact-mixer-strip.is-drop-inside-folder {
+  background: rgb(87 241 219 / 0.12);
+  box-shadow: inset 0 0 0 2px rgb(87 241 219 / 0.65);
+}
+
 .lt-compact-mixer-strip-name {
   color: #e5e2e1;
   font: 600 10px/1.3 "Space Grotesk", sans-serif;

@@ -151,9 +151,16 @@ export type TrackDragState = {
   startClientX: number;
   startClientY: number;
   currentClientY: number;
+  currentClientX: number;
   isDragging: boolean;
   rowElement: HTMLDivElement | null;
   headerElement: HTMLDivElement | null;
+  /** Where the drag originated. "daw" routes the visuals through the
+   * vertical track-row pipeline (translate3d on Y, drop indicator on
+   * lt-track-lane-row/lt-track-header-row). "compact" routes them
+   * through the horizontal mixer pipeline (translate3d on X, drop
+   * indicator on lt-compact-mixer-strip). */
+  originSurface: "daw" | "compact";
 } | null;
 
 export type TimelinePanState = {

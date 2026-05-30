@@ -56,7 +56,7 @@ type CompactMixerProps = {
     event: ReactMouseEvent<HTMLDivElement>,
     trackId: string,
   ) => void;
-};
+} & CompactMixerProps_DragSelection;
 
 /** Default colour applied to a track strip when track.color is null, the
  * way Reaper paints unset tracks with a neutral grey rather than leaving
@@ -71,6 +71,9 @@ function CompactMixerComponent({
   audioRoutingOptions,
   handlers,
   onTrackContextMenu,
+  selectedTrackIds,
+  onTrackSelect,
+  onTrackDragStart,
 }: CompactMixerProps) {
   // Build a (childTrackId → parent colour / parent name) lookup once so each
   // strip can render its Reaper-style folder cue (a thin coloured ribbon on
@@ -102,6 +105,9 @@ function CompactMixerComponent({
             handlers={handlers}
             parentInfo={parentInfoByTrackId.get(track.id) ?? null}
             onContextMenu={onTrackContextMenu}
+            isSelected={selectedTrackIds.includes(track.id)}
+            onSelect={onTrackSelect}
+            onDragStart={onTrackDragStart}
           />
         ))}
       </div>
@@ -111,12 +117,52 @@ function CompactMixerComponent({
 
 export const CompactMixer = memo(CompactMixerComponent);
 
+type CompactMixerProps_DragSelection = {
+  /** Track ids the user has selected. Mirrors the project-wide
+   * selection so changes made from the DAW track header stay in sync
+   * here, and vice-versa. */
+  selectedTrackIds: string[];
+  /** Forwarded down to each strip — shared with the DAW track header
+   * so the multi-select rules (Ctrl/Shift) behave identically. */
+  onTrackSelect: (
+    trackId: string,
+    trackName: string,
+    event: ReactMouseEvent<HTMLDivElement>,
+  ) => void;
+  /** Pointer-down on a strip handle starts the reorder drag. */
+  onTrackDragStart: (
+    event: ReactMouseEvent<HTMLDivElement>,
+    trackId: string,
+  ) => void;
+};
+
 type CompactMixerStripProps = {
   track: TrackSummary;
   audioRoutingOptions: Array<{ value: string; label: string }>;
   handlers: CompactMixerHandlers;
   parentInfo: { color: string; name: string } | null;
   onContextMenu: (
+    event: ReactMouseEvent<HTMLDivElement>,
+    trackId: string,
+  ) => void;
+  /** True when this strip's track id is in the project selection. We
+   * mirror the DAW track-header `is-selected` styling so the user
+   * sees a consistent selection signal in both views. */
+  isSelected: boolean;
+  /** Click on a non-interactive part of the strip — selects this
+   * track using the same shared selection logic as the DAW header
+   * (single / Ctrl-toggle / Shift-range). Caller passes the event so
+   * we don't duplicate the modifier-key decision tree here. */
+  onSelect: (
+    trackId: string,
+    trackName: string,
+    event: ReactMouseEvent<HTMLDivElement>,
+  ) => void;
+  /** Pointer-down on a non-interactive part of the strip starts the
+   * drag-to-reorder gesture. Caller decides if the move was big
+   * enough to count as a drag (vs. plain click). Same contract the
+   * DAW track header uses. */
+  onDragStart: (
     event: ReactMouseEvent<HTMLDivElement>,
     trackId: string,
   ) => void;
@@ -148,6 +194,9 @@ function CompactMixerStripComponent({
   handlers,
   parentInfo,
   onContextMenu,
+  isSelected,
+  onSelect,
+  onDragStart,
 }: CompactMixerStripProps) {
   const isFolder = track.kind === "folder";
   // Track accent (drives --track-accent CSS var). If the track has a user
@@ -231,11 +280,43 @@ function CompactMixerStripComponent({
     [handlers, track.id],
   );
 
+  // Treat a mousedown/click on the strip background or its name area
+  // as a track-selection / drag-start gesture. We deliberately ignore
+  // clicks that originate on the toggle buttons, fader, pan slider,
+  // routing select, or any other native control inside the strip —
+  // those have their own handlers and shouldn't double-fire selection
+  // or accidentally start a track drag while the user is moving a
+  // fader. The `data-strip-noninteractive` data-attribute below is
+  // the contract we use to mark "selectable" zones.
+  const isSelectableTarget = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(target.closest("[data-strip-noninteractive]"));
+  };
+
+  const handleStripMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      if (!isSelectableTarget(event.target)) return;
+      onDragStart(event, track.id);
+    },
+    [onDragStart, track.id],
+  );
+
+  const handleStripClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      if (!isSelectableTarget(event.target)) return;
+      onSelect(track.id, track.name, event);
+    },
+    [onSelect, track.id, track.name],
+  );
+
   return (
     <div
       className={`lt-compact-mixer-strip ${
         isFolder ? "is-folder" : ""
-      } ${parentInfo ? "is-child" : ""}`}
+      } ${parentInfo ? "is-child" : ""} ${isSelected ? "is-selected" : ""}`}
+      data-track-id={track.id}
       style={
         {
           ["--track-accent" as string]: trackAccent,
@@ -244,9 +325,20 @@ function CompactMixerStripComponent({
             : null),
         } as React.CSSProperties
       }
+      onMouseDown={handleStripMouseDown}
+      onClick={handleStripClick}
       onContextMenu={(event) => onContextMenu(event, track.id)}
     >
-      <div className="lt-compact-mixer-strip-name" title={track.name}>
+      {/* The name + parent-hint band acts as the strip's "handle".
+          data-strip-noninteractive opts it into selection / drag-start
+          via the bubbling handlers on the strip root; controls below
+          deliberately omit this attribute so they keep their own
+          click semantics. */}
+      <div
+        className="lt-compact-mixer-strip-name"
+        title={track.name}
+        data-strip-noninteractive=""
+      >
         {isFolder ? (
           <span
             className="lt-compact-mixer-folder-icon material-symbols-outlined"
@@ -261,6 +353,7 @@ function CompactMixerStripComponent({
         <div
           className="lt-compact-mixer-strip-parent"
           title={`Dentro de ${parentInfo.name}`}
+          data-strip-noninteractive=""
         >
           ↳ {parentInfo.name}
         </div>

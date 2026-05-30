@@ -265,6 +265,7 @@ import {
   mergeOptimisticClipsByTrack,
   nativeClientPointCandidates,
   normalizeEnabledOutputChannelsForOutputCount,
+  resolveCompactTrackDropState,
   resolveNativeAudioImportPayloads,
   resolveTrackDropState,
   rulerClientXToSeconds,
@@ -2070,15 +2071,22 @@ export function TransportPanelContent() {
       row.style.transform = "";
       row.style.zIndex = "";
       row.style.pointerEvents = "";
+      // Mirror the additional .is-dragging tag the compact branch
+      // applies in applyTrackDragVisuals so re-opening the view
+      // doesn't leave strips faded.
+      row.classList.remove("is-dragging");
     });
 
     draggedTrackHeadersRef.current.forEach((header) => {
       header.classList.remove("is-dragging");
     });
 
-    const dropTargets =
-      timelineShellRef.current?.querySelectorAll(".is-drop-target");
-    dropTargets?.forEach((element) => {
+    // Sweep both DAW shell and the document — we don't know here
+    // whether the latest drag originated in compact or DAW, and
+    // missing a stale indicator would leave the UI in a "stuck
+    // highlighted" state.
+    const dropTargets = document.querySelectorAll(".is-drop-target");
+    dropTargets.forEach((element) => {
       element.classList.remove(
         "is-drop-target",
         "is-drop-before",
@@ -2096,7 +2104,18 @@ export function TransportPanelContent() {
 
   const applyTrackDragVisuals = useCallback(
     (dragState: NonNullable<TrackDragState>, dropState: TrackDropState) => {
+      const isCompact = dragState.originSurface === "compact";
       const deltaY = dragState.currentClientY - dragState.startClientY;
+      const deltaX = dragState.currentClientX - dragState.startClientX;
+
+      // Selector lists vary by origin: DAW drags grab both the
+      // header row and the lane row so they translate together;
+      // compact drags grab the single mixer strip. data-track-id is
+      // present on all three so the same querySelector works.
+      const dragSelector = (trackId: string) =>
+        isCompact
+          ? `.lt-compact-mixer-strip[data-track-id="${trackId}"]`
+          : `.lt-track-header-row[data-track-id="${trackId}"], .lt-track-lane-row[data-track-id="${trackId}"]`;
 
       if (draggedTrackRowRef.current !== dragState.rowElement) {
         clearTrackDragVisuals();
@@ -2110,9 +2129,15 @@ export function TransportPanelContent() {
         const draggedRows: HTMLDivElement[] = [];
         const draggedHeaders: HTMLElement[] = [];
 
+        // Compact strips live outside the DAW shell, so for compact
+        // drags we query the document directly. DAW drags stay scoped
+        // to the shell to avoid accidentally matching unrelated rows
+        // in side panels.
+        const dragRoot: ParentNode =
+          isCompact ? document : (timelineShellRef.current ?? document);
         dragTrackIds.forEach((trackId) => {
-          const matchingRows = timelineShellRef.current?.querySelectorAll(
-            `.lt-track-header-row[data-track-id="${trackId}"], .lt-track-lane-row[data-track-id="${trackId}"]`,
+          const matchingRows = dragRoot.querySelectorAll(
+            dragSelector(trackId),
           );
 
           matchingRows?.forEach((element) => {
@@ -2137,17 +2162,26 @@ export function TransportPanelContent() {
       }
 
       draggedTrackRowsRef.current.forEach((row) => {
-        row.style.transform = `translate3d(0, ${deltaY}px, 0)`;
+        row.style.transform = isCompact
+          ? `translate3d(${deltaX}px, 0, 0)`
+          : `translate3d(0, ${deltaY}px, 0)`;
         row.style.zIndex = "8";
         row.style.pointerEvents = "none";
+        // Compact strips don't have an inner .lt-track-header child to
+        // tag, so we tag the row (which IS the strip) directly so the
+        // is-dragging CSS picks it up.
+        if (isCompact) {
+          row.classList.add("is-dragging");
+        }
       });
 
       draggedTrackHeadersRef.current.forEach((header) => {
         header.classList.add("is-dragging");
       });
 
-      const dropTargets =
-        timelineShellRef.current?.querySelectorAll(".is-drop-target");
+      const indicatorRoot: ParentNode =
+        isCompact ? document : (timelineShellRef.current ?? document);
+      const dropTargets = indicatorRoot.querySelectorAll(".is-drop-target");
       dropTargets?.forEach((element) => {
         if (
           element instanceof HTMLElement &&
@@ -2163,7 +2197,7 @@ export function TransportPanelContent() {
       });
 
       if (dropState?.targetTrackId) {
-        const nextDropRows = timelineShellRef.current?.querySelectorAll(
+        const nextDropRows = indicatorRoot.querySelectorAll(
           `[data-track-id="${dropState.targetTrackId}"]`,
         );
         nextDropRows?.forEach((element) => {
@@ -3814,6 +3848,7 @@ export function TransportPanelContent() {
         const nextDrag = {
           ...trackDrag,
           currentClientY: event.clientY,
+          currentClientX: event.clientX,
           isDragging: isDraggingNow,
         };
         trackDragRef.current = nextDrag;
@@ -3822,12 +3857,20 @@ export function TransportPanelContent() {
           return;
         }
 
-        const dropState = resolveTrackDropState(
-          songRef.current,
-          trackDrag.trackId,
-          event.clientX,
-          event.clientY,
-        );
+        const dropState =
+          trackDrag.originSurface === "compact"
+            ? resolveCompactTrackDropState(
+                songRef.current,
+                trackDrag.trackId,
+                event.clientX,
+                event.clientY,
+              )
+            : resolveTrackDropState(
+                songRef.current,
+                trackDrag.trackId,
+                event.clientX,
+                event.clientY,
+              );
         applyTrackDragVisuals(nextDrag, dropState);
       }
     };
@@ -3958,12 +4001,19 @@ export function TransportPanelContent() {
           Boolean(currentSong) && (activeTrackDrag.isDragging || movedEnough);
         const dropState =
           shouldTreatAsDrag && currentSong
-            ? resolveTrackDropState(
-                currentSong,
-                activeTrackDrag.trackId,
-                event.clientX,
-                event.clientY,
-              )
+            ? activeTrackDrag.originSurface === "compact"
+              ? resolveCompactTrackDropState(
+                  currentSong,
+                  activeTrackDrag.trackId,
+                  event.clientX,
+                  event.clientY,
+                )
+              : resolveTrackDropState(
+                  currentSong,
+                  activeTrackDrag.trackId,
+                  event.clientX,
+                  event.clientY,
+                )
             : null;
 
         trackDragRef.current = null;
@@ -5632,20 +5682,36 @@ export function TransportPanelContent() {
 
       event.stopPropagation();
       setContextMenu(null);
+      // The track header drag can be initiated from either the DAW
+      // header (vertical layout) or the compact mixer strip
+      // (horizontal layout). We branch on which DOM ancestor we find
+      // so the visual pipeline knows whether to translate on Y or X
+      // and which selector to highlight as the drop target.
       const headerElement = event.currentTarget.closest(
         ".lt-track-header",
       ) as HTMLDivElement | null;
+      const compactStrip = event.currentTarget.closest(
+        ".lt-compact-mixer-strip",
+      ) as HTMLDivElement | null;
+      const originSurface: "daw" | "compact" = compactStrip
+        ? "compact"
+        : "daw";
       trackDragRef.current = {
         trackId,
         pointerId: 1,
         startClientX: event.clientX,
         startClientY: event.clientY,
         currentClientY: event.clientY,
+        currentClientX: event.clientX,
         isDragging: false,
-        rowElement: event.currentTarget.closest(
-          ".lt-track-header-row",
-        ) as HTMLDivElement | null,
+        rowElement:
+          originSurface === "compact"
+            ? compactStrip
+            : (event.currentTarget.closest(
+                ".lt-track-header-row",
+              ) as HTMLDivElement | null),
         headerElement,
+        originSurface,
       };
     },
     [],
@@ -9672,6 +9738,9 @@ export function TransportPanelContent() {
                         handleCompactImportSongPackageFromOsFile
                       }
                       dragPreview={compactDragPreview}
+                      selectedTrackIds={selectedTrackIds}
+                      onTrackSelect={handleTrackHeaderSelect}
+                      onTrackDragStart={handleTrackHeaderDragStart}
                     />
                   ) : null}
                 </section>

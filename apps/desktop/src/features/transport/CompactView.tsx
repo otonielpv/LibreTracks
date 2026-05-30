@@ -67,6 +67,24 @@ type CompactViewProps = {
     event: ReactMouseEvent<HTMLDivElement>,
     trackId: string,
   ) => void;
+  /** Track ids currently selected at the project level. Drives the
+   * `is-selected` class on each mixer strip and feeds the drag
+   * pipeline so multi-selection drag works the same way the DAW
+   * track header does. */
+  selectedTrackIds: string[];
+  /** Click on a strip handle (name/parent band) → selection. Same
+   * Ctrl/Shift modifiers as the DAW header. */
+  onTrackSelect: (
+    trackId: string,
+    trackName: string,
+    event: ReactMouseEvent<HTMLDivElement>,
+  ) => void;
+  /** Pointer-down on a strip handle starts a track-reorder drag. The
+   * parent owns the move / drop pipeline (shared with the DAW). */
+  onTrackDragStart: (
+    event: ReactMouseEvent<HTMLDivElement>,
+    trackId: string,
+  ) => void;
   /** Fired when the user wants to commit the master gain for a region. */
   onMasterGainChange: (regionId: string, gain: number) => void;
   onMasterGainCommit: (regionId: string) => void;
@@ -185,6 +203,9 @@ function CompactViewComponent({
   onImportSongPackageFromDialog,
   onImportSongPackageFromOsFile: _onImportSongPackageFromOsFile,
   dragPreview,
+  selectedTrackIds,
+  onTrackSelect,
+  onTrackDragStart,
 }: CompactViewProps) {
   const isPackageDragOver = dragPreview?.isPackage === true;
 
@@ -300,6 +321,9 @@ function CompactViewComponent({
         audioRoutingOptions={audioRoutingOptions}
         handlers={mixerHandlers}
         onTrackContextMenu={onTrackContextMenu}
+        selectedTrackIds={selectedTrackIds}
+        onTrackSelect={onTrackSelect}
+        onTrackDragStart={onTrackDragStart}
       />
     </div>
   );
