@@ -327,6 +327,14 @@ function CompactMixerStripComponent({
           step={0.005}
           value={volume}
           aria-label={`Volume ${track.name}`}
+          // Teal fill below the thumb, black above. The writing-mode +
+          // direction:rtl rotation maps the input's logical "right"
+          // axis to visual "up", so `to right` here paints fill from
+          // the bottom up to the current value. (Using `to top` paints
+          // sideways under this rotation and yields a wrong-colour bar.)
+          style={{
+            background: `linear-gradient(to right, #3cddc7 ${(volume * 100).toFixed(2)}%, #0e0e0e ${(volume * 100).toFixed(2)}%)`,
+          }}
           onChange={handleVolumeInput}
           onDoubleClick={handleVolumeDoubleClick}
           onPointerUp={() => handlers.onCommitVolume(track.id)}
@@ -357,6 +365,12 @@ function CompactMixerStripComponent({
             step={0.01}
             value={pan}
             aria-label={`Pan ${track.name}`}
+            // Two-tone azul→negro gradient — identical to the DAW
+            // track-pan slider (TrackHeaderItem.tsx). `panFill` maps
+            // pan ∈ [-1,1] to a 0..100% position on the horizontal axis.
+            style={{
+              background: `linear-gradient(to right, #4d79d8 0%, #74b8ff ${(((pan + 1) * 0.5) * 100).toFixed(2)}%, #0e0e0e ${(((pan + 1) * 0.5) * 100).toFixed(2)}%, #0e0e0e 100%)`,
+            }}
             onChange={handlePanInput}
             onDoubleClick={handlePanDoubleClick}
             onPointerDown={() => setIsPanDragging(true)}

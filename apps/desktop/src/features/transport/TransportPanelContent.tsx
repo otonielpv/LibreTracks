@@ -2751,6 +2751,70 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, runAction, song],
   );
 
+  // Imports a .ltpkg as a new song appended at the end of the project. The
+  // insert position mirrors createEmptySong: anchor at max(end) + one bar of
+  // silence, where bar length is derived from the project's global bpm.
+  // Returns the position used so the drop-from-OS path can log it.
+  const runCompactSongPackageImport = useCallback(
+    async (packagePath: string) => {
+      const currentSong = song;
+      if (!currentSong) return;
+      const lastEnd = currentSong.regions.reduce(
+        (acc, region) => Math.max(acc, region.endSeconds),
+        0,
+      );
+      const bpm = Math.max(1, getSongBaseBpm(currentSong));
+      const barSeconds = (60 / bpm) * 4;
+      const insertAt = lastEnd + barSeconds;
+      await handleDroppedSongPackagePath(packagePath, insertAt);
+    },
+    // handleDroppedSongPackagePath is a function declaration in this
+    // component body — included for exhaustive-deps even though its
+    // identity is stable across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [song],
+  );
+
+  // File-dialog entry point for "Importar canción…" in the compact view.
+  // Opens the same .ltpkg picker the DAW context-menu export uses, then
+  // appends the chosen package at the end of the project.
+  const handleCompactImportSongPackageFromDialog = useCallback(() => {
+    void runAction(
+      async () => {
+        const picked = await open({
+          multiple: false,
+          directory: false,
+          filters: [{ name: "LibreTracks Package", extensions: ["ltpkg"] }],
+        });
+        const path = typeof picked === "string" ? picked : null;
+        if (!path) return;
+        await runCompactSongPackageImport(path);
+      },
+      { busy: true },
+    );
+  }, [runAction, runCompactSongPackageImport]);
+
+  // OS-drag of a .ltpkg dropped anywhere over the compact song strip.
+  // When running under Tauri we can resolve the absolute path; in the
+  // browser fallback we'd have no path to feed import_song_package, so
+  // we silently no-op there.
+  const handleCompactImportSongPackageFromOsFile = useCallback(
+    (file: File) => {
+      void runAction(
+        async () => {
+          const payloads = isTauriApp
+            ? resolveNativeAudioImportPayloads([file])
+            : null;
+          const nativePath = payloads?.[0]?.sourcePath;
+          if (!nativePath) return;
+          await runCompactSongPackageImport(nativePath);
+        },
+        { busy: true },
+      );
+    },
+    [runAction, runCompactSongPackageImport],
+  );
+
   // Per-clip context menu handlers from the compact view.
   const handleCompactMoveClipToTrack = useCallback(
     (clipId: string, targetTrackId: string) => {
@@ -9358,6 +9422,12 @@ export function TransportPanelContent() {
                       onExportSong={handleCompactExportSong}
                       bpmByRegion={bpmByRegion}
                       onSnapshotApplied={applyPlaybackSnapshot}
+                      onImportSongPackageFromDialog={
+                        handleCompactImportSongPackageFromDialog
+                      }
+                      onImportSongPackageFromOsFile={
+                        handleCompactImportSongPackageFromOsFile
+                      }
                     />
                   ) : null}
                 </section>

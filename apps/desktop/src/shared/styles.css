@@ -4715,9 +4715,20 @@ textarea {
   text-overflow: ellipsis;
 }
 
-.lt-compact-view-add-song {
+/* Action buttons that sit after the last song column: "+ Nueva canción"
+   and "Importar .ltpkg". Both stack vertically inside a single 8rem-wide
+   slot so they don't push the columns and keep a compact footprint. */
+.lt-compact-view-song-actions {
   flex: 0 0 8rem;
   align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.lt-compact-view-add-song,
+.lt-compact-view-import-song {
+  flex: 1 1 auto;
   border: 1px dashed rgba(186, 202, 197, 0.25);
   border-radius: 2px;
   background: transparent;
@@ -4727,11 +4738,29 @@ textarea {
   text-transform: uppercase;
   cursor: pointer;
   padding: 0 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
 }
 
-.lt-compact-view-add-song:hover {
+.lt-compact-view-add-song:hover,
+.lt-compact-view-import-song:hover {
   border-color: rgb(87 241 219 / 0.7);
   color: #57f1db;
+}
+
+.lt-compact-view-import-song .material-symbols-outlined {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Highlight the entire song strip while the user is dragging a .ltpkg
+   over it, so the "drop anywhere to append" affordance is discoverable. */
+.lt-compact-songs.is-package-drop {
+  outline: 2px dashed rgb(87 241 219 / 0.55);
+  outline-offset: -6px;
+  background: rgb(87 241 219 / 0.04);
 }
 
 /* ─── Bottom mixer ────────────────────────────────────────────────────── */
@@ -4914,18 +4943,46 @@ textarea {
 }
 
 /* Vertical fader: rotate the native <input type=range> with writing-mode
-   so the thumb travels bottom→top as expected for a mixer fader. */
+   so the thumb travels bottom→top as expected for a mixer fader. Thumb
+   colour matches the DAW track-volume slider (teal #3cddc7 on #0e0e0e). */
 .lt-compact-mixer-fader {
-  -webkit-appearance: slider-vertical;
-  appearance: slider-vertical;
   writing-mode: vertical-lr;
   direction: rtl;
-  width: 1.2rem;
+  width: 0.4rem;
   height: 100%;
   margin: 0;
   padding: 0;
-  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #0e0e0e;
+  border-radius: 2px;
   cursor: ns-resize;
+}
+
+.lt-compact-mixer-fader::-webkit-slider-runnable-track,
+.lt-compact-mixer-fader::-moz-range-track {
+  width: 0.4rem;
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+}
+
+.lt-compact-mixer-fader::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 8px;
+  border: 0;
+  border-radius: 2px;
+  background: #3cddc7;
+}
+
+.lt-compact-mixer-fader::-moz-range-thumb {
+  width: 14px;
+  height: 8px;
+  border: 0;
+  border-radius: 2px;
+  background: #3cddc7;
 }
 
 .lt-compact-mixer-pan-wrap {
@@ -4933,6 +4990,9 @@ textarea {
   flex-direction: column;
   align-items: stretch;
   gap: 0.15rem;
+  /* Breathing room between the pan slider and the routing dropdown
+     below — without it the thumb almost touches the select. */
+  margin-bottom: 0.5rem;
 }
 
 .lt-compact-mixer-pan-guides {
@@ -4966,40 +5026,45 @@ textarea {
   height: 0.8rem;
 }
 
+/* Center tick mark only — the track background itself is now painted
+   by the <input>'s inline gradient (azul oscuro → azul → negro) to
+   match the DAW track-pan slider, so we no longer paint a base bar
+   here. Just the 1px C marker remains as a visual reference. */
 .lt-compact-mixer-pan-track::before {
   content: "";
   position: absolute;
-  inset: 0.35rem 0 auto 0;
-  height: 0.3rem;
+  inset: 0.4rem 0 auto 0;
+  height: 4px;
   border-radius: 2px;
-  background:
-    /* centre tick: 1px white-ish */
-    linear-gradient(90deg,
-      transparent calc(50% - 1px),
-      rgba(186, 202, 197, 0.55) calc(50% - 1px),
-      rgba(186, 202, 197, 0.55) calc(50% + 1px),
-      transparent calc(50% + 1px)),
-    /* base bar */
-    rgb(15 18 19);
+  background: linear-gradient(90deg,
+    transparent calc(50% - 1px),
+    rgba(255, 255, 255, 0.45) calc(50% - 1px),
+    rgba(255, 255, 255, 0.45) calc(50% + 1px),
+    transparent calc(50% + 1px));
   pointer-events: none;
+  z-index: 2;
 }
 
+/* Pan input. The two-tone azul→negro gradient is painted by the inline
+   `style` prop (see CompactMixer.tsx), so the runnable-track stays
+   transparent and we just shape the thumb. Height 4px to match the
+   DAW track-pan thickness. */
 .lt-compact-mixer-pan {
   position: relative;
   width: 100%;
-  height: 0.8rem;
-  margin: 0;
+  height: 4px;
+  margin: 0.5rem 0 0 0;
   padding: 0;
-  background: transparent;
   -webkit-appearance: none;
   appearance: none;
   cursor: ew-resize;
+  border-radius: 2px;
   z-index: 1;
 }
 
 .lt-compact-mixer-pan::-webkit-slider-runnable-track,
 .lt-compact-mixer-pan::-moz-range-track {
-  height: 0.3rem;
+  height: 4px;
   background: transparent;
   border: 0;
   border-radius: 2px;
@@ -5008,20 +5073,20 @@ textarea {
 .lt-compact-mixer-pan::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 0.55rem;
-  height: 0.8rem;
-  margin-top: -0.25rem;
+  width: 8px;
+  height: 14px;
+  margin-top: -5px;
   border: 0;
-  border-radius: 1px;
-  background: #f3f0ef;
+  border-radius: 2px;
+  background: #74b8ff;
 }
 
 .lt-compact-mixer-pan::-moz-range-thumb {
-  width: 0.55rem;
-  height: 0.8rem;
+  width: 8px;
+  height: 14px;
   border: 0;
-  border-radius: 1px;
-  background: #f3f0ef;
+  border-radius: 2px;
+  background: #74b8ff;
 }
 
 .lt-compact-mixer-pan-tooltip {

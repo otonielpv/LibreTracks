@@ -109,6 +109,15 @@ type CompactViewProps = {
   /** Fired after a successful createEmptySong so the snapshot is applied
    * by whoever owns runAction / applyPlaybackSnapshot upstream. */
   onSnapshotApplied: (snapshot: TransportSnapshot) => void;
+  /** Opens the OS file dialog filtered to .ltpkg and imports the chosen
+   * package as a new song appended at the end of the project. The dialog
+   * + insert-position math lives in the parent so we keep a single
+   * source of truth for "where does a new song land". */
+  onImportSongPackageFromDialog: () => void;
+  /** Fired when the user drops a .ltpkg file from the OS file explorer
+   * anywhere over the song strip. The parent appends it as a new song at
+   * the end of the project, mirroring the DAW timeline behaviour. */
+  onImportSongPackageFromOsFile: (file: File) => void;
 };
 
 /**
@@ -150,7 +159,72 @@ function CompactViewComponent({
   onExportSong,
   bpmByRegion,
   onSnapshotApplied,
+  onImportSongPackageFromDialog,
+  onImportSongPackageFromOsFile,
 }: CompactViewProps) {
+  const [isPackageDragOver, setIsPackageDragOver] = useState(false);
+
+  // OS-drag of a .ltpkg over the song strip: accept the drag and, on drop,
+  // delegate to the parent which appends it as a new song at the end.
+  // We accept the drag if any of the dragged items has a .ltpkg name —
+  // dataTransfer.files is empty during dragover so we rely on items[].
+  const handleStripDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      const items = event.dataTransfer?.items;
+      if (!items || items.length === 0) return;
+      let hasPackage = false;
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index];
+        if (item.kind !== "file") continue;
+        // Item.getAsFile() returns null during dragover; we can only use
+        // the type hint here. Browsers don't expose the filename during
+        // dragover for security, so we optimistically accept any file
+        // drag — the drop handler then filters by extension.
+        hasPackage = true;
+        break;
+      }
+      if (!hasPackage) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      setIsPackageDragOver(true);
+    },
+    [],
+  );
+
+  const handleStripDragLeave = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      // Only clear when leaving the strip entirely (not when crossing
+      // into a child). relatedTarget is null when leaving the window.
+      if (
+        event.relatedTarget instanceof Node &&
+        event.currentTarget.contains(event.relatedTarget)
+      ) {
+        return;
+      }
+      setIsPackageDragOver(false);
+    },
+    [],
+  );
+
+  const handleStripDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      const files = Array.from(event.dataTransfer?.files ?? []);
+      const ltpkg = files.find((file) =>
+        file.name.toLowerCase().endsWith(".ltpkg"),
+      );
+      if (!ltpkg) {
+        // Not a package — let the per-column handlers process audio drops.
+        setIsPackageDragOver(false);
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setIsPackageDragOver(false);
+      onImportSongPackageFromOsFile(ltpkg);
+    },
+    [onImportSongPackageFromOsFile],
+  );
+
   const handleAddSong = useCallback(async () => {
     try {
       const snapshot = await createEmptySong();
@@ -175,8 +249,19 @@ function CompactViewComponent({
   return (
     <div className="lt-compact-view">
       {/* Top zone: songs + master + clip stacks. Horizontal scroll when
-          the project has more songs than fit on screen. */}
-      <div className="lt-compact-songs">
+          the project has more songs than fit on screen. Accepts OS drag
+          of a .ltpkg file anywhere over the strip — the drop appends a
+          new song at the end of the project, mirroring the DAW timeline. */}
+      <div
+        className={
+          isPackageDragOver
+            ? "lt-compact-songs is-package-drop"
+            : "lt-compact-songs"
+        }
+        onDragOver={handleStripDragOver}
+        onDragLeave={handleStripDragLeave}
+        onDrop={handleStripDrop}
+      >
         {regions.map((region) => (
           <CompactSongColumn
             key={region.id}
@@ -203,13 +288,26 @@ function CompactViewComponent({
             bpm={bpmByRegion[region.id]}
           />
         ))}
-        <button
-          type="button"
-          className="lt-compact-view-add-song"
-          onClick={handleAddSong}
-        >
-          + Nueva canción
-        </button>
+        <div className="lt-compact-view-song-actions">
+          <button
+            type="button"
+            className="lt-compact-view-add-song"
+            onClick={handleAddSong}
+          >
+            + Nueva canción
+          </button>
+          <button
+            type="button"
+            className="lt-compact-view-import-song"
+            onClick={onImportSongPackageFromDialog}
+            title="Importar canción desde .ltpkg"
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              folder_open
+            </span>
+            Importar .ltpkg
+          </button>
+        </div>
       </div>
 
       {/* Bottom zone: global mixer over all tracks. Reusable so the DAW
