@@ -328,6 +328,11 @@ function CompactSongColumnComponent({
   return (
     <div
       className={`lt-compact-song-column ${isActive ? "is-active" : ""}`}
+      /* data-region-id lets the library asset pointer-drag pipeline in
+         TransportPanelContent identify which song the user just dropped
+         onto without having to plumb a per-column React ref through the
+         component tree. */
+      data-region-id={region.id}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >

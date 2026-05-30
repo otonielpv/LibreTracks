@@ -7464,7 +7464,36 @@ export function TransportPanelContent() {
     const hover = nextDrag.hover;
     clearInternalLibraryPointerDrag();
 
-    if (!nextDrag.isDragging || !hover) {
+    if (!nextDrag.isDragging) {
+      return;
+    }
+
+    // Compact-view drop targets aren't part of the timeline hit-test that
+    // updateInternalLibraryPointerDragHover knows about, so we check for
+    // them manually by walking the DOM under the pointer. A column carries
+    // its region id via data-region-id so we can route the drop through
+    // createClipsWithAutoTracks the same way the OS-file drop in step 5.6.B
+    // does.
+    const elementAtPointer = document.elementFromPoint(
+      event.clientX,
+      event.clientY,
+    ) as HTMLElement | null;
+    const compactColumn = elementAtPointer?.closest(
+      ".lt-compact-song-column[data-region-id]",
+    ) as HTMLElement | null;
+    if (compactColumn) {
+      const regionId = compactColumn.getAttribute("data-region-id");
+      if (regionId) {
+        const payload = nextDrag.payload.map((item) => ({
+          filePath: item.file_path,
+          durationSeconds: item.durationSeconds,
+        }));
+        handleCompactDropLibraryAssetsIntoSong(regionId, payload);
+        return;
+      }
+    }
+
+    if (!hover) {
       return;
     }
 
