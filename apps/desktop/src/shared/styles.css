@@ -4688,6 +4688,33 @@ textarea {
   background: rgb(20 26 25 / 0.85);
   border: 1px solid rgba(186, 202, 197, 0.1);
   border-radius: 2px;
+  position: relative;
+}
+
+/* Track-coloured variant. Mirrors the DAW affordance: a 3px ribbon on
+   the left edge in the track's accent colour, plus a faint tinted
+   background. Reads at a glance which track a clip belongs to without
+   spelling out the name. The accent comes from --lt-track-color which
+   the parent sets inline per clip. */
+.lt-compact-clip-entry.is-coloured {
+  padding-left: 0.7rem;
+  border-color: color-mix(in srgb, var(--lt-track-color) 35%, transparent);
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--lt-track-color) 18%, transparent) 0%,
+    rgb(20 26 25 / 0.85) 60%
+  );
+}
+
+.lt-compact-clip-entry.is-coloured::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--lt-track-color);
+  border-radius: 2px 0 0 2px;
 }
 
 .lt-compact-clip-name {
@@ -4713,6 +4740,60 @@ textarea {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Subtle teal glow on the stack while a drag is hovering. Pairs with the
+   per-file dashed placeholders rendered inside. */
+.lt-compact-song-clip-stack.is-drop-target {
+  border-color: rgb(87 241 219 / 0.55);
+  background: rgb(87 241 219 / 0.05);
+}
+
+/* Empty placeholder rendered once per incoming file during dragover.
+   Dashed teal border + muted label so it reads as "future clip" without
+   competing with real clip entries. */
+.lt-compact-clip-entry.is-drop-placeholder {
+  background: transparent;
+  border-style: dashed;
+  border-color: rgb(87 241 219 / 0.6);
+  color: rgba(87, 241, 219, 0.8);
+  pointer-events: none;
+}
+
+.lt-compact-clip-entry.is-drop-placeholder .lt-compact-clip-name {
+  color: rgba(87, 241, 219, 0.85);
+  font-style: italic;
+}
+
+/* Ghost column shown next to the action buttons while a .ltpkg drag is
+   over the strip. Same shape as a real song column but dashed and
+   non-interactive — communicates "the imported song lands here". */
+.lt-compact-song-column.is-package-ghost {
+  border: 1px dashed rgb(87 241 219 / 0.6);
+  background: rgb(87 241 219 / 0.04);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem;
+  pointer-events: none;
+}
+
+.lt-compact-song-header.is-package-ghost-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  color: rgba(87, 241, 219, 0.9);
+  font: 600 11px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lt-compact-song-header.is-package-ghost-header .material-symbols-outlined {
+  font-size: 28px;
+  opacity: 0.9;
 }
 
 /* Action buttons that sit after the last song column: "+ Nueva canción"
@@ -4913,6 +4994,11 @@ textarea {
   justify-content: center;
   gap: 0.25rem;
   overflow: hidden;
+  /* Reserve half the thumb's height (8px / 2 = 4px) above and below
+     the track. With the thumb centred on `bottom: <value>%` this
+     prevents it from poking out of the wrapper at value=0 / value=1
+     and overlapping the M/S/T toggles sitting above. */
+  padding: 4px 0;
 }
 
 /* Post-fader peak meter that sits next to the vertical fader. Fill grows
@@ -4945,44 +5031,45 @@ textarea {
 /* Vertical fader: rotate the native <input type=range> with writing-mode
    so the thumb travels bottom→top as expected for a mixer fader. Thumb
    colour matches the DAW track-volume slider (teal #3cddc7 on #0e0e0e). */
+/* Custom vertical fader (rendered as a <div role="slider"> in
+   CompactMixer.tsx). The track is the slim teal-on-black bar; the
+   thumb is absolutely positioned so it always sits at the current
+   value, with `bottom: <pct>%`. Width is the visible thickness of
+   the track; the wrapping pointer area is generous so the thumb is
+   easy to grab even on a 0.4rem track. */
 .lt-compact-mixer-fader {
-  writing-mode: vertical-lr;
-  direction: rtl;
+  position: relative;
   width: 0.4rem;
   height: 100%;
-  margin: 0;
+  margin: 0 auto;
   padding: 0;
-  -webkit-appearance: none;
-  appearance: none;
   background: #0e0e0e;
   border-radius: 2px;
   cursor: ns-resize;
+  touch-action: none;
+  outline: none;
 }
 
-.lt-compact-mixer-fader::-webkit-slider-runnable-track,
-.lt-compact-mixer-fader::-moz-range-track {
-  width: 0.4rem;
-  background: transparent;
-  border: 0;
-  border-radius: 2px;
+.lt-compact-mixer-fader:focus-visible {
+  box-shadow: 0 0 0 2px rgb(87 241 219 / 0.45);
 }
 
-.lt-compact-mixer-fader::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
+.lt-compact-mixer-fader-thumb {
+  position: absolute;
+  /* Centre the 14px-wide thumb on the 0.4rem (~6.4px) track. The
+     thumb's vertical centre maps to `bottom` — we offset by half its
+     own height so at value=0 the thumb sits flush with the bottom of
+     the usable track, and at value=1 it sits flush with the top. The
+     usable track is shrunk inset by half the thumb on each side via
+     a wrapper margin, so the thumb never overflows into the M/S/T
+     buttons sitting above. */
+  left: 50%;
+  transform: translate(-50%, 50%);
   width: 14px;
   height: 8px;
-  border: 0;
   border-radius: 2px;
   background: #3cddc7;
-}
-
-.lt-compact-mixer-fader::-moz-range-thumb {
-  width: 14px;
-  height: 8px;
-  border: 0;
-  border-radius: 2px;
-  background: #3cddc7;
+  pointer-events: none;
 }
 
 .lt-compact-mixer-pan-wrap {

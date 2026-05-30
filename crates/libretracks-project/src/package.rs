@@ -425,11 +425,31 @@ fn import_song_package_from_archive<R: Read + Seek>(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
+    // Region span has to cover every clip that landed inside it, not
+    // just the manifest's nominal duration. Older packages were
+    // exported with a region length that didn't always account for
+    // clips extending past region.end_seconds (the exporter filters
+    // by timeline_start only), so taking the max of "manifest length"
+    // and "furthest clip end among the freshly-inserted clips" keeps
+    // imports of those packages valid against the engine's
+    // "clip-must-live-inside-its-region" invariant.
+    let imported_clip_count = manifest.clips.len();
+    let furthest_clip_end_offset = next_song
+        .clips
+        .iter()
+        .rev()
+        .take(imported_clip_count)
+        .map(|clip| {
+            (clip.timeline_start_seconds + clip.duration_seconds)
+                - insert_at_seconds
+        })
+        .fold(0.0_f64, f64::max);
+    let region_span = manifest.duration_seconds.max(furthest_clip_end_offset);
     next_song.regions.push(SongRegion {
         id: format!("region_import_{}", timestamp_suffix()),
         name: manifest.song_title.clone(),
         start_seconds: insert_at_seconds,
-        end_seconds: insert_at_seconds + manifest.duration_seconds,
+        end_seconds: insert_at_seconds + region_span,
         transpose_semitones: manifest.region_transpose_semitones,
         warp_enabled: false,
         warp_source_bpm: None,
@@ -497,7 +517,7 @@ fn import_song_package_from_archive<R: Read + Seek>(
 
     next_song.duration_seconds = next_song
         .duration_seconds
-        .max(insert_at_seconds + manifest.duration_seconds);
+        .max(insert_at_seconds + region_span);
 
     Ok(SongPackageImportResult {
         song: next_song,

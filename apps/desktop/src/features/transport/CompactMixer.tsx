@@ -5,7 +5,9 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 
 import {
@@ -188,21 +190,6 @@ function CompactMixerStripComponent({
     };
   }, []);
 
-  const handleVolumeInput = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const next = Number(event.target.value);
-      if (!Number.isFinite(next)) return;
-      const snapped = applySnap(
-        next,
-        VOLUME_SNAP_TARGET,
-        VOLUME_SNAP_THRESHOLD,
-        shiftPressedRef.current,
-      );
-      handlers.onVolumeChange(track.id, snapped);
-    },
-    [handlers, track.id],
-  );
-
   const handlePanInput = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const next = Number(event.target.value);
@@ -313,35 +300,34 @@ function CompactMixerStripComponent({
       </div>
 
       {/* Vertical fader + post-fader meter side by side, the way Ableton
-          Live lays out its mixer. The fader is the native <input type=range>
-          rotated via CSS (writing-mode: vertical-lr + direction: rtl) so
-          the thumb travels bottom→top. The meter is a div whose height
+          Live lays out its mixer. The fader is a fully custom <div>
+          slider driven by pointer events — we can't use a native
+          <input type=range> here because the recipes for rotating it
+          90° (writing-mode + appearance:slider-vertical) all force
+          trade-offs: either the thumb travels horizontally, or
+          appearance:slider-vertical wins but discards our custom
+          thumb colour. The custom path lets us reuse the exact same
+          teal-on-black look the DAW track-volume slider uses, and
+          travel bottom→top reliably. The meter is a div whose height
           tracks the same `meters[trackId]` dictionary the DAW track
           headers already populate. */}
       <div className="lt-compact-mixer-fader-wrap">
-        <input
-          type="range"
-          className="lt-compact-mixer-fader"
-          min={0}
-          max={1}
-          step={0.005}
+        <CompactVerticalFader
           value={volume}
-          aria-label={`Volume ${track.name}`}
-          // Teal fill below the thumb, black above. The writing-mode +
-          // direction:rtl rotation maps the input's logical "right"
-          // axis to visual "up", so `to right` here paints fill from
-          // the bottom up to the current value. (Using `to top` paints
-          // sideways under this rotation and yields a wrong-colour bar.)
-          style={{
-            background: `linear-gradient(to right, #3cddc7 ${(volume * 100).toFixed(2)}%, #0e0e0e ${(volume * 100).toFixed(2)}%)`,
-          }}
-          onChange={handleVolumeInput}
+          onChange={(next) =>
+            handlers.onVolumeChange(
+              track.id,
+              applySnap(
+                next,
+                VOLUME_SNAP_TARGET,
+                VOLUME_SNAP_THRESHOLD,
+                shiftPressedRef.current,
+              ),
+            )
+          }
+          onCommit={() => handlers.onCommitVolume(track.id)}
           onDoubleClick={handleVolumeDoubleClick}
-          onPointerUp={() => handlers.onCommitVolume(track.id)}
-          onPointerCancel={() => handlers.onCommitVolume(track.id)}
-          onKeyUp={(event) => {
-            if (isStepperKey(event.key)) handlers.onCommitVolume(track.id);
-          }}
+          ariaLabel={`Volume ${track.name}`}
         />
         <CompactMixerMeter trackId={track.id} />
       </div>
@@ -516,6 +502,153 @@ function CompactMixerMeterComponent({ trackId }: CompactMixerMeterProps) {
 }
 
 const CompactMixerMeter = memo(CompactMixerMeterComponent);
+
+/**
+ * Vertical fader rendered as a custom <div> + pointer events so we can
+ * keep the DAW-style colours (teal fill below the thumb on a #0e0e0e
+ * track + saturated teal thumb) while travelling bottom→top reliably.
+ * The native <input type=range> route requires either appearance:
+ * slider-vertical (which discards custom thumb colouring) or a CSS
+ * writing-mode rotation (which in this build mis-rotated the slider
+ * into a horizontal one). Custom path sidesteps both gotchas.
+ *
+ *   value:        current value in [0, 1].
+ *   onChange:     called on every pointer move with the new value.
+ *                 Caller is responsible for any snap behaviour.
+ *   onCommit:     called once the user releases or cancels — same
+ *                 contract the original <input> handlers had.
+ *   onDoubleClick: reset-to-unity shortcut; caller commits.
+ *   ariaLabel:    accessible label propagated to the slider role.
+ */
+type CompactVerticalFaderProps = {
+  value: number;
+  onChange: (next: number) => void;
+  onCommit: () => void;
+  onDoubleClick: () => void;
+  ariaLabel: string;
+};
+
+function CompactVerticalFaderComponent({
+  value,
+  onChange,
+  onCommit,
+  onDoubleClick,
+  ariaLabel,
+}: CompactVerticalFaderProps) {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const draggingRef = useRef(false);
+  const clamp = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
+
+  // Map a clientY inside the track to a value in [0, 1] with the
+  // bottom of the track being 0 and the top being 1 — i.e. the way
+  // every mixer fader on the planet works.
+  const valueFromClientY = useCallback((clientY: number) => {
+    const track = trackRef.current;
+    if (!track) return 0;
+    const rect = track.getBoundingClientRect();
+    if (rect.height <= 0) return 0;
+    const offsetFromBottom = rect.bottom - clientY;
+    return clamp(offsetFromBottom / rect.height);
+  }, []);
+
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      // Only react to primary button drags. Right-click / middle-click
+      // should fall through to the strip-level context menu.
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const target = trackRef.current;
+      if (!target) return;
+      target.setPointerCapture(event.pointerId);
+      draggingRef.current = true;
+      onChange(valueFromClientY(event.clientY));
+    },
+    [onChange, valueFromClientY],
+  );
+
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!draggingRef.current) return;
+      onChange(valueFromClientY(event.clientY));
+    },
+    [onChange, valueFromClientY],
+  );
+
+  const finishDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      const target = trackRef.current;
+      if (target?.hasPointerCapture(event.pointerId)) {
+        target.releasePointerCapture(event.pointerId);
+      }
+      onCommit();
+    },
+    [onCommit],
+  );
+
+  // Keyboard support — Arrow up/down nudge by 1%, Home/End jump.
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      let next: number | null = null;
+      if (event.key === "ArrowUp" || event.key === "ArrowRight") {
+        next = clamp(value + 0.01);
+      } else if (event.key === "ArrowDown" || event.key === "ArrowLeft") {
+        next = clamp(value - 0.01);
+      } else if (event.key === "Home") {
+        next = 0;
+      } else if (event.key === "End") {
+        next = 1;
+      }
+      if (next === null) return;
+      event.preventDefault();
+      onChange(next);
+    },
+    [onChange, value],
+  );
+
+  const handleKeyUp = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (isStepperKey(event.key)) onCommit();
+    },
+    [onCommit],
+  );
+
+  const fillPct = (value * 100).toFixed(2);
+  return (
+    <div
+      ref={trackRef}
+      className="lt-compact-mixer-fader"
+      role="slider"
+      tabIndex={0}
+      aria-label={ariaLabel}
+      aria-valuemin={0}
+      aria-valuemax={1}
+      aria-valuenow={value}
+      aria-orientation="vertical"
+      // Teal fill below the thumb, black above — same gradient pattern
+      // the DAW track-volume slider uses.
+      style={{
+        background: `linear-gradient(to top, #3cddc7 ${fillPct}%, #0e0e0e ${fillPct}%)`,
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishDrag}
+      onPointerCancel={finishDrag}
+      onDoubleClick={onDoubleClick}
+      onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
+    >
+      <div
+        className="lt-compact-mixer-fader-thumb"
+        style={{ bottom: `${fillPct}%` }}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
+
+const CompactVerticalFader = memo(CompactVerticalFaderComponent);
 
 function effectiveBool(
   optimistic: boolean | undefined,

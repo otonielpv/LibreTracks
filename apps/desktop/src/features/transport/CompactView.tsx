@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -36,6 +37,12 @@ export type CompactClipEntry = {
   clipName: string;
   trackId: string;
   trackName: string;
+  /** Optional track accent colour propagated by the parent. When set,
+   * the clip card paints a left ribbon + tinted name in that colour
+   * — same affordance the DAW track header uses (via the
+   * --lt-track-color custom property). null/undefined falls back to
+   * the default neutral styling. */
+  trackColor?: string | null;
 };
 
 type CompactViewProps = {
@@ -118,6 +125,22 @@ type CompactViewProps = {
    * anywhere over the song strip. The parent appends it as a new song at
    * the end of the project, mirroring the DAW timeline behaviour. */
   onImportSongPackageFromOsFile: (file: File) => void;
+  /** Live drag-over preview driven by the parent's native + library
+   * drag pipelines (HTML5 dragover doesn't fire reliably under Tauri,
+   * so the per-column dataTransfer-based detection was unreliable).
+   *
+   *   targetRegionId: the song column under the pointer; null when the
+   *     pointer is on the strip but not on a column.
+   *   count: how many files/assets will land (≥ 1).
+   *   isPackage: true → render the strip-level ghost column (a .ltpkg
+   *     import); false → render `count` dashed placeholders inside
+   *     the target column.
+   */
+  dragPreview: {
+    targetRegionId: string | null;
+    count: number;
+    isPackage: boolean;
+  } | null;
 };
 
 /**
@@ -160,70 +183,10 @@ function CompactViewComponent({
   bpmByRegion,
   onSnapshotApplied,
   onImportSongPackageFromDialog,
-  onImportSongPackageFromOsFile,
+  onImportSongPackageFromOsFile: _onImportSongPackageFromOsFile,
+  dragPreview,
 }: CompactViewProps) {
-  const [isPackageDragOver, setIsPackageDragOver] = useState(false);
-
-  // OS-drag of a .ltpkg over the song strip: accept the drag and, on drop,
-  // delegate to the parent which appends it as a new song at the end.
-  // We accept the drag if any of the dragged items has a .ltpkg name —
-  // dataTransfer.files is empty during dragover so we rely on items[].
-  const handleStripDragOver = useCallback(
-    (event: ReactDragEvent<HTMLDivElement>) => {
-      const items = event.dataTransfer?.items;
-      if (!items || items.length === 0) return;
-      let hasPackage = false;
-      for (let index = 0; index < items.length; index += 1) {
-        const item = items[index];
-        if (item.kind !== "file") continue;
-        // Item.getAsFile() returns null during dragover; we can only use
-        // the type hint here. Browsers don't expose the filename during
-        // dragover for security, so we optimistically accept any file
-        // drag — the drop handler then filters by extension.
-        hasPackage = true;
-        break;
-      }
-      if (!hasPackage) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-      setIsPackageDragOver(true);
-    },
-    [],
-  );
-
-  const handleStripDragLeave = useCallback(
-    (event: ReactDragEvent<HTMLDivElement>) => {
-      // Only clear when leaving the strip entirely (not when crossing
-      // into a child). relatedTarget is null when leaving the window.
-      if (
-        event.relatedTarget instanceof Node &&
-        event.currentTarget.contains(event.relatedTarget)
-      ) {
-        return;
-      }
-      setIsPackageDragOver(false);
-    },
-    [],
-  );
-
-  const handleStripDrop = useCallback(
-    (event: ReactDragEvent<HTMLDivElement>) => {
-      const files = Array.from(event.dataTransfer?.files ?? []);
-      const ltpkg = files.find((file) =>
-        file.name.toLowerCase().endsWith(".ltpkg"),
-      );
-      if (!ltpkg) {
-        // Not a package — let the per-column handlers process audio drops.
-        setIsPackageDragOver(false);
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      setIsPackageDragOver(false);
-      onImportSongPackageFromOsFile(ltpkg);
-    },
-    [onImportSongPackageFromOsFile],
-  );
+  const isPackageDragOver = dragPreview?.isPackage === true;
 
   const handleAddSong = useCallback(async () => {
     try {
@@ -258,9 +221,6 @@ function CompactViewComponent({
             ? "lt-compact-songs is-package-drop"
             : "lt-compact-songs"
         }
-        onDragOver={handleStripDragOver}
-        onDragLeave={handleStripDragLeave}
-        onDrop={handleStripDrop}
       >
         {regions.map((region) => (
           <CompactSongColumn
@@ -286,8 +246,31 @@ function CompactViewComponent({
             onDelete={() => onDeleteSong(region.id)}
             onExport={() => onExportSong(region.id)}
             bpm={bpmByRegion[region.id]}
+            placeholderCount={
+              dragPreview &&
+              !dragPreview.isPackage &&
+              dragPreview.targetRegionId === region.id
+                ? dragPreview.count
+                : 0
+            }
           />
         ))}
+        {/* Ghost column previewed while the user drags a .ltpkg over the
+            strip — shows them exactly where the imported song will land
+            (always at the end, before the action buttons). */}
+        {isPackageDragOver ? (
+          <div
+            className="lt-compact-song-column is-package-ghost"
+            aria-hidden="true"
+          >
+            <div className="lt-compact-song-header is-package-ghost-header">
+              <span className="material-symbols-outlined">
+                library_music
+              </span>
+              <span>Importar aquí</span>
+            </div>
+          </div>
+        ) : null}
         <div className="lt-compact-view-song-actions">
           <button
             type="button"
@@ -343,6 +326,11 @@ type CompactSongColumnProps = {
   onDelete: () => void;
   onExport: () => void;
   bpm: number | undefined;
+  /** Number of dashed placeholders to render at the end of the clip
+   * stack while a drag is hovering this column. Driven by the parent's
+   * `dragPreview`. 0 means no drag — render the empty-state hint if
+   * the column has no clips. */
+  placeholderCount: number;
 };
 
 function CompactSongColumnComponent({
@@ -362,6 +350,7 @@ function CompactSongColumnComponent({
   onDelete,
   onExport,
   bpm,
+  placeholderCount,
 }: CompactSongColumnProps) {
   const [contextMenu, setContextMenu] = useState<{
     clipId: string;
@@ -386,10 +375,19 @@ function CompactSongColumnComponent({
     };
   }, [contextMenu]);
 
-  const handleDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }, []);
+  // HTML5 dragover doesn't fire reliably under Tauri's native drag
+  // pipeline, so the placeholder count is driven by the parent via
+  // `placeholderCount` instead of computing it locally from
+  // dataTransfer. We still keep the onDrop handler below for the
+  // browser fallback path (running outside Tauri) and for the
+  // synthetic drop the library pipeline might dispatch in the future.
+  const handleDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    },
+    [],
+  );
 
   const handleDrop = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
@@ -464,17 +462,36 @@ function CompactSongColumnComponent({
         onDelete={onDelete}
         onExport={onExport}
       />
-      <div className="lt-compact-song-clip-stack">
-        {clips.length === 0 ? (
+      <div
+        className={
+          placeholderCount > 0
+            ? "lt-compact-song-clip-stack is-drop-target"
+            : "lt-compact-song-clip-stack"
+        }
+      >
+        {clips.length === 0 && placeholderCount === 0 ? (
           <div className="lt-compact-song-clip-stack-empty">
             Suelta clips aquí
           </div>
         ) : (
           clips.map((clip) => (
             <div
-              className="lt-compact-clip-entry"
+              className={
+                clip.trackColor
+                  ? "lt-compact-clip-entry is-coloured"
+                  : "lt-compact-clip-entry"
+              }
               key={clip.id}
               onContextMenu={(event) => openContextMenu(event, clip.id)}
+              style={
+                clip.trackColor
+                  ? ({
+                      // Same custom-prop the DAW track header sets, so
+                      // styles stay symmetric across the two views.
+                      "--lt-track-color": clip.trackColor,
+                    } as CSSProperties)
+                  : undefined
+              }
             >
               <span className="lt-compact-clip-name" title={clip.clipName}>
                 {clip.clipName}
@@ -489,6 +506,20 @@ function CompactSongColumnComponent({
             </div>
           ))
         )}
+        {/* Dashed placeholders rendered while a drag hovers over the
+            column. One placeholder per file/asset the user is about to
+            drop, so the preview matches the resulting clip stack. */}
+        {placeholderCount > 0
+          ? Array.from({ length: placeholderCount }).map((_, index) => (
+              <div
+                key={`drop-placeholder-${index}`}
+                className="lt-compact-clip-entry is-drop-placeholder"
+                aria-hidden="true"
+              >
+                <span className="lt-compact-clip-name">Nuevo clip</span>
+              </div>
+            ))
+          : null}
       </div>
 
       {contextMenu && activeClip ? (

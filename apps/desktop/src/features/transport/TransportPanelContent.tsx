@@ -174,6 +174,7 @@ import { useTimelineKeyboardShortcuts } from "./timeline/TimelineKeyboardShortcu
 import {
   buildTimelineDropPreviewGeometry,
   classifyDroppedPaths,
+  isAcceptedDroppedFileName,
   type DroppedFileClassification,
   type ExternalDropKind,
   type ExternalDropPreview,
@@ -500,8 +501,33 @@ export function TransportPanelContent() {
   const [tracksById, setTracksById] = useState<Record<string, TrackSummary>>(
     {},
   );
-  const [status, setStatus] = useState(() =>
+  const [status, setStatusRaw] = useState(() =>
     t("transport.status.loadingSession"),
+  );
+  // Auto-clear the status banner ~5s after the last message so the
+  // overlay doesn't sit there forever after a completed action. We
+  // never auto-clear a message that begins with the loading-session
+  // copy (that's a persistent state, not a one-shot notification).
+  const statusClearTimerRef = useRef<number | null>(null);
+  const setStatus = useCallback((next: string) => {
+    setStatusRaw(next);
+    if (statusClearTimerRef.current !== null) {
+      window.clearTimeout(statusClearTimerRef.current);
+      statusClearTimerRef.current = null;
+    }
+    if (next === "") return;
+    statusClearTimerRef.current = window.setTimeout(() => {
+      setStatusRaw("");
+      statusClearTimerRef.current = null;
+    }, 5500);
+  }, []);
+  useEffect(
+    () => () => {
+      if (statusClearTimerRef.current !== null) {
+        window.clearTimeout(statusClearTimerRef.current);
+      }
+    },
+    [],
   );
   const [pitchPrepareUiState, setPitchPrepareUiState] = useState<{
     active: boolean;
@@ -583,6 +609,24 @@ export function TransportPanelContent() {
   >([]);
   const [internalLibraryPointerDrag, setInternalLibraryPointerDrag] =
     useState<InternalLibraryPointerDrag | null>(null);
+  // Drag preview for the compact view, driven by both the internal
+  // library pointer pipeline and the native OS drag pipeline. HTML5
+  // dragover doesn't fire reliably under Tauri, so this is the single
+  // source of truth the CompactView reads from to render placeholders
+  // and the package ghost column.
+  //
+  //   targetRegionId: the song column under the pointer (null when the
+  //     pointer is on the strip but not on a column, e.g. over the
+  //     action buttons or empty gutter).
+  //   count: number of files/assets about to be dropped (≥ 1).
+  //   isPackage: true when at least one .ltpkg path is being dragged;
+  //     paints the strip-level ghost column instead of per-column
+  //     placeholders.
+  const [compactDragPreview, setCompactDragPreview] = useState<{
+    targetRegionId: string | null;
+    count: number;
+    isPackage: boolean;
+  } | null>(null);
   // Position (in seconds) of the anchor a magneted clip drag is locked onto.
   // Drives the vertical snap indicator. null when no anchor is engaged.
   const [clipDragSnapIndicatorSeconds, setClipDragSnapIndicatorSeconds] =
@@ -886,6 +930,7 @@ export function TransportPanelContent() {
         lastNativeTimelineDropRef.current = null;
         nativeDropCoordinateModeRef.current = null;
         setExternalDropPreview(null);
+        setCompactDragPreview(null);
         if (NATIVE_DND_DEBUG_ENABLED) {
           setNativeDropDebugCandidates([]);
         }
@@ -2581,14 +2626,22 @@ export function TransportPanelContent() {
   const clipsByRegion = useMemo(() => {
     const byRegion: Record<
       string,
-      { id: string; clipName: string; trackId: string; trackName: string }[]
+      {
+        id: string;
+        clipName: string;
+        trackId: string;
+        trackName: string;
+        trackColor?: string | null;
+      }[]
     > = {};
     if (!song) return byRegion;
     const trackOrderIndex = new Map<string, number>();
     const trackNameById = new Map<string, string>();
+    const trackColorById = new Map<string, string | null | undefined>();
     song.tracks.forEach((track, index) => {
       trackOrderIndex.set(track.id, index);
       trackNameById.set(track.id, track.name);
+      trackColorById.set(track.id, track.color);
     });
     for (const region of song.regions) {
       byRegion[region.id] = [];
@@ -2608,6 +2661,7 @@ export function TransportPanelContent() {
         clipName: fileName,
         trackId: clip.trackId,
         trackName: trackNameById.get(clip.trackId) ?? clip.trackId,
+        trackColor: trackColorById.get(clip.trackId),
       });
     }
     // Sort each region's clip list by the track order of the project so
@@ -2681,17 +2735,39 @@ export function TransportPanelContent() {
     (regionId: string, files: File[]) => {
       const region = song?.regions.find((r) => r.id === regionId);
       if (!region) return;
+      // Reject unsupported file types up front. Mixed drops (some
+      // valid + some invalid) are also refused outright rather than
+      // silently importing the valid subset, because the user just
+      // dragged a batch and "some imported, some skipped" hides
+      // failures. Status: see status.unsupportedDropRejected i18n.
+      const accepted = files.filter((file) =>
+        isAcceptedDroppedFileName(file.name),
+      );
+      const hasUnsupported = accepted.length !== files.length;
+      // .ltpkg dropped onto a column is also invalid — packages go to
+      // the strip, not into an existing song. Treat as unsupported.
+      const hasPackage = accepted.some((file) =>
+        file.name.toLowerCase().endsWith(".ltpkg"),
+      );
+      if (hasUnsupported || hasPackage || accepted.length === 0) {
+        setStatus(
+          t("transport.status.unsupportedDrop", {
+            defaultValue: "Tipo de archivo no admitido",
+          }),
+        );
+        return;
+      }
       const dropSeconds = region.startSeconds;
       void runAction(async () => {
         const nativePayloads = isTauriApp
-          ? resolveNativeAudioImportPayloads(files)
+          ? resolveNativeAudioImportPayloads(accepted)
           : null;
         let importedAssets: LibraryAssetSummary[] = [];
         if (nativePayloads) {
           importedAssets = await importAudioFilesFromPaths(nativePayloads);
         } else {
           const byteloads = await Promise.all(
-            files.map(async (file) => ({
+            accepted.map(async (file) => ({
               fileName: file.name,
               bytes: new Uint8Array(await file.arrayBuffer()),
             })),
@@ -7440,6 +7516,33 @@ export function TransportPanelContent() {
     setInternalLibraryPointerDrag(next);
   }
 
+  // Returns the region id of the compact song column under the given
+  // viewport coordinates, or null if the point is over the compact
+  // strip but not on a specific column (e.g. action buttons / empty
+  // gutter), or undefined when the point isn't on the compact view at
+  // all. Used by both the internal library drag pipeline and the
+  // native OS drag pipeline to drive `compactDragPreview`.
+  function resolveCompactRegionAtPoint(
+    clientX: number,
+    clientY: number,
+  ): { hit: true; regionId: string | null } | { hit: false } {
+    const element = document.elementFromPoint(clientX, clientY) as
+      | HTMLElement
+      | null;
+    if (!element) return { hit: false };
+    const column = element.closest(
+      ".lt-compact-song-column[data-region-id]",
+    ) as HTMLElement | null;
+    if (column) {
+      return { hit: true, regionId: column.getAttribute("data-region-id") };
+    }
+    // Anywhere over the song strip counts as "on the compact view" so
+    // package drags can show the ghost column even outside a song.
+    const strip = element.closest(".lt-compact-songs");
+    if (strip) return { hit: true, regionId: null };
+    return { hit: false };
+  }
+
   function stopInternalLibraryPointerDragListeners() {
     const listeners = internalLibraryPointerDragListenersRef.current;
     if (!listeners) {
@@ -7459,6 +7562,7 @@ export function TransportPanelContent() {
     clearLibraryDragPreview();
     clearActiveLibraryDragPayload();
     setInternalLibraryPointerDragState(null);
+    setCompactDragPreview(null);
   }
 
   function updateInternalLibraryPointerDragHover(args: {
@@ -7559,6 +7663,21 @@ export function TransportPanelContent() {
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
       });
+
+      // Compact-view drop preview: library items are never .ltpkg, so
+      // we always emit isPackage=false and let the per-column handler
+      // render `count` dashed placeholders.
+      const hit = resolveCompactRegionAtPoint(event.clientX, event.clientY);
+      if (hit.hit) {
+        const count = nextDrag.payload.length;
+        setCompactDragPreview({
+          targetRegionId: hit.regionId,
+          count,
+          isPackage: false,
+        });
+      } else {
+        setCompactDragPreview((current) => (current === null ? current : null));
+      }
     }
 
     setInternalLibraryPointerDragState(nextDrag);
@@ -8137,6 +8256,7 @@ export function TransportPanelContent() {
     dropSeconds: number,
   ) {
     setExternalDropPreview(null);
+    setCompactDragPreview(null);
     nativeExternalDropPathsRef.current = [];
     nativeDropKindRef.current = null;
     domExternalDropPreviewUntilRef.current = 0;
@@ -8187,6 +8307,62 @@ export function TransportPanelContent() {
       : nativeExternalDropPathsRef.current;
     const kind = paths.length ? classifyDroppedPaths(paths).kind : "unknown";
     nativeDropKindRef.current = kind;
+
+    // Compact-view preview branch. HTML5 dragover doesn't fire under
+    // Tauri's native drop pipeline, so the strip and song columns rely
+    // on this hook to know "something is being dragged over me". We
+    // resolve which column the pointer is on, and for package drags we
+    // emit a null regionId so the CompactView paints the strip-level
+    // ghost instead of per-column placeholders.
+    const compactHit = resolveCompactRegionAtPoint(
+      args.position.x,
+      args.position.y,
+    );
+    if (compactHit.hit) {
+      // Decide what kind of preview to paint:
+      //
+      //   audio    → per-column dashed placeholders (one per file).
+      //   package  → strip-level ghost column (.ltpkg lands at the end).
+      //   unknown  → some Tauri builds don't send paths on dragover,
+      //              only on drop. To still give immediate feedback we
+      //              fall back to a ghost column when the pointer is
+      //              NOT on a specific song column (i.e. over the
+      //              action buttons / empty gutter — the natural
+      //              landing zone for a .ltpkg). If the pointer is on
+      //              a column we wait for the next event with paths
+      //              before showing per-column placeholders, since
+      //              showing them for what turns out to be a .txt
+      //              would mislead.
+      //   mixed/unsupported → never paint a preview; the drop will be
+      //              rejected with a status toast.
+      let isPackage: boolean;
+      if (kind === "audio") {
+        isPackage = false;
+      } else if (kind === "package") {
+        isPackage = true;
+      } else if (kind === "unknown" && compactHit.regionId === null) {
+        // Strip gutter / action buttons under the pointer + paths
+        // unknown → assume package (the only thing that lands here).
+        isPackage = true;
+      } else {
+        setCompactDragPreview((current) =>
+          current === null ? current : null,
+        );
+        setExternalDropPreview(null);
+        return;
+      }
+      const count = paths.length || 1;
+      setCompactDragPreview({
+        targetRegionId: isPackage ? null : compactHit.regionId,
+        count,
+        isPackage,
+      });
+      // Clear any lingering timeline preview so the two views don't
+      // both light up while the pointer is over the compact strip.
+      setExternalDropPreview(null);
+      return;
+    }
+    setCompactDragPreview((current) => (current === null ? current : null));
 
     if (Date.now() < domExternalDropPreviewUntilRef.current) {
       setExternalDropPreview((current) => {
@@ -8259,6 +8435,7 @@ export function TransportPanelContent() {
 
     nativeExternalDropPathsRef.current = [];
     nativeDropKindRef.current = null;
+    setCompactDragPreview(null);
 
     if (!args.paths.length) {
       domExternalDropPreviewUntilRef.current = 0;
@@ -8268,6 +8445,72 @@ export function TransportPanelContent() {
       if (NATIVE_DND_DEBUG_ENABLED) {
         setNativeDropDebugCandidates([]);
       }
+      return;
+    }
+
+    // If the drop landed on the compact view, route through the
+    // compact handlers instead of the timeline. Unknown / unsupported
+    // / mixed kinds are rejected here so a .txt or a .ltpkg+audio mix
+    // never reaches the importer.
+    const compactHit = resolveCompactRegionAtPoint(
+      args.position.x,
+      args.position.y,
+    );
+    if (compactHit.hit) {
+      const classification = classifyDroppedPaths(args.paths);
+      if (classification.kind === "package") {
+        void runAction(
+          async () =>
+            runCompactSongPackageImport(classification.packagePath),
+          { busy: true },
+        );
+        return;
+      }
+      if (classification.kind === "audio" && compactHit.regionId) {
+        // Route native paths straight through the same importer the
+        // OS-File handler uses, but without round-tripping through a
+        // synthetic File (which wouldn't carry the .path needed by
+        // resolveNativeAudioImportPayloads under Tauri).
+        const regionId = compactHit.regionId;
+        const region = song?.regions.find((r) => r.id === regionId);
+        if (!region) return;
+        const dropSeconds = region.startSeconds;
+        void runAction(async () => {
+          const payloads = classification.audioPaths.map((path) => ({
+            fileName: path.split(/[\\/]/).pop() ?? path,
+            sourcePath: path,
+          }));
+          const importedAssets = await importAudioFilesFromPaths(payloads);
+          mergeLibraryAssets(importedAssets);
+          await refreshLibraryState({ preserveAssets: importedAssets });
+          if (importedAssets.length === 0) return;
+          const snapshot = await createClipsWithAutoTracks(
+            importedAssets.map((asset) => ({
+              filePath: asset.filePath,
+              timelineStartSeconds: dropSeconds,
+            })),
+          );
+          applyPlaybackSnapshot(snapshot);
+          setStatus(
+            importedAssets.length === 1
+              ? t("transport.status.clipAdded", {
+                  name: importedAssets[0].fileName,
+                })
+              : t("transport.status.clipsAdded", {
+                  count: importedAssets.length,
+                }),
+          );
+        });
+        return;
+      }
+      // mixed / unsupported / package-but-no-region (theoretically
+      // impossible because the strip always has at least the action
+      // buttons inside it) → reject with a status toast.
+      setStatus(
+        t("transport.status.unsupportedDrop", {
+          defaultValue: "Tipo de archivo no admitido",
+        }),
+      );
       return;
     }
 
@@ -9428,6 +9671,7 @@ export function TransportPanelContent() {
                       onImportSongPackageFromOsFile={
                         handleCompactImportSongPackageFromOsFile
                       }
+                      dragPreview={compactDragPreview}
                     />
                   ) : null}
                 </section>
@@ -9537,17 +9781,19 @@ export function TransportPanelContent() {
               </button>
             ) : null}
 
-            <div className="lt-status-overlay" aria-live="polite">
-              <span>
-                {pitchPrepareUiState.active
-                  ? `${pitchPrepareUiState.message}${
-                      pitchPrepareUiState.error
-                        ? `: ${pitchPrepareUiState.error}`
-                        : ""
-                    }`
-                  : status}
-              </span>
-            </div>
+            {pitchPrepareUiState.active || status !== "" ? (
+              <div className="lt-status-overlay" aria-live="polite">
+                <span>
+                  {pitchPrepareUiState.active
+                    ? `${pitchPrepareUiState.message}${
+                        pitchPrepareUiState.error
+                          ? `: ${pitchPrepareUiState.error}`
+                          : ""
+                      }`
+                    : status}
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

@@ -10,6 +10,18 @@ export const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set(["wav", "mp3", "flac", "ogg", "aiff", "aif", "m4a"]);
 
+/** True for file names the compact + DAW drop pipelines actually
+ * accept (any supported audio extension, or a LibreTracks package).
+ * Used to reject unsupported drops at the entry point so the user
+ * doesn't see misleading "imported" feedback for files we'd silently
+ * drop on the floor. */
+export function isAcceptedDroppedFileName(name: string): boolean {
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return false;
+  const ext = name.slice(dot + 1).toLowerCase();
+  return ext === "ltpkg" || SUPPORTED_AUDIO_EXTENSIONS.has(ext);
+}
+
 export type ExternalDropKind = "package" | "audio" | "mixed" | "unsupported" | "unknown";
 
 export type ExternalDropPreview = {
