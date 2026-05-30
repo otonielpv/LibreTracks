@@ -2565,6 +2565,19 @@ export function TransportPanelContent() {
   // header pane). Each entry carries the clip name + the track name so the
   // cell can label which track the clip belongs to without a separate
   // label column.
+  // Effective BPM at the start of each song. The compact view shows this
+  // next to the song name so the user reads "what tempo plays here" at a
+  // glance, regardless of whether the song has its own tempo marker or
+  // inherits the global one.
+  const bpmByRegion = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (!song) return map;
+    for (const region of song.regions) {
+      map[region.id] = getEffectiveBpmAt(song, region.startSeconds);
+    }
+    return map;
+  }, [song]);
+
   const clipsByRegion = useMemo(() => {
     const byRegion: Record<
       string,
@@ -2809,6 +2822,73 @@ export function TransportPanelContent() {
       });
     },
     [runAction, scheduleRegionJumpWithOptions],
+  );
+
+  // Rename song via window.prompt, the same way the DAW track header's
+  // "Renombrar" context-menu entry works. We keep the song's existing
+  // bounds + transpose; only the name changes.
+  const handleCompactRenameSong = useCallback(
+    (regionId: string) => {
+      const currentRegion = songRef.current?.regions.find(
+        (region) => region.id === regionId,
+      );
+      if (!currentRegion) return;
+      const nextName = window
+        .prompt("Renombrar canción", currentRegion.name)
+        ?.trim();
+      if (!nextName || nextName === currentRegion.name) return;
+      void runAction(async () => {
+        const snapshot = await updateSongRegion(
+          regionId,
+          nextName,
+          currentRegion.startSeconds,
+          currentRegion.endSeconds,
+        );
+        applyPlaybackSnapshot(snapshot);
+        setStatus(`Canción renombrada como "${nextName}"`);
+      });
+    },
+    [applyPlaybackSnapshot, runAction, setStatus],
+  );
+
+  // Set BPM for a song. Always inserts (or replaces) a tempo marker at the
+  // song's start_seconds — we agreed this stays consistent whether the song
+  // is the project's first or not, so reordering songs never silently
+  // changes which tempo applies to which section. Backend's
+  // upsertSongTempoMarker semantics handle the "create-or-replace" part.
+  const handleCompactSetSongBpm = useCallback(
+    (regionId: string) => {
+      const currentSong = songRef.current;
+      const currentRegion = currentSong?.regions.find(
+        (region) => region.id === regionId,
+      );
+      if (!currentSong || !currentRegion) return;
+      const currentBpm = getEffectiveBpmAt(
+        currentSong,
+        currentRegion.startSeconds,
+      );
+      const raw = window.prompt(
+        `BPM de "${currentRegion.name}"`,
+        currentBpm.toFixed(2),
+      );
+      if (raw === null) return;
+      const nextBpm = Number(raw.replace(",", "."));
+      if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
+        setStatus("BPM inválido");
+        return;
+      }
+      void runAction(async () => {
+        const snapshot = await upsertSongTempoMarker(
+          currentRegion.startSeconds,
+          nextBpm,
+        );
+        applyPlaybackSnapshot(snapshot);
+        setStatus(
+          `BPM de "${currentRegion.name}" ajustado a ${nextBpm.toFixed(2)}`,
+        );
+      });
+    },
+    [applyPlaybackSnapshot, runAction, setStatus],
   );
 
   useEffect(() => {
@@ -9180,6 +9260,9 @@ export function TransportPanelContent() {
                       onMoveClipToTrack={handleCompactMoveClipToTrack}
                       onDeleteClip={handleCompactDeleteClip}
                       onPlaySong={handleCompactPlaySong}
+                      onRenameSong={handleCompactRenameSong}
+                      onSetSongBpm={handleCompactSetSongBpm}
+                      bpmByRegion={bpmByRegion}
                       onSnapshotApplied={applyPlaybackSnapshot}
                     />
                   ) : null}

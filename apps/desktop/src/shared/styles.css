@@ -4541,6 +4541,22 @@ textarea {
   text-overflow: ellipsis;
 }
 
+/* Compact BPM badge next to the song name. Reads the effective BPM at the
+   song's start_seconds — either a tempo marker placed there explicitly or
+   the global project bpm by inheritance. Uppercase letters + small font
+   keep it from competing with the song name for attention. */
+.lt-compact-song-bpm {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.4rem;
+  color: #57f1db;
+  background: rgba(87, 241, 219, 0.12);
+  border: 1px solid rgba(87, 241, 219, 0.35);
+  border-radius: 2px;
+  font: 600 9px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
 .lt-compact-song-play {
   flex: 0 0 auto;
   width: 1.4rem;

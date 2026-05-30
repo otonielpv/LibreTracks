@@ -76,6 +76,19 @@ type CompactViewProps = {
    * song-jump configuration (trigger + transition mode) — same path the
    * Shift+digit keyboard shortcut uses. */
   onPlaySong: (regionId: string, regionName: string) => void;
+  /** Fired from the song-column right-click menu. Renames the song
+   * region; the prompt UI lives in the parent. */
+  onRenameSong: (regionId: string) => void;
+  /** Fired from the song-column right-click menu. Sets the BPM at the
+   * song's start by inserting (or replacing) a tempo marker — never
+   * touches the global project BPM, so reordering songs never silently
+   * changes which tempo applies to which section. */
+  onSetSongBpm: (regionId: string) => void;
+  /** Effective BPM at each song's start_seconds, computed by the parent so
+   * the column reads "what tempo plays here" without re-doing the marker
+   * resolution at render time. Empty / missing values fall back to the
+   * project's global bpm via the visible badge. */
+  bpmByRegion: Record<string, number>;
   /** Fired after a successful createEmptySong so the snapshot is applied
    * by whoever owns runAction / applyPlaybackSnapshot upstream. */
   onSnapshotApplied: (snapshot: TransportSnapshot) => void;
@@ -113,6 +126,9 @@ function CompactViewComponent({
   onMoveClipToTrack,
   onDeleteClip,
   onPlaySong,
+  onRenameSong,
+  onSetSongBpm,
+  bpmByRegion,
   onSnapshotApplied,
 }: CompactViewProps) {
   const handleAddSong = useCallback(async () => {
@@ -160,6 +176,9 @@ function CompactViewComponent({
             onMoveClipToTrack={onMoveClipToTrack}
             onDeleteClip={onDeleteClip}
             onPlay={() => onPlaySong(region.id, region.name)}
+            onRename={() => onRenameSong(region.id)}
+            onSetBpm={() => onSetSongBpm(region.id)}
+            bpm={bpmByRegion[region.id]}
           />
         ))}
         <button
@@ -198,6 +217,9 @@ type CompactSongColumnProps = {
   onMoveClipToTrack: (clipId: string, targetTrackId: string) => void;
   onDeleteClip: (clipId: string) => void;
   onPlay: () => void;
+  onRename: () => void;
+  onSetBpm: () => void;
+  bpm: number | undefined;
 };
 
 function CompactSongColumnComponent({
@@ -212,6 +234,9 @@ function CompactSongColumnComponent({
   onMoveClipToTrack,
   onDeleteClip,
   onPlay,
+  onRename,
+  onSetBpm,
+  bpm,
 }: CompactSongColumnProps) {
   const [contextMenu, setContextMenu] = useState<{
     clipId: string;
@@ -300,9 +325,12 @@ function CompactSongColumnComponent({
       <CompactSongHeader
         region={region}
         isActive={isActive}
+        bpm={bpm}
         onMasterGainChange={onMasterGainChange}
         onMasterGainCommit={onMasterGainCommit}
         onPlay={onPlay}
+        onRename={onRename}
+        onSetBpm={onSetBpm}
       />
       <div className="lt-compact-song-clip-stack">
         {clips.length === 0 ? (
@@ -387,9 +415,12 @@ const CompactSongColumn = memo(CompactSongColumnComponent);
 type CompactSongHeaderProps = {
   region: SongRegionSummary;
   isActive: boolean;
+  bpm: number | undefined;
   onMasterGainChange: (gain: number) => void;
   onMasterGainCommit: () => void;
   onPlay: () => void;
+  onRename: () => void;
+  onSetBpm: () => void;
 };
 
 // Master fader snaps to unity (1.0) within ±3% of full range (0..2), so the
@@ -408,10 +439,35 @@ function applyMasterSnap(value: number, bypass: boolean): number {
 function CompactSongHeaderComponent({
   region,
   isActive,
+  bpm,
   onMasterGainChange,
   onMasterGainCommit,
   onPlay,
+  onRename,
+  onSetBpm,
 }: CompactSongHeaderProps) {
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [contextMenu]);
+  const openMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ x: event.clientX, y: event.clientY });
+  }, []);
   // Track Shift state via window listeners so the slider's onChange can
   // read it; same pattern as the CompactMixerStrip volume / pan.
   const shiftPressedRef = useRef(false);
@@ -493,6 +549,7 @@ function CompactSongHeaderComponent({
   return (
     <div
       className={`lt-compact-song-header ${isActive ? "is-active" : ""}`}
+      onContextMenu={openMenu}
     >
       <div className="lt-compact-song-name-row">
         <button
@@ -507,7 +564,43 @@ function CompactSongHeaderComponent({
         <div className="lt-compact-song-name" title={region.name}>
           {region.name}
         </div>
+        {bpm !== undefined ? (
+          <div
+            className="lt-compact-song-bpm"
+            title={`BPM efectivo al inicio de la canción`}
+          >
+            {bpm.toFixed(bpm % 1 === 0 ? 0 : 2)} BPM
+          </div>
+        ) : null}
       </div>
+      {contextMenu ? (
+        <div
+          className="lt-compact-clip-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="lt-compact-clip-menu-item"
+            onClick={() => {
+              setContextMenu(null);
+              onRename();
+            }}
+          >
+            Renombrar canción
+          </button>
+          <button
+            type="button"
+            className="lt-compact-clip-menu-item"
+            onClick={() => {
+              setContextMenu(null);
+              onSetBpm();
+            }}
+          >
+            Cambiar BPM…
+          </button>
+        </div>
+      ) : null}
       <div className="lt-compact-song-master">
         <div className="lt-compact-song-meter" aria-hidden="true">
           <div className="lt-compact-song-meter-fill" ref={meterFillRef} />
