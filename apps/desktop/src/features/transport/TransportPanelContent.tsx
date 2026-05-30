@@ -250,6 +250,7 @@ import {
   findPreviousFolderTrack,
   findSection,
   findTrack,
+  formatBpmDraft,
   formatClock,
   formatMidiBinding,
   formatMusicalPosition,
@@ -3429,7 +3430,9 @@ export function TransportPanelContent() {
     // from an unrelated mutation) would yank the value out from under them.
     if (!tempoDraftFocusedRef.current && !tempoDraftDirtyRef.current) {
       setTempoDraft(
-        String(getEffectiveBpmAt(song, displayPositionSecondsRef.current)),
+        formatBpmDraft(
+          getEffectiveBpmAt(song, displayPositionSecondsRef.current),
+        ),
       );
     }
     setTimeSignatureDraft(getSongBaseTimeSignature(song));
@@ -4834,7 +4837,7 @@ export function TransportPanelContent() {
             await refreshSongView({ includeWaveforms: false, sync: true });
             applyPlaybackSnapshot(nextSnapshot);
             tempoDraftDirtyRef.current = false;
-            setTempoDraft(String(nextBpm));
+            setTempoDraft(formatBpmDraft(nextBpm));
             setStatus(
               positionSeconds <= 0.0001
                 ? t("transport.status.baseTimelineBpmUpdated", {
@@ -4997,7 +5000,7 @@ export function TransportPanelContent() {
             await refreshSongView({ includeWaveforms: false, sync: true });
             applyPlaybackSnapshot(nextSnapshot);
             tempoDraftDirtyRef.current = false;
-            setTempoDraft(String(nextBpm));
+            setTempoDraft(formatBpmDraft(nextBpm));
             setStatus(
               t("transport.status.tempoMarkerUpdated", {
                 bpm: nextBpm.toFixed(2),
@@ -8945,7 +8948,7 @@ export function TransportPanelContent() {
               !Number.isFinite(clampedBpm) ||
               clampedBpm === currentBpm
             ) {
-              setTempoDraft(String(currentBpm));
+              setTempoDraft(formatBpmDraft(currentBpm));
               return;
             }
 

@@ -670,6 +670,23 @@ export function isTimelineZoomTarget(target: EventTarget | null) {
     : false;
 }
 
+/**
+ * Format a BPM value for the editable tempo input in the topbar. The
+ * raw effective BPM coming from the engine can be a long irrational
+ * float (e.g. after a varispeed or after a tempo marker interpolation)
+ * which renders ugly when stringified directly. We display:
+ *   - integers as is (`120`)
+ *   - non-integers rounded to 2 decimals (`96.41`)
+ * The user can still type any precision they want; this formatter
+ * only controls how the engine value is reflected back when the
+ * input is not being edited.
+ */
+export function formatBpmDraft(bpm: number): string {
+  if (!Number.isFinite(bpm)) return "";
+  if (Number.isInteger(bpm)) return String(bpm);
+  return bpm.toFixed(2);
+}
+
 export function isTrackInfoScrollTarget(target: EventTarget | null) {
   return target instanceof HTMLElement
     ? Boolean(target.closest(".lt-track-header"))
