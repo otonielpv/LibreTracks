@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 
 import {
@@ -45,13 +46,49 @@ type CompactMixerProps = {
   tracks: TrackSummary[];
   audioRoutingOptions: Array<{ value: string; label: string }>;
   handlers: CompactMixerHandlers;
+  /** Fire the same DAW track context menu when the user right-clicks a
+   * strip. The parent owns the menu so the seven existing actions
+   * (insert, rename, color, delete, indent, unindent, …) reuse one
+   * implementation. */
+  onTrackContextMenu: (
+    event: ReactMouseEvent<HTMLDivElement>,
+    trackId: string,
+  ) => void;
 };
+
+/** Default colour applied to a track strip when track.color is null, the
+ * way Reaper paints unset tracks with a neutral grey rather than leaving
+ * them transparent. Folder tracks get a slightly different default so the
+ * eye can still tell folder strips apart from leaf audio strips when no
+ * user colour is configured anywhere in the project. */
+const DEFAULT_TRACK_ACCENT = "rgba(186, 202, 197, 0.35)";
+const DEFAULT_FOLDER_ACCENT = "rgba(87, 241, 219, 0.55)";
 
 function CompactMixerComponent({
   tracks,
   audioRoutingOptions,
   handlers,
+  onTrackContextMenu,
 }: CompactMixerProps) {
+  // Build a (childTrackId → parent colour / parent name) lookup once so each
+  // strip can render its Reaper-style folder cue (a thin coloured ribbon on
+  // the left edge + a tiny "↳ Parent" hint under the strip name) without
+  // having to walk the project's track tree at render time.
+  const trackById = new Map(tracks.map((track) => [track.id, track]));
+  const parentInfoByTrackId = new Map<
+    string,
+    { color: string; name: string }
+  >();
+  for (const track of tracks) {
+    if (!track.parentTrackId) continue;
+    const parent = trackById.get(track.parentTrackId);
+    if (!parent) continue;
+    parentInfoByTrackId.set(track.id, {
+      color: parent.color ?? DEFAULT_FOLDER_ACCENT,
+      name: parent.name,
+    });
+  }
+
   return (
     <div className="lt-compact-mixer">
       <div className="lt-compact-mixer-strips">
@@ -61,6 +98,8 @@ function CompactMixerComponent({
             track={track}
             audioRoutingOptions={audioRoutingOptions}
             handlers={handlers}
+            parentInfo={parentInfoByTrackId.get(track.id) ?? null}
+            onContextMenu={onTrackContextMenu}
           />
         ))}
       </div>
@@ -74,6 +113,11 @@ type CompactMixerStripProps = {
   track: TrackSummary;
   audioRoutingOptions: Array<{ value: string; label: string }>;
   handlers: CompactMixerHandlers;
+  parentInfo: { color: string; name: string } | null;
+  onContextMenu: (
+    event: ReactMouseEvent<HTMLDivElement>,
+    trackId: string,
+  ) => void;
 };
 
 // Snap thresholds: when the slider lands within this fraction of the
@@ -100,7 +144,17 @@ function CompactMixerStripComponent({
   track,
   audioRoutingOptions,
   handlers,
+  parentInfo,
+  onContextMenu,
 }: CompactMixerStripProps) {
+  const isFolder = track.kind === "folder";
+  // Track accent (drives --track-accent CSS var). If the track has a user
+  // colour use it; otherwise pick a neutral default that's visible but
+  // doesn't compete for attention. Folder strips get a slightly bolder
+  // default so they stand out from leaf tracks even before the user
+  // colours anything.
+  const trackAccent =
+    track.color ?? (isFolder ? DEFAULT_FOLDER_ACCENT : DEFAULT_TRACK_ACCENT);
   // Mirror the DAW track header's optimistic-state pattern: while the user
   // drags the volume or pan slider the live value lives in the store; the
   // committed value lives on `track`. We read the optimistic value (if any)
@@ -192,16 +246,38 @@ function CompactMixerStripComponent({
 
   return (
     <div
-      className="lt-compact-mixer-strip"
+      className={`lt-compact-mixer-strip ${
+        isFolder ? "is-folder" : ""
+      } ${parentInfo ? "is-child" : ""}`}
       style={
-        track.color
-          ? ({ ["--track-accent" as string]: track.color } as React.CSSProperties)
-          : undefined
+        {
+          ["--track-accent" as string]: trackAccent,
+          ...(parentInfo
+            ? { ["--parent-accent" as string]: parentInfo.color }
+            : null),
+        } as React.CSSProperties
       }
+      onContextMenu={(event) => onContextMenu(event, track.id)}
     >
       <div className="lt-compact-mixer-strip-name" title={track.name}>
+        {isFolder ? (
+          <span
+            className="lt-compact-mixer-folder-icon material-symbols-outlined"
+            aria-hidden="true"
+          >
+            folder
+          </span>
+        ) : null}
         {track.name}
       </div>
+      {parentInfo ? (
+        <div
+          className="lt-compact-mixer-strip-parent"
+          title={`Dentro de ${parentInfo.name}`}
+        >
+          ↳ {parentInfo.name}
+        </div>
+      ) : null}
 
       <div className="lt-compact-mixer-strip-toggles">
         <button

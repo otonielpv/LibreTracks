@@ -4757,8 +4757,13 @@ textarea {
 }
 
 .lt-compact-mixer-strip {
-  /* --track-accent is set inline from the track's color when present. */
-  --track-accent: rgba(186, 202, 197, 0.18);
+  /* --track-accent is set inline from the track's color (or a neutral
+     default from the React side). --parent-accent is set on child strips
+     so a thin coloured ribbon on the left identifies the folder the track
+     belongs to, the way Reaper's mixer does. */
+  --track-accent: rgba(186, 202, 197, 0.35);
+  --parent-accent: transparent;
+  position: relative;
   flex: 0 0 5.2rem;
   display: flex;
   flex-direction: column;
@@ -4766,10 +4771,39 @@ textarea {
   padding: 0.45rem 0.45rem 0.5rem;
   background: rgb(14 17 18 / 0.85);
   border: 1px solid rgba(186, 202, 197, 0.1);
-  border-left: 3px solid var(--track-accent);
+  border-left: 4px solid var(--track-accent);
   border-radius: 2px;
   height: 100%;
   box-sizing: border-box;
+  cursor: context-menu;
+}
+
+/* Folder strips: subtly darker background + slightly thicker left accent so
+   the eye can tell them apart from leaf audio strips even before any user
+   colour is applied. */
+.lt-compact-mixer-strip.is-folder {
+  background: rgb(10 13 14 / 0.92);
+  border-left-width: 5px;
+}
+
+/* Child-of-folder strips: a second, thinner ribbon sits next to the regular
+   accent and is painted in the parent track's colour. Reaper-style cue —
+   compact, doesn't claim screen space, and works at every nesting level. */
+.lt-compact-mixer-strip.is-child::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 4px;
+  background: var(--parent-accent);
+  pointer-events: none;
+}
+
+.lt-compact-mixer-strip.is-child {
+  /* Push content right so the parent ribbon doesn't overlap the strip's
+     own border-left accent visually. */
+  padding-left: 0.6rem;
 }
 
 .lt-compact-mixer-strip-name {
@@ -4781,6 +4815,27 @@ textarea {
   text-overflow: ellipsis;
   min-height: 1.1rem;
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.lt-compact-mixer-folder-icon {
+  font-size: 12px;
+  color: #57f1db;
+}
+
+/* Sub-text under the strip name showing the folder a child track lives in.
+   Reaper convention — a quiet hint at the relationship without pulling
+   attention away from the track itself. */
+.lt-compact-mixer-strip-parent {
+  color: rgba(186, 202, 197, 0.55);
+  font: 500 9px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: -0.2rem;
 }
 
 .lt-compact-mixer-strip-toggles {

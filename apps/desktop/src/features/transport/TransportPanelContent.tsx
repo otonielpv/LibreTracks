@@ -9251,6 +9251,7 @@ export function TransportPanelContent() {
                         onCommitPan: handleTrackHeaderPanCommit,
                         onAudioToChange: handleTrackAudioToChange,
                       }}
+                      onTrackContextMenu={handleTrackHeaderContextMenu}
                       onMasterGainChange={handleCompactMasterGainChange}
                       onMasterGainCommit={handleCompactMasterGainCommit}
                       onDropOsFilesIntoSong={handleCompactDropOsFilesIntoSong}

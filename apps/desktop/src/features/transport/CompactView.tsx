@@ -53,6 +53,13 @@ type CompactViewProps = {
   audioRoutingOptions: Array<{ value: string; label: string }>;
   /** Mixer handlers — the very same callbacks the DAW track header uses. */
   mixerHandlers: CompactMixerHandlers;
+  /** Right-click on a mixer strip routes to the parent's existing track
+   * context-menu handler (the same one wired to the DAW track header),
+   * so the seven actions there are reused without duplication. */
+  onTrackContextMenu: (
+    event: ReactMouseEvent<HTMLDivElement>,
+    trackId: string,
+  ) => void;
   /** Fired when the user wants to commit the master gain for a region. */
   onMasterGainChange: (regionId: string, gain: number) => void;
   onMasterGainCommit: (regionId: string) => void;
@@ -119,6 +126,7 @@ function CompactViewComponent({
   clipsByRegion,
   audioRoutingOptions,
   mixerHandlers,
+  onTrackContextMenu,
   onMasterGainChange,
   onMasterGainCommit,
   onDropOsFilesIntoSong,
@@ -196,6 +204,7 @@ function CompactViewComponent({
         tracks={tracks}
         audioRoutingOptions={audioRoutingOptions}
         handlers={mixerHandlers}
+        onTrackContextMenu={onTrackContextMenu}
       />
     </div>
   );
