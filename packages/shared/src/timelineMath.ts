@@ -438,6 +438,64 @@ export function snapToTimelineGrid(
   return timebaseFrameDeltaToSeconds(Math.round(positionFrames / beatFrames) * beatFrames);
 }
 
+/**
+ * Returns the timeline-time of the first downbeat (bar boundary) at or
+ * after `seconds`. Walks the project's tempo regions so the answer
+ * respects every tempo / time-signature change between `seconds` and
+ * the next bar. Used by the compact view's `.ltpkg` import to land
+ * imported songs on a real grid bar instead of "last region end + one
+ * bar at the global BPM", which drifts off-grid whenever the previous
+ * song ended under a different tempo marker.
+ */
+export function nextDownbeatAfter(
+  seconds: number,
+  bpm: number,
+  timeSignature: string,
+  regions: TimelineRegion[] = [],
+): number {
+  if (regions.length > 0) {
+    const resolvedRegions = normalizeTimelineRegions({
+      durationSeconds: Math.max(
+        0,
+        ...regions.map((region) => region.endSeconds),
+        seconds,
+      ),
+      bpm,
+      timeSignature,
+      regions,
+    });
+    const region =
+      resolveTimelineRegionAtSeconds(seconds, resolvedRegions) ??
+      resolvedRegions[resolvedRegions.length - 1];
+    if (region) {
+      const localFrames = secondsToTimebaseFrames(seconds - region.startSeconds);
+      const totalBeats =
+        region.cumulativeBarsStart * region.beatsPerBar +
+        localFrames / region.beatFrames;
+      const totalBars = totalBeats / region.beatsPerBar;
+      // Ceil to land *on or after* the requested seconds. The epsilon
+      // prevents floating drift from spuriously bumping an already-on-bar
+      // position to the next one.
+      const targetBars = Math.ceil(totalBars - MUSICAL_POSITION_EPSILON);
+      const targetTotalBeats = targetBars * region.beatsPerBar;
+      const localTargetFrames =
+        (targetTotalBeats - region.cumulativeBarsStart * region.beatsPerBar) *
+        region.beatFrames;
+      return (
+        region.startSeconds + timebaseFramesToSeconds(localTargetFrames)
+      );
+    }
+  }
+
+  const beatFrames = getBeatFrames(bpm, timeSignature);
+  const { beatsPerBar } = parseTimeSignature(timeSignature);
+  const barFrames = beatFrames * beatsPerBar;
+  const positionFrames = secondsToTimebaseFrames(Math.max(0, seconds));
+  const targetFrames =
+    Math.ceil(positionFrames / barFrames - MUSICAL_POSITION_EPSILON) * barFrames;
+  return timebaseFramesToSeconds(targetFrames);
+}
+
 function normalizeTimelineRegions(
   params: Pick<TimelineGridParams, "durationSeconds" | "bpm" | "timeSignature" | "regions">,
 ) {

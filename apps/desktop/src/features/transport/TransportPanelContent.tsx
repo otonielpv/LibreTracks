@@ -135,9 +135,10 @@ import {
   clampCameraX,
   clientXToTimelineSeconds,
   getCumulativeMusicalPosition,
+  getMaxCameraX,
   getTimelineWorkspaceEndSeconds,
   getZoomLevelDelta,
-  getMaxCameraX,
+  nextDownbeatAfter,
   screenXToSeconds,
   secondsToScreenX,
   TIMELINE_ZOOM_MULTIPLIER,
@@ -2862,10 +2863,17 @@ export function TransportPanelContent() {
     [applyPlaybackSnapshot, runAction, song],
   );
 
-  // Imports a .ltpkg as a new song appended at the end of the project. The
-  // insert position mirrors createEmptySong: anchor at max(end) + one bar of
-  // silence, where bar length is derived from the project's global bpm.
-  // Returns the position used so the drop-from-OS path can log it.
+  // Imports a .ltpkg as a new song appended at the end of the project.
+  // The previous logic was "lastEnd + one bar at the project's global
+  // BPM", which broke as soon as the last region's end didn't fall on a
+  // downbeat (because the user trimmed the region, or because a tempo
+  // marker changed the grid mid-song). The correct anchor is the first
+  // real downbeat at or after `lastEnd`, computed from the project's
+  // tempo regions — that way the imported song always starts on a bar
+  // line regardless of how the previous song ended.
+  //
+  // The first song in an empty project still anchors at 0 (no leading
+  // silence), same rule as create_empty_song.
   const runCompactSongPackageImport = useCallback(
     async (packagePath: string) => {
       const currentSong = song;
@@ -2874,9 +2882,15 @@ export function TransportPanelContent() {
         (acc, region) => Math.max(acc, region.endSeconds),
         0,
       );
-      const bpm = Math.max(1, getSongBaseBpm(currentSong));
-      const barSeconds = (60 / bpm) * 4;
-      const insertAt = lastEnd + barSeconds;
+      const isFirstSong = currentSong.regions.length === 0;
+      const insertAt = isFirstSong
+        ? 0
+        : nextDownbeatAfter(
+            lastEnd,
+            getSongBaseBpm(currentSong),
+            getSongBaseTimeSignature(currentSong),
+            buildSongTempoRegions(currentSong),
+          );
       await handleDroppedSongPackagePath(packagePath, insertAt);
     },
     // handleDroppedSongPackagePath is a function declaration in this

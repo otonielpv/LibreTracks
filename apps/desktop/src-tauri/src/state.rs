@@ -2328,16 +2328,20 @@ impl DesktopSession {
             .fold(0.0_f64, f64::max);
 
         // The first song in a fresh project starts at bar 1 (no leading
-        // silence) — anything else would push it to bar 2 and look like a
-        // bug to the user. Subsequent songs leave one bar of silence
-        // between themselves and the previous song's end so the boundary
-        // is visible and the transport has time to react on song jumps.
+        // silence). For subsequent songs we want the boundary to be on a
+        // real downbeat — using `lastEnd + one bar at the local BPM`
+        // breaks when the previous song ended off-grid (trimmed region,
+        // mid-bar tempo change, etc.), so we ask the song's tempo map
+        // for the next downbeat at or after `anchor_source_seconds`.
         // Both offsets stay in source-time so they survive warp without
         // shifting visually.
-        let bar_seconds = bar_seconds_at(&song, anchor_source_seconds);
         let is_first_region = song.regions.is_empty();
-        let leading_silence = if is_first_region { 0.0 } else { bar_seconds };
-        let start_seconds = anchor_source_seconds + leading_silence;
+        let start_seconds = if is_first_region {
+            0.0
+        } else {
+            next_downbeat_after_in_song(&song, anchor_source_seconds)
+        };
+        let bar_seconds = bar_seconds_at(&song, start_seconds);
         let end_seconds = start_seconds + bar_seconds;
 
         let region_index = song.regions.len();
@@ -6023,6 +6027,66 @@ fn bar_seconds_at(song: &Song, position_seconds: f64) -> f64 {
         .filter(|n| *n > 0)
         .unwrap_or(4) as f64;
     (beats_per_bar * 60.0) / bpm
+}
+
+/// Returns the first downbeat (bar boundary) at or after `position_seconds`,
+/// walking the song's tempo markers so the answer respects every tempo
+/// change between the anchor and the next bar. Falls back to the song's
+/// global BPM when there are no tempo markers. Used by create_empty_song
+/// to land new songs on a real grid bar instead of "lastEnd + one bar at
+/// the global BPM", which drifts off-grid whenever the previous song
+/// ended under a different tempo marker or didn't end exactly on a bar.
+fn next_downbeat_after_in_song(song: &Song, position_seconds: f64) -> f64 {
+    if position_seconds <= 0.0 {
+        return 0.0;
+    }
+    // Build the set of tempo segments: from each tempo marker (sorted by
+    // start) to the next marker's start (or +infinity for the last one).
+    // Within a segment the BPM is constant so the local downbeat math is
+    // a simple rounding.
+    let mut markers = song.tempo_markers.clone();
+    markers.sort_by(|a, b| {
+        a.start_seconds
+            .partial_cmp(&b.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let beats_per_bar = song
+        .time_signature
+        .split_once('/')
+        .and_then(|(num, _)| num.trim().parse::<u32>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(4) as f64;
+
+    // Walk segments in order, accumulating bar count at each segment
+    // boundary. The current segment is the one whose start_seconds is the
+    // greatest <= position_seconds (or the implicit "before-any-marker"
+    // segment anchored at 0 with the song's base BPM).
+    let mut segment_start_seconds = 0.0_f64;
+    let mut segment_start_bars = 0.0_f64;
+    let mut segment_bpm = song.bpm.max(1.0);
+
+    for marker in &markers {
+        if marker.start_seconds > position_seconds {
+            break;
+        }
+        let span = marker.start_seconds - segment_start_seconds;
+        let bar_seconds = (beats_per_bar * 60.0) / segment_bpm.max(1.0);
+        let span_bars = if bar_seconds > 0.0 { span / bar_seconds } else { 0.0 };
+        segment_start_bars += span_bars;
+        segment_start_seconds = marker.start_seconds;
+        segment_bpm = marker.bpm.max(1.0);
+    }
+
+    let segment_bar_seconds = (beats_per_bar * 60.0) / segment_bpm.max(1.0);
+    if segment_bar_seconds <= 0.0 {
+        return position_seconds;
+    }
+    let local_bars = (position_seconds - segment_start_seconds) / segment_bar_seconds;
+    // Ceil with a tiny epsilon so positions already on a downbeat don't
+    // jump to the next one due to floating drift.
+    let target_local_bars = (local_bars - 1e-9).ceil().max(0.0);
+    segment_start_seconds + target_local_bars * segment_bar_seconds
 }
 
 fn refresh_song_duration(song: &mut Song) {
