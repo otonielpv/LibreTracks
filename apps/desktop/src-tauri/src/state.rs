@@ -2327,10 +2327,17 @@ impl DesktopSession {
             .map(|region| region.end_seconds)
             .fold(0.0_f64, f64::max);
 
-        // One bar of silence + one bar of region, both in source-time so
-        // they survive warp without shifting visually.
+        // The first song in a fresh project starts at bar 1 (no leading
+        // silence) — anything else would push it to bar 2 and look like a
+        // bug to the user. Subsequent songs leave one bar of silence
+        // between themselves and the previous song's end so the boundary
+        // is visible and the transport has time to react on song jumps.
+        // Both offsets stay in source-time so they survive warp without
+        // shifting visually.
         let bar_seconds = bar_seconds_at(&song, anchor_source_seconds);
-        let start_seconds = anchor_source_seconds + bar_seconds;
+        let is_first_region = song.regions.is_empty();
+        let leading_silence = if is_first_region { 0.0 } else { bar_seconds };
+        let start_seconds = anchor_source_seconds + leading_silence;
         let end_seconds = start_seconds + bar_seconds;
 
         let region_index = song.regions.len();
