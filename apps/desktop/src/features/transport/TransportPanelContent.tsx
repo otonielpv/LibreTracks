@@ -3182,10 +3182,45 @@ export function TransportPanelContent() {
   const handleCompactPlaySong = useCallback(
     (regionId: string, regionName: string) => {
       void runAction(async () => {
-        await scheduleRegionJumpWithOptions(regionId, regionName);
+        // If the transport is already running, route through the
+        // shared scheduler so the song-jump respects the global
+        // transition mode (immediate / next marker / region end / etc.)
+        // configured in the toolbar — same path the Shift+digit
+        // shortcut takes.
+        //
+        // If the transport is NOT running yet, scheduling a jump
+        // would just queue it and the user wouldn't hear anything.
+        // Instead, jump the playhead to the song's start and start
+        // playback. This matches the natural expectation of "I
+        // clicked play on this song, please play it".
+        if (playbackState === "playing") {
+          await scheduleRegionJumpWithOptions(regionId, regionName);
+          return;
+        }
+        const targetRegion = songRef.current?.regions.find(
+          (region) => region.id === regionId,
+        );
+        if (!targetRegion) return;
+        await performSeek(targetRegion.startSeconds);
+        const nextSnapshot = await playTransport();
+        applyPlaybackSnapshot(nextSnapshot);
+        setStatus(
+          t("transport.status.songStarted", {
+            name: regionName,
+            defaultValue: `Reproduciendo ${regionName}`,
+          }),
+        );
       });
     },
-    [runAction, scheduleRegionJumpWithOptions],
+    [
+      applyPlaybackSnapshot,
+      performSeek,
+      playbackState,
+      runAction,
+      scheduleRegionJumpWithOptions,
+      setStatus,
+      t,
+    ],
   );
 
   // Rename song via window.prompt, the same way the DAW track header's
