@@ -392,16 +392,43 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         auto [_backend, device_name] = split_device_id(request.device_id);
         setup.outputDeviceName = juce::String(device_name);
     } else {
-        // Fallback path: explicitly clear any device name carried over
-        // from a previous failed open attempt. Without this JUCE
-        // would try to open the stale name on the newly-selected
-        // backend (typical case: the user picked a DirectSound device
-        // that failed; the fallback switches to WASAPI but inherits
-        // the DirectSound name, so WASAPI returns "No audio device
-        // opened after setup" instead of opening the WASAPI default).
-        // Empty name + setAudioDeviceSetup makes JUCE pick the new
-        // backend's actual default.
-        setup.outputDeviceName = juce::String();
+        // "System default" path. The user asked for whatever Windows
+        // currently treats as the default playback device.
+        //
+        // We can't just leave `outputDeviceName` empty here — JUCE
+        // interprets the empty string as the literal device name
+        // "" and refuses to open anything, which is exactly the
+        // reported bug ("predeterminado no funciona, pero el Razer
+        // concreto si").
+        //
+        // The correct way to ask JUCE for the OS default is to
+        // resolve the current backend's default device NAME ourselves
+        // (Windows updates this automatically when the user changes
+        // the system default device — e.g. swaps to the Razer
+        // headset), then set `outputDeviceName` to that string.
+        // setAudioDeviceSetup then opens that specific device, which
+        // is what "system default" means in practice.
+        auto* current_type = impl_->juce_manager.getCurrentDeviceTypeObject();
+        if (current_type) {
+            // Make sure scanForDevices ran on the now-current type so
+            // getDefaultDeviceIndex returns a meaningful position even
+            // right after we switched backends.
+            current_type->scanForDevices();
+            const auto names = current_type->getDeviceNames(false);
+            const int default_index =
+                current_type->getDefaultDeviceIndex(false);
+            if (default_index >= 0 && default_index < names.size()) {
+                setup.outputDeviceName = names[default_index];
+            } else if (names.size() > 0) {
+                // No explicit default — fall back to the first device
+                // the driver exposes.
+                setup.outputDeviceName = names[0];
+            } else {
+                setup.outputDeviceName = juce::String();
+            }
+        } else {
+            setup.outputDeviceName = juce::String();
+        }
     }
     // Always reset input — we are an output-only app, but JUCE's
     // setAudioDeviceSetup will refuse the call if input config is
