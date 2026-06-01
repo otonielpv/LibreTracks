@@ -29,6 +29,8 @@ using json = nlohmann::json;
 
 namespace {
 
+constexpr float kMaxMetronomeVolume = 2.5f;
+
 bool env_flag_enabled(const char* name) {
     const char* raw = std::getenv(name);
     if (!raw) return false;
@@ -1277,7 +1279,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetMetronomeVolume>) {
-            metronome_config_.volume = std::clamp(c.volume, 0.0f, 1.0f);
+            metronome_config_.volume = std::clamp(c.volume, 0.0f, kMaxMetronomeVolume);
             if (mixer_) mixer_->set_metronome_volume(metronome_config_.volume);
             return Result<void>::ok();
         }
@@ -1288,7 +1290,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSetMetronomeConfig>) {
             metronome_config_.enabled = c.enabled;
-            metronome_config_.volume = std::clamp(c.volume, 0.0f, 1.0f);
+            metronome_config_.volume = std::clamp(c.volume, 0.0f, kMaxMetronomeVolume);
             metronome_config_.output_route = c.route.empty() ? std::string("master") : c.route;
             if (mixer_) mixer_->set_metronome_config(metronome_config_);
             return Result<void>::ok();

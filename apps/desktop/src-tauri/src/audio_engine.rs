@@ -27,7 +27,12 @@ use crate::{error::DesktopError, settings::AppSettings};
 
 const ENGINE_SAMPLE_RATE: f64 = 48_000.0;
 const ENGINE_V2_FALLBACK_OUTPUT_CHANNELS: usize = 2;
+const METRONOME_OUTPUT_GAIN: f64 = 2.5;
 pub(crate) const ENGINE_WAVEFORM_RESOLUTION_FRAMES: usize = 256;
+
+fn metronome_engine_volume(settings_volume: f64) -> f32 {
+    (settings_volume.clamp(0.0, 1.0) * METRONOME_OUTPUT_GAIN) as f32
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1038,7 +1043,7 @@ impl AudioController {
             .fetch_add(1, Ordering::Relaxed);
         self.with_engine_state("set_metronome_volume_realtime", None, |engine, _state| {
             engine.send_command(&EngineCommand::SetMetronomeVolume {
-                volume: volume.clamp(0.0, 1.0) as f32,
+                volume: metronome_engine_volume(volume),
             })?;
             Ok(())
         })
@@ -1249,7 +1254,7 @@ impl AudioController {
             // genuine engine bug, so we DO propagate.
             engine.send_command(&EngineCommand::SetMetronomeConfig {
                 enabled: settings.metronome_enabled,
-                volume: settings.metronome_volume.clamp(0.0, 1.0) as f32,
+                volume: metronome_engine_volume(settings.metronome_volume),
                 route: settings.metronome_output.clone(),
             })?;
             state.settings = settings;
@@ -2059,6 +2064,14 @@ mod tests {
             normalize_engine_audio_path("?//?/C:/Users/me/song.mp3"),
             "C:/Users/me/song.mp3"
         );
+    }
+
+    #[test]
+    fn metronome_engine_volume_boosts_saved_setting_range() {
+        assert_eq!(metronome_engine_volume(0.0), 0.0);
+        assert_eq!(metronome_engine_volume(0.5), 1.25);
+        assert_eq!(metronome_engine_volume(1.0), 2.5);
+        assert_eq!(metronome_engine_volume(2.0), 2.5);
     }
 }
 

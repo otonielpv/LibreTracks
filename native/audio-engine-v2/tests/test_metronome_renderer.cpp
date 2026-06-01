@@ -65,6 +65,31 @@ TEST_CASE("metronome enabled renders clicks on beats and respects volume zero") 
     CHECK(peak(left) == doctest::Approx(0.0f));
 }
 
+TEST_CASE("metronome volume above unity boosts click output") {
+    MetronomeRenderer normal;
+    MetronomeRenderer loud;
+    auto session = make_session();
+    normal.set_config({true, 1.0f, "master", true});
+    loud.set_config({true, 2.5f, "master", true});
+    std::vector<float> normal_left(2048, 0.0f), normal_right(2048, 0.0f);
+    std::vector<float> loud_left(2048, 0.0f), loud_right(2048, 0.0f);
+    float* normal_out[] = { normal_left.data(), normal_right.data() };
+    float* loud_out[] = { loud_left.data(), loud_right.data() };
+
+    normal.render(normal_out, 2, 2048, 48000.0, 0, &session);
+    loud.render(loud_out, 2, 2048, 48000.0, 0, &session);
+
+    CHECK(loud.diagnostics().volume == doctest::Approx(2.5f));
+    CHECK(peak(loud_left) > peak(normal_left) * 2.0f);
+}
+
+TEST_CASE("metronome volume clamps to boosted maximum") {
+    MetronomeRenderer renderer;
+    renderer.set_config({true, 3.0f, "master", true});
+
+    CHECK(renderer.diagnostics().volume == doctest::Approx(2.5f));
+}
+
 TEST_CASE("accent click is louder than normal beat") {
     MetronomeRenderer renderer;
     auto session = make_session();

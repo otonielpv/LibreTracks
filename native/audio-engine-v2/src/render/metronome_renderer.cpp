@@ -11,6 +11,7 @@ namespace lt {
 namespace {
 
 constexpr double kTwoPi = 6.28318530717958647692;
+constexpr float kMaxMetronomeVolume = 2.5f;
 
 void copy_text(std::array<char, 64>& dst, const std::string& text) noexcept {
     std::fill(dst.begin(), dst.end(), '\0');
@@ -131,7 +132,7 @@ void MetronomeRenderer::set_enabled(bool enabled) {
 }
 
 void MetronomeRenderer::set_volume(float volume) {
-    volume_.store(std::clamp(volume, 0.0f, 1.0f), std::memory_order_release);
+    volume_.store(std::clamp(volume, 0.0f, kMaxMetronomeVolume), std::memory_order_release);
 }
 
 MetronomeConfig MetronomeRenderer::config() const {
