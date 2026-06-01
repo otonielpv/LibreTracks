@@ -173,8 +173,7 @@ pub fn load_song_from_file(song_file: impl AsRef<Path>) -> Result<Song, ProjectE
     match document_version(&raw_document)? {
         SONG_FORMAT_VERSION => {
             let document: SongDocument = serde_json::from_str(&json)?;
-            validate_song(&document.song)?;
-            Ok(document.song)
+            load_current_song(document.song)
         }
         5 => {
             // v5 had the same on-disk shape as v6 but predates the
@@ -313,6 +312,22 @@ fn migrate_v5_song(mut song: Song) -> Result<Song, ProjectError> {
     fit_regions_to_clips(&mut song);
     validate_song(&song)?;
     Ok(song)
+}
+
+fn load_current_song(song: Song) -> Result<Song, ProjectError> {
+    match validate_song(&song) {
+        Ok(()) => Ok(song),
+        Err(
+            DomainError::ClipCrossesRegionBoundary { .. }
+            | DomainError::ClipOutsideAnyRegion { .. },
+        ) => {
+            let mut repaired = song;
+            fit_regions_to_clips(&mut repaired);
+            validate_song(&repaired)?;
+            Ok(repaired)
+        }
+        Err(error) => Err(ProjectError::InvalidSong(error)),
+    }
 }
 
 /// Adjust the song's regions in-place so every clip falls inside exactly one
@@ -664,5 +679,75 @@ mod tests {
         assert!((song.regions[0].start_seconds - 0.0).abs() < 1e-9);
         assert!((song.regions[0].end_seconds - 25.0).abs() < 1e-9);
         validate_song(&song).expect("migrated song must satisfy invariants");
+    }
+
+    #[test]
+    fn loading_current_song_with_saved_region_boundary_overflow_recovers() {
+        let v6_json = r#"{
+            "version": 6,
+            "id": "song_test",
+            "title": "Current",
+            "artist": null,
+            "key": null,
+            "bpm": 120.0,
+            "timeSignature": "4/4",
+            "durationSeconds": 30.0,
+            "tempoMarkers": [],
+            "timeSignatureMarkers": [],
+            "regions": [{
+                "id": "r1",
+                "name": "Cancion 1",
+                "startSeconds": 0.0,
+                "endSeconds": 10.0,
+                "transposeSemitones": 0,
+                "warpEnabled": false,
+                "warpSourceBpm": null
+            }, {
+                "id": "r2",
+                "name": "Cancion 2",
+                "startSeconds": 10.5,
+                "endSeconds": 20.0,
+                "transposeSemitones": 0,
+                "warpEnabled": false,
+                "warpSourceBpm": null
+            }],
+            "tracks": [{
+                "id": "t1",
+                "name": "T1",
+                "kind": "audio",
+                "parentTrackId": null,
+                "volume": 1.0,
+                "pan": 0.0,
+                "muted": false,
+                "solo": false,
+                "transposeEnabled": true,
+                "audioTo": "master"
+            }],
+            "clips": [{
+                "id": "c1",
+                "trackId": "t1",
+                "filePath": "audio/x.wav",
+                "timelineStartSeconds": 5.0,
+                "sourceStartSeconds": 0.0,
+                "durationSeconds": 6.0,
+                "gain": 1.0,
+                "fadeInSeconds": null,
+                "fadeOutSeconds": null
+            }],
+            "sectionMarkers": []
+        }"#;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("song.ltsession");
+        std::fs::write(&path, v6_json).expect("write json");
+
+        let song = load_song_from_file(&path).expect("current song must recover boundary overflow");
+        let r1 = song
+            .regions
+            .iter()
+            .find(|region| region.id == "r1")
+            .expect("first region");
+        assert!((r1.end_seconds - 11.0).abs() < 1e-9);
+        validate_song(&song).expect("recovered song must satisfy invariants");
     }
 }

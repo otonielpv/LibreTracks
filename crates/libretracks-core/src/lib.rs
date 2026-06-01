@@ -177,6 +177,26 @@ mod tests {
     }
 
     #[test]
+    fn allows_sub_frame_clip_region_boundary_rounding() {
+        let mut song = valid_song();
+        song.regions[0].end_seconds = 10.0;
+        song.regions.push(SongRegion {
+            id: "region_outro".into(),
+            name: "Outro".into(),
+            start_seconds: 10.5,
+            end_seconds: 20.0,
+            transpose_semitones: 0,
+            warp_enabled: false,
+            warp_source_bpm: None,
+            master: SongMaster::default(),
+        });
+        song.clips[0].timeline_start_seconds = 0.0;
+        song.clips[0].duration_seconds = 10.0000005;
+
+        validate_song(&song).expect("tiny boundary rounding must be accepted");
+    }
+
+    #[test]
     fn allows_clip_when_song_has_no_regions() {
         // Empty-regions edge case: a song bootstrap with clips but no
         // regions yet should still validate. Auto-create-region logic at

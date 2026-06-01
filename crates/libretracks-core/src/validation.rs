@@ -9,6 +9,7 @@ pub const MAX_TRANSPOSE_SEMITONES: i32 = 12;
 
 pub const MIN_WARP_SOURCE_BPM: f64 = 20.0;
 pub const MAX_WARP_SOURCE_BPM: f64 = 300.0;
+const CLIP_REGION_BOUNDARY_EPSILON_SECONDS: f64 = 1.0e-6;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DomainError {
@@ -212,7 +213,9 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
                     });
                 }
             };
-            if clip_end > containing_region.end_seconds {
+            if clip_end
+                > containing_region.end_seconds + CLIP_REGION_BOUNDARY_EPSILON_SECONDS
+            {
                 return Err(DomainError::ClipCrossesRegionBoundary {
                     clip_id: clip.id.clone(),
                     region_id: containing_region.id.clone(),
