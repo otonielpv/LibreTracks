@@ -229,6 +229,17 @@ type TimelineToolbarProps = {
   onSelectedRegionMasterGainCommit: () => void;
   viewMode: "daw" | "compact";
   onToggleViewMode: () => void;
+  /** Only meaningful in compact view: the compact mixer hides tracks
+   * that don't have a clip in the active song when this is on.
+   * Lifted to the toolbar so the toggle button has somewhere natural
+   * to live, instead of stealing space from the mixer band. */
+  compactMixerFilterActiveSong: boolean;
+  onToggleCompactMixerFilterActiveSong: () => void;
+  /** True when there's a song under the playhead — the filter has
+   * something to act on. When false we render the button disabled so
+   * the user gets a visual cue that toggling it won't change anything
+   * right now. */
+  compactMixerFilterAvailable: boolean;
   midiLearnMode: string | null;
   onMidiLearnTarget: (controlKey: string) => void;
 };
@@ -329,6 +340,9 @@ export function TimelineToolbar({
   onSelectedRegionMasterGainCommit,
   viewMode,
   onToggleViewMode,
+  compactMixerFilterActiveSong,
+  onToggleCompactMixerFilterActiveSong,
+  compactMixerFilterAvailable,
   midiLearnMode,
   onMidiLearnTarget,
 }: TimelineToolbarProps) {
@@ -448,6 +462,36 @@ export function TimelineToolbar({
               {viewMode === "compact" ? "view_timeline" : "view_module"}
             </span>
           </button>
+
+          {viewMode === "compact" ? (
+            <button
+              type="button"
+              className={`lt-icon-button ${
+                compactMixerFilterActiveSong ? "is-active" : ""
+              }`}
+              aria-label={
+                compactMixerFilterActiveSong
+                  ? "Mostrar todos los tracks en el mixer"
+                  : "Mostrar solo los tracks de la cancion activa en el mixer"
+              }
+              aria-pressed={compactMixerFilterActiveSong}
+              title={
+                compactMixerFilterAvailable
+                  ? compactMixerFilterActiveSong
+                    ? "Mostrando solo tracks de la cancion activa"
+                    : "Mostrar solo tracks de la cancion activa"
+                  : "Sin cancion activa: el filtro no tiene efecto ahora"
+              }
+              disabled={
+                !compactMixerFilterAvailable && !compactMixerFilterActiveSong
+              }
+              onClick={onToggleCompactMixerFilterActiveSong}
+            >
+              <span className="material-symbols-outlined">
+                {compactMixerFilterActiveSong ? "filter_alt" : "filter_alt_off"}
+              </span>
+            </button>
+          ) : null}
 
           <button
             type="button"

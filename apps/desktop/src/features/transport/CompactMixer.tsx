@@ -2,6 +2,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -56,6 +57,16 @@ type CompactMixerProps = {
     event: ReactMouseEvent<HTMLDivElement>,
     trackId: string,
   ) => void;
+  /** Track ids that currently have at least one clip inside the song
+   * the playhead is on. Calculated by the parent because it has the
+   * playhead + song data already. `null` means "no active song" —
+   * in that case the filter is ignored and every track shows. */
+  activeSongTrackIds: Set<string> | null;
+  /** When true the mixer hides tracks that don't have a clip inside
+   * the active song (using `activeSongTrackIds`). State is owned by
+   * the parent so the toggle UI can live in the TimelineToolbar
+   * instead of stealing strip-band space. */
+  filterActiveSong: boolean;
 } & CompactMixerProps_DragSelection;
 
 /** Default colour applied to a track strip when track.color is null, the
@@ -74,6 +85,8 @@ function CompactMixerComponent({
   selectedTrackIds,
   onTrackSelect,
   onTrackDragStart,
+  activeSongTrackIds,
+  filterActiveSong,
 }: CompactMixerProps) {
   // Build a (childTrackId → parent colour / parent name) lookup once so each
   // strip can render its Reaper-style folder cue (a thin coloured ribbon on
@@ -94,10 +107,31 @@ function CompactMixerComponent({
     });
   }
 
+  // Tracks the user will actually see. When the filter is on AND there
+  // is an active song, keep tracks whose id is in the active-song set
+  // PLUS every ancestor folder of those tracks (so the parent hierarchy
+  // remains visible and a child doesn't appear orphaned). When the
+  // filter is off, or no song is active, show everything as before.
+  const visibleTracks = useMemo(() => {
+    if (!filterActiveSong || !activeSongTrackIds) return tracks;
+    const visibleIds = new Set<string>(activeSongTrackIds);
+    // Walk each visible track upwards through parentTrackId and add
+    // ancestors so folder strips don't disappear when their child does.
+    for (const id of activeSongTrackIds) {
+      let current = trackById.get(id);
+      while (current?.parentTrackId) {
+        if (visibleIds.has(current.parentTrackId)) break;
+        visibleIds.add(current.parentTrackId);
+        current = trackById.get(current.parentTrackId);
+      }
+    }
+    return tracks.filter((track) => visibleIds.has(track.id));
+  }, [filterActiveSong, activeSongTrackIds, tracks, trackById]);
+
   return (
     <div className="lt-compact-mixer">
       <div className="lt-compact-mixer-strips">
-        {tracks.map((track) => (
+        {visibleTracks.map((track) => (
           <CompactMixerStrip
             key={track.id}
             track={track}

@@ -92,6 +92,10 @@ type CompactViewProps = {
   /** Click on a song header selects that region project-wide. The
    * toolbar's Transpose/Warp/Master groups bind to this selection. */
   onSelectRegion: (regionId: string) => void;
+  /** Controls the "Solo cancion activa" filter inside CompactMixer.
+   * Owned by the project-wide parent so the toggle UI can live in
+   * the TimelineToolbar without lifting more wiring than necessary. */
+  compactMixerFilterActiveSong: boolean;
   /** Fired when the user wants to commit the master gain for a region. */
   onMasterGainChange: (regionId: string, gain: number) => void;
   onMasterGainCommit: (regionId: string) => void;
@@ -215,6 +219,7 @@ function CompactViewComponent({
   onTrackDragStart,
   selectedRegionId,
   onSelectRegion,
+  compactMixerFilterActiveSong,
 }: CompactViewProps) {
   const isPackageDragOver = dragPreview?.isPackage === true;
 
@@ -238,6 +243,26 @@ function CompactViewComponent({
         .map((track) => ({ id: track.id, name: track.name })),
     [tracks],
   );
+
+  // Tracks that participate in the song the playhead is on. Used by
+  // the CompactMixer's "solo cancion activa" filter. null = no
+  // active song under the playhead (between regions, or fresh
+  // project), in which case the filter has no target set and the
+  // mixer falls back to showing every track. Recalculated on every
+  // playhead move; the underlying set is tiny so the cost is fine.
+  const activeSongTrackIds = useMemo<Set<string> | null>(() => {
+    const activeRegion = regions.find(
+      (region) =>
+        playheadSeconds >= region.startSeconds &&
+        playheadSeconds < region.endSeconds,
+    );
+    if (!activeRegion) return null;
+    const ids = new Set<string>();
+    for (const entry of clipsByRegion[activeRegion.id] ?? []) {
+      ids.add(entry.trackId);
+    }
+    return ids;
+  }, [regions, playheadSeconds, clipsByRegion]);
 
   return (
     <div className="lt-compact-view">
@@ -335,6 +360,8 @@ function CompactViewComponent({
         selectedTrackIds={selectedTrackIds}
         onTrackSelect={onTrackSelect}
         onTrackDragStart={onTrackDragStart}
+        activeSongTrackIds={activeSongTrackIds}
+        filterActiveSong={compactMixerFilterActiveSong}
       />
     </div>
   );

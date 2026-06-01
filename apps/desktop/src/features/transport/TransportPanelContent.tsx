@@ -646,6 +646,44 @@ export function TransportPanelContent() {
       song?.regions.find((region) => region.id === selectedRegionId) ?? null,
     [selectedRegionId, song?.regions],
   );
+
+  // Compact view: "Solo cancion activa" filter. Owned here so the
+  // toggle button lives in the TimelineToolbar (saves strip space),
+  // and the CompactMixer just reads the boolean as a controlled prop.
+  // Persists across sessions via localStorage; the read happens once
+  // at mount, the write on every change.
+  const COMPACT_MIXER_FILTER_KEY = "libretracks.compactMixer.filterActiveSong";
+  const [compactMixerFilterActiveSong, setCompactMixerFilterActiveSong] =
+    useState<boolean>(() => {
+      if (typeof window === "undefined") return false;
+      try {
+        return window.localStorage.getItem(COMPACT_MIXER_FILTER_KEY) === "1";
+      } catch {
+        return false;
+      }
+    });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        COMPACT_MIXER_FILTER_KEY,
+        compactMixerFilterActiveSong ? "1" : "0",
+      );
+    } catch {
+      // Storage quota / private mode — toggle still works in memory.
+    }
+  }, [compactMixerFilterActiveSong]);
+  const toggleCompactMixerFilterActiveSong = useCallback(() => {
+    setCompactMixerFilterActiveSong((current) => !current);
+  }, []);
+  // "Available" — coarse proxy: the toggle has potential effect as
+  // soon as the project has at least one song region. The exact
+  // "playhead is inside a region right now" check would require
+  // subscribing to a reactive playhead state we don't have here;
+  // the project-has-regions test is enough to gate the disabled
+  // appearance, and toggling with the playhead between regions is
+  // a harmless no-op (the mixer falls back to showing every track).
+  const compactMixerFilterAvailable = (song?.regions.length ?? 0) > 0;
   const [selectedTimelineRange, setSelectedTimelineRange] =
     useState<TimelineRangeSelection | null>(null);
   const [optimisticClipOperations, setOptimisticClipOperations] = useState<
@@ -9206,6 +9244,11 @@ export function TransportPanelContent() {
                     }
                     viewMode={viewMode}
                     onToggleViewMode={toggleViewMode}
+                    compactMixerFilterActiveSong={compactMixerFilterActiveSong}
+                    onToggleCompactMixerFilterActiveSong={
+                      toggleCompactMixerFilterActiveSong
+                    }
+                    compactMixerFilterAvailable={compactMixerFilterAvailable}
                     midiLearnMode={midiLearnMode}
                     onMidiLearnTarget={handleMidiLearnTarget}
                   />
@@ -9824,6 +9867,9 @@ export function TransportPanelContent() {
                       onTrackDragStart={handleTrackHeaderDragStart}
                       selectedRegionId={selectedRegionId}
                       onSelectRegion={setSelectedRegionId}
+                      compactMixerFilterActiveSong={
+                        compactMixerFilterActiveSong
+                      }
                     />
                   ) : null}
                 </section>

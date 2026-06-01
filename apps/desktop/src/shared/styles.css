@@ -3359,6 +3359,42 @@ textarea {
   transform: none;
 }
 
+/* When the user is "Armado: <song name> | <reason>" — typical when a
+   song jump is pending — the right-hand details span can grow long
+   enough to push back against the segmented control on the left and
+   visually collide with it (the user's "Fiesta en el Desierto |
+   Al final de la cancion" repro). Let the body wrap, allow the
+   details column to shrink, and break the text instead of forcing it
+   onto a single line. Same recipe the Region / Warp control groups
+   already use for their long status strings. */
+.lt-control-group-jump .lt-control-group-body {
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
+  align-items: stretch;
+}
+
+.lt-control-group-jump .lt-control-group-actions {
+  flex: 0 0 auto;
+}
+
+.lt-control-group-jump .lt-control-group-details {
+  flex: 1 1 100%;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.lt-control-group-jump .lt-control-group-details > span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.lt-control-group-jump .lt-control-popover-header > strong {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 .lt-control-group-vamp .lt-control-popover-panel {
   left: 0;
   transform: none;
