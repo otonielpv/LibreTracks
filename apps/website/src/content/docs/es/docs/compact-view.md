@@ -58,6 +58,19 @@ Tambien puedes **arrastrar un `.ltpkg` desde el explorador del sistema** a cualq
 
 Un mixer horizontal con una columna por pista del proyecto: nombre, M/S/T, fader vertical teal con vumetro post-fader, slider de pan azul, y selector de routing. Las pistas que son `folder` tienen un fondo mas oscuro y un borde-acento mas grueso a la izquierda; las pistas hijas muestran un `↳ Nombre Carpeta` debajo del nombre y una banda fina con el color del padre, al estilo Reaper. Si una pista tiene color asignado, ese color se usa como acento.
 
+#### Filtro "Solo cancion activa"
+
+En la barra superior, junto al boton de cambiar vista, aparece un boton con icono de embudo **solo en modo compacto**. Al activarlo el mixer oculta los strips de las pistas que no tienen ningun clip dentro de la cancion donde esta el playhead. Los folders ancestros de las pistas visibles se mantienen para preservar la jerarquia, asi una pista hija nunca queda huerfana sin su carpeta padre.
+
+Reglas concretas:
+
+- Filtro **off** (por defecto): se ve el mixer completo.
+- Filtro **on** + playhead dentro de una cancion: solo se ven las pistas con clips en esa cancion + sus folders ancestros.
+- Filtro **on** + playhead fuera de cualquier cancion (silencio inicial, hueco entre regiones): el filtro no recorta y se muestra todo. Al volver a entrar en una cancion se reactiva automaticamente.
+- Sin canciones en el proyecto: el boton aparece deshabilitado.
+
+El estado del filtro se conserva entre sesiones via localStorage.
+
 #### Seleccionar pistas (multi-seleccion)
 
 Click sobre el nombre o el `↳ Parent hint` de un strip selecciona la pista. Misma convencion que en el header de la vista DAW:

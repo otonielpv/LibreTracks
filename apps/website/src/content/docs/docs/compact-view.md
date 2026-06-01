@@ -58,6 +58,19 @@ You can also **drag a `.ltpkg` from the OS file explorer** anywhere over the str
 
 A horizontal mixer with one column per project track: name, M/S/T toggles, vertical teal fader with post-fader meter, blue pan slider, and routing selector. `folder` tracks get a darker background and a thicker left accent; child tracks show a `↳ Folder name` hint below the name and a thin ribbon in the parent's colour — Reaper-style. If a track has an assigned colour, that colour is used as the strip accent.
 
+#### "Active song only" filter
+
+A funnel button appears in the top toolbar (next to the view-toggle icon) **only in compact mode**. When activated, the mixer hides the strips for tracks that don't have any clip inside the song the playhead is on. Ancestor folders of the visible tracks stay in place to preserve the hierarchy, so a child track never appears orphaned without its parent folder.
+
+Concrete behaviour:
+
+- Filter **off** (default): the full mixer is shown.
+- Filter **on** + playhead inside a song: only tracks with clips in that song + their ancestor folders are visible.
+- Filter **on** + playhead outside any song (leading silence, gap between regions): the filter doesn't trim, every track is shown. It re-engages automatically when the playhead enters a song again.
+- No songs in the project: the button is disabled.
+
+Filter state is persisted across sessions via localStorage.
+
 #### Selecting tracks (multi-selection)
 
 Clicking on the strip name or the `↳ parent hint` selects the track. Same convention as the DAW track header:
