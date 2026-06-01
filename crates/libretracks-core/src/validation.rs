@@ -89,10 +89,7 @@ pub enum DomainError {
         clip_start_seconds: String,
     },
     #[error("clip {clip_id} spans the boundary between region {region_id} and the next region")]
-    ClipCrossesRegionBoundary {
-        clip_id: String,
-        region_id: String,
-    },
+    ClipCrossesRegionBoundary { clip_id: String, region_id: String },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -200,10 +197,9 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
         if !song.regions.is_empty() {
             let clip_start = clip.timeline_start_seconds;
             let clip_end = clip_start + clip.duration_seconds;
-            let containing_region = song
-                .regions
-                .iter()
-                .find(|region| clip_start >= region.start_seconds && clip_start < region.end_seconds);
+            let containing_region = song.regions.iter().find(|region| {
+                clip_start >= region.start_seconds && clip_start < region.end_seconds
+            });
             let containing_region = match containing_region {
                 Some(region) => region,
                 None => {
@@ -213,9 +209,7 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
                     });
                 }
             };
-            if clip_end
-                > containing_region.end_seconds + CLIP_REGION_BOUNDARY_EPSILON_SECONDS
-            {
+            if clip_end > containing_region.end_seconds + CLIP_REGION_BOUNDARY_EPSILON_SECONDS {
                 return Err(DomainError::ClipCrossesRegionBoundary {
                     clip_id: clip.id.clone(),
                     region_id: containing_region.id.clone(),

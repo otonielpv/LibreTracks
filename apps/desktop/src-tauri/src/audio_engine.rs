@@ -1124,9 +1124,9 @@ impl AudioController {
                 // sessions. Checking first means we skip the doomed
                 // open entirely and go straight to system default.
                 let available = engine.list_devices().unwrap_or_default();
-                let device_exists = available.iter().any(|d| {
-                    d.device_id == device_id || d.device_name == device_id
-                });
+                let device_exists = available
+                    .iter()
+                    .any(|d| d.device_id == device_id || d.device_name == device_id);
                 if audio_debug_logging_enabled() {
                     eprintln!(
                         "[libretracks-audio] apply_settings: {} device(s) available; \
@@ -1187,9 +1187,13 @@ impl AudioController {
                             }
                             // Prefer non-"primary alias" devices —
                             // those are the ones that commonly fail.
-                            if candidate.device_name.to_ascii_lowercase()
+                            if candidate
+                                .device_name
+                                .to_ascii_lowercase()
                                 .contains("controlador primario")
-                                || candidate.device_name.to_ascii_lowercase()
+                                || candidate
+                                    .device_name
+                                    .to_ascii_lowercase()
                                     .contains("primary sound driver")
                             {
                                 continue;
@@ -1641,10 +1645,7 @@ pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> 
         for device in &devices {
             eprintln!(
                 "[audio]   device id={:?} name={:?} backend={:?} channels={}",
-                device.device_id,
-                device.device_name,
-                device.backend,
-                device.output_channel_count,
+                device.device_id, device.device_name, device.backend, device.output_channel_count,
             );
         }
     }

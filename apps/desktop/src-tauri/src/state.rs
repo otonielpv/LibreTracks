@@ -13,9 +13,9 @@ use libretracks_audio::{
     VampMode,
 };
 use libretracks_core::{
-    audible_clip_duration_seconds, effective_bpm_at, region_warp_ratio_in_song, source_seconds_at_view,
-    warp_timeline_seconds_at, Clip, Marker, Song, SongRegion, TempoMarker, TimeSignatureMarker,
-    Track, TrackKind, MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
+    audible_clip_duration_seconds, effective_bpm_at, region_warp_ratio_in_song,
+    source_seconds_at_view, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion, TempoMarker,
+    TimeSignatureMarker, Track, TrackKind, MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
 };
 use libretracks_project::{
     append_wav_files_to_song, generate_waveform_summary,
@@ -1692,8 +1692,10 @@ impl DesktopSession {
         active_vamp: &ActiveVamp,
     ) -> Result<(), DesktopError> {
         let trigger_seconds = warp_timeline_seconds_at(source_song, active_vamp.end_seconds);
-        let target_seconds =
-            Some(warp_timeline_seconds_at(source_song, active_vamp.start_seconds));
+        let target_seconds = Some(warp_timeline_seconds_at(
+            source_song,
+            active_vamp.start_seconds,
+        ));
         if jump_debug_logging_enabled() {
             eprintln!(
                 "[LT_JUMP_DEBUG][state] native_vamp_schedule source_start={:.9} source_end={:.9} view_trigger={:.9} view_target={:.9}",
@@ -2482,8 +2484,7 @@ impl DesktopSession {
         // invariant reject the sync with a cryptic boundary error.
         let start_delta = updated_region.start_seconds - existing_region.start_seconds;
         let shrinks_left = start_delta > f64::EPSILON;
-        let shrinks_right =
-            updated_region.end_seconds < existing_region.end_seconds - f64::EPSILON;
+        let shrinks_right = updated_region.end_seconds < existing_region.end_seconds - f64::EPSILON;
         if shrinks_left || shrinks_right {
             let old_start = existing_region.start_seconds;
             let old_end = existing_region.end_seconds;
@@ -2761,8 +2762,7 @@ impl DesktopSession {
 
         song.regions.remove(region_index);
         song.clips.retain(|clip| {
-            clip.timeline_start_seconds < region_start
-                || clip.timeline_start_seconds >= region_end
+            clip.timeline_start_seconds < region_start || clip.timeline_start_seconds >= region_end
         });
         song.tempo_markers.retain(|marker| {
             marker.start_seconds < region_start || marker.start_seconds >= region_end
@@ -2776,12 +2776,7 @@ impl DesktopSession {
         refresh_song_duration(&mut song);
 
         audio.update_live_song_regions(&song)?;
-        self.persist_song_update(
-            song,
-            audio,
-            AudioChangeImpact::StructureRebuild,
-            true,
-        )?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
         Ok(self.snapshot())
     }
@@ -2835,7 +2830,9 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        let previous_song = song.clone();
         song.bpm = bpm;
+        realign_regions_after_warp_tempo_change(&previous_song, &mut song);
 
         let impact = if song_has_active_warp(&song) {
             AudioChangeImpact::TimelineWindow
@@ -2865,6 +2862,7 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         // View-time → source-time conversion, see create_section_marker.
+        let previous_song = song.clone();
         let clamped_start_seconds = source_seconds_at_view(&song, start_seconds).max(0.0);
 
         if clamped_start_seconds <= 0.0001 {
@@ -2887,6 +2885,7 @@ impl DesktopSession {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
         }
+        realign_regions_after_warp_tempo_change(&previous_song, &mut song);
 
         let impact = if song_has_active_warp(&song) {
             AudioChangeImpact::TimelineWindow
@@ -2908,12 +2907,14 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        let previous_song = song.clone();
         let marker_index = song
             .tempo_markers
             .iter()
             .position(|marker| marker.id == marker_id)
             .ok_or_else(|| DesktopError::AudioCommand("tempo marker not found".into()))?;
         song.tempo_markers.remove(marker_index);
+        realign_regions_after_warp_tempo_change(&previous_song, &mut song);
 
         let impact = if song_has_active_warp(&song) {
             AudioChangeImpact::TimelineWindow
@@ -3510,19 +3511,13 @@ impl DesktopSession {
         let mut last_invalid_clip: Option<String> = None;
 
         for (offset, clip_id) in clip_ids.iter().enumerate() {
-            let clip_index = match song
-                .clips
-                .iter()
-                .position(|clip| clip.id == *clip_id)
-            {
+            let clip_index = match song.clips.iter().position(|clip| clip.id == *clip_id) {
                 Some(index) => index,
                 None => continue,
             };
             let clip = song.clips[clip_index].clone();
             let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
-            if split_seconds_view <= clip.timeline_start_seconds
-                || split_seconds_view >= clip_end
-            {
+            if split_seconds_view <= clip.timeline_start_seconds || split_seconds_view >= clip_end {
                 last_invalid_clip = Some(clip_id.clone());
                 continue;
             }
@@ -3532,16 +3527,11 @@ impl DesktopSession {
             // Source-time offset of the cut inside the original audio. With
             // warp off this collapses to `left_duration`; with warp on it
             // accounts for the stretch ratio in this region.
-            let split_seconds_source_clip = source_seconds_at_view(
-                &song,
-                clip.timeline_start_seconds + left_duration,
-            );
-            let source_left_duration =
-                (split_seconds_source_clip - source_seconds_at_view(
-                    &song,
-                    clip.timeline_start_seconds,
-                ))
-                .max(0.0);
+            let split_seconds_source_clip =
+                source_seconds_at_view(&song, clip.timeline_start_seconds + left_duration);
+            let source_left_duration = (split_seconds_source_clip
+                - source_seconds_at_view(&song, clip.timeline_start_seconds))
+            .max(0.0);
 
             let left_clip = Clip {
                 id: format!("clip_{}_{}_l", suffix_base, offset),
@@ -4984,10 +4974,7 @@ fn append_project_load_debug_line(app: &AppHandle, line: &str) {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
-    let _ = std::io::Write::write_all(
-        &mut file,
-        format!("[{timestamp_ms}] {line}\n").as_bytes(),
-    );
+    let _ = std::io::Write::write_all(&mut file, format!("[{timestamp_ms}] {line}\n").as_bytes());
 }
 
 fn emit_project_load_progress(
@@ -6191,7 +6178,11 @@ fn next_downbeat_after_in_song(song: &Song, position_seconds: f64) -> f64 {
         }
         let span = marker.start_seconds - segment_start_seconds;
         let bar_seconds = (beats_per_bar * 60.0) / segment_bpm.max(1.0);
-        let span_bars = if bar_seconds > 0.0 { span / bar_seconds } else { 0.0 };
+        let span_bars = if bar_seconds > 0.0 {
+            span / bar_seconds
+        } else {
+            0.0
+        };
         segment_start_bars += span_bars;
         segment_start_seconds = marker.start_seconds;
         segment_bpm = marker.bpm.max(1.0);
@@ -6206,6 +6197,232 @@ fn next_downbeat_after_in_song(song: &Song, position_seconds: f64) -> f64 {
     // jump to the next one due to floating drift.
     let target_local_bars = (local_bars - 1e-9).ceil().max(0.0);
     segment_start_seconds + target_local_bars * segment_bar_seconds
+}
+
+const REGION_DOWNBEAT_ALIGNMENT_EPSILON_SECONDS: f64 = 0.15;
+
+#[derive(Clone, Copy)]
+struct ViewTempoBoundary<'a> {
+    start_seconds: f64,
+    bpm: Option<f64>,
+    time_signature: Option<&'a str>,
+}
+
+fn realign_regions_after_warp_tempo_change(previous_song: &Song, song: &mut Song) {
+    if !song_has_active_warp(previous_song) && !song_has_active_warp(song) {
+        return;
+    }
+
+    let mut previous_regions = previous_song.regions.iter().collect::<Vec<_>>();
+    previous_regions.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for pair in previous_regions.windows(2) {
+        let previous_region = pair[0];
+        let following_region = pair[1];
+        if !region_boundary_was_downbeat_aligned(previous_song, previous_region, following_region) {
+            continue;
+        }
+
+        let Some(current_previous_end) = song
+            .regions
+            .iter()
+            .find(|region| region.id == previous_region.id)
+            .map(|region| region.end_seconds)
+        else {
+            continue;
+        };
+        let Some(current_following_start) = song
+            .regions
+            .iter()
+            .find(|region| region.id == following_region.id)
+            .map(|region| region.start_seconds)
+        else {
+            continue;
+        };
+
+        let previous_view_end = warp_timeline_seconds_at(song, current_previous_end);
+        let desired_view_start = next_downbeat_after_in_view_timeline(song, previous_view_end);
+        let desired_source_start = source_seconds_at_view(song, desired_view_start);
+        let delta = desired_source_start - current_following_start;
+        if delta.abs() <= 0.0001 {
+            continue;
+        }
+
+        shift_song_suffix(song, current_following_start, delta);
+    }
+
+    refresh_song_duration(song);
+}
+
+fn region_boundary_was_downbeat_aligned(
+    song: &Song,
+    previous_region: &SongRegion,
+    following_region: &SongRegion,
+) -> bool {
+    let previous_view_end = warp_timeline_seconds_at(song, previous_region.end_seconds);
+    let following_view_start = warp_timeline_seconds_at(song, following_region.start_seconds);
+    let expected_view_start = next_downbeat_after_in_view_timeline(song, previous_view_end);
+    (following_view_start - expected_view_start).abs() <= REGION_DOWNBEAT_ALIGNMENT_EPSILON_SECONDS
+}
+
+fn shift_song_suffix(song: &mut Song, anchor_seconds: f64, delta_seconds: f64) {
+    if !delta_seconds.is_finite() || delta_seconds.abs() <= 0.0001 {
+        return;
+    }
+    let at_or_after_anchor = |seconds: f64| seconds >= anchor_seconds - 0.0001;
+
+    for region in &mut song.regions {
+        if at_or_after_anchor(region.start_seconds) {
+            region.start_seconds = (region.start_seconds + delta_seconds).max(0.0);
+            region.end_seconds = (region.end_seconds + delta_seconds).max(region.start_seconds);
+        }
+    }
+    for clip in &mut song.clips {
+        if at_or_after_anchor(clip.timeline_start_seconds) {
+            clip.timeline_start_seconds = (clip.timeline_start_seconds + delta_seconds).max(0.0);
+        }
+    }
+    for marker in &mut song.tempo_markers {
+        if at_or_after_anchor(marker.start_seconds) {
+            marker.start_seconds = (marker.start_seconds + delta_seconds).max(0.0);
+        }
+    }
+    for marker in &mut song.time_signature_markers {
+        if at_or_after_anchor(marker.start_seconds) {
+            marker.start_seconds = (marker.start_seconds + delta_seconds).max(0.0);
+        }
+    }
+    for marker in &mut song.section_markers {
+        if at_or_after_anchor(marker.start_seconds) {
+            marker.start_seconds = (marker.start_seconds + delta_seconds).max(0.0);
+        }
+    }
+}
+
+fn next_downbeat_after_in_view_timeline(song: &Song, position_seconds: f64) -> f64 {
+    if position_seconds <= 0.0 {
+        return 0.0;
+    }
+
+    let mut boundaries = Vec::<ViewTempoBoundary>::new();
+    for marker in &song.tempo_markers {
+        if marker.start_seconds > 0.0 {
+            boundaries.push(ViewTempoBoundary {
+                start_seconds: warp_timeline_seconds_at(song, marker.start_seconds),
+                bpm: Some(marker.bpm),
+                time_signature: None,
+            });
+        }
+    }
+    for marker in &song.time_signature_markers {
+        if marker.start_seconds > 0.0 {
+            boundaries.push(ViewTempoBoundary {
+                start_seconds: warp_timeline_seconds_at(song, marker.start_seconds),
+                bpm: None,
+                time_signature: Some(marker.signature.as_str()),
+            });
+        }
+    }
+    for region in &song.regions {
+        if !region.warp_enabled && region.transpose_semitones != 0 {
+            if region.start_seconds > 0.0 {
+                boundaries.push(ViewTempoBoundary {
+                    start_seconds: warp_timeline_seconds_at(song, region.start_seconds),
+                    bpm: None,
+                    time_signature: None,
+                });
+            }
+            if region.end_seconds > 0.0 {
+                boundaries.push(ViewTempoBoundary {
+                    start_seconds: warp_timeline_seconds_at(song, region.end_seconds),
+                    bpm: None,
+                    time_signature: None,
+                });
+            }
+        }
+    }
+    boundaries.sort_by(|left, right| {
+        left.start_seconds
+            .partial_cmp(&right.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut segment_start_seconds = 0.0_f64;
+    let mut segment_bpm = song.bpm.max(1.0);
+    let mut segment_time_signature = song.time_signature.as_str();
+    let mut cumulative_bars = 0.0_f64;
+
+    for boundary in boundaries {
+        if boundary.start_seconds > position_seconds {
+            break;
+        }
+        if boundary.start_seconds > segment_start_seconds {
+            let bar_seconds = view_bar_seconds_at(
+                song,
+                segment_start_seconds,
+                segment_bpm,
+                segment_time_signature,
+            );
+            if bar_seconds > 0.0 {
+                cumulative_bars += (boundary.start_seconds - segment_start_seconds) / bar_seconds;
+            }
+            segment_start_seconds = boundary.start_seconds;
+        }
+        if let Some(next_signature) = boundary.time_signature {
+            if next_signature != segment_time_signature {
+                cumulative_bars = (cumulative_bars - 1e-9).ceil();
+            }
+            segment_time_signature = next_signature;
+        }
+        if let Some(next_bpm) = boundary.bpm {
+            segment_bpm = next_bpm.max(1.0);
+        }
+    }
+
+    let bar_seconds = view_bar_seconds_at(
+        song,
+        segment_start_seconds,
+        segment_bpm,
+        segment_time_signature,
+    );
+    if bar_seconds <= 0.0 {
+        return position_seconds;
+    }
+    let local_bars = (position_seconds - segment_start_seconds) / bar_seconds;
+    let target_total_bars = (cumulative_bars + local_bars - 1e-9).ceil().max(0.0);
+    segment_start_seconds + (target_total_bars - cumulative_bars) * bar_seconds
+}
+
+fn view_bar_seconds_at(song: &Song, view_seconds: f64, bpm: f64, time_signature: &str) -> f64 {
+    let source_seconds = source_seconds_at_view(song, view_seconds);
+    let display_bpm = bpm.max(1.0) * varispeed_scale_at_source(song, source_seconds);
+    let beats_per_bar = time_signature
+        .split_once('/')
+        .and_then(|(num, _)| num.trim().parse::<u32>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(4) as f64;
+    (beats_per_bar * 60.0) / display_bpm.max(1.0)
+}
+
+fn varispeed_scale_at_source(song: &Song, source_seconds: f64) -> f64 {
+    let Some(region) = song.regions.iter().find(|region| {
+        !region.warp_enabled
+            && region.transpose_semitones != 0
+            && source_seconds >= region.start_seconds
+            && source_seconds < region.end_seconds
+    }) else {
+        return 1.0;
+    };
+    let scale = 2.0_f64.powf(region.transpose_semitones as f64 / 12.0);
+    if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    }
 }
 
 fn refresh_song_duration(song: &mut Song) {
@@ -6556,8 +6773,8 @@ mod tests {
 
     use libretracks_audio::{JumpTrigger, PlaybackState, TransitionType};
     use libretracks_core::{
-        source_seconds_at_view, warp_timeline_seconds_at, Clip, Marker, Song, SongRegion,
-        TempoMarker, Track, TrackKind,
+        source_seconds_at_view, validate_song, warp_timeline_seconds_at, Clip, Marker, Song,
+        SongRegion, TempoMarker, Track, TrackKind,
     };
     use libretracks_project::{
         create_song_folder, export_region_as_package, generate_waveform_summary, load_song,
@@ -6569,7 +6786,8 @@ mod tests {
     use crate::models::LibraryAssetSummary;
 
     use super::{
-        build_empty_song, list_library_assets, write_library_manifest,
+        build_empty_song, list_library_assets, next_downbeat_after_in_view_timeline,
+        realign_regions_after_warp_tempo_change, write_library_manifest,
         write_library_manifest_assets, AudioFileImportPayload, CreateClipRequest, DesktopSession,
         TransportClock, WaveformMemoryCache,
     };
@@ -9143,6 +9361,119 @@ mod tests {
         assert_eq!(song_view.bpm, 91.0);
         assert_eq!(song_view.regions[0].warp_enabled, false);
         assert_eq!(song_view.regions[0].warp_source_bpm, Some(91.0));
+    }
+
+    #[test]
+    fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
+        let mut song = demo_song();
+        song.bpm = 120.0;
+        song.time_signature = "4/4".into();
+        song.tempo_markers = vec![
+            TempoMarker {
+                id: "tempo_middle".into(),
+                start_seconds: 10.0,
+                bpm: 130.0,
+            },
+            TempoMarker {
+                id: "tempo_following".into(),
+                start_seconds: 17.384615384615387,
+                bpm: 140.0,
+            },
+        ];
+        song.regions = vec![
+            SongRegion {
+                id: "region_intro".into(),
+                name: "Intro".into(),
+                start_seconds: 0.0,
+                end_seconds: 9.0,
+                transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
+            },
+            SongRegion {
+                id: "region_middle".into(),
+                name: "Warped".into(),
+                start_seconds: 10.0,
+                end_seconds: 17.0,
+                transpose_semitones: 0,
+                warp_enabled: true,
+                warp_source_bpm: Some(130.0),
+                master: libretracks_core::SongMaster::default(),
+            },
+            SongRegion {
+                id: "region_following".into(),
+                name: "Following".into(),
+                start_seconds: 17.384615384615387,
+                end_seconds: 25.0,
+                transpose_semitones: 0,
+                warp_enabled: false,
+                warp_source_bpm: None,
+                master: libretracks_core::SongMaster::default(),
+            },
+        ];
+        song.clips = vec![
+            Clip {
+                id: "clip_middle".into(),
+                track_id: "track_1".into(),
+                file_path: "audio/middle.wav".into(),
+                timeline_start_seconds: 10.0,
+                source_start_seconds: 0.0,
+                duration_seconds: 7.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+                color: None,
+            },
+            Clip {
+                id: "clip_following".into(),
+                track_id: "track_1".into(),
+                file_path: "audio/following.wav".into(),
+                timeline_start_seconds: 17.384615384615387,
+                source_start_seconds: 0.0,
+                duration_seconds: 7.0,
+                gain: 1.0,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+                color: None,
+            },
+        ];
+
+        let previous_song = song.clone();
+        song.tempo_markers[0].bpm = 110.0;
+        realign_regions_after_warp_tempo_change(&previous_song, &mut song);
+
+        let middle = song
+            .regions
+            .iter()
+            .find(|region| region.id == "region_middle")
+            .expect("middle region");
+        let following = song
+            .regions
+            .iter()
+            .find(|region| region.id == "region_following")
+            .expect("following region");
+        let following_clip = song
+            .clips
+            .iter()
+            .find(|clip| clip.id == "clip_following")
+            .expect("following clip");
+        let following_tempo = song
+            .tempo_markers
+            .iter()
+            .find(|marker| marker.id == "tempo_following")
+            .expect("following tempo marker");
+
+        let expected_view_start = next_downbeat_after_in_view_timeline(
+            &song,
+            warp_timeline_seconds_at(&song, middle.end_seconds),
+        );
+        let actual_view_start = warp_timeline_seconds_at(&song, following.start_seconds);
+        assert!((actual_view_start - expected_view_start).abs() < 0.0001);
+        assert!((following.start_seconds - following_clip.timeline_start_seconds).abs() < 0.0001);
+        assert!((following.start_seconds - following_tempo.start_seconds).abs() < 0.0001);
+        assert!(following.start_seconds > 17.384615384615387);
+        validate_song(&song).expect("realigned song should validate");
     }
 
     #[test]

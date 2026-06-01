@@ -399,9 +399,11 @@ fn fit_regions_to_clips(song: &mut Song) {
                     <= song.regions[fol_idx].start_seconds - clip_end =>
             {
                 song.regions[pre_idx].end_seconds = clip_end;
-                if song.regions.get(pre_idx + 1).is_some_and(|next| {
-                    next.start_seconds < song.regions[pre_idx].end_seconds
-                }) {
+                if song
+                    .regions
+                    .get(pre_idx + 1)
+                    .is_some_and(|next| next.start_seconds < song.regions[pre_idx].end_seconds)
+                {
                     let new_end = song.regions[pre_idx].end_seconds;
                     song.regions[pre_idx + 1].start_seconds = new_end;
                 }

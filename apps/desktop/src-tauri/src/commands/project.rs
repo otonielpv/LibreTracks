@@ -3,8 +3,8 @@ use std::thread;
 use tauri::{AppHandle, Manager, State};
 
 use crate::commands::events::{
-    emit_project_load_complete_event, emit_ready_library_waveforms,
-    emit_transport_lifecycle_event, ProjectLoadCompleteEventPayload,
+    emit_project_load_complete_event, emit_ready_library_waveforms, emit_transport_lifecycle_event,
+    ProjectLoadCompleteEventPayload,
 };
 use crate::error::DesktopError;
 use crate::models::{LibraryAssetSummary, SongPackageImportResponse, SongView, TransportSnapshot};

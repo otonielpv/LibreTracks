@@ -134,13 +134,12 @@ impl Engine {
                     .ok()
                     .map(|s| s.device.last_error)
                     .unwrap_or_default();
-                let detail = if last_error_after != last_error_before
-                    && !last_error_after.is_empty()
-                {
-                    Some(last_error_after.clone())
-                } else {
-                    None
-                };
+                let detail =
+                    if last_error_after != last_error_before && !last_error_after.is_empty() {
+                        Some(last_error_after.clone())
+                    } else {
+                        None
+                    };
                 let command_kind = command_tag(cmd);
                 if let Some(ref payload) = json_for_log {
                     let truncated_json = truncate_command_json(payload);

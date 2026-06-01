@@ -439,10 +439,7 @@ fn import_song_package_from_archive<R: Read + Seek>(
         .iter()
         .rev()
         .take(imported_clip_count)
-        .map(|clip| {
-            (clip.timeline_start_seconds + clip.duration_seconds)
-                - insert_at_seconds
-        })
+        .map(|clip| (clip.timeline_start_seconds + clip.duration_seconds) - insert_at_seconds)
         .fold(0.0_f64, f64::max);
     let region_span = manifest.duration_seconds.max(furthest_clip_end_offset);
     next_song.regions.push(SongRegion {
