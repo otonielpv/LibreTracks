@@ -36,6 +36,15 @@ Click en cualquier parte del header (que no sea Play ni el fader) **selecciona l
 
 > El control `Master` de la barra superior **no aparece en vista compacta** porque cada columna ya tiene su propio fader Master con vumetro. Sigue accesible desde la vista DAW.
 
+#### Boton de Play por cancion
+
+Cada cabecera de cancion lleva un boton de Play. Su comportamiento depende del estado del transporte:
+
+- **Transporte parado o pausado**: el boton mueve el playhead al inicio de la cancion y arranca la reproduccion inmediatamente. No espera a transiciones — es el equivalente a "tocar esta cancion ya".
+- **Transporte reproduciendo**: el boton programa un salto a la cancion respetando el modo de transicion global configurado en la barra de herramientas (`Inmediato`, `Siguiente marca`, `Final de region`, etc.). Es el mismo path que el atajo `Shift+numero`.
+
+Eso significa que en uso en directo, dar play a una cancion siempre la suena: si nada estaba sonando, arranca; si ya habia algo, hace el salto configurado.
+
 #### Menu contextual de cancion
 
 Click derecho en el header abre un menu con:

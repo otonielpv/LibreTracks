@@ -36,6 +36,15 @@ Clicking anywhere on the header (except Play or the fader) **selects the region*
 
 > The `Master` control in the top toolbar **does not appear in compact view** because every column already has its own Master fader with meter. It's still available from the DAW view.
 
+#### Per-song Play button
+
+Every song header has a Play button. Its behaviour depends on the transport state:
+
+- **Transport stopped or paused**: the button jumps the playhead to the song's start and starts playback immediately. No transition wait — the equivalent of "play this song right now".
+- **Transport already playing**: the button schedules a song jump that respects the global transition mode configured in the toolbar (`Immediate`, `Next marker`, `Region end`, etc.). Same path the `Shift+digit` shortcut takes.
+
+In live use this means hitting Play on a song always makes it sound: if nothing was playing it starts; if something was playing it performs the configured transition.
+
 #### Song context menu
 
 Right-click the header opens a menu with:
