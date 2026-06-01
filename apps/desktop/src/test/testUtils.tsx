@@ -13,6 +13,7 @@ import i18n from "../shared/i18n";
 import enMessages from "../shared/i18n/en";
 import { useTransportStore as transportStore } from "../features/transport/store";
 import {
+  DEFAULT_VIEW_MODE,
   TIMELINE_DEFAULT_SNAP_ENABLED,
   TIMELINE_DEFAULT_TRACK_HEIGHT as defaultTrackHeight,
   TIMELINE_DEFAULT_ZOOM_LEVEL,
@@ -72,6 +73,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     isTauriApp: true,
     listenToTransportLifecycle: vi.fn(testDesktopApiMock.listenToTransportLifecycle),
     listenToAudioMeters: vi.fn(testDesktopApiMock.listenToAudioMeters),
+    listenToRegionMeters: vi.fn(testDesktopApiMock.listenToRegionMeters),
     listenToLibraryImportProgress: vi.fn(testDesktopApiMock.listenToLibraryImportProgress),
     listenToProjectLoadProgress: vi.fn(testDesktopApiMock.listenToProjectLoadProgress),
     listenToWaveformReady: vi.fn(testDesktopApiMock.listenToWaveformReady),
@@ -221,6 +223,10 @@ beforeEach(async () => {
     configurable: true,
     value: originalPointerEvent,
   });
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    value: vi.fn(() => null),
+  });
   resetTestDesktopApiMock();
   useTransportStore.setState({
     meters: {},
@@ -234,9 +240,11 @@ beforeEach(async () => {
     trackHeight: TIMELINE_DEFAULT_TRACK_HEIGHT,
     selectedTrackIds: [],
     selectedClipId: null,
+    selectedClipIds: [],
     selectedSectionId: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     midiLearnMode: null,
+    viewMode: DEFAULT_VIEW_MODE,
   });
   vi.clearAllMocks();
   vi.restoreAllMocks();

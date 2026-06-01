@@ -953,10 +953,21 @@ export function TransportPanelContent() {
       const dispose = await currentWebview.onDragDropEvent((event) => {
         const payload = event.payload;
 
-        if (payload.type === "over") {
-          const overPayload = payload as typeof payload & { paths?: string[] };
+        // Tauri 2.x emits FOUR variants: `enter`, `over`, `drop`,
+        // `leave`. The `paths` array is only included in `enter` and
+        // `drop` — `over` carries position-only. Earlier we only
+        // listened to `over`/`drop`, so the dragover preview path
+        // never received paths and always classified the kind as
+        // "unknown", which silenced every per-column placeholder /
+        // ghost feedback. We now treat `enter` and `over` as the
+        // same logical event for our preview pipeline; the handler
+        // already caches paths into nativeExternalDropPathsRef so
+        // subsequent `over` ticks (no paths) can reuse them.
+        if (payload.type === "enter" || payload.type === "over") {
+          const positionalPaths =
+            payload.type === "enter" ? payload.paths : undefined;
           handleNativeFileDragOverRef.current({
-            paths: overPayload.paths,
+            paths: positionalPaths,
             position: payload.position,
           });
           return;
@@ -2810,6 +2821,123 @@ export function TransportPanelContent() {
   // backend extends the region if the clip is longer than the existing
   // placeholder (step 4.4) and prunes the auto-track later if the user
   // moves the clip off it.
+  // Library auto-organisation for the compact view: a song's name
+  // doubles as a Library folder name. When audios are imported by
+  // dropping them onto a song column, we make sure that folder exists
+  // and we move the *newly-imported* assets into it. Assets that
+  // already lived in another folder are respected — the user's manual
+  // organisation wins. Empty song name = skip (we don't create a
+  // folder for "").
+  const assignAssetsToSongFolder = useCallback(
+    async (songName: string, assets: LibraryAssetSummary[]) => {
+      const folderName = songName.trim();
+      if (!folderName || assets.length === 0) return assets;
+      // 1) Ensure the folder. createLibraryFolder is idempotent (the
+      //    backend just adds it to the manifest if missing and returns
+      //    the full folder list).
+      try {
+        await createLibraryFolder(folderName);
+      } catch {
+        // If creation fails (already exists / name collision), keep
+        // going — the move below will still place the assets.
+      }
+      // 2) Move only the assets that were freshly created with no
+      //    folder assignment yet. moveLibraryAsset returns the full
+      //    updated asset list every time, so we just keep the last
+      //    response as the canonical state.
+      let latest: LibraryAssetSummary[] = assets;
+      for (const asset of assets) {
+        if (asset.folderPath && asset.folderPath.trim().length > 0) {
+          continue;
+        }
+        try {
+          latest = await moveLibraryAsset(asset.filePath, folderName);
+        } catch {
+          // Per-asset failure shouldn't abort the whole batch.
+        }
+      }
+      mergeLibraryAssets(latest);
+      await refreshLibraryState({ preserveAssets: latest });
+      return latest;
+    },
+    [mergeLibraryAssets, refreshLibraryState],
+  );
+
+  const isLibraryFolderInBranch = useCallback(
+    (folderPath: string, branchRoot: string) =>
+      folderPath === branchRoot || folderPath.startsWith(`${branchRoot}/`),
+    [],
+  );
+
+  const resolveRenamedLibraryFolderBranch = useCallback(
+    (folderPath: string, oldFolderPath: string, newFolderPath: string) => {
+      if (folderPath === oldFolderPath) {
+        return newFolderPath;
+      }
+
+      const suffix = folderPath.slice(oldFolderPath.length).replace(/^\/+/, "");
+      return suffix ? `${newFolderPath}/${suffix}` : newFolderPath;
+    },
+    [],
+  );
+
+  const syncSongLibraryFolderAfterRename = useCallback(
+    async (oldSongName: string, newSongName: string) => {
+      const oldFolderPath = oldSongName.trim();
+      const newFolderPath = newSongName.trim();
+      if (!oldFolderPath || !newFolderPath || oldFolderPath === newFolderPath) {
+        return;
+      }
+
+      const { assets, folders } = await loadLibraryState();
+      const oldFolderExists =
+        folders.includes(oldFolderPath) ||
+        assets.some((asset) => asset.folderPath === oldFolderPath);
+      if (!oldFolderExists) {
+        return;
+      }
+
+      const newFolderExists =
+        folders.includes(newFolderPath) ||
+        assets.some((asset) => asset.folderPath === newFolderPath);
+
+      let nextAssets: LibraryAssetSummary[] = assets;
+      if (!newFolderExists) {
+        nextAssets = await renameLibraryFolder(oldFolderPath, newFolderPath);
+      } else {
+        for (const asset of assets) {
+          if (
+            !asset.folderPath ||
+            !isLibraryFolderInBranch(asset.folderPath, oldFolderPath)
+          ) {
+            continue;
+          }
+
+          nextAssets = await moveLibraryAsset(
+            asset.filePath,
+            resolveRenamedLibraryFolderBranch(
+              asset.folderPath,
+              oldFolderPath,
+              newFolderPath,
+            ),
+          );
+        }
+        nextAssets = await deleteLibraryFolder(oldFolderPath);
+      }
+
+      const { folders: nextFolders } = await loadLibraryState();
+      setLibraryAssets(nextAssets);
+      setLibraryFolders(nextFolders);
+    },
+    [
+      isLibraryFolderInBranch,
+      loadLibraryState,
+      resolveRenamedLibraryFolderBranch,
+      setLibraryAssets,
+      setLibraryFolders,
+    ],
+  );
+
   const handleCompactDropOsFilesIntoSong = useCallback(
     (regionId: string, files: File[]) => {
       const region = song?.regions.find((r) => r.id === regionId);
@@ -2856,6 +2984,10 @@ export function TransportPanelContent() {
         mergeLibraryAssets(importedAssets);
         await refreshLibraryState({ preserveAssets: importedAssets });
         if (importedAssets.length === 0) return;
+        // Auto-place the freshly imported assets in the song's Library
+        // folder (creating it if needed). Assets that already had a
+        // folder are respected.
+        await assignAssetsToSongFolder(region.name, importedAssets);
         const snapshot = await createClipsWithAutoTracks(
           importedAssets.map((asset) => ({
             filePath: asset.filePath,
@@ -2876,6 +3008,7 @@ export function TransportPanelContent() {
     },
     [
       applyPlaybackSnapshot,
+      assignAssetsToSongFolder,
       mergeLibraryAssets,
       refreshLibraryState,
       runAction,
@@ -3077,10 +3210,11 @@ export function TransportPanelContent() {
           currentRegion.endSeconds,
         );
         applyPlaybackSnapshot(snapshot);
+        await syncSongLibraryFolderAfterRename(currentRegion.name, nextName);
         setStatus(`Canción renombrada como "${nextName}"`);
       });
     },
-    [applyPlaybackSnapshot, runAction, setStatus],
+    [applyPlaybackSnapshot, runAction, setStatus, syncSongLibraryFolderAfterRename],
   );
 
   // Set BPM for a song. Always inserts (or replaces) a tempo marker at the
@@ -4967,6 +5101,7 @@ export function TransportPanelContent() {
               region.endSeconds,
             );
             applyPlaybackSnapshot(nextSnapshot);
+            await syncSongLibraryFolderAfterRename(region.name, nextName);
             setStatus(t("transport.status.songRenamed", { name: nextName }));
           });
         },
@@ -8669,6 +8804,9 @@ export function TransportPanelContent() {
           mergeLibraryAssets(importedAssets);
           await refreshLibraryState({ preserveAssets: importedAssets });
           if (importedAssets.length === 0) return;
+          // Auto-organise: drop the freshly imported assets into the
+          // song's Library folder (creating it if needed).
+          await assignAssetsToSongFolder(region.name, importedAssets);
           const snapshot = await createClipsWithAutoTracks(
             importedAssets.map((asset) => ({
               filePath: asset.filePath,

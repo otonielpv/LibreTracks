@@ -12,6 +12,7 @@ import type {
   LibraryImportProgressEvent,
   PendingJumpSummary,
   ProjectLoadProgressEvent,
+  RegionMeterLevel,
   SectionMarkerSummary,
   SongRegionSummary,
   SongPackageImportResponse,
@@ -736,6 +737,8 @@ export const testDesktopApiMock = {
     async (_handler: (event: TransportLifecycleEvent) => void) => () => {},
   listenToAudioMeters:
     async (_handler: (levels: AudioMeterLevel[]) => void) => () => {},
+  listenToRegionMeters:
+    async (_handler: (levels: RegionMeterLevel[]) => void) => () => {},
   listenToLibraryImportProgress:
     async (_handler: (event: LibraryImportProgressEvent) => void) => () => {},
   listenToProjectLoadProgress:

@@ -183,4 +183,46 @@ describe("App / library", () => {
     promptSpy.mockRestore();
   });
 
+  it("merges the old song library folder into the existing new one when renaming a compact song", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    await desktopApi.moveLibraryAsset("audio/drums.wav", "LibreTracks Session");
+    await desktopApi.createLibraryFolder("Renamed Song");
+
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Renamed Song");
+    const renameLibraryFolderMock = vi.mocked(desktopApi.renameLibraryFolder);
+    const moveLibraryAssetMock = vi.mocked(desktopApi.moveLibraryAsset);
+    const deleteLibraryFolderMock = vi.mocked(desktopApi.deleteLibraryFolder);
+    renameLibraryFolderMock.mockClear();
+    moveLibraryAssetMock.mockClear();
+    deleteLibraryFolderMock.mockClear();
+
+    await renderApp();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /cambiar a vista compacta/i }));
+    });
+
+    const compactSongHeader = document.querySelector(".lt-compact-song-header");
+    expect(compactSongHeader).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.contextMenu(compactSongHeader as HTMLElement, {
+        clientX: 120,
+        clientY: 120,
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /renombrar canci/i }));
+    });
+
+    await waitFor(() => {
+      expect(moveLibraryAssetMock).toHaveBeenCalledWith("audio/drums.wav", "Renamed Song");
+      expect(deleteLibraryFolderMock).toHaveBeenCalledWith("LibreTracks Session");
+      expect(renameLibraryFolderMock).not.toHaveBeenCalled();
+    });
+
+    promptSpy.mockRestore();
+  });
+
 });
