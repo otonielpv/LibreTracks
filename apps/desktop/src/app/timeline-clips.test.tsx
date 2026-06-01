@@ -40,8 +40,57 @@ import {
   mockTrackRowDragGeometry,
   setMockNativeWebviewPosition
 } from "../test/testUtils";
+import { useTimelineUIStore } from "../features/transport/uiStore";
 
 describe("App / timeline-clips", () => {
+  it("keeps timeline click seeks aligned after toggling compact view", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    const seekSpy = vi.mocked(desktopApi.seekTransport);
+
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockTimelineShellMetrics(container, 1500);
+
+    await act(async () => {
+      useTimelineUIStore.getState().setZoomLevel(1);
+      useTimelineUIStore.getState().setCameraX(6300);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /cambiar a vista compacta/i }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /cambiar a vista daw/i }));
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector(".lt-ruler-track")).toBeTruthy();
+    });
+    mockRulerBounds(container);
+    mockTimelineShellMetrics(container, 1500);
+
+    seekSpy.mockClear();
+    const ruler = container.querySelector(".lt-ruler-track") as HTMLElement | null;
+    expect(ruler).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.mouseDown(ruler as HTMLElement, {
+        button: 0,
+        clientX: 630,
+      });
+      fireEvent.mouseUp(window, {
+        button: 0,
+        clientX: 630,
+      });
+    });
+
+    await waitFor(() => {
+      const positionSeconds = seekSpy.mock.calls[0]?.[0] ?? 0;
+      expect(positionSeconds).toBeGreaterThan(300);
+    });
+  });
+
   it("drags a clip before bar one for pre-roll alignment", async () => {
     const desktopApi = await import("../features/transport/desktopApi");
     const moveClipSpy = vi.spyOn(desktopApi, "moveClip");

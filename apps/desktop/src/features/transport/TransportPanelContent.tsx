@@ -272,7 +272,6 @@ import {
   resolveNativeAudioImportPayloads,
   resolveTrackDropState,
   rulerClientXToSeconds,
-  rulerPointerToSeconds,
   selectNativeDropCandidate,
   toClientPointFromNativePosition,
   toNativeDropDebugRect,
@@ -4515,19 +4514,15 @@ export function TransportPanelContent() {
       : clampedPosition;
   }
 
-  function getTimelineScrollContainer() {
-    return horizontalScrollbarRef.current ?? timelineShellRef.current;
-  }
-
   function snappedRulerSeconds(
     event: MouseEvent | ReactMouseEvent,
     durationSeconds: number,
   ) {
     return normalizeTimelineSeekSeconds(
-      rulerPointerToSeconds(
-        event,
+      rulerClientXToSeconds(
+        event.clientX,
         rulerTrackRef.current as HTMLElement,
-        getTimelineScrollContainer(),
+        getCameraX(),
         durationSeconds,
         livePixelsPerSecondRef.current,
       ),
@@ -4947,6 +4942,7 @@ export function TransportPanelContent() {
     pixelsPerSecond,
     song?.durationSeconds,
     timelineContentEndSeconds,
+    viewMode,
   ]);
 
   useEffect(() => {
@@ -6165,10 +6161,10 @@ export function TransportPanelContent() {
     if (hitClip) {
       event.preventDefault();
       const clickSeekSeconds = normalizeTimelineSeekSeconds(
-        rulerPointerToSeconds(
-          event,
+        rulerClientXToSeconds(
+          event.clientX,
           event.currentTarget,
-          getTimelineScrollContainer(),
+          getCameraX(),
           songRef.current?.durationSeconds ?? 0,
           livePixelsPerSecondRef.current,
         ),
@@ -6316,10 +6312,10 @@ export function TransportPanelContent() {
     event.preventDefault();
     setContextMenu(null);
     const previewSeconds = normalizeTimelineSeekSeconds(
-      rulerPointerToSeconds(
-        event,
+      rulerClientXToSeconds(
+        event.clientX,
         event.currentTarget,
-        getTimelineScrollContainer(),
+        getCameraX(),
         songRef.current?.durationSeconds ?? 0,
         livePixelsPerSecondRef.current,
       ),

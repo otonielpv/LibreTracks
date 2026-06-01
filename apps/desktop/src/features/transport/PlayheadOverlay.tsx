@@ -10,8 +10,8 @@ import { useRenderCounter } from "./perf/useRenderCounter";
 import { useTransportStore } from "./store";
 import {
   clamp,
-  clientXToTimelineSeconds,
   secondsToAbsoluteX,
+  screenXToSeconds,
 } from "./timelineMath";
 
 function isSyncDebugAvailable() {
@@ -51,6 +51,17 @@ type PlaybackSnapshotState = {
   transportClock: TransportClock | null;
   anchorReceivedAtMs: number;
 };
+
+function clientXToTimelineSecondsFromCamera(
+  clientX: number,
+  boundsElement: Pick<HTMLElement, "getBoundingClientRect">,
+  cameraX: number,
+  pixelsPerSecond: number,
+) {
+  const bounds = boundsElement.getBoundingClientRect();
+  const viewportX = clamp(clientX - bounds.left, 0, bounds.width);
+  return screenXToSeconds(viewportX, cameraX, pixelsPerSecond);
+}
 
 function resolveClockPositionSeconds(
   playback: PlaybackSnapshotState,
@@ -232,10 +243,12 @@ export function PlayheadOverlay({
     event.stopPropagation();
 
     const rawStartSeconds = clamp(
-      clientXToTimelineSeconds(
+      clientXToTimelineSecondsFromCamera(
         event.clientX,
         boundsElement,
-        latestPropsRef.current.scrollContainerRef?.current ?? null,
+        latestPropsRef.current.cameraXRef?.current ??
+          latestPropsRef.current.scrollContainerRef?.current?.scrollLeft ??
+          0,
         latestPropsRef.current.livePixelsPerSecondRef?.current ??
           latestPropsRef.current.pixelsPerSecond,
       ),
@@ -265,10 +278,12 @@ export function PlayheadOverlay({
       }
 
       const nextSeconds = clamp(
-        clientXToTimelineSeconds(
+        clientXToTimelineSecondsFromCamera(
           pointerEvent.clientX,
           boundsElement,
-          latestPropsRef.current.scrollContainerRef?.current ?? null,
+          latestPropsRef.current.cameraXRef?.current ??
+            latestPropsRef.current.scrollContainerRef?.current?.scrollLeft ??
+            0,
           latestPropsRef.current.livePixelsPerSecondRef?.current ??
             latestPropsRef.current.pixelsPerSecond,
         ),
