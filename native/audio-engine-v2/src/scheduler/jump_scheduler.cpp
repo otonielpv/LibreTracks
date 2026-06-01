@@ -65,24 +65,24 @@ Result<Frame> resolve_jump_target(const JumpTarget& target,
         case Kind::Marker: {
             if (!target.id)
                 return Result<Frame>::err("JumpTarget::Marker has no id");
+            if (target.frame)
+                return Result<Frame>::ok(*target.frame);
             for (const auto& song : session.songs)
                 for (const auto& m : song.markers)
                     if (m.id == *target.id)
                         return Result<Frame>::ok(m.frame);
-            if (target.frame)
-                return Result<Frame>::ok(*target.frame);
             return Result<Frame>::err("Marker not found: " + *target.id);
         }
 
         case Kind::Region: {
             if (!target.id)
                 return Result<Frame>::err("JumpTarget::Region has no id");
+            if (target.frame)
+                return Result<Frame>::ok(*target.frame);
             for (const auto& song : session.songs)
                 for (const auto& r : song.regions)
                     if (r.id == *target.id)
                         return Result<Frame>::ok(r.start_frame);
-            if (target.frame)
-                return Result<Frame>::ok(*target.frame);
             return Result<Frame>::err("Region not found: " + *target.id);
         }
 

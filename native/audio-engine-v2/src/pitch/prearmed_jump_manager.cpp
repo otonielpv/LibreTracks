@@ -197,22 +197,20 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
     const Frame src_end  = source.duration_frames();
     Frame  read_cursor   = target_source_frame
         + static_cast<Frame>(compensation_frames); // absolute source frame to read next
-    int    fed           = 0;                   // count of real frames fed
-    while (fed < latency_frames) {
-        const int chunk = std::min(max_in_frames, latency_frames - fed);
 
-        // Pull `chunk` frames from the source starting at `read_cursor`. Anything
-        // past src_end is zero-padded (matches track_renderer's pad-on-EOF).
-        std::fill(read_l.begin(), read_l.begin() + chunk, 0.0f);
-        std::fill(read_r.begin(), read_r.begin() + chunk, 0.0f);
+    const double safe_ratio = time_ratio > 0.0 ? time_ratio : 1.0;
+    const bool warp_active = std::abs(safe_ratio - 1.0) > 1.0e-6;
+    auto read_source = [&](int frames) {
+        std::fill(read_l.begin(), read_l.begin() + frames, 0.0f);
+        std::fill(read_r.begin(), read_r.begin() + frames, 0.0f);
         const int dst_offset = read_cursor < 0
-            ? static_cast<int>(std::min<Frame>(chunk, -read_cursor))
+            ? static_cast<int>(std::min<Frame>(frames, -read_cursor))
             : 0;
         const Frame read_start = std::max<Frame>(0, read_cursor);
-        const int available = (dst_offset >= chunk || read_start >= src_end)
+        const int available = (dst_offset >= frames || read_start >= src_end)
             ? 0
             : static_cast<int>(std::min<long long>(
-                chunk - dst_offset, static_cast<long long>(src_end - read_start)));
+                frames - dst_offset, static_cast<long long>(src_end - read_start)));
         if (available > 0) {
             float* read_into[2] = {
                 read_l.data() + dst_offset,
@@ -224,12 +222,54 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
                             read_r.begin() + dst_offset);
             }
         }
+        read_cursor += frames;
+    };
+
+    if (warp_active) {
+        // Ratio-aware prefeed: drain enough output to consume Bungee's input
+        // latency in source-frame units. The ratio=1 path below can advance
+        // input and output by the same amount, but warp must not skip source
+        // frames while warming the post-jump stream.
+        voice.clear_queued_output();
+        const int max_output_per_call = std::max(1, std::min(
+            max_in_frames,
+            static_cast<int>(std::floor(
+                static_cast<double>(max_in_frames) / safe_ratio))));
+        int consumed_input = 0;
+        while (consumed_input < latency_frames) {
+            const int remaining = latency_frames - consumed_input;
+            int output_frames = static_cast<int>(std::floor(
+                static_cast<double>(remaining) / safe_ratio));
+            if (output_frames <= 0)
+                break;
+            output_frames = std::min(output_frames, max_output_per_call);
+            const int input_frames = std::min(
+                max_in_frames,
+                std::max(1, static_cast<int>(std::ceil(
+                    static_cast<double>(output_frames) * safe_ratio))));
+            read_source(input_frames);
+            (void)voice.render_block(in_ptrs.data(), input_frames,
+                                      out_ptrs.data(), output_frames,
+                                      pitch_scale,
+                                      safe_ratio);
+            consumed_input += input_frames;
+        }
+        voice.clear_queued_output();
+        return;
+    }
+
+    int    fed           = 0;                   // count of real frames fed
+    while (fed < latency_frames) {
+        const int chunk = std::min(max_in_frames, latency_frames - fed);
+
+        // Pull `chunk` frames from the source starting at `read_cursor`. Anything
+        // past src_end is zero-padded (matches track_renderer's pad-on-EOF).
+        read_source(chunk);
 
         (void)voice.render_block(in_ptrs.data(), chunk,
                                   out_ptrs.data(), chunk,
                                   pitch_scale,
                                   time_ratio);
-        read_cursor += chunk;
         fed         += chunk;
     }
 
@@ -240,39 +280,19 @@ void prefeed_voice_with_target_audio(BungeePitchVoice& voice,
     // roughness while preserving sample-exact transport.
     const int prime_target_frames = std::max(
         max_in_frames,
-        std::min(max_in_frames * 4, std::max(max_in_frames, sample_rate / 20)));
+        std::min(max_in_frames * 4,
+                 std::max(max_in_frames, sample_rate / 20)));
     int primed_total = voice.queued_output_frames();
     int prime_budget = prime_target_frames * 2;
     while (max_in_frames > 0
            && primed_total < prime_target_frames
            && prime_budget > 0) {
         const int prime_frames = std::min(max_in_frames, prime_budget);
-        std::fill(read_l.begin(), read_l.begin() + prime_frames, 0.0f);
-        std::fill(read_r.begin(), read_r.begin() + prime_frames, 0.0f);
-        const int dst_offset = read_cursor < 0
-            ? static_cast<int>(std::min<Frame>(prime_frames, -read_cursor))
-            : 0;
-        const Frame read_start = std::max<Frame>(0, read_cursor);
-        const int available = (dst_offset >= prime_frames || read_start >= src_end)
-            ? 0
-            : static_cast<int>(std::min<long long>(
-                prime_frames - dst_offset, static_cast<long long>(src_end - read_start)));
-        if (available > 0) {
-            float* read_into[2] = {
-                read_l.data() + dst_offset,
-                read_r.data() + dst_offset};
-            const int got = source.read(read_start, available, read_into,
-                                         std::min(2, source.channel_count()));
-            if (got > 0 && source.channel_count() == 1) {
-                std::copy_n(read_l.begin() + dst_offset, got,
-                            read_r.begin() + dst_offset);
-            }
-        }
+        read_source(prime_frames);
         const int before = voice.queued_output_frames();
         (void)voice.prime_output_fifo(in_ptrs.data(), prime_frames,
                                       pitch_scale, time_ratio);
         primed_total = voice.queued_output_frames();
-        read_cursor += prime_frames;
         prime_budget -= prime_frames;
         if (primed_total <= before)
             break;

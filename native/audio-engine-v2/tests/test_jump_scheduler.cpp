@@ -74,6 +74,16 @@ TEST_CASE("resolve marker target can use exact fallback frame") {
     CHECK(r.unwrap() == 123456);
 }
 
+TEST_CASE("resolve marker target prefers explicit warped frame over marker frame") {
+    TransportClock clock(48000);
+    auto sess = make_session_with_marker();
+    auto target = marker_target("m1");
+    target.frame = 123456;
+    auto r = resolve_jump_target(target, sess, clock);
+    CHECK(r.is_ok());
+    CHECK(r.unwrap() == 123456);
+}
+
 TEST_CASE("resolve NextSong from inside song-1") {
     TransportClock clock(48000);
     clock.seek(10000);  // inside song-1
@@ -104,6 +114,15 @@ TEST_CASE("resolve Region target") {
 }
 
 // ── Schedule / cancel / replace ──────────────────────────────────────────────
+
+TEST_CASE("resolve region target prefers explicit warped frame over region start") {
+    TransportClock clock(48000);
+    auto sess = make_session_with_marker();
+    JumpTarget t; t.kind = JumpTarget::Kind::Region; t.id = "r1"; t.frame = 123456;
+    auto r = resolve_jump_target(t, sess, clock);
+    CHECK(r.is_ok());
+    CHECK(r.unwrap() == 123456);
+}
 
 TEST_CASE("schedule and drain pending appears in list") {
     TransportClock clock(48000);

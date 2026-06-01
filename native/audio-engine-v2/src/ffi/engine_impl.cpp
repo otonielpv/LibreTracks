@@ -1709,6 +1709,19 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                     session_, source_manager_.get(), rev);
                             }
                         }
+                        if (!jump.prepared_voice_map) {
+                            wait_jump_target_audio_ready(
+                                *source_manager_, *session_, target_frame,
+                                std::max(4096,
+                                    (device_manager_
+                                        ? device_manager_->actual_buffer_size()
+                                        : 1024) * 8));
+                            jump.prepared_voice_map =
+                                bungee_voices_->build_seek_voice_map(
+                                    target_frame, *session_, *source_manager_);
+                            if (jump.prepared_voice_map)
+                                prearm_source = "seek_map";
+                        }
                     }
                 }
                 if (jump_debug_enabled()) {
