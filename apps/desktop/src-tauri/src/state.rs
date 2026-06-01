@@ -2468,71 +2468,23 @@ impl DesktopSession {
             master: existing_region.master.clone(),
         };
 
-        // The song region acts as the container for the song's markers
-        // and clips. When the user moves either edge of the region, the
-        // contents must travel with it — otherwise tempo markers / time
-        // signature changes / section markers / clips end up sitting in
-        // a different musical position than where they were authored,
-        // and the engine refuses the next sync ("audio command failed:
-        // Invalid or unknown command") because the resulting song no
-        // longer has a consistent timing map.
+        // Resizing a region NEVER moves its contents — the region is
+        // just the named span that contains the clips and markers, not
+        // a transform on them. Extending the left edge adds empty room
+        // before whatever's already in the song; shrinking either edge
+        // reclaims unused space at the boundary. The user's mental
+        // model is "I'm changing where the box starts/ends", not "I'm
+        // sliding the box and everything inside it".
         //
-        // We translate by the start delta ONLY when expanding the left
-        // edge (start_delta < 0, i.e. moving the start earlier). The
-        // semantics there: the user is making room before the existing
-        // contents, so the contents should slide along to keep their
-        // musical alignment to the rest of the song.
-        //
-        // When the user *shrinks* the left edge (start_delta > 0, i.e.
-        // moving the start later), the contents must stay put — the
-        // intent is to reclaim the empty space at the head of the song,
-        // not to push everything to the right. If a clip ends up
-        // straddling the new boundary the engine's invariant catches it
-        // and surfaces a clear error, which is the right behaviour:
-        // we'd rather refuse the resize than silently destroy data.
-        //
-        // Dragging only the right edge doesn't shift contents in either
-        // direction; it just changes how much room the region claims at
-        // the end.
+        // We only need to validate that a shrink doesn't leave clips
+        // dangling outside the new bounds. If it would, refuse the
+        // resize with a clear message instead of letting the engine's
+        // invariant reject the sync with a cryptic boundary error.
         let start_delta = updated_region.start_seconds - existing_region.start_seconds;
-        if start_delta < -f64::EPSILON {
-            // Expanding the left edge: slide the contents along so they
-            // keep their musical position relative to the rest of the
-            // song.
-            let old_start = existing_region.start_seconds;
-            let old_end = existing_region.end_seconds;
-            let inside_old_region = |pos: f64| pos >= old_start - 0.001 && pos < old_end;
-
-            for marker in &mut song.tempo_markers {
-                if inside_old_region(marker.start_seconds) {
-                    marker.start_seconds = (marker.start_seconds + start_delta).max(0.0);
-                }
-            }
-            for marker in &mut song.section_markers {
-                if inside_old_region(marker.start_seconds) {
-                    marker.start_seconds = (marker.start_seconds + start_delta).max(0.0);
-                }
-            }
-            for marker in &mut song.time_signature_markers {
-                if inside_old_region(marker.start_seconds) {
-                    marker.start_seconds = (marker.start_seconds + start_delta).max(0.0);
-                }
-            }
-            for clip in &mut song.clips {
-                if inside_old_region(clip.timeline_start_seconds) {
-                    clip.timeline_start_seconds =
-                        (clip.timeline_start_seconds + start_delta).max(0.0);
-                }
-            }
-        } else if start_delta > f64::EPSILON
-            || updated_region.end_seconds < existing_region.end_seconds - f64::EPSILON
-        {
-            // Shrinking one or both edges: contents stay put, but we
-            // must refuse the resize if any clip that lived inside the
-            // OLD region would fall outside the NEW one. Otherwise the
-            // engine rejects the next sync with a cryptic "clip spans
-            // the boundary…" error and leaves the project in a half-
-            // applied state. Failing fast here keeps the song valid.
+        let shrinks_left = start_delta > f64::EPSILON;
+        let shrinks_right =
+            updated_region.end_seconds < existing_region.end_seconds - f64::EPSILON;
+        if shrinks_left || shrinks_right {
             let old_start = existing_region.start_seconds;
             let old_end = existing_region.end_seconds;
             let inside_old_region = |pos: f64| pos >= old_start - 0.001 && pos < old_end;
