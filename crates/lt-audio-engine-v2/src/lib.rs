@@ -102,10 +102,69 @@ impl Engine {
     pub fn send_command(&self, cmd: &EngineCommand) -> Result<(), EngineError> {
         let json =
             serde_json::to_string(cmd).map_err(|e| EngineError::Serialization(e.to_string()))?;
+        let log_failures = audio_debug_enabled();
+        let json_for_log = if log_failures {
+            Some(json.clone())
+        } else {
+            None
+        };
         let c_str =
             std::ffi::CString::new(json).map_err(|e| EngineError::Serialization(e.to_string()))?;
+        // Snapshot of the device.last_error BEFORE the command so we can
+        // distinguish a fresh error caused by this command from a stale
+        // one left over from a previous failure (e.g. bootstrap failed to
+        // open the output device → last_error stays "Couldn't open the
+        // output device!" forever, and every subsequent unrelated failure
+        // would surface that wrong message).
+        let last_error_before = self
+            .get_snapshot()
+            .ok()
+            .map(|s| s.device.last_error)
+            .unwrap_or_default();
         let rc = unsafe { lt_audio_engine_send_command(self.handle, c_str.as_ptr()) };
-        lt_result_to_rust(rc)
+        match lt_result_to_rust(rc) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                // Pull the post-command last_error and report it only if
+                // it's different from the snapshot we took before — that
+                // way we surface the real cause of *this* failure instead
+                // of an outdated message.
+                let last_error_after = self
+                    .get_snapshot()
+                    .ok()
+                    .map(|s| s.device.last_error)
+                    .unwrap_or_default();
+                let detail = if last_error_after != last_error_before
+                    && !last_error_after.is_empty()
+                {
+                    Some(last_error_after.clone())
+                } else {
+                    None
+                };
+                let command_kind = command_tag(cmd);
+                if let Some(ref payload) = json_for_log {
+                    let truncated_json = truncate_command_json(payload);
+                    eprintln!(
+                        "[engine] send_command failed: kind={command_kind} error={error:?} \
+                         fresh_detail={detail:?} stale_last_error={last_error_after:?} \
+                         payload={truncated_json}"
+                    );
+                }
+                Err(match (error, detail) {
+                    (EngineError::InvalidCommand, Some(message)) => {
+                        EngineError::Internal(format!("{command_kind}: {message}"))
+                    }
+                    (EngineError::InvalidCommand, None) => EngineError::Internal(format!(
+                        "{command_kind}: engine returned invalid-command with no fresh \
+                         detail (stale device.last_error: {last_error_after:?})"
+                    )),
+                    (other, Some(message)) => {
+                        EngineError::Internal(format!("{command_kind}: {other}: {message}"))
+                    }
+                    (other, None) => other,
+                })
+            }
+        }
     }
 
     /// Service control-thread housekeeping tasks (pitch repair etc.).
@@ -208,4 +267,47 @@ fn lt_result_to_rust(rc: LtResult) -> Result<(), EngineError> {
         LT_ERR_DEVICE => Err(EngineError::Device("device error".into())),
         _ => Err(EngineError::Internal("unknown error code".into())),
     }
+}
+
+/// Short, human-readable tag for an EngineCommand variant, used in error
+/// messages and logs so "Invalid or unknown command" actually tells us
+/// *which* command failed. We read it from the serialized JSON to avoid
+/// having to update a giant match every time someone adds a variant.
+fn command_tag(cmd: &EngineCommand) -> String {
+    let serialized = match serde_json::to_value(cmd) {
+        Ok(value) => value,
+        Err(_) => return "EngineCommand(?)".to_string(),
+    };
+    serialized
+        .get("type")
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| "EngineCommand(?)".to_string())
+}
+
+/// Avoid dumping a multi-megabyte LoadSession payload into the log.
+/// Keeps the first chunk so the kind/tag is visible plus enough context
+/// to spot obvious garbage.
+fn truncate_command_json(json: &str) -> String {
+    const MAX: usize = 512;
+    if json.len() <= MAX {
+        return json.to_string();
+    }
+    let mut truncated = json[..MAX].to_string();
+    truncated.push_str(&format!("…[truncated, total {} bytes]", json.len()));
+    truncated
+}
+
+/// Cached check for `LIBRETRACKS_AUDIO_DEBUG`. Used to gate the
+/// per-command failure dump in `send_command` so production runs stay
+/// quiet but support can flip the env var to get the full trail without
+/// recompiling. Cached because it's read on every failed command.
+fn audio_debug_enabled() -> bool {
+    use std::sync::OnceLock;
+    static FLAG: OnceLock<bool> = OnceLock::new();
+    *FLAG.get_or_init(|| {
+        std::env::var("LIBRETRACKS_AUDIO_DEBUG")
+            .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+            .unwrap_or(false)
+    })
 }

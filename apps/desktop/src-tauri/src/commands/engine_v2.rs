@@ -100,8 +100,13 @@ pub fn engine_v2_load_session(
     state: State<'_, EngineV2State>,
     project_json: String,
 ) -> Result<(), String> {
+    let json_bytes = project_json.len();
     with_engine(&state, |e| {
         e.send_command(&EngineCommand::LoadSession { project_json })
     })
-    .map_err(|e| e.to_string())
+    .map_err(|error| {
+        let message = error.to_string();
+        eprintln!("[engine_v2] load_session FAILED ({json_bytes} bytes): {message}");
+        message
+    })
 }

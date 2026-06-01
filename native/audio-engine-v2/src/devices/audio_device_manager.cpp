@@ -12,6 +12,7 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <limits>
 #include <mutex>
@@ -208,10 +209,32 @@ Result<void> ensure_initialized(ImplT& impl) {
     if (impl.initialized)
         return Result<void>::ok();
 
-    juce::String err = impl.juce_manager.initialise(0, 64, nullptr, true);
+    // `initialise(in, out, savedState, selectDefaultDeviceOnFailure)`.
+    // We pass `selectDefaultDeviceOnFailure = false` so JUCE only
+    // enumerates the available backends without trying to open a
+    // device. Opening happens later via open_device(), where we can
+    // gracefully fall back when the saved device is gone.
+    //
+    // Previously this flag was `true`, which made initialise() try to
+    // open the system default audio device immediately. On Windows
+    // hosts where the default device had been unplugged (typical
+    // headphone swap between sessions) JUCE would return
+    // "Couldn't open the output device!" and refuse to mark itself as
+    // initialised — and from that point list_devices() returned an
+    // empty list, the settings dropdown only showed "System default",
+    // and every subsequent device operation failed with the same
+    // stale error.
+    juce::String err = impl.juce_manager.initialise(0, 64, nullptr, false);
     if (err.isNotEmpty()) {
+        // Even with selectDefaultDeviceOnFailure=false JUCE may still
+        // report a soft error (e.g. driver enumeration warning). It's
+        // recoverable for our purposes — backend types and device
+        // names are still queryable. Stash the message so it shows up
+        // under LIBRETRACKS_AUDIO_DEBUG without flooding normal runs.
+        device_debug_log(
+            "[LT_AUDIO_DEBUG] juce_manager.initialise soft-warned '%s' but continuing\n",
+            err.toRawUTF8());
         impl.last_error = err.toStdString();
-        return Result<void>::err(impl.last_error);
     }
 
     impl.initialized = true;
@@ -235,11 +258,32 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices() const {
     std::vector<DeviceDescriptor> result;
 
     auto init = ensure_initialized(*impl_);
-    if (init.is_err())
+    if (init.is_err()) {
+        // Print unconditionally — when this fails the user sees an empty
+        // device list with no explanation, which has been the source of
+        // several confusing bug reports. The cause is almost always JUCE
+        // failing to initialise on a Windows host whose default audio
+        // device was unplugged/changed between sessions.
+        fprintf(stderr,
+                "[LT_AUDIO] list_devices ensure_initialized FAILED: %s\n",
+                impl_->last_error.c_str());
         return result;
+    }
 
     auto& mgr = impl_->juce_manager;
-    for (auto* type : mgr.getAvailableDeviceTypes()) {
+    // getAvailableDeviceTypes() returns a const OwnedArray& — must be
+    // bound by reference because OwnedArray is non-copyable. Capturing
+    // by `auto` produces a copy attempt and a hard compile error.
+    const auto& backend_types = mgr.getAvailableDeviceTypes();
+    // Empty backend list is the clear failure signal — log it always.
+    // Populated lists go through the LT_AUDIO_DEBUG channel so production
+    // runs aren't flooded with per-backend timings.
+    if (backend_types.size() == 0) {
+        fprintf(stderr,
+                "[LT_AUDIO] list_devices: 0 backend type(s) available — "
+                "JUCE failed to enumerate audio backends\n");
+    }
+    for (auto* type : backend_types) {
         const juce::String backend_name = type->getTypeName();
         const auto t_scan = clk::now();
         type->scanForDevices();
@@ -326,8 +370,19 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
 
     if (!request.device_id.empty()) {
         auto [backend, device_name] = split_device_id(request.device_id);
-        if (!backend.empty())
-            impl_->juce_manager.setCurrentAudioDeviceType(juce::String(backend), true);
+        if (!backend.empty()) {
+            // setCurrentAudioDeviceType(name, treatAsChosenDevice=false):
+            // we pass `false` so JUCE only switches the backend without
+            // also trying to open a device. The actual open happens
+            // below through setAudioDeviceSetup with the explicit
+            // outputDeviceName we want. Passing `true` here used to make
+            // JUCE pick whatever device its internal heuristic decided
+            // (often the previous backend's stale "primary" alias),
+            // producing nonsensical errors like
+            // "Error opening Controlador primario de sonido" when the
+            // caller actually asked for Razer Kraken.
+            impl_->juce_manager.setCurrentAudioDeviceType(juce::String(backend), false);
+        }
     } else {
         select_preferred_default_device_type(impl_->juce_manager);
     }
@@ -336,7 +391,26 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     if (!request.device_id.empty()) {
         auto [_backend, device_name] = split_device_id(request.device_id);
         setup.outputDeviceName = juce::String(device_name);
+    } else {
+        // Fallback path: explicitly clear any device name carried over
+        // from a previous failed open attempt. Without this JUCE
+        // would try to open the stale name on the newly-selected
+        // backend (typical case: the user picked a DirectSound device
+        // that failed; the fallback switches to WASAPI but inherits
+        // the DirectSound name, so WASAPI returns "No audio device
+        // opened after setup" instead of opening the WASAPI default).
+        // Empty name + setAudioDeviceSetup makes JUCE pick the new
+        // backend's actual default.
+        setup.outputDeviceName = juce::String();
     }
+    // Always reset input — we are an output-only app, but JUCE's
+    // setAudioDeviceSetup will refuse the call if input config is
+    // stale from the previous backend (e.g. a microphone name that
+    // doesn't exist in the new backend). Clearing it up front means
+    // the only constraint that has to be satisfiable is the output.
+    setup.inputDeviceName = juce::String();
+    setup.inputChannels.clear();
+    setup.useDefaultInputChannels = false;
     setup.outputChannels.clear();
     if (request.active_output_channels.empty()) {
         for (int ch = 0; ch < 2; ++ch)
@@ -354,8 +428,33 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         ? request.buffer_size
         : kDefaultLowLatencyBufferSize;
 
+    if (device_debug_enabled()) {
+        const auto current_type = impl_->juce_manager.getCurrentAudioDeviceType();
+        fprintf(stderr,
+                "[LT_AUDIO_DEBUG] open_device -> setAudioDeviceSetup with backend=\"%s\" "
+                "outputDeviceName=\"%s\" sampleRate=%.0f bufferSize=%d "
+                "outputChannels(bits)=%d\n",
+                current_type.toRawUTF8(),
+                setup.outputDeviceName.toRawUTF8(),
+                setup.sampleRate, setup.bufferSize,
+                setup.outputChannels.countNumberOfSetBits());
+    }
     const auto t_setup = clk::now();
     juce::String err = impl_->juce_manager.setAudioDeviceSetup(setup, true);
+    if (err.isNotEmpty() && device_debug_enabled()) {
+        // Inspect what JUCE actually picked when our request was
+        // rejected. Helps explain mismatches like "asked for device A,
+        // got 'primary X' in the error message". The hard error itself
+        // is surfaced from the SetOutputDevice command handler so the
+        // user always sees it; only the post-failure diagnostic dump
+        // is gated behind the debug flag.
+        auto post = impl_->juce_manager.getAudioDeviceSetup();
+        fprintf(stderr,
+                "[LT_AUDIO_DEBUG] open_device setAudioDeviceSetup err=\"%s\" "
+                "post.outputDeviceName=\"%s\" post.sampleRate=%.0f post.bufferSize=%d\n",
+                err.toRawUTF8(), post.outputDeviceName.toRawUTF8(),
+                post.sampleRate, post.bufferSize);
+    }
     if (err.isNotEmpty() && request.buffer_size <= 0) {
         setup.bufferSize = 0;
         err = impl_->juce_manager.setAudioDeviceSetup(setup, true);

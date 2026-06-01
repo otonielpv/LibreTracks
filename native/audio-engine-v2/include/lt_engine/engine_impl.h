@@ -24,6 +24,7 @@
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <memory>
+#include <mutex>
 #include <atomic>
 #include <string>
 
@@ -105,6 +106,15 @@ private:
     // Silent audio render callback used during Phases 1-5.
     class SilentCallback;
     std::unique_ptr<SilentCallback> silent_callback_;
+
+    // Last error returned by send_command(). The FFI collapses all
+    // command-side errors to LT_ERR_INVALID_COMMAND and discards the
+    // textual reason; the Rust layer pulls this string from the
+    // snapshot to surface the actual cause to the user. Cleared at the
+    // start of every send_command so callers can distinguish a fresh
+    // failure from a stale one.
+    mutable std::mutex last_command_error_mtx_;
+    std::string last_command_error_;
 };
 
 } // namespace lt

@@ -490,6 +490,17 @@ export async function deleteClip(clipId: string): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("delete_clip", { clipId });
 }
 
+/**
+ * Batched clip deletion. Removes every id in `clipIds` in one engine
+ * sync + one history entry + one snapshot round-trip. Use this when
+ * the UI has a multi-selection of clips to delete — a loop of
+ * `deleteClip` would otherwise re-sync the whole engine and re-render
+ * the timeline once per clip, which feels sluggish on big selections.
+ */
+export async function deleteClips(clipIds: string[]): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("delete_clips", { clipIds });
+}
+
 export async function updateClipWindow(
   clipId: string,
   timelineStartSeconds: number,
@@ -529,6 +540,22 @@ export async function splitClip(
   splitSeconds: number,
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("split_clip", { clipId, splitSeconds });
+}
+
+/**
+ * Batched split for a multi-selection. Splits every clip in `clipIds`
+ * whose timeline span contains `splitSeconds`; clips that don't contain
+ * the cursor are left untouched. One persisted snapshot, one history
+ * entry. Backend is the authority on which clips actually qualify.
+ */
+export async function splitClips(
+  clipIds: string[],
+  splitSeconds: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("split_clips", {
+    clipIds,
+    splitSeconds,
+  });
 }
 
 export async function createSongRegion(

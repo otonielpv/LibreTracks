@@ -15,8 +15,8 @@ use libretracks_core::{
 };
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
-    ClipUpdate, DeviceInfo, Engine, EngineCommand, EngineSnapshot, JumpTarget, JumpTargetKind,
-    JumpTrigger, MarkerUpdate, RegionUpdate, SourcePeaks, TempoMarkerUpdate,
+    ClipUpdate, DeviceInfo, Engine, EngineCommand, EngineError, EngineSnapshot, JumpTarget,
+    JumpTargetKind, JumpTrigger, MarkerUpdate, RegionUpdate, SourcePeaks, TempoMarkerUpdate,
     TimeSignatureMarkerUpdate,
 };
 use serde::{Deserialize, Serialize};
@@ -1110,49 +1110,110 @@ impl AudioController {
                     .iter()
                     .map(|c| *c as i32)
                     .collect();
-                if let Err(error) = engine.send_command(&EngineCommand::SetOutputDevice {
-                    device_id: device_id.clone(),
-                    active_channels: active_channels.clone(),
-                }) {
-                    let device_exists = engine
-                        .list_devices()
-                        .map(|devs| {
-                            devs.iter()
-                                .any(|d| d.device_id == device_id || d.device_name == device_id)
-                        })
-                        .unwrap_or(false);
-                    if device_exists {
-                        if audio_debug_logging_enabled() {
-                            eprintln!(
-                                "[libretracks-audio] saved output device '{device_id}' \
-                                 exists but failed to open ({error}); falling back to system \
-                                 default for this session and keeping the saved selection \
-                                 so subsequent launches can retry."
-                            );
-                        }
-                    } else {
-                        if audio_debug_logging_enabled() {
-                            eprintln!(
-                                "[libretracks-audio] saved output device '{device_id}' is \
-                                 not present ({error}); clearing the saved selection."
-                            );
-                        }
-                        settings.selected_output_device = None;
-                        settings.selected_output_device_id = None;
-                        settings.selected_output_device_name = None;
+                // Probe the available devices BEFORE attempting to open
+                // the saved one. A failed setAudioDeviceSetup can leave
+                // the JUCE manager in a degraded state where subsequent
+                // list_devices() calls return an empty list — that's
+                // the "audio settings only shows System default" bug
+                // reported when the user changes headphones between
+                // sessions. Checking first means we skip the doomed
+                // open entirely and go straight to system default.
+                let available = engine.list_devices().unwrap_or_default();
+                let device_exists = available.iter().any(|d| {
+                    d.device_id == device_id || d.device_name == device_id
+                });
+                if audio_debug_logging_enabled() {
+                    eprintln!(
+                        "[libretracks-audio] apply_settings: {} device(s) available; \
+                         saved='{device_id}' present={device_exists}",
+                        available.len(),
+                    );
+                }
+                let attempt_result = if device_exists {
+                    engine.send_command(&EngineCommand::SetOutputDevice {
+                        device_id: device_id.clone(),
+                        active_channels: active_channels.clone(),
+                    })
+                } else {
+                    if audio_debug_logging_enabled() {
+                        eprintln!(
+                            "[libretracks-audio] saved output device '{device_id}' is not in \
+                             the current device list; skipping its open attempt and clearing \
+                             the saved selection so future launches don't keep failing."
+                        );
                     }
-                    if let Err(fallback_error) =
-                        engine.send_command(&EngineCommand::SetOutputDevice {
+                    settings.selected_output_device = None;
+                    settings.selected_output_device_id = None;
+                    settings.selected_output_device_name = None;
+                    Err(EngineError::Internal(
+                        "saved device not present".to_string(),
+                    ))
+                };
+                if let Err(error) = attempt_result {
+                    if device_exists && audio_debug_logging_enabled() {
+                        eprintln!(
+                            "[libretracks-audio] saved output device '{device_id}' exists \
+                             but failed to open ({error}); falling back to system default."
+                        );
+                    }
+                    // Two-tier fallback: first try the system default
+                    // (empty device_id). If that also fails, walk the
+                    // enumerated device list and open the first one
+                    // that the engine accepts. Without this, a user
+                    // whose saved default points to a flaky alias
+                    // (e.g. DirectSound's "Controlador primario de
+                    // sonido", which can refuse to open after audio
+                    // hardware changes) ends up with no working
+                    // device at all, even though several other
+                    // perfectly fine devices are in the list.
+                    let mut opened = engine
+                        .send_command(&EngineCommand::SetOutputDevice {
                             device_id: String::new(),
                             active_channels: active_channels.clone(),
                         })
-                    {
-                        if audio_debug_logging_enabled() {
-                            eprintln!(
-                                "[libretracks-audio] fallback output device failed to open after \
-                                 rejecting '{device_id}' ({fallback_error})."
-                            );
+                        .is_ok();
+                    if !opened {
+                        for candidate in available.iter() {
+                            // Skip the same id we already failed on.
+                            if candidate.device_id == device_id
+                                || candidate.device_name == device_id
+                            {
+                                continue;
+                            }
+                            // Prefer non-"primary alias" devices —
+                            // those are the ones that commonly fail.
+                            if candidate.device_name.to_ascii_lowercase()
+                                .contains("controlador primario")
+                                || candidate.device_name.to_ascii_lowercase()
+                                    .contains("primary sound driver")
+                            {
+                                continue;
+                            }
+                            if engine
+                                .send_command(&EngineCommand::SetOutputDevice {
+                                    device_id: candidate.device_id.clone(),
+                                    active_channels: active_channels.clone(),
+                                })
+                                .is_ok()
+                            {
+                                eprintln!(
+                                    "[libretracks-audio] fallback opened '{}'.",
+                                    candidate.device_id,
+                                );
+                                opened = true;
+                                break;
+                            }
                         }
+                    }
+                    if !opened {
+                        // Truly nothing opened. Log unconditionally so
+                        // the silent-transport state has a paper trail.
+                        eprintln!(
+                            "[libretracks-audio] no audio output could be opened after \
+                             rejecting '{device_id}'; tried system default and every \
+                             enumerated device. Transport will run silently until the \
+                             user picks a device that opens cleanly."
+                        );
                     }
                 }
             }
@@ -1514,6 +1575,11 @@ impl AudioController {
         }
         let result = f(&engine, &mut state);
         state.engine = Some(engine);
+        if let Err(ref error) = result {
+            if audio_debug_logging_enabled() {
+                eprintln!("[engine] with_engine_state kind={kind} failed: {error}");
+            }
+        }
         result
     }
 }
@@ -1544,8 +1610,39 @@ impl Drop for AudioController {
 #[tauri::command]
 pub fn get_audio_output_devices() -> Result<AudioOutputDevicesResponse, String> {
     let engine = Engine::new().map_err(|error| error.to_string())?;
-    engine.initialize().map_err(|error| error.to_string())?;
-    let devices = engine.list_devices().map_err(|error| error.to_string())?;
+    if let Err(error) = engine.initialize() {
+        eprintln!("[audio] get_audio_output_devices initialize FAILED: {error}");
+        return Err(error.to_string());
+    }
+    let devices = engine.list_devices().map_err(|error| {
+        eprintln!("[audio] get_audio_output_devices list_devices FAILED: {error}");
+        error.to_string()
+    })?;
+    // Only log the empty case unconditionally. A populated list is the
+    // happy path — printing 60+ device names every time the settings
+    // panel opens just floods stderr. The per-device dump stays
+    // behind LIBRETRACKS_AUDIO_DEBUG for when we need to diagnose
+    // missing/duplicated entries again.
+    if devices.is_empty() {
+        eprintln!(
+            "[audio] get_audio_output_devices returned 0 device(s) — engine \
+             enumerated no devices, JUCE may have failed to initialise"
+        );
+    } else if audio_debug_logging_enabled() {
+        eprintln!(
+            "[audio] get_audio_output_devices returned {} device(s)",
+            devices.len(),
+        );
+        for device in &devices {
+            eprintln!(
+                "[audio]   device id={:?} name={:?} backend={:?} channels={}",
+                device.device_id,
+                device.device_name,
+                device.backend,
+                device.output_channel_count,
+            );
+        }
+    }
     let _ = engine.shutdown();
     Ok(devices_response(devices))
 }
@@ -1607,9 +1704,32 @@ fn load_resolved_song(
     let runtime_song = song_with_warped_timeline(song);
     let project_json = serde_json::to_string(&runtime_song)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    if audio_debug_logging_enabled() {
+        eprintln!(
+            "[engine] load_resolved_song: id={} bpm={} duration={:.3}s tracks={} regions={} clips={} markers={{tempo:{}, section:{}, time_sig:{}}} json_bytes={}",
+            runtime_song.id,
+            runtime_song.bpm,
+            runtime_song.duration_seconds,
+            runtime_song.tracks.len(),
+            runtime_song.regions.len(),
+            runtime_song.clips.len(),
+            runtime_song.tempo_markers.len(),
+            runtime_song.section_markers.len(),
+            runtime_song.time_signature_markers.len(),
+            project_json.len(),
+        );
+    }
     engine
         .send_command(&EngineCommand::LoadSession { project_json })
-        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        .map_err(|error| {
+            // Load failures are surfaced to the user as a status banner
+            // anyway; the verbose line goes only under the debug flag so
+            // normal runs stay quiet.
+            if audio_debug_logging_enabled() {
+                eprintln!("[engine] load_resolved_song FAILED: {error}");
+            }
+            DesktopError::AudioCommand(error.to_string())
+        })?;
     state.loaded_session_signature = Some(signature);
     Ok(())
 }

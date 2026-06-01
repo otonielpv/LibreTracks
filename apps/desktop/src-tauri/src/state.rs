@@ -1989,21 +1989,41 @@ impl DesktopSession {
         clip_id: &str,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        self.delete_clips(&[clip_id.to_string()], audio)
+    }
+
+    /// Batched deletion. Removes every id in `clip_ids` in a single
+    /// persist_song_update, so a multi-clip delete is one engine reload
+    /// + one history entry instead of N. Missing ids are tolerated
+    /// silently (could have been pruned by a previous cascade) — the
+    /// only hard error is the whole batch missing.
+    pub fn delete_clips(
+        &mut self,
+        clip_ids: &[String],
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if clip_ids.is_empty() {
+            return Err(DesktopError::ClipNotFound(String::new()));
+        }
         let mut song = self
             .engine
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let clip_count = song.clips.len();
-        song.clips.retain(|clip| clip.id != clip_id);
-
-        if song.clips.len() == clip_count {
-            return Err(DesktopError::ClipNotFound(clip_id.to_string()));
+        let id_set: HashSet<&str> = clip_ids.iter().map(String::as_str).collect();
+        let before_count = song.clips.len();
+        song.clips.retain(|clip| !id_set.contains(clip.id.as_str()));
+        if song.clips.len() == before_count {
+            // None of the ids matched. Surface the first one so the
+            // error message is concrete.
+            return Err(DesktopError::ClipNotFound(
+                clip_ids.first().cloned().unwrap_or_default(),
+            ));
         }
 
         // Per the song-model plan (step 4.5), a region that loses its
         // last clip is auto-deleted. The whole operation rides on a
-        // single persist_song_update so undo restores the clip AND the
+        // single persist_song_update so undo restores the clips AND the
         // region together.
         prune_empty_regions(&mut song);
         prune_auto_created_empty_tracks(&mut song);
@@ -2447,6 +2467,94 @@ impl DesktopSession {
             warp_source_bpm: existing_region.warp_source_bpm,
             master: existing_region.master.clone(),
         };
+
+        // The song region acts as the container for the song's markers
+        // and clips. When the user moves either edge of the region, the
+        // contents must travel with it — otherwise tempo markers / time
+        // signature changes / section markers / clips end up sitting in
+        // a different musical position than where they were authored,
+        // and the engine refuses the next sync ("audio command failed:
+        // Invalid or unknown command") because the resulting song no
+        // longer has a consistent timing map.
+        //
+        // We translate by the start delta ONLY when expanding the left
+        // edge (start_delta < 0, i.e. moving the start earlier). The
+        // semantics there: the user is making room before the existing
+        // contents, so the contents should slide along to keep their
+        // musical alignment to the rest of the song.
+        //
+        // When the user *shrinks* the left edge (start_delta > 0, i.e.
+        // moving the start later), the contents must stay put — the
+        // intent is to reclaim the empty space at the head of the song,
+        // not to push everything to the right. If a clip ends up
+        // straddling the new boundary the engine's invariant catches it
+        // and surfaces a clear error, which is the right behaviour:
+        // we'd rather refuse the resize than silently destroy data.
+        //
+        // Dragging only the right edge doesn't shift contents in either
+        // direction; it just changes how much room the region claims at
+        // the end.
+        let start_delta = updated_region.start_seconds - existing_region.start_seconds;
+        if start_delta < -f64::EPSILON {
+            // Expanding the left edge: slide the contents along so they
+            // keep their musical position relative to the rest of the
+            // song.
+            let old_start = existing_region.start_seconds;
+            let old_end = existing_region.end_seconds;
+            let inside_old_region = |pos: f64| pos >= old_start - 0.001 && pos < old_end;
+
+            for marker in &mut song.tempo_markers {
+                if inside_old_region(marker.start_seconds) {
+                    marker.start_seconds = (marker.start_seconds + start_delta).max(0.0);
+                }
+            }
+            for marker in &mut song.section_markers {
+                if inside_old_region(marker.start_seconds) {
+                    marker.start_seconds = (marker.start_seconds + start_delta).max(0.0);
+                }
+            }
+            for marker in &mut song.time_signature_markers {
+                if inside_old_region(marker.start_seconds) {
+                    marker.start_seconds = (marker.start_seconds + start_delta).max(0.0);
+                }
+            }
+            for clip in &mut song.clips {
+                if inside_old_region(clip.timeline_start_seconds) {
+                    clip.timeline_start_seconds =
+                        (clip.timeline_start_seconds + start_delta).max(0.0);
+                }
+            }
+        } else if start_delta > f64::EPSILON
+            || updated_region.end_seconds < existing_region.end_seconds - f64::EPSILON
+        {
+            // Shrinking one or both edges: contents stay put, but we
+            // must refuse the resize if any clip that lived inside the
+            // OLD region would fall outside the NEW one. Otherwise the
+            // engine rejects the next sync with a cryptic "clip spans
+            // the boundary…" error and leaves the project in a half-
+            // applied state. Failing fast here keeps the song valid.
+            let old_start = existing_region.start_seconds;
+            let old_end = existing_region.end_seconds;
+            let inside_old_region = |pos: f64| pos >= old_start - 0.001 && pos < old_end;
+            let new_start = updated_region.start_seconds;
+            let new_end = updated_region.end_seconds;
+            for clip in &song.clips {
+                if !inside_old_region(clip.timeline_start_seconds) {
+                    continue;
+                }
+                let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
+                let starts_before_new = clip.timeline_start_seconds < new_start - 0.001;
+                let ends_after_new = clip_end > new_end + 0.001;
+                if starts_before_new || ends_after_new {
+                    return Err(DesktopError::AudioCommand(format!(
+                        "no se puede reducir la region: el clip '{}' quedaria fuera del \
+                         nuevo rango. Elimina o mueve los clips afectados antes de \
+                         reducir la region.",
+                        clip.id,
+                    )));
+                }
+            }
+        }
 
         // Drop the OLD copy of this region before delegating to
         // replace_song_region_range. That helper fragments any pre-existing
@@ -3414,45 +3522,104 @@ impl DesktopSession {
         split_seconds: f64,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        self.split_clips(&[clip_id.to_string()], split_seconds, audio)
+    }
+
+    /// Splits every clip whose timeline span contains `split_seconds_view`
+    /// in a single transaction. Used by the timeline context menu's
+    /// "Split at cursor" action when the click target is part of a
+    /// multi-selection — every selected clip the cursor crosses gets
+    /// split, the ones it doesn't cross are left untouched. A single
+    /// `persist_song_update` keeps the engine, the project revision,
+    /// and the history entry coherent.
+    pub fn split_clips(
+        &mut self,
+        clip_ids: &[String],
+        split_seconds_view: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
             .engine
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        // View-time → source-time conversion, see create_section_marker.
-        let split_seconds = source_seconds_at_view(&song, split_seconds);
-        let clip_index = song
-            .clips
-            .iter()
-            .position(|clip| clip.id == clip_id)
-            .ok_or_else(|| DesktopError::ClipNotFound(clip_id.to_string()))?;
-        let clip = song.clips[clip_index].clone();
-        let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
+        if clip_ids.is_empty() {
+            return Err(DesktopError::ClipNotFound(String::new()));
+        }
 
-        if split_seconds <= clip.timeline_start_seconds || split_seconds >= clip_end {
+        // `timeline_start_seconds` and `duration_seconds` are stored in
+        // view-time, so the split point comparison stays in view-time too.
+        // We only convert to source-time when computing the right-hand
+        // clip's `source_start_seconds`, which is the only field that
+        // actually lives in the underlying audio file's clock.
+        let split_seconds_source = source_seconds_at_view(&song, split_seconds_view);
+        let suffix_base = timestamp_suffix();
+        let mut any_split = false;
+        let mut last_invalid_clip: Option<String> = None;
+
+        for (offset, clip_id) in clip_ids.iter().enumerate() {
+            let clip_index = match song
+                .clips
+                .iter()
+                .position(|clip| clip.id == *clip_id)
+            {
+                Some(index) => index,
+                None => continue,
+            };
+            let clip = song.clips[clip_index].clone();
+            let clip_end = clip.timeline_start_seconds + clip.duration_seconds;
+            if split_seconds_view <= clip.timeline_start_seconds
+                || split_seconds_view >= clip_end
+            {
+                last_invalid_clip = Some(clip_id.clone());
+                continue;
+            }
+
+            let left_duration = split_seconds_view - clip.timeline_start_seconds;
+            let right_duration = clip_end - split_seconds_view;
+            // Source-time offset of the cut inside the original audio. With
+            // warp off this collapses to `left_duration`; with warp on it
+            // accounts for the stretch ratio in this region.
+            let split_seconds_source_clip = source_seconds_at_view(
+                &song,
+                clip.timeline_start_seconds + left_duration,
+            );
+            let source_left_duration =
+                (split_seconds_source_clip - source_seconds_at_view(
+                    &song,
+                    clip.timeline_start_seconds,
+                ))
+                .max(0.0);
+
+            let left_clip = Clip {
+                id: format!("clip_{}_{}_l", suffix_base, offset),
+                duration_seconds: left_duration,
+                ..clip.clone()
+            };
+            let right_clip = Clip {
+                id: format!("clip_{}_{}_r", suffix_base, offset),
+                timeline_start_seconds: split_seconds_view,
+                source_start_seconds: clip.source_start_seconds + source_left_duration,
+                duration_seconds: right_duration,
+                ..clip
+            };
+
+            song.clips
+                .splice(clip_index..=clip_index, [left_clip, right_clip]);
+            any_split = true;
+        }
+
+        if !any_split {
+            // No clip contained the split point — surface a clear error
+            // instead of an opaque engine roundtrip with no-op state.
             return Err(DesktopError::InvalidSplitPoint);
         }
 
-        let left_duration = split_seconds - clip.timeline_start_seconds;
-        let right_duration = clip_end - split_seconds;
+        // Suppress an unused-variable warning on the diagnostic-only path
+        // where every clip in the batch was outside the cursor.
+        let _ = (split_seconds_source, last_invalid_clip);
 
-        let left_clip = Clip {
-            id: format!("clip_{}", timestamp_suffix()),
-            duration_seconds: left_duration,
-            ..clip.clone()
-        };
-        let right_clip = Clip {
-            id: format!("clip_{}", timestamp_suffix() + 1),
-            timeline_start_seconds: split_seconds,
-            source_start_seconds: clip.source_start_seconds + left_duration,
-            duration_seconds: right_duration,
-            ..clip
-        };
-
-        song.clips
-            .splice(clip_index..=clip_index, [left_clip, right_clip]);
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
-
         Ok(self.snapshot())
     }
 
@@ -6095,8 +6262,18 @@ fn refresh_song_duration(song: &mut Song) {
         .iter()
         .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
         .fold(0.0_f64, f64::max);
+    // Regions must fit inside the song. If a region's end extends past
+    // the latest clip — typical after a user-grabbed resize that
+    // expanded the region's bounds — the engine's session validator
+    // rejects the load with "Region X is outside its song". Take the
+    // max of both so the song duration always envelops every region.
+    let max_region_end = song
+        .regions
+        .iter()
+        .map(|region| region.end_seconds)
+        .fold(0.0_f64, f64::max);
 
-    song.duration_seconds = max_clip_end.max(1.0);
+    song.duration_seconds = max_clip_end.max(max_region_end).max(1.0);
 }
 
 fn song_with_warped_timeline_for_transport(song: &Song) -> Song {

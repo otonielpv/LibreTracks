@@ -101,6 +101,7 @@ import {
   setMetronomeEnabledRealtime,
   setMetronomeVolumeRealtime,
   splitClip,
+  splitClips,
   stopTransport,
   updateClipColor,
   updateAudioSettings,
@@ -674,6 +675,10 @@ export function TransportPanelContent() {
   );
   const formatErrorStatus = useCallback(
     (error: unknown) => {
+      // Log to devtools so we can grab the full string even after the
+      // status banner auto-hides. The status banner truncates long
+      // engine error messages; the console keeps them in full.
+      console.error("[lt] action error:", error);
       return t("transport.status.error", { message: String(error) });
     },
     [t],
@@ -3720,6 +3725,7 @@ export function TransportPanelContent() {
     snapshotRef,
     song,
     selectedClipId,
+    selectedClipIds,
     selectedTrackIds,
     openTopMenu,
     setOpenTopMenu,
@@ -5880,9 +5886,20 @@ export function TransportPanelContent() {
   function clipContextMenu(clip: ClipSummary) {
     const currentCursorSeconds = displayPositionSecondsRef.current;
     const clipName = clipDisplayName(clip);
-    const canSplit =
-      currentCursorSeconds > clip.timelineStartSeconds &&
-      currentCursorSeconds < clip.timelineStartSeconds + clip.durationSeconds;
+    // If the right-clicked clip is part of a multi-selection, the split
+    // is offered when *any* selected clip contains the cursor, and we
+    // batch all qualifying ones into a single command. Otherwise we
+    // fall back to the single-clip behaviour.
+    const isMultiSelection =
+      selectedClipIds.includes(clip.id) && selectedClipSummaries.length > 1;
+    const splitCandidates = isMultiSelection ? selectedClipSummaries : [clip];
+    const splittableClips = splitCandidates.filter(
+      (candidate) =>
+        currentCursorSeconds > candidate.timelineStartSeconds &&
+        currentCursorSeconds <
+          candidate.timelineStartSeconds + candidate.durationSeconds,
+    );
+    const canSplit = splittableClips.length > 0;
 
     return [
       {
@@ -5890,12 +5907,22 @@ export function TransportPanelContent() {
         disabled: !canSplit,
         onSelect: async () => {
           await runAction(async () => {
-            const nextSnapshot = await splitClip(clip.id, currentCursorSeconds);
+            const ids = splittableClips.map((entry) => entry.id);
+            const nextSnapshot =
+              ids.length > 1
+                ? await splitClips(ids, currentCursorSeconds)
+                : await splitClip(ids[0], currentCursorSeconds);
             applyPlaybackSnapshot(nextSnapshot);
             setStatus(
-              t("transport.status.clipSplitAt", {
-                time: formatClock(currentCursorSeconds),
-              }),
+              ids.length > 1
+                ? t("transport.status.clipsSplitAt", {
+                    count: ids.length,
+                    time: formatClock(currentCursorSeconds),
+                    defaultValue: "Split {{count}} clips at {{time}}.",
+                  })
+                : t("transport.status.clipSplitAt", {
+                    time: formatClock(currentCursorSeconds),
+                  }),
             );
           });
         },
@@ -5998,14 +6025,51 @@ export function TransportPanelContent() {
         toggleClipSelection(hitClip.id);
         clipSelectionAnchorRef.current = hitClip.id;
       } else if (event.shiftKey && currentSong) {
-        const orderedIds = currentSong.clips.map((clip) => clip.id);
+        // Shift-click selects a 2-D rectangle of clips: temporal range
+        // from the earliest start to the latest end across both
+        // anchor and hit clip, intersected with the vertical band of
+        // tracks between them. This matches the user expectation when
+        // they cut several tracks at the same point and want to grab
+        // every left-of-cut fragment in one gesture. Falls back to
+        // single select when there's no usable anchor (e.g. anchor
+        // clip got deleted since the last click).
         const anchor = clipSelectionAnchorRef.current;
-        const anchorIdx = anchor ? orderedIds.indexOf(anchor) : -1;
-        const currentIdx = orderedIds.indexOf(hitClip.id);
-        if (anchorIdx !== -1 && currentIdx !== -1) {
-          const start = Math.min(anchorIdx, currentIdx);
-          const end = Math.max(anchorIdx, currentIdx);
-          setSelectedClipIds(orderedIds.slice(start, end + 1));
+        const anchorClip = anchor ? findClip(currentSong, anchor) : null;
+        if (anchorClip) {
+          const trackOrder = currentSong.tracks.map((t) => t.id);
+          const anchorTrackIdx = trackOrder.indexOf(anchorClip.trackId);
+          const hitTrackIdx = trackOrder.indexOf(hitClip.trackId);
+          const minTrackIdx = Math.min(anchorTrackIdx, hitTrackIdx);
+          const maxTrackIdx = Math.max(anchorTrackIdx, hitTrackIdx);
+          const anchorStart = anchorClip.timelineStartSeconds;
+          const anchorEnd = anchorStart + anchorClip.durationSeconds;
+          const hitStart = hitClip.timelineStartSeconds;
+          const hitEnd = hitStart + hitClip.durationSeconds;
+          const rectStart = Math.min(anchorStart, hitStart);
+          const rectEnd = Math.max(anchorEnd, hitEnd);
+          // A clip is in the rectangle when its track is between the
+          // two endpoints AND its timeline span overlaps [rectStart,
+          // rectEnd]. Overlap (not strict-inside) so a clip that
+          // straddles either edge — typical for the freshly-cut left
+          // fragment whose end is exactly the cursor — still gets
+          // grabbed.
+          const next = currentSong.clips
+            .filter((clip) => {
+              const trackIdx = trackOrder.indexOf(clip.trackId);
+              if (trackIdx < minTrackIdx || trackIdx > maxTrackIdx) {
+                return false;
+              }
+              const clipStart = clip.timelineStartSeconds;
+              const clipEnd = clipStart + clip.durationSeconds;
+              return clipEnd > rectStart && clipStart < rectEnd;
+            })
+            .map((clip) => clip.id);
+          if (next.length > 0) {
+            setSelectedClipIds(next);
+          } else {
+            selectClip(hitClip.id, track.id);
+            clipSelectionAnchorRef.current = hitClip.id;
+          }
         } else {
           selectClip(hitClip.id, track.id);
           clipSelectionAnchorRef.current = hitClip.id;

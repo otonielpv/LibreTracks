@@ -618,12 +618,27 @@ std::string EngineImpl::diagnostics() const {
 }
 
 Result<void> EngineImpl::send_command(const std::string& cmd_json) {
-    try {
-        auto cmd = command_from_json(cmd_json);
-        return dispatch_command(cmd);
-    } catch (const std::exception& ex) {
-        return Result<void>::err(std::string("command parse error: ") + ex.what());
+    // Clear the previous error so the Rust side can tell a fresh failure
+    // from a stale one. We record any new error before returning so the
+    // FFI (which collapses everything to LT_ERR_INVALID_COMMAND) doesn't
+    // lose the textual reason.
+    {
+        std::lock_guard<std::mutex> lk(last_command_error_mtx_);
+        last_command_error_.clear();
     }
+    Result<void> result = [&]() -> Result<void> {
+        try {
+            auto cmd = command_from_json(cmd_json);
+            return dispatch_command(cmd);
+        } catch (const std::exception& ex) {
+            return Result<void>::err(std::string("command parse error: ") + ex.what());
+        }
+    }();
+    if (result.is_err()) {
+        std::lock_guard<std::mutex> lk(last_command_error_mtx_);
+        last_command_error_ = result.error();
+    }
+    return result;
 }
 
 void EngineImpl::service_control_thread_tasks() {
@@ -738,6 +753,18 @@ std::string EngineImpl::get_snapshot() const {
     }
 
     snap.device = device_manager_->device_info();
+
+    // Surface the last command error through device.last_error so the
+    // Rust layer (which already reads that field after every command)
+    // can report the real reason instead of the FFI's flat
+    // LT_ERR_INVALID_COMMAND. Command errors win over device errors
+    // because they describe what *just* happened.
+    {
+        std::lock_guard<std::mutex> lk(last_command_error_mtx_);
+        if (!last_command_error_.empty()) {
+            snap.device.last_error = last_command_error_;
+        }
+    }
 
     if (mixer_) {
         auto m = mixer_->meters();
@@ -2292,9 +2319,28 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                     : static_cast<AudioRenderCallback*>(silent_callback_.get());
             auto r = device_manager_->open_device(req, callback);
             if (r.is_err()) {
+                // Always log a failed open — an unopen-able output device
+                // leaves the app with a silent transport (clock pending
+                // forever), and we want a paper trail every time.
+                fprintf(stderr,
+                        "[LT_AUDIO] SetOutputDevice OPEN FAILED device_id=\"%s\" "
+                        "sr=%d bs=%d channels=%zu reason=\"%s\"\n",
+                        req.device_id.c_str(), req.sample_rate, req.buffer_size,
+                        req.active_output_channels.size(), r.error().c_str());
                 push_event(EvDeviceError{ r.error() });
                 if (was_playing && clock_) clock_->play();
                 return r;
+            }
+            // Success-case dump is informational only; only print under
+            // LIBRETRACKS_AUDIO_DEBUG to keep production logs quiet.
+            if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DEBUG")) {
+                fprintf(stderr,
+                        "[LT_AUDIO_DEBUG] SetOutputDevice OPEN OK device=\"%s\" "
+                        "backend=\"%s\" sr=%d bs=%d\n",
+                        device_manager_->actual_device_name().c_str(),
+                        device_manager_->actual_backend().c_str(),
+                        device_manager_->actual_sample_rate(),
+                        device_manager_->actual_buffer_size());
             }
             current_device_request_ = req;
             if (clock_ && device_manager_->actual_sample_rate() > 0)

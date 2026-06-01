@@ -3,6 +3,7 @@ import type { SongView, TransportSnapshot } from "@libretracks/shared/models";
 import {
   cancelMarkerJump,
   deleteClip,
+  deleteClips,
   deleteTrack,
   pauseTransport,
   playTransport,
@@ -25,6 +26,9 @@ type TimelineKeyboardShortcutsProps = {
   snapshotRef: MutableRefObject<TransportSnapshot | null>;
   song: SongView | null;
   selectedClipId: string | null;
+  /** Full multi-selection of clip ids. Used by Delete/Backspace so the
+   * shortcut deletes every selected clip, not just the primary one. */
+  selectedClipIds: string[];
   selectedTrackIds: string[];
   openTopMenu: "file" | null;
   setOpenTopMenu: (menu: "file" | null) => void;
@@ -55,6 +59,7 @@ export function useTimelineKeyboardShortcuts({
   snapshotRef,
   song,
   selectedClipId,
+  selectedClipIds,
   selectedTrackIds,
   openTopMenu,
   setOpenTopMenu,
@@ -273,7 +278,24 @@ export function useTimelineKeyboardShortcuts({
 
         event.preventDefault();
 
-        if (selectedClipId) {
+        if (selectedClipIds.length > 1) {
+          // Multi-clip deletion via the batched backend command — a
+          // single engine sync + one snapshot reload + one history
+          // entry, instead of N round-trips that made the UI feel
+          // sluggish on big selections.
+          const idsToDelete = [...selectedClipIds];
+          void runAction(async () => {
+            const nextSnapshot = await deleteClips(idsToDelete);
+            applyPlaybackSnapshot(nextSnapshot);
+            setSelectedClipId(null);
+            setStatus(
+              t("transport.status.clipsDeleted", {
+                count: idsToDelete.length,
+                defaultValue: "Deleted {{count}} clips.",
+              }),
+            );
+          });
+        } else if (selectedClipId) {
           void runAction(async () => {
             const nextSnapshot = await deleteClip(selectedClipId);
             applyPlaybackSnapshot(nextSnapshot);
@@ -314,6 +336,7 @@ export function useTimelineKeyboardShortcuts({
     scheduleMarkerJumpWithGlobalMode,
     scheduleRegionJumpWithOptions,
     selectedClipId,
+    selectedClipIds,
     selectedTrackIds,
     song,
     clearSelection,

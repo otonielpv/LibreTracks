@@ -110,6 +110,21 @@ pub fn delete_clip(
 }
 
 #[tauri::command]
+pub fn delete_clips(
+    clip_ids: Vec<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .delete_clips(&clip_ids, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn update_clip_window(
     clip_id: String,
     timeline_start_seconds: f64,
@@ -197,6 +212,22 @@ pub fn split_clip(
 
     session
         .split_clip(&clip_id, split_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn split_clips(
+    clip_ids: Vec<String>,
+    split_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .split_clips(&clip_ids, split_seconds, &state.audio)
         .map_err(|error| error.to_string())
 }
 
