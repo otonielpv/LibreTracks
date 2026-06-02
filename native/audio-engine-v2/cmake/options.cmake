@@ -30,7 +30,7 @@ option(LT_ENGINE_USE_LIBSNDFILE
 # The engine binary becomes GPL v2 when this option is on.
 option(LT_ENGINE_USE_RUBBERBAND
     "Link RubberBand as the fallback warp backend (GPL v2)"
-    ON)
+    OFF)
 
 # Resampler backend - exactly one must be ON.
 option(LT_ENGINE_USE_R8BRAIN

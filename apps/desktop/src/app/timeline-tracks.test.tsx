@@ -40,6 +40,7 @@ import {
   mockTrackRowDragGeometry,
   setMockNativeWebviewPosition
 } from "../test/testUtils";
+import { useTimelineUIStore as useTimelineUIStoreForTest } from "../features/transport/uiStore";
 
 describe("App / timeline-tracks", () => {
   it("keeps folder tracks integrated in the same timeline box", async () => {
@@ -83,15 +84,15 @@ describe("App / timeline-tracks", () => {
 
   it("pans the timeline by dragging over an empty lane", async () => {
     const { container } = await renderApp();
-    const shell = mockTimelineShellMetrics(container, 600);
-    const firstLane = container.querySelector(".lt-track-lane") as HTMLElement | null;
-    expect(firstLane).toBeTruthy();
-
-    Object.defineProperty(shell, "scrollLeft", {
-      configurable: true,
-      writable: true,
-      value: 120,
+    await waitFor(() => {
+      expect(useTimelineUIStoreForTest.getState().zoomLevel).toBeLessThan(7);
     });
+    await act(async () => {
+      useTimelineUIStoreForTest.getState().setZoomLevel(7);
+    });
+    const shell = mockTimelineShellMetrics(container, 600);
+    mockLaneBounds(container, 600);
+    const rhythmLane = screen.getByLabelText("Lane Rhythm");
 
     // Use native MouseEvent dispatchEvent for the window-level mousemove /
     // mouseup. fireEvent.mouseMove(window, ...) leaves a real DOM event
@@ -101,7 +102,7 @@ describe("App / timeline-tracks", () => {
     // MouseEvent ourselves and dispatching it goes through the same code
     // path the browser uses, so the imperative listener always sees it.
     await act(async () => {
-      fireEvent.mouseDown(firstLane as HTMLElement, { button: 0, clientX: 300 });
+      fireEvent.mouseDown(rhythmLane, { button: 0, clientX: 300 });
       window.dispatchEvent(
         new MouseEvent("mousemove", { clientX: 220, bubbles: true }),
       );

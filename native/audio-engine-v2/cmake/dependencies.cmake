@@ -221,10 +221,13 @@ endif()
 # audible periodic clicks on real polyphonic material. See
 # `bench/WARP_BACKEND_COMPARISON.md` for the writeup; the previous
 # Signalsmith wrapper lived alongside this code in commit b8663e1.
+set(LT_ENGINE_HAVE_RUBBERBAND_RESOLVED OFF)
+
 if(LT_ENGINE_USE_RUBBERBAND)
     find_package(rubberband CONFIG QUIET)
     if(rubberband_FOUND)
         target_link_libraries(lt_deps_warp INTERFACE rubberband::rubberband)
+        set(LT_ENGINE_HAVE_RUBBERBAND_RESOLVED ON)
         message(STATUS "Warp backend: RubberBand from find_package")
     else()
         find_path(_lt_rb_inc rubberband/RubberBandStretcher.h)
@@ -244,6 +247,7 @@ if(LT_ENGINE_USE_RUBBERBAND)
                 target_link_libraries(lt_deps_warp INTERFACE
                     "${_lt_rb_lib_release}")
             endif()
+            set(LT_ENGINE_HAVE_RUBBERBAND_RESOLVED ON)
             message(STATUS "Warp backend: RubberBand release="
                 "${_lt_rb_lib_release} debug=${_lt_rb_lib_debug}")
         else()

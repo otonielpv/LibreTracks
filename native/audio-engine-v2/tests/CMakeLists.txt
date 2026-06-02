@@ -95,7 +95,7 @@ if(LT_ENGINE_USE_BUNGEE AND DEFINED LT_BUNGEE_DIR)
 endif()
 
 # Copy RubberBand DLL too if the engine was built with it.
-if(LT_ENGINE_USE_RUBBERBAND AND WIN32)
+if(LT_ENGINE_HAVE_RUBBERBAND_RESOLVED AND WIN32)
     find_path(_lt_rb_test_inc rubberband/RubberBandStretcher.h)
     if(_lt_rb_test_inc)
         get_filename_component(_lt_rb_test_root "${_lt_rb_test_inc}" DIRECTORY)

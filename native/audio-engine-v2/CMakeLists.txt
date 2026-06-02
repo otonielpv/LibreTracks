@@ -116,7 +116,7 @@ target_link_libraries(lt_audio_engine_v2
         lt_deps_warp
 )
 
-if(LT_ENGINE_USE_RUBBERBAND)
+if(LT_ENGINE_HAVE_RUBBERBAND_RESOLVED)
     target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HAVE_RUBBERBAND=1)
     # Copy the RubberBand DLL next to the engine on Windows so the loaded
     # process can resolve it. vcpkg ships rubberband-3.dll under bin/.
