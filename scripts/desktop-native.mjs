@@ -91,7 +91,7 @@ const run = (command, args, options = {}) => {
   }
 };
 
-const copyLinuxRuntimeDependencies = (sourceFile, nativeVendorDir) => {
+const copyLinuxRuntimeDependencies = (sourceFile, nativeVendorDir, copied = new Set()) => {
   if (process.platform !== "linux") {
     return;
   }
@@ -104,7 +104,7 @@ const copyLinuxRuntimeDependencies = (sourceFile, nativeVendorDir) => {
     return;
   }
 
-  const wantedLibraries = /^lib(?:avcodec|avformat|avutil|swresample)\.so(?:\.\d+)*$/;
+  const skippedLibraries = /^(?:linux-vdso|ld-linux|libc|libm|libpthread|libdl|librt|libgcc_s|libstdc\+\+)\.so(?:\.\d+)*$/;
   for (const line of result.stdout.split(/\r?\n/)) {
     const match = line.match(/=>\s+(\/\S+)/) ?? line.match(/^\s*(\/\S+)/);
     if (!match) {
@@ -113,11 +113,13 @@ const copyLinuxRuntimeDependencies = (sourceFile, nativeVendorDir) => {
 
     const dependencyPath = match[1];
     const dependencyName = path.basename(dependencyPath);
-    if (!wantedLibraries.test(dependencyName) || !existsSync(dependencyPath)) {
+    if (skippedLibraries.test(dependencyName) || !existsSync(dependencyPath) || copied.has(dependencyPath)) {
       continue;
     }
 
     copyFileSync(dependencyPath, path.join(nativeVendorDir, dependencyName));
+    copied.add(dependencyPath);
+    copyLinuxRuntimeDependencies(dependencyPath, nativeVendorDir, copied);
   }
 };
 

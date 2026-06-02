@@ -38,6 +38,11 @@ if(APPLE)
         INSTALL_NAME_DIR "@rpath"
         BUILD_WITH_INSTALL_NAME_DIR ON
     )
+elseif(UNIX)
+    set_target_properties(lt_audio_engine_v2 PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+    )
 endif()
 
 target_include_directories(lt_audio_engine_v2
