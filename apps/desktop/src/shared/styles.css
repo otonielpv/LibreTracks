@@ -4998,7 +4998,7 @@ textarea {
   --track-accent: rgba(186, 202, 197, 0.35);
   --parent-accent: transparent;
   position: relative;
-  flex: 0 0 5.2rem;
+  flex: 0 0 6.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -5365,12 +5365,18 @@ textarea {
 .lt-compact-mixer-audio-to {
   width: 100%;
   height: 1.4rem;
-  padding: 0 0.3rem;
+  /* Extra right padding leaves room for the native dropdown caret so
+     a long label like "Inherited (Folder)" gets ellipsis instead of
+     overlapping the arrow. */
+  padding: 0 1.1rem 0 0.3rem;
   background: rgb(15 18 19);
   color: #bacac5;
   border: 1px solid rgba(186, 202, 197, 0.12);
   border-radius: 2px;
   font: 500 10px/1 "Space Grotesk", sans-serif;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 /* Context menu shown when the user right-clicks a clip entry inside a

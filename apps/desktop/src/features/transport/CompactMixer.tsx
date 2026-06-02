@@ -10,6 +10,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   meterDbToDisplayScale,
@@ -232,7 +233,26 @@ function CompactMixerStripComponent({
   onSelect,
   onDragStart,
 }: CompactMixerStripProps) {
+  const { t } = useTranslation();
   const isFolder = track.kind === "folder";
+  // Mirror the DAW TrackHeaderItem: tracks that live inside a folder
+  // get an "Inherited (Folder)" option prepended to their routing
+  // dropdown so the user can route the strip to the parent's bus
+  // instead of picking an explicit destination.
+  const effectiveRoutingOptions = useMemo(() => {
+    if (!track.parentTrackId) {
+      return audioRoutingOptions;
+    }
+    return [
+      {
+        value: "inherit",
+        label: t("trackHeader.inherited", {
+          defaultValue: "Inherited (Folder)",
+        }),
+      },
+      ...audioRoutingOptions,
+    ];
+  }, [audioRoutingOptions, track.parentTrackId, t]);
   // Track accent (drives --track-accent CSS var). If the track has a user
   // colour use it; otherwise pick a neutral default that's visible but
   // doesn't compete for attention. Folder strips get a slightly bolder
@@ -516,7 +536,7 @@ function CompactMixerStripComponent({
         aria-label={`Audio routing for ${track.name}`}
         onChange={handleAudioToChange}
       >
-        {audioRoutingOptions.map((option) => (
+        {effectiveRoutingOptions.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
