@@ -195,6 +195,94 @@ pub fn get_midi_inputs() -> Result<Vec<String>, String> {
     get_midi_input_names()
 }
 
+/// Fetch the latest GitHub release metadata from the Rust side.
+///
+/// The in-app update check used to call `fetch()` directly from the WebView.
+/// In packaged release builds that request originates from the `tauri://`
+/// origin and GitHub's API rejected it (CORS / missing User-Agent), so the
+/// promise rejected, the error was swallowed, and the update modal never
+/// appeared — even though the same code worked in `dev` (origin
+/// `http://127.0.0.1:1420`). Doing the request in Rust avoids the WebView's
+/// origin restrictions entirely and lets us set the `User-Agent` header that
+/// the GitHub API requires.
+///
+/// Returns the raw JSON body so the existing TypeScript parser
+/// (`fetchLatestRelease`) stays the single source of truth for shape and
+/// filtering (draft / prerelease). Outcomes are appended to the update log so
+/// the check is diagnosable in production, where DevTools is unavailable.
+#[tauri::command]
+pub async fn fetch_latest_release(app: AppHandle, url: String) -> Result<String, String> {
+    let user_agent = format!("LibreTracks/{}", env!("CARGO_PKG_VERSION"));
+
+    let log = |line: String| append_update_log(&app, &line);
+
+    let client = match reqwest::Client::builder()
+        .user_agent(user_agent)
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            let message = format!("client build failed: {error}");
+            log(message.clone());
+            return Err(message);
+        }
+    };
+
+    let response = match client
+        .get(&url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            let message = format!("request to {url} failed: {error}");
+            log(message.clone());
+            return Err(message);
+        }
+    };
+
+    let status = response.status();
+    let body = match response.text().await {
+        Ok(body) => body,
+        Err(error) => {
+            let message = format!("reading response body failed: {error}");
+            log(message.clone());
+            return Err(message);
+        }
+    };
+
+    if !status.is_success() {
+        let message = format!("GitHub API returned {status}");
+        log(format!("{message}; body: {body}"));
+        return Err(message);
+    }
+
+    log(format!("fetched latest release OK ({status})"));
+    Ok(body)
+}
+
+/// Append a line to the dedicated update-check log inside the app data dir.
+/// Best-effort: logging must never make the update check itself fail.
+fn append_update_log(app: &AppHandle, line: &str) {
+    let Ok(log_dir) = app.path().app_data_dir() else {
+        return;
+    };
+    if fs::create_dir_all(&log_dir).is_err() {
+        return;
+    }
+    let log_path = log_dir.join("update-check.log");
+    let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&log_path) else {
+        return;
+    };
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    let _ = writeln!(file, "[{timestamp_ms}] {line}");
+}
+
 #[tauri::command]
 pub fn append_debug_log(app: AppHandle, line: String) -> Result<(), String> {
     let log_dir = app

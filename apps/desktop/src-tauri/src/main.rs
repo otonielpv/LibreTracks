@@ -111,6 +111,7 @@ fn main() {
             commands::system::get_desktop_performance_snapshot,
             commands::system::get_ownership_diagnostics,
             commands::system::append_debug_log,
+            commands::system::fetch_latest_release,
             commands::system::report_ui_render_metric,
             commands::project::create_song,
             commands::project::import_library_assets_from_dialog,

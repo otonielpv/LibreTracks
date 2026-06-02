@@ -19,6 +19,7 @@ lt-audio-engine-v2 = { path = "../../../crates/lt-audio-engine-v2" }
 libretracks-project = { path = "../../../crates/libretracks-project" }
 libretracks-remote = { path = "../../../crates/libretracks-remote" }
 midir = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 rfd = "0.15"
 rayon = "1.10"
 serde = { version = "1", features = ["derive"] }

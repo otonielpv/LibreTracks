@@ -108,9 +108,27 @@ export type FetchOptions = {
   signal?: AbortSignal;
 };
 
-export async function fetchLatestRelease(
-  options: FetchOptions = {},
-): Promise<ReleaseInfo | null> {
+function isTauriRuntime(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    Boolean((window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+  );
+}
+
+/**
+ * Fetch the latest release JSON. In a packaged Tauri build the WebView `fetch`
+ * to api.github.com is rejected (cross-origin from `tauri://` + GitHub requires
+ * a User-Agent), which silently broke the in-app update notification in
+ * production while still working in `dev`. So when running inside Tauri we route
+ * the request through the Rust `fetch_latest_release` command, which has no
+ * origin restrictions and sets the required User-Agent. The browser `fetch`
+ * path is kept for the web build and unit tests.
+ */
+async function fetchReleaseJson(options: FetchOptions): Promise<string> {
+  if (isTauriRuntime()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<string>("fetch_latest_release", { url: RELEASES_API_URL });
+  }
   const response = await fetch(RELEASES_API_URL, {
     headers: { Accept: "application/vnd.github+json" },
     signal: options.signal,
@@ -118,7 +136,14 @@ export async function fetchLatestRelease(
   if (!response.ok) {
     throw new Error(`GitHub API returned ${response.status}`);
   }
-  const data = (await response.json()) as GithubRelease;
+  return response.text();
+}
+
+export async function fetchLatestRelease(
+  options: FetchOptions = {},
+): Promise<ReleaseInfo | null> {
+  const raw = await fetchReleaseJson(options);
+  const data = JSON.parse(raw) as GithubRelease;
   if (data.draft || data.prerelease || !data.tag_name) return null;
   return {
     tag: data.tag_name,
