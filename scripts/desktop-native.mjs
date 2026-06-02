@@ -63,7 +63,7 @@ const buildDesktopNativeEnv = (rawEnv) => {
     LIBRETRACKS_AUDIO_DEBUG_LOG: rawEnv.LIBRETRACKS_AUDIO_DEBUG_LOG ?? path.join(repoRoot, "lt_audio_debug.log"),
     LIBRETRACKS_ENGINE_V2_BUNGEE:
       rawEnv.LIBRETRACKS_ENGINE_V2_BUNGEE ?? rawEnv.LIBRETRACKS_ENGINE_V2_RUBBERBAND ?? "1",
-    LIBRETRACKS_ENGINE_V2_FFMPEG: rawEnv.LIBRETRACKS_ENGINE_V2_FFMPEG ?? "1",
+    LIBRETRACKS_ENGINE_V2_FFMPEG: rawEnv.LIBRETRACKS_ENGINE_V2_FFMPEG ?? (process.platform === "linux" ? "0" : "1"),
     VCPKG_DEFAULT_TRIPLET: rawEnv.VCPKG_DEFAULT_TRIPLET ?? "x64-windows",
   };
 
@@ -88,38 +88,6 @@ const run = (command, args, options = {}) => {
 
   if (typeof result.status === "number" && result.status !== 0) {
     process.exit(result.status);
-  }
-};
-
-const copyLinuxRuntimeDependencies = (sourceFile, nativeVendorDir, copied = new Set()) => {
-  if (process.platform !== "linux") {
-    return;
-  }
-
-  const result = spawnSync("ldd", [sourceFile], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  });
-  if (result.error || result.status !== 0) {
-    return;
-  }
-
-  const skippedLibraries = /^(?:linux-vdso|ld-linux|libc|libm|libpthread|libdl|librt|libgcc_s|libstdc\+\+)\.so(?:\.\d+)*$/;
-  for (const line of result.stdout.split(/\r?\n/)) {
-    const match = line.match(/=>\s+(\/\S+)/) ?? line.match(/^\s*(\/\S+)/);
-    if (!match) {
-      continue;
-    }
-
-    const dependencyPath = match[1];
-    const dependencyName = path.basename(dependencyPath);
-    if (skippedLibraries.test(dependencyName) || !existsSync(dependencyPath) || copied.has(dependencyPath)) {
-      continue;
-    }
-
-    copyFileSync(dependencyPath, path.join(nativeVendorDir, dependencyName));
-    copied.add(dependencyPath);
-    copyLinuxRuntimeDependencies(dependencyPath, nativeVendorDir, copied);
   }
 };
 
@@ -234,15 +202,13 @@ const ensureEngineV2 = (normalizedEnv) => {
   const nativeVendorDir = path.join(repoRoot, "vendor", "bin", "native");
   mkdirSync(nativeVendorDir, { recursive: true });
   for (const fileName of readdirSync(nativeVendorDir)) {
-    if (/\.(dll|dylib|so)$/i.test(fileName)) {
+    if (/\.(?:dll|dylib|so(?:\.\d+)*)$/i.test(fileName)) {
       rmSync(path.join(nativeVendorDir, fileName), { force: true });
     }
   }
   for (const fileName of readdirSync(libDir)) {
     if (/\.(dll|dylib|so)$/i.test(fileName)) {
-      const sourceFile = path.join(libDir, fileName);
-      copyFileSync(sourceFile, path.join(nativeVendorDir, fileName));
-      copyLinuxRuntimeDependencies(sourceFile, nativeVendorDir);
+      copyFileSync(path.join(libDir, fileName), path.join(nativeVendorDir, fileName));
     }
   }
 
