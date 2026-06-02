@@ -1,7 +1,20 @@
 ---
 title: Conceptos Base
-description: Biblioteca, pistas, clips, marcas, cambios de compas y regiones de cancion.
+description: La cancion como unidad de trabajo, biblioteca, pistas, clips, marcas, cambios de compas y regiones de cancion.
 ---
+
+## Las Canciones — La Unidad Sobre La Que Trabajas
+
+LibreTracks esta construido alrededor de la **cancion** como unidad de trabajo. Un proyecto es una secuencia de canciones; todo lo demas — clips, tempo markers, cambios de compas, marcas de seccion — vive *dentro* de una cancion. No hay "audio suelto" flotando en el proyecto: cada clip pertenece a exactamente una cancion, y el motor lo enforza en cada edicion.
+
+Esto es lo mas importante de interiorizar antes de leer el resto. Cuando piensas en canciones:
+
+- Añadir material al show significa **crear o importar una cancion**, no soltar audio sobre una pista.
+- Reordenar el setlist significa **mover canciones**, lo que arrastra sus clips, marcas, tempo y cambios de compas de forma atomica.
+- Tempo, tonalidad y ganancia master son **propiedades por cancion** (`Region Warp`, `Region Transpose`, fader master por cancion), no globales.
+- Hacer copia o compartir una pieza del show significa **exportar un `.ltpkg`** de una o varias canciones, que se puede importar en cualquier otro proyecto.
+
+La referencia sobre como se comportan las canciones como contenedores — limites, BPM efectivo, transpose, warp — esta en la seccion [Regiones De Cancion](#regiones-de-cancion--el-contenedor-principal) mas abajo. El flujo orientado a canciones en si (canciones como columnas, drag-and-drop de audio y paquetes, mixer por cancion) vive en [Vista Compacta](./compact-view).
 
 ## Biblioteca Y Assets
 

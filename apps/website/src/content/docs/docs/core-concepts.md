@@ -1,7 +1,20 @@
 ---
 title: Core Concepts
-description: Library, tracks, clips, markers, meter changes, and song regions.
+description: Songs as the primary unit, library, tracks, clips, markers, meter changes, and song regions.
 ---
+
+## Songs — The Unit You Work With
+
+LibreTracks is built around the **song** as the unit of work. A project is a sequence of songs; everything else — clips, tempo markers, time-signature changes, section markers — exists *inside* a song. There is no "loose audio" floating in the project: every clip belongs to exactly one song, and the engine enforces this at every edit.
+
+This is the single most important thing to internalise before reading the rest. Once you think in songs:
+
+- Adding material to the show means **creating or importing a song**, not dropping audio onto a track.
+- Reordering the setlist means **moving songs**, which carries their clips, markers, tempo and meter changes along atomically.
+- Tempo, key and master gain are **per-song properties** (`Region Warp`, `Region Transpose`, per-song master fader), not global ones.
+- Backing up or sharing a piece of the show means **exporting a `.ltpkg`** of one or more songs, which round-trips into any other project.
+
+The reference for how songs behave as containers — boundaries, effective BPM, transpose, warp — is the [Song Regions](#song-regions--the-primary-container) section below. The song-first workflow itself (songs as columns, drag-and-drop of audio and packages, per-song mixer) lives in [Compact View](./compact-view).
 
 ## Library And Assets
 
