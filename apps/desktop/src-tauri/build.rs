@@ -1,8 +1,20 @@
 use std::{env, fs, path::PathBuf};
 
 fn main() {
+    configure_runtime_library_search_path();
     copy_native_engine_runtime();
     tauri_build::build()
+}
+
+fn configure_runtime_library_search_path() {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("linux") {
+        return;
+    }
+
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib/LibreTracks");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib/libretracks-desktop");
 }
 
 fn copy_native_engine_runtime() {

@@ -37,6 +37,7 @@ fn main() {
             Ok("linux") => {
                 println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
                 println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib");
+                println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib/LibreTracks");
                 println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/../lib/libretracks-desktop");
             }
             Ok("macos") => {
