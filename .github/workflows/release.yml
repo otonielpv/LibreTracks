@@ -118,7 +118,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libavformat-dev libavcodec-dev libavutil-dev libswresample-dev libsndfile1-dev
+          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libsndfile1-dev
           sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
 
       - name: Configure Windows vcpkg
@@ -172,7 +172,7 @@ jobs:
         shell: pwsh
         run: |
           $bungeeEnabled = "ON"
-          $ffmpegEnabled = if ("${{ matrix.platform }}" -eq "macos") { "OFF" } else { "ON" }
+          $ffmpegEnabled = if ("${{ matrix.platform }}" -eq "windows") { "ON" } else { "OFF" }
           $configureArgs = @(
             "-S", "native/audio-engine-v2",
             "-B", "build/engine-release",
@@ -224,6 +224,68 @@ jobs:
         with:
           projectPath: 'apps/desktop'
           args: ${{ matrix.platform == 'macos' && '--verbose --target universal-apple-darwin' || matrix.platform == 'linux' && '--verbose --bundles deb,appimage' || '--verbose' }}
+
+      - name: Validate Linux .deb runtime linkage
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DEB_PATH="$(find target-desktop-native -type f -name '*.deb' | head -n1)"
+          if [ -z "$DEB_PATH" ]; then
+            echo "::error::No .deb bundle found under target-desktop-native"
+            exit 1
+          fi
+          echo "Inspecting: $DEB_PATH"
+          dpkg-deb -I "$DEB_PATH" | sed -n '/ Depends:/p'
+
+          TMP_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TMP_DIR"' EXIT
+          dpkg-deb -x "$DEB_PATH" "$TMP_DIR"
+
+          BIN="$TMP_DIR/usr/bin/libretracks-desktop"
+          LIB_DIR="$TMP_DIR/usr/lib/LibreTracks"
+          ENGINE="$LIB_DIR/liblt_audio_engine_v2.so"
+
+          if [ ! -x "$BIN" ]; then
+            echo "::error::Missing executable $BIN"
+            exit 1
+          fi
+          if [ ! -f "$ENGINE" ]; then
+            echo "::error::Missing native engine $ENGINE"
+            find "$TMP_DIR/usr" -maxdepth 4 -type f | sort
+            exit 1
+          fi
+
+          echo "--- main binary RUNPATH ---"
+          readelf -d "$BIN" | grep -E 'RPATH|RUNPATH' || true
+          if ! readelf -d "$BIN" | grep -q '\$ORIGIN/../lib/LibreTracks'; then
+            echo "::error::Main binary RUNPATH does not include private LibreTracks lib directory"
+            exit 1
+          fi
+
+          echo "--- engine RUNPATH ---"
+          readelf -d "$ENGINE" | grep -E 'RPATH|RUNPATH' || true
+          if ! readelf -d "$ENGINE" | grep -q '\$ORIGIN'; then
+            echo "::error::Native engine RUNPATH does not include its own directory"
+            exit 1
+          fi
+
+          echo "--- ldd main binary ---"
+          if ldd "$BIN" | tee /tmp/libretracks-ldd-main.log | grep -q 'not found'; then
+            echo "::error::Main binary has unresolved shared libraries"
+            exit 1
+          fi
+
+          echo "--- ldd private libraries ---"
+          for so in "$LIB_DIR"/*.so*; do
+            [ -e "$so" ] || continue
+            echo "Inspecting $so"
+            if LD_LIBRARY_PATH="$LIB_DIR" ldd "$so" | tee -a /tmp/libretracks-ldd-private.log | grep -q 'not found'; then
+              echo "::error::$so has unresolved shared libraries"
+              exit 1
+            fi
+          done
 
       - name: Validate macOS .app bundle dylib wiring
         if: matrix.platform == 'macos'
