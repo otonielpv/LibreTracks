@@ -169,6 +169,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download ASIO SDK (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          # JUCE's ASIO device type needs iasiodrv.h from the Steinberg ASIO
+          # SDK at build time. Steinberg's license forbids us redistributing
+          # it, so the SDK is not vendored in the repo — without this step the
+          # release DLL builds with JUCE_ASIO=0 and ASIO devices never appear
+          # in the installed app (they only show up in local dev builds where
+          # the SDK is present on the developer's machine).
+          #
+          # The public mirror keeps the headers at <root>/common/iasiodrv.h,
+          # which is exactly what dependencies.cmake validates against. We
+          # expose the checkout path via LT_ASIO_SDK_DIR for the next step.
+          git clone --depth 1 https://github.com/audiosdk/asio.git "$PWD/vendor/asiosdk"
+          if (-not (Test-Path "$PWD/vendor/asiosdk/common/iasiodrv.h")) {
+            Write-Error "ASIO SDK clone did not produce common/iasiodrv.h"
+            exit 1
+          }
+          "LT_ASIO_SDK_DIR=$PWD/vendor/asiosdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Build native engine release
         shell: pwsh
         run: |
@@ -198,6 +219,11 @@ jobs:
             $configureArgs += "-DCMAKE_C_COMPILER_LAUNCHER=sccache"
             $configureArgs += "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
           }
+          if ($env:LT_ASIO_SDK_DIR) {
+            # Enables JUCE_ASIO=1 in dependencies.cmake. Without this the
+            # Windows release builds without ASIO device support.
+            $configureArgs += "-DLT_ASIO_SDK_DIR=$env:LT_ASIO_SDK_DIR"
+          }
           if ("${{ matrix.platform }}" -eq "macos") {
             $env:MACOSX_DEPLOYMENT_TARGET = "10.13"
             $configureArgs += "-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64"
@@ -218,6 +244,29 @@ jobs:
           if ("${{ matrix.platform }}" -eq "macos") {
             Copy-Item vendor/bungee/apple-mac/bungee.framework vendor/bin/native -Recurse -Force
           }
+
+      - name: Verify ASIO compiled into release engine (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          # Guard against silent ASIO loss. JUCE only compiles its ASIO device
+          # type when JUCE_ASIO=1, which depends on LT_ASIO_SDK_DIR resolving to
+          # a valid SDK. If that ever regresses the build still succeeds but the
+          # installed app loses ASIO devices — a defect users only hit after
+          # download. We detect the ASIO device-type strings JUCE bakes into the
+          # DLL (stored UTF-16LE) and fail the job if they're absent.
+          $dll = "$PWD/vendor/bin/native/lt_audio_engine_v2.dll"
+          if (-not (Test-Path $dll)) {
+            Write-Error "Engine DLL not found at $dll"
+            exit 1
+          }
+          $bytes = [System.IO.File]::ReadAllBytes($dll)
+          $text = [System.Text.Encoding]::Unicode.GetString($bytes)
+          if ($text -notmatch 'ASIO') {
+            Write-Error "Release engine DLL has no ASIO support compiled in (JUCE_ASIO was not enabled). Check the ASIO SDK download step and LT_ASIO_SDK_DIR."
+            exit 1
+          }
+          Write-Host "ASIO support confirmed present in release engine DLL."
 
       - name: Build Tauri bundles
         uses: tauri-apps/tauri-action@v0.5
