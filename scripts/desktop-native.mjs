@@ -91,6 +91,36 @@ const run = (command, args, options = {}) => {
   }
 };
 
+const copyLinuxRuntimeDependencies = (sourceFile, nativeVendorDir) => {
+  if (process.platform !== "linux") {
+    return;
+  }
+
+  const result = spawnSync("ldd", [sourceFile], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  if (result.error || result.status !== 0) {
+    return;
+  }
+
+  const wantedLibraries = /^lib(?:avcodec|avformat|avutil|swresample)\.so(?:\.\d+)*$/;
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const match = line.match(/=>\s+(\/\S+)/) ?? line.match(/^\s*(\/\S+)/);
+    if (!match) {
+      continue;
+    }
+
+    const dependencyPath = match[1];
+    const dependencyName = path.basename(dependencyPath);
+    if (!wantedLibraries.test(dependencyName) || !existsSync(dependencyPath)) {
+      continue;
+    }
+
+    copyFileSync(dependencyPath, path.join(nativeVendorDir, dependencyName));
+  }
+};
+
 const ensureRemoteDist = () => {
   const remoteDist = path.join(repoRoot, "apps", "remote", "dist");
   if (!existsSync(remoteDist)) {
@@ -208,7 +238,9 @@ const ensureEngineV2 = (normalizedEnv) => {
   }
   for (const fileName of readdirSync(libDir)) {
     if (/\.(dll|dylib|so)$/i.test(fileName)) {
-      copyFileSync(path.join(libDir, fileName), path.join(nativeVendorDir, fileName));
+      const sourceFile = path.join(libDir, fileName);
+      copyFileSync(sourceFile, path.join(nativeVendorDir, fileName));
+      copyLinuxRuntimeDependencies(sourceFile, nativeVendorDir);
     }
   }
 
