@@ -32,6 +32,18 @@
         "installerIcon": "icons/icon.ico"
       }
     },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1",
+          "librsvg2-2",
+          "libasound2t64 | libasound2",
+          "xdg-utils"
+        ]
+      }
+    },
     "macOS": {
       "frameworks": [
         "../../../vendor/bin/native/liblt_audio_engine_v2.dylib",
