@@ -3,7 +3,13 @@ title: Vista Compacta
 description: Vista tipo Session Ableton de LibreTracks — canciones como columnas, mixer compartido, drag-and-drop, importacion y exportacion de paquetes ltpkg, seleccion multiple y reordenacion de tracks.
 ---
 
-La **Vista Compacta** es una segunda proyeccion del mismo proyecto. La vista DAW (timeline lineal) y la vista compacta comparten el mismo modelo: lo que haces en una se ve inmediatamente en la otra. Cambia entre las dos con la tecla `Tab` o con el boton del icono `view_module` / `view_timeline` en la barra de herramientas.
+La **Vista Compacta** es una segunda proyeccion del mismo proyecto. La vista DAW (timeline lineal) y la vista compacta comparten el mismo modelo: lo que haces en una se ve inmediatamente en la otra. 
+
+![Vista Compacta](/screenshots/Compact-View.png)
+
+Cambia entre las dos con la tecla `Tab` o con el boton del icono `view_module` / `view_timeline` en la barra de herramientas.
+
+![Boton para activar Vista Compacta](/screenshots/Compact-View-Button.png)
 
 ## Cuando Usar Cada Vista
 
@@ -70,6 +76,8 @@ Un mixer horizontal con una columna por pista del proyecto: nombre, M/S/T, fader
 #### Filtro "Solo cancion activa"
 
 En la barra superior, junto al boton de cambiar vista, aparece un boton con icono de embudo **solo en modo compacto**. Al activarlo el mixer oculta los strips de las pistas que no tienen ningun clip dentro de la cancion donde esta el playhead. Los folders ancestros de las pistas visibles se mantienen para preservar la jerarquia, asi una pista hija nunca queda huerfana sin su carpeta padre.
+
+![Boton para filtrar tracks reproduciendo](/screenshots/Compact-View-Track-Filter-Button.png)
 
 Reglas concretas:
 

@@ -590,6 +590,23 @@ export async function updateSongRegion(
   });
 }
 
+/**
+ * Atomically translate a song region by `deltaSeconds`. Moves the region
+ * AND every clip / tempo marker / section marker / time-signature
+ * marker that lived inside it by the same offset, in a single backend
+ * transaction (one snapshot, one undo entry). Backend rejects the move
+ * if the new range would collide with a neighbouring region.
+ */
+export async function moveSongRegion(
+  regionId: string,
+  deltaSeconds: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("move_song_region", {
+    regionId,
+    deltaSeconds,
+  });
+}
+
 export async function updateSongRegionTranspose(
   regionId: string,
   transposeSemitones: number,

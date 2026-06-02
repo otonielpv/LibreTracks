@@ -56,6 +56,17 @@ What follows from this:
 
 Create a song region by selecting a range on the timeline, right-clicking it, and choosing `Create song from selection`. You can also create an empty song from the Compact View's `+ New song` button, or import a previously-exported `.ltpkg` package as a new song appended at the end. After that, adjust `Region Transpose` and `Region Warp` from the transport view when the song needs a different key or tempo.
 
+### Moving a whole song
+
+In the DAW view you can drag the song's name band (the amber strip above the tracks) to translate the entire song across the timeline. The gesture moves the region, the clips, tempo markers, section markers and time-signature markers together, so the music stays intact — only its absolute position in the project changes.
+
+Rules:
+
+- Initiate the drag with a left-click on the centre of the band. The edges still act as resize handles.
+- If `Snap to Grid` is on, the song's start snaps to the nearest downbeat. Hold `Shift` while dragging to bypass snap and place it freely.
+- If the destination would overlap another song, the move is rejected with a clear message and the song stays put. Move or reorder the neighbour first.
+- The whole thing runs as one atomic transaction: one snapshot, one undo entry.
+
 ![Create a song region](/screenshots/Create-Region.png)
 
 For the full song-first workflow — songs as columns, per-song master fader, drag-and-drop of audio and packages, and track multi-selection in the mixer — see [Compact View](./compact-view).

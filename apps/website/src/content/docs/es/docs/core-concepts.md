@@ -56,6 +56,17 @@ Consecuencias practicas:
 
 Crea una region seleccionando una zona del timeline, haciendo clic derecho y eligiendo `Create song from selection`. Tambien puedes crear una cancion vacia desde el boton `+ Nueva cancion` de la Vista Compacta, o importar un paquete `.ltpkg` previamente exportado como una cancion appendeada al final. Despues puedes ajustar `Region Transpose` y `Region Warp` desde la vista de transporte cuando la cancion necesite otra tonalidad o tempo.
 
+### Mover una cancion completa
+
+En la vista DAW puedes arrastrar la banda con el nombre de la cancion (la franja amarilla encima de las pistas) para desplazar la cancion entera por el timeline. El gesto translada region, clips, tempo markers, marcas de seccion y cambios de compas todo al mismo tiempo, manteniendo la musica intacta — solo cambia su posicion absoluta en el proyecto.
+
+Reglas:
+
+- El gesto se inicia haciendo click izquierdo y arrastrando el centro de la banda. Los bordes siguen siendo handles de redimensionado.
+- Si `Snap to Grid` esta activo, el inicio de la cancion se ajusta al downbeat mas cercano. Mantén `Shift` durante el drag para colocarla libremente sin snap.
+- Si soltar ahi haria que la cancion solape con otra, el movimiento se rechaza con un mensaje claro y la cancion vuelve a su posicion original. Mueve o reordena la otra cancion antes.
+- Todo va en una sola transaccion atomica: un solo snapshot, una sola entrada de undo.
+
 ![Crear region de cancion](/screenshots/Create-Region.png)
 
 Para el flujo completo orientado a canciones — canciones como columnas, fader Master por cancion, drag-and-drop de audio y paquetes, y multi-seleccion de pistas en el mixer — ver [Vista Compacta](./compact-view).

@@ -357,6 +357,22 @@ pub fn update_song_region(
 }
 
 #[tauri::command]
+pub fn move_song_region(
+    region_id: String,
+    delta_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .move_song_region(&region_id, delta_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn update_song_region_transpose(
     region_id: String,
     transpose_semitones: i32,

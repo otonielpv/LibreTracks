@@ -24,6 +24,7 @@ import type {
   TimelineTrackSummary,
 } from "./pendingAudioImports";
 import { formatTransposeSemitones } from "./desktopApi";
+import { buildSongTempoRegions } from "@libretracks/shared/models";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { PlayheadOverlay } from "./PlayheadOverlay";
 import {
@@ -33,6 +34,7 @@ import {
 } from "./Renderer/drawBackground";
 import {
   BASE_PIXELS_PER_SECOND,
+  snapToTimelineBar,
   snapToTimelineGrid,
   type TimelineGrid,
 } from "./timelineMath";
@@ -135,6 +137,17 @@ type TimelineCanvasPaneProps = {
     endSeconds: number,
   ) => void;
   /**
+   * Fires once when the user releases the song-move drag (dragging the
+   * coloured band of a region horizontally). The pair `(deltaSeconds)`
+   * describes how far the song should translate; consumers are
+   * responsible for moving the region + every clip / tempo marker /
+   * section marker / time-signature marker that lived inside it by
+   * that delta in a single backend transaction. The component drives
+   * the optimistic preview during the drag and only fires this on
+   * release.
+   */
+  onRegionMoveCommit?: (regionId: string, deltaSeconds: number) => void;
+  /**
    * Snap state used during resize drag (matches the snap behaviour of
    * clip drag). Holding Alt during the drag temporarily disables snap.
    */
@@ -231,6 +244,7 @@ export function TimelineCanvasPane({
   onTimeSignatureMarkerContextMenu,
   onRegionContextMenu,
   onRegionResizeCommit,
+  onRegionMoveCommit,
   snapEnabled,
   midiLearnMode,
   onMidiLearnTarget,
@@ -278,6 +292,33 @@ export function TimelineCanvasPane({
     regionId: string;
     startSeconds: number;
     endSeconds: number;
+  } | null>(null);
+
+  // Move drag (translate the entire song — region + clips + markers).
+  // The math here is simpler than resize because the region's WIDTH
+  // doesn't change; only its start moves and we just translate
+  // everything inside by the same delta. The clamp comes from the
+  // neighbour regions on either side: the moved song can't slide
+  // into another song's range.
+  type RegionMoveDrag = {
+    regionId: string;
+    pointerId: number;
+    pointerStartClientX: number;
+    initialStartSeconds: number;
+    initialEndSeconds: number;
+    // Clamps for the moving START seconds (so neighbour-end ≤ start
+    // and start + duration ≤ next neighbour's start).
+    minStartSeconds: number;
+    maxStartSeconds: number;
+    previewStartSeconds: number;
+    previewEndSeconds: number;
+  };
+  const regionMoveDragRef = useRef<RegionMoveDrag | null>(null);
+  const [regionMovePreview, setRegionMovePreview] = useState<{
+    regionId: string;
+    startSeconds: number;
+    endSeconds: number;
+    deltaSeconds: number;
   } | null>(null);
 
   const MIN_REGION_DURATION_SECONDS = 0.1;
@@ -346,28 +387,18 @@ export function TimelineCanvasPane({
       nextEnd = drag.initialEndSeconds + deltaSeconds;
     }
 
-    // Snap (respects Alt to temporarily disable).
+    // Snap to BAR grid (downbeat). Song boundaries are bar-aligned;
+    // snapping mid-bar would produce off-grid edges. Alt bypasses
+    // snap for ad-hoc resizing.
     const shouldSnap = Boolean(snapEnabled) && !event.altKey;
     if (shouldSnap) {
       const songBpm = song.bpm;
       const songTs = song.timeSignature;
-      const zoom = 1;
+      const tempoRegions = buildSongTempoRegions(song);
       if (drag.edge === "start") {
-        nextStart = snapToTimelineGrid(
-          nextStart,
-          songBpm,
-          songTs,
-          zoom,
-          effectivePixelsPerSecond,
-        );
+        nextStart = snapToTimelineBar(nextStart, songBpm, songTs, tempoRegions);
       } else {
-        nextEnd = snapToTimelineGrid(
-          nextEnd,
-          songBpm,
-          songTs,
-          zoom,
-          effectivePixelsPerSecond,
-        );
+        nextEnd = snapToTimelineBar(nextEnd, songBpm, songTs, tempoRegions);
       }
     }
 
@@ -421,6 +452,155 @@ export function TimelineCanvasPane({
 
     if (changed && onRegionResizeCommit) {
       onRegionResizeCommit(drag.regionId, finalStart, finalEnd);
+    }
+  }
+
+  function beginRegionMove(
+    event: ReactPointerEvent<HTMLElement>,
+    region: SongRegionSummary,
+  ) {
+    if (!song) return;
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const sorted = [...song.regions].sort(
+      (left, right) => left.startSeconds - right.startSeconds,
+    );
+    const idx = sorted.findIndex((entry) => entry.id === region.id);
+    const leftNeighbour = idx > 0 ? sorted[idx - 1] : null;
+    const rightNeighbour =
+      idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
+    const duration = region.endSeconds - region.startSeconds;
+    const minStart = leftNeighbour ? leftNeighbour.endSeconds : 0;
+    // No upper bound: moving right is always allowed. The backend
+    // cascade-pushes any region that would overlap, and the user is
+    // free to extend the project past its current end.
+    const maxStart = Number.POSITIVE_INFINITY;
+
+    regionMoveDragRef.current = {
+      regionId: region.id,
+      pointerId: event.pointerId,
+      pointerStartClientX: event.clientX,
+      initialStartSeconds: region.startSeconds,
+      initialEndSeconds: region.endSeconds,
+      minStartSeconds: minStart,
+      maxStartSeconds: Math.max(minStart, maxStart),
+      previewStartSeconds: region.startSeconds,
+      previewEndSeconds: region.endSeconds,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.classList.add("is-moving");
+    setRegionMovePreview({
+      regionId: region.id,
+      startSeconds: region.startSeconds,
+      endSeconds: region.endSeconds,
+      deltaSeconds: 0,
+    });
+  }
+
+  function updateRegionMove(event: ReactPointerEvent<HTMLElement>) {
+    const drag = regionMoveDragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId || !song) return;
+
+    const effectivePixelsPerSecond =
+      livePixelsPerSecondRef.current ?? pixelsPerSecond;
+    if (effectivePixelsPerSecond <= 0) return;
+
+    const rawDelta =
+      (event.clientX - drag.pointerStartClientX) / effectivePixelsPerSecond;
+    let nextStart = drag.initialStartSeconds + rawDelta;
+
+    // Visual snap during the drag uses the FULL song grid (the moved
+    // region's own tempo markers included). This makes the preview
+    // land on the SAME visible grid lines the user sees on screen.
+    // The commit-time logic in endRegionMove re-snaps using the
+    // previous region's grid, which is what actually matters for
+    // the final landing position. Holding Shift bypasses snap.
+    const shouldSnap = Boolean(snapEnabled) && !event.shiftKey;
+    if (shouldSnap) {
+      nextStart = snapToTimelineGrid(
+        nextStart,
+        song.bpm,
+        song.timeSignature,
+        1,
+        effectivePixelsPerSecond,
+        buildSongTempoRegions(song),
+      );
+    }
+
+    // Clamp to neighbour bounds — no overlap with adjacent songs.
+    nextStart = Math.max(
+      drag.minStartSeconds,
+      Math.min(nextStart, drag.maxStartSeconds),
+    );
+
+    const duration = drag.initialEndSeconds - drag.initialStartSeconds;
+    const nextEnd = nextStart + duration;
+
+    drag.previewStartSeconds = nextStart;
+    drag.previewEndSeconds = nextEnd;
+    setRegionMovePreview({
+      regionId: drag.regionId,
+      startSeconds: nextStart,
+      endSeconds: nextEnd,
+      deltaSeconds: nextStart - drag.initialStartSeconds,
+    });
+  }
+
+  function endRegionMove(event: ReactPointerEvent<HTMLElement>) {
+    const drag = regionMoveDragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+
+    event.currentTarget.classList.remove("is-moving");
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer was already released — ignore.
+    }
+
+    // On commit, re-snap using the PREVIOUS region's grid (with the
+    // moved region's tempo markers filtered out, since they travel
+    // with the region and would otherwise grid the destination zone
+    // with the moved region's own BPM). This is what makes the
+    // final landing align with the destination's bars/beats. Shift
+    // bypasses snap entirely.
+    let finalStart = drag.previewStartSeconds;
+    if (snapEnabled && !event.shiftKey && song) {
+      const oldStart = drag.initialStartSeconds;
+      const oldEnd = drag.initialEndSeconds;
+      const insideMoved = (pos: number) =>
+        pos >= oldStart - 0.001 && pos < oldEnd;
+      const songWithoutMovedInternals: SongView = {
+        ...song,
+        tempoMarkers: song.tempoMarkers.filter(
+          (m) => !insideMoved(m.startSeconds),
+        ),
+        timeSignatureMarkers: song.timeSignatureMarkers.filter(
+          (m) => !insideMoved(m.startSeconds),
+        ),
+      };
+      const livePps =
+        livePixelsPerSecondRef.current ?? pixelsPerSecond ?? 1;
+      finalStart = snapToTimelineGrid(
+        finalStart,
+        song.bpm,
+        song.timeSignature,
+        1,
+        livePps,
+        buildSongTempoRegions(songWithoutMovedInternals),
+      );
+      finalStart = Math.max(
+        drag.minStartSeconds,
+        Math.min(finalStart, drag.maxStartSeconds),
+      );
+    }
+    const finalDelta = finalStart - drag.initialStartSeconds;
+    regionMoveDragRef.current = null;
+    setRegionMovePreview(null);
+
+    if (Math.abs(finalDelta) > 1e-6 && onRegionMoveCommit) {
+      onRegionMoveCommit(drag.regionId, finalDelta);
     }
   }
 
@@ -565,14 +745,20 @@ export function TimelineCanvasPane({
             onNativeTrackHeightChange={onNativeTrackHeightChange}
           >
             {song?.regions.map((region) => {
-              // Live preview during resize: drag updates this single in-flight
-              // region's bounds optimistically; everyone else renders as-is.
+              // Live preview during resize or move: drag updates the
+              // in-flight region's bounds optimistically; everyone else
+              // renders as-is.
               const isResizing = regionResizePreview?.regionId === region.id;
+              const isMoving = regionMovePreview?.regionId === region.id;
               const renderStart = isResizing
                 ? regionResizePreview.startSeconds
+                : isMoving
+                ? regionMovePreview.startSeconds
                 : region.startSeconds;
               const renderEnd = isResizing
                 ? regionResizePreview.endSeconds
+                : isMoving
+                ? regionMovePreview.endSeconds
                 : region.endSeconds;
               const regionDescription = `Carril superior: región ${region.name}${region.warpEnabled && region.warpSourceBpm ? `, BPM original ${region.warpSourceBpm.toFixed(0)}` : ""}${region.transposeSemitones !== 0 ? `, ${formatTransposeSemitones(region.transposeSemitones)} semitonos` : ""}`;
               return (
@@ -601,9 +787,30 @@ export function TimelineCanvasPane({
                     event.preventDefault();
                     event.stopPropagation();
                   }}
+                  onPointerDown={(event) => {
+                    // Only the central body initiates the move drag.
+                    // The two resize handles at the edges have their
+                    // own onPointerDown handlers and stop propagation
+                    // before this fires, so primary-button presses on
+                    // the body cleanly map to the move gesture.
+                    if (event.button !== 0) return;
+                    if (event.altKey || event.ctrlKey || event.metaKey) {
+                      return;
+                    }
+                    beginRegionMove(event, region);
+                  }}
+                  onPointerMove={updateRegionMove}
+                  onPointerUp={endRegionMove}
+                  onPointerCancel={endRegionMove}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
+                    // Swallow the click that follows a move drag —
+                    // dragging is not selecting. We detect it by
+                    // checking if the move preview state was set.
+                    if (regionMoveDragRef.current !== null) {
+                      return;
+                    }
                     if (midiLearnMode !== null) {
                       const chronologicalRegions = [
                         ...(song?.regions ?? []),

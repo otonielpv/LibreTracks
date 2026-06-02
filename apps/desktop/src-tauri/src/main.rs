@@ -159,6 +159,7 @@ fn main() {
             commands::timeline::create_song_region,
             commands::timeline::create_empty_song,
             commands::timeline::update_song_region,
+            commands::timeline::move_song_region,
             commands::timeline::update_song_region_transpose,
             commands::timeline::update_song_region_warp,
             commands::timeline::update_live_region_master_gain,

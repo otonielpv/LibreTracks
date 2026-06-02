@@ -364,14 +364,6 @@ void Mixer::render_timeline_span(float** output_channels,
     const Frame timeline_frame = clock_->position().frame;
     std::uint64_t rendered_this_block = 0;
     std::uint64_t skipped_this_block = 0;
-    // Track whether any track produced a non-silent sample this block.
-    // The pending-start gate (see TransportClock::clear_pending_start
-    // docs) is supposed to stay armed until the FIRST audible block
-    // actually emerges from the mixer — that's the contract the
-    // "committed audio playhead advances only after successful render"
-    // test pins down. Clearing the gate before any audio came out was
-    // making the playhead run ahead while Bungee was still priming.
-    bool block_was_audible = false;
 
     for (const auto& song : session->songs) {
         if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
@@ -469,12 +461,6 @@ void Mixer::render_timeline_span(float** output_channels,
             }
             track_meters_[ti].left_peak.store(track_peak_l, std::memory_order_relaxed);
             track_meters_[ti].right_peak.store(track_peak_r, std::memory_order_relaxed);
-            // 1e-7 mirrors the left/right-only-source threshold used a
-            // couple of lines above; anything below that is treated as
-            // silence elsewhere in the mixer, so we reuse it here as
-            // the "audible block" gate.
-            if (track_peak_l > 1.0e-7f || track_peak_r > 1.0e-7f)
-                block_was_audible = true;
             track_meters_[ti].left_rms.store(static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames))), std::memory_order_relaxed);
             track_meters_[ti].right_rms.store(static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames))), std::memory_order_relaxed);
 
@@ -529,16 +515,10 @@ void Mixer::render_timeline_span(float** output_channels,
     metronome_.render(metronome_channels, num_channels, num_frames,
                       clock_->sample_rate(), timeline_frame, session.get());
 
-    // Order matters: advance FIRST, then clear the gate. This way the
-    // very first audible block leaves the clock untouched (advance is
-    // a no-op while pending_start_ is set), and only the subsequent
-    // block actually moves the playhead. The contract pinned down by
-    // "committed audio playhead advances only after successful render"
-    // is "clock.position() reflects the most recently rendered audio
-    // block, not the next one queued", which falls out of this order.
-    clock_->advance(num_frames);
-    if (clock_->pending_start() && block_was_audible)
+    const bool was_pending_start = clock_->pending_start();
+    if (was_pending_start)
         clock_->clear_pending_start();
+    clock_->advance(num_frames);
 }
 
 void Mixer::render(float** output_channels,
@@ -649,10 +629,6 @@ void Mixer::render(float** output_channels,
     } else if (clock_->position().state == TransportState::Playing && session) {
         std::uint64_t rendered_this_block = 0;
         std::uint64_t skipped_this_block = 0;
-        // Same audibility tracking as in render_timeline_span — the
-        // pending-start gate has to stay armed until at least one
-        // track actually emits a non-silent sample.
-        bool block_was_audible = false;
         // Find the current song.
         for (const auto& song : session->songs) {
             if (timeline_frame < song.start_frame || timeline_frame >= song.end_frame)
@@ -758,8 +734,6 @@ void Mixer::render(float** output_channels,
                 }
                 track_meters_[ti].left_peak.store(track_peak_l, std::memory_order_relaxed);
                 track_meters_[ti].right_peak.store(track_peak_r, std::memory_order_relaxed);
-                if (track_peak_l > 1.0e-7f || track_peak_r > 1.0e-7f)
-                    block_was_audible = true;
                 track_meters_[ti].left_rms.store(static_cast<float>(std::sqrt(track_sum_l / std::max(1, num_frames))), std::memory_order_relaxed);
                 track_meters_[ti].right_rms.store(static_cast<float>(std::sqrt(track_sum_r / std::max(1, num_frames))), std::memory_order_relaxed);
 
@@ -806,14 +780,10 @@ void Mixer::render(float** output_channels,
         metronome_.render(output_channels, num_channels, num_frames,
                           clock_->sample_rate(), timeline_frame, session.get());
 
-        // Same order as render_timeline_span: advance is a no-op while
-        // pending_start_ is armed, and we only release the gate
-        // *after* trying to advance. The first audible block therefore
-        // leaves clock.position() at its play-start frame, and the
-        // next block is the first one to actually move it.
-        clock_->advance(num_frames);
-        if (clock_->pending_start() && block_was_audible)
+        const bool was_pending_start = clock_->pending_start();
+        if (was_pending_start)
             clock_->clear_pending_start();
+        clock_->advance(num_frames);
     }
 
     // Apply crossfade ramp (Phase 7).

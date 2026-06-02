@@ -439,6 +439,56 @@ export function snapToTimelineGrid(
 }
 
 /**
+ * Like snapToTimelineGrid but rounds to the nearest bar (downbeat),
+ * not to the nearest beat. Used when moving / resizing a whole song
+ * region — songs always start on a downbeat, so snapping mid-bar
+ * gives off-grid results like 215.4.00.
+ */
+export function snapToTimelineBar(
+  seconds: number,
+  bpm: number,
+  timeSignature: string,
+  regions: TimelineRegion[] = [],
+): number {
+  if (regions.length > 0) {
+    const resolvedRegions = normalizeTimelineRegions({
+      durationSeconds: Math.max(0, ...regions.map((region) => region.endSeconds), seconds),
+      bpm,
+      timeSignature,
+      regions,
+    });
+    const firstRegion = resolvedRegions[0];
+    if (firstRegion && seconds < firstRegion.startSeconds) {
+      const barFrames = firstRegion.beatFrames * firstRegion.beatsPerBar;
+      const localFrames = secondsToSignedTimebaseFrames(seconds - firstRegion.startSeconds);
+      const snappedFrames = Math.round(localFrames / barFrames) * barFrames;
+      return firstRegion.startSeconds + timebaseFrameDeltaToSeconds(snappedFrames);
+    }
+
+    const region = resolveTimelineRegionAtSeconds(seconds, resolvedRegions) ?? resolvedRegions[0];
+    if (region) {
+      const localFrames = secondsToTimebaseFrames(seconds - region.startSeconds);
+      const totalBars =
+        region.cumulativeBarsStart + localFrames / (region.beatFrames * region.beatsPerBar);
+      const snappedTotalBars = Math.round(totalBars);
+      const localTargetFrames =
+        (snappedTotalBars - region.cumulativeBarsStart) *
+        region.beatFrames *
+        region.beatsPerBar;
+      return clamp(
+        region.startSeconds + timebaseFramesToSeconds(localTargetFrames),
+        region.startSeconds,
+        region.endSeconds,
+      );
+    }
+  }
+
+  const barFrames = getBeatFrames(bpm, timeSignature) * Number(timeSignature.split("/")[0] ?? 4);
+  const positionFrames = secondsToSignedTimebaseFrames(seconds);
+  return timebaseFrameDeltaToSeconds(Math.round(positionFrames / barFrames) * barFrames);
+}
+
+/**
  * Returns the timeline-time of the first downbeat (bar boundary) at or
  * after `seconds`. Walks the project's tempo regions so the answer
  * respects every tempo / time-signature change between `seconds` and

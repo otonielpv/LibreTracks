@@ -199,7 +199,7 @@ pub fn warp_timeline_duration_seconds(
 }
 
 /// Frequency scale `2^(semitones/12)` clamped to a finite positive value.
-fn semitones_to_pitch_scale(semitones: i32) -> f64 {
+pub fn semitones_to_pitch_scale(semitones: i32) -> f64 {
     let scale = 2.0_f64.powf(semitones as f64 / 12.0);
     if scale.is_finite() && scale > 0.0 {
         scale

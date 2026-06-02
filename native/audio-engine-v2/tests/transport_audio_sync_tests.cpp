@@ -29,7 +29,12 @@ Session make_one_track_session(Semitones song_transpose) {
 
 }
 
-TEST_CASE("committed audio playhead advances only after successful render") {
+TEST_CASE("playing clock advances by one block per render call") {
+    // The mixer is the sole driver of clock_->advance() during playback:
+    // each render call clears the pending-start gate (the audio thread
+    // has emitted a block of output) and then bumps the clock by the
+    // exact number of frames the host asked for. Two render calls →
+    // two block advances → position has moved by 2 × block_frames.
     SourceManager sources;
     sources.register_source("source", "");
     REQUIRE(sources.store_decoded_source("source", test::make_stereo_click(8192, 128, 1.0f),
@@ -46,7 +51,7 @@ TEST_CASE("committed audio playhead advances only after successful render") {
     clock.play();
     Frame before = clock.position().frame;
     mixer->render(out, 2, 256, test::kFixtureSampleRate);
-    CHECK(clock.position().frame == before);
-    mixer->render(out, 2, 256, test::kFixtureSampleRate);
     CHECK(clock.position().frame == before + 256);
+    mixer->render(out, 2, 256, test::kFixtureSampleRate);
+    CHECK(clock.position().frame == before + 512);
 }

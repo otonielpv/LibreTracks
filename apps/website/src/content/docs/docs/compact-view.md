@@ -3,7 +3,13 @@ title: Compact View
 description: LibreTracks' Ableton Session-style projection — songs as columns, shared mixer, drag-and-drop, .ltpkg import/export, multi-selection and track reorder.
 ---
 
-The **Compact View** is a second projection of the same project. The DAW view (linear timeline) and the compact view share one underlying model: anything you change in one shows up immediately in the other. Toggle between them with `Tab` or with the `view_module` / `view_timeline` button in the toolbar.
+The **Compact View** is a second projection of the same project. The DAW view (linear timeline) and the compact view share one underlying model: anything you change in one shows up immediately in the other.
+
+![Compact View](/screenshots/Compact-View.png)
+
+Toggle between them with `Tab` or with the `view_module` / `view_timeline` button in the toolbar.
+
+![Button to toggle Compact View](/screenshots/Compact-View-Button.png)
 
 ## When To Use Each View
 
@@ -70,6 +76,8 @@ A horizontal mixer with one column per project track: name, M/S/T toggles, verti
 #### "Active song only" filter
 
 A funnel button appears in the top toolbar (next to the view-toggle icon) **only in compact mode**. When activated, the mixer hides the strips for tracks that don't have any clip inside the song the playhead is on. Ancestor folders of the visible tracks stay in place to preserve the hierarchy, so a child track never appears orphaned without its parent folder.
+
+![Button to filter tracks that are playing](/screenshots/Compact-View-Track-Filter-Button.png)
 
 Concrete behaviour:
 

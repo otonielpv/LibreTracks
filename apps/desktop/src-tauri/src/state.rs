@@ -2528,6 +2528,180 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Atomically translate an entire song by `delta_seconds`. Moves
+    /// the region itself + every clip whose timeline_start_seconds
+    /// fell inside the region + every tempo / section /
+    /// time-signature marker that lived inside the region, all by
+    /// the same delta. One persist_song_update, one snapshot, one
+    /// undo entry. Rejects the move if it would collide with a
+    /// neighbouring region (the validator backs us up here too, but
+    /// failing fast gives the user a friendlier error than the
+    /// "regions out of order" downstream rejection).
+    pub fn move_song_region(
+        &mut self,
+        region_id: &str,
+        delta_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+
+        if !delta_seconds.is_finite() {
+            return Err(DesktopError::AudioCommand(
+                "delta_seconds must be a finite number".into(),
+            ));
+        }
+
+        let existing_region = song
+            .regions
+            .iter()
+            .find(|region| region.id == region_id)
+            .cloned()
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+
+        let old_start = existing_region.start_seconds;
+        let old_end = existing_region.end_seconds;
+        let new_start = old_start + delta_seconds;
+        let new_end = old_end + delta_seconds;
+
+        if new_start < 0.0 {
+            return Err(DesktopError::AudioCommand(
+                "no se puede mover la canción antes del inicio del proyecto".into(),
+            ));
+        }
+
+        // Collision policy is asymmetric:
+        //
+        //   * Moving RIGHT into a following region: cascade-push the
+        //     following regions to the right by the amount needed to
+        //     resolve the overlap. realign_regions_after_warp_tempo_change
+        //     later re-snaps each one to its bar.1, so the cascade
+        //     converges to a clean bar-aligned arrangement.
+        //
+        //   * Moving LEFT into a preceding region: bounce the operation.
+        //     There is no symmetric "push left" because doing so could
+        //     push the predecessor before t=0 and silently swallow
+        //     audio. The user can move the predecessors first.
+        //
+        // EDGE_EPS lets back-to-back boundaries (end == start) count as
+        // touching, not overlapping.
+        const EDGE_EPS: f64 = 1e-4;
+        if delta_seconds < 0.0 {
+            for other in &song.regions {
+                if other.id == existing_region.id {
+                    continue;
+                }
+                let overlaps_left = new_start < other.end_seconds - EDGE_EPS
+                    && new_end > other.start_seconds + EDGE_EPS
+                    && other.start_seconds < old_start;
+                if overlaps_left {
+                    return Err(DesktopError::AudioCommand(format!(
+                        "no se puede mover la canción ahí: solaparía con '{}'",
+                        other.name,
+                    )));
+                }
+            }
+        }
+
+        // Translate everything that lived inside the old region by
+        // the same offset: clips by timeline_start, markers by
+        // start_seconds. We treat "inside" with a 1ms tolerance on
+        // the left edge so markers placed exactly at start move with
+        // the song (typical case: the per-song tempo marker the
+        // importer pins at the region start).
+        let inside_old = |pos: f64| pos >= old_start - 0.001 && pos < old_end;
+
+        for clip in &mut song.clips {
+            if inside_old(clip.timeline_start_seconds) {
+                clip.timeline_start_seconds =
+                    (clip.timeline_start_seconds + delta_seconds).max(0.0);
+            }
+        }
+        for marker in &mut song.tempo_markers {
+            if inside_old(marker.start_seconds) {
+                marker.start_seconds = (marker.start_seconds + delta_seconds).max(0.0);
+            }
+        }
+        for marker in &mut song.section_markers {
+            if inside_old(marker.start_seconds) {
+                marker.start_seconds = (marker.start_seconds + delta_seconds).max(0.0);
+            }
+        }
+        for marker in &mut song.time_signature_markers {
+            if inside_old(marker.start_seconds) {
+                marker.start_seconds = (marker.start_seconds + delta_seconds).max(0.0);
+            }
+        }
+
+        // Cascade-push following regions if the rightward move would
+        // overlap them. We find the smallest "following" region that
+        // overlaps and push from its original start. shift_song_suffix
+        // moves regions/clips/markers from anchor onward; the moved
+        // region itself is excluded because at this point song still
+        // contains it at its OLD position (we haven't replaced it yet).
+        if delta_seconds > 0.0 {
+            let mut push_anchor: Option<f64> = None;
+            let mut push_delta: f64 = 0.0;
+            for other in &song.regions {
+                if other.id == existing_region.id {
+                    continue;
+                }
+                if other.start_seconds <= old_start {
+                    continue; // not a follower
+                }
+                let needed = new_end - other.start_seconds + EDGE_EPS;
+                if needed > push_delta {
+                    push_delta = needed;
+                    push_anchor = Some(other.start_seconds);
+                } else if push_anchor.is_none() && needed > 0.0 {
+                    push_anchor = Some(other.start_seconds);
+                }
+            }
+            if let (Some(anchor), true) = (push_anchor, push_delta > 0.0) {
+                shift_song_suffix(&mut song, anchor, push_delta);
+            }
+        }
+
+        let updated_region = SongRegion {
+            id: existing_region.id.clone(),
+            name: existing_region.name.clone(),
+            start_seconds: new_start,
+            end_seconds: new_end,
+            transpose_semitones: existing_region.transpose_semitones,
+            warp_enabled: existing_region.warp_enabled,
+            warp_source_bpm: existing_region.warp_source_bpm,
+            master: existing_region.master.clone(),
+        };
+
+        // Same rebuild flow as update_song_region: drop the old copy
+        // then push the new one through replace_song_region_range so
+        // the regions list stays sorted and consistent.
+        song.regions
+            .retain(|region| region.id != existing_region.id);
+        replace_song_region_range(&mut song, updated_region);
+        sort_song_regions(&mut song.regions);
+
+        // Snap every region AFTER the moved one to the next downbeat
+        // following its predecessor's end. We don't rely on the
+        // "boundary was downbeat-aligned before" check from the
+        // generic realign helper, because the cascade-push above can
+        // displace successors by non-bar amounts (EDGE_EPS, or by
+        // arbitrary deltas if the move's delta wasn't bar-quantised
+        // — which the frontend allows). Unconditionally snapping the
+        // tail to bar.1 matches the user expectation that "each song
+        // sits on its own downbeat" after any move.
+        snap_regions_after_to_downbeats(&mut song, &existing_region.id);
+
+        refresh_song_duration(&mut song);
+        audio.update_live_song_regions(&song)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn update_song_region_warp(
         &mut self,
         region_id: &str,
@@ -2634,11 +2808,106 @@ impl DesktopSession {
             self.should_record_transpose_history(TransposeHistoryTarget::Region(region.id.clone()));
 
         let changes_timeline = !region.warp_enabled;
+        // Capture the values we'll need to compensate the songs that
+        // follow this region, BEFORE we mutate it.
+        let edited_region_id = region.id.clone();
+        let edited_region_start = region.start_seconds;
+        let edited_region_end = region.end_seconds;
+        let edited_region_warp_enabled = region.warp_enabled;
+        let previous_transpose = region.transpose_semitones;
         region.transpose_semitones = transpose_semitones;
         if jump_debug_logging_enabled() {
             eprintln!(
                 "[LT_JUMP_DEBUG][state] region_transpose region={region_id} semitones={transpose_semitones} changes_timeline={changes_timeline}"
             );
+        }
+
+        // Varispeed compensation: changing a region's pitch with warp
+        // OFF rescales its rendered duration on the timeline (Ableton
+        // varispeed). Without compensation, every clip / region /
+        // marker that lives AFTER the edited region's source range
+        // would visually slide left or right because the renderer
+        // applies the new shift. The user perception is "I changed
+        // song 1's pitch and song 2 stopped starting on a bar".
+        //
+        // To keep the view-time of subsequent songs anchored, we
+        // translate their stored source positions by the inverse of
+        // the shift change introduced by the edit:
+        //
+        //   covered      = region.end - region.start         (source span)
+        //   old_shift_per_region = covered / old_ratio - covered
+        //   new_shift_per_region = covered / new_ratio - covered
+        //   delta = old_shift_per_region - new_shift_per_region
+        //         = covered * (1/old_ratio - 1/new_ratio)
+        //
+        // Adding `delta` to every downstream position keeps
+        // warp_timeline_seconds_at(song, pos) constant after the edit.
+        // Warp-enabled regions are NOT affected here — warp absorbs
+        // the duration change into Bungee, so the rendered length
+        // stays anchored to the timeline bpm and downstream view-
+        // time is unchanged anyway.
+        if changes_timeline && !edited_region_warp_enabled {
+            let old_ratio = if previous_transpose != 0 {
+                libretracks_core::semitones_to_pitch_scale(previous_transpose)
+            } else {
+                1.0
+            };
+            let new_ratio = if transpose_semitones != 0 {
+                libretracks_core::semitones_to_pitch_scale(transpose_semitones)
+            } else {
+                1.0
+            };
+            let covered = (edited_region_end - edited_region_start).max(0.0);
+            let old_shift = covered / old_ratio - covered;
+            let new_shift = covered / new_ratio - covered;
+            let delta = old_shift - new_shift;
+            // Tolerance: only act when the delta would actually nudge
+            // a sample. Skips the no-op case (e.g. user re-applied the
+            // same semitones value via MIDI learn / stepper bounce).
+            if delta.abs() > 1e-9 {
+                // Translate every region, clip and marker whose source
+                // position lies at or after the edited region's source
+                // end. The edited region itself stays put — its
+                // source bounds are unchanged; only its rendered
+                // length scales because of the new pitch.
+                for region_iter in song.regions.iter_mut() {
+                    if region_iter.id == edited_region_id {
+                        continue;
+                    }
+                    if region_iter.start_seconds >= edited_region_end - 1e-6 {
+                        region_iter.start_seconds =
+                            (region_iter.start_seconds + delta).max(0.0);
+                        region_iter.end_seconds =
+                            (region_iter.end_seconds + delta).max(0.0);
+                    }
+                }
+                for clip in song.clips.iter_mut() {
+                    if clip.timeline_start_seconds >= edited_region_end - 1e-6 {
+                        clip.timeline_start_seconds =
+                            (clip.timeline_start_seconds + delta).max(0.0);
+                    }
+                }
+                for marker in song.tempo_markers.iter_mut() {
+                    if marker.start_seconds >= edited_region_end - 1e-6 {
+                        marker.start_seconds =
+                            (marker.start_seconds + delta).max(0.0);
+                    }
+                }
+                for marker in song.section_markers.iter_mut() {
+                    if marker.start_seconds >= edited_region_end - 1e-6 {
+                        marker.start_seconds =
+                            (marker.start_seconds + delta).max(0.0);
+                    }
+                }
+                for marker in song.time_signature_markers.iter_mut() {
+                    if marker.start_seconds >= edited_region_end - 1e-6 {
+                        marker.start_seconds =
+                            (marker.start_seconds + delta).max(0.0);
+                    }
+                }
+                sort_song_regions(&mut song.regions);
+                refresh_song_duration(&mut song);
+            }
         }
         if changes_timeline {
             // Warp off means pitch is varispeed: changing semitones changes
@@ -6208,11 +6477,78 @@ struct ViewTempoBoundary<'a> {
     time_signature: Option<&'a str>,
 }
 
-fn realign_regions_after_warp_tempo_change(previous_song: &Song, song: &mut Song) {
-    if !song_has_active_warp(previous_song) && !song_has_active_warp(song) {
+/// Snap every region positioned AFTER `moved_region_id` so its start
+/// lands on the next downbeat after the previous region's end. Used
+/// by `move_song_region` to guarantee that each follower ends up on
+/// its own bar.1 even when the cascade-push displaced it by a
+/// non-bar amount. Iterates in order so that fixing region N feeds
+/// the correct end_seconds into the fix for region N+1.
+fn snap_regions_after_to_downbeats(song: &mut Song, moved_region_id: &str) {
+    let ordered_ids: Vec<String> = song
+        .regions
+        .iter()
+        .map(|region| region.id.clone())
+        .collect();
+    let Some(moved_idx) = ordered_ids
+        .iter()
+        .position(|id| id == moved_region_id)
+    else {
+        return;
+    };
+    if moved_idx + 1 >= ordered_ids.len() {
         return;
     }
 
+    let followers: Vec<String> = ordered_ids
+        .iter()
+        .skip(moved_idx + 1)
+        .cloned()
+        .collect();
+    let mut predecessor_id = moved_region_id.to_string();
+    for follower_id in followers {
+        let Some(predecessor_end) = song
+            .regions
+            .iter()
+            .find(|region| region.id == predecessor_id)
+            .map(|region| region.end_seconds)
+        else {
+            predecessor_id = follower_id;
+            continue;
+        };
+        let Some(current_start) = song
+            .regions
+            .iter()
+            .find(|region| region.id == follower_id)
+            .map(|region| region.start_seconds)
+        else {
+            predecessor_id = follower_id;
+            continue;
+        };
+
+        let predecessor_view_end = warp_timeline_seconds_at(song, predecessor_end);
+        let desired_view_start =
+            next_downbeat_after_in_view_timeline(song, predecessor_view_end);
+        let desired_source_start = source_seconds_at_view(song, desired_view_start);
+        let delta = desired_source_start - current_start;
+        if delta.abs() > 0.00001 {
+            shift_song_suffix(song, current_start, delta);
+        }
+        predecessor_id = follower_id;
+    }
+}
+
+fn realign_regions_after_warp_tempo_change(previous_song: &Song, song: &mut Song) {
+    // The original guard here was "only act when some region has warp
+    // active", but the same realignment is needed for plain tempo
+    // changes too: if the user moves the global BPM (or a tempo
+    // marker that the next region doesn't supersede), region N+1's
+    // source_start no longer falls on the bar it used to fall on.
+    // Without this, the case "song 1 has no tempo marker (uses
+    // global BPM), song 2 has its own tempo marker pinned at its
+    // start; bumping the global BPM" leaves song 2 visually
+    // mid-bar even though both endpoints were downbeat-aligned
+    // before. The function name is kept for now to avoid touching
+    // every caller; it's effectively realign_regions_after_tempo_change.
     let mut previous_regions = previous_song.regions.iter().collect::<Vec<_>>();
     previous_regions.sort_by(|left, right| {
         left.start_seconds

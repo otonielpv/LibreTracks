@@ -107,6 +107,7 @@ import {
   updateAudioSettings,
   updateSectionMarker,
   updateLiveRegionMasterGain,
+  moveSongRegion,
   updateSongRegion,
   updateSongRegionMasterGain,
   updateSongRegionTranspose,
@@ -9910,6 +9911,21 @@ export function TransportPanelContent() {
                                 region.name,
                                 startSeconds,
                                 endSeconds,
+                              );
+                              applyPlaybackSnapshot(nextSnapshot);
+                            });
+                          }}
+                          onRegionMoveCommit={(regionId, deltaSeconds) => {
+                            // Translates the entire song — region + clips +
+                            // every marker inside it — by `deltaSeconds`.
+                            // Goes through a dedicated backend command so
+                            // the move is one atomic snapshot / one undo
+                            // entry, instead of N independent region/
+                            // marker/clip updates.
+                            void runAction(async () => {
+                              const nextSnapshot = await moveSongRegion(
+                                regionId,
+                                deltaSeconds,
                               );
                               applyPlaybackSnapshot(nextSnapshot);
                             });

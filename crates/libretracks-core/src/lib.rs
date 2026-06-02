@@ -12,7 +12,8 @@ pub use validation::{
 };
 pub use warp::{
     audible_clip_duration_seconds, effective_bpm_at, region_warp_ratio, region_warp_ratio_in_song,
-    source_seconds_at_view, warp_timeline_duration_seconds, warp_timeline_seconds_at,
+    semitones_to_pitch_scale, source_seconds_at_view, warp_timeline_duration_seconds,
+    warp_timeline_seconds_at,
 };
 
 #[cfg(test)]
