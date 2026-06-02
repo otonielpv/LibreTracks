@@ -126,14 +126,15 @@ jobs:
         shell: pwsh
         run: |
           "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "VCPKG_DEFAULT_TRIPLET=x64-windows" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VCPKG_DEFAULT_TRIPLET=x64-windows-release" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VCPKG_OVERLAY_TRIPLETS=$PWD\native\audio-engine-v2\vcpkg-triplets" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Cache Windows vcpkg binary packages
         if: matrix.platform == 'windows'
         uses: actions/cache@v4
         with:
           path: ~\AppData\Local\vcpkg\archives
-          key: release-windows-vcpkg-${{ env.BUNGEE_VERSION }}-${{ hashFiles('native/audio-engine-v2/CMakeLists.txt', 'native/audio-engine-v2/cmake/**/*.cmake') }}
+          key: release-windows-vcpkg-${{ env.BUNGEE_VERSION }}-${{ hashFiles('native/audio-engine-v2/CMakeLists.txt', 'native/audio-engine-v2/cmake/**/*.cmake', 'native/audio-engine-v2/vcpkg-triplets/*.cmake') }}
           restore-keys: |
             release-windows-vcpkg-${{ env.BUNGEE_VERSION }}-
 
@@ -189,6 +190,9 @@ jobs:
           }
           if ($env:VCPKG_DEFAULT_TRIPLET) {
             $configureArgs += "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_DEFAULT_TRIPLET"
+          }
+          if ($env:VCPKG_OVERLAY_TRIPLETS) {
+            $configureArgs += "-DVCPKG_OVERLAY_TRIPLETS=$env:VCPKG_OVERLAY_TRIPLETS"
           }
           if (Get-Command sccache -ErrorAction SilentlyContinue) {
             $configureArgs += "-DCMAKE_C_COMPILER_LAUNCHER=sccache"
