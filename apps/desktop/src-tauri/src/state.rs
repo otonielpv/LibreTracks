@@ -546,10 +546,6 @@ impl DesktopSession {
         app: &AppHandle,
         audio: &AudioController,
     ) -> Result<Option<TransportSnapshot>, DesktopError> {
-        let title = "Nueva Cancion".to_string();
-        let song_id = format!("song_{}", timestamp_suffix());
-        let song = build_empty_song(song_id, title);
-
         let default_directory = project_root(app).join("songs");
         // The user picks the .ltsession name + parent location with the native
         // save dialog. We then create a project folder named after the file
@@ -560,12 +556,29 @@ impl DesktopSession {
             .set_title("Crear proyecto")
             .set_directory(&default_directory)
             .add_filter("LibreTracks Session", &["ltsession"])
-            .set_file_name(&default_project_file_name(&song.title))
+            .set_file_name(&default_project_file_name("Nueva Cancion"))
             .save_file();
 
         let Some(target_pick) = target_pick else {
             return Ok(None);
         };
+
+        self.create_song_at_path(target_pick, audio).map(Some)
+    }
+
+    /// Heavy half of `create_song`: writes the project folder + .ltsession and
+    /// loads it into the engine. Split out from the native dialog so the
+    /// command layer can run this on a worker thread — running it on the main
+    /// thread (as a sync Tauri command does) freezes the macOS run loop and
+    /// hangs the window on the "Applying changes" overlay.
+    pub fn create_song_at_path(
+        &mut self,
+        target_pick: PathBuf,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let title = "Nueva Cancion".to_string();
+        let song_id = format!("song_{}", timestamp_suffix());
+        let song = build_empty_song(song_id, title);
 
         let parent_dir = target_pick.parent().map(Path::to_path_buf).ok_or_else(|| {
             DesktopError::AudioCommand("no se pudo determinar la carpeta destino".into())
@@ -598,7 +611,7 @@ impl DesktopSession {
         self.load_song_from_path(song, song_dir, audio)?;
         self.song_file_path = Some(target_song_file);
 
-        Ok(Some(self.snapshot()))
+        Ok(self.snapshot())
     }
 
     pub fn save_project(&mut self) -> Result<TransportSnapshot, DesktopError> {
@@ -679,7 +692,6 @@ impl DesktopSession {
     }
 
     pub fn save_project_as(&mut self) -> Result<Option<TransportSnapshot>, DesktopError> {
-        let source_song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         let song = self
             .engine
             .song()
@@ -695,6 +707,24 @@ impl DesktopSession {
         let Some(target_pick) = target_pick else {
             return Ok(None);
         };
+
+        self.save_project_as_to_path(target_pick).map(Some)
+    }
+
+    /// Heavy half of `save_project_as`: copies the project's audio and writes
+    /// the new .ltsession. Split out from the native dialog so the command
+    /// layer can run it on a worker thread instead of freezing the macOS main
+    /// run loop. See [`create_song_at_path`](Self::create_song_at_path).
+    pub fn save_project_as_to_path(
+        &mut self,
+        target_pick: PathBuf,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let source_song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
 
         // Save As mirrors Create: the user picks <name>.ltsession in any
         // folder, and we create a <name>/ subfolder containing the session
@@ -740,7 +770,7 @@ impl DesktopSession {
         self.song_file_path = Some(target_song_file);
         self.prime_waveform_cache(&target_song_dir, &song)?;
 
-        Ok(Some(self.snapshot()))
+        Ok(self.snapshot())
     }
 
     pub fn open_project_from_dialog(
@@ -791,20 +821,16 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn import_song_from_dialog(
+    /// Heavy half of the package-import flow: unpacks the .ltpkg and decodes
+    /// its sources. Split out from the native dialog so the command layer can
+    /// run it on a worker thread instead of freezing the macOS main run loop.
+    /// See [`create_song_at_path`](Self::create_song_at_path).
+    pub fn import_song_from_path(
         &mut self,
         app: &AppHandle,
         audio: &AudioController,
-    ) -> Result<Option<TransportSnapshot>, DesktopError> {
-        let package_file = FileDialog::new()
-            .add_filter("LibreTracks Package", &["ltpkg"])
-            .set_title("Selecciona un paquete .ltpkg")
-            .pick_file();
-
-        let Some(package_file) = package_file else {
-            return Ok(None);
-        };
-
+        package_file: PathBuf,
+    ) -> Result<TransportSnapshot, DesktopError> {
         self.song_dir.as_ref().ok_or(DesktopError::NoSongLoaded)?;
         self.engine
             .song()
@@ -821,7 +847,7 @@ impl DesktopSession {
             self.import_song_package_no_wait(&package_path, self.current_position(), audio)?;
         self.wait_for_project_audio_preparation(app, audio)?;
 
-        Ok(Some(inserted.snapshot))
+        Ok(inserted.snapshot)
     }
 
     pub fn import_library_assets_from_dialog(
@@ -7037,7 +7063,14 @@ pub(crate) fn slugify(value: &str) -> String {
     }
 }
 
-fn default_project_file_name(title: &str) -> String {
+/// Default directory the "Crear proyecto" save dialog opens to:
+/// `<app_data>/songs`. Exposed so the command layer can build it before
+/// spawning the worker thread (the dialog must run on the main thread).
+pub(crate) fn create_song_default_directory(app: &AppHandle) -> PathBuf {
+    project_root(app).join("songs")
+}
+
+pub(crate) fn default_project_file_name(title: &str) -> String {
     let trimmed = title.trim();
     let fallback = if trimmed.is_empty() {
         "proyecto"

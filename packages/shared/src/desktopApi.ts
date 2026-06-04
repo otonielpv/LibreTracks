@@ -241,7 +241,7 @@ export async function appendDebugLog(line: string): Promise<void> {
 }
 
 export async function createSong(): Promise<TransportSnapshot | null> {
-  return invokeCommand<TransportSnapshot | null>("create_song");
+  return runProjectLoadCommand("start_create_song");
 }
 
 export async function saveProject(): Promise<TransportSnapshot> {
@@ -249,7 +249,7 @@ export async function saveProject(): Promise<TransportSnapshot> {
 }
 
 export async function saveProjectAs(): Promise<TransportSnapshot | null> {
-  return invokeCommand<TransportSnapshot | null>("save_project_as");
+  return runProjectLoadCommand("start_save_project_as");
 }
 
 export async function undoAction(): Promise<TransportSnapshot> {
@@ -293,7 +293,14 @@ export async function deleteSongTimeSignatureMarker(markerId: string): Promise<T
   return invokeCommand<TransportSnapshot>("delete_song_time_signature_marker", { markerId });
 }
 
-export async function openProject(): Promise<TransportSnapshot | null> {
+// Drive a dialog-backed project command that does its heavy work on a Rust
+// worker thread (so the macOS main run loop stays responsive) and reports the
+// result via the `project:load-complete` event. The `start_*` command returns
+// `false` if the user cancels the native dialog — in that case no event fires,
+// so resolve to null without waiting. Otherwise we await the completion event.
+async function runProjectLoadCommand(
+  startCommand: string,
+): Promise<TransportSnapshot | null> {
   let dispose: (() => void) | null = null;
   const clearListener = () => {
     const unlisten: (() => void) | null = dispose;
@@ -316,7 +323,7 @@ export async function openProject(): Promise<TransportSnapshot | null> {
   });
 
   try {
-    const started = await invokeCommand<boolean>("start_open_project_from_dialog");
+    const started = await invokeCommand<boolean>(startCommand);
     if (!started) {
       clearListener();
       return null;
@@ -328,8 +335,12 @@ export async function openProject(): Promise<TransportSnapshot | null> {
   }
 }
 
+export async function openProject(): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand("start_open_project_from_dialog");
+}
+
 export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
-  return invokeCommand<TransportSnapshot | null>("pick_and_import_song_from_dialog");
+  return runProjectLoadCommand("start_pick_and_import_song_from_dialog");
 }
 
 export async function importLibraryAssetsFromDialog(): Promise<LibraryAssetSummary[] | null> {

@@ -30,33 +30,100 @@ pub fn get_song_view(
 }
 
 #[tauri::command]
-pub fn pick_and_import_song_from_dialog(
-    app: AppHandle,
-    state: State<'_, DesktopState>,
-) -> Result<Option<TransportSnapshot>, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, String> {
+    let package_file = FileDialog::new()
+        .add_filter("LibreTracks Package", &["ltpkg"])
+        .set_title("Selecciona un paquete .ltpkg")
+        .pick_file();
 
-    session
-        .import_song_from_dialog(&app, &state.audio)
-        .map_err(|error| error.to_string())
+    let Some(package_file) = package_file else {
+        return Ok(false);
+    };
+
+    spawn_project_work(&app, move |worker_app, state| {
+        let mut session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .import_song_from_path(worker_app, &state.audio, package_file)
+            .map_err(|error| error.to_string())
+    });
+
+    Ok(true)
+}
+
+/// Spawn the heavy half of a dialog-driven project operation on a worker
+/// thread, emitting `project:load-complete` when it finishes. The native rfd
+/// dialog must run on the calling (main) thread on macOS, but the lock + engine
+/// work must NOT — running it on the main thread freezes the macOS run loop and
+/// hangs the window on the "Applying changes" overlay. The frontend awaits the
+/// completion event (see `openProject`/`createSong` in desktopApi.ts).
+fn spawn_project_work<F>(app: &AppHandle, work: F)
+where
+    F: FnOnce(
+            &AppHandle,
+            &DesktopState,
+        ) -> Result<TransportSnapshot, String>
+        + Send
+        + 'static,
+{
+    let worker_app = app.clone();
+    thread::spawn(move || {
+        let state = worker_app.state::<DesktopState>();
+        let result = work(&worker_app, &state);
+
+        match result {
+            Ok(snapshot) => {
+                emit_transport_lifecycle_event(&worker_app, "sync", &snapshot);
+                emit_project_load_complete_event(
+                    &worker_app,
+                    ProjectLoadCompleteEventPayload {
+                        snapshot: Some(snapshot),
+                        error: None,
+                    },
+                );
+            }
+            Err(error) => {
+                emit_project_load_complete_event(
+                    &worker_app,
+                    ProjectLoadCompleteEventPayload {
+                        snapshot: None,
+                        error: Some(error),
+                    },
+                );
+            }
+        }
+    });
 }
 
 #[tauri::command]
-pub fn create_song(
-    app: AppHandle,
-    state: State<'_, DesktopState>,
-) -> Result<Option<TransportSnapshot>, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+pub fn start_create_song(app: AppHandle) -> Result<bool, String> {
+    // project_root() needs the AppHandle; build the default dir here so the
+    // dialog still opens in <app_data>/songs as before.
+    let default_directory = crate::state::create_song_default_directory(&app);
+    let target_pick = FileDialog::new()
+        .set_title("Crear proyecto")
+        .set_directory(&default_directory)
+        .add_filter("LibreTracks Session", &["ltsession"])
+        .set_file_name(&crate::state::default_project_file_name("Nueva Cancion"))
+        .save_file();
 
-    session
-        .create_song(&app, &state.audio)
-        .map_err(|error| error.to_string())
+    let Some(target_pick) = target_pick else {
+        return Ok(false);
+    };
+
+    spawn_project_work(&app, move |_worker_app, state| {
+        let mut session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .create_song_at_path(target_pick, &state.audio)
+            .map_err(|error| error.to_string())
+    });
+
+    Ok(true)
 }
 
 #[tauri::command]
@@ -86,15 +153,43 @@ pub fn resolve_missing_file(
 }
 
 #[tauri::command]
-pub fn save_project_as(
-    state: State<'_, DesktopState>,
-) -> Result<Option<TransportSnapshot>, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+pub fn start_save_project_as(app: AppHandle, state: State<'_, DesktopState>) -> Result<bool, String> {
+    // Read the current title under a short lock so we can seed the dialog's
+    // default file name, then drop the lock before opening the (blocking)
+    // dialog and spawning the heavy save onto a worker thread.
+    let song_title = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .engine
+            .song()
+            .map(|song| song.title.clone())
+            .ok_or_else(|| DesktopError::NoSongLoaded.to_string())?
+    };
 
-    session.save_project_as().map_err(|error| error.to_string())
+    let target_pick = FileDialog::new()
+        .add_filter("LibreTracks Session", &["ltsession"])
+        .set_title("Guardar proyecto como")
+        .set_file_name(&crate::state::default_project_file_name(&song_title))
+        .save_file();
+
+    let Some(target_pick) = target_pick else {
+        return Ok(false);
+    };
+
+    spawn_project_work(&app, move |_worker_app, state| {
+        let mut session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        session
+            .save_project_as_to_path(target_pick)
+            .map_err(|error| error.to_string())
+    });
+
+    Ok(true)
 }
 
 #[tauri::command]
