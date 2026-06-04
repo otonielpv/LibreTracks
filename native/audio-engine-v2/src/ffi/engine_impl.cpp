@@ -1292,6 +1292,15 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             metronome_config_.enabled = c.enabled;
             metronome_config_.volume = std::clamp(c.volume, 0.0f, kMaxMetronomeVolume);
             metronome_config_.output_route = c.route.empty() ? std::string("master") : c.route;
+            metronome_config_.accent_enabled = c.accent_enabled;
+            metronome_config_.accent_preset = c.accent_preset;
+            metronome_config_.beat_preset = c.beat_preset;
+            metronome_config_.accent_pitch = c.accent_pitch;
+            metronome_config_.beat_pitch = c.beat_pitch;
+            metronome_config_.subdivision = c.subdivision;
+            metronome_config_.subdivision_preset = c.subdivision_preset;
+            metronome_config_.subdivision_pitch = c.subdivision_pitch;
+            metronome_config_.subdivision_gain = c.subdivision_gain;
             if (mixer_) mixer_->set_metronome_config(metronome_config_);
             return Result<void>::ok();
         }

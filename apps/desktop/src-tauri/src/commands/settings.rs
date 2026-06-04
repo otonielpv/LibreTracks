@@ -94,3 +94,30 @@ pub fn set_metronome_volume_realtime(
         .set_metronome_volume_realtime(volume)
         .map_err(|error| error.to_string())
 }
+
+/// Apply metronome sound settings (presets, pitch, subdivision) live without
+/// reopening the audio device, and persist them. Used so tweaking the click
+/// sound never pauses playback.
+#[tauri::command]
+pub fn set_metronome_sound_realtime(
+    app: AppHandle,
+    settings: AppSettings,
+    settings_store: State<'_, AppSettingsStore>,
+    state: State<'_, DesktopState>,
+) -> Result<AppSettings, String> {
+    state
+        .audio
+        .set_metronome_sound_realtime(&settings)
+        .map_err(|error| error.to_string())?;
+    // Keep the in-memory engine settings in sync so a later device change
+    // rebuilds with the right metronome config.
+    state
+        .audio
+        .replace_settings(settings.clone())
+        .map_err(|error| error.to_string())?;
+    settings_store
+        .set(settings.clone())
+        .map_err(|error| error.to_string())?;
+    save_app_settings(&app, &settings).map_err(|error| error.to_string())?;
+    Ok(settings)
+}

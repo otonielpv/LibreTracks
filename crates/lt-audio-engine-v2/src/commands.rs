@@ -94,6 +94,15 @@ pub enum EngineCommand {
         enabled: bool,
         volume: f32,
         route: String,
+        accent_enabled: bool,
+        accent_preset: i32,
+        beat_preset: i32,
+        accent_pitch: f32,
+        beat_pitch: f32,
+        subdivision: i32,
+        subdivision_preset: i32,
+        subdivision_pitch: f32,
+        subdivision_gain: f32,
     },
 
     SetSongTranspose {

@@ -357,6 +357,25 @@ export type MidiBinding = {
   isCc: boolean;
 };
 
+// Procedural metronome click timbres. Index order MUST match the C++
+// `SoundPreset` enum (metronome_renderer.h) — append, never reorder.
+export const METRONOME_SOUND_PRESETS = [
+  "sine",
+  "beep",
+  "woodblock",
+  "click",
+  "rimshot",
+  "cowbell",
+  "clave",
+] as const;
+
+export type MetronomeSoundPreset = (typeof METRONOME_SOUND_PRESETS)[number];
+
+// Allowed subdivision divisors: 1 = off, 2 = eighths, 3 = triplets, 4 = sixteenths.
+export const METRONOME_SUBDIVISIONS = [1, 2, 3, 4] as const;
+
+const METRONOME_PITCH_RANGE = 24; // semitones, +/-
+
 export type AppSettings = {
   selectedOutputDevice: string | null;
   selectedAudioBackend: AudioBackendKind | null;
@@ -374,6 +393,15 @@ export type AppSettings = {
   metronomeEnabled: boolean;
   metronomeVolume: number;
   metronomeOutput: string;
+  metronomeAccentEnabled: boolean;
+  metronomeAccentPreset: number;
+  metronomeBeatPreset: number;
+  metronomeAccentPitch: number;
+  metronomeBeatPitch: number;
+  metronomeSubdivision: number;
+  metronomeSubdivisionPreset: number;
+  metronomeSubdivisionPitch: number;
+  metronomeSubdivisionGain: number;
   globalJumpMode: "immediate" | "after_bars" | "next_marker";
   globalJumpBars: number;
   songJumpTrigger: "immediate" | "region_end" | "after_bars";
@@ -402,6 +430,15 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   metronomeEnabled: false,
   metronomeVolume: 0.8,
   metronomeOutput: "master",
+  metronomeAccentEnabled: true,
+  metronomeAccentPreset: 0,
+  metronomeBeatPreset: 0,
+  metronomeAccentPitch: 0,
+  metronomeBeatPitch: 0,
+  metronomeSubdivision: 1,
+  metronomeSubdivisionPreset: 0,
+  metronomeSubdivisionPitch: 0,
+  metronomeSubdivisionGain: 0.5,
   globalJumpMode: "immediate",
   globalJumpBars: 4,
   songJumpTrigger: "immediate",
@@ -450,6 +487,52 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const metronomeVolume = Number.isFinite(settings.metronomeVolume)
     ? Math.min(1, Math.max(0, settings.metronomeVolume))
     : DEFAULT_APP_SETTINGS.metronomeVolume;
+  const normalizePreset = (value: number, fallback: number) => {
+    const index = Math.floor(value);
+    return Number.isFinite(index) &&
+      index >= 0 &&
+      index < METRONOME_SOUND_PRESETS.length
+      ? index
+      : fallback;
+  };
+  const normalizePitch = (value: number, fallback: number) =>
+    Number.isFinite(value)
+      ? Math.max(-METRONOME_PITCH_RANGE, Math.min(METRONOME_PITCH_RANGE, value))
+      : fallback;
+  const metronomeAccentPreset = normalizePreset(
+    settings.metronomeAccentPreset,
+    DEFAULT_APP_SETTINGS.metronomeAccentPreset,
+  );
+  const metronomeBeatPreset = normalizePreset(
+    settings.metronomeBeatPreset,
+    DEFAULT_APP_SETTINGS.metronomeBeatPreset,
+  );
+  const metronomeSubdivisionPreset = normalizePreset(
+    settings.metronomeSubdivisionPreset,
+    DEFAULT_APP_SETTINGS.metronomeSubdivisionPreset,
+  );
+  const metronomeAccentPitch = normalizePitch(
+    settings.metronomeAccentPitch,
+    DEFAULT_APP_SETTINGS.metronomeAccentPitch,
+  );
+  const metronomeBeatPitch = normalizePitch(
+    settings.metronomeBeatPitch,
+    DEFAULT_APP_SETTINGS.metronomeBeatPitch,
+  );
+  const metronomeSubdivisionPitch = normalizePitch(
+    settings.metronomeSubdivisionPitch,
+    DEFAULT_APP_SETTINGS.metronomeSubdivisionPitch,
+  );
+  const metronomeSubdivision = (
+    METRONOME_SUBDIVISIONS as readonly number[]
+  ).includes(Math.floor(settings.metronomeSubdivision))
+    ? Math.floor(settings.metronomeSubdivision)
+    : DEFAULT_APP_SETTINGS.metronomeSubdivision;
+  const metronomeSubdivisionGain = Number.isFinite(
+    settings.metronomeSubdivisionGain,
+  )
+    ? Math.min(1, Math.max(0, settings.metronomeSubdivisionGain))
+    : DEFAULT_APP_SETTINGS.metronomeSubdivisionGain;
   const enabledOutputChannels = Array.from(
     new Set(
       (
@@ -519,6 +602,15 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     metronomeEnabled: Boolean(settings.metronomeEnabled),
     metronomeVolume,
     metronomeOutput,
+    metronomeAccentEnabled: settings.metronomeAccentEnabled ?? true,
+    metronomeAccentPreset,
+    metronomeBeatPreset,
+    metronomeAccentPitch,
+    metronomeBeatPitch,
+    metronomeSubdivision,
+    metronomeSubdivisionPreset,
+    metronomeSubdivisionPitch,
+    metronomeSubdivisionGain,
     globalJumpMode,
     globalJumpBars: normalizeJumpBars(
       settings.globalJumpBars,

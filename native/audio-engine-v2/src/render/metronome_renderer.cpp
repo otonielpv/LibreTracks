@@ -84,12 +84,59 @@ Frame rounded_beat_frame(Frame segment_start, double beat_frames, int64_t beat_i
     return segment_start + static_cast<Frame>(std::llround(static_cast<double>(beat_index) * beat_frames));
 }
 
+double semitones_to_ratio(float semitones) noexcept {
+    return std::pow(2.0, static_cast<double>(semitones) / 12.0);
+}
+
+// Cheap deterministic PRNG (xorshift32), RT-safe — no global state.
+uint32_t xorshift(uint32_t& state) noexcept {
+    state ^= state << 13;
+    state ^= state >> 17;
+    state ^= state << 5;
+    return state;
+}
+
+float white_noise(uint32_t& state) noexcept {
+    return static_cast<float>(xorshift(state)) / 2147483648.0f - 1.0f;
+}
+
+float oscillator(int waveform, double phase) noexcept {
+    const float s = static_cast<float>(std::sin(phase));
+    switch (waveform) {
+        case 1: { // soft square: blend of sine + clamped sign for a digital beep
+            const float sq = s >= 0.0f ? 1.0f : -1.0f;
+            return 0.5f * s + 0.5f * sq;
+        }
+        case 2: { // triangle-ish from arcsine of sine
+            return static_cast<float>(2.0 / kTwoPi * 2.0 * std::asin(s));
+        }
+        default:
+            return s;
+    }
+}
+
 } // namespace
 
 void MetronomeRenderer::set_config(const MetronomeConfig& config) {
     set_enabled(config.enabled);
     set_volume(config.volume);
     accent_enabled_.store(config.accent_enabled, std::memory_order_release);
+
+    const auto clamp_preset = [](int p) {
+        return std::clamp(p, 0, static_cast<int>(SoundPreset::Count) - 1);
+    };
+    accent_preset_.store(clamp_preset(config.accent_preset), std::memory_order_release);
+    beat_preset_.store(clamp_preset(config.beat_preset), std::memory_order_release);
+    accent_pitch_.store(std::clamp(config.accent_pitch, -24.0f, 24.0f), std::memory_order_release);
+    beat_pitch_.store(std::clamp(config.beat_pitch, -24.0f, 24.0f), std::memory_order_release);
+    int sub = config.subdivision;
+    if (sub != 2 && sub != 3 && sub != 4) sub = 1;
+    subdivision_.store(sub, std::memory_order_release);
+    subdivision_preset_.store(clamp_preset(config.subdivision_preset), std::memory_order_release);
+    subdivision_pitch_.store(std::clamp(config.subdivision_pitch, -24.0f, 24.0f),
+                             std::memory_order_release);
+    subdivision_gain_.store(std::clamp(config.subdivision_gain, 0.0f, 1.0f),
+                            std::memory_order_release);
 
     std::string route = normalize_route(config.output_route.empty() ? "master" : config.output_route);
     copy_text(output_route_, route);
@@ -141,17 +188,131 @@ MetronomeConfig MetronomeRenderer::config() const {
     config.volume = volume_.load(std::memory_order_acquire);
     config.output_route = array_text(output_route_);
     config.accent_enabled = accent_enabled_.load(std::memory_order_acquire);
+    config.accent_preset = accent_preset_.load(std::memory_order_acquire);
+    config.beat_preset = beat_preset_.load(std::memory_order_acquire);
+    config.accent_pitch = accent_pitch_.load(std::memory_order_acquire);
+    config.beat_pitch = beat_pitch_.load(std::memory_order_acquire);
+    config.subdivision = subdivision_.load(std::memory_order_acquire);
+    config.subdivision_preset = subdivision_preset_.load(std::memory_order_acquire);
+    config.subdivision_pitch = subdivision_pitch_.load(std::memory_order_acquire);
+    config.subdivision_gain = subdivision_gain_.load(std::memory_order_acquire);
     return config;
 }
 
 void MetronomeRenderer::reset_voice() noexcept {
-    voice_remaining_ = 0;
-    voice_total_ = 0;
-    voice_index_ = 0;
-    voice_phase_ = 0.0;
-    voice_phase_step_ = 0.0;
-    voice_gain_ = 0.0f;
+    for (auto& v : voices_)
+        v.remaining = 0;
     last_started_beat_frame_ = -1;
+    last_started_sub_frame_ = -1;
+}
+
+// Build the synthesis parameters for one click from a preset, a pitch offset
+// (semitones) and a base gain. Pure function — no engine state touched.
+MetronomeRenderer::VoiceSpec MetronomeRenderer::make_voice_spec(int preset,
+                                                                float pitch_semitones,
+                                                                float gain) noexcept {
+    const double ratio = semitones_to_ratio(pitch_semitones);
+    VoiceSpec spec;
+    spec.gain = gain;
+    switch (static_cast<SoundPreset>(preset)) {
+        case SoundPreset::Beep:
+            spec.base_freq = 1000.0 * ratio;
+            spec.duration_sec = 0.040;
+            spec.decay_rate = 5.0f;
+            spec.waveform = 1;
+            break;
+        case SoundPreset::Woodblock:
+            // Hollow mid-pitched wooden knock: tone with a low inharmonic
+            // partial, almost no noise, medium decay. "Tonk".
+            spec.base_freq = 1200.0 * ratio;
+            spec.duration_sec = 0.035;
+            spec.decay_rate = 11.0f;
+            spec.gain = gain * 1.3f;
+            spec.partial2_ratio = 2.4f;
+            spec.partial2_mix = 0.3f;
+            spec.noise_mix = 0.1f;
+            spec.noise_coeff = 0.3f;  // darker noise body
+            break;
+        case SoundPreset::Click:
+            // Digital "tic": short and very bright. A pointed high tone with a
+            // fizzy high-passed noise edge — sharp and defined, the snappiest
+            // preset.
+            spec.base_freq = 3200.0 * ratio;
+            spec.duration_sec = 0.014;
+            spec.decay_rate = 12.0f;
+            spec.gain = gain * 4.5f;
+            spec.noise_mix = 0.45f;
+            spec.noise_hp_coeff = 0.7f;  // bright, fizzy edge
+            break;
+        case SoundPreset::Rimshot:
+            // Harsh, noisy snare-rim crack: strong bright noise over a short
+            // mid tone, longer ring than the click. "Tssak".
+            spec.base_freq = 1400.0 * ratio;
+            spec.duration_sec = 0.045;
+            spec.decay_rate = 13.0f;
+            spec.gain = gain * 2.4f;
+            spec.noise_mix = 0.6f;
+            spec.noise_hp_coeff = 0.4f;  // gritty, less fizzy than the click
+            break;
+        case SoundPreset::Cowbell:
+            spec.base_freq = 800.0 * ratio;
+            spec.duration_sec = 0.090;
+            spec.decay_rate = 6.0f;
+            spec.partial2_ratio = 1.5f;   // inharmonic upper partial
+            spec.partial2_mix = 0.7f;
+            spec.waveform = 1;
+            break;
+        case SoundPreset::Clave:
+            // Dry resonant wooden clave "tock": clean two-partial tone, almost
+            // no noise, fairly long ring. The most pitched/musical of the wood
+            // family — clearly different from the noisy click/rimshot.
+            spec.base_freq = 2500.0 * ratio;
+            spec.duration_sec = 0.055;
+            spec.decay_rate = 9.0f;
+            spec.gain = gain * 2.0f;
+            spec.partial2_ratio = 1.47f;  // slight inharmonicity = wooden ring
+            spec.partial2_mix = 0.35f;
+            spec.noise_mix = 0.06f;       // tiny attack tick only
+            break;
+        case SoundPreset::Sine:
+        default:
+            spec.base_freq = 1100.0 * ratio;
+            spec.duration_sec = 0.022;
+            spec.decay_rate = 7.0f;
+            break;
+    }
+    return spec;
+}
+
+// Pick the inactive voice, or steal the one with the fewest frames remaining.
+MetronomeRenderer::Voice* MetronomeRenderer::free_voice() noexcept {
+    Voice* best = &voices_[0];
+    for (auto& v : voices_) {
+        if (v.remaining == 0) return &v;
+        if (v.remaining < best->remaining) best = &v;
+    }
+    return best;
+}
+
+void MetronomeRenderer::trigger_voice(const VoiceSpec& spec, double sample_rate) noexcept {
+    Voice* v = free_voice();
+    v->total = static_cast<int>(std::max(1.0, std::round(sample_rate * spec.duration_sec)));
+    v->remaining = v->total;
+    v->index = 0;
+    v->phase = 0.0;
+    v->phase_step = kTwoPi * spec.base_freq / sample_rate;
+    v->phase2 = 0.0;
+    v->phase2_step = kTwoPi * spec.base_freq * spec.partial2_ratio / sample_rate;
+    v->gain = spec.gain;
+    v->decay_rate = spec.decay_rate;
+    v->noise_mix = spec.noise_mix;
+    v->partial2_mix = spec.partial2_mix;
+    v->noise_coeff = spec.noise_coeff;
+    v->noise_lp = 0.0f;
+    v->noise_hp_coeff = spec.noise_hp_coeff;
+    v->noise_hp_lp = 0.0f;
+    v->waveform = spec.waveform;
+    v->rng = (trigger_rng_ ^= 0x6d2b79f5u, trigger_rng_ ? trigger_rng_ : 1u);
 }
 
 void MetronomeRenderer::render(float** output_channels,
@@ -228,15 +389,46 @@ void MetronomeRenderer::render(float** output_channels,
             if (beat_frame == abs_frame && beat_frame != last_started_beat_frame_) {
                 const bool accent = accent_enabled_.load(std::memory_order_acquire)
                     && (beat_index % beats_per_bar == 0);
-                voice_total_ = static_cast<int>(std::max(1.0, std::round(sample_rate * (accent ? 0.030 : 0.022))));
-                voice_remaining_ = voice_total_;
-                voice_index_ = 0;
-                voice_phase_ = 0.0;
-                voice_phase_step_ = kTwoPi * (accent ? 1800.0 : 1100.0) / sample_rate;
-                voice_gain_ = accent ? 0.9f : 0.65f;
+                VoiceSpec spec;
+                if (accent) {
+                    // Accent emphasis: built-in freq/duration/gain boost on top of
+                    // the chosen accent preset. The default (Sine, +0 st) reproduces
+                    // the legacy accent click (1800 Hz / 0.030 s / 0.9) exactly.
+                    spec = make_voice_spec(accent_preset_.load(std::memory_order_acquire),
+                                           accent_pitch_.load(std::memory_order_acquire), 0.65f);
+                    spec.base_freq *= 1800.0 / 1100.0;
+                    spec.duration_sec *= 0.030 / 0.022;
+                    spec.gain *= 0.9f / 0.65f;
+                } else {
+                    spec = make_voice_spec(beat_preset_.load(std::memory_order_acquire),
+                                           beat_pitch_.load(std::memory_order_acquire), 0.65f);
+                }
+                trigger_voice(spec, sample_rate);
                 last_started_beat_frame_ = beat_frame;
                 last_beat_frame_.store(beat_frame, std::memory_order_release);
                 rendered_clicks_count_.fetch_add(1, std::memory_order_relaxed);
+            }
+
+            // Subdivision clicks fall between main beats and never collide with one.
+            const int subdivision = subdivision_.load(std::memory_order_acquire);
+            if (subdivision >= 2) {
+                const int64_t beat_floor = static_cast<int64_t>(
+                    std::floor(static_cast<double>(rel) / beat_frames));
+                for (int k = 1; k < subdivision; ++k) {
+                    const double sub_pos =
+                        static_cast<double>(beat_floor) + static_cast<double>(k) / subdivision;
+                    const Frame sub_frame = segment_start
+                        + static_cast<Frame>(std::llround(sub_pos * beat_frames));
+                    if (sub_frame == abs_frame && sub_frame != last_started_sub_frame_
+                        && sub_frame != last_started_beat_frame_) {
+                        VoiceSpec spec = make_voice_spec(
+                            subdivision_preset_.load(std::memory_order_acquire),
+                            subdivision_pitch_.load(std::memory_order_acquire),
+                            0.65f * subdivision_gain_.load(std::memory_order_acquire));
+                        trigger_voice(spec, sample_rate);
+                        last_started_sub_frame_ = sub_frame;
+                    }
+                }
             }
 
             const int64_t next_idx = static_cast<int64_t>(
@@ -247,18 +439,38 @@ void MetronomeRenderer::render(float** output_channels,
             current_beat_.store(static_cast<int>(beat_index % beats_per_bar) + 1, std::memory_order_release);
         }
 
-        if (voice_remaining_ > 0) {
-            const float t = voice_total_ <= 1 ? 1.0f
-                : static_cast<float>(voice_index_) / static_cast<float>(voice_total_ - 1);
+        for (auto& v : voices_) {
+            if (v.remaining <= 0) continue;
+            const float t = v.total <= 1 ? 1.0f
+                : static_cast<float>(v.index) / static_cast<float>(v.total - 1);
             const float attack = std::min(1.0f, t / 0.03f);
-            const float decay = std::exp(-7.0f * t);
-            const float sample = std::sin(voice_phase_) * attack * decay * voice_gain_ * current_output_gain_;
+            const float decay = std::exp(-v.decay_rate * t);
+            float tone = oscillator(v.waveform, v.phase) * (1.0f - v.partial2_mix);
+            if (v.partial2_mix > 0.0f)
+                tone += static_cast<float>(std::sin(v.phase2)) * v.partial2_mix;
+            float body = tone;
+            if (v.noise_mix > 0.0f) {
+                float n = white_noise(v.rng);
+                if (v.noise_coeff > 0.0f) {
+                    // One-pole low-pass: darker, woody noise.
+                    v.noise_lp += v.noise_coeff * (n - v.noise_lp);
+                    n = v.noise_lp;
+                } else if (v.noise_hp_coeff > 0.0f) {
+                    // One-pole high-pass (n minus its low-passed self): bright,
+                    // harsh noise — the rimshot/click crack.
+                    v.noise_hp_lp += v.noise_hp_coeff * (n - v.noise_hp_lp);
+                    n = n - v.noise_hp_lp;
+                }
+                body = tone * (1.0f - v.noise_mix) + n * v.noise_mix;
+            }
+            const float sample = body * attack * decay * v.gain * current_output_gain_;
             output_channels[left][f] += sample;
             if (right != left)
                 output_channels[right][f] += sample;
-            voice_phase_ += voice_phase_step_;
-            ++voice_index_;
-            --voice_remaining_;
+            v.phase += v.phase_step;
+            v.phase2 += v.phase2_step;
+            ++v.index;
+            --v.remaining;
         }
     }
 }

@@ -1049,6 +1049,32 @@ impl AudioController {
         })
     }
 
+    /// Push the full metronome sound config (presets, pitch, subdivision) to the
+    /// engine without reopening the audio device, so changing the click sound
+    /// never interrupts playback. Mirrors the realtime enabled/volume path.
+    pub fn set_metronome_sound_realtime(
+        &self,
+        settings: &AppSettings,
+    ) -> Result<(), DesktopError> {
+        self.with_engine_state("set_metronome_sound_realtime", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetMetronomeConfig {
+                enabled: settings.metronome_enabled,
+                volume: metronome_engine_volume(settings.metronome_volume),
+                route: settings.metronome_output.clone(),
+                accent_enabled: settings.metronome_accent_enabled,
+                accent_preset: settings.metronome_accent_preset,
+                beat_preset: settings.metronome_beat_preset,
+                accent_pitch: settings.metronome_accent_pitch,
+                beat_pitch: settings.metronome_beat_pitch,
+                subdivision: settings.metronome_subdivision,
+                subdivision_preset: settings.metronome_subdivision_preset,
+                subdivision_pitch: settings.metronome_subdivision_pitch,
+                subdivision_gain: settings.metronome_subdivision_gain,
+            })?;
+            Ok(())
+        })
+    }
+
     pub fn realtime_control_diagnostics(&self) -> RealtimeControlDiagnostics {
         RealtimeControlDiagnostics {
             live_mix_realtime_command_count: self
@@ -1082,6 +1108,16 @@ impl AudioController {
         self.state
             .lock()
             .map(|state| state.settings.clone())
+            .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))
+    }
+
+    /// Update the cached settings without touching the audio device. Used by
+    /// realtime paths (e.g. metronome sound) that send their own engine command
+    /// but must keep `current_settings()` consistent for later device changes.
+    pub fn replace_settings(&self, settings: AppSettings) -> Result<(), DesktopError> {
+        self.state
+            .lock()
+            .map(|mut state| state.settings = settings)
             .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))
     }
 
@@ -1260,6 +1296,15 @@ impl AudioController {
                 enabled: settings.metronome_enabled,
                 volume: metronome_engine_volume(settings.metronome_volume),
                 route: settings.metronome_output.clone(),
+                accent_enabled: settings.metronome_accent_enabled,
+                accent_preset: settings.metronome_accent_preset,
+                beat_preset: settings.metronome_beat_preset,
+                accent_pitch: settings.metronome_accent_pitch,
+                beat_pitch: settings.metronome_beat_pitch,
+                subdivision: settings.metronome_subdivision,
+                subdivision_preset: settings.metronome_subdivision_preset,
+                subdivision_pitch: settings.metronome_subdivision_pitch,
+                subdivision_gain: settings.metronome_subdivision_gain,
             })?;
             state.settings = settings;
             Ok(())

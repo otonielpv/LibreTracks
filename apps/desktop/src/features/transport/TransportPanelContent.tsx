@@ -100,6 +100,7 @@ import {
   seekTransport,
   setMetronomeEnabledRealtime,
   setMetronomeVolumeRealtime,
+  setMetronomeSoundRealtime,
   splitClip,
   splitClips,
   stopTransport,
@@ -6821,6 +6822,36 @@ export function TransportPanelContent() {
     );
   }
 
+  function handleMetronomeSoundChange(patch: Partial<AppSettings>) {
+    // Realtime path: push the new click config straight to the engine and
+    // persist it, WITHOUT going through update_audio_settings (which reopens
+    // the audio device and would pause/resume playback on every tweak).
+    const nextSettings = normalizeAppSettings({
+      ...appSettingsRef.current,
+      ...patch,
+    });
+
+    appSettingsRef.current = nextSettings;
+    setAppSettings(nextSettings);
+
+    void runAction(async () => {
+      try {
+        const savedSettings = normalizeAppSettings(
+          await setMetronomeSoundRealtime(nextSettings),
+        );
+        appSettingsRef.current = savedSettings;
+        setAppSettings(savedSettings);
+        setStatus(
+          t("transport.status.metronomeSoundUpdated", {
+            defaultValue: "Metronome sound updated.",
+          }),
+        );
+      } catch (error) {
+        setStatus(formatErrorStatus(error));
+      }
+    });
+  }
+
   function handleTrackAudioToChange(trackId: string, nextAudioTo: string) {
     void runAction(async () => {
       const nextSnapshot = await commitTrackMixChange({
@@ -10108,6 +10139,7 @@ export function TransportPanelContent() {
               onMetronomeOutputChange={handleMetronomeOutputChange}
               onMetronomeVolumeDraftChange={handleMetronomeVolumeDraftChange}
               onCommitMetronomeVolume={commitMetronomeVolumeDraft}
+              onMetronomeSoundChange={handleMetronomeSoundChange}
               midiInputDevices={midiInputDevices}
               isMidiInputRefreshing={isMidiInputRefreshing}
               selectedMidiInputDevice={selectedMidiInputDevice}

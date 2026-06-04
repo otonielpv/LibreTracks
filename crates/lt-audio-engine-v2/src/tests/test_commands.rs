@@ -400,11 +400,21 @@ fn set_metronome_config_round_trip() {
         enabled: true,
         volume: 0.5,
         route: "monitor".into(),
+        accent_enabled: true,
+        accent_preset: 2,
+        beat_preset: 1,
+        accent_pitch: 3.0,
+        beat_pitch: -2.0,
+        subdivision: 2,
+        subdivision_preset: 3,
+        subdivision_pitch: 1.0,
+        subdivision_gain: 0.4,
     };
     let rt = round_trip(&cmd);
     assert!(
-        matches!(rt, EngineCommand::SetMetronomeConfig { enabled: true, volume, route }
-            if (volume - 0.5).abs() < 1e-6 && route == "monitor")
+        matches!(rt, EngineCommand::SetMetronomeConfig {
+            enabled: true, volume, route, accent_preset: 2, beat_preset: 1, subdivision: 2, ..
+        } if (volume - 0.5).abs() < 1e-6 && route == "monitor")
     );
 }
 

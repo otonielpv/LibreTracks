@@ -2,6 +2,10 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AppSettings, AudioDeviceDescriptor } from "@libretracks/shared/models";
+import {
+  METRONOME_SOUND_PRESETS,
+  METRONOME_SUBDIVISIONS,
+} from "@libretracks/shared/models";
 import { readErrorLog, revealErrorLog } from "@libretracks/shared/desktopApi";
 import type {
   MidiLearnCommandRow,
@@ -66,6 +70,7 @@ type SettingsPanelProps = {
   onMetronomeOutputChange: (value: string) => void;
   onMetronomeVolumeDraftChange: (value: number) => void;
   onCommitMetronomeVolume: (value: number) => void;
+  onMetronomeSoundChange: (patch: Partial<AppSettings>) => void;
 
   midiInputDevices: string[];
   isMidiInputRefreshing: boolean;
@@ -132,6 +137,7 @@ export function SettingsPanel({
   onMetronomeOutputChange,
   onMetronomeVolumeDraftChange,
   onCommitMetronomeVolume,
+  onMetronomeSoundChange,
   midiInputDevices,
   isMidiInputRefreshing,
   selectedMidiInputDevice,
@@ -627,6 +633,230 @@ export function SettingsPanel({
                         )}
                       </small>
                     </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.metronomeAccentSound", {
+                          defaultValue: "Accent sound",
+                        })}
+                      </span>
+                      <select
+                        value={appSettings.metronomeAccentPreset}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onMetronomeSoundChange({
+                            metronomeAccentPreset: Number(event.target.value),
+                          })
+                        }
+                      >
+                        {METRONOME_SOUND_PRESETS.map((preset, index) => (
+                          <option key={preset} value={index}>
+                            {t(`transport.settingsModal.metronomePreset.${preset}`, {
+                              defaultValue: preset,
+                            })}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.metronomeAccentPitch", {
+                          defaultValue: "Accent pitch",
+                        })}
+                      </span>
+                      <input
+                        className="lt-range-input"
+                        type="range"
+                        min={-24}
+                        max={24}
+                        step={1}
+                        value={appSettings.metronomeAccentPitch}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onMetronomeSoundChange({
+                            metronomeAccentPitch: Number(event.target.value),
+                          })
+                        }
+                      />
+                      <small>
+                        {t("transport.settingsModal.metronomePitchValue", {
+                          defaultValue: "{{value}} st",
+                          value: appSettings.metronomeAccentPitch,
+                        })}
+                      </small>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.metronomeBeatSound", {
+                          defaultValue: "Beat sound",
+                        })}
+                      </span>
+                      <select
+                        value={appSettings.metronomeBeatPreset}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onMetronomeSoundChange({
+                            metronomeBeatPreset: Number(event.target.value),
+                          })
+                        }
+                      >
+                        {METRONOME_SOUND_PRESETS.map((preset, index) => (
+                          <option key={preset} value={index}>
+                            {t(`transport.settingsModal.metronomePreset.${preset}`, {
+                              defaultValue: preset,
+                            })}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.metronomeBeatPitch", {
+                          defaultValue: "Beat pitch",
+                        })}
+                      </span>
+                      <input
+                        className="lt-range-input"
+                        type="range"
+                        min={-24}
+                        max={24}
+                        step={1}
+                        value={appSettings.metronomeBeatPitch}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onMetronomeSoundChange({
+                            metronomeBeatPitch: Number(event.target.value),
+                          })
+                        }
+                      />
+                      <small>
+                        {t("transport.settingsModal.metronomePitchValue", {
+                          defaultValue: "{{value}} st",
+                          value: appSettings.metronomeBeatPitch,
+                        })}
+                      </small>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.metronomeSubdivision", {
+                          defaultValue: "Subdivision",
+                        })}
+                      </span>
+                      <select
+                        value={appSettings.metronomeSubdivision}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onMetronomeSoundChange({
+                            metronomeSubdivision: Number(event.target.value),
+                          })
+                        }
+                      >
+                        {METRONOME_SUBDIVISIONS.map((value) => (
+                          <option key={value} value={value}>
+                            {t(`transport.settingsModal.metronomeSubdivisionOption.${value}`, {
+                              defaultValue:
+                                value === 1 ? "Off" : `1/${value}`,
+                            })}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    {appSettings.metronomeSubdivision > 1 ? (
+                      <>
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">
+                            {t("transport.settingsModal.metronomeSubdivisionSound", {
+                              defaultValue: "Subdivision sound",
+                            })}
+                          </span>
+                          <select
+                            value={appSettings.metronomeSubdivisionPreset}
+                            disabled={isLoading || isSaving}
+                            onChange={(event) =>
+                              onMetronomeSoundChange({
+                                metronomeSubdivisionPreset: Number(
+                                  event.target.value,
+                                ),
+                              })
+                            }
+                          >
+                            {METRONOME_SOUND_PRESETS.map((preset, index) => (
+                              <option key={preset} value={index}>
+                                {t(`transport.settingsModal.metronomePreset.${preset}`, {
+                                  defaultValue: preset,
+                                })}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">
+                            {t("transport.settingsModal.metronomeSubdivisionPitch", {
+                              defaultValue: "Subdivision pitch",
+                            })}
+                          </span>
+                          <input
+                            className="lt-range-input"
+                            type="range"
+                            min={-24}
+                            max={24}
+                            step={1}
+                            value={appSettings.metronomeSubdivisionPitch}
+                            disabled={isLoading || isSaving}
+                            onChange={(event) =>
+                              onMetronomeSoundChange({
+                                metronomeSubdivisionPitch: Number(
+                                  event.target.value,
+                                ),
+                              })
+                            }
+                          />
+                          <small>
+                            {t("transport.settingsModal.metronomePitchValue", {
+                              defaultValue: "{{value}} st",
+                              value: appSettings.metronomeSubdivisionPitch,
+                            })}
+                          </small>
+                        </label>
+
+                        <label className="lt-settings-field">
+                          <span className="lt-settings-field-label">
+                            {t("transport.settingsModal.metronomeSubdivisionGain", {
+                              defaultValue: "Subdivision volume",
+                            })}
+                          </span>
+                          <input
+                            className="lt-range-input"
+                            type="range"
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            value={appSettings.metronomeSubdivisionGain}
+                            disabled={isLoading || isSaving}
+                            onChange={(event) =>
+                              onMetronomeSoundChange({
+                                metronomeSubdivisionGain: Number(
+                                  event.target.value,
+                                ),
+                              })
+                            }
+                          />
+                          <small>
+                            {t("transport.settingsModal.metronomeVolumeValue", {
+                              value: Math.round(
+                                appSettings.metronomeSubdivisionGain * 100,
+                              ),
+                            })}
+                          </small>
+                        </label>
+                      </>
+                    ) : null}
                   </div>
                 </section>
               ) : null}

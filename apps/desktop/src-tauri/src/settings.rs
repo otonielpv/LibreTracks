@@ -13,6 +13,26 @@ fn default_metronome_volume() -> f64 {
     0.8
 }
 
+fn default_metronome_accent_enabled() -> bool {
+    true
+}
+
+fn default_metronome_preset() -> i32 {
+    0
+}
+
+fn default_metronome_pitch() -> f32 {
+    0.0
+}
+
+fn default_metronome_subdivision() -> i32 {
+    1
+}
+
+fn default_metronome_subdivision_gain() -> f32 {
+    0.5
+}
+
 fn default_enabled_output_channels() -> Vec<usize> {
     vec![0, 1]
 }
@@ -96,6 +116,24 @@ pub struct AppSettings {
     pub metronome_volume: f64,
     #[serde(default = "default_audio_route")]
     pub metronome_output: String,
+    #[serde(default = "default_metronome_accent_enabled")]
+    pub metronome_accent_enabled: bool,
+    #[serde(default = "default_metronome_preset")]
+    pub metronome_accent_preset: i32,
+    #[serde(default = "default_metronome_preset")]
+    pub metronome_beat_preset: i32,
+    #[serde(default = "default_metronome_pitch")]
+    pub metronome_accent_pitch: f32,
+    #[serde(default = "default_metronome_pitch")]
+    pub metronome_beat_pitch: f32,
+    #[serde(default = "default_metronome_subdivision")]
+    pub metronome_subdivision: i32,
+    #[serde(default = "default_metronome_preset")]
+    pub metronome_subdivision_preset: i32,
+    #[serde(default = "default_metronome_pitch")]
+    pub metronome_subdivision_pitch: f32,
+    #[serde(default = "default_metronome_subdivision_gain")]
+    pub metronome_subdivision_gain: f32,
     #[serde(default = "default_global_jump_mode")]
     pub global_jump_mode: String,
     #[serde(default = "default_global_jump_bars")]
@@ -135,6 +173,15 @@ impl Default for AppSettings {
             metronome_enabled: false,
             metronome_volume: default_metronome_volume(),
             metronome_output: default_audio_route(),
+            metronome_accent_enabled: default_metronome_accent_enabled(),
+            metronome_accent_preset: default_metronome_preset(),
+            metronome_beat_preset: default_metronome_preset(),
+            metronome_accent_pitch: default_metronome_pitch(),
+            metronome_beat_pitch: default_metronome_pitch(),
+            metronome_subdivision: default_metronome_subdivision(),
+            metronome_subdivision_preset: default_metronome_preset(),
+            metronome_subdivision_pitch: default_metronome_pitch(),
+            metronome_subdivision_gain: default_metronome_subdivision_gain(),
             global_jump_mode: default_global_jump_mode(),
             global_jump_bars: default_global_jump_bars(),
             song_jump_trigger: default_song_jump_trigger(),

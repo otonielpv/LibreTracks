@@ -1392,6 +1392,26 @@ impl DesktopSession {
                 > f64::EPSILON;
         let metronome_output_changed =
             previous_settings.metronome_output != next_settings.metronome_output;
+        let metronome_sound_changed = previous_settings.metronome_accent_enabled
+            != next_settings.metronome_accent_enabled
+            || previous_settings.metronome_accent_preset != next_settings.metronome_accent_preset
+            || previous_settings.metronome_beat_preset != next_settings.metronome_beat_preset
+            || (previous_settings.metronome_accent_pitch - next_settings.metronome_accent_pitch)
+                .abs()
+                > f32::EPSILON
+            || (previous_settings.metronome_beat_pitch - next_settings.metronome_beat_pitch).abs()
+                > f32::EPSILON
+            || previous_settings.metronome_subdivision != next_settings.metronome_subdivision
+            || previous_settings.metronome_subdivision_preset
+                != next_settings.metronome_subdivision_preset
+            || (previous_settings.metronome_subdivision_pitch
+                - next_settings.metronome_subdivision_pitch)
+                .abs()
+                > f32::EPSILON
+            || (previous_settings.metronome_subdivision_gain
+                - next_settings.metronome_subdivision_gain)
+                .abs()
+                > f32::EPSILON;
 
         if !device_changed
             && !midi_changed
@@ -1399,6 +1419,7 @@ impl DesktopSession {
             && !metronome_enabled_changed
             && !metronome_volume_changed
             && !metronome_output_changed
+            && !metronome_sound_changed
         {
             return Ok(next_settings);
         }

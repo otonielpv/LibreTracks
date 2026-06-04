@@ -89,7 +89,20 @@ struct CmdStartMasterFade           { float target_gain; double duration_seconds
 struct CmdSetMetronomeEnabled     { bool enabled; };
 struct CmdSetMetronomeVolume      { float volume; };
 struct CmdSetMetronomeOutputRoute { std::string route; };
-struct CmdSetMetronomeConfig      { bool enabled; float volume; std::string route; };
+struct CmdSetMetronomeConfig      {
+    bool enabled;
+    float volume;
+    std::string route;
+    bool accent_enabled = true;
+    int accent_preset = 0;
+    int beat_preset = 0;
+    float accent_pitch = 0.0f;
+    float beat_pitch = 0.0f;
+    int subdivision = 1;
+    int subdivision_preset = 0;
+    float subdivision_pitch = 0.0f;
+    float subdivision_gain = 0.5f;
+};
 
 // ---------------------------------------------------------------------------
 // Pitch

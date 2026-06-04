@@ -855,6 +855,14 @@ export async function setMetronomeVolumeRealtime(volume: number): Promise<void> 
   await invokeCommand("set_metronome_volume_realtime", { volume });
 }
 
+export async function setMetronomeSoundRealtime(
+  settings: AppSettings,
+): Promise<AppSettings> {
+  return invokeCommand<AppSettings>("set_metronome_sound_realtime", {
+    settings,
+  });
+}
+
 export async function deleteTrack(trackId: string): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("delete_track", { trackId });
 }

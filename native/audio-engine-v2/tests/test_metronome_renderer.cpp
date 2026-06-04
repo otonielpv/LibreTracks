@@ -30,6 +30,61 @@ float peak(const std::vector<float>& samples) {
     return p;
 }
 
+// Count distinct click onsets: rising edges from below to above a threshold,
+// with a small refractory gap so the body of one click isn't counted twice.
+int count_clicks(const std::vector<float>& samples, float threshold = 0.02f) {
+    int count = 0;
+    int silence = 1000;
+    for (float sample : samples) {
+        if (std::abs(sample) > threshold) {
+            if (silence > 64) ++count;
+            silence = 0;
+        } else {
+            ++silence;
+        }
+    }
+    return count;
+}
+
+// Zero-crossing count over the audible part of the buffer. A rough brightness /
+// noisiness proxy: bright noisy clicks cross zero far more often than a clean
+// low-pitched tone. Used to assert presets are spectrally distinct.
+int zero_crossings(const std::vector<float>& samples, float threshold = 0.01f) {
+    int crossings = 0;
+    float prev = 0.0f;
+    for (float sample : samples) {
+        if (std::abs(sample) < threshold) continue;
+        if (prev != 0.0f && ((prev < 0.0f) != (sample < 0.0f))) ++crossings;
+        prev = sample;
+    }
+    return crossings;
+}
+
+int render_preset_zero_crossings(int preset) {
+    Session session;
+    session.sample_rate = 48000;
+    Song song;
+    song.id = "song";
+    song.start_frame = 0;
+    song.end_frame = 48000 * 16;
+    song.bpm = 120.0;
+    song.beats_per_bar = 4;
+    song.beat_unit = 4;
+    session.songs.push_back(song);
+
+    MetronomeRenderer renderer;
+    MetronomeConfig config;
+    config.enabled = true;
+    config.volume = 1.0f;
+    config.accent_enabled = false; // measure the plain beat timbre
+    config.beat_preset = preset;
+    renderer.set_config(config);
+    std::vector<float> left(4096, 0.0f), right(4096, 0.0f);
+    float* out[] = { left.data(), right.data() };
+    renderer.render(out, 2, 4096, 48000.0, 0, &session);
+    return zero_crossings(left);
+}
+
 } // namespace
 
 TEST_CASE("metronome disabled produces silence") {
@@ -175,6 +230,103 @@ TEST_CASE("seek realigns and does not duplicate previous click") {
 
     CHECK(second_count == first_count + 1);
     CHECK(peak(left) > 0.01f);
+}
+
+TEST_CASE("default config preserves the legacy click sound") {
+    // The legacy default click was sine 1100/1800 Hz; with all new fields at
+    // their defaults the renderer must still produce audible clicks.
+    MetronomeRenderer renderer;
+    auto session = make_session();
+    MetronomeConfig config; // all defaults
+    config.enabled = true;
+    config.volume = 1.0f;
+    renderer.set_config(config);
+
+    std::vector<float> left(2048, 0.0f), right(2048, 0.0f);
+    float* out[] = { left.data(), right.data() };
+    renderer.render(out, 2, 2048, 48000.0, 0, &session);
+    CHECK(peak(left) > 0.01f);
+}
+
+TEST_CASE("subdivision adds clicks between beats") {
+    auto session = make_session(120.0, 4, 4); // beat = 24000 frames @120bpm
+    const int frames = 24000; // exactly one beat
+
+    MetronomeRenderer plain;
+    MetronomeConfig pc; pc.enabled = true; pc.volume = 1.0f;
+    plain.set_config(pc);
+    std::vector<float> pl(frames, 0.0f), pr(frames, 0.0f);
+    float* pout[] = { pl.data(), pr.data() };
+    plain.render(pout, 2, frames, 48000.0, 0, &session);
+
+    MetronomeRenderer subdiv;
+    MetronomeConfig sc; sc.enabled = true; sc.volume = 1.0f; sc.subdivision = 2;
+    subdiv.set_config(sc);
+    std::vector<float> sl(frames, 0.0f), sr(frames, 0.0f);
+    float* sout[] = { sl.data(), sr.data() };
+    subdiv.render(sout, 2, frames, 48000.0, 0, &session);
+
+    // Eighth-note subdivision adds one extra click in the middle of the beat.
+    CHECK(count_clicks(sl) == count_clicks(pl) + 1);
+}
+
+TEST_CASE("different presets produce audible output") {
+    auto session = make_session();
+    for (int preset = 0; preset < static_cast<int>(SoundPreset::Count); ++preset) {
+        MetronomeRenderer renderer;
+        MetronomeConfig config;
+        config.enabled = true;
+        config.volume = 1.0f;
+        config.beat_preset = preset;
+        config.accent_preset = preset;
+        renderer.set_config(config);
+        std::vector<float> left(2048, 0.0f), right(2048, 0.0f);
+        float* out[] = { left.data(), right.data() };
+        renderer.render(out, 2, 2048, 48000.0, 0, &session);
+        // Every preset must be clearly audible, not just non-zero — guards
+        // against a preset that technically renders but is too quiet to hear.
+        CHECK_MESSAGE(peak(left) > 0.1f, "preset ", preset, " too quiet to hear");
+    }
+}
+
+TEST_CASE("click, rimshot and clave are spectrally distinct") {
+    // Regression guard: these three percussive presets used to sound nearly
+    // identical. Click is the brightest/noisiest, clave the most tonal, so
+    // their zero-crossing rates must differ clearly.
+    const int click = render_preset_zero_crossings(static_cast<int>(SoundPreset::Click));
+    const int rimshot = render_preset_zero_crossings(static_cast<int>(SoundPreset::Rimshot));
+    const int clave = render_preset_zero_crossings(static_cast<int>(SoundPreset::Clave));
+
+    // Each pair must differ by a clear margin — distinct timbres, not just
+    // distinct levels.
+    CHECK(std::abs(click - rimshot) > 20);
+    CHECK(std::abs(rimshot - clave) > 20);
+    CHECK(std::abs(click - clave) > 20);
+}
+
+TEST_CASE("set_config round-trips the new sound fields") {
+    MetronomeRenderer renderer;
+    MetronomeConfig config;
+    config.enabled = true;
+    config.accent_preset = 4;
+    config.beat_preset = 2;
+    config.accent_pitch = 5.0f;
+    config.beat_pitch = -3.0f;
+    config.subdivision = 3;
+    config.subdivision_preset = 1;
+    config.subdivision_pitch = 2.0f;
+    config.subdivision_gain = 0.4f;
+    renderer.set_config(config);
+
+    auto rt = renderer.config();
+    CHECK(rt.accent_preset == 4);
+    CHECK(rt.beat_preset == 2);
+    CHECK(rt.accent_pitch == doctest::Approx(5.0f));
+    CHECK(rt.beat_pitch == doctest::Approx(-3.0f));
+    CHECK(rt.subdivision == 3);
+    CHECK(rt.subdivision_preset == 1);
+    CHECK(rt.subdivision_pitch == doctest::Approx(2.0f));
+    CHECK(rt.subdivision_gain == doctest::Approx(0.4f));
 }
 
 TEST_CASE("metronome routes to ext zero-based output channel") {

@@ -126,12 +126,22 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "SetMetronomeOutputRoute")
         return CmdSetMetronomeOutputRoute{ j.at("route").get<std::string>() };
 
-    if (type == "SetMetronomeConfig")
-        return CmdSetMetronomeConfig{
-            j.at("enabled").get<bool>(),
-            j.at("volume").get<float>(),
-            j.at("route").get<std::string>()
-        };
+    if (type == "SetMetronomeConfig") {
+        CmdSetMetronomeConfig c;
+        c.enabled = j.at("enabled").get<bool>();
+        c.volume = j.at("volume").get<float>();
+        c.route = j.at("route").get<std::string>();
+        c.accent_enabled = j.value("accent_enabled", true);
+        c.accent_preset = j.value("accent_preset", 0);
+        c.beat_preset = j.value("beat_preset", 0);
+        c.accent_pitch = j.value("accent_pitch", 0.0f);
+        c.beat_pitch = j.value("beat_pitch", 0.0f);
+        c.subdivision = j.value("subdivision", 1);
+        c.subdivision_preset = j.value("subdivision_preset", 0);
+        c.subdivision_pitch = j.value("subdivision_pitch", 0.0f);
+        c.subdivision_gain = j.value("subdivision_gain", 0.5f);
+        return c;
+    }
 
     if (type == "SetSongTranspose")
         return CmdSetSongTranspose{ j.at("song_id").get<Id>(), j.at("semitones").get<Semitones>() };
@@ -337,6 +347,15 @@ std::string command_to_json(const EngineCommand& cmd) {
             j["enabled"] = c.enabled;
             j["volume"] = c.volume;
             j["route"] = c.route;
+            j["accent_enabled"] = c.accent_enabled;
+            j["accent_preset"] = c.accent_preset;
+            j["beat_preset"] = c.beat_preset;
+            j["accent_pitch"] = c.accent_pitch;
+            j["beat_pitch"] = c.beat_pitch;
+            j["subdivision"] = c.subdivision;
+            j["subdivision_preset"] = c.subdivision_preset;
+            j["subdivision_pitch"] = c.subdivision_pitch;
+            j["subdivision_gain"] = c.subdivision_gain;
         }
         // ... additional types follow the same pattern.
         // Omitted for brevity — expand as needed.

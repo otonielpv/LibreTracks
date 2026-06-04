@@ -115,6 +115,7 @@ fn main() {
             commands::settings::update_audio_settings,
             commands::settings::set_metronome_enabled_realtime,
             commands::settings::set_metronome_volume_realtime,
+            commands::settings::set_metronome_sound_realtime,
             commands::project::get_song_view,
             commands::library::get_library_assets,
             commands::library::get_library_folders,
