@@ -32,7 +32,22 @@ export const isTauriApp = Boolean(tauriWindow.__TAURI_INTERNALS__);
 
 async function invokeCommand<T>(command: string, args?: Record<string, unknown>) {
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<T>(command, args);
+  try {
+    return await invoke<T>(command, args);
+  } catch (error) {
+    // Central capture point for ALL command failures that surface to the
+    // frontend — covers the many commands not explicitly instrumented on the
+    // Rust side. Never let logging mask the original error: swallow its own
+    // failure and re-throw the real one. Skip append_frontend_error itself to
+    // avoid recursion if it ever fails.
+    if (command !== "append_frontend_error") {
+      const message = error instanceof Error ? error.message : String(error);
+      void appendFrontendError(`invoke ${command} failed: ${message}`).catch(
+        () => {},
+      );
+    }
+    throw error;
+  }
 }
 
 function isTransientAudioStateLockError(error: unknown): boolean {
@@ -238,6 +253,26 @@ export async function reportUiRenderMetric(renderMillis: number): Promise<void> 
 
 export async function appendDebugLog(line: string): Promise<void> {
   await invokeCommand("append_debug_log", { line });
+}
+
+// Best-effort append to the dedicated error log. Calls invoke directly (not
+// invokeCommand) so a failure here can never recurse through the central
+// error-capture wrapper. Always resolves; never throws.
+export async function appendFrontendError(message: string): Promise<void> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("append_frontend_error", { message });
+  } catch {
+    // Logging must never break the app.
+  }
+}
+
+export async function readErrorLog(): Promise<string> {
+  return invokeCommand<string>("read_error_log");
+}
+
+export async function revealErrorLog(): Promise<void> {
+  await invokeCommand("reveal_error_log");
 }
 
 export async function createSong(): Promise<TransportSnapshot | null> {

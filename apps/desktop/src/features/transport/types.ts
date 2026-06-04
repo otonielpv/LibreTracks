@@ -138,7 +138,8 @@ export type SettingsTab =
   | "metronome"
   | "midi"
   | "general"
-  | "midiLearn";
+  | "midiLearn"
+  | "diagnostics";
 
 export type TrackDropState = {
   targetTrackId: string;

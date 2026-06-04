@@ -9054,6 +9054,12 @@ export function TransportPanelContent() {
       }),
     },
     {
+      id: "diagnostics",
+      label: t("transport.settingsModal.tabDiagnostics", {
+        defaultValue: "Diagnostics",
+      }),
+    },
+    {
       id: "midi",
       label: t("transport.settingsModal.tabMidi", { defaultValue: "MIDI" }),
     },

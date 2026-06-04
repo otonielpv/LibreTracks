@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AppSettings, AudioDeviceDescriptor } from "@libretracks/shared/models";
+import { readErrorLog, revealErrorLog } from "@libretracks/shared/desktopApi";
 import type {
   MidiLearnCommandRow,
   MidiLearnFeedback,
@@ -784,6 +786,17 @@ export function SettingsPanel({
                 </section>
               ) : null}
 
+              {activeTab === "diagnostics" ? (
+                <section
+                  className="lt-settings-tab-panel"
+                  role="tabpanel"
+                  id="lt-settings-panel-diagnostics"
+                  aria-labelledby="lt-settings-tab-diagnostics"
+                >
+                  <DiagnosticsTabPanel />
+                </section>
+              ) : null}
+
               {activeTab === "midiLearn" ? (
                 <section
                   className="lt-settings-tab-panel"
@@ -1084,6 +1097,92 @@ function UpdateCheckField() {
         {isChecking ? t("update.checking") : t("update.checkNow")}
       </button>
       {statusLine}
+    </div>
+  );
+}
+
+function DiagnosticsTabPanel() {
+  const { t } = useTranslation();
+  const [status, setStatus] = useState<ReactNode>(null);
+
+  const handleReveal = () => {
+    void revealErrorLog().catch((error) => {
+      setStatus(
+        <small className="lt-update-check-status lt-update-check-status--error">
+          {error instanceof Error ? error.message : String(error)}
+        </small>,
+      );
+    });
+  };
+
+  const handleCopy = () => {
+    void (async () => {
+      try {
+        const contents = await readErrorLog();
+        if (!contents.trim()) {
+          setStatus(
+            <small className="lt-update-check-status">
+              {t("transport.settingsModal.diagnosticsEmpty", {
+                defaultValue: "No errors have been recorded yet.",
+              })}
+            </small>,
+          );
+          return;
+        }
+        await navigator.clipboard.writeText(contents);
+        setStatus(
+          <small className="lt-update-check-status lt-update-check-status--new">
+            {t("transport.settingsModal.diagnosticsCopied", {
+              defaultValue: "Error log copied to clipboard.",
+            })}
+          </small>,
+        );
+      } catch (error) {
+        setStatus(
+          <small className="lt-update-check-status lt-update-check-status--error">
+            {error instanceof Error ? error.message : String(error)}
+          </small>,
+        );
+      }
+    })();
+  };
+
+  return (
+    <div className="lt-settings-section-grid">
+      <div className="lt-settings-field">
+        <span className="lt-settings-field-label">
+          {t("transport.settingsModal.diagnosticsTitle", {
+            defaultValue: "Error log",
+          })}
+        </span>
+        <small>
+          {t("transport.settingsModal.diagnosticsDescription", {
+            defaultValue:
+              "If the app freezes or misbehaves, send us this log so we can find the cause. It records errors only — no audio or personal data.",
+          })}
+        </small>
+        <div className="lt-inline-actions">
+          <button
+            type="button"
+            className="lt-secondary-button"
+            onClick={handleReveal}
+          >
+            {t("transport.settingsModal.diagnosticsOpenFolder", {
+              defaultValue: "Open logs folder",
+            })}
+          </button>
+          <button
+            type="button"
+            className="lt-secondary-button"
+            onClick={handleCopy}
+          >
+            {t("transport.settingsModal.diagnosticsCopy", {
+              defaultValue: "Copy error log",
+            })}
+          </button>
+        </div>
+        {status}
+      </div>
     </div>
   );
 }

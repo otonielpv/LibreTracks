@@ -85,6 +85,7 @@ where
                 );
             }
             Err(error) => {
+                crate::error_log::write_error(&format!("project load/save failed: {error}"));
                 emit_project_load_complete_event(
                     &worker_app,
                     ProjectLoadCompleteEventPayload {
@@ -133,7 +134,9 @@ pub fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot,
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
-    session.save_project().map_err(|error| error.to_string())
+    session
+        .save_project()
+        .map_err(|error| crate::error_log::log_command_err("save_project", error))
 }
 
 #[tauri::command]
@@ -149,7 +152,7 @@ pub fn resolve_missing_file(
 
     session
         .resolve_missing_file(&old_path, &new_path, &state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| crate::error_log::log_command_err("resolve_missing_file", error))
 }
 
 #[tauri::command]
@@ -244,6 +247,7 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
                 );
             }
             Err(error) => {
+                crate::error_log::write_error(&format!("project load/save failed: {error}"));
                 emit_project_load_complete_event(
                     &worker_app,
                     ProjectLoadCompleteEventPayload {
@@ -378,8 +382,8 @@ pub async fn import_audio_files_from_bytes(
         )
     })
     .await
-    .map_err(|error| error.to_string())?
-    .map_err(|error| error.to_string())
+    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_bytes", error))?
+    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_bytes", error))
 }
 
 #[tauri::command]
@@ -408,8 +412,8 @@ pub async fn import_audio_files_from_paths(
         )
     })
     .await
-    .map_err(|error| error.to_string())?
-    .map_err(|error| error.to_string())
+    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_paths", error))?
+    .map_err(|error| crate::error_log::log_command_err("import_audio_files_from_paths", error))
 }
 
 #[tauri::command]
@@ -515,5 +519,5 @@ pub fn import_song_package(
 
     session
         .import_song_package(&package_path, insert_at_seconds, &state.audio)
-        .map_err(|error| error.to_string())
+        .map_err(|error| crate::error_log::log_command_err("import_song_package", error))
 }

@@ -86,6 +86,14 @@ const es = {
       languageSystemDefault: "Sistema / System Default",
       languageEnglish: "English",
       languageSpanish: "Español",
+      tabDiagnostics: "Diagnóstico",
+      diagnosticsTitle: "Registro de errores",
+      diagnosticsDescription:
+        "Si la aplicación se congela o falla, envíanos este registro para encontrar la causa. Solo guarda errores — sin audio ni datos personales.",
+      diagnosticsOpenFolder: "Abrir carpeta de logs",
+      diagnosticsCopy: "Copiar registro de errores",
+      diagnosticsCopied: "Registro de errores copiado al portapapeles.",
+      diagnosticsEmpty: "Aún no se han registrado errores.",
       timelineNavigationScheme: "Navegación de la línea de tiempo",
       timelineNavigationSchemeAbleton:
         "Ableton / Audacity (pellizcar para hacer zoom, scroll para desplazar)",

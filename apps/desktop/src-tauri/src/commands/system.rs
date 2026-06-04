@@ -305,3 +305,39 @@ pub fn append_debug_log(app: AppHandle, line: String) -> Result<(), String> {
     writeln!(file, "[{timestamp_ms}] {line}").map_err(|error| error.to_string())?;
     Ok(())
 }
+
+/// Read the dedicated error log (`logs/errors.log`) so the Diagnostics panel
+/// can show / let the user copy it. Returns an empty string if it doesn't
+/// exist yet (no errors have been recorded).
+#[tauri::command]
+pub fn read_error_log() -> Result<String, String> {
+    let Some(path) = crate::error_log::errors_path() else {
+        return Err("error logger not initialized".into());
+    };
+    match fs::read_to_string(&path) {
+        Ok(contents) => Ok(contents),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+/// Append a frontend-originated error (uncaught exception, rejected promise,
+/// failed invoke) to the same error log as backend panics/command failures.
+#[tauri::command]
+pub fn append_frontend_error(message: String) -> Result<(), String> {
+    crate::error_log::write_error(&format!("frontend: {message}"));
+    Ok(())
+}
+
+/// Reveal the error log in the OS file manager so the user can attach it to a
+/// bug report.
+#[tauri::command]
+pub fn reveal_error_log(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let path = crate::error_log::errors_path()
+        .ok_or_else(|| "error logger not initialized".to_string())?;
+    app.opener()
+        .reveal_item_in_dir(&path)
+        .map_err(|error| error.to_string())
+}

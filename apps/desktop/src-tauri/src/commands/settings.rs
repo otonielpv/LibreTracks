@@ -47,7 +47,7 @@ pub fn update_audio_settings(
 
     let next_settings = session
         .update_audio_settings(settings, &state.audio)
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| crate::error_log::log_command_err("update_audio_settings", error))?;
     drop(session);
 
     settings_store

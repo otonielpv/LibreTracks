@@ -6,6 +6,7 @@
 mod audio_engine;
 mod commands;
 mod error;
+mod error_log;
 mod midi;
 mod models;
 mod remote;
@@ -20,6 +21,12 @@ use state::DesktopState;
 use commands::engine_v2::EngineV2State;
 
 fn main() {
+    // Install the error-log panic hook before anything else so panics during
+    // plugin init / setup are captured too. Until error_log::init runs (in
+    // setup, once app_data_dir resolves) this is a no-op beyond the default
+    // hook's stderr output.
+    error_log::install_panic_hook();
+
     // Keep the env flag visible for diagnostics; desktop audio now routes
     // through the C++ engine v2 path by default.
     let _engine_v2_requested = std::env::var("LIBRETRACKS_AUDIO_ENGINE")
@@ -35,6 +42,13 @@ fn main() {
 
     builder
         .setup(|app| {
+            // Resolve the error-log directory now that app_data_dir is
+            // available; degrade gracefully (no logging) if it can't resolve
+            // rather than aborting startup.
+            if let Ok(app_data_dir) = app.handle().path().app_data_dir() {
+                error_log::init(app_data_dir);
+            }
+
             let initial_settings = load_app_settings(&app.handle()).unwrap_or_else(|error| {
                 eprintln!("[libretracks-settings] failed to load settings: {error}");
                 settings::AppSettings::default()
@@ -111,6 +125,9 @@ fn main() {
             commands::system::get_desktop_performance_snapshot,
             commands::system::get_ownership_diagnostics,
             commands::system::append_debug_log,
+            commands::system::read_error_log,
+            commands::system::append_frontend_error,
+            commands::system::reveal_error_log,
             commands::system::fetch_latest_release,
             commands::system::report_ui_render_metric,
             commands::project::start_create_song,

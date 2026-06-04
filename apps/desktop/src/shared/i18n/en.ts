@@ -85,6 +85,14 @@ const en = {
       languageSystemDefault: "Sistema / System Default",
       languageEnglish: "English",
       languageSpanish: "Español",
+      tabDiagnostics: "Diagnostics",
+      diagnosticsTitle: "Error log",
+      diagnosticsDescription:
+        "If the app freezes or misbehaves, send us this log so we can find the cause. It records errors only — no audio or personal data.",
+      diagnosticsOpenFolder: "Open logs folder",
+      diagnosticsCopy: "Copy error log",
+      diagnosticsCopied: "Error log copied to clipboard.",
+      diagnosticsEmpty: "No errors have been recorded yet.",
       timelineNavigationScheme: "Timeline navigation",
       timelineNavigationSchemeAbleton:
         "Ableton / Audacity (pinch to zoom, scroll to pan)",
