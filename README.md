@@ -43,8 +43,14 @@ The desktop workflow assumes the following tools are installed:
 
 - Node.js `>= 20`
 - Rust stable toolchain with `cargo` and `rustc`
-- On Linux (Debian/Ubuntu), install Tauri system packages:
-  `sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf`
+- On Linux (Debian/Ubuntu), install system packages for Tauri and the C++ audio engine:
+  ```bash
+  sudo apt install -y \
+    cmake build-essential pkg-config \
+    libasound2-dev \
+    libwebkit2gtk-4.1-dev libgtk-3-dev \
+    libayatana-appindicator3-dev librsvg2-dev patchelf
+  ```
 - Microsoft Visual C++ Build Tools on Windows
 - Windows 10/11 SDK on Windows for MSVC linking
 - LLVM/Clang with `libclang.dll` on Windows for bindgen-based crates

@@ -42,8 +42,14 @@ El flujo desktop asume estas dependencias instaladas:
 
 - Node.js `>= 20`
 - Rust stable toolchain con `cargo` y `rustc`
-- En Linux (Debian/Ubuntu), instala los paquetes de sistema de Tauri:
-  `sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf`
+- En Linux (Debian/Ubuntu), instala los paquetes de sistema para Tauri y el motor de audio C++:
+  ```bash
+  sudo apt install -y \
+    cmake build-essential pkg-config \
+    libasound2-dev \
+    libwebkit2gtk-4.1-dev libgtk-3-dev \
+    libayatana-appindicator3-dev librsvg2-dev patchelf
+  ```
 - Microsoft Visual C++ Build Tools en Windows
 - Windows 10/11 SDK en Windows para el enlazado MSVC
 - LLVM/Clang con `libclang.dll` en Windows para las crates que usan bindgen
