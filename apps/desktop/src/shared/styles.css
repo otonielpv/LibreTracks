@@ -5171,31 +5171,16 @@ textarea {
   padding: 4px 0;
 }
 
-/* Post-fader peak meter that sits next to the vertical fader. Fill grows
-   bottom→top via height %; the gradient matches the master fader meter
-   so the two views read consistently. */
-.lt-compact-mixer-meter {
+/* Post-fader peak meter that sits next to the vertical fader. We reuse
+   the DAW track-header <TrackMeter> component verbatim so the gradient,
+   peak-hold line and clip indicator are identical across both views.
+   The only mixer-specific tweak is the width: the strip's meter is a
+   touch wider than the 10px DAW header meter so it reads at a glance
+   next to the fader. The .lt-track-meter rules (gradient, channel,
+   peak, clip) live up near the DAW track-header section. */
+.lt-compact-mixer-fader-wrap .lt-track-meter {
+  width: 0.4rem;
   flex: 0 0 0.4rem;
-  position: relative;
-  align-self: stretch;
-  background: rgb(15 18 19);
-  border-radius: 2px;
-  overflow: hidden;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
-.lt-compact-mixer-meter-fill {
-  width: 100%;
-  height: 0;
-  background: linear-gradient(0deg,
-    rgb(87 241 219 / 0.6) 0%,
-    rgb(87 241 219 / 0.9) 65%,
-    rgb(255 196 87 / 0.95) 88%,
-    rgb(255 95 95 / 1) 100%);
-  transition: opacity 80ms linear;
 }
 
 /* Vertical fader: rotate the native <input type=range> with writing-mode

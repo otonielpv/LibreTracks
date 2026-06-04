@@ -12,16 +12,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  meterDbToDisplayScale,
-  peakToMeterDb,
-  stepMeterDb,
-  DEFAULT_METER_FALLOFF_DB_PER_SECOND,
-  METER_ACTIVE_EPSILON_DB,
-  METER_MIN_DB,
-} from "@libretracks/shared/meterBallistics";
-
 import type { TrackSummary } from "./desktopApi";
+import { TrackMeter } from "./TrackMeter";
 import { useTransportStore, type OptimisticMixState } from "./store";
 
 /**
@@ -476,7 +468,7 @@ function CompactMixerStripComponent({
           onDoubleClick={handleVolumeDoubleClick}
           ariaLabel={`Volume ${track.name}`}
         />
-        <CompactMixerMeter trackId={track.id} />
+        <TrackMeter trackId={track.id} />
       </div>
 
       {/* Pan slider. Horizontal so it doesn't claim more height inside the
@@ -547,108 +539,6 @@ function CompactMixerStripComponent({
 }
 
 const CompactMixerStrip = memo(CompactMixerStripComponent);
-
-/**
- * Vertical post-fader peak meter that lives next to the strip's fader.
- * Subscribes to the per-track meter dictionary the audio engine already
- * publishes (see useAudioMeters) and animates the bar with the same
- * release ballistics the master fader meter uses, so the two views read
- * consistently. One bar, max(L, R) — same single-channel approach the rest
- * of the project's meters take for now.
- */
-type CompactMixerMeterProps = {
-  trackId: string;
-};
-
-function CompactMixerMeterComponent({ trackId }: CompactMixerMeterProps) {
-  const fillRef = useRef<HTMLDivElement | null>(null);
-  const animationStateRef = useRef({
-    frameId: null as number | null,
-    lastFrameAt: 0,
-    currentDb: METER_MIN_DB,
-    targetDb: METER_MIN_DB,
-  });
-
-  useEffect(() => {
-    const animationState = animationStateRef.current;
-
-    const applyFill = () => {
-      const element = fillRef.current;
-      if (!element) return;
-      const scale = meterDbToDisplayScale(animationState.currentDb);
-      element.style.height = `${(scale * 100).toFixed(2)}%`;
-      element.style.opacity = scale > 0 ? "1" : "0";
-    };
-
-    const stopAnimation = () => {
-      if (animationState.frameId !== null) {
-        cancelAnimationFrame(animationState.frameId);
-        animationState.frameId = null;
-      }
-      animationState.lastFrameAt = 0;
-    };
-
-    const step = (now: number) => {
-      const elapsed =
-        animationState.lastFrameAt > 0 ? now - animationState.lastFrameAt : 16.67;
-      animationState.lastFrameAt = now;
-      animationState.currentDb = stepMeterDb(
-        animationState.currentDb,
-        animationState.targetDb,
-        elapsed,
-        DEFAULT_METER_FALLOFF_DB_PER_SECOND,
-      );
-      applyFill();
-      const settled =
-        Math.abs(animationState.currentDb - animationState.targetDb) <
-        METER_ACTIVE_EPSILON_DB;
-      if (settled) {
-        animationState.currentDb = animationState.targetDb;
-        applyFill();
-        stopAnimation();
-        return;
-      }
-      animationState.frameId = requestAnimationFrame(step);
-    };
-
-    const schedule = () => {
-      if (animationState.frameId !== null) return;
-      animationState.frameId = requestAnimationFrame(step);
-    };
-
-    const initial = useTransportStore.getState().meters[trackId];
-    const initialPeak = initial
-      ? Math.max(initial.leftPeak, initial.rightPeak)
-      : 0;
-    animationState.currentDb = peakToMeterDb(initialPeak);
-    animationState.targetDb = animationState.currentDb;
-    applyFill();
-
-    const unsubscribe = useTransportStore.subscribe(
-      (state) => {
-        const m = state.meters[trackId];
-        return m ? Math.max(m.leftPeak, m.rightPeak) : 0;
-      },
-      (peak) => {
-        animationState.targetDb = peakToMeterDb(peak);
-        schedule();
-      },
-    );
-
-    return () => {
-      unsubscribe();
-      stopAnimation();
-    };
-  }, [trackId]);
-
-  return (
-    <div className="lt-compact-mixer-meter" aria-hidden="true">
-      <div className="lt-compact-mixer-meter-fill" ref={fillRef} />
-    </div>
-  );
-}
-
-const CompactMixerMeter = memo(CompactMixerMeterComponent);
 
 /**
  * Vertical fader rendered as a custom <div> + pointer events so we can

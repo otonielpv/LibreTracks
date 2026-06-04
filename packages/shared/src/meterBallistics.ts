@@ -15,8 +15,18 @@ export function gainToDb(peak: number) {
   return 20 * Math.log10(Math.max(peak, 0.000_001));
 }
 
+// Linear peak that corresponds to METER_MAX_DB (+6 dBFS). The per-region
+// master fader (and track gains) can push the post-mix bus above unity, so
+// the peak the engine reports can exceed 1.0. Clamping the *peak* to 1.0
+// before converting to dB pinned targetDb at 0 dB whenever the master ran
+// hot: the bar stuck at the 0 dB anchor (~85%) and, because targetDb stopped
+// moving, the animation loop settled and froze. Clamping in dB-space up to
+// METER_MAX_DB instead lets the bar travel into the +6 dB headroom and keep
+// animating. Clip detection still triggers at 0 dBFS via METER_CLIP_THRESHOLD.
+const METER_MAX_PEAK = 10 ** (METER_MAX_DB / 20);
+
 export function peakToMeterDb(peak: number) {
-  const nextPeak = clampPeak(peak);
+  const nextPeak = Math.max(0, Math.min(METER_MAX_PEAK, peak));
   if (nextPeak <= 0.001) {
     return METER_MIN_DB;
   }
