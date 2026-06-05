@@ -65,11 +65,12 @@ Update ALL of these to the new version string (use Edit tool on each):
 | `packages/shared/package.json` | `"version"` |
 | `apps/desktop/src-tauri/Cargo.toml` | `version = "..."` under `[package]` |
 | `apps/desktop/src-tauri/tauri.conf.json` | `"version"` |
+| `apps/remote/package.json` | `"version"` |
 | `Cargo.lock` | the `libretracks-desktop` `[[package]]` entry's `version` |
 
-`apps/remote/package.json` historically lags — only bump if it's already
-being touched in the release. Don't touch other crates' versions unless
-something forced a bump there.
+`apps/remote/package.json` must be bumped to the new version string along
+with the rest (it historically lagged, but it should now stay in lockstep).
+Don't touch other crates' versions unless something forced a bump there.
 
 ## 5. Update web docs (only if user-visible behavior changed)
 
