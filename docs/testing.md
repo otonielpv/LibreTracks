@@ -11,6 +11,21 @@ This runs `scripts/test-all.mjs`, which executes each suite sequentially and
 prints an aggregated PASS/FAIL summary. It is cross-platform (Windows / macOS /
 Linux) and exits non-zero if any suite fails.
 
+## Which command to run after a change
+
+| You changed… | Run |
+| --- | --- |
+| Frontend (React/TS), shared, remote | `npm test` (+ `npm run lint`) |
+| Rust session logic (`state.rs`, `models/`) | also `npm run test:native:nolink` |
+| The C++ audio engine (`native/audio-engine-v2/`) | also `npm run test:native` |
+| Everything, before a release | `npm run test:full` |
+
+`npm run test:full` chains both tiers (fast suites + native engine) and prints
+one combined summary — the single command for "check that nothing is broken".
+Note: its native tier links the **real** engine, so the audio-device-dependent
+Rust tests fail on a machine with no/busy sound card (they are informational —
+see below). The 163 C++ DSP tests are the authoritative engine signal.
+
 ## What `npm test` covers
 
 | Suite | Tool | Location |
