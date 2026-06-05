@@ -65,11 +65,17 @@ npm run test:native:nolink
 ```
 
 The `no-link` feature swaps the engine FFI for an in-memory no-op stub (see
-`crates/lt-audio-engine-v2/src/ffi.rs`). This runs the Rust session-logic
-tests that don't depend on real engine output (~88 of the `state.rs` cases)
-without compiling any C++. Tests that assert on real playback position,
-post-seek/jump snapshots, or source peaks only pass under the real engine
-(`npm run test:native`).
+`crates/lt-audio-engine-v2/src/ffi.rs`): `create()` returns a valid handle,
+commands succeed, and `get_snapshot()` returns a default-serialized
+`EngineSnapshot`. This runs the Rust session-logic `state.rs` tests without
+compiling any C++ (100 passed, 5 ignored).
+
+A handful of `state.rs` cases assert on real engine output (playhead
+estimate, playback drift, source peaks, waveform-cache counters) and are
+`#[cfg_attr(feature = "no-link", ignore = "requires real engine output")]`,
+so they are skipped here and run under `npm run test:native`. Those are
+integration tests: with the real engine they additionally need an available
+audio device.
 
 See [`testing-engine-v2.md`](testing-engine-v2.md) for engine-specific notes.
 
