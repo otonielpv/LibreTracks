@@ -2,7 +2,6 @@ import { useSyncExternalStore } from "react";
 
 import {
   fetchLatestRelease,
-  setLastCheck,
   shouldNotify,
   type ReleaseInfo,
 } from "../../shared/updateCheck";
@@ -61,7 +60,6 @@ export async function runUpdateCheck(
   setSnapshot({ isChecking: true, error: null });
   try {
     const latest = await fetchLatestRelease({ signal: controller.signal });
-    setLastCheck();
     if (!latest) {
       setSnapshot({ release: null, hasCheckedOnce: true });
       return;

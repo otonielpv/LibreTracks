@@ -9,8 +9,6 @@ import {
   type UpdateCheckSnapshot,
 } from "./updateCheckStore";
 
-const INITIAL_CHECK_DELAY_MS = 5000;
-
 export type UseUpdateCheckOptions = {
   currentVersion: string;
   enabled?: boolean;
@@ -33,12 +31,12 @@ export function useUpdateCheck({
   useEffect(() => {
     if (!enabled || !currentVersion) return;
     if (!shouldRunAutoCheck()) return;
-    const timer = window.setTimeout(() => {
-      void runUpdateCheck();
-    }, INITIAL_CHECK_DELAY_MS);
-    return () => {
-      window.clearTimeout(timer);
-    };
+    // Fire as soon as the app has its version — no artificial delay — so the
+    // popup shows the moment the app starts (only the GitHub fetch latency
+    // remains). setCurrentVersion runs synchronously here too, guarding the
+    // store's empty-version early return in case effect ordering ever shifts.
+    setCurrentVersion(currentVersion);
+    void runUpdateCheck();
   }, [enabled, currentVersion]);
 
   return { ...snapshot, dismiss: closeUpdateModal };

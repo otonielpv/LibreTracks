@@ -4,7 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import type { AppLanguage } from "../../shared/i18n";
 import {
-  DOWNLOADS_PAGE_URL,
+  downloadsPageUrl,
   extractReleaseNotesForLanguage,
   setSkippedVersion,
   snoozeUntil,
@@ -112,7 +112,7 @@ export function UpdateModal({
   }, [release.publishedAt, language]);
 
   const handleDownload = () => {
-    void openUrl(DOWNLOADS_PAGE_URL).catch(() => undefined);
+    void openUrl(downloadsPageUrl(language)).catch(() => undefined);
     snoozeUntil();
     onClose();
   };
@@ -146,11 +146,11 @@ export function UpdateModal({
               })}
             </h2>
             <p>
-              {t("update.subtitle", "You are on version {{current}}.", {
+              {t("update.subtitle", "Your current version is {{current}}.", {
                 current: currentVersion,
               })}
               {formattedDate
-                ? ` · ${t("update.published", "Published {{date}}", {
+                ? ` · ${t("update.published", "New version released {{date}}", {
                     date: formattedDate,
                   })}`
                 : null}

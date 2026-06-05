@@ -512,8 +512,8 @@ const en = {
   update: {
     eyebrow: "Update available",
     title: "LibreTracks {{version}} is available",
-    subtitle: "You are on version {{current}}.",
-    published: "Published {{date}}",
+    subtitle: "Your current version is {{current}}.",
+    published: "New version released {{date}}",
     notesTitle: "What's new",
     notesEmpty: "Open the release page to see the full changelog.",
     download: "Download",

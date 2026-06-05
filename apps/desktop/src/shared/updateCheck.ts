@@ -2,16 +2,17 @@ import type { AppLanguage } from "./i18n";
 
 export const RELEASES_API_URL =
   "https://api.github.com/repos/otonielpv/LibreTracks/releases/latest";
-export const DOWNLOADS_PAGE_URL = "https://libretracks.pages.dev/downloads";
+
+/** Localized download page: `/download/` for English, `/es/download/` for Spanish. */
+export function downloadsPageUrl(language: AppLanguage): string {
+  return language === "es"
+    ? "https://libretracks.pages.dev/es/download/"
+    : "https://libretracks.pages.dev/download/";
+}
 
 const STORAGE_KEYS = {
   skippedVersion: "libretracks.updateCheck.skippedVersion",
-  remindAfter: "libretracks.updateCheck.remindAfter",
-  lastCheck: "libretracks.updateCheck.lastCheck",
 } as const;
-
-const REMIND_LATER_MS = 24 * 60 * 60 * 1000;
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export type ReleaseInfo = {
   tag: string;
@@ -175,55 +176,48 @@ export function clearSkippedVersion(): void {
   safeStorage()?.removeItem(STORAGE_KEYS.skippedVersion);
 }
 
-export function getRemindAfter(): number {
-  const raw = safeStorage()?.getItem(STORAGE_KEYS.remindAfter);
-  const value = raw ? Number.parseInt(raw, 10) : 0;
-  return Number.isFinite(value) ? value : 0;
+/**
+ * "Remind me later" snooze. Kept in memory only (not persisted) so it lasts
+ * the current app session and the popup shows again on the next launch. The
+ * only persistent silencer is "Skip this version" (getSkippedVersion).
+ */
+let sessionSnoozed = false;
+
+export function isSnoozedThisSession(): boolean {
+  return sessionSnoozed;
 }
 
-export function snoozeUntil(now: number = Date.now()): void {
-  safeStorage()?.setItem(
-    STORAGE_KEYS.remindAfter,
-    String(now + REMIND_LATER_MS),
-  );
+export function snoozeUntil(): void {
+  sessionSnoozed = true;
 }
 
 export function clearSnooze(): void {
-  safeStorage()?.removeItem(STORAGE_KEYS.remindAfter);
-}
-
-export function getLastCheck(): number {
-  const raw = safeStorage()?.getItem(STORAGE_KEYS.lastCheck);
-  const value = raw ? Number.parseInt(raw, 10) : 0;
-  return Number.isFinite(value) ? value : 0;
-}
-
-export function setLastCheck(now: number = Date.now()): void {
-  safeStorage()?.setItem(STORAGE_KEYS.lastCheck, String(now));
+  sessionSnoozed = false;
 }
 
 export type ShouldNotifyArgs = {
   currentVersion: string;
   release: ReleaseInfo;
-  now?: number;
   bypassSnooze?: boolean;
 };
 
 export function shouldNotify({
   currentVersion,
   release,
-  now = Date.now(),
   bypassSnooze = false,
 }: ShouldNotifyArgs): boolean {
   if (!isNewerVersion(release.version, currentVersion)) return false;
   const skipped = getSkippedVersion();
   if (skipped && compareVersions(skipped, release.version) >= 0) return false;
-  if (!bypassSnooze && now < getRemindAfter()) return false;
+  if (!bypassSnooze && sessionSnoozed) return false;
   return true;
 }
 
-export function shouldRunAutoCheck(now: number = Date.now()): boolean {
-  const last = getLastCheck();
-  if (!last) return true;
-  return now - last >= CHECK_INTERVAL_MS;
+/**
+ * The update check now runs on every app launch (a session only starts once),
+ * so the popup reappears each time you open the app unless you skipped the
+ * version. Kept as a function so callers and tests have a single seam.
+ */
+export function shouldRunAutoCheck(): boolean {
+  return true;
 }

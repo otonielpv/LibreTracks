@@ -95,20 +95,19 @@ describe("shouldNotify", () => {
     expect(shouldNotify({ currentVersion: "0.0.8", release: newer })).toBe(true);
   });
 
-  it("respects the snooze window", () => {
-    const now = Date.now();
-    snoozeUntil(now);
+  it("suppresses the popup for the current session after Remind me later", () => {
+    snoozeUntil();
+    expect(shouldNotify({ currentVersion: "0.0.8", release })).toBe(false);
+    // A forced check (manual "Check for updates") bypasses the session snooze.
     expect(
-      shouldNotify({ currentVersion: "0.0.8", release, now: now + 1000 }),
-    ).toBe(false);
-    expect(
-      shouldNotify({
-        currentVersion: "0.0.8",
-        release,
-        now: now + 1000,
-        bypassSnooze: true,
-      }),
+      shouldNotify({ currentVersion: "0.0.8", release, bypassSnooze: true }),
     ).toBe(true);
+  });
+
+  it("clears the snooze when the session resets", () => {
+    snoozeUntil();
+    clearSnooze();
+    expect(shouldNotify({ currentVersion: "0.0.8", release })).toBe(true);
   });
 });
 
