@@ -52,6 +52,11 @@ Rules:
   language — see `apps/desktop/src/shared/updateCheck.ts:SECTION_HEADINGS`).
 - Headings must start with `## Novedades de v<NEW>` and `## What's New in v<NEW>` literally — the parser matches these.
 - Keep entries to 5–7 high-signal bullets. Group related commits.
+- Lead each bullet with a single relevant emoji (e.g. 🍎 macOS, 🥁 metronome,
+  🩺 diagnostics, 📊 meters, 🛠️ internal) so the in-app modal reads nicely.
+  Emojis go on the bullet text only — NEVER in the `##` headings, which the
+  parser regex-matches and would break. Use the SAME emoji for a given item in
+  both the ES and EN sections.
 
 ## 4. Bump versions
 
