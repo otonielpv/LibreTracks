@@ -477,3 +477,127 @@ fn resolve_hostname() -> Option<String> {
         Some(hostname)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The RemoteCommand enum is the wire contract between the web remote and
+    // the desktop. These tests pin the `cmd`-tagged, camelCase JSON shape so a
+    // field rename can't silently break the remote control.
+
+    fn parse(json: &str) -> RemoteCommand {
+        serde_json::from_str(json).expect("valid RemoteCommand json")
+    }
+
+    #[test]
+    fn parses_simple_transport_commands() {
+        assert!(matches!(parse(r#"{"cmd":"play"}"#), RemoteCommand::Play));
+        assert!(matches!(parse(r#"{"cmd":"pause"}"#), RemoteCommand::Pause));
+        assert!(matches!(parse(r#"{"cmd":"stop"}"#), RemoteCommand::Stop));
+        assert!(matches!(parse(r#"{"cmd":"ping"}"#), RemoteCommand::Ping));
+        assert!(matches!(
+            parse(r#"{"cmd":"cancelMarkerJump"}"#),
+            RemoteCommand::CancelMarkerJump
+        ));
+    }
+
+    #[test]
+    fn parses_seek_with_camelcase_field() {
+        match parse(r#"{"cmd":"seek","positionSeconds":12.5}"#) {
+            RemoteCommand::Seek { position_seconds } => {
+                assert_eq!(position_seconds, 12.5)
+            }
+            other => panic!("expected seek, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_schedule_marker_jump_with_optional_fields() {
+        match parse(
+            r#"{"cmd":"scheduleMarkerJump","targetMarkerId":"m1","trigger":"immediate"}"#,
+        ) {
+            RemoteCommand::ScheduleMarkerJump {
+                target_marker_id,
+                trigger,
+                bars,
+                transition,
+                duration_seconds,
+            } => {
+                assert_eq!(target_marker_id, "m1");
+                assert_eq!(trigger, "immediate");
+                assert!(bars.is_none());
+                assert!(transition.is_none());
+                assert!(duration_seconds.is_none());
+            }
+            other => panic!("expected scheduleMarkerJump, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_toggle_vamp_and_region_transpose() {
+        match parse(r#"{"cmd":"toggleVamp","mode":"bars","bars":8}"#) {
+            RemoteCommand::ToggleVamp { mode, bars } => {
+                assert_eq!(mode, "bars");
+                assert_eq!(bars, Some(8));
+            }
+            other => panic!("expected toggleVamp, got {other:?}"),
+        }
+
+        match parse(
+            r#"{"cmd":"updateRegionTranspose","regionId":"r1","transposeSemitones":-5}"#,
+        ) {
+            RemoteCommand::UpdateRegionTranspose {
+                region_id,
+                transpose_semitones,
+            } => {
+                assert_eq!(region_id, "r1");
+                assert_eq!(transpose_semitones, -5);
+            }
+            other => panic!("expected updateRegionTranspose, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_live_track_mix_update_with_partial_fields() {
+        match parse(
+            r#"{"cmd":"updateTrackMixLive","trackId":"t1","volume":0.8,"muted":true}"#,
+        ) {
+            RemoteCommand::UpdateTrackMixLive {
+                track_id,
+                volume,
+                pan,
+                muted,
+                solo,
+            } => {
+                assert_eq!(track_id, "t1");
+                assert_eq!(volume, Some(0.8));
+                assert!(pan.is_none());
+                assert_eq!(muted, Some(true));
+                assert!(solo.is_none());
+            }
+            other => panic!("expected updateTrackMixLive, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_update_settings_with_arbitrary_payload() {
+        match parse(r#"{"cmd":"updateSettings","settings":{"metronomeEnabled":true}}"#) {
+            RemoteCommand::UpdateSettings { settings } => {
+                assert_eq!(settings["metronomeEnabled"], serde_json::json!(true));
+            }
+            other => panic!("expected updateSettings, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_command() {
+        assert!(serde_json::from_str::<RemoteCommand>(r#"{"cmd":"frobnicate"}"#).is_err());
+    }
+
+    #[test]
+    fn rejects_missing_required_field() {
+        // seek without positionSeconds is invalid.
+        assert!(serde_json::from_str::<RemoteCommand>(r#"{"cmd":"seek"}"#).is_err());
+    }
+}
