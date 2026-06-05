@@ -47,15 +47,33 @@ extern "C" {
 }
 
 // ── Stubs (no-link feature — tests only) ───────────────────────────────────
+//
+// These make the engine behave as an in-memory no-op so the Rust-side logic
+// tests (session/state management in libretracks-desktop) run without the
+// compiled C++ library or any audio hardware. They are NOT a simulation of
+// the DSP — the real engine behaviour is covered by the C++ doctest suite
+// (see docs/testing-engine-v2.md). Contract held here:
+//   * create() returns a valid non-null handle that is never dereferenced.
+//   * initialize()/shutdown()/send_command() succeed (LT_OK).
+//   * snapshot()/diagnostics()/list_devices() return well-formed JSON so the
+//     safe wrapper deserializes cleanly.
+
+// A non-null, properly-aligned address used as the opaque handle. The handle
+// is opaque (`LtEngine` is a zero-sized `[u8; 0]`) and every stub ignores it,
+// so this pointer is never read or written — it only has to be non-null so
+// `Engine::new()` treats creation as successful.
+#[cfg(feature = "no-link")]
+static STUB_ENGINE_HANDLE: u8 = 0;
+
 #[cfg(feature = "no-link")]
 pub unsafe fn lt_audio_engine_create() -> *mut LtEngine {
-    std::ptr::null_mut()
+    (&STUB_ENGINE_HANDLE as *const u8 as *mut u8).cast::<LtEngine>()
 }
 #[cfg(feature = "no-link")]
 pub unsafe fn lt_audio_engine_destroy(_: *mut LtEngine) {}
 #[cfg(feature = "no-link")]
 pub unsafe fn lt_audio_engine_initialize(_: *mut LtEngine) -> LtResult {
-    LT_ERR_INTERNAL
+    LT_OK
 }
 #[cfg(feature = "no-link")]
 pub unsafe fn lt_audio_engine_shutdown(_: *mut LtEngine) -> LtResult {
@@ -71,7 +89,7 @@ pub unsafe fn lt_audio_engine_get_diagnostics(_: *mut LtEngine) -> *const c_char
 }
 #[cfg(feature = "no-link")]
 pub unsafe fn lt_audio_engine_send_command(_: *mut LtEngine, _: *const c_char) -> LtResult {
-    LT_ERR_INTERNAL
+    LT_OK
 }
 #[cfg(feature = "no-link")]
 pub unsafe fn lt_audio_engine_service_control_thread(_: *mut LtEngine) {}

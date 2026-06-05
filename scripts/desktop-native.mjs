@@ -3,11 +3,11 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync } from
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const allowedModes = new Set(["dev", "check", "build"]);
+const allowedModes = new Set(["dev", "check", "build", "test"]);
 const mode = process.argv[2] ?? "dev";
 
 if (!allowedModes.has(mode)) {
-  console.error(`Unsupported mode "${mode}". Use: dev | check | build.`);
+  console.error(`Unsupported mode "${mode}". Use: dev | check | build | test.`);
   process.exit(1);
 }
 
@@ -130,7 +130,7 @@ const ensureEngineV2 = (normalizedEnv) => {
     : (useFFmpeg === "ON" ? "build-bungee-off-ffmpeg" : "build-bungee-off");
   const buildDir = path.join(repoRoot, "native", "audio-engine-v2", buildName);
   const buildArg = `native/audio-engine-v2/${buildName}`;
-  const buildConfig = mode === "build" ? "Release" : "Debug";
+  const buildConfig = mode === "build" || mode === "test" ? "Release" : "Debug";
   const libDir = process.platform === "win32" ? path.join(buildDir, buildConfig) : buildDir;
 
   console.log(`Audio Engine v2 Bungee requested: ${useBungeeRequested}`);
@@ -257,4 +257,42 @@ switch (mode) {
       { env: runEnv },
     );
     break;
+  case "test": {
+    // Real engine linked: run the Rust-side tests that drive the engine
+    // (libretracks-desktop session/state + lt-audio-engine-v2 bindings)
+    // against the freshly built shared library.
+    console.log("\n=== Rust tests against the real engine ===");
+    run(
+      "cargo",
+      [
+        "test",
+        "-p",
+        "libretracks-desktop",
+        "-p",
+        "lt-audio-engine-v2",
+      ],
+      { env: runEnv },
+    );
+
+    // C++ DSP tests (doctest) — a separate STATIC build with tests enabled.
+    console.log("\n=== C++ engine DSP tests (ctest) ===");
+    const cppTestBuildDir = "native/audio-engine-v2/build-tests";
+    run("cmake", [
+      "-S",
+      "native/audio-engine-v2",
+      "-B",
+      cppTestBuildDir,
+      "-DLT_ENGINE_BUILD_TESTS=ON",
+      ...(runEnv.CMAKE_TOOLCHAIN_FILE
+        ? [`-DCMAKE_TOOLCHAIN_FILE=${runEnv.CMAKE_TOOLCHAIN_FILE}`]
+        : []),
+    ], { env: runEnv });
+    run("cmake", ["--build", cppTestBuildDir, "--config", "Release"], {
+      env: runEnv,
+    });
+    run("ctest", ["--test-dir", cppTestBuildDir, "-C", "Release", "--output-on-failure"], {
+      env: runEnv,
+    });
+    break;
+  }
 }

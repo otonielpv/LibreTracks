@@ -22,7 +22,8 @@
     "dev:website": "npm --prefix apps/website run dev --",
     "build:website": "npm --prefix apps/website run build",
     "test": "node ./scripts/test-all.mjs",
-    "test:native": "cargo test -p libretracks-desktop -p lt-audio-engine-v2",
+    "test:native": "node ./scripts/desktop-native.mjs test",
+    "test:native:nolink": "cargo test -p libretracks-desktop -p lt-audio-engine-v2 --features libretracks-desktop/no-link",
     "lint": "npm --prefix apps/desktop run lint && npm --prefix apps/remote run lint && npm --prefix packages/shared run lint"
   },
   "engines": {

@@ -35,6 +35,10 @@ path = "../../../crates/libretracks-core"
 
 [features]
 audio-engine-v2 = []
+# Build/test without linking the native C++ audio engine. Propagates to the
+# engine crate's `no-link` feature, which swaps the FFI extern block for
+# stubs so `cargo test` compiles without the prebuilt shared library.
+no-link = ["lt-audio-engine-v2/no-link"]
 
 [dev-dependencies]
 hound = "3"

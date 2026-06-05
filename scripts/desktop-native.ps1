@@ -1,5 +1,5 @@
 param(
-  [ValidateSet("dev", "check", "build")]
+  [ValidateSet("dev", "check", "build", "test")]
   [string]$Mode = "dev"
 )
 
@@ -85,7 +85,7 @@ $engineV2BuildName = if ($useBungeeRequested -eq "ON") {
   if ($useFFmpeg -eq "ON") { "build-bungee-off-ffmpeg" } else { "build-bungee-off" }
 }
 $engineV2BuildDir = Join-Path $repoRoot "native\audio-engine-v2\$engineV2BuildName"
-$engineV2Config = if ($Mode -eq "build") { "Release" } else { "Debug" }
+$engineV2Config = if ($Mode -eq "build" -or $Mode -eq "test") { "Release" } else { "Debug" }
 $engineV2LibDir = Join-Path $engineV2BuildDir $engineV2Config
 $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
 $toolchainRoot = Join-Path $env:USERPROFILE ".rustup\toolchains"
@@ -456,5 +456,38 @@ switch ($Mode) {
   }
   "build" {
     npm --prefix apps/desktop run tauri:build
+  }
+  "test" {
+    # Real engine linked: run the Rust-side tests that drive the engine
+    # (libretracks-desktop session/state + lt-audio-engine-v2 bindings)
+    # against the freshly built shared library.
+    Write-Host "`n=== Rust tests against the real engine ===" -ForegroundColor Cyan
+    cargo test -p libretracks-desktop -p lt-audio-engine-v2
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    # C++ DSP tests (doctest) — a separate STATIC build with tests enabled.
+    Write-Host "`n=== C++ engine DSP tests (ctest) ===" -ForegroundColor Cyan
+    $cppTestBuildDir = Join-Path $repoRoot "native\audio-engine-v2\build-tests"
+    $cppTestArgs = @(
+      "-S", "native/audio-engine-v2",
+      "-B", $cppTestBuildDir,
+      "-DLT_ENGINE_BUILD_TESTS=ON"
+    )
+    if ($env:CMAKE_TOOLCHAIN_FILE) {
+      $cppTestArgs += "-DCMAKE_TOOLCHAIN_FILE=$env:CMAKE_TOOLCHAIN_FILE"
+    }
+    if ($env:VCPKG_DEFAULT_TRIPLET) {
+      $cppTestArgs += "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_DEFAULT_TRIPLET"
+    }
+    if ($useBungee -eq "ON") {
+      $cppTestArgs += "-DLT_ENGINE_USE_BUNGEE=ON"
+      $cppTestArgs += "-DLT_BUNGEE_DIR=$bungeeDir"
+    }
+    cmake @cppTestArgs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    cmake --build $cppTestBuildDir --config Release
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    ctest --test-dir $cppTestBuildDir -C Release --output-on-failure
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   }
 }
