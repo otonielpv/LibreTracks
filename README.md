@@ -51,6 +51,11 @@ The desktop workflow assumes the following tools are installed:
     libwebkit2gtk-4.1-dev libgtk-3-dev \
     libayatana-appindicator3-dev librsvg2-dev patchelf
   ```
+- On macOS, install the build tools via [Homebrew](https://brew.sh). CoreAudio ships with the OS, so no extra audio packages are needed:
+  ```bash
+  brew install cmake pkg-config ffmpeg
+  ```
+  Xcode Command Line Tools (`xcode-select --install`) provide the Apple Clang compiler. FFmpeg is enabled by default on macOS (it adds M4A/AAC import); see the macOS note below if you prefer to skip it.
 - Microsoft Visual C++ Build Tools on Windows
 - Windows 10/11 SDK on Windows for MSVC linking
 - LLVM/Clang with `libclang.dll` on Windows for bindgen-based crates
@@ -58,6 +63,60 @@ The desktop workflow assumes the following tools are installed:
 For Windows native desktop runs, `scripts/desktop-native.ps1` checks for the MSVC linker and SDK libraries. In practice, install Visual Studio Build Tools with the `Desktop development with C++` workload before running the native Tauri target. The root `npm run *:desktop:native` scripts now route to that Windows helper automatically and run directly on Linux/macOS.
 
 If `cargo check` later reports that bindgen cannot find `libclang`, install LLVM and set `LIBCLANG_PATH` to the directory that contains `libclang.dll` (for example `C:\Program Files\LLVM\bin`). If `winget install -e --id LLVM.LLVM` does not complete on your machine, install LLVM manually from the official installer or use another package manager such as Chocolatey.
+
+### Bungee pitch backend (SDK download)
+
+[Bungee](https://github.com/bungee-audio-stretch/bungee) (MPL-2.0) is the pitch/warp backend used for tempo and key changes. It is **not vendored in the repo** — you download the prebuilt SDK once and unpack it into `vendor/bungee/`. The native launcher requests it by default (`LIBRETRACKS_ENGINE_V2_BUNGEE=1`), and on macOS the Tauri bundle references `bungee.framework` explicitly, so **a fresh clone will not build on macOS until the SDK is in place**.
+
+Download release `v2.4.24` and unpack it so that `vendor/bungee/include/bungee/Bungee.h` and your platform's binary folder exist:
+
+```bash
+mkdir -p vendor/bungee
+curl -fSL -o /tmp/bungee.tgz \
+  https://github.com/bungee-audio-stretch/bungee/releases/download/v2.4.24/bungee-v2.4.24.tgz
+tar -xzf /tmp/bungee.tgz -C vendor/bungee
+```
+
+The archive ships every platform (`apple-mac/bungee.framework`, `linux-x86_64/libbungee.so`, `linux-aarch64/libbungee.so`, `windows-x86_64/bungee.dll`, etc.); the launcher picks the right one. The macOS framework is a universal binary (x86_64 + arm64). Alternatively, point `LT_BUNGEE_DIR` at an SDK unpacked elsewhere, or place it in `~/Downloads/bungee-v2.4.24`.
+
+To build **without** Bungee (pitch/warp voices compile to no-op stubs), set `LIBRETRACKS_ENGINE_V2_BUNGEE=0`. Note that on macOS you must also remove the `bungee.framework` entry from `apps/desktop/src-tauri/tauri.conf.json` (`bundle.macOS.frameworks`), since it is referenced unconditionally there.
+
+### macOS architecture note (Intel vs Apple Silicon)
+
+The native launcher builds the C++ engine as a universal binary (`x86_64;arm64`) by default. On an **Intel-only Mac**, the `arm64` slice fails to link because Homebrew installs FFmpeg only for your native architecture (`x86_64`), producing errors like:
+
+```
+ld: warning: ignoring file '.../ffmpeg/.../libavformat.dylib': found architecture 'x86_64', required architecture 'arm64'
+ld: symbol(s) not found for architecture arm64
+```
+
+Force a single-architecture build that matches your machine by setting `CMAKE_OSX_ARCHITECTURES` before running the native target:
+
+```bash
+# Intel Macs
+CMAKE_OSX_ARCHITECTURES=x86_64 npm run dev:desktop:native
+
+# Apple Silicon Macs
+CMAKE_OSX_ARCHITECTURES=arm64 npm run dev:desktop:native
+```
+
+To make it permanent, add the matching line to your shell profile (e.g. `~/.zshrc`):
+
+```bash
+echo 'export CMAKE_OSX_ARCHITECTURES=x86_64' >> ~/.zshrc   # use arm64 on Apple Silicon
+```
+
+If you changed the architecture after a failed build, delete the stale build directory first so CMake reconfigures cleanly:
+
+```bash
+rm -rf native/audio-engine-v2/build-bungee-on-ffmpeg
+```
+
+Alternatively, skip FFmpeg entirely (drops M4A/AAC import; keeps WAV/FLAC/MP3/OGG via libsndfile + dr_libs) — this also removes the `pkg-config`/`ffmpeg` requirement:
+
+```bash
+LIBRETRACKS_ENGINE_V2_FFMPEG=0 npm run dev:desktop:native
+```
 
 ## Getting Started
 

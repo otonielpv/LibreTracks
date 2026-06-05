@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -202,13 +202,17 @@ const ensureEngineV2 = (normalizedEnv) => {
   const nativeVendorDir = path.join(repoRoot, "vendor", "bin", "native");
   mkdirSync(nativeVendorDir, { recursive: true });
   for (const fileName of readdirSync(nativeVendorDir)) {
-    if (/\.(?:dll|dylib|so(?:\.\d+)*)$/i.test(fileName)) {
-      rmSync(path.join(nativeVendorDir, fileName), { force: true });
+    if (/\.(?:dll|dylib|so(?:\.\d+)*|framework)$/i.test(fileName)) {
+      rmSync(path.join(nativeVendorDir, fileName), { recursive: true, force: true });
     }
   }
   for (const fileName of readdirSync(libDir)) {
     if (/\.(dll|dylib|so)$/i.test(fileName)) {
       copyFileSync(path.join(libDir, fileName), path.join(nativeVendorDir, fileName));
+    } else if (/\.framework$/i.test(fileName)) {
+      // macOS framework bundles (e.g. bungee.framework) are directories; mirror
+      // them recursively so tauri.conf.json's bundle frameworks list resolves.
+      cpSync(path.join(libDir, fileName), path.join(nativeVendorDir, fileName), { recursive: true });
     }
   }
 

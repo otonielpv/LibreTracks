@@ -9,6 +9,8 @@ target-desktop-native/
 target-desktop-check/
 vendor/bin/native/*
 !vendor/bin/native/.gitkeep
+# Bungee pitch SDK — downloaded per-machine, not vendored (see README "Bungee pitch backend")
+vendor/bungee/
 
 *.log
 .DS_Store
