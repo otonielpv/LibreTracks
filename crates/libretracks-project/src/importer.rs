@@ -544,3 +544,139 @@ fn humanize_track_name(value: &str) -> String {
         words.join(" ")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn write_silent_wav(path: &Path, sample_rate: u32, frames: u32) {
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).expect("create wav");
+        for _ in 0..frames {
+            writer.write_sample(0_i16).expect("write");
+        }
+        writer.finalize().expect("finalize");
+    }
+
+    #[test]
+    fn slugify_lowercases_and_collapses_separators() {
+        assert_eq!(slugify("My Cool Track!"), "my-cool-track");
+        assert_eq!(slugify("  ---  "), "audio");
+        assert_eq!(slugify("Drum_Loop 01"), "drum-loop-01");
+    }
+
+    #[test]
+    fn humanize_track_name_title_cases_words() {
+        assert_eq!(humanize_track_name("my_cool-loop"), "My Cool Loop");
+        assert_eq!(humanize_track_name("___"), "Audio");
+        assert_eq!(humanize_track_name("BASS"), "Bass");
+    }
+
+    #[test]
+    fn unique_entity_id_disambiguates_collisions() {
+        let mut used = HashSet::new();
+        assert_eq!(unique_entity_id("track", "kick", &mut used), "track_kick");
+        assert_eq!(unique_entity_id("track", "kick", &mut used), "track_kick-1");
+    }
+
+    #[test]
+    fn merge_import_metrics_sums_costs_and_takes_max_workers() {
+        let mut target = ImportOperationMetrics {
+            copy_millis: 5,
+            analysis_workers: 2,
+            ..ImportOperationMetrics::default()
+        };
+        let source = ImportOperationMetrics {
+            copy_millis: 3,
+            wav_analysis_millis: 7,
+            analysis_workers: 4,
+            ..ImportOperationMetrics::default()
+        };
+        merge_import_metrics(&mut target, &source);
+        assert_eq!(target.copy_millis, 8);
+        assert_eq!(target.wav_analysis_millis, 7);
+        assert_eq!(target.analysis_workers, 4);
+    }
+
+    #[test]
+    fn plan_import_files_preserves_order_and_indices() {
+        let dir = tempdir().expect("tempdir");
+        let a = dir.path().join("a.wav");
+        let b = dir.path().join("b.wav");
+        write_silent_wav(&a, 8_000, 8_000);
+        write_silent_wav(&b, 8_000, 8_000);
+
+        let planned = plan_import_files(&[a.clone(), b.clone()]).expect("plan");
+        assert_eq!(planned.len(), 2);
+        assert_eq!(planned[0].index, 0);
+        assert_eq!(planned[1].index, 1);
+    }
+
+    #[test]
+    fn read_audio_metadata_reports_duration_and_channels() {
+        let dir = tempdir().expect("tempdir");
+        let wav = dir.path().join("tone.wav");
+        write_silent_wav(&wav, 8_000, 4_000); // 0.5s
+        let meta = read_audio_metadata(&wav).expect("metadata");
+        assert_eq!(meta.sample_rate, 8_000);
+        assert_eq!(meta.channels, 1);
+        assert!((meta.duration_seconds - 0.5).abs() < 0.05);
+    }
+
+    #[test]
+    fn import_wav_song_rejects_an_empty_file_set() {
+        let dir = tempdir().expect("tempdir");
+        let request = ProjectImportRequest {
+            song_id: "s".into(),
+            title: "Empty".into(),
+            artist: None,
+            bpm: None,
+            key: None,
+            time_signature: "4/4".into(),
+            wav_files: vec![],
+        };
+        let result = import_wav_song(dir.path(), "empty", &request, |_, _| {});
+        assert!(matches!(result, Err(ProjectError::EmptyImportSet)));
+    }
+
+    #[test]
+    fn import_wav_song_builds_a_valid_song_with_tracks_and_clips() {
+        let dir = tempdir().expect("tempdir");
+        let kick = dir.path().join("Kick Drum.wav");
+        let snare = dir.path().join("snare.wav");
+        write_silent_wav(&kick, 8_000, 8_000); // 1.0s
+        write_silent_wav(&snare, 8_000, 4_000); // 0.5s
+
+        let request = ProjectImportRequest {
+            song_id: "song_1".into(),
+            title: "My Set".into(),
+            artist: Some("Me".into()),
+            bpm: Some(128.0),
+            key: None,
+            time_signature: "4/4".into(),
+            wav_files: vec![kick, snare],
+        };
+
+        let imported = import_wav_song(dir.path(), "my-set", &request, |_, _| {})
+            .expect("import");
+
+        assert_eq!(imported.song.tracks.len(), 2);
+        assert_eq!(imported.song.clips.len(), 2);
+        assert_eq!(imported.song.bpm, 128.0);
+        // Track name derives from the humanized file stem.
+        assert!(imported
+            .song
+            .tracks
+            .iter()
+            .any(|track| track.name == "Kick Drum"));
+        // Song duration spans the longest clip.
+        assert!((imported.song.duration_seconds - 1.0).abs() < 0.05);
+        assert!(validate_song(&imported.song).is_ok());
+    }
+}
