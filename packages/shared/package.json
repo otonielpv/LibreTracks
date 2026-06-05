@@ -10,9 +10,13 @@
     "./meterBallistics": "./src/meterBallistics.ts"
   },
   "scripts": {
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
   }
 }

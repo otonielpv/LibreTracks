@@ -15,12 +15,14 @@
     "check:desktop:native": "node ./scripts/desktop-native.mjs check",
     "build:desktop:native": "node ./scripts/desktop-native.mjs build",
     "test:desktop": "npm --prefix apps/desktop run test",
+    "test:shared": "npm --prefix packages/shared run test",
     "dev:remote": "npm --prefix apps/remote run dev --",
     "build:remote": "npm --prefix apps/remote run build",
     "test:remote": "npm --prefix apps/remote run test",
     "dev:website": "npm --prefix apps/website run dev --",
     "build:website": "npm --prefix apps/website run build",
-    "test": "npm run test:desktop",
+    "test": "node ./scripts/test-all.mjs",
+    "test:native": "cargo test -p libretracks-desktop -p lt-audio-engine-v2",
     "lint": "npm --prefix apps/desktop run lint && npm --prefix apps/remote run lint && npm --prefix packages/shared run lint"
   },
   "engines": {
