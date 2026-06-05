@@ -586,7 +586,9 @@ h1 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
-  align-items: start;
+  /* stretch so the notes column matches the height of the downloads column
+     and both panels stay aligned at the bottom. */
+  align-items: stretch;
 }
 
 .release-section-title {
@@ -604,10 +606,46 @@ h1 {
   padding: 1.25rem;
 }
 
+/* Lay the notes panel out as a column so its scrollable body fills the
+   height the grid gives it (matching the downloads column), instead of
+   collapsing to its content height and leaving a gap below. */
+.release-notes-panel {
+  display: flex;
+  flex-direction: column;
+  /* min-height:0 lets the flex child (.release-notes-body) shrink and scroll
+     rather than overflow the panel. */
+  min-height: 0;
+}
+
+/* Fills the remaining panel height and anchors the absolutely-positioned
+   body, so the notes column matches the downloads column height instead of
+   growing the grid row to fit all the text. */
+.release-notes-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
 .release-notes-body {
+  position: absolute;
+  inset: 0;
   color: color-mix(in srgb, var(--lt-text) 85%, transparent);
   font-size: 0.92rem;
   line-height: 1.7;
+  overflow-y: auto;
+  /* Keep scrolled content from sitting flush against the scrollbar. */
+  padding-right: 0.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--lt-muted) 40%, transparent) transparent;
+}
+
+.release-notes-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.release-notes-body::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--lt-muted) 40%, transparent);
+  border-radius: 4px;
 }
 
 .release-notes-body h1,

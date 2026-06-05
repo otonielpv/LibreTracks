@@ -10,6 +10,19 @@ interface Props {
 const { title, description, lang = "en" } = Astro.props;
 const isSpanish = lang === "es";
 const prefix = isSpanish ? "/es" : "";
+
+// Language switch should stay on the equivalent page in the other language
+// (e.g. /download ↔ /es/download), not jump back to the home page. Strip or
+// add the `/es` prefix on the current path to build the counterpart URL.
+const currentPath = Astro.url.pathname;
+let switchHref: string;
+if (isSpanish) {
+  // /es/download → /download ; /es or /es/ → /
+  switchHref = currentPath.replace(/^\/es(?=\/|$)/, "") || "/";
+} else {
+  // /download → /es/download ; / → /es/
+  switchHref = currentPath === "/" ? "/es/" : `/es${currentPath}`;
+}
 ---
 
 <!doctype html>
@@ -31,7 +44,7 @@ const prefix = isSpanish ? "/es" : "";
         <nav class="nav-links" aria-label={isSpanish ? "Navegacion principal" : "Primary navigation"}>
           <a href={`${prefix}/download`}>{isSpanish ? "Descargas" : "Downloads"}</a>
           <a href={`${prefix}/docs/`}>{isSpanish ? "Documentacion" : "Docs"}</a>
-          <a href={isSpanish ? "/" : "/es/"}>{isSpanish ? "English" : "Español"}</a>
+          <a href={switchHref}>{isSpanish ? "English" : "Español"}</a>
           <a href="https://github.com/otonielpv/LibreTracks">GitHub</a>
         </nav>
       </header>

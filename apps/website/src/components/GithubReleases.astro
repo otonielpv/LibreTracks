@@ -23,6 +23,38 @@ type Release = {
 
 const { owner = "otonielpv", repo = "LibreTracks", lang = "en" } = Astro.props;
 const isSpanish = lang === "es";
+
+// Release bodies ship both the Spanish ("## Novedades de vX") and English
+// ("## What's New in vX") sections. Show only the one matching the current
+// page language so the panel isn't twice as tall as it needs to be. Mirrors
+// `extractReleaseNotesForLanguage` in apps/desktop/src/shared/updateCheck.ts.
+const SECTION_HEADINGS: Record<"es" | "en", RegExp[]> = {
+  es: [/^#{1,3}\s*Novedades(?:\s+de)?\s+v?\d+\.\d+\.\d+/i, /^#{1,3}\s*Novedades/i, /^#{1,3}\s*Cambios/i],
+  en: [/^#{1,3}\s*What['’]s\s+New\s+in\s+v?\d+\.\d+\.\d+/i, /^#{1,3}\s*What['’]s\s+New/i, /^#{1,3}\s*Changes/i, /^#{1,3}\s*Release\s+Notes/i],
+};
+const ANY_HEADING = /^#{1,3}\s+/;
+
+function extractReleaseNotesForLanguage(body: string, language: "es" | "en"): string {
+  if (!body) return "";
+  const lines = body.split(/\r?\n/);
+  const patterns = SECTION_HEADINGS[language];
+
+  let startIndex = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (patterns.some((pattern) => pattern.test(lines[i]))) {
+      startIndex = i;
+      break;
+    }
+  }
+  if (startIndex === -1) return body.trim();
+
+  const collected: string[] = [lines[startIndex]];
+  for (let i = startIndex + 1; i < lines.length; i += 1) {
+    if (ANY_HEADING.test(lines[i])) break;
+    collected.push(lines[i]);
+  }
+  return collected.join("\n").trim();
+}
 const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
 
 let release: Release | null = null;
@@ -75,7 +107,10 @@ const date = release?.published_at
   ? new Intl.DateTimeFormat(isSpanish ? "es" : "en", { dateStyle: "medium" }).format(new Date(release.published_at))
   : null;
 
-const bodyHtml = release?.body ? await marked.parse(release.body) : null;
+const localizedBody = release?.body
+  ? extractReleaseNotesForLanguage(release.body, isSpanish ? "es" : "en")
+  : "";
+const bodyHtml = localizedBody ? await marked.parse(localizedBody) : null;
 
 function iconForAsset(name: string): string {
   if (/\.msi$|\.exe$/i.test(name)) return "🪟";
@@ -127,7 +162,11 @@ function iconForAsset(name: string): string {
         {bodyHtml ? (
           <div class="release-notes-panel">
             <h3 class="release-section-title">{labels.notes}</h3>
-            <div class="release-notes-body" set:html={bodyHtml} />
+            {/* The scroll wrapper is positioned so the notes never grow the
+                grid row past the downloads column; the body scrolls inside. */}
+            <div class="release-notes-scroll">
+              <div class="release-notes-body" set:html={bodyHtml} />
+            </div>
           </div>
         ) : null}
       </div>
