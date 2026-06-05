@@ -343,3 +343,298 @@ fn parse_time_signature(time_signature: &str) -> Option<(u32, u32)> {
     }
     Some((numerator, denominator))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Clip, Marker, SongMaster, SongRegion, TimeSignatureMarker, Track};
+
+    fn region(id: &str, start: f64, end: f64) -> SongRegion {
+        SongRegion {
+            id: id.into(),
+            name: id.into(),
+            start_seconds: start,
+            end_seconds: end,
+            transpose_semitones: 0,
+            warp_enabled: false,
+            warp_source_bpm: None,
+            master: SongMaster::default(),
+        }
+    }
+
+    fn folder(id: &str) -> Track {
+        track(id, TrackKind::Folder, None)
+    }
+
+    fn track(id: &str, kind: TrackKind, parent: Option<&str>) -> Track {
+        Track {
+            id: id.into(),
+            name: id.into(),
+            kind,
+            parent_track_id: parent.map(|p| p.to_string()),
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            transpose_enabled: true,
+            audio_to: "master".into(),
+            color: None,
+            auto_created: false,
+        }
+    }
+
+    /// Minimal valid song: one full-length region, one audio track, no clips.
+    fn valid_song() -> Song {
+        Song {
+            id: "s".into(),
+            title: "Song".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 100.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![region("r1", 0.0, 100.0)],
+            tracks: vec![track("t1", TrackKind::Audio, None)],
+            clips: vec![],
+            section_markers: vec![],
+        }
+    }
+
+    #[test]
+    fn baseline_song_is_valid() {
+        assert_eq!(validate_song(&valid_song()), Ok(()));
+    }
+
+    #[test]
+    fn rejects_blank_title() {
+        let mut song = valid_song();
+        song.title = "   ".into();
+        assert_eq!(validate_song(&song), Err(DomainError::MissingTitle));
+    }
+
+    #[test]
+    fn rejects_non_positive_duration() {
+        let mut song = valid_song();
+        song.duration_seconds = 0.0;
+        assert_eq!(validate_song(&song), Err(DomainError::InvalidDuration));
+    }
+
+    #[test]
+    fn rejects_inverted_region_bounds() {
+        let mut song = valid_song();
+        song.regions = vec![region("bad", 10.0, 5.0)];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidRegionBounds { region_id }) if region_id == "bad"
+        ));
+    }
+
+    #[test]
+    fn rejects_negative_region_start() {
+        let mut song = valid_song();
+        song.regions = vec![region("bad", -1.0, 10.0)];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidRegionBounds { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_overlapping_regions() {
+        let mut song = valid_song();
+        song.regions = vec![region("r1", 0.0, 50.0), region("r2", 40.0, 100.0)];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::RegionsOutOfOrder { region_id, .. }) if region_id == "r2"
+        ));
+    }
+
+    #[test]
+    fn rejects_negative_region_master_gain() {
+        let mut song = valid_song();
+        song.regions[0].master = SongMaster { gain: -0.5 };
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidRegionMasterGain { region_id, .. }) if region_id == "r1"
+        ));
+    }
+
+    #[test]
+    fn rejects_non_finite_region_master_gain() {
+        let mut song = valid_song();
+        song.regions[0].master = SongMaster {
+            gain: f64::INFINITY,
+        };
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidRegionMasterGain { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_track_ids() {
+        let mut song = valid_song();
+        song.tracks = vec![
+            track("dup", TrackKind::Audio, None),
+            track("dup", TrackKind::Audio, None),
+        ];
+        assert_eq!(
+            validate_song(&song),
+            Err(DomainError::DuplicateTrackId("dup".into()))
+        );
+    }
+
+    #[test]
+    fn rejects_self_parented_track() {
+        let mut song = valid_song();
+        song.tracks = vec![track("t1", TrackKind::Audio, Some("t1"))];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::SelfParentTrack { track_id }) if track_id == "t1"
+        ));
+    }
+
+    #[test]
+    fn rejects_unknown_parent_track() {
+        let mut song = valid_song();
+        song.tracks = vec![track("t1", TrackKind::Audio, Some("ghost"))];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::UnknownParentTrack { parent_track_id, .. }) if parent_track_id == "ghost"
+        ));
+    }
+
+    #[test]
+    fn rejects_non_folder_parent() {
+        let mut song = valid_song();
+        song.tracks = vec![
+            track("parent", TrackKind::Audio, None),
+            track("child", TrackKind::Audio, Some("parent")),
+        ];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::ParentTrackMustBeFolder { track_id, .. }) if track_id == "child"
+        ));
+    }
+
+    #[test]
+    fn accepts_audio_track_parented_to_a_folder() {
+        let mut song = valid_song();
+        song.tracks = vec![
+            folder("f1"),
+            track("child", TrackKind::Audio, Some("f1")),
+        ];
+        assert_eq!(validate_song(&song), Ok(()));
+    }
+
+    #[test]
+    fn rejects_track_hierarchy_cycle() {
+        // Two folders parenting each other form a cycle.
+        let mut song = valid_song();
+        song.tracks = vec![
+            track("a", TrackKind::Folder, Some("b")),
+            track("b", TrackKind::Folder, Some("a")),
+        ];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::TrackHierarchyCycle { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_clip_ids() {
+        let mut song = valid_song();
+        let clip = Clip {
+            id: "c".into(),
+            track_id: "t1".into(),
+            file_path: "a.wav".into(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 1.0,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        };
+        song.clips = vec![clip.clone(), clip];
+        assert_eq!(
+            validate_song(&song),
+            Err(DomainError::DuplicateClipId("c".into()))
+        );
+    }
+
+    #[test]
+    fn rejects_negative_marker_position() {
+        let mut song = valid_song();
+        song.section_markers = vec![Marker {
+            id: "m".into(),
+            name: "M".into(),
+            start_seconds: -1.0,
+            digit: None,
+        }];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidMarkerPosition { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_out_of_order_markers() {
+        let mut song = valid_song();
+        song.section_markers = vec![
+            Marker { id: "m1".into(), name: "M1".into(), start_seconds: 10.0, digit: None },
+            Marker { id: "m2".into(), name: "M2".into(), start_seconds: 5.0, digit: None },
+        ];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::MarkersOutOfOrder { marker_id, .. }) if marker_id == "m2"
+        ));
+    }
+
+    #[test]
+    fn rejects_marker_digit_above_nine() {
+        let mut song = valid_song();
+        song.section_markers = vec![Marker {
+            id: "m".into(),
+            name: "M".into(),
+            start_seconds: 0.0,
+            digit: Some(10),
+        }];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidMarkerDigit { digit, .. }) if digit == 10
+        ));
+    }
+
+    #[test]
+    fn validates_time_signature_markers() {
+        let mut song = valid_song();
+        song.time_signature_markers = vec![TimeSignatureMarker {
+            id: "ts".into(),
+            start_seconds: 0.0,
+            signature: "7/8".into(),
+        }];
+        assert_eq!(validate_song(&song), Ok(()));
+
+        song.time_signature_markers[0].signature = "4/0".into();
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidTimeSignatureMarker { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_out_of_order_time_signature_markers() {
+        let mut song = valid_song();
+        song.time_signature_markers = vec![
+            TimeSignatureMarker { id: "a".into(), start_seconds: 10.0, signature: "4/4".into() },
+            TimeSignatureMarker { id: "b".into(), start_seconds: 4.0, signature: "4/4".into() },
+        ];
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::TimeSignatureMarkersOutOfOrder { .. })
+        ));
+    }
+}

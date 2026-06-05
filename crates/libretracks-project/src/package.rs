@@ -538,3 +538,208 @@ fn unique_id(prefix: &str, seed: &str, used: &mut HashSet<String>) -> String {
         index += 1;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libretracks_core::{validate_song, SongMaster, TrackKind};
+    use tempfile::tempdir;
+
+    fn track(id: &str, name: &str) -> Track {
+        Track {
+            id: id.into(),
+            name: name.into(),
+            kind: TrackKind::Audio,
+            parent_track_id: None,
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            transpose_enabled: true,
+            audio_to: "master".into(),
+            color: None,
+            auto_created: false,
+        }
+    }
+
+    fn clip(id: &str, track_id: &str, start: f64, duration: f64) -> Clip {
+        Clip {
+            id: id.into(),
+            track_id: track_id.into(),
+            file_path: "audio/loop.wav".into(),
+            timeline_start_seconds: start,
+            source_start_seconds: 0.0,
+            duration_seconds: duration,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        }
+    }
+
+    fn region(id: &str, name: &str, start: f64, end: f64) -> SongRegion {
+        SongRegion {
+            id: id.into(),
+            name: name.into(),
+            start_seconds: start,
+            end_seconds: end,
+            transpose_semitones: 0,
+            warp_enabled: false,
+            warp_source_bpm: None,
+            master: SongMaster::default(),
+        }
+    }
+
+    fn song() -> Song {
+        Song {
+            id: "s".into(),
+            title: "Set".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 60.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![region("r1", "Verse", 0.0, 30.0)],
+            tracks: vec![track("t1", "Drums")],
+            clips: vec![clip("c1", "t1", 4.0, 8.0)],
+            section_markers: vec![libretracks_core::Marker {
+                id: "m1".into(),
+                name: "Drop".into(),
+                start_seconds: 5.0,
+                digit: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn normalize_package_file_path_uses_forward_slashes() {
+        assert_eq!(
+            normalize_package_file_path("a\\b\\c.wav"),
+            "a/b/c.wav".to_string()
+        );
+    }
+
+    #[test]
+    fn unique_id_appends_a_suffix_only_on_collision() {
+        let mut used = HashSet::new();
+        assert_eq!(unique_id("clip", "abc", &mut used), "clip_abc");
+        assert_eq!(unique_id("clip", "abc", &mut used), "clip_abc-1");
+        assert_eq!(unique_id("clip", "abc", &mut used), "clip_abc-2");
+    }
+
+    #[test]
+    fn song_bpm_at_returns_the_latest_marker_value() {
+        let mut s = song();
+        s.tempo_markers = vec![
+            TempoMarker { id: "a".into(), start_seconds: 0.0, bpm: 100.0 },
+            TempoMarker { id: "b".into(), start_seconds: 10.0, bpm: 140.0 },
+        ];
+        assert_eq!(song_bpm_at(&s, 5.0), 100.0);
+        assert_eq!(song_bpm_at(&s, 12.0), 140.0);
+        // No marker at-or-before -> base bpm.
+        s.tempo_markers.clear();
+        assert_eq!(song_bpm_at(&s, 5.0), 120.0);
+    }
+
+    #[test]
+    fn song_time_signature_at_returns_the_latest_marker_value() {
+        let mut s = song();
+        s.time_signature_markers = vec![TimeSignatureMarker {
+            id: "ts".into(),
+            start_seconds: 8.0,
+            signature: "3/4".into(),
+        }];
+        assert_eq!(song_time_signature_at(&s, 4.0), "4/4");
+        assert_eq!(song_time_signature_at(&s, 10.0), "3/4");
+    }
+
+    #[test]
+    fn export_then_import_round_trips_into_a_valid_song() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let source = song();
+        let package_path = song_dir.join("verse.ltsong");
+
+        export_region_as_package(song_dir, &source, "r1", &package_path)
+            .expect("export region");
+        assert!(package_path.exists());
+
+        // Import into a fresh empty session at offset 0.
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        let result = import_song_package(song_dir, &empty, &package_path, 0.0)
+            .expect("import package");
+
+        assert_eq!(result.package_title, "Verse");
+        // The drums track and its clip came across.
+        assert_eq!(result.song.tracks.len(), 1);
+        assert_eq!(result.song.clips.len(), 1);
+        assert_eq!(result.song.regions.len(), 1);
+        // The imported region must span the clip so the song stays valid.
+        assert!(validate_song(&result.song).is_ok());
+    }
+
+    #[test]
+    fn import_offsets_clips_and_markers_by_insert_position() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let source = song();
+        let package_path = song_dir.join("verse.ltsong");
+        export_region_as_package(song_dir, &source, "r1", &package_path)
+            .expect("export");
+
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        let result = import_song_package(song_dir, &empty, &package_path, 100.0)
+            .expect("import");
+
+        // Original clip started at 4s within the region; inserted at 100s it
+        // should now sit at 104s.
+        assert!((result.song.clips[0].timeline_start_seconds - 104.0).abs() < 1e-6);
+        assert!(result.song.regions[0].start_seconds >= 100.0);
+    }
+
+    #[test]
+    fn import_rejects_out_of_range_transpose() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let mut source = song();
+        source.regions[0].transpose_semitones = 99; // beyond MAX
+        let package_path = song_dir.join("bad.ltsong");
+        export_region_as_package(song_dir, &source, "r1", &package_path)
+            .expect("export");
+
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        assert!(import_song_package(song_dir, &empty, &package_path, 0.0).is_err());
+    }
+
+    #[test]
+    fn export_errors_for_an_unknown_region() {
+        let dir = tempdir().expect("tempdir");
+        let result = export_region_as_package(
+            dir.path(),
+            &song(),
+            "nonexistent",
+            &dir.path().join("x.ltsong"),
+        );
+        assert!(result.is_err());
+    }
+}

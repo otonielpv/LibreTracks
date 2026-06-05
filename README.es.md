@@ -137,25 +137,66 @@ npm run dev:desktop:native
 # Bundle de producción del frontend desktop
 npm run build:desktop
 
-# Tests Rust del workspace
-cargo test
-```
-
-Otros comandos útiles durante desarrollo:
-
-```bash
 # Chequeo nativo de Rust mediante el lanzador nativo multiplataforma
 npm run check:desktop:native
 
-# Tests frontend y lint/typecheck
-npm run test:desktop
+# Lint / typecheck (TypeScript) en desktop, remote y shared
 npm run lint
-
-# Tests Rust desktop headless
-cargo test --locked -p libretracks-desktop -- --test-threads=1
 ```
 
 El launcher nativo de escritorio compila `native/audio-engine-v2`, define `LT_ENGINE_V2_LIB_DIR` y despues inicia/chequea/compila la app Tauri contra el motor C++ v2.
+
+## Tests
+
+Toda la batería de tests se lanza desde la raíz del repositorio. Consulta
+[`docs/testing.md`](docs/testing.md) para la referencia completa.
+
+**Qué comando lanzar según lo que hayas tocado:**
+
+| Tocaste… | Lanza |
+| --- | --- |
+| Frontend (React/TS), `shared`, `remote` | `npm test` (+ `npm run lint`) |
+| Lógica de sesión Rust (`state.rs`, `models/`) | además `npm run test:native:nolink` |
+| El motor de audio C++ (`native/audio-engine-v2/`) | además `npm run test:native` |
+| Todo, antes de una release | `npm run test:full` |
+
+**Los comandos:**
+
+```bash
+# Suite rápida — corre en cualquier sitio, sin toolchain nativo.
+# Cubre: shared (vitest), frontend desktop (vitest), frontend remote
+# (vitest) y los crates Rust puros (core, project, audio, remote).
+npm test
+
+# Tests Rust del motor SIN compilar C++ (stub en memoria del engine).
+# Cubre la suite de sesión/estado de libretracks-desktop + bindings de
+# lt-audio-engine-v2. Algunos casos que necesitan el motor real se omiten.
+npm run test:native:nolink
+
+# Motor real: compila el motor C++, ejecuta los 163 tests C++ del DSP
+# (la señal fiable) y luego los tests Rust enlazados contra él.
+npm run test:native
+
+# Verificación completa — encadena la suite rápida + la del motor real y
+# muestra un único resumen PASS/FAIL agregado. Úsalo antes de una release.
+npm run test:full
+```
+
+También puedes lanzar un solo nivel por separado:
+
+```bash
+npm run test:shared      # packages/shared
+npm run test:desktop     # frontend de apps/desktop
+npm run test:remote      # frontend de apps/remote
+cargo test -p libretracks-core   # o -project / -audio / -remote
+```
+
+> **Nota sobre los niveles nativos:** `npm run test:native` y `npm run test:full`
+> enlazan el motor de audio **real**, así que los tests Rust que dependen de un
+> dispositivo de audio fallan en una máquina sin tarjeta de sonido (o con ella
+> ocupada). Son informativos — los **163 tests C++ del DSP son la señal fiable**
+> del motor y el código de salida del comando depende de ellos, no de los tests
+> de dispositivo de audio.
 
 
 ## Control Remote (Desktop + Movil)

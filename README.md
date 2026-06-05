@@ -138,25 +138,65 @@ npm run dev:desktop:native
 # Production frontend bundle for the desktop app
 npm run build:desktop
 
-# Rust tests across the workspace
-cargo test
-```
-
-Additional commands that are useful during development:
-
-```bash
 # Native Rust compile check through the cross-platform native launcher
 npm run check:desktop:native
 
-# Frontend tests and lint/typecheck
-npm run test:desktop
+# Lint / typecheck (TypeScript) across desktop, remote and shared
 npm run lint
-
-# Headless desktop Rust tests
-cargo test --locked -p libretracks-desktop -- --test-threads=1
 ```
 
 The native desktop launcher builds `native/audio-engine-v2`, sets `LT_ENGINE_V2_LIB_DIR`, and then starts/checks/builds the Tauri app against the C++ v2 engine.
+
+## Testing
+
+The whole test surface is reachable from the repository root. See
+[`docs/testing.md`](docs/testing.md) for the full reference.
+
+**Which command to run after a change:**
+
+| You changed… | Run |
+| --- | --- |
+| Frontend (React/TS), `shared`, `remote` | `npm test` (+ `npm run lint`) |
+| Rust session logic (`state.rs`, `models/`) | also `npm run test:native:nolink` |
+| The C++ audio engine (`native/audio-engine-v2/`) | also `npm run test:native` |
+| Everything, before a release | `npm run test:full` |
+
+**The commands:**
+
+```bash
+# Fast suite — runs everywhere, no native toolchain needed.
+# Covers: shared (vitest), desktop frontend (vitest), remote frontend
+# (vitest), and the pure Rust crates (core, project, audio, remote).
+npm test
+
+# Engine-linked Rust tests WITHOUT compiling C++ (in-memory engine stub).
+# Covers the libretracks-desktop session/state suite + lt-audio-engine-v2
+# bindings. A few cases needing real engine output are auto-skipped here.
+npm run test:native:nolink
+
+# Real engine: builds the C++ audio engine, runs the 163 C++ DSP tests
+# (authoritative), then the engine-linked Rust tests against it.
+npm run test:native
+
+# Full verification — chains the fast suite + the real-engine suite and
+# prints one aggregated PASS/FAIL summary. Use before a release.
+npm run test:full
+```
+
+You can also run a single tier on its own:
+
+```bash
+npm run test:shared      # packages/shared
+npm run test:desktop     # apps/desktop frontend
+npm run test:remote      # apps/remote frontend
+cargo test -p libretracks-core   # or -project / -audio / -remote
+```
+
+> **Note on the native tiers:** `npm run test:native` and `npm run test:full`
+> link the **real** audio engine, so the audio-device-dependent Rust tests
+> fail on a machine with no/busy sound card. Those are informational — the
+> **163 C++ DSP tests are the authoritative engine signal** and the command's
+> exit code is gated on them, not on the audio-device tests.
 
 ## Remote Control (Desktop + Mobile)
 

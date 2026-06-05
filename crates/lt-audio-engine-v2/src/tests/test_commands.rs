@@ -545,3 +545,130 @@ fn all_commands_have_type_field() {
         assert!(v.get("type").is_some(), "missing 'type' field in: {json}");
     }
 }
+
+// ── Mixer / region / metronome commands (previously uncovered) ───────────────
+
+#[test]
+fn set_track_solo_round_trips_fields() {
+    let cmd = EngineCommand::SetTrackSolo {
+        track_id: "t1".into(),
+        solo: true,
+    };
+    assert_eq!(round_trip_type(&cmd), "SetTrackSolo");
+    match round_trip(&cmd) {
+        EngineCommand::SetTrackSolo { track_id, solo } => {
+            assert_eq!(track_id, "t1");
+            assert!(solo);
+        }
+        other => panic!("expected SetTrackSolo, got {other:?}"),
+    }
+}
+
+#[test]
+fn set_metronome_volume_round_trips() {
+    let cmd = EngineCommand::SetMetronomeVolume { volume: 0.42 };
+    assert_eq!(round_trip_type(&cmd), "SetMetronomeVolume");
+    match round_trip(&cmd) {
+        EngineCommand::SetMetronomeVolume { volume } => {
+            assert!((volume - 0.42).abs() < 1e-6)
+        }
+        other => panic!("expected SetMetronomeVolume, got {other:?}"),
+    }
+}
+
+#[test]
+fn set_metronome_output_route_round_trips() {
+    let cmd = EngineCommand::SetMetronomeOutputRoute {
+        route: "ext:2-3".into(),
+    };
+    assert_eq!(round_trip_type(&cmd), "SetMetronomeOutputRoute");
+    match round_trip(&cmd) {
+        EngineCommand::SetMetronomeOutputRoute { route } => {
+            assert_eq!(route, "ext:2-3")
+        }
+        other => panic!("expected SetMetronomeOutputRoute, got {other:?}"),
+    }
+}
+
+#[test]
+fn set_region_warp_round_trips_fields() {
+    let cmd = EngineCommand::SetRegionWarp {
+        region_id: "r1".into(),
+        warp_enabled: true,
+        warp_source_bpm: 128.0,
+    };
+    assert_eq!(round_trip_type(&cmd), "SetRegionWarp");
+    match round_trip(&cmd) {
+        EngineCommand::SetRegionWarp {
+            region_id,
+            warp_enabled,
+            warp_source_bpm,
+        } => {
+            assert_eq!(region_id, "r1");
+            assert!(warp_enabled);
+            assert!((warp_source_bpm - 128.0).abs() < 1e-9);
+        }
+        other => panic!("expected SetRegionWarp, got {other:?}"),
+    }
+}
+
+#[test]
+fn set_region_master_gain_round_trips_fields() {
+    let cmd = EngineCommand::SetRegionMasterGain {
+        region_id: "r1".into(),
+        master_gain: 0.5,
+    };
+    assert_eq!(round_trip_type(&cmd), "SetRegionMasterGain");
+    match round_trip(&cmd) {
+        EngineCommand::SetRegionMasterGain {
+            region_id,
+            master_gain,
+        } => {
+            assert_eq!(region_id, "r1");
+            assert!((master_gain - 0.5).abs() < 1e-6);
+        }
+        other => panic!("expected SetRegionMasterGain, got {other:?}"),
+    }
+}
+
+#[test]
+fn set_song_regions_round_trips_region_updates() {
+    let cmd = EngineCommand::SetSongRegions {
+        song_id: "song1".into(),
+        regions: vec![RegionUpdate {
+            id: "r1".into(),
+            name: "Intro".into(),
+            start_frame: 0,
+            end_frame: 96_000,
+            transpose_semitones: 3,
+            warp_enabled: false,
+            warp_source_bpm: 0.0,
+            master_gain: 1.0,
+        }],
+    };
+    assert_eq!(round_trip_type(&cmd), "SetSongRegions");
+    match round_trip(&cmd) {
+        EngineCommand::SetSongRegions { song_id, regions } => {
+            assert_eq!(song_id, "song1");
+            assert_eq!(regions.len(), 1);
+            assert_eq!(regions[0].id, "r1");
+            assert_eq!(regions[0].transpose_semitones, 3);
+        }
+        other => panic!("expected SetSongRegions, got {other:?}"),
+    }
+}
+
+#[test]
+fn region_update_master_gain_defaults_to_unity_when_absent() {
+    // Engine snapshots predating the master fader omit master_gain; it must
+    // deserialize to 1.0 so older sessions keep unity gain. (RegionUpdate uses
+    // snake_case field names, unlike the camelCase command envelope.)
+    let json = r#"{
+        "id": "r1", "name": "R", "start_frame": 0, "end_frame": 100,
+        "transpose_semitones": 0
+    }"#;
+    let region: RegionUpdate = serde_json::from_str(json).expect("region update");
+    assert_eq!(region.master_gain, 1.0);
+    assert!(!region.warp_enabled);
+    assert_eq!(region.warp_source_bpm, 0.0);
+}

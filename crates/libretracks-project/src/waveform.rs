@@ -748,3 +748,200 @@ impl WaveformBuckets {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn write_mono_wav(path: &Path, sample_rate: u32, samples: &[i16]) {
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).expect("create wav");
+        for &sample in samples {
+            writer.write_sample(sample).expect("write sample");
+        }
+        writer.finalize().expect("finalize wav");
+    }
+
+    // ── waveform_file_path / cache stem ───────────────────────────────────
+
+    #[test]
+    fn waveform_file_path_uses_relative_stem_verbatim() {
+        let path = waveform_file_path("C:/songs/demo", "audio/kick.wav");
+        let path_str = path.to_string_lossy().replace('\\', "/");
+        assert!(path_str.ends_with("cache/waveforms/kick.waveform.ltpeaks"));
+    }
+
+    #[test]
+    fn waveform_cache_stem_hashes_absolute_paths_to_avoid_collisions() {
+        // Absolute paths from different folders sharing a file name must not
+        // collide in the cache.
+        // Use an OS-absolute path so is_absolute() holds on every platform
+        // (Windows needs a drive prefix; Unix accepts a leading slash).
+        let (path_a, path_b) = if cfg!(windows) {
+            ("C:\\a\\kick.wav", "C:\\b\\kick.wav")
+        } else {
+            ("/a/kick.wav", "/b/kick.wav")
+        };
+        let a = waveform_cache_file_stem(Path::new(path_a));
+        let b = waveform_cache_file_stem(Path::new(path_b));
+        assert!(a.starts_with("kick-"));
+        assert!(b.starts_with("kick-"));
+        assert_ne!(a, b);
+    }
+
+    // ── waveform_summary_from_peaks ───────────────────────────────────────
+
+    #[test]
+    fn summary_from_peaks_builds_a_valid_summary() {
+        let summary = waveform_summary_from_peaks(
+            44_100,
+            44_100,
+            256,
+            vec![-0.5; 172],
+            vec![0.5; 172],
+        )
+        .expect("valid peaks");
+        assert_eq!(summary.sample_rate, 44_100);
+        assert!((summary.duration_seconds - 1.0).abs() < 1e-9);
+        assert_eq!(summary.lods[0].resolution_frames, 256);
+        assert!(validate_waveform_summary(&summary, "<test>").is_ok());
+    }
+
+    #[test]
+    fn summary_from_peaks_rejects_invalid_input() {
+        // Zero sample rate, mismatched peak lengths, and empty peaks all fail.
+        assert!(waveform_summary_from_peaks(0, 100, 256, vec![0.0], vec![0.0]).is_err());
+        assert!(waveform_summary_from_peaks(44_100, 0, 256, vec![0.0], vec![0.0]).is_err());
+        assert!(waveform_summary_from_peaks(44_100, 100, 256, vec![0.0], vec![]).is_err());
+        assert!(waveform_summary_from_peaks(44_100, 100, 256, vec![], vec![]).is_err());
+    }
+
+    // ── LOD pyramid ───────────────────────────────────────────────────────
+
+    #[test]
+    fn build_waveform_lods_produces_coarser_levels() {
+        let base = WaveformLod {
+            resolution_frames: 256,
+            min_peaks: vec![-0.2; 4096],
+            max_peaks: vec![0.2; 4096],
+            min_peaks_right: Vec::new(),
+            max_peaks_right: Vec::new(),
+        };
+        let lods = build_waveform_lods(base);
+        assert!(lods.len() > 1);
+        for window in lods.windows(2) {
+            assert!(window[1].resolution_frames > window[0].resolution_frames);
+            assert!(window[1].max_peaks.len() <= window[0].max_peaks.len());
+        }
+    }
+
+    #[test]
+    fn downsample_preserves_the_peak_envelope() {
+        let mut min_source = vec![-0.1_f32; 1000];
+        let mut max_source = vec![0.1_f32; 1000];
+        min_source[500] = -0.9;
+        max_source[500] = 0.9;
+        let (min_peaks, max_peaks) = downsample_peak_pair(&min_source, &max_source, 100);
+        assert_eq!(min_peaks.len(), 10);
+        assert!(max_peaks.iter().cloned().fold(f32::MIN, f32::max) >= 0.9);
+        assert!(min_peaks.iter().cloned().fold(f32::MAX, f32::min) <= -0.9);
+    }
+
+    // ── Binary round-trip ─────────────────────────────────────────────────
+
+    fn sample_summary() -> WaveformSummary {
+        waveform_summary_from_peaks(48_000, 48_000, 256, vec![-0.3; 188], vec![0.3; 188])
+            .expect("summary")
+    }
+
+    #[test]
+    fn binary_encode_decode_round_trips() {
+        let summary = sample_summary();
+        let bytes = encode_waveform_summary_binary(&summary).expect("encode");
+        assert_eq!(&bytes[..8], WAVEFORM_FILE_MAGIC);
+        let decoded = decode_waveform_summary_binary(&bytes).expect("decode");
+        assert_eq!(decoded, summary);
+    }
+
+    #[test]
+    fn decode_rejects_a_bad_magic_header() {
+        let mut bytes = encode_waveform_summary_binary(&sample_summary()).expect("encode");
+        bytes[0] = b'X';
+        assert!(decode_waveform_summary_binary(&bytes).is_none());
+    }
+
+    #[test]
+    fn decode_rejects_truncated_bytes() {
+        let bytes = encode_waveform_summary_binary(&sample_summary()).expect("encode");
+        assert!(decode_waveform_summary_binary(&bytes[..10]).is_none());
+    }
+
+    // ── write + load through the filesystem ───────────────────────────────
+
+    #[test]
+    fn write_then_load_round_trips_through_disk() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let summary = sample_summary();
+        let path = waveform_file_path(song_dir, "audio/loop.wav");
+        write_waveform_summary(&path, &summary).expect("write");
+        assert!(path.exists());
+
+        let loaded = load_waveform_summary(song_dir, "audio/loop.wav").expect("load");
+        assert_eq!(loaded, summary);
+    }
+
+    #[test]
+    fn load_errors_when_no_cache_or_legacy_exists() {
+        let dir = tempdir().expect("tempdir");
+        let result = load_waveform_summary(dir.path(), "audio/missing.wav");
+        assert!(result.is_err());
+    }
+
+    // ── validate_waveform_summary ─────────────────────────────────────────
+
+    #[test]
+    fn validate_rejects_empty_lods_and_old_versions() {
+        let mut summary = sample_summary();
+        summary.lods.clear();
+        assert!(validate_waveform_summary(&summary, "<t>").is_err());
+
+        let mut old = sample_summary();
+        old.version = MIN_READABLE_WAVEFORM_FORMAT_VERSION - 1;
+        assert!(validate_waveform_summary(&old, "<t>").is_err());
+    }
+
+    #[test]
+    fn validate_rejects_mismatched_peak_lengths() {
+        let mut summary = sample_summary();
+        summary.lods[0].min_peaks.pop();
+        assert!(validate_waveform_summary(&summary, "<t>").is_err());
+    }
+
+    // ── analyze_wav_file (full decode pipeline) ───────────────────────────
+
+    #[test]
+    fn analyze_wav_file_reports_duration_and_sample_rate() {
+        let dir = tempdir().expect("tempdir");
+        let wav_path = dir.path().join("tone.wav");
+        // 1 second of a simple ramp at 8 kHz mono.
+        let samples: Vec<i16> = (0..8_000)
+            .map(|i| ((i as f32 / 8_000.0 - 0.5) * 2.0 * i16::MAX as f32) as i16)
+            .collect();
+        write_mono_wav(&wav_path, 8_000, &samples);
+
+        let analyzed = analyze_wav_file(&wav_path).expect("analyze");
+        assert_eq!(analyzed.sample_rate, 8_000);
+        assert_eq!(analyzed.channels, 1);
+        assert!((analyzed.duration_seconds - 1.0).abs() < 0.05);
+        assert!(!analyzed.waveform.lods.is_empty());
+        assert!(validate_waveform_summary(&analyzed.waveform, "<t>").is_ok());
+    }
+}
+

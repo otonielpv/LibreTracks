@@ -187,3 +187,105 @@ fn multiple_pending_jumps_round_trip() {
     assert_eq!(rt.pending_jumps.len(), 5);
     assert_eq!(rt.pending_jumps[4].jump_id, "j4");
 }
+
+// ── Meter / cache / pitch sub-snapshots (previously uncovered) ───────────────
+
+#[test]
+fn track_meters_round_trip() {
+    let mut snap = EngineSnapshot::default();
+    snap.track_meters = vec![TrackMeterValues {
+        track_id: "t1".into(),
+        left_peak: 0.8,
+        right_peak: 0.7,
+        left_rms: 0.4,
+        right_rms: 0.35,
+    }];
+    let rt = round_trip(&snap);
+    assert_eq!(rt.track_meters.len(), 1);
+    assert_eq!(rt.track_meters[0].track_id, "t1");
+    assert!((rt.track_meters[0].left_peak - 0.8).abs() < 1e-6);
+    assert!((rt.track_meters[0].right_rms - 0.35).abs() < 1e-6);
+}
+
+#[test]
+fn region_meters_round_trip() {
+    let mut snap = EngineSnapshot::default();
+    snap.region_meters = vec![RegionMeterValues {
+        region_id: "r1".into(),
+        peak: 0.9,
+    }];
+    let rt = round_trip(&snap);
+    assert_eq!(rt.region_meters.len(), 1);
+    assert_eq!(rt.region_meters[0].region_id, "r1");
+    assert!((rt.region_meters[0].peak - 0.9).abs() < 1e-6);
+}
+
+#[test]
+fn source_cache_snapshot_round_trips_and_defaults() {
+    let mut snap = EngineSnapshot::default();
+    snap.source_cache.ram_bytes_used = 1024;
+    snap.source_cache.ram_bytes_capacity = 4096;
+    snap.source_cache.disk_bytes_used = 2048;
+    let rt = round_trip(&snap);
+    assert_eq!(rt.source_cache.ram_bytes_used, 1024);
+    assert_eq!(rt.source_cache.ram_bytes_capacity, 4096);
+    assert_eq!(rt.source_cache.disk_bytes_used, 2048);
+
+    // Defaulted struct round-trips to zeros.
+    let default_rt = round_trip(&EngineSnapshot::default());
+    assert_eq!(default_rt.source_cache.ram_bytes_used, 0);
+}
+
+#[test]
+fn pitch_snapshot_round_trips() {
+    let mut snap = EngineSnapshot::default();
+    snap.pitch.pitch_engine_available = true;
+    snap.pitch.pitch_backend = "bungee".into();
+    let rt = round_trip(&snap);
+    assert!(rt.pitch.pitch_engine_available);
+    assert_eq!(rt.pitch.pitch_backend, "bungee");
+}
+
+#[test]
+fn prearmed_jumps_snapshot_round_trips() {
+    let mut snap = EngineSnapshot::default();
+    snap.prearmed_jumps.ready_count = 3;
+    snap.prearmed_jumps.prepared_total = 10;
+    snap.prearmed_jumps.worker_busy = true;
+    let rt = round_trip(&snap);
+    assert_eq!(rt.prearmed_jumps.ready_count, 3);
+    assert_eq!(rt.prearmed_jumps.prepared_total, 10);
+    assert!(rt.prearmed_jumps.worker_busy);
+}
+
+#[test]
+fn snapshot_tolerates_missing_optional_collections() {
+    // Optional collections/sub-snapshots default when absent. Start from the
+    // full default JSON, drop the defaulted array fields, and confirm it still
+    // deserializes (the required device/cpu/meters objects stay in place).
+    let mut value: serde_json::Value =
+        serde_json::to_value(EngineSnapshot::default()).expect("to value");
+    let obj = value.as_object_mut().unwrap();
+    for optional in [
+        "track_meters",
+        "region_meters",
+        "pending_jumps",
+        "source_states",
+    ] {
+        obj.remove(optional);
+    }
+    let snap: EngineSnapshot =
+        serde_json::from_value(value).expect("snapshot without optional arrays");
+    assert!(snap.track_meters.is_empty());
+    assert!(snap.region_meters.is_empty());
+    assert!(snap.pending_jumps.is_empty());
+}
+
+#[test]
+fn playback_state_serializes_lowercase() {
+    // The C++ engine emits lowercase state strings; pin that contract.
+    let mut snap = EngineSnapshot::default();
+    snap.playback_state = PlaybackState::Playing;
+    let json = serde_json::to_string(&snap).unwrap();
+    assert!(json.contains("\"playing\""));
+}
