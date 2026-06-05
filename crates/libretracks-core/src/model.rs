@@ -308,3 +308,128 @@ impl Song {
         format!("Marker {}", self.section_markers.len())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn marker(id: &str, start_seconds: f64, digit: Option<u8>) -> Marker {
+        Marker {
+            id: id.into(),
+            name: id.into(),
+            start_seconds,
+            digit,
+        }
+    }
+
+    fn song_with_markers(markers: Vec<Marker>) -> Song {
+        Song {
+            id: "s".into(),
+            title: "S".into(),
+            artist: None,
+            key: None,
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 100.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![],
+            tracks: vec![],
+            clips: vec![],
+            section_markers: markers,
+        }
+    }
+
+    // ── parse_audio_output_route ──────────────────────────────────────────
+
+    #[test]
+    fn route_master_and_aliases_map_to_the_first_stereo_pair() {
+        for route in ["", "master", "main", "MASTER", "  Main  "] {
+            assert_eq!(parse_audio_output_route(route, 8), vec![0, 1], "{route:?}");
+        }
+    }
+
+    #[test]
+    fn route_monitor_uses_channels_3_4_when_available() {
+        assert_eq!(parse_audio_output_route("monitor", 8), vec![2, 3]);
+    }
+
+    #[test]
+    fn route_monitor_falls_back_to_main_on_stereo_devices() {
+        assert_eq!(parse_audio_output_route("monitor", 2), vec![0, 1]);
+    }
+
+    #[test]
+    fn route_ext_is_zero_based() {
+        assert_eq!(parse_audio_output_route("ext:0", 8), vec![0]);
+        assert_eq!(parse_audio_output_route("ext:2-3", 8), vec![2, 3]);
+    }
+
+    #[test]
+    fn route_hardware_out_is_one_based() {
+        // "out 1" addresses the first physical output -> zero-based channel 0.
+        assert_eq!(parse_audio_output_route("out 1", 8), vec![0]);
+        assert_eq!(parse_audio_output_route("out 3-4", 8), vec![2, 3]);
+    }
+
+    #[test]
+    fn route_drops_channels_beyond_the_device_channel_count() {
+        // ext:6-7 on a 2-channel device yields nothing valid -> master fallback.
+        assert_eq!(parse_audio_output_route("ext:6-7", 2), vec![0, 1]);
+    }
+
+    #[test]
+    fn route_one_based_zero_is_invalid_and_falls_back() {
+        // "out 0" is not a valid 1-based channel -> master fallback.
+        assert_eq!(parse_audio_output_route("out 0", 8), vec![0, 1]);
+    }
+
+    #[test]
+    fn route_unparseable_falls_back_to_master() {
+        assert_eq!(parse_audio_output_route("garbage", 8), vec![0, 1]);
+    }
+
+    #[test]
+    fn route_clamps_to_a_single_channel_on_mono_devices() {
+        assert_eq!(parse_audio_output_route("master", 1), vec![0]);
+    }
+
+    // ── Song marker lookups ───────────────────────────────────────────────
+
+    #[test]
+    fn marker_by_id_and_digit_find_the_right_marker() {
+        let song = song_with_markers(vec![
+            marker("a", 0.0, Some(1)),
+            marker("b", 10.0, Some(2)),
+        ]);
+        assert_eq!(song.marker_by_id("b").unwrap().start_seconds, 10.0);
+        assert!(song.marker_by_id("missing").is_none());
+        assert_eq!(song.marker_by_digit(2).unwrap().id, "b");
+        assert!(song.marker_by_digit(9).is_none());
+    }
+
+    #[test]
+    fn next_marker_after_returns_the_first_marker_strictly_ahead() {
+        let song = song_with_markers(vec![
+            marker("b", 20.0, None),
+            marker("a", 10.0, None),
+        ]);
+        // Sorted internally; from 5s the next is "a" at 10s.
+        assert_eq!(song.next_marker_after(5.0).unwrap().id, "a");
+        // Exactly on a marker is not "after" it.
+        assert_eq!(song.next_marker_after(10.0).unwrap().id, "b");
+        assert!(song.next_marker_after(20.0).is_none());
+    }
+
+    #[test]
+    fn marker_at_returns_none_for_negative_positions() {
+        let song = song_with_markers(vec![marker("a", 0.0, None)]);
+        assert!(song.marker_at(-1.0).is_none());
+    }
+
+    #[test]
+    fn next_marker_name_counts_existing_markers() {
+        let song = song_with_markers(vec![marker("a", 0.0, None)]);
+        assert_eq!(song.next_marker_name(), "Marker 1");
+    }
+}
