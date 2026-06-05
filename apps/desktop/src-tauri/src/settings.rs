@@ -252,3 +252,89 @@ fn settings_file_path(app: &AppHandle) -> Result<PathBuf, io::Error> {
         .map_err(|error| io::Error::other(error.to_string()))?;
     Ok(app_data_dir.join(SETTINGS_FILE_NAME))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_settings_match_the_documented_values() {
+        let settings = AppSettings::default();
+        assert!(!settings.metronome_enabled);
+        assert_eq!(settings.metronome_volume, 0.8);
+        assert_eq!(settings.metronome_output, "master");
+        assert_eq!(settings.enabled_output_channels, vec![0, 1]);
+        assert_eq!(settings.global_jump_mode, "immediate");
+        assert_eq!(settings.global_jump_bars, 4);
+        assert_eq!(settings.vamp_mode, "section");
+        assert_eq!(settings.timeline_navigation_scheme, "ableton");
+        assert!(settings.midi_mappings.is_empty());
+    }
+
+    #[test]
+    fn deserializing_an_empty_object_fills_every_default() {
+        // The settings file may predate any given field; serde defaults keep
+        // older files loadable. An empty object must yield the full defaults.
+        let settings: AppSettings = serde_json::from_str("{}").expect("defaults");
+        assert_eq!(settings, AppSettings::default());
+    }
+
+    #[test]
+    fn deserializing_a_partial_object_overrides_only_named_fields() {
+        let json = r#"{ "metronomeEnabled": true, "globalJumpBars": 8 }"#;
+        let settings: AppSettings = serde_json::from_str(json).expect("partial");
+        assert!(settings.metronome_enabled);
+        assert_eq!(settings.global_jump_bars, 8);
+        // Untouched fields stay at their defaults.
+        assert_eq!(settings.metronome_volume, 0.8);
+        assert_eq!(settings.vamp_bars, 4);
+    }
+
+    #[test]
+    fn settings_round_trip_through_json() {
+        let mut settings = AppSettings::default();
+        settings.locale = Some("es".into());
+        settings.metronome_volume = 0.42;
+        settings.midi_mappings.insert(
+            "play".into(),
+            MidiBinding {
+                status: 0x90,
+                data1: 60,
+                is_cc: false,
+            },
+        );
+        let json = serde_json::to_string(&settings).expect("serialize");
+        let restored: AppSettings = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored, settings);
+    }
+
+    #[test]
+    fn camel_case_field_names_are_used_on_the_wire() {
+        let json = serde_json::to_string(&AppSettings::default()).expect("serialize");
+        assert!(json.contains("metronomeVolume"));
+        assert!(json.contains("globalJumpMode"));
+        assert!(!json.contains("metronome_volume"));
+    }
+
+    #[test]
+    fn midi_binding_uses_camel_case_is_cc() {
+        let json = serde_json::to_string(&MidiBinding {
+            status: 1,
+            data1: 2,
+            is_cc: true,
+        })
+        .expect("serialize");
+        assert!(json.contains("isCc"));
+    }
+
+    #[test]
+    fn settings_store_reads_back_what_was_set() {
+        let store = AppSettingsStore::new(AppSettings::default());
+        assert_eq!(store.current().unwrap().metronome_volume, 0.8);
+
+        let mut next = AppSettings::default();
+        next.metronome_volume = 0.1;
+        store.set(next).unwrap();
+        assert_eq!(store.current().unwrap().metronome_volume, 0.1);
+    }
+}
