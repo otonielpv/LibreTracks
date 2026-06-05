@@ -784,3 +784,250 @@ fn transition_type_label(transition: &TransitionType) -> String {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libretracks_core::{SongMaster, Track};
+
+    fn track(id: &str, kind: TrackKind, parent: Option<&str>) -> Track {
+        Track {
+            id: id.into(),
+            name: format!("Track {id}"),
+            kind,
+            parent_track_id: parent.map(|p| p.to_string()),
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            transpose_enabled: true,
+            audio_to: "master".into(),
+            color: None,
+            auto_created: false,
+        }
+    }
+
+    fn clip(id: &str, track_id: &str, start: f64, dur: f64, file: &str) -> Clip {
+        Clip {
+            id: id.into(),
+            track_id: track_id.into(),
+            file_path: file.into(),
+            timeline_start_seconds: start,
+            source_start_seconds: 0.0,
+            duration_seconds: dur,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        }
+    }
+
+    fn region(id: &str, start: f64, end: f64) -> SongRegion {
+        SongRegion {
+            id: id.into(),
+            name: id.into(),
+            start_seconds: start,
+            end_seconds: end,
+            transpose_semitones: 0,
+            warp_enabled: false,
+            warp_source_bpm: None,
+            master: SongMaster::default(),
+        }
+    }
+
+    fn base_song() -> Song {
+        Song {
+            id: "song".into(),
+            title: "Title".into(),
+            artist: Some("Artist".into()),
+            key: Some("C".into()),
+            bpm: 120.0,
+            time_signature: "4/4".into(),
+            duration_seconds: 12.0,
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            regions: vec![region("r1", 0.0, 12.0)],
+            tracks: vec![track("t1", TrackKind::Audio, None)],
+            clips: vec![clip("c1", "t1", 1.0, 4.0, "audio/a.wav")],
+            section_markers: vec![Marker {
+                id: "m1".into(),
+                name: "Intro".into(),
+                start_seconds: 2.0,
+                digit: Some(1),
+            }],
+        }
+    }
+
+    // ── small pure helpers ────────────────────────────────────────────────
+
+    #[test]
+    fn waveform_key_normalizes_backslashes() {
+        assert_eq!(waveform_key_for_file_path("a\\b\\c.wav"), "a/b/c.wav");
+        assert_eq!(waveform_key_for_file_path("a/b.wav"), "a/b.wav");
+    }
+
+    #[test]
+    fn track_kind_label_maps_each_kind() {
+        assert_eq!(track_kind_label(TrackKind::Audio), "audio");
+        assert_eq!(track_kind_label(TrackKind::Folder), "folder");
+    }
+
+    #[test]
+    fn track_depth_counts_the_parent_chain() {
+        let mut song = base_song();
+        song.tracks = vec![
+            track("root", TrackKind::Folder, None),
+            track("mid", TrackKind::Folder, Some("root")),
+            track("leaf", TrackKind::Audio, Some("mid")),
+        ];
+        assert_eq!(track_depth(&song, "root"), 0);
+        assert_eq!(track_depth(&song, "mid"), 1);
+        assert_eq!(track_depth(&song, "leaf"), 2);
+        assert_eq!(track_depth(&song, "missing"), 0);
+    }
+
+    #[test]
+    fn parse_time_signature_accepts_valid_and_rejects_invalid() {
+        assert_eq!(parse_time_signature("7/8").unwrap(), (7, 8));
+        assert!(parse_time_signature("4").is_err());
+        assert!(parse_time_signature("4/0").is_err());
+        assert!(parse_time_signature("x/4").is_err());
+    }
+
+    #[test]
+    fn beat_frames_scale_with_bpm_and_denominator() {
+        // 120 bpm, quarter note, 48k -> 60/120 * 48000 = 24000 frames.
+        assert_eq!(beat_frames_for_signature(120.0, 4, 48_000), 24_000);
+        // Eighth-note beat unit halves the frames.
+        assert_eq!(beat_frames_for_signature(120.0, 8, 48_000), 12_000);
+        // Guards: never zero.
+        assert!(beat_frames_for_signature(0.0, 0, 0) >= 1);
+    }
+
+    #[test]
+    fn encode_peaks_base64_round_trips_little_endian_f32() {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        let values = [0.0_f32, 1.0, -0.5];
+        let encoded = encode_peaks_base64(&values);
+        let decoded = STANDARD.decode(encoded).unwrap();
+        assert_eq!(decoded.len(), values.len() * 4);
+        let first = f32::from_le_bytes(decoded[0..4].try_into().unwrap());
+        assert_eq!(first, 0.0);
+        let third = f32::from_le_bytes(decoded[8..12].try_into().unwrap());
+        assert_eq!(third, -0.5);
+    }
+
+    #[test]
+    fn encode_peaks_base64_is_empty_for_no_values() {
+        assert_eq!(encode_peaks_base64(&[]), "");
+    }
+
+    // ── label helpers ─────────────────────────────────────────────────────
+
+    #[test]
+    fn jump_trigger_labels_match_the_frontend_contract() {
+        assert_eq!(pending_jump_trigger_label(&JumpTrigger::Immediate), "immediate");
+        assert_eq!(pending_jump_trigger_label(&JumpTrigger::NextMarker), "next_marker");
+        assert_eq!(pending_jump_trigger_label(&JumpTrigger::RegionEnd), "region_end");
+        assert_eq!(
+            pending_jump_trigger_label(&JumpTrigger::AfterBars(4)),
+            "after_bars:4"
+        );
+    }
+
+    #[test]
+    fn transition_labels_match_the_frontend_contract() {
+        assert_eq!(transition_type_label(&TransitionType::Instant), "instant");
+        assert_eq!(
+            transition_type_label(&TransitionType::FadeOut {
+                duration_seconds: 1.5
+            }),
+            "fade_out:1.5"
+        );
+    }
+
+    // ── summaries ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn region_to_summary_carries_fields_through() {
+        let song = base_song();
+        let summary = region_to_summary(&song, &song.regions[0]);
+        assert_eq!(summary.id, "r1");
+        assert_eq!(summary.start_seconds, 0.0);
+        assert_eq!(summary.end_seconds, 12.0);
+        assert_eq!(summary.master.gain, 1.0);
+    }
+
+    #[test]
+    fn marker_to_summary_preserves_digit_and_name() {
+        let song = base_song();
+        let summary = marker_to_warped_summary(&song, &song.section_markers[0]);
+        assert_eq!(summary.id, "m1");
+        assert_eq!(summary.name, "Intro");
+        assert_eq!(summary.digit, Some(1));
+        // No warp -> position unchanged.
+        assert_eq!(summary.start_seconds, 2.0);
+    }
+
+    #[test]
+    fn clip_to_summary_derives_track_name_and_marks_missing_files() {
+        let song = base_song();
+        let cache = WaveformMemoryCache::default();
+        let summary = clip_to_summary(&song, &song.clips[0], &cache, None);
+        assert_eq!(summary.id, "c1");
+        assert_eq!(summary.track_name, "Track t1");
+        assert_eq!(summary.waveform_key, "audio/a.wav");
+        // The file does not exist on disk -> flagged missing.
+        assert!(summary.is_missing);
+        // No warp -> source window passes through.
+        assert_eq!(summary.source_window_duration_seconds, 4.0);
+    }
+
+    #[test]
+    fn clip_to_summary_falls_back_to_track_id_when_track_missing() {
+        let mut song = base_song();
+        song.clips[0].track_id = "ghost".into();
+        let cache = WaveformMemoryCache::default();
+        let summary = clip_to_summary(&song, &song.clips[0], &cache, None);
+        assert_eq!(summary.track_name, "ghost");
+    }
+
+    // ── song_to_view ──────────────────────────────────────────────────────
+
+    #[test]
+    fn song_to_view_maps_top_level_fields() {
+        let song = base_song();
+        let cache = WaveformMemoryCache::default();
+        let view = song_to_view(&song, &cache, 7, None, false);
+        assert_eq!(view.id, "song");
+        assert_eq!(view.title, "Title");
+        assert_eq!(view.bpm, 120.0);
+        assert_eq!(view.project_revision, 7);
+        assert_eq!(view.tracks.len(), 1);
+        assert_eq!(view.clips.len(), 1);
+        assert_eq!(view.regions.len(), 1);
+        assert_eq!(view.section_markers.len(), 1);
+    }
+
+    #[test]
+    fn song_to_view_skips_waveforms_when_not_requested() {
+        let song = base_song();
+        let cache = WaveformMemoryCache::default();
+        let view = song_to_view(&song, &cache, 1, None, false);
+        assert!(view.waveforms.is_empty());
+    }
+
+    #[test]
+    fn song_to_view_duration_covers_the_furthest_clip_and_song_duration() {
+        let mut song = base_song();
+        // Clip ends at 1 + 4 = 5; song.duration is 12 -> view duration >= 12.
+        let view = song_to_view(&song, &WaveformMemoryCache::default(), 1, None, false);
+        assert!(view.duration_seconds >= 12.0);
+
+        // Extend a clip past the song duration -> view duration follows it.
+        song.clips[0].timeline_start_seconds = 20.0;
+        song.clips[0].duration_seconds = 5.0;
+        let view = song_to_view(&song, &WaveformMemoryCache::default(), 1, None, false);
+        assert!(view.duration_seconds >= 25.0);
+    }
+}
