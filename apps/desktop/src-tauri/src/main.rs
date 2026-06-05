@@ -132,7 +132,7 @@ fn main() {
             commands::system::fetch_latest_release,
             commands::system::report_ui_render_metric,
             commands::project::start_create_song,
-            commands::project::import_library_assets_from_dialog,
+            commands::project::start_import_library_assets_from_dialog,
             commands::project::import_audio_files_from_bytes,
             commands::project::import_audio_files_from_paths,
             commands::project::export_region_as_package,

@@ -3,11 +3,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::models::TransportSnapshot;
+use crate::models::{LibraryAssetSummary, TransportSnapshot};
 use crate::state::{DesktopSession, DesktopState, WaveformReadyEvent, WAVEFORM_READY_EVENT};
 
 const TRANSPORT_LIFECYCLE_EVENT: &str = "transport:lifecycle";
 const PROJECT_LOAD_COMPLETE_EVENT: &str = "project:load-complete";
+const LIBRARY_IMPORT_COMPLETE_EVENT: &str = "library:import-complete";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +23,13 @@ struct TransportLifecycleEventPayload {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProjectLoadCompleteEventPayload {
     pub snapshot: Option<TransportSnapshot>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryImportCompleteEventPayload {
+    pub assets: Option<Vec<LibraryAssetSummary>>,
     pub error: Option<String>,
 }
 
@@ -60,6 +68,15 @@ pub(crate) fn emit_project_load_complete_event(
 ) {
     if let Err(error) = app.emit(PROJECT_LOAD_COMPLETE_EVENT, payload) {
         eprintln!("[libretracks-project] failed to emit load-complete event: {error}");
+    }
+}
+
+pub(crate) fn emit_library_import_complete_event(
+    app: &AppHandle,
+    payload: LibraryImportCompleteEventPayload,
+) {
+    if let Err(error) = app.emit(LIBRARY_IMPORT_COMPLETE_EVENT, payload) {
+        eprintln!("[libretracks-library] failed to emit import-complete event: {error}");
     }
 }
 

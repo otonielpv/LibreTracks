@@ -749,6 +749,11 @@ export type LibraryImportProgressEvent = {
   message: string;
 };
 
+export type LibraryImportCompleteEvent = {
+  assets: LibraryAssetSummary[] | null;
+  error: string | null;
+};
+
 export type ProjectLoadProgressEvent = {
   percent: number;
   message: string;

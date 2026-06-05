@@ -850,26 +850,23 @@ impl DesktopSession {
         Ok(inserted.snapshot)
     }
 
-    pub fn import_library_assets_from_dialog(
+    /// Import a set of already-picked audio files into the library, emitting
+    /// progress events as it goes. The native file dialog is opened by the
+    /// caller on the main thread; this runs on a worker thread so the heavy
+    /// decode/persist work does not block the macOS run loop and freeze the
+    /// window (see `start_import_library_assets_from_dialog`).
+    pub fn import_picked_library_assets(
         &mut self,
         app: &AppHandle,
-    ) -> Result<Option<Vec<LibraryAssetSummary>>, DesktopError> {
-        let files = FileDialog::new()
-            .add_filter("Audio", &["wav", "mp3", "flac", "m4a", "aac", "ogg"])
-            .set_title("Importar audio a la libreria")
-            .pick_files();
-
-        let Some(files) = files else {
-            return Ok(None);
-        };
-
+        files: &[PathBuf],
+    ) -> Result<Vec<LibraryAssetSummary>, DesktopError> {
         emit_library_import_progress(
             app,
             10,
             format!("Preparando {} archivo(s) para importar...", files.len()),
         );
 
-        let assets = self.import_audio_files_into_library(&files, |percent, message| {
+        let assets = self.import_audio_files_into_library(files, |percent, message| {
             emit_library_import_progress(app, percent, message);
         })?;
         emit_library_import_progress(app, 85, "Actualizando libreria de la sesion...".into());
@@ -881,7 +878,7 @@ impl DesktopSession {
                 assets.len()
             ),
         );
-        Ok(Some(assets))
+        Ok(assets)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]

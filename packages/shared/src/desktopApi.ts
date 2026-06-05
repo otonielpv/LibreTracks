@@ -7,6 +7,7 @@ import type {
   CreateClipArgs,
   DesktopPerformanceSnapshot,
   LibraryAssetSummary,
+  LibraryImportCompleteEvent,
   LibraryImportProgressEvent,
   ProjectLoadCompleteEvent,
   MidiRawMessage,
@@ -111,6 +112,15 @@ async function listenToProjectLoadComplete(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<ProjectLoadCompleteEvent>("project:load-complete", (event) => {
+    handler(event.payload);
+  });
+}
+
+async function listenToLibraryImportComplete(
+  handler: (event: LibraryImportCompleteEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<LibraryImportCompleteEvent>("library:import-complete", (event) => {
     handler(event.payload);
   });
 }
@@ -378,8 +388,44 @@ export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
   return runProjectLoadCommand("start_pick_and_import_song_from_dialog");
 }
 
+// Mirrors `runProjectLoadCommand`: the native dialog opens on the macOS main
+// thread, the heavy import runs on a Rust worker thread, and the result arrives
+// via the `library:import-complete` event so the window never freezes. The
+// `start_*` command returns `false` when the user cancels the dialog — no event
+// fires then, so we resolve to null without waiting.
 export async function importLibraryAssetsFromDialog(): Promise<LibraryAssetSummary[] | null> {
-  return invokeCommand<LibraryAssetSummary[] | null>("import_library_assets_from_dialog");
+  let dispose: (() => void) | null = null;
+  const clearListener = () => {
+    const unlisten: (() => void) | null = dispose;
+    dispose = null;
+    if (unlisten) {
+      unlisten();
+    }
+  };
+  const completion = new Promise<LibraryAssetSummary[] | null>((resolve, reject) => {
+    void listenToLibraryImportComplete((event) => {
+      clearListener();
+      if (event.error) {
+        reject(new Error(event.error));
+        return;
+      }
+      resolve(event.assets);
+    }).then((unlisten) => {
+      dispose = unlisten;
+    }, reject);
+  });
+
+  try {
+    const started = await invokeCommand<boolean>("start_import_library_assets_from_dialog");
+    if (!started) {
+      clearListener();
+      return null;
+    }
+    return await completion;
+  } catch (error) {
+    clearListener();
+    throw error;
+  }
 }
 
 export async function importAudioFilesFromBytes(

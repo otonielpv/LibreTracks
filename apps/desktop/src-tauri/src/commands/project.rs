@@ -3,8 +3,9 @@ use std::thread;
 use tauri::{AppHandle, Manager, State};
 
 use crate::commands::events::{
-    emit_project_load_complete_event, emit_ready_library_waveforms, emit_transport_lifecycle_event,
-    ProjectLoadCompleteEventPayload,
+    emit_library_import_complete_event, emit_project_load_complete_event,
+    emit_ready_library_waveforms, emit_transport_lifecycle_event,
+    LibraryImportCompleteEventPayload, ProjectLoadCompleteEventPayload,
 };
 use crate::error::DesktopError;
 use crate::models::{LibraryAssetSummary, SongPackageImportResponse, SongView, TransportSnapshot};
@@ -341,19 +342,61 @@ pub fn create_clips_with_auto_tracks(
     Ok(snapshot)
 }
 
+/// Open the native "import audio" dialog on the main thread, then hand the
+/// picked files to a worker thread for the heavy decode/persist work, reporting
+/// the result via the `library:import-complete` event. Running the import on
+/// the main thread froze the macOS run loop and hung the window (same failure
+/// mode the project load/save commands fixed). Returns `false` if the user
+/// cancels the dialog — no event fires in that case, so the frontend resolves
+/// to null without waiting (see `importLibraryAssetsFromDialog` in desktopApi.ts).
 #[tauri::command]
-pub fn import_library_assets_from_dialog(
-    app: AppHandle,
-    state: State<'_, DesktopState>,
-) -> Result<Option<Vec<LibraryAssetSummary>>, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, String> {
+    let files = FileDialog::new()
+        .add_filter("Audio", &["wav", "mp3", "flac", "m4a", "aac", "ogg"])
+        .set_title("Importar audio a la libreria")
+        .pick_files();
 
-    session
-        .import_library_assets_from_dialog(&app)
-        .map_err(|error| error.to_string())
+    let Some(files) = files else {
+        return Ok(false);
+    };
+
+    let worker_app = app.clone();
+    thread::spawn(move || {
+        let state = worker_app.state::<DesktopState>();
+        let result = (|| -> Result<Vec<LibraryAssetSummary>, String> {
+            let mut session = state
+                .session
+                .lock()
+                .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+            session
+                .import_picked_library_assets(&worker_app, &files)
+                .map_err(|error| error.to_string())
+        })();
+
+        match result {
+            Ok(assets) => {
+                emit_library_import_complete_event(
+                    &worker_app,
+                    LibraryImportCompleteEventPayload {
+                        assets: Some(assets),
+                        error: None,
+                    },
+                );
+            }
+            Err(error) => {
+                crate::error_log::write_error(&format!("library import failed: {error}"));
+                emit_library_import_complete_event(
+                    &worker_app,
+                    LibraryImportCompleteEventPayload {
+                        assets: None,
+                        error: Some(error),
+                    },
+                );
+            }
+        }
+    });
+
+    Ok(true)
 }
 
 #[tauri::command]
