@@ -118,7 +118,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libsndfile1-dev
+          sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libsndfile1-dev rpm
           sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
 
       - name: Configure Windows vcpkg
@@ -276,7 +276,7 @@ jobs:
           LT_ENGINE_V2_LIB_DIR: ${{ env.LT_ENGINE_V2_LIB_DIR }}
         with:
           projectPath: 'apps/desktop'
-          args: ${{ matrix.platform == 'macos' && '--verbose --target universal-apple-darwin' || matrix.platform == 'linux' && '--verbose --bundles deb,appimage' || '--verbose' }}
+          args: ${{ matrix.platform == 'macos' && '--verbose --target universal-apple-darwin' || matrix.platform == 'linux' && '--verbose --bundles deb,rpm,appimage' || '--verbose' }}
 
       - name: Validate Linux .deb runtime linkage
         if: matrix.platform == 'linux'
@@ -339,6 +339,36 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Validate Linux .rpm contents
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RPM_PATH="$(find target-desktop-native -type f -name '*.rpm' | head -n1)"
+          if [ -z "$RPM_PATH" ]; then
+            echo "::error::No .rpm bundle found under target-desktop-native"
+            exit 1
+          fi
+          echo "Inspecting: $RPM_PATH"
+          rpm -qp --requires "$RPM_PATH"
+
+          # The .rpm packs the same payload as the .deb: the launcher in
+          # /usr/bin and the private engine .so under /usr/lib/LibreTracks.
+          # rpm2cpio extracts without needing the package installed.
+          PAYLOAD="$(rpm -qpl "$RPM_PATH")"
+          if ! echo "$PAYLOAD" | grep -q '/usr/bin/libretracks-desktop'; then
+            echo "::error::.rpm payload is missing /usr/bin/libretracks-desktop"
+            echo "$PAYLOAD"
+            exit 1
+          fi
+          if ! echo "$PAYLOAD" | grep -q '/usr/lib/LibreTracks/liblt_audio_engine_v2.so'; then
+            echo "::error::.rpm payload is missing the native engine liblt_audio_engine_v2.so"
+            echo "$PAYLOAD"
+            exit 1
+          fi
+          echo "Linux .rpm contents validation passed."
 
       - name: Validate macOS .app bundle dylib wiring
         if: matrix.platform == 'macos'
@@ -467,6 +497,7 @@ jobs:
             find dist/release-assets -type f \( \
               -name '*.AppImage' -o \
               -name '*.deb' -o \
+              -name '*.rpm' -o \
               -name '*.dmg' -o \
               -name '*.exe' -o \
               -name '*.msi' -o \

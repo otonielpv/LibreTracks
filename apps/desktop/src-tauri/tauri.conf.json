@@ -22,7 +22,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "deb", "appimage", "app", "dmg"],
+    "targets": ["nsis", "deb", "rpm", "appimage", "app", "dmg"],
     "resources": {
       "../../remote/dist": "remote-dist",
       "../../../vendor/bin/native/*": "."
@@ -41,6 +41,15 @@
           "librsvg2-2",
           "libasound2t64 | libasound2",
           "xdg-utils"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "webkit2gtk4.1",
+          "gtk3",
+          "libappindicator-gtk3",
+          "librsvg2",
+          "alsa-lib"
         ]
       }
     },
