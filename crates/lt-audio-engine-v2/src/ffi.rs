@@ -99,7 +99,25 @@ pub unsafe fn lt_audio_engine_poll_event(_: *mut LtEngine) -> *const c_char {
 }
 #[cfg(feature = "no-link")]
 pub unsafe fn lt_audio_engine_get_snapshot(_: *mut LtEngine) -> *const c_char {
-    b"{}\0".as_ptr().cast()
+    // The safe wrapper deserializes this into EngineSnapshot, which has a few
+    // non-defaulted fields (current_frame, device, cpu, meters…). Returning a
+    // bare "{}" fails to deserialize, so emit a fully-defaulted snapshot. The
+    // CString is cached per thread so the returned pointer stays valid for the
+    // duration of the call (the wrapper copies it immediately).
+    use std::cell::RefCell;
+    use std::ffi::CString;
+    thread_local! {
+        static SNAPSHOT_JSON: RefCell<Option<CString>> = const { RefCell::new(None) };
+    }
+    SNAPSHOT_JSON.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        if slot.is_none() {
+            let json = serde_json::to_string(&crate::snapshot::EngineSnapshot::default())
+                .unwrap_or_else(|_| "{}".to_string());
+            *slot = Some(CString::new(json).unwrap_or_default());
+        }
+        slot.as_ref().map(|s| s.as_ptr()).unwrap_or(std::ptr::null())
+    })
 }
 #[cfg(feature = "no-link")]
 pub unsafe fn lt_audio_engine_list_devices(_: *mut LtEngine) -> *const c_char {
