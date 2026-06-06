@@ -704,6 +704,9 @@ export function TransportPanelContent() {
   // settings handler factory — instantiated near the top — can read the current
   // value without depending on render-order of the derived memo.
   const selectedOutputChannelCountRef = useRef(1);
+  // Mirrors `audioDeviceDescriptors` so the settings handler factory can look up
+  // a device descriptor at call time without depending on render order.
+  const audioDeviceDescriptorsRef = useRef<AudioDeviceDescriptor[]>([]);
   const hasShownMissingMidiDeviceWarningRef = useRef(false);
   const metronomeLiveRequestIdRef = useRef(0);
   const tapTempoTimesRef = useRef<number[]>([]);
@@ -1555,6 +1558,8 @@ export function TransportPanelContent() {
         persistAudioSettings,
         getSelectedOutputChannelCount: () =>
           selectedOutputChannelCountRef.current,
+        getAudioDeviceDescriptors: () => audioDeviceDescriptorsRef.current,
+        setMidiLearnFeedback,
         setEnabledOutputChannelsDraft,
         t,
         translateLocaleMessage: (savedSettings) =>
@@ -1579,6 +1584,8 @@ export function TransportPanelContent() {
     handleClearOutputChannels,
     handleCommitEnabledOutputChannels,
     handleMetronomeOutputChange,
+    handleAudioOutputDeviceChange,
+    handleResetMidiMappings,
     handleGlobalJumpModeChange,
     handleGlobalJumpBarsChange,
     handleSongJumpTriggerChange,
@@ -6740,52 +6747,6 @@ export function TransportPanelContent() {
     );
   }
 
-  function handleResetMidiMappings() {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        midiMappings: {},
-      }),
-      t("transport.status.midiMappingsReset"),
-    );
-    setMidiLearnFeedback(null);
-  }
-
-  function handleAudioOutputDeviceChange(nextValue: string) {
-    const descriptor = audioDeviceDescriptors.find(
-      (device) => device.stableId === nextValue,
-    );
-    const nextOutputChannelCount =
-      descriptor?.maxOutputChannels ?? selectedOutputChannelCount;
-    const currentSampleRate = appSettingsRef.current.outputSampleRate;
-    const sampleRateSupported =
-      currentSampleRate === null ||
-      Boolean(descriptor?.supportedSampleRates.includes(currentSampleRate));
-    const nextOutputSampleRate = sampleRateSupported ? currentSampleRate : null;
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        selectedOutputDevice: descriptor?.name ?? null,
-        selectedOutputDeviceId: descriptor?.stableId ?? null,
-        selectedOutputDeviceName: descriptor?.name ?? null,
-        outputSampleRate: nextOutputSampleRate,
-        enabledOutputChannels: normalizeEnabledOutputChannelsForOutputCount(
-          appSettingsRef.current.enabledOutputChannels,
-          nextOutputChannelCount,
-        ),
-      }),
-      !sampleRateSupported && currentSampleRate !== null
-        ? t("transport.status.outputSampleRateResetUnsupported", {
-            sampleRate: currentSampleRate,
-            defaultValue:
-              "The selected device does not support {{sampleRate}} Hz. Output sample rate was changed to Auto.",
-          })
-        : descriptor
-          ? t("transport.status.audioDeviceUpdated", { name: descriptor.name })
-          : t("transport.status.audioDeviceSystemDefault"),
-    );
-  }
-
   function handleTrackAudioToChange(trackId: string, nextAudioTo: string) {
     void runAction(async () => {
       const nextSnapshot = await commitTrackMixChange({
@@ -8721,6 +8682,7 @@ export function TransportPanelContent() {
     ),
   );
   selectedOutputChannelCountRef.current = selectedOutputChannelCount;
+  audioDeviceDescriptorsRef.current = audioDeviceDescriptors;
   const effectiveEnabledOutputChannels = useMemo(
     () =>
       normalizeEnabledOutputChannelsForOutputCount(

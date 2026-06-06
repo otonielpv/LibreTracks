@@ -20,6 +20,8 @@ function setup(overrides: Partial<SettingsHandlerDeps> = {}) {
     appSettingsRef,
     persistAudioSettings,
     getSelectedOutputChannelCount: () => 8,
+    getAudioDeviceDescriptors: () => [],
+    setMidiLearnFeedback: vi.fn(),
     setEnabledOutputChannelsDraft,
     t: (key) => key,
     translateLocaleMessage: (saved) => `locale:${saved.locale ?? "system"}`,
@@ -104,6 +106,34 @@ describe("createSettingsHandlers", () => {
     expect(lastPatch(persistAudioSettings).vampBars).toBe(1);
     handlers.handleSongJumpBarsChange(-5);
     expect(lastPatch(persistAudioSettings).songJumpBars).toBe(1);
+  });
+
+  it("handleResetMidiMappings clears mappings and the learn feedback toast", () => {
+    const setMidiLearnFeedback = vi.fn();
+    const { handlers, persistAudioSettings } = setup({ setMidiLearnFeedback });
+    handlers.handleResetMidiMappings();
+    expect(lastPatch(persistAudioSettings).midiMappings).toEqual({});
+    expect(setMidiLearnFeedback).toHaveBeenCalledWith(null);
+  });
+
+  it("handleAudioOutputDeviceChange resets an unsupported sample rate to Auto", () => {
+    const descriptor = {
+      stableId: "dev-1",
+      name: "Dev 1",
+      maxOutputChannels: 2,
+      supportedSampleRates: [48000],
+    } as never;
+    const { handlers, persistAudioSettings, appSettingsRef } = setup({
+      getAudioDeviceDescriptors: () => [descriptor],
+    });
+    appSettingsRef.current = {
+      ...DEFAULT_APP_SETTINGS,
+      outputSampleRate: 96000, // not in supportedSampleRates
+    };
+    handlers.handleAudioOutputDeviceChange("dev-1");
+    const patch = lastPatch(persistAudioSettings);
+    expect(patch.selectedOutputDeviceId).toBe("dev-1");
+    expect(patch.outputSampleRate).toBeNull();
   });
 
   it("handleLocaleChange forwards a null locale and a derived message", () => {

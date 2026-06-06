@@ -2,6 +2,7 @@ import {
   normalizeAppSettings,
   type AppSettings,
   type AudioBackendKind,
+  type AudioDeviceDescriptor,
 } from "@libretracks/shared/models";
 
 import {
@@ -29,6 +30,10 @@ export type SettingsHandlerDeps = {
   ) => void;
   /** The currently selected output device's channel count. */
   getSelectedOutputChannelCount: () => number;
+  /** The current list of audio output device descriptors (read at call time). */
+  getAudioDeviceDescriptors: () => AudioDeviceDescriptor[];
+  /** Clears the MIDI-learn feedback toast when mappings are reset. */
+  setMidiLearnFeedback: (feedback: null) => void;
   setEnabledOutputChannelsDraft: (
     next: number[] | ((previous: number[]) => number[]),
   ) => void;
@@ -47,6 +52,8 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
     appSettingsRef,
     persistAudioSettings,
     getSelectedOutputChannelCount,
+    getAudioDeviceDescriptors,
+    setMidiLearnFeedback,
     setEnabledOutputChannelsDraft,
     t,
     translateLocaleMessage,
@@ -146,6 +153,49 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
 
     handleMetronomeOutputChange(nextValue: string) {
       persistAudioPatch({ metronomeOutput: nextValue }, audioRoutingUpdated());
+    },
+
+    handleAudioOutputDeviceChange(nextValue: string) {
+      const descriptor = getAudioDeviceDescriptors().find(
+        (device) => device.stableId === nextValue,
+      );
+      const nextOutputChannelCount =
+        descriptor?.maxOutputChannels ?? getSelectedOutputChannelCount();
+      const currentSampleRate = appSettingsRef.current.outputSampleRate;
+      const sampleRateSupported =
+        currentSampleRate === null ||
+        Boolean(descriptor?.supportedSampleRates.includes(currentSampleRate));
+      const nextOutputSampleRate = sampleRateSupported
+        ? currentSampleRate
+        : null;
+      persistAudioPatch(
+        {
+          selectedOutputDevice: descriptor?.name ?? null,
+          selectedOutputDeviceId: descriptor?.stableId ?? null,
+          selectedOutputDeviceName: descriptor?.name ?? null,
+          outputSampleRate: nextOutputSampleRate,
+          enabledOutputChannels: normalizeEnabledOutputChannelsForOutputCount(
+            appSettingsRef.current.enabledOutputChannels,
+            nextOutputChannelCount,
+          ),
+        },
+        !sampleRateSupported && currentSampleRate !== null
+          ? t("transport.status.outputSampleRateResetUnsupported", {
+              sampleRate: currentSampleRate,
+              defaultValue:
+                "The selected device does not support {{sampleRate}} Hz. Output sample rate was changed to Auto.",
+            })
+          : descriptor
+            ? t("transport.status.audioDeviceUpdated", {
+                name: descriptor.name,
+              })
+            : t("transport.status.audioDeviceSystemDefault"),
+      );
+    },
+
+    handleResetMidiMappings() {
+      persistAudioPatch({ midiMappings: {} }, t("transport.status.midiMappingsReset"));
+      setMidiLearnFeedback(null);
     },
 
     handleGlobalJumpModeChange(nextValue: AppSettings["globalJumpMode"]) {
