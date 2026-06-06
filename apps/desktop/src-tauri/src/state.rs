@@ -4118,7 +4118,7 @@ impl DesktopSession {
                     emit_project_load_progress(
                         app,
                         92,
-                        "Preparando voces de salto en segundo plano...".into(),
+                        "Preparando voces para reproduccion instantanea...".into(),
                         ready,
                         total,
                         ram_cache_mb,
@@ -4185,9 +4185,10 @@ impl DesktopSession {
     ) -> Result<(), DesktopError> {
         // Bungee voice priming for marker/region/song targets runs on a
         // background worker after LoadSession. Without waiting here, the first
-        // Give the prearm worker a short head start, but keep project opening
-        // responsive while any remaining jump voices continue warming.
-        const PREARM_TIMEOUT: Duration = Duration::from_millis(1_500);
+        // Play after open pays the ~80ms × voices × markers warm cost on the
+        // audio thread → multi-second silence before sound starts. Bound the
+        // wait so a stuck worker can't freeze the open flow forever.
+        const PREARM_TIMEOUT: Duration = Duration::from_secs(30);
         const POLL_INTERVAL: Duration = Duration::from_millis(50);
         const STABLE_REQUIRED: u32 = 3; // ~150ms of idle to absorb re-post races
         const MIN_POSTS: u64 = 2; // initial (sources empty) + re-post once all decoded
@@ -4296,7 +4297,7 @@ impl DesktopSession {
                 emit_project_load_progress(
                     app,
                     percent,
-                    "Preparando voces de salto en segundo plano...".into(),
+                    "Preparando voces para reproduccion instantanea...".into(),
                     ready,
                     total,
                     ram_cache_mb,

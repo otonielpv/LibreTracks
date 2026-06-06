@@ -290,7 +290,6 @@ import { createTapTempoHandler } from "./tempo/tapTempoHandler";
 
 const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
-const WAVEFORM_SUMMARY_BATCH_SIZE = 4;
 const TIMELINE_COLOR_PRESETS = [
   { label: "Rojo", value: "#E35D5B" },
   { label: "Ambar", value: "#E0A83A" },
@@ -3637,16 +3636,36 @@ export function TransportPanelContent() {
         return;
       }
 
-      // Keep project revision refreshes structural; waveform summaries hydrate
-      // separately in small batches so the first project paint stays light.
-      const nextSong = await getSongView({ includeWaveforms: false });
+      // First load needs the full SongView with waveforms; subsequent
+      // revision bumps (transpose, gain, mute, region edit, …) only need
+      // the structural mutations — the waveform cache is still valid.
+      // Use a ref (not songRef which lags by one render) so that overlapping
+      // effect runs during the initial load don't all race to fetch
+      // waveforms before the first setSong has committed.
+      const needsWaveforms = !waveformsHydratedRef.current;
+      // Reserve the slot *before* awaiting so a concurrent revision bump
+      // sees needsWaveforms=false and skips the redundant 27 MB fetch.
+      if (needsWaveforms) {
+        waveformsHydratedRef.current = true;
+      }
+      const nextSong = await getSongView({ includeWaveforms: needsWaveforms });
       if (!active) {
         return;
       }
 
-      setSong(nextSong ? { ...nextSong, waveforms: [] } : null);
-      if (!nextSong) {
-        waveformsHydratedRef.current = false;
+      if (!needsWaveforms && nextSong) {
+        // Preserve previously hydrated waveforms.
+        const previous = songRef.current;
+        setSong({ ...nextSong, waveforms: previous?.waveforms ?? [] });
+      } else {
+        hydrateWaveformCacheFromSong(nextSong);
+        setSong(nextSong);
+        if (!nextSong) {
+          // Fetched-with-waveforms returned null (shouldn't normally happen
+          // mid-session, but be defensive): reset the flag so the next
+          // load will fetch waveforms again.
+          waveformsHydratedRef.current = false;
+        }
       }
       if (nextSong) {
         setIsProjectViewHydrating(false);
@@ -3757,30 +3776,17 @@ export function TransportPanelContent() {
         return;
       }
 
-      for (
-        let index = 0;
-        index < missingWaveformKeys.length && active;
-        index += WAVEFORM_SUMMARY_BATCH_SIZE
-      ) {
-        const batch = missingWaveformKeys.slice(
-          index,
-          index + WAVEFORM_SUMMARY_BATCH_SIZE,
-        );
-        const summaries = await getLibraryWaveformSummaries(batch);
-        if (!active || !summaries.length) {
-          continue;
-        }
-
-        setWaveformCache((current) => ({
-          ...current,
-          ...Object.fromEntries(
-            summaries.map((summary) => [summary.waveformKey, summary]),
-          ),
-        }));
-        if (index + WAVEFORM_SUMMARY_BATCH_SIZE < missingWaveformKeys.length) {
-          await nextPaint();
-        }
+      const summaries = await getLibraryWaveformSummaries(missingWaveformKeys);
+      if (!active || !summaries.length) {
+        return;
       }
+
+      setWaveformCache((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          summaries.map((summary) => [summary.waveformKey, summary]),
+        ),
+      }));
     }
 
     void warmLibraryWaveforms();
@@ -3868,30 +3874,20 @@ export function TransportPanelContent() {
         return;
       }
 
-      for (
-        let index = 0;
-        index < missingWaveformKeys.length && active;
-        index += WAVEFORM_SUMMARY_BATCH_SIZE
-      ) {
-        const batch = missingWaveformKeys.slice(
-          index,
-          index + WAVEFORM_SUMMARY_BATCH_SIZE,
-        );
-        const summaries = await getWaveformSummaries(batch);
-        if (!active || !summaries.length) {
-          continue;
-        }
-
-        setWaveformCache((current) => ({
-          ...current,
-          ...Object.fromEntries(
-            summaries.map((summary) => [summary.waveformKey, summary]),
-          ),
-        }));
-        if (index + WAVEFORM_SUMMARY_BATCH_SIZE < missingWaveformKeys.length) {
-          await nextPaint();
-        }
+      const summaries = await getWaveformSummaries(missingWaveformKeys);
+      if (!active) {
+        return;
       }
+      if (!summaries.length) {
+        return;
+      }
+
+      setWaveformCache((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          summaries.map((summary) => [summary.waveformKey, summary]),
+        ),
+      }));
     }
 
     void loadMissingWaveforms();
