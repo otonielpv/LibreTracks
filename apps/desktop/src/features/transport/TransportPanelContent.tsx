@@ -69,7 +69,6 @@ import {
   getLibraryWaveformSummaries,
   getMidiInputs,
   getRemoteServerInfo,
-  getSettings,
   getSongView,
   getWaveformSummaries,
   importLibraryAssetsFromDialog,
@@ -169,6 +168,7 @@ import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
 import { useLibraryActions } from "./hooks/useLibraryActions";
+import { useSettingsState } from "./hooks/useSettingsState";
 import { useTransportLifecycle } from "./hooks/useTransportLifecycle";
 import { useTransportPolling } from "./hooks/useTransportPolling";
 import { useProjectActions } from "./hooks/useProjectActions";
@@ -521,39 +521,6 @@ export function TransportPanelContent() {
     percent?: number;
     detail?: string;
   } | null>(null);
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [isRemoteModalOpen, setIsRemoteModalOpen] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] =
-    useState<SettingsTab>("audio");
-  const [isSettingsLoading, setIsSettingsLoading] = useState(true);
-  const [isSettingsSaving, setIsSettingsSaving] = useState(false);
-  const [appSettings, setAppSettings] =
-    useState<AppSettings>(DEFAULT_APP_SETTINGS);
-  const [midiLearnFeedback, setMidiLearnFeedback] =
-    useState<MidiLearnFeedback | null>(null);
-  const [midiLearnView, setMidiLearnView] = useState<
-    "core" | "markers" | "songs"
-  >("core");
-  const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(
-    DEFAULT_APP_SETTINGS.metronomeVolume,
-  );
-  // Draft for the Settings → Hardware Outputs checkbox grid. Each tick stays
-  // local until the user hits Apply, so picking N channels does not trigger
-  // N device reopens.
-  const [enabledOutputChannelsDraft, setEnabledOutputChannelsDraft] = useState<
-    number[]
-  >(DEFAULT_APP_SETTINGS.enabledOutputChannels);
-  const [audioDeviceDescriptors, setAudioDeviceDescriptors] = useState<
-    AudioDeviceDescriptor[]
-  >([]);
-  const [audioOutputChannelCounts, setAudioOutputChannelCounts] = useState<
-    Record<string, number>
-  >({});
-  const [defaultAudioOutputDevice, setDefaultAudioOutputDevice] = useState<
-    string | null
-  >(null);
-  const [midiInputDevices, setMidiInputDevices] = useState<string[]>([]);
-  const [isMidiInputRefreshing, setIsMidiInputRefreshing] = useState(false);
   const [remoteServerInfo, setRemoteServerInfo] =
     useState<RemoteServerInfo | null>(null);
   const [tempoDraft, setTempoDraft] = useState("120");
@@ -671,7 +638,6 @@ export function TransportPanelContent() {
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(
     DEFAULT_TIMELINE_VIEWPORT_WIDTH,
   );
-  const appSettingsRef = useRef(appSettings);
   // Mirrors `selectedOutputChannelCount` (derived far below in render) so the
   // settings handler factory — instantiated near the top — can read the current
   // value without depending on render-order of the derived memo.
@@ -682,17 +648,52 @@ export function TransportPanelContent() {
   const hasShownMissingMidiDeviceWarningRef = useRef(false);
   const metronomeLiveRequestIdRef = useRef(0);
   const tapTempoTimesRef = useRef<number[]>([]);
-  useEffect(() => {
-    if (isSettingsModalOpen) {
-      setActiveSettingsTab("audio");
-    }
-  }, [isSettingsModalOpen]);
   const syncSettingsLanguage = useCallback(
     async (settings: AppSettings) => {
       await i18n.changeLanguage(settings.locale || getSystemLanguage());
     },
     [i18n],
   );
+  // Settings / Audio / MIDI configuration state. See hooks/useSettingsState.
+  const {
+    isSettingsModalOpen,
+    setIsSettingsModalOpen,
+    isRemoteModalOpen,
+    setIsRemoteModalOpen,
+    activeSettingsTab,
+    setActiveSettingsTab,
+    isSettingsLoading,
+    setIsSettingsLoading,
+    isSettingsSaving,
+    setIsSettingsSaving,
+    appSettings,
+    setAppSettings,
+    appSettingsRef,
+    midiLearnFeedback,
+    setMidiLearnFeedback,
+    midiLearnView,
+    setMidiLearnView,
+    metronomeVolumeDraft,
+    setMetronomeVolumeDraft,
+    enabledOutputChannelsDraft,
+    setEnabledOutputChannelsDraft,
+    audioDeviceDescriptors,
+    setAudioDeviceDescriptors,
+    audioOutputChannelCounts,
+    setAudioOutputChannelCounts,
+    defaultAudioOutputDevice,
+    setDefaultAudioOutputDevice,
+    midiInputDevices,
+    setMidiInputDevices,
+    isMidiInputRefreshing,
+    setIsMidiInputRefreshing,
+    refreshAudioSettings,
+  } = useSettingsState({ syncSettingsLanguage });
+  useEffect(() => {
+    if (isSettingsModalOpen) {
+      setActiveSettingsTab("audio");
+    }
+  }, [isSettingsModalOpen, setActiveSettingsTab]);
   const formatErrorStatus = useCallback(
     (error: unknown) => {
       // Log to devtools so we can grab the full string even after the
@@ -881,10 +882,6 @@ export function TransportPanelContent() {
       );
     }
   }, [isSettingsModalOpen]);
-
-  useEffect(() => {
-    appSettingsRef.current = appSettings;
-  }, [appSettings]);
 
   useEffect(() => {
     if (!isTauriApp) {
@@ -1343,22 +1340,6 @@ export function TransportPanelContent() {
     },
     [hydrateWaveformCacheFromSong],
   );
-
-  const refreshAudioSettings = useCallback(async () => {
-    const [nextSettings, nextAudioDevices, nextMidiInputs] = await Promise.all([
-      getSettings(),
-      getAudioOutputDevices(),
-      getMidiInputs(),
-    ]);
-    const normalizedSettings = normalizeAppSettings(nextSettings);
-    setAppSettings(normalizedSettings);
-    await syncSettingsLanguage(normalizedSettings);
-    setAudioDeviceDescriptors(nextAudioDevices.deviceDescriptors ?? []);
-    setAudioOutputChannelCounts(nextAudioDevices.channelCounts ?? {});
-    setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
-    setMidiInputDevices(nextMidiInputs);
-    return normalizedSettings;
-  }, [syncSettingsLanguage]);
 
   useEffect(() => {
     if (!isTauriApp) {
