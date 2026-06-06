@@ -88,6 +88,13 @@ public:
 
     // Check whether a block is cached (worker thread decision).
     bool has_block(const Id& source_id, int block_index) const;
+    void append_missing_blocks(const Id& source_id,
+                               int first_block,
+                               int last_block,
+                               std::vector<int>& out) const;
+    void append_missing_blocks(const Id& source_id,
+                               const std::vector<int>& block_indices,
+                               std::vector<int>& out) const;
 
     int    block_frames()  const noexcept { return block_frames_; }
     int    block_index_for(Frame frame) const noexcept {

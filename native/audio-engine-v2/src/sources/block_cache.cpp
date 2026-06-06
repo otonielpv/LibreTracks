@@ -107,6 +107,39 @@ bool BlockCache::has_block(const Id& source_id, int block_index) const {
     return it->second->ready.load(std::memory_order_acquire);
 }
 
+void BlockCache::append_missing_blocks(const Id& source_id,
+                                       int first_block,
+                                       int last_block,
+                                       std::vector<int>& out) const {
+    if (last_block < first_block)
+        return;
+    std::lock_guard<std::mutex> lk(mtx_);
+    for (int block = std::max(0, first_block); block <= last_block; ++block) {
+        CacheKey key{ source_id, block };
+        auto it = blocks_.find(key);
+        if (it == blocks_.end() ||
+            !it->second->ready.load(std::memory_order_acquire)) {
+            out.push_back(block);
+        }
+    }
+}
+
+void BlockCache::append_missing_blocks(const Id& source_id,
+                                       const std::vector<int>& block_indices,
+                                       std::vector<int>& out) const {
+    std::lock_guard<std::mutex> lk(mtx_);
+    for (int block : block_indices) {
+        if (block < 0)
+            continue;
+        CacheKey key{ source_id, block };
+        auto it = blocks_.find(key);
+        if (it == blocks_.end() ||
+            !it->second->ready.load(std::memory_order_acquire)) {
+            out.push_back(block);
+        }
+    }
+}
+
 CacheDiagnostics BlockCache::diagnostics() const {
     CacheDiagnostics d;
     {

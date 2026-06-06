@@ -605,10 +605,7 @@ void SourceManager::request_range(const Id& source_id, Frame source_frame, int f
 
     std::vector<int> missing_blocks;
     missing_blocks.reserve(static_cast<std::size_t>(last - first + 1));
-    for (int block = first; block <= last; ++block) {
-        if (!block_cache_.has_block(source_id, block))
-            missing_blocks.push_back(block);
-    }
+    block_cache_.append_missing_blocks(source_id, first, last, missing_blocks);
     if (missing_blocks.empty())
         return;
 
@@ -825,10 +822,7 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
 
     std::vector<int> missing;
     missing.reserve(block_indices.size());
-    for (int block_index : block_indices) {
-        if (block_index >= 0 && !block_cache_.has_block(source_id, block_index))
-            missing.push_back(block_index);
-    }
+    block_cache_.append_missing_blocks(source_id, block_indices, missing);
     if (missing.empty())
         return;
 
