@@ -550,6 +550,39 @@ TEST_CASE("TrackRenderer output is identical for memory and streaming source pat
     }
 }
 
+TEST_CASE("request_range prepares a multi-block streaming window") {
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 5;
+    auto samples = make_reference_audio(kFrames, kChannels);
+
+    SourceManager manager;
+    const Id source_id = "request-range-source";
+    manager.register_source(source_id, "request-range-source.wav");
+    REQUIRE(manager.store_decoded_source(
+        source_id, samples, kChannels, kSampleRate, kFrames).is_ok());
+
+    const Frame start = kDefaultBlockFrames + 123;
+    constexpr int kReadFrames = kDefaultBlockFrames * 2 + 321;
+    manager.request_range(source_id, start, kReadFrames);
+
+    const auto source = manager.get_shared(source_id);
+    REQUIRE(static_cast<bool>(source));
+    for (int spin = 0; spin < 200 && !source->is_range_ready(start, kReadFrames); ++spin)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    REQUIRE(source->is_range_ready(start, kReadFrames));
+
+    std::vector<float> expected;
+    expected.reserve(static_cast<std::size_t>(kReadFrames) * kChannels);
+    for (Frame f = 0; f < kReadFrames; ++f) {
+        const std::size_t base =
+            static_cast<std::size_t>((start + f) * kChannels);
+        expected.push_back(samples[base]);
+        expected.push_back(samples[base + 1]);
+    }
+    require_audio_equal(read_planar(*source, start, kReadFrames), expected);
+}
+
 TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
     constexpr int kChannels = 2;
     constexpr int kSampleRate = 48000;

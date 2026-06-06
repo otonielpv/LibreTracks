@@ -602,8 +602,30 @@ void SourceManager::request_range(const Id& source_id, Frame source_frame, int f
         start + static_cast<Frame>(frame_count) - 1);
     const int first = block_cache_.block_index_for(start);
     const int last = block_cache_.block_index_for(end);
-    for (int block = first; block <= last; ++block)
-        request_block(source_id, block);
+
+    std::vector<int> missing_blocks;
+    missing_blocks.reserve(static_cast<std::size_t>(last - first + 1));
+    for (int block = first; block <= last; ++block) {
+        if (!block_cache_.has_block(source_id, block))
+            missing_blocks.push_back(block);
+    }
+    if (missing_blocks.empty())
+        return;
+
+    bool queued_any = false;
+    {
+        std::lock_guard lock(fill_mtx_);
+        for (int block : missing_blocks) {
+            CacheKey key{source_id, block};
+            if (queued_blocks_.find(key) != queued_blocks_.end())
+                continue;
+            queued_blocks_[key] = true;
+            fill_queue_.push(key);
+            queued_any = true;
+        }
+    }
+    if (queued_any)
+        fill_cv_.notify_one();
 }
 
 CacheDiagnostics SourceManager::cache_diagnostics() const {
