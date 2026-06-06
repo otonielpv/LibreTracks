@@ -23,7 +23,10 @@ type UseProjectActionsProps = {
     detail?: string;
   } | null) => void;
   registerProjectLoadProgressListener: () => Promise<() => void>;
-  refreshSongView: (options?: { sync?: boolean }) => Promise<unknown>;
+  refreshSongView: (options?: {
+    sync?: boolean;
+    includeWaveforms?: boolean;
+  }) => Promise<unknown>;
   refreshLibraryState: (options?: {
     preserveAssets?: LibraryAssetSummary[];
   }) => Promise<LibraryAssetSummary[]>;
@@ -101,7 +104,10 @@ export function useProjectActions({
             }),
             percent: 96,
           });
-          const nextSong = await refreshSongView({ sync: true });
+          const nextSong = await refreshSongView({
+            includeWaveforms: false,
+            sync: true,
+          });
           void appendDebugLog(
             `[frontend:open] refreshSongView resolved hasSong=${Boolean(nextSong)}`,
           ).catch(() => {});
@@ -155,7 +161,10 @@ export function useProjectActions({
             }),
             percent: 96,
           });
-          const nextSong = await refreshSongView({ sync: true });
+          const nextSong = await refreshSongView({
+            includeWaveforms: false,
+            sync: true,
+          });
           applyPlaybackSnapshot(nextSnapshot);
           await refreshLibraryState();
           setActiveSidebarTab(null);
