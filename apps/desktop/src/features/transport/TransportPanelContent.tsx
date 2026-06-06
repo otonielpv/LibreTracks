@@ -282,6 +282,7 @@ import {
 } from "./helpers";
 import { createSettingsHandlers } from "./settings/settingsHandlers";
 import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandlers";
+import { createLibraryHandlers } from "./library/libraryHandlers";
 
 const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
@@ -1226,6 +1227,12 @@ export function TransportPanelContent() {
     setLibraryImportProgress,
     setDeletingLibraryFilePath,
   } = useLibraryActions({ playbackSongDir });
+  // Mirror library assets / song dir so the library handler factory reads the
+  // live values inside its async runAction bodies without capturing stale state.
+  const libraryAssetsRef = useRef(libraryAssets);
+  libraryAssetsRef.current = libraryAssets;
+  const playbackSongDirRef = useRef(playbackSongDir);
+  playbackSongDirRef.current = playbackSongDir;
   const pendingAudioImports = useTransportStore(
     (state) => state.pendingAudioImports,
   );
@@ -1642,6 +1649,55 @@ export function TransportPanelContent() {
     handleMidiInputDeviceChange,
     handleRefreshMidiInputDevices,
   } = metronomeDeviceHandlers;
+
+  // Library asset/folder mutation handlers. See ./library/libraryHandlers.
+  const libraryHandlers = useMemo(
+    () =>
+      createLibraryHandlers({
+        getPlaybackSongDir: () => playbackSongDirRef.current,
+        getLibraryAssets: () => libraryAssetsRef.current,
+        runAction,
+        waitForUiPaint,
+        setStatus,
+        setLibraryAssets,
+        setLibraryFolders,
+        setLibraryClipPreview,
+        setIsImportingLibrary,
+        setLibraryImportProgress,
+        setDeletingLibraryFilePath,
+        loadLibraryState,
+        t,
+        importLibraryAssetsFromDialog,
+        getLibraryFolders,
+        deleteLibraryAsset,
+        createLibraryFolder,
+        moveLibraryAsset,
+        renameLibraryFolder,
+        deleteLibraryFolder,
+        confirm: (message) => window.confirm(message),
+        prompt: (message, defaultValue) => window.prompt(message, defaultValue),
+      }),
+    [
+      runAction,
+      setStatus,
+      loadLibraryState,
+      setLibraryAssets,
+      setLibraryFolders,
+      setLibraryClipPreview,
+      setIsImportingLibrary,
+      setLibraryImportProgress,
+      setDeletingLibraryFilePath,
+      t,
+    ],
+  );
+  const {
+    handleImportLibraryAssetsClick,
+    handleDeleteLibraryAssets,
+    handleCreateLibraryFolder,
+    handleMoveLibraryAssets,
+    handleRenameLibraryFolder,
+    handleDeleteLibraryFolder,
+  } = libraryHandlers;
 
   const applyPitchPrepareSnapshot = useCallback(
     (pitch: PitchPrepareSummary | null | undefined) => {
@@ -6775,193 +6831,6 @@ export function TransportPanelContent() {
       },
       t("transport.status.midiWarningHidden"),
     );
-  }
-
-  async function handleImportLibraryAssetsClick() {
-    if (!playbackSongDir) {
-      setStatus(t("transport.status.importRequiresSession"));
-      return;
-    }
-
-    setIsImportingLibrary(true);
-    setLibraryImportProgress(null);
-    setStatus(t("transport.status.libraryImportStarting"));
-    await waitForUiPaint();
-    await runAction(async () => {
-      const assets = await importLibraryAssetsFromDialog();
-      if (!assets) {
-        setLibraryImportProgress(null);
-        return;
-      }
-
-      setLibraryAssets(assets);
-      setLibraryFolders(await getLibraryFolders());
-      setStatus(t("transport.status.libraryUpdated", { count: assets.length }));
-    });
-    setIsImportingLibrary(false);
-    setLibraryImportProgress(null);
-  }
-
-  async function handleDeleteLibraryAssets(
-    assetsToDelete: LibraryAssetSummary[],
-  ) {
-    const uniqueAssets = [
-      ...new Map(
-        assetsToDelete.map((asset) => [asset.filePath, asset]),
-      ).values(),
-    ];
-    if (!uniqueAssets.length) {
-      return;
-    }
-
-    const confirmationMessage =
-      uniqueAssets.length === 1
-        ? t("transport.confirm.deleteLibraryAsset", {
-            name: uniqueAssets[0].fileName,
-          })
-        : t("transport.confirm.deleteLibraryAssets", {
-            count: uniqueAssets.length,
-          });
-    if (!window.confirm(confirmationMessage)) {
-      return;
-    }
-
-    try {
-      await runAction(async () => {
-        let nextAssets = libraryAssets;
-        const deletedFilePaths = new Set(
-          uniqueAssets.map((asset) => asset.filePath),
-        );
-
-        for (const asset of uniqueAssets) {
-          setDeletingLibraryFilePath(asset.filePath);
-          nextAssets = await deleteLibraryAsset(asset.filePath);
-        }
-
-        const { folders } = await loadLibraryState();
-        setLibraryAssets(nextAssets);
-        setLibraryFolders(folders);
-        setLibraryClipPreview((current) =>
-          current.filter((preview) => !deletedFilePaths.has(preview.filePath)),
-        );
-        setStatus(
-          uniqueAssets.length === 1
-            ? t("transport.status.libraryAssetDeleted", {
-                name: uniqueAssets[0].fileName,
-              })
-            : t("transport.status.libraryAssetsDeleted", {
-                count: uniqueAssets.length,
-              }),
-        );
-      });
-    } finally {
-      setDeletingLibraryFilePath(null);
-    }
-  }
-
-  async function handleCreateLibraryFolder() {
-    if (!playbackSongDir) {
-      setStatus(t("transport.status.createFolderRequiresSession"));
-      return;
-    }
-
-    const folderPath = window.prompt(
-      t("transport.prompt.virtualFolderName"),
-      t("transport.defaults.virtualFolderName"),
-    );
-    if (folderPath === null) {
-      return;
-    }
-
-    await runAction(async () => {
-      const folders = await createLibraryFolder(folderPath);
-      setLibraryFolders(folders);
-      setStatus(
-        t("transport.status.virtualFolderCreated", {
-          name: folderPath.trim() || t("transport.defaults.unnamedFolder"),
-        }),
-      );
-    });
-  }
-
-  async function handleMoveLibraryAssets(
-    filePaths: string[],
-    newFolderPath: string | null,
-  ) {
-    const uniqueFilePaths = [...new Set(filePaths)];
-    if (!uniqueFilePaths.length) {
-      return;
-    }
-
-    await runAction(async () => {
-      let nextAssets = libraryAssets;
-
-      for (const filePath of uniqueFilePaths) {
-        nextAssets = await moveLibraryAsset(filePath, newFolderPath);
-      }
-
-      const { folders } = await loadLibraryState();
-      setLibraryAssets(nextAssets);
-      setLibraryFolders(folders);
-      setStatus(
-        newFolderPath
-          ? t("transport.status.libraryAssetsMoved", {
-              count: uniqueFilePaths.length,
-              name: newFolderPath,
-            })
-          : t("transport.status.libraryAssetsMovedRoot", {
-              count: uniqueFilePaths.length,
-            }),
-      );
-    });
-  }
-
-  async function handleRenameLibraryFolder(folderPath: string) {
-    if (!playbackSongDir) {
-      setStatus(t("transport.status.renameFolderRequiresSession"));
-      return;
-    }
-
-    const nextFolderPath = window.prompt(
-      t("transport.prompt.virtualFolderRename"),
-      folderPath,
-    );
-    if (nextFolderPath === null) {
-      return;
-    }
-
-    await runAction(async () => {
-      const assets = await renameLibraryFolder(folderPath, nextFolderPath);
-      const { folders } = await loadLibraryState();
-      setLibraryAssets(assets);
-      setLibraryFolders(folders);
-      setStatus(
-        t("transport.status.virtualFolderRenamed", {
-          from: folderPath,
-          to: nextFolderPath.trim(),
-        }),
-      );
-    });
-  }
-
-  async function handleDeleteLibraryFolder(folderPath: string) {
-    if (
-      !window.confirm(
-        t("transport.confirm.deleteLibraryFolder", { name: folderPath }),
-      )
-    ) {
-      return;
-    }
-
-    await runAction(async () => {
-      const assets = await deleteLibraryFolder(folderPath);
-      const { folders } = await loadLibraryState();
-      setLibraryAssets(assets);
-      setLibraryFolders(folders);
-      setStatus(
-        t("transport.status.virtualFolderDeleted", { name: folderPath }),
-      );
-    });
   }
 
   function resolveDraggedLibraryAsset(
