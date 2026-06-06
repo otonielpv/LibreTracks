@@ -281,6 +281,7 @@ import {
   waitForUiPaint,
 } from "./helpers";
 import { createSettingsHandlers } from "./settings/settingsHandlers";
+import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandlers";
 
 const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
@@ -1588,6 +1589,52 @@ export function TransportPanelContent() {
     handleTimelineNavigationSchemeChange,
     handleLocaleChange,
   } = settingsHandlers;
+
+  // Metronome realtime + audio-device/MIDI refresh handlers. Like
+  // settingsHandlers, instantiated once with stable deps so SettingsPanel's
+  // handler props stay referentially stable. `isMidiInputRefreshing` is read
+  // through a getter so the guard sees the live flag without re-creating the
+  // factory. See ./settings/metronomeDeviceHandlers.
+  const isMidiInputRefreshingRef = useRef(isMidiInputRefreshing);
+  isMidiInputRefreshingRef.current = isMidiInputRefreshing;
+  const metronomeDeviceHandlers = useMemo(
+    () =>
+      createMetronomeDeviceHandlers({
+        appSettingsRef,
+        persistAudioSettings,
+        setAppSettings,
+        setMetronomeVolumeDraft,
+        setIsSettingsLoading,
+        setIsMidiInputRefreshing,
+        setAudioDeviceDescriptors,
+        setAudioOutputChannelCounts,
+        setDefaultAudioOutputDevice,
+        setMidiInputDevices,
+        metronomeLiveRequestIdRef,
+        isTauriApp,
+        isMidiInputRefreshing: () => isMidiInputRefreshingRef.current,
+        runAction,
+        setStatus,
+        formatErrorStatus,
+        t,
+        getAudioOutputDevices,
+        getMidiInputs,
+        setMetronomeSoundRealtime,
+        setMetronomeEnabledRealtime,
+        setMetronomeVolumeRealtime,
+        saveSettings,
+      }),
+    [persistAudioSettings, runAction, setStatus, formatErrorStatus, t],
+  );
+  const {
+    handleRefreshAudioDevices,
+    handleMetronomeSoundChange,
+    handleMetronomeEnabledChange,
+    handleMetronomeVolumeDraftChange,
+    commitMetronomeVolumeDraft,
+    handleMidiInputDeviceChange,
+    handleRefreshMidiInputDevices,
+  } = metronomeDeviceHandlers;
 
   const applyPitchPrepareSnapshot = useCallback(
     (pitch: PitchPrepareSummary | null | undefined) => {
@@ -6739,55 +6786,6 @@ export function TransportPanelContent() {
     );
   }
 
-  function handleRefreshAudioDevices() {
-    setIsSettingsLoading(true);
-    void runAction(async () => {
-      try {
-        const nextAudioDevices = await getAudioOutputDevices({ force: true });
-        setAudioDeviceDescriptors(nextAudioDevices.deviceDescriptors ?? []);
-        setAudioOutputChannelCounts(nextAudioDevices.channelCounts ?? {});
-        setDefaultAudioOutputDevice(nextAudioDevices.defaultDevice ?? null);
-        setStatus(
-          t("transport.status.audioDevicesRefreshed", {
-            defaultValue: "Audio device list refreshed.",
-          }),
-        );
-      } finally {
-        setIsSettingsLoading(false);
-      }
-    });
-  }
-
-  function handleMetronomeSoundChange(patch: Partial<AppSettings>) {
-    // Realtime path: push the new click config straight to the engine and
-    // persist it, WITHOUT going through update_audio_settings (which reopens
-    // the audio device and would pause/resume playback on every tweak).
-    const nextSettings = normalizeAppSettings({
-      ...appSettingsRef.current,
-      ...patch,
-    });
-
-    appSettingsRef.current = nextSettings;
-    setAppSettings(nextSettings);
-
-    void runAction(async () => {
-      try {
-        const savedSettings = normalizeAppSettings(
-          await setMetronomeSoundRealtime(nextSettings),
-        );
-        appSettingsRef.current = savedSettings;
-        setAppSettings(savedSettings);
-        setStatus(
-          t("transport.status.metronomeSoundUpdated", {
-            defaultValue: "Metronome sound updated.",
-          }),
-        );
-      } catch (error) {
-        setStatus(formatErrorStatus(error));
-      }
-    });
-  }
-
   function handleTrackAudioToChange(trackId: string, nextAudioTo: string) {
     void runAction(async () => {
       const nextSnapshot = await commitTrackMixChange({
@@ -6801,118 +6799,6 @@ export function TransportPanelContent() {
         }),
       );
     });
-  }
-
-  function handleMetronomeEnabledChange(nextValue: boolean) {
-    const nextSettings = normalizeAppSettings({
-      ...appSettingsRef.current,
-      metronomeEnabled: nextValue,
-    });
-
-    appSettingsRef.current = nextSettings;
-    setAppSettings(nextSettings);
-
-    void runAction(async () => {
-      await setMetronomeEnabledRealtime(nextValue);
-      const savedSettings = normalizeAppSettings(
-        await saveSettings(nextSettings),
-      );
-      appSettingsRef.current = savedSettings;
-      setAppSettings(savedSettings);
-      setStatus(
-        nextValue
-          ? t("transport.status.metronomeEnabled")
-          : t("transport.status.metronomeDisabled"),
-      );
-    });
-  }
-
-  function handleMetronomeVolumeDraftChange(nextValue: number) {
-    const normalizedValue = Math.max(0, Math.min(1, nextValue));
-    const nextSettings = normalizeAppSettings({
-      ...appSettingsRef.current,
-      metronomeVolume: normalizedValue,
-    });
-    const requestId = metronomeLiveRequestIdRef.current + 1;
-
-    metronomeLiveRequestIdRef.current = requestId;
-    appSettingsRef.current = nextSettings;
-    setMetronomeVolumeDraft(normalizedValue);
-    setAppSettings(nextSettings);
-
-    void setMetronomeVolumeRealtime(normalizedValue)
-      .then(() => {
-        if (metronomeLiveRequestIdRef.current !== requestId) {
-          return;
-        }
-      })
-      .catch((error) => {
-        if (metronomeLiveRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        setStatus(formatErrorStatus(error));
-      });
-  }
-
-  function commitMetronomeVolumeDraft(nextValue: number) {
-    const normalizedValue = Math.max(0, Math.min(1, nextValue));
-    const nextSettings = normalizeAppSettings({
-      ...appSettingsRef.current,
-      metronomeVolume: normalizedValue,
-    });
-
-    appSettingsRef.current = nextSettings;
-    setMetronomeVolumeDraft(normalizedValue);
-    setAppSettings(nextSettings);
-
-    void runAction(async () => {
-      try {
-        await setMetronomeVolumeRealtime(normalizedValue);
-        const savedSettings = normalizeAppSettings(
-          await saveSettings(nextSettings),
-        );
-        appSettingsRef.current = savedSettings;
-        setAppSettings(savedSettings);
-        setStatus(
-          t("transport.status.metronomeVolumeUpdated", {
-            volume: Math.round(savedSettings.metronomeVolume * 100),
-          }),
-        );
-      } catch (error) {
-        setStatus(formatErrorStatus(error));
-      }
-    });
-  }
-
-
-  function handleMidiInputDeviceChange(nextValue: string) {
-    persistAudioSettings(
-      {
-        ...appSettings,
-        selectedMidiDevice: nextValue || null,
-      },
-      nextValue
-        ? t("transport.status.midiDeviceUpdated", { name: nextValue })
-        : t("transport.status.midiDeviceDisabled"),
-    );
-  }
-
-  async function handleRefreshMidiInputDevices() {
-    if (!isTauriApp || isMidiInputRefreshing) {
-      return;
-    }
-
-    setIsMidiInputRefreshing(true);
-    try {
-      const nextMidiInputs = await getMidiInputs();
-      setMidiInputDevices(nextMidiInputs);
-      setStatus(t("transport.status.midiDevicesRefreshed"));
-    } catch (error) {
-      setStatus(formatErrorStatus(error));
-    } finally {
-      setIsMidiInputRefreshing(false);
-    }
   }
 
   function handleDismissMissingMidiDeviceWarning() {
