@@ -12,9 +12,6 @@ $toolchainCandidates = @(
   (Join-Path $repoRoot "vcpkg\scripts\buildsystems\vcpkg.cmake"),
   "D:\Repos\vcpkg\scripts\buildsystems\vcpkg.cmake"
 )
-if (-not $env:LIBRETRACKS_ENGINE_V2_BUNGEE -and $env:LIBRETRACKS_ENGINE_V2_RUBBERBAND) {
-  $env:LIBRETRACKS_ENGINE_V2_BUNGEE = $env:LIBRETRACKS_ENGINE_V2_RUBBERBAND
-}
 if (-not $env:LIBRETRACKS_ENGINE_V2_BUNGEE) {
   $env:LIBRETRACKS_ENGINE_V2_BUNGEE = "1"
 }
@@ -34,10 +31,6 @@ if (-not $env:CMAKE_TOOLCHAIN_FILE) {
 }
 $useBungeeRequested = if ($env:LIBRETRACKS_ENGINE_V2_BUNGEE -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
 $useFFmpeg = if ($env:LIBRETRACKS_ENGINE_V2_FFMPEG -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
-# RubberBand is only a fallback/debug backend now. Keep it out of the normal
-# desktop build unless explicitly requested so warp uses the Bungee path.
-$useRubberBand = if ($env:LIBRETRACKS_ENGINE_V2_RUBBERBAND -match '^(1|true|TRUE|yes|YES|on|ON)$') { "ON" } else { "OFF" }
-$vcpkgManifestFeatures = if ($useRubberBand -eq "ON") { "rubberband" } else { "" }
 
 function Test-CandidateChildPath {
   param(
@@ -92,9 +85,7 @@ $toolchainRoot = Join-Path $env:USERPROFILE ".rustup\toolchains"
 $toolchainBin = $null
 $scopeCppSdkRoot = Join-Path ${env:ProgramFiles} "Microsoft Visual Studio\2022\Community\SDK\ScopeCppSDK\vc15\VC"
 
-# Inyectar librería de RubberBand para el DSP
-
-# ... y además le decimos a Windows dónde buscar las otras DLLs (sleef, samplerate)
+# Le decimos a Windows dónde buscar las DLLs del DSP (sleef, samplerate)
 
 function Add-EnvironmentSegment {
   param(
@@ -334,7 +325,6 @@ $useR8Brain = "ON"
 
 Write-Host "Audio Engine v2 Bungee requested: $useBungeeRequested"
 Write-Host "Audio Engine v2 Bungee: $useBungee"
-Write-Host "Audio Engine v2 RubberBand: $useRubberBand"
 if ($bungeeDir) {
   Write-Host "LT_BUNGEE_DIR: $bungeeDir"
 }
@@ -371,9 +361,7 @@ $cmakeConfigureArgs = @(
   "-DLT_ENGINE_USE_BUNGEE=$useBungee",
   "-DLT_ENGINE_USE_FFMPEG=$useFFmpeg",
   "-DLT_ENGINE_USE_LIBSNDFILE=$useLibSndFile",
-  "-DLT_ENGINE_USE_R8BRAIN=$useR8Brain",
-  "-DLT_ENGINE_USE_RUBBERBAND=$useRubberBand",
-  "-DVCPKG_MANIFEST_FEATURES=$vcpkgManifestFeatures"
+  "-DLT_ENGINE_USE_R8BRAIN=$useR8Brain"
 )
 if ($useBungee -eq "ON") {
   $cmakeConfigureArgs += "-DLT_BUNGEE_DIR=$bungeeDir"

@@ -45,7 +45,6 @@ set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
 add_library(lt_deps_juce       INTERFACE)
 add_library(lt_deps_decoder    INTERFACE)
 add_library(lt_deps_resampler  INTERFACE)
-add_library(lt_deps_warp       INTERFACE)
 
 # ── JUCE ──────────────────────────────────────────────────────────────────
 if(LT_ENGINE_USE_JUCE)
@@ -211,48 +210,7 @@ elseif(LT_ENGINE_USE_LIBSAMPLERATE)
 endif()
 
 # ── WARP (time-stretch) ───────────────────────────────────────────────────
-# RubberBand R3 ("Finer") is the warp backend. Comes from vcpkg via the
-# manifest in native/audio-engine-v2/vcpkg.json. find_package first
-# (system / vcpkg config), then fallback to a manual find_path /
-# find_library. Release/Debug split so MSVC links the right variant.
-#
-# Signalsmith Stretch was the original default (the offline bench ranked
-# it close to RubberBand) but engine-level A/B testing showed it producing
-# audible periodic clicks on real polyphonic material. See
-# `bench/WARP_BACKEND_COMPARISON.md` for the writeup; the previous
-# Signalsmith wrapper lived alongside this code in commit b8663e1.
-set(LT_ENGINE_HAVE_RUBBERBAND_RESOLVED OFF)
-
-if(LT_ENGINE_USE_RUBBERBAND)
-    find_package(rubberband CONFIG QUIET)
-    if(rubberband_FOUND)
-        target_link_libraries(lt_deps_warp INTERFACE rubberband::rubberband)
-        set(LT_ENGINE_HAVE_RUBBERBAND_RESOLVED ON)
-        message(STATUS "Warp backend: RubberBand from find_package")
-    else()
-        find_path(_lt_rb_inc rubberband/RubberBandStretcher.h)
-        find_library(_lt_rb_lib_release NAMES rubberband
-            PATHS "${_lt_rb_inc}/.." PATH_SUFFIXES lib NO_DEFAULT_PATH)
-        find_library(_lt_rb_lib_debug NAMES rubberband
-            PATHS "${_lt_rb_inc}/.." PATH_SUFFIXES debug/lib NO_DEFAULT_PATH)
-        if(NOT _lt_rb_lib_release)
-            find_library(_lt_rb_lib_release NAMES rubberband)
-        endif()
-        if(_lt_rb_inc AND _lt_rb_lib_release)
-            target_include_directories(lt_deps_warp INTERFACE "${_lt_rb_inc}")
-            if(_lt_rb_lib_debug)
-                target_link_libraries(lt_deps_warp INTERFACE
-                    "$<IF:$<CONFIG:Debug>,${_lt_rb_lib_debug},${_lt_rb_lib_release}>")
-            else()
-                target_link_libraries(lt_deps_warp INTERFACE
-                    "${_lt_rb_lib_release}")
-            endif()
-            set(LT_ENGINE_HAVE_RUBBERBAND_RESOLVED ON)
-            message(STATUS "Warp backend: RubberBand release="
-                "${_lt_rb_lib_release} debug=${_lt_rb_lib_debug}")
-        else()
-            message(WARNING "LT_ENGINE_USE_RUBBERBAND=ON but RubberBand not "
-                            "found via find_package or find_path. Backend disabled.")
-        endif()
-    endif()
-endif()
+# Warp (time-stretch) now runs through the same Bungee voice as pitch shift
+# (see WARP_BACKEND_NOTES.md). The previous RubberBand warp fallback and its
+# WarpVoiceManager were removed; nothing in this engine links a warp backend
+# separately any more.

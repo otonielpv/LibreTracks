@@ -3,7 +3,6 @@
 #include <lt_engine/render/fade_processor.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
-#include <lt_engine/pitch/warp_voice_manager.h>
 #include <algorithm>
 #include <array>
 #include <chrono>

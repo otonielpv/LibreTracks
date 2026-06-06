@@ -113,43 +113,21 @@ target_link_libraries(lt_audio_engine_v2
         lt_deps_decoder
         lt_deps_resampler
         lt_deps_json
-        lt_deps_warp
 )
-
-if(LT_ENGINE_HAVE_RUBBERBAND_RESOLVED)
-    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HAVE_RUBBERBAND=1)
-    # Copy the RubberBand DLL next to the engine on Windows so the loaded
-    # process can resolve it. vcpkg ships rubberband-3.dll under bin/.
-    if(WIN32)
-        find_path(_lt_rb_runtime_inc rubberband/RubberBandStretcher.h)
-        if(_lt_rb_runtime_inc)
-            get_filename_component(_lt_rb_root "${_lt_rb_runtime_inc}" DIRECTORY)
-            file(GLOB _lt_rb_dlls "${_lt_rb_root}/bin/rubberband*.dll")
-            foreach(_dll ${_lt_rb_dlls})
-                add_custom_command(TARGET lt_audio_engine_v2 POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${_dll}" "$<TARGET_FILE_DIR:lt_audio_engine_v2>"
-                    COMMENT "Copying ${_dll} next to lt_audio_engine_v2")
-            endforeach()
-        endif()
-    endif()
-else()
-    target_compile_definitions(lt_audio_engine_v2 PUBLIC LT_ENGINE_HAVE_RUBBERBAND=0)
-endif()
 
 # ---------------------------------------------------------------------------
 # Bungee pitch/warp backend (optional, opt-in).
 #
 # Bungee (https://github.com/bungee-audio-stretch/bungee, MPL-2.0) is a phase-
-# vocoder library with much lower per-voice CPU than RubberBand. We consume the
-# upstream-published prebuilt archives because Bungee's source uses GCC-only
-# attributes that MSVC cannot compile.
+# vocoder library. It drives both pitch shift and warp (time-stretch). We
+# consume the upstream-published prebuilt archives because Bungee's source uses
+# GCC-only attributes that MSVC cannot compile.
 #
 # Enable with:
 #   cmake -DLT_ENGINE_USE_BUNGEE=ON -DLT_BUNGEE_DIR=<unpacked-release-folder>
 #
 # When OFF (default), LT_ENGINE_HAVE_BUNGEE is 0 and Bungee voices compile
-# to no-op stubs; RubberBand remains the warp fallback when enabled.
+# to no-op stubs (pitch/warp become identity passthroughs).
 # ---------------------------------------------------------------------------
 option(LT_ENGINE_USE_BUNGEE "Link the Bungee pitch backend into the engine" OFF)
 if(LT_ENGINE_USE_BUNGEE)
@@ -316,25 +294,6 @@ if(LT_ENGINE_BUILD_BENCHES)
         endif()
     endif()
 
-    if(LT_ENGINE_USE_BUNGEE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_bungee_warp_backends.cpp")
-        add_executable(bench_bungee_warp_backends
-            bench/bench_bungee_warp_backends.cpp)
-        target_compile_features(bench_bungee_warp_backends PRIVATE cxx_std_20)
-        target_link_libraries(bench_bungee_warp_backends PRIVATE lt_audio_engine_v2)
-        target_include_directories(bench_bungee_warp_backends PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/include
-            "${LT_BUNGEE_DIR}/include")
-        if(WIN32 AND DEFINED LT_BUNGEE_DIR)
-            set(_lt_bungee_warp_dll "${LT_BUNGEE_DIR}/windows-x86_64/bungee.dll")
-            if(EXISTS "${_lt_bungee_warp_dll}")
-                add_custom_command(TARGET bench_bungee_warp_backends POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${_lt_bungee_warp_dll}"
-                        "$<TARGET_FILE_DIR:bench_bungee_warp_backends>"
-                    COMMENT "Copying Bungee DLL for warp-backend bench")
-            endif()
-        endif()
-    endif()
 endif()
 
 # ---------------------------------------------------------------------------

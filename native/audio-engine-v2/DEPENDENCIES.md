@@ -36,22 +36,22 @@ so JUCE does not affect the UI architecture.
 
 ---
 
-## 2. Rubber Band Library
+## 2. Bungee (pitch shift + warp)
 
 | Decision    | Value |
 |-------------|-------|
-| Version     | 3.3.0 |
-| Integration | `find_package` first, then FetchContent |
-| License     | GPLv2+ |
+| Integration | Prebuilt upstream release, `-DLT_BUNGEE_DIR=<path>` |
+| License     | MPL-2.0 |
 
-**Why RubberBand?**
-- Best phase-vocoder implementation available as open source.
-- Proven in production (used by Ardour, Audacity, etc.).
-- Provides latency value we need for alignment compensation.
-- v3 ships a proper CMake build, making integration straightforward.
+**Why Bungee?**
+- Single grain pipeline drives both pitch shift and warp (time-stretch), so one
+  voice per clip covers both (see `WARP_BACKEND_NOTES.md`).
+- Much lower per-voice CPU than the previous RubberBand path — the only backend
+  that sustains 9+ concurrent voices within the audio budget on our target CPU.
+- Preferred by ear in engine-level A/B testing on real polyphonic material.
 
-RubberBand is already vendored as a DLL in the existing Rust engine.  The C++
-engine links it directly instead of through `libloading`.
+RubberBand was previously kept as a fallback warp backend but has been removed:
+nothing in the engine links a separate warp backend any more.
 
 ---
 
@@ -112,7 +112,7 @@ Not used in the audio callback hot path.
 | Library           | Role                | Integration         | Licence   |
 |-------------------|---------------------|---------------------|-----------|
 | JUCE 8.0.4        | Audio device I/O    | FetchContent        | GPL3/comm |
-| RubberBand 3.3.0  | Pitch shifting       | find_package + FC   | GPL2+     |
+| Bungee            | Pitch shift + warp  | prebuilt (LT_BUNGEE_DIR) | MPL-2.0 |
 | libsndfile 1.2.2  | WAV/FLAC/OGG decode | find_package + FC   | LGPL-2.1  |
 | dr_mp3/dr_flac    | MP3/FLAC decode     | bundled headers     | MIT/0-BSD |
 | r8brain           | Resampling          | FetchContent        | MIT       |

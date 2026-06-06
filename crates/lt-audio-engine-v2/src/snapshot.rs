@@ -214,8 +214,6 @@ pub struct PitchSnapshot {
     #[serde(default)]
     pub pitch_backend: String,
     #[serde(default)]
-    pub rubberband_version: String,
-    #[serde(default)]
     pub pitch_runtime_enabled: bool,
     #[serde(default)]
     pub pitch_prepare_active: bool,

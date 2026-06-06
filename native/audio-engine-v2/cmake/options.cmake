@@ -24,14 +24,6 @@ option(LT_ENGINE_USE_LIBSNDFILE
     "Use libsndfile + header-only decoders for WAV/FLAC/MP3/OGG decoding"
     ON)
 
-# Warp (time-stretch) fallback backend.
-# Bungee is preferred for warp when LT_ENGINE_USE_BUNGEE is ON.
-# RubberBand is kept as a fallback for builds without Bungee.
-# The engine binary becomes GPL v2 when this option is on.
-option(LT_ENGINE_USE_RUBBERBAND
-    "Link RubberBand as the fallback warp backend (GPL v2)"
-    OFF)
-
 # Resampler backend - exactly one must be ON.
 option(LT_ENGINE_USE_R8BRAIN
     "Use r8brain-free-src for high-quality resampling (preferred)"
