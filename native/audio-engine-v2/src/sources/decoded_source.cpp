@@ -63,6 +63,7 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
             const int block_offset = cache_->offset_in_block(absolute);
             const int chunk = std::min(readable - copied,
                                        cache_->block_frames() - block_offset);
+            bool missed_current_block = false;
             float* shifted[32];
             const int channels = std::min(out_channels, 32);
             for (int ch = 0; ch < channels; ++ch)
@@ -82,16 +83,35 @@ int DecodedSource::read(Frame offset_frames, int frame_count,
                     request_block_(source_id_, block_index);
                 for (int ch = 0; ch < out_channels; ++ch)
                     std::fill(out[ch] + copied, out[ch] + copied + chunk, 0.f);
+                missed_current_block = true;
             }
             if (request_block_) {
                 const int kReadAheadBlocks = streaming_read_ahead_blocks();
-                for (int ahead = 1; ahead <= kReadAheadBlocks; ++ahead) {
-                    const int next_block = block_index + ahead;
-                    const Frame next_start =
-                        static_cast<Frame>(next_block) * cache_->block_frames();
-                    if (next_start >= duration_frames_)
+                int previous = read_ahead_anchor_block_.load(std::memory_order_relaxed);
+                bool should_request = missed_current_block;
+                while (!should_request) {
+                    should_request = previous < 0 ||
+                        block_index > previous ||
+                        block_index + kReadAheadBlocks < previous;
+                    if (!should_request)
                         break;
-                    request_block_(source_id_, next_block);
+                    if (read_ahead_anchor_block_.compare_exchange_weak(
+                            previous, block_index, std::memory_order_relaxed)) {
+                        break;
+                    }
+                }
+                if (missed_current_block) {
+                    read_ahead_anchor_block_.store(block_index, std::memory_order_relaxed);
+                }
+                if (should_request) {
+                    for (int ahead = 1; ahead <= kReadAheadBlocks; ++ahead) {
+                        const int next_block = block_index + ahead;
+                        const Frame next_start =
+                            static_cast<Frame>(next_block) * cache_->block_frames();
+                        if (next_start >= duration_frames_)
+                            break;
+                        request_block_(source_id_, next_block);
+                    }
                 }
             }
             copied += chunk;

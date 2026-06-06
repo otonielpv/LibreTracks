@@ -2,6 +2,7 @@
 
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/session/session.h>
+#include <lt_engine/sources/decoded_source.h>
 #include <lt_engine/sources/source_manager.h>
 
 #include <algorithm>
@@ -547,4 +548,39 @@ TEST_CASE("TrackRenderer output is identical for memory and streaming source pat
         require_audio_equal(render_track_block(memory_manager, "src", start, kRenderFrames),
                             render_track_block(streaming_manager, "src", start, kRenderFrames));
     }
+}
+
+TEST_CASE("DecodedSource requests streaming read-ahead once per cache block") {
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 32;
+    const Id source_id = "read-ahead-source";
+
+    BlockCache cache(kDefaultBlockFrames, 64);
+    auto first_block = make_reference_audio(kDefaultBlockFrames, kChannels);
+    cache.fill(source_id, 0, first_block.data(), kChannels, kDefaultBlockFrames);
+
+    std::vector<int> requested_blocks;
+    DecodedSource source(
+        source_id,
+        kChannels,
+        kSampleRate,
+        kFrames,
+        &cache,
+        [&](const Id& id, int block_index) {
+            CHECK(id == source_id);
+            requested_blocks.push_back(block_index);
+        });
+
+    std::vector<float> left(512, 0.0f);
+    std::vector<float> right(512, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+
+    REQUIRE(source.read(0, 512, out, 2) == 512);
+    CHECK(requested_blocks.size() == 16);
+    CHECK(requested_blocks.front() == 1);
+    CHECK(requested_blocks.back() == 16);
+
+    REQUIRE(source.read(512, 512, out, 2) == 512);
+    CHECK(requested_blocks.size() == 16);
 }
