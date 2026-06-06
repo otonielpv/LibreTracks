@@ -2135,7 +2135,7 @@ fn playback_prepare_wait_timeout() -> Duration {
         .ok()
         .and_then(|raw| raw.parse::<u64>().ok())
         .filter(|value| *value <= 120_000)
-        .unwrap_or(5_000);
+        .unwrap_or(750);
     Duration::from_millis(millis)
 }
 

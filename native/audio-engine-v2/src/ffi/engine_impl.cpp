@@ -275,16 +275,16 @@ void wait_jump_target_audio_ready(SourceManager& sources,
 int playback_prepare_wait_ms() {
     static const int value = [] {
         const char* v = std::getenv("LIBRETRACKS_PLAYBACK_PREPARE_WAIT_MS");
-        if (!v) return 5000;
+        if (!v) return 750;
         const int parsed = std::atoi(v);
-        return parsed >= 0 && parsed <= 120000 ? parsed : 5000;
+        return parsed >= 0 && parsed <= 120000 ? parsed : 750;
     }();
     return value;
 }
 
 int playback_prepare_window_frames(int sample_rate) {
     const int sr = sample_rate > 0 ? sample_rate : 48000;
-    int seconds = 20;
+    int seconds = 3;
     if (const char* v = std::getenv("LIBRETRACKS_PLAYBACK_PREPARE_SECONDS")) {
         const int parsed = std::atoi(v);
         if (parsed >= 1 && parsed <= 120)
