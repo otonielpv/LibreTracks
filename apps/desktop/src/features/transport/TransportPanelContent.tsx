@@ -285,6 +285,7 @@ import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandler
 import { createLibraryHandlers } from "./library/libraryHandlers";
 import { createColorHandlers } from "./colors/colorHandlers";
 import { createTrackHandlers } from "./tracks/trackHandlers";
+import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 
 const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
@@ -2373,6 +2374,27 @@ export function TransportPanelContent() {
       setStatus,
       t,
     ],
+  );
+
+  // MIDI-learn arming handlers. midiLearnMode is read from the timeline UI store
+  // through a getter so the factory never has to be re-created. See
+  // ./midi/midiLearnHandlers.
+  const {
+    handleMidiLearnToggle,
+    handleMidiLearnTarget,
+    handleMidiLearnCommandRelearn,
+    handleDynamicMidiLearnJump,
+  } = useMemo(
+    () =>
+      createMidiLearnHandlers({
+        getMidiLearnMode: () => useTimelineUIStore.getState().midiLearnMode,
+        setMidiLearnMode,
+        setIsSettingsModalOpen,
+        setIsRemoteModalOpen,
+        t,
+        prompt: (message) => window.prompt(message),
+      }),
+    [setMidiLearnMode, t],
   );
 
   const applyTrackDragVisuals = useCallback(
@@ -6622,55 +6644,6 @@ export function TransportPanelContent() {
         },
       },
     ];
-  }
-
-  function handleMidiLearnToggle(options?: { closePanels?: boolean }) {
-    if (options?.closePanels) {
-      setIsSettingsModalOpen(false);
-      setIsRemoteModalOpen(false);
-    }
-
-    setMidiLearnMode(midiLearnMode === null ? "" : null);
-  }
-
-  function handleMidiLearnTarget(
-    controlKey: string,
-    options?: { arm?: boolean },
-  ) {
-    if (midiLearnMode === null && !options?.arm) {
-      return false;
-    }
-
-    setMidiLearnMode(controlKey);
-    return true;
-  }
-
-  function handleMidiLearnCommandRelearn(controlKey: string) {
-    setMidiLearnMode(controlKey);
-  }
-
-  function handleDynamicMidiLearnJump(kind: "marker" | "song") {
-    const maxIndex = kind === "marker" ? 100 : 20;
-    const rawValue = window.prompt(
-      kind === "marker"
-        ? t("transport.settingsModal.midiLearnMapMarkerPrompt")
-        : t("transport.settingsModal.midiLearnMapSongPrompt"),
-    );
-    if (rawValue === null) {
-      return;
-    }
-
-    const index = Number(rawValue.trim());
-    if (!Number.isInteger(index) || index < 1 || index > maxIndex) {
-      return;
-    }
-
-    handleMidiLearnTarget(
-      kind === "marker"
-        ? `action:jump_marker_${index}`
-        : `action:jump_song_${index}`,
-      { arm: true },
-    );
   }
 
   function handleTrackAudioToChange(trackId: string, nextAudioTo: string) {
