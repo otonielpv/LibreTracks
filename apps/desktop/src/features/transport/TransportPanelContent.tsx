@@ -280,6 +280,7 @@ import {
   trackChildrenCount,
   waitForUiPaint,
 } from "./helpers";
+import { createSettingsHandlers } from "./settings/settingsHandlers";
 
 const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
@@ -698,6 +699,10 @@ export function TransportPanelContent() {
     DEFAULT_TIMELINE_VIEWPORT_WIDTH,
   );
   const appSettingsRef = useRef(appSettings);
+  // Mirrors `selectedOutputChannelCount` (derived far below in render) so the
+  // settings handler factory — instantiated near the top — can read the current
+  // value without depending on render-order of the derived memo.
+  const selectedOutputChannelCountRef = useRef(1);
   const hasShownMissingMidiDeviceWarningRef = useRef(false);
   const metronomeLiveRequestIdRef = useRef(0);
   const tapTempoTimesRef = useRef<number[]>([]);
@@ -1536,6 +1541,53 @@ export function TransportPanelContent() {
     },
     [appSettings, runAction, syncSettingsLanguage],
   );
+
+  // Settings transform handlers, extracted to ./settings/settingsHandlers.
+  // They read appSettingsRef.current (kept in sync with appSettings by an
+  // effect below), so the factory only depends on stable identities and never
+  // needs to be re-created when appSettings changes — keeping SettingsPanel's
+  // handler props referentially stable across renders.
+  const settingsHandlers = useMemo(
+    () =>
+      createSettingsHandlers({
+        appSettingsRef,
+        persistAudioSettings,
+        getSelectedOutputChannelCount: () =>
+          selectedOutputChannelCountRef.current,
+        setEnabledOutputChannelsDraft,
+        t,
+        translateLocaleMessage: (savedSettings) =>
+          savedSettings.locale
+            ? i18n.t("transport.status.settingsLanguageUpdated", {
+                name: translateLanguageName(
+                  savedSettings.locale === "es" ? "es" : "en",
+                ),
+              })
+            : i18n.t("transport.status.settingsLanguageSystem"),
+      }),
+    [persistAudioSettings, t, i18n, translateLanguageName],
+  );
+  const {
+    handleAudioBackendChange,
+    handleOutputSampleRateChange,
+    handleOutputBufferSizeChange,
+    handleAudioSafeModeChange,
+    handleEnabledOutputChannelChange,
+    handleDiscardEnabledOutputChannels,
+    handleSelectAllOutputChannels,
+    handleClearOutputChannels,
+    handleCommitEnabledOutputChannels,
+    handleMetronomeOutputChange,
+    handleGlobalJumpModeChange,
+    handleGlobalJumpBarsChange,
+    handleSongJumpTriggerChange,
+    handleSongJumpBarsChange,
+    handleSongTransitionModeChange,
+    handleVampModeChange,
+    handleVampBarsChange,
+    handleTimelineNavigationSchemeChange,
+    handleLocaleChange,
+  } = settingsHandlers;
 
   const applyPitchPrepareSnapshot = useCallback(
     (pitch: PitchPrepareSummary | null | undefined) => {
@@ -6687,58 +6739,6 @@ export function TransportPanelContent() {
     );
   }
 
-  function handleAudioBackendChange(nextValue: string) {
-    const nextBackend = (nextValue || null) as AudioBackendKind | null;
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        selectedAudioBackend: nextBackend,
-        selectedOutputDevice: null,
-        selectedOutputDeviceId: null,
-        selectedOutputDeviceName: null,
-      }),
-      t("transport.status.audioRoutingUpdated", {
-        defaultValue: "Audio routing updated.",
-      }),
-    );
-  }
-
-  function handleOutputSampleRateChange(nextValue: string) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        outputSampleRate: nextValue ? Number(nextValue) : null,
-      }),
-      t("transport.status.audioRoutingUpdated", {
-        defaultValue: "Audio routing updated.",
-      }),
-    );
-  }
-
-  function handleOutputBufferSizeChange(nextValue: string) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        outputBufferSize: nextValue ? { fixed: Number(nextValue) } : "default",
-      }),
-      t("transport.status.audioRoutingUpdated", {
-        defaultValue: "Audio routing updated.",
-      }),
-    );
-  }
-
-  function handleAudioSafeModeChange(enabled: boolean) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        audioSafeMode: enabled,
-      }),
-      t("transport.status.audioRoutingUpdated", {
-        defaultValue: "Audio routing updated.",
-      }),
-    );
-  }
-
   function handleRefreshAudioDevices() {
     setIsSettingsLoading(true);
     void runAction(async () => {
@@ -6756,70 +6756,6 @@ export function TransportPanelContent() {
         setIsSettingsLoading(false);
       }
     });
-  }
-
-  function handleEnabledOutputChannelChange(
-    channelIndex: number,
-    enabled: boolean,
-  ) {
-    setEnabledOutputChannelsDraft((previous) => {
-      const next = new Set(
-        filterOutputChannelsForOutputCount(
-          previous,
-          selectedOutputChannelCount,
-        ),
-      );
-      if (enabled) {
-        next.add(channelIndex);
-      } else {
-        next.delete(channelIndex);
-      }
-      return Array.from(next).sort((left, right) => left - right);
-    });
-  }
-
-  function handleCommitEnabledOutputChannels() {
-    const nextChannels = normalizeEnabledOutputChannelsForOutputCount(
-      enabledOutputChannelsDraft,
-      selectedOutputChannelCount,
-    );
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        enabledOutputChannels: nextChannels,
-      }),
-      t("transport.status.audioRoutingUpdated", {
-        defaultValue: "Audio routing updated.",
-      }),
-    );
-  }
-
-  function handleDiscardEnabledOutputChannels() {
-    setEnabledOutputChannelsDraft(
-      appSettingsRef.current.enabledOutputChannels,
-    );
-  }
-
-  function handleSelectAllOutputChannels() {
-    setEnabledOutputChannelsDraft(
-      Array.from({ length: selectedOutputChannelCount }, (_, i) => i),
-    );
-  }
-
-  function handleClearOutputChannels() {
-    setEnabledOutputChannelsDraft([]);
-  }
-
-  function handleMetronomeOutputChange(nextValue: string) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        metronomeOutput: nextValue,
-      }),
-      t("transport.status.audioRoutingUpdated", {
-        defaultValue: "Audio routing updated.",
-      }),
-    );
   }
 
   function handleMetronomeSoundChange(patch: Partial<AppSettings>) {
@@ -6949,81 +6885,6 @@ export function TransportPanelContent() {
     });
   }
 
-  function handleGlobalJumpModeChange(
-    nextValue: AppSettings["globalJumpMode"],
-  ) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        globalJumpMode: nextValue,
-      }),
-      "Jump settings updated.",
-    );
-  }
-
-  function handleGlobalJumpBarsChange(nextValue: number) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        globalJumpBars: Math.max(1, Math.floor(nextValue) || 1),
-      }),
-      "Jump settings updated.",
-    );
-  }
-
-  function handleSongJumpTriggerChange(
-    nextValue: AppSettings["songJumpTrigger"],
-  ) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        songJumpTrigger: nextValue,
-      }),
-      "Song jump settings updated.",
-    );
-  }
-
-  function handleSongJumpBarsChange(nextValue: number) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        songJumpBars: Math.max(1, Math.floor(nextValue) || 1),
-      }),
-      "Song jump settings updated.",
-    );
-  }
-
-  function handleSongTransitionModeChange(
-    nextValue: AppSettings["songTransitionMode"],
-  ) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        songTransitionMode: nextValue,
-      }),
-      "Song transition updated.",
-    );
-  }
-
-  function handleVampModeChange(nextValue: AppSettings["vampMode"]) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        vampMode: nextValue,
-      }),
-      "Vamp settings updated.",
-    );
-  }
-
-  function handleVampBarsChange(nextValue: number) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        vampBars: Math.max(1, Math.floor(nextValue) || 1),
-      }),
-      "Vamp settings updated.",
-    );
-  }
 
   function handleMidiInputDeviceChange(nextValue: string) {
     persistAudioSettings(
@@ -7066,37 +6927,6 @@ export function TransportPanelContent() {
         suppressMissingMidiDeviceWarning: true,
       },
       t("transport.status.midiWarningHidden"),
-    );
-  }
-
-  function handleTimelineNavigationSchemeChange(
-    nextValue: "ableton" | "libretracks",
-  ) {
-    persistAudioSettings(
-      normalizeAppSettings({
-        ...appSettingsRef.current,
-        timelineNavigationScheme: nextValue,
-      }),
-      t("transport.status.timelineNavigationSchemeUpdated", {
-        defaultValue: "Timeline navigation scheme updated.",
-      }),
-    );
-  }
-
-  function handleLocaleChange(nextValue: string) {
-    persistAudioSettings(
-      {
-        ...appSettings,
-        locale: nextValue || null,
-      },
-      (savedSettings) =>
-        savedSettings.locale
-          ? i18n.t("transport.status.settingsLanguageUpdated", {
-              name: translateLanguageName(
-                savedSettings.locale === "es" ? "es" : "en",
-              ),
-            })
-          : i18n.t("transport.status.settingsLanguageSystem"),
     );
   }
 
@@ -9004,6 +8834,7 @@ export function TransportPanelContent() {
         HARDWARE_OUTPUT_CHANNEL_COUNT,
     ),
   );
+  selectedOutputChannelCountRef.current = selectedOutputChannelCount;
   const effectiveEnabledOutputChannels = useMemo(
     () =>
       normalizeEnabledOutputChannelsForOutputCount(
