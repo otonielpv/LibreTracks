@@ -81,6 +81,33 @@ bool prearm_globally_enabled() {
     return on;
 }
 
+int prearm_build_threads() {
+    static const int value = [] {
+        if (const char* v = std::getenv("LIBRETRACKS_PREARM_BUILD_THREADS")) {
+            const int parsed = std::atoi(v);
+            if (parsed >= 1 && parsed <= 16)
+                return parsed;
+        }
+        const unsigned hc = std::thread::hardware_concurrency();
+        if (hc >= 8) return 4;
+        if (hc >= 4) return 2;
+        return 1;
+    }();
+    return value;
+}
+
+void set_prearm_worker_thread_priority() {
+#ifdef _WIN32
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#elif defined(__APPLE__) || defined(__linux__)
+  #ifdef __APPLE__
+    pthread_set_qos_class_self_np(QOS_CLASS_BACKGROUND, 0);
+  #else
+    setpriority(PRIO_PROCESS, 0, 10);
+  #endif
+#endif
+}
+
 int prearm_source_wait_ms() {
     static const int value = [] {
         const char* v = std::getenv("LIBRETRACKS_PREARM_SOURCE_WAIT_MS");
@@ -722,50 +749,81 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
     const int channel_count = impl_->channel_count;
     const int max_in_frames = impl_->max_in_frames;
 
-    std::unordered_set<PrearmTargetKey, PrearmTargetKeyHash> kept;
-    kept.reserve(32);
+    struct BuildTask {
+        PrearmTargetKind kind;
+        const Song*      song;
+        Id               target_id;
+        Frame            target_frame;
+        PrearmTargetKey  key;
+    };
+
+    std::vector<BuildTask> tasks;
     std::uint64_t target_total = 0;
     for (const auto& song : session.songs) {
         target_total += static_cast<std::uint64_t>(song.markers.size());
         target_total += static_cast<std::uint64_t>(song.regions.size());
         target_total += 1;
     }
+    tasks.reserve(static_cast<std::size_t>(target_total));
     impl_->active_target_total.store(target_total, std::memory_order_release);
     impl_->active_target_completed.store(0, std::memory_order_release);
 
+    auto add_task = [&](PrearmTargetKind kind,
+                        const Song& song,
+                        const Id& target_id,
+                        Frame target_frame) {
+        PrearmTargetKey key;
+        key.kind             = kind;
+        key.song_id          = song.id;
+        key.target_id        = target_id;
+        key.timeline_frame   = target_frame;
+        key.sample_rate      = sample_rate;
+        key.block_size       = max_in_frames;
+        key.session_revision = session_revision;
+        tasks.push_back(BuildTask{kind, &song, target_id, target_frame, key});
+    };
+
+    for (const auto& song : session.songs) {
+        for (const auto& marker : song.markers)
+            add_task(PrearmTargetKind::Marker, song, marker.id, marker.frame);
+        for (const auto& region : song.regions)
+            add_task(PrearmTargetKind::RegionStart, song, region.id, region.start_frame);
+        add_task(PrearmTargetKind::SongStart, song, song.id, song.start_frame);
+    }
+
+    std::unordered_set<PrearmTargetKey, PrearmTargetKeyHash> kept;
+    kept.reserve(tasks.size());
+    for (const auto& task : tasks)
+        kept.insert(task.key);
+
     // build_one: prime voices targeting `target_frame` and insert into the
     // prepared_map. Skips if a valid set already exists for the same key.
-    auto build_one = [&](PrearmTargetKind kind,
-                          const Song& song,
-                          const Id& target_id,
-                          Frame target_frame) {
-        auto build_for_target = [&]() {
-            PrearmTargetKey key;
-            key.kind             = kind;
-            key.song_id          = song.id;
-            key.target_id        = target_id;
-            key.timeline_frame   = target_frame;
-            key.sample_rate      = sample_rate;
-            key.block_size       = max_in_frames;
-            key.session_revision = session_revision;
-            kept.insert(key);
+    auto build_one = [&](const BuildTask& task) {
+        {
+            std::lock_guard<std::mutex> lk(impl_->mtx);
+            auto it = impl_->prepared_map.find(task.key);
+            if (it != impl_->prepared_map.end() && it->second && it->second->valid) {
+                impl_->active_target_completed.fetch_add(1, std::memory_order_acq_rel);
+                return;
+            }
+        }
 
-            auto it = impl_->prepared_map.find(key);
-            if (it != impl_->prepared_map.end() && it->second && it->second->valid)
-                return;
+        auto br = build_prepared_set(task.kind, *task.song, task.target_id,
+                                     task.target_frame, sources, sample_rate,
+                                     channel_count, max_in_frames,
+                                     session_revision);
 
-            g.unlock();
-            auto br  = build_prepared_set(kind, song, target_id, target_frame,
-                                           sources, sample_rate,
-                                           channel_count,
-                                           max_in_frames, session_revision);
-            g.lock();
-            if (session_revision != impl_->current_revision)
-                return;
-            it = impl_->prepared_map.find(key);
-            if (it != impl_->prepared_map.end() && it->second && it->second->valid)
-                return;
-            auto set = std::move(br.set);
+        std::lock_guard<std::mutex> lk(impl_->mtx);
+        if (session_revision != impl_->current_revision) {
+            impl_->active_target_completed.fetch_add(1, std::memory_order_acq_rel);
+            return;
+        }
+        auto it = impl_->prepared_map.find(task.key);
+        if (it != impl_->prepared_map.end() && it->second && it->second->valid) {
+            impl_->active_target_completed.fetch_add(1, std::memory_order_acq_rel);
+            return;
+        }
+        auto set = std::move(br.set);
 
             // If sources weren't loaded for some audible clips, skip inserting
             // this set entirely so source_ready can retry cleanly without a
@@ -775,10 +833,12 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
                 if (prearm_log_enabled()) {
                     lt_debug_log(
                         "[PREARM] skip_unloaded kind=%s song=%s id=%s frame=%lld unloaded_clips=%d\n",
-                        target_kind_label(kind), song.id.c_str(),
-                        target_id.c_str(), static_cast<long long>(target_frame),
+                        target_kind_label(task.kind), task.song->id.c_str(),
+                        task.target_id.c_str(),
+                        static_cast<long long>(task.target_frame),
                         br.unloaded_clips_skipped);
                 }
+                impl_->active_target_completed.fetch_add(1, std::memory_order_acq_rel);
                 return;
             }
 
@@ -787,25 +847,29 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
                 if (prearm_log_enabled()) {
                     lt_debug_log(
                         "[PREARM] prepare_failed kind=%s song=%s id=%s frame=%lld\n",
-                        target_kind_label(kind), song.id.c_str(),
-                        target_id.c_str(), static_cast<long long>(target_frame));
+                        target_kind_label(task.kind), task.song->id.c_str(),
+                        task.target_id.c_str(),
+                        static_cast<long long>(task.target_frame));
                 }
             } else {
                 impl_->prepared_total.fetch_add(1, std::memory_order_relaxed);
                 if (prearm_log_enabled()) {
                     lt_debug_log(
                         "[PREARM] prepared kind=%s song=%s id=%s frame=%lld voices=%zu\n",
-                        target_kind_label(kind), song.id.c_str(),
-                        target_id.c_str(), static_cast<long long>(target_frame),
+                        target_kind_label(task.kind), task.song->id.c_str(),
+                        task.target_id.c_str(),
+                        static_cast<long long>(task.target_frame),
                         set->tracks.size());
                 }
             }
 
-            if (set->valid && set->tracks.empty())
+            if (set->valid && set->tracks.empty()) {
+                impl_->active_target_completed.fetch_add(1, std::memory_order_acq_rel);
                 return;
+            }
 
-            impl_->prepared_map[key] = std::move(set);
-            impl_->insertion_order.push_back(key);
+            impl_->prepared_map[task.key] = std::move(set);
+            impl_->insertion_order.push_back(task.key);
 
             // Phase 7: enforce cap. Evict oldest until we're at or below the cap.
             while (static_cast<int>(impl_->prepared_map.size())
@@ -819,24 +883,37 @@ void PrearmedJumpManager::prepare_all_targets(const Session& session,
                         impl_->max_prepared_targets, impl_->prepared_map.size());
                 }
             }
-        };
-
-        build_for_target();
         impl_->active_target_completed.fetch_add(1, std::memory_order_acq_rel);
     };
 
-    for (const auto& song : session.songs) {
-        // Markers
-        for (const auto& marker : song.markers)
-            build_one(PrearmTargetKind::Marker, song, marker.id, marker.frame);
-
-        // Region starts
-        for (const auto& region : song.regions)
-            build_one(PrearmTargetKind::RegionStart, song, region.id, region.start_frame);
-
-        // Song start
-        build_one(PrearmTargetKind::SongStart, song, song.id, song.start_frame);
+    g.unlock();
+    const int worker_count = std::min<int>(
+        prearm_build_threads(),
+        static_cast<int>(tasks.size()));
+    if (worker_count <= 1) {
+        for (const auto& task : tasks)
+            build_one(task);
+    } else {
+        std::atomic<std::size_t> next_index{0};
+        std::vector<std::thread> workers;
+        workers.reserve(static_cast<std::size_t>(worker_count));
+        for (int i = 0; i < worker_count; ++i) {
+            workers.emplace_back([&] {
+                set_prearm_worker_thread_priority();
+                for (;;) {
+                    const std::size_t index =
+                        next_index.fetch_add(1, std::memory_order_relaxed);
+                    if (index >= tasks.size())
+                        return;
+                    build_one(tasks[index]);
+                }
+            });
+        }
+        for (auto& worker : workers)
+            if (worker.joinable())
+                worker.join();
     }
+    g.lock();
 
     // Evict prepared sets whose target no longer exists (defensive — most
     // structural edits also bump session_revision, which already cleared).
