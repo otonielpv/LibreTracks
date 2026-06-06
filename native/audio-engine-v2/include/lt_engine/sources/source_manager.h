@@ -14,6 +14,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 namespace lt {
 
@@ -129,7 +130,7 @@ private:
 
     void publish_locked(EntryMap entries);
     void fill_worker_loop() const;
-    void fill_block_from_disk(const CacheKey& key) const;
+    void fill_blocks_from_disk(const Id& source_id, const std::vector<int>& block_indices) const;
     std::string cache_file_for(const Id& source_id, const std::string& file_path, int sample_rate) const;
 };
 

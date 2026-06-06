@@ -769,6 +769,7 @@ void SourceManager::clear() {
 void SourceManager::fill_worker_loop() const {
     while (true) {
         CacheKey key;
+        std::vector<int> block_batch;
         {
             std::unique_lock lock(fill_mtx_);
             fill_cv_.wait(lock, [this] { return fill_stop_ || !fill_queue_.empty(); });
@@ -777,63 +778,121 @@ void SourceManager::fill_worker_loop() const {
             key = fill_queue_.front();
             fill_queue_.pop();
             queued_blocks_.erase(key);
+
+            block_batch.push_back(key.block_index);
+            constexpr std::size_t kMaxBatchBlocks = 64;
+            while (!fill_queue_.empty() && block_batch.size() < kMaxBatchBlocks) {
+                const CacheKey& next = fill_queue_.front();
+                if (next.source_id != key.source_id ||
+                    next.block_index != block_batch.back() + 1) {
+                    break;
+                }
+                block_batch.push_back(next.block_index);
+                queued_blocks_.erase(next);
+                fill_queue_.pop();
+            }
         }
-        if (!block_cache_.has_block(key.source_id, key.block_index))
-            fill_block_from_disk(key);
+        fill_blocks_from_disk(key.source_id, block_batch);
     }
 }
 
-void SourceManager::fill_block_from_disk(const CacheKey& key) const {
+void SourceManager::fill_blocks_from_disk(const Id& source_id,
+                                          const std::vector<int>& block_indices) const {
+    if (block_indices.empty())
+        return;
+
+    std::vector<int> missing;
+    missing.reserve(block_indices.size());
+    for (int block_index : block_indices) {
+        if (block_index >= 0 && !block_cache_.has_block(source_id, block_index))
+            missing.push_back(block_index);
+    }
+    if (missing.empty())
+        return;
+
     Entry entry;
     {
         auto entries = std::atomic_load(&entries_);
-        auto it = entries->find(key.source_id);
+        auto it = entries->find(source_id);
         if (it == entries->end())
             return;
         entry = it->second;
     }
     if (entry.cache_file_path.empty() || entry.channel_count <= 0)
         return;
+
     const int block_frames = block_cache_.block_frames();
-    const Frame start = static_cast<Frame>(key.block_index) * block_frames;
-    if (start >= entry.duration_frames)
-        return;
-    const int frames = static_cast<int>(
-        std::min<Frame>(block_frames, entry.duration_frames - start));
-    std::vector<float> data(static_cast<std::size_t>(frames) * entry.channel_count, 0.f);
+    std::size_t cursor_index = 0;
+    while (cursor_index < missing.size()) {
+        const int first_block = missing[cursor_index];
+        int last_block = first_block;
+        ++cursor_index;
+        while (cursor_index < missing.size() &&
+               missing[cursor_index] == last_block + 1) {
+            last_block = missing[cursor_index];
+            ++cursor_index;
+        }
+
+        const Frame start = static_cast<Frame>(first_block) * block_frames;
+        if (start >= entry.duration_frames)
+            continue;
+        const Frame end = std::min<Frame>(
+            entry.duration_frames,
+            (static_cast<Frame>(last_block) + 1) * block_frames);
+        const int frames = static_cast<int>(end - start);
+        if (frames <= 0)
+            continue;
+
+        std::vector<float> data(
+            static_cast<std::size_t>(frames) * entry.channel_count, 0.f);
+        int frames_read = 0;
 #if LT_ENGINE_USE_LIBSNDFILE
-    SF_INFO info{};
-    SNDFILE* sf = sf_open(entry.cache_file_path.c_str(), SFM_READ, &info);
-    if (!sf)
-        return;
-    if (info.channels != entry.channel_count) {
+        SF_INFO info{};
+        SNDFILE* sf = sf_open(entry.cache_file_path.c_str(), SFM_READ, &info);
+        if (!sf)
+            continue;
+        if (info.channels != entry.channel_count) {
+            sf_close(sf);
+            continue;
+        }
+        if (sf_seek(sf, static_cast<sf_count_t>(start), SEEK_SET) >= 0) {
+            frames_read = static_cast<int>(
+                sf_readf_float(sf, data.data(), static_cast<sf_count_t>(frames)));
+        }
         sf_close(sf);
-        return;
-    }
-    if (sf_seek(sf, static_cast<sf_count_t>(start), SEEK_SET) < 0) {
-        sf_close(sf);
-        return;
-    }
-    const int frames_read = static_cast<int>(
-        sf_readf_float(sf, data.data(), static_cast<sf_count_t>(frames)));
-    sf_close(sf);
 #else
-    std::ifstream in(entry.cache_file_path, std::ios::binary);
-    if (!in)
-        return;
-    const std::streamoff byte_offset =
-        static_cast<std::streamoff>(start * entry.channel_count * sizeof(float));
-    in.seekg(byte_offset, std::ios::beg);
-    in.read(reinterpret_cast<char*>(data.data()),
-            static_cast<std::streamsize>(data.size() * sizeof(float)));
-    if (in.gcount() <= 0)
-        return;
-    const int frames_read = static_cast<int>(
-        static_cast<std::size_t>(in.gcount()) / (sizeof(float) * entry.channel_count));
+        std::ifstream in(entry.cache_file_path, std::ios::binary);
+        if (!in)
+            continue;
+        const std::streamoff byte_offset =
+            static_cast<std::streamoff>(start * entry.channel_count * sizeof(float));
+        in.seekg(byte_offset, std::ios::beg);
+        in.read(reinterpret_cast<char*>(data.data()),
+                static_cast<std::streamsize>(data.size() * sizeof(float)));
+        frames_read = static_cast<int>(
+            static_cast<std::size_t>(in.gcount()) / (sizeof(float) * entry.channel_count));
 #endif
-    if (frames_read > 0)
-        block_cache_.fill(key.source_id, key.block_index,
-                          data.data(), entry.channel_count, frames_read);
+        if (frames_read <= 0)
+            continue;
+
+        for (int block = first_block; block <= last_block; ++block) {
+            const Frame block_start = static_cast<Frame>(block) * block_frames;
+            if (block_start >= start + frames_read)
+                break;
+            const int offset = static_cast<int>(block_start - start);
+            const int block_read_frames = static_cast<int>(std::min<Frame>(
+                block_frames,
+                static_cast<Frame>(frames_read) - offset));
+            if (block_read_frames <= 0)
+                continue;
+            block_cache_.fill(
+                source_id,
+                block,
+                data.data() + static_cast<std::size_t>(offset) * entry.channel_count,
+                entry.channel_count,
+                block_read_frames);
+        }
+    }
 }
 
 std::string SourceManager::cache_file_for(const Id& source_id,
@@ -901,7 +960,7 @@ bool SourceManager::try_install_native_file(const Id& source_id,
             return false;
 
         auto& entry = it->second;
-        // fill_block_from_disk reads bytes from `cache_file_path` via
+        // The cache-fill worker reads bytes from `cache_file_path` via
         // libsndfile, so pointing it at the original file is enough — no
         // separate code path needed.
         entry.cache_file_path = file_path;
