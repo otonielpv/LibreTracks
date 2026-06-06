@@ -286,11 +286,10 @@ import { createLibraryHandlers } from "./library/libraryHandlers";
 import { createColorHandlers } from "./colors/colorHandlers";
 import { createTrackHandlers } from "./tracks/trackHandlers";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
+import { createTapTempoHandler } from "./tempo/tapTempoHandler";
 
 const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
-const TAP_TEMPO_RESET_MS = 2500;
-const TAP_TEMPO_MAX_TAPS = 8;
 const TIMELINE_COLOR_PRESETS = [
   { label: "Rojo", value: "#E35D5B" },
   { label: "Ambar", value: "#E0A83A" },
@@ -464,40 +463,9 @@ export type {
   NativeDropCoordinateMode,
 } from "./types";
 
-export function nextTapTempoTimes(
-  previousTapTimesMs: readonly number[],
-  nowMs: number,
-) {
-  const previousTapMs = previousTapTimesMs.at(-1);
-  const activeTapTimes =
-    typeof previousTapMs === "number" &&
-    nowMs - previousTapMs <= TAP_TEMPO_RESET_MS
-      ? [...previousTapTimesMs, nowMs]
-      : [nowMs];
-
-  return activeTapTimes.slice(-TAP_TEMPO_MAX_TAPS);
-}
-
-export function calculateTapTempoBpm(tapTimesMs: readonly number[]) {
-  if (tapTimesMs.length < 2) {
-    return null;
-  }
-
-  const intervalsMs = tapTimesMs
-    .slice(1)
-    .map((tapMs, index) => tapMs - tapTimesMs[index])
-    .filter((intervalMs) => intervalMs > 0);
-
-  if (intervalsMs.length === 0) {
-    return null;
-  }
-
-  const averageIntervalMs =
-    intervalsMs.reduce((totalMs, intervalMs) => totalMs + intervalMs, 0) /
-    intervalsMs.length;
-
-  return 60_000 / averageIntervalMs;
-}
+// Tap-tempo math now lives in ./tapTempo; re-exported here because
+// TransportPanelContent.test.ts imports these from this module.
+export { calculateTapTempoBpm, nextTapTempoTimes } from "./tapTempo";
 
 export function TransportPanelContent() {
   useRenderCounter("TransportPanelContent");
@@ -4926,64 +4894,29 @@ export function TransportPanelContent() {
   })() : (
     t("transport.tempoSource.base")
   );
-  function handleTapTempo() {
-    if (!song) {
-      tapTempoTimesRef.current = [];
-      return;
-    }
-
-    const nextTapTimes = nextTapTempoTimes(
-      tapTempoTimesRef.current,
-      performance.now(),
-    );
-    tapTempoTimesRef.current = nextTapTimes;
-
-    const tappedBpm = calculateTapTempoBpm(nextTapTimes);
-    if (tappedBpm === null) {
-      setStatus(t("transport.status.tapTempoWaiting"));
-      return;
-    }
-
-    const clampedBpm = Math.max(
-      MIN_SESSION_BPM,
-      Math.min(MAX_SESSION_BPM, tappedBpm),
-    );
-    const nextBpm = Math.round(clampedBpm * 10) / 10;
-    tempoDraftDirtyRef.current = false;
-    setTempoDraft(nextBpm.toFixed(1));
-
-    const tempoPositionSeconds = displayPositionSecondsRef.current;
-    const currentBpm = getEffectiveBpmAt(song, tempoPositionSeconds);
-    const tempoMarker = getEffectiveTempoMarkerAt(song, tempoPositionSeconds);
-
-    if (Math.abs(nextBpm - currentBpm) < 0.05) {
-      setStatus(
-        t("transport.status.tapTempoUpdated", {
-          bpm: nextBpm.toFixed(1),
-        }),
-      );
-      return;
-    }
-
-    void runAction(async () => {
-      const nextSnapshot = tempoMarker
-        ? await upsertSongTempoMarker(
-            tempoMarker.sourceStartSeconds ?? tempoMarker.startSeconds,
-            nextBpm,
-          )
-        : await updateSongTempo(nextBpm);
-      optimisticallyAppliedRevisionsRef.current.add(
-        nextSnapshot.projectRevision,
-      );
-      await refreshSongView({ includeWaveforms: false, sync: true });
-      applyPlaybackSnapshot(nextSnapshot);
-      setStatus(
-        t("transport.status.tapTempoUpdated", {
-          bpm: nextBpm.toFixed(1),
-        }),
-      );
-    });
-  }
+  // Tap-tempo handler. song + playhead position read through getters/refs so
+  // the factory stays stable across renders. See ./tempo/tapTempoHandler.
+  const handleTapTempo = useMemo(
+    () =>
+      createTapTempoHandler({
+        getSong: () => songRef.current,
+        getCursorSeconds: () => displayPositionSecondsRef.current,
+        tapTempoTimesRef,
+        tempoDraftDirtyRef,
+        setTempoDraft,
+        setStatus,
+        runAction,
+        refreshSongView,
+        applyPlaybackSnapshot,
+        optimisticallyAppliedRevisionsRef,
+        getEffectiveTempoMarkerAt,
+        upsertSongTempoMarker,
+        updateSongTempo,
+        t,
+        now: () => performance.now(),
+      }),
+    [setStatus, runAction, refreshSongView, applyPlaybackSnapshot, t],
+  );
 
   const canPersistProject = Boolean(song);
   const isProjectEmpty = !song;
