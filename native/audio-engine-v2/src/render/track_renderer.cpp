@@ -175,12 +175,6 @@ void TrackRenderer::render(const Track&         track,
             continue;
         }
 
-        // Reset scratch for this clip.
-        std::fill(scratch_l_.begin(),
-                  scratch_l_.begin() + cb.frames_to_read, 0.f);
-        std::fill(scratch_r_.begin(),
-                  scratch_r_.begin() + cb.frames_to_read, 0.f);
-
         int written = 0;
         switch (path) {
             case ClipPathKind::Direct:
