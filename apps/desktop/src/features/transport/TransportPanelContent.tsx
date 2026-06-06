@@ -284,6 +284,7 @@ import { createSettingsHandlers } from "./settings/settingsHandlers";
 import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandlers";
 import { createLibraryHandlers } from "./library/libraryHandlers";
 import { createColorHandlers } from "./colors/colorHandlers";
+import { createTrackHandlers } from "./tracks/trackHandlers";
 
 const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
@@ -2342,6 +2343,37 @@ export function TransportPanelContent() {
     droppedTrackRowRef.current = null;
     trackDropStateRef.current = null;
   }, []);
+
+  // Track create / reorder handlers. See ./tracks/trackHandlers. Reactive state
+  // is read through getters (songRef, tracksByIdRef, the timeline UI store) so
+  // the factory stays referentially stable across renders.
+  const { handleTrackDrop, handleCreateTrack } = useMemo(
+    () =>
+      createTrackHandlers({
+        getSong: () => songRef.current,
+        getTracksById: () => tracksByIdRef.current,
+        getSelectedTrackIds: () =>
+          useTimelineUIStore.getState().selectedTrackIds,
+        runAction,
+        refreshSongView,
+        applyPlaybackSnapshot,
+        clearTrackDragVisuals,
+        optimisticallyAppliedRevisionsRef,
+        setStatus,
+        t,
+        moveTrack,
+        createTrack,
+        prompt: (message, defaultValue) => window.prompt(message, defaultValue),
+      }),
+    [
+      runAction,
+      refreshSongView,
+      applyPlaybackSnapshot,
+      clearTrackDragVisuals,
+      setStatus,
+      t,
+    ],
+  );
 
   const applyTrackDragVisuals = useCallback(
     (dragState: NonNullable<TrackDragState>, dropState: TrackDropState) => {
@@ -5591,67 +5623,6 @@ export function TransportPanelContent() {
     );
   }
 
-  async function handleTrackDrop(
-    draggedTrackId: string,
-    dropState: NonNullable<TrackDropState>,
-  ) {
-    const targetTrack = tracksById[dropState.targetTrackId] ?? null;
-    if (!song || !targetTrack || draggedTrackId === targetTrack.id) {
-      clearTrackDragVisuals();
-      return;
-    }
-
-    const tracksToMove =
-      selectedTrackIds.includes(draggedTrackId) && selectedTrackIds.length > 1
-        ? selectedTrackIds
-        : [draggedTrackId];
-
-    await runAction(async () => {
-      try {
-        let lastSnapshot: TransportSnapshot | null = null;
-        for (const trackId of tracksToMove) {
-          if (trackId === targetTrack.id) {
-            continue;
-          }
-
-          const moveArgs =
-            dropState.mode === "inside-folder"
-              ? {
-                  trackId,
-                  insertAfterTrackId: null,
-                  insertBeforeTrackId: null,
-                  parentTrackId: targetTrack.id,
-                }
-              : dropState.mode === "before"
-                ? {
-                    trackId,
-                    insertAfterTrackId: null,
-                    insertBeforeTrackId: targetTrack.id,
-                    parentTrackId: targetTrack.parentTrackId ?? null,
-                  }
-                : {
-                    trackId,
-                    insertAfterTrackId: targetTrack.id,
-                    insertBeforeTrackId: null,
-                    parentTrackId: targetTrack.parentTrackId ?? null,
-                  };
-
-          lastSnapshot = await moveTrack(moveArgs);
-        }
-
-        if (lastSnapshot) {
-          applyPlaybackSnapshot(lastSnapshot);
-        }
-        await refreshSongView();
-        setStatus(
-          t("transport.status.tracksReordered", { count: tracksToMove.length }),
-        );
-      } finally {
-        clearTrackDragVisuals();
-      }
-    });
-  }
-
   function openMenu(
     event: ReactMouseEvent,
     title: string,
@@ -5669,40 +5640,6 @@ export function TransportPanelContent() {
       y: event.clientY,
       title,
       actions,
-    });
-  }
-
-  async function handleCreateTrack(
-    kind: TrackKind,
-    anchorTrack: TrackSummary | null,
-    parentTrackId?: string | null,
-  ) {
-    const defaultName =
-      kind === "folder"
-        ? t("transport.defaults.folderTrackName")
-        : t("transport.defaults.audioTrackName");
-    const name = window
-      .prompt(t("transport.prompt.trackName"), defaultName)
-      ?.trim();
-    if (!name) {
-      return;
-    }
-
-    await runAction(async () => {
-      const nextSnapshot = await createTrack({
-        name,
-        kind,
-        insertAfterTrackId: anchorTrack?.id ?? null,
-        parentTrackId: parentTrackId ?? null,
-      });
-      // Pre-register the new revision so the revision-effect skips its own
-      // refetch — refreshSongView below already pulls the fresh structure.
-      optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
-      applyPlaybackSnapshot(nextSnapshot);
-      // Creating an empty track does not add, move, or remove clips, so the
-      // waveform peaks cache is still valid. Skip the ~27 MB waveform payload.
-      await refreshSongView({ includeWaveforms: false });
-      setStatus(t("transport.status.trackCreated", { name }));
     });
   }
 
