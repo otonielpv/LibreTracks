@@ -38,10 +38,31 @@ bool BlockCache::read(const Id&  source_id,
 
     const float* src = blk->samples.data() + frame_offset_in_block * src_channels;
 
-    for (int f = 0; f < copy_frames; ++f) {
-        for (int ch = 0; ch < num_channels; ++ch) {
-            int src_ch = (src_channels > 0) ? std::min(ch, src_channels - 1) : 0;
-            out[ch][f] = src[f * src_channels + src_ch];
+    if (num_channels == 2 && src_channels == 2) {
+        float* out_l = out[0];
+        float* out_r = out[1];
+        for (int f = 0; f < copy_frames; ++f) {
+            out_l[f] = src[f * 2];
+            out_r[f] = src[f * 2 + 1];
+        }
+    } else if (num_channels == 2 && src_channels == 1) {
+        float* out_l = out[0];
+        float* out_r = out[1];
+        for (int f = 0; f < copy_frames; ++f) {
+            const float sample = src[f];
+            out_l[f] = sample;
+            out_r[f] = sample;
+        }
+    } else if (num_channels == 1 && src_channels >= 1) {
+        float* out_l = out[0];
+        for (int f = 0; f < copy_frames; ++f)
+            out_l[f] = src[f * src_channels];
+    } else {
+        for (int f = 0; f < copy_frames; ++f) {
+            for (int ch = 0; ch < num_channels; ++ch) {
+                int src_ch = (src_channels > 0) ? std::min(ch, src_channels - 1) : 0;
+                out[ch][f] = src[f * src_channels + src_ch];
+            }
         }
     }
 
