@@ -283,6 +283,7 @@ import {
 import { createSettingsHandlers } from "./settings/settingsHandlers";
 import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandlers";
 import { createLibraryHandlers } from "./library/libraryHandlers";
+import { createColorHandlers } from "./colors/colorHandlers";
 
 const MIN_SESSION_BPM = 20;
 const MAX_SESSION_BPM = 300;
@@ -1737,6 +1738,27 @@ export function TransportPanelContent() {
       applyPitchPrepareSnapshot(nextSnapshot?.pitch);
     },
     [applyPitchPrepareSnapshot],
+  );
+
+  // Track/clip colour handlers (optimistic song patch + snapshot publish).
+  // See ./colors/colorHandlers.
+  const {
+    handleSetTrackColor,
+    handleSetTrackColors,
+    handleSetClipColor,
+  } = useMemo(
+    () =>
+      createColorHandlers({
+        runAction,
+        setSong,
+        applyPlaybackSnapshot,
+        setStatus,
+        optimisticallyAppliedRevisionsRef,
+        clipDisplayName,
+        updateTrackColor,
+        updateClipColor,
+      }),
+    [runAction, setSong, applyPlaybackSnapshot, setStatus],
   );
 
   const missingFilePaths = useMemo(() => {
@@ -5742,95 +5764,6 @@ export function TransportPanelContent() {
       y: nextPosition.y,
       title,
       actions: colorPickerActions({ title, currentColor, onColor }),
-    });
-  }
-
-  async function handleSetTrackColor(track: TrackSummary, color: string | null) {
-    await runAction(async () => {
-      const nextSnapshot = await updateTrackColor({
-        trackId: track.id,
-        color,
-      });
-      optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
-      setSong((previous) =>
-        previous
-          ? {
-              ...previous,
-              projectRevision: nextSnapshot.projectRevision,
-              tracks: previous.tracks.map((candidate) =>
-                candidate.id === track.id ? { ...candidate, color } : candidate,
-              ),
-            }
-          : previous,
-      );
-      applyPlaybackSnapshot(nextSnapshot);
-      setStatus(`Track color updated: ${track.name}`);
-    });
-  }
-
-  async function handleSetTrackColors(
-    tracks: TrackSummary[],
-    color: string | null,
-  ) {
-    if (tracks.length === 0) {
-      return;
-    }
-
-    if (tracks.length === 1) {
-      await handleSetTrackColor(tracks[0], color);
-      return;
-    }
-
-    await runAction(async () => {
-      let nextSnapshot: Awaited<ReturnType<typeof updateTrackColor>> | null =
-        null;
-      const trackIds = new Set(tracks.map((track) => track.id));
-
-      for (const track of tracks) {
-        nextSnapshot = await updateTrackColor({
-          trackId: track.id,
-          color,
-        });
-      }
-
-      if (!nextSnapshot) {
-        return;
-      }
-
-      optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
-      setSong((previous) =>
-        previous
-          ? {
-              ...previous,
-              projectRevision: nextSnapshot.projectRevision,
-              tracks: previous.tracks.map((candidate) =>
-                trackIds.has(candidate.id) ? { ...candidate, color } : candidate,
-              ),
-            }
-          : previous,
-      );
-      applyPlaybackSnapshot(nextSnapshot);
-      setStatus(`Track colors updated: ${tracks.length}`);
-    });
-  }
-
-  async function handleSetClipColor(clip: ClipSummary, color: string | null) {
-    await runAction(async () => {
-      const nextSnapshot = await updateClipColor(clip.id, color);
-      optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
-      setSong((previous) =>
-        previous
-          ? {
-              ...previous,
-              projectRevision: nextSnapshot.projectRevision,
-              clips: previous.clips.map((candidate) =>
-                candidate.id === clip.id ? { ...candidate, color } : candidate,
-              ),
-            }
-          : previous,
-      );
-      applyPlaybackSnapshot(nextSnapshot);
-      setStatus(`Clip color updated: ${clipDisplayName(clip)}`);
     });
   }
 
