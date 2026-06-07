@@ -38,10 +38,31 @@ bool BlockCache::read(const Id&  source_id,
 
     const float* src = blk->samples.data() + frame_offset_in_block * src_channels;
 
-    for (int f = 0; f < copy_frames; ++f) {
-        for (int ch = 0; ch < num_channels; ++ch) {
-            int src_ch = (src_channels > 0) ? std::min(ch, src_channels - 1) : 0;
-            out[ch][f] = src[f * src_channels + src_ch];
+    if (num_channels == 2 && src_channels == 2) {
+        float* out_l = out[0];
+        float* out_r = out[1];
+        for (int f = 0; f < copy_frames; ++f) {
+            out_l[f] = src[f * 2];
+            out_r[f] = src[f * 2 + 1];
+        }
+    } else if (num_channels == 2 && src_channels == 1) {
+        float* out_l = out[0];
+        float* out_r = out[1];
+        for (int f = 0; f < copy_frames; ++f) {
+            const float sample = src[f];
+            out_l[f] = sample;
+            out_r[f] = sample;
+        }
+    } else if (num_channels == 1 && src_channels >= 1) {
+        float* out_l = out[0];
+        for (int f = 0; f < copy_frames; ++f)
+            out_l[f] = src[f * src_channels];
+    } else {
+        for (int f = 0; f < copy_frames; ++f) {
+            for (int ch = 0; ch < num_channels; ++ch) {
+                int src_ch = (src_channels > 0) ? std::min(ch, src_channels - 1) : 0;
+                out[ch][f] = src[f * src_channels + src_ch];
+            }
         }
     }
 
@@ -84,6 +105,39 @@ bool BlockCache::has_block(const Id& source_id, int block_index) const {
     auto it = blocks_.find(key);
     if (it == blocks_.end()) return false;
     return it->second->ready.load(std::memory_order_acquire);
+}
+
+void BlockCache::append_missing_blocks(const Id& source_id,
+                                       int first_block,
+                                       int last_block,
+                                       std::vector<int>& out) const {
+    if (last_block < first_block)
+        return;
+    std::lock_guard<std::mutex> lk(mtx_);
+    for (int block = std::max(0, first_block); block <= last_block; ++block) {
+        CacheKey key{ source_id, block };
+        auto it = blocks_.find(key);
+        if (it == blocks_.end() ||
+            !it->second->ready.load(std::memory_order_acquire)) {
+            out.push_back(block);
+        }
+    }
+}
+
+void BlockCache::append_missing_blocks(const Id& source_id,
+                                       const std::vector<int>& block_indices,
+                                       std::vector<int>& out) const {
+    std::lock_guard<std::mutex> lk(mtx_);
+    for (int block : block_indices) {
+        if (block < 0)
+            continue;
+        CacheKey key{ source_id, block };
+        auto it = blocks_.find(key);
+        if (it == blocks_.end() ||
+            !it->second->ready.load(std::memory_order_acquire)) {
+            out.push_back(block);
+        }
+    }
 }
 
 CacheDiagnostics BlockCache::diagnostics() const {

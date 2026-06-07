@@ -810,10 +810,13 @@ impl DesktopSession {
                 song_dir.to_string_lossy(),
             ),
         );
+        emit_project_load_progress(app, 5, "Leyendo archivo de proyecto...".into(), 0, 0, 0, 0);
         let song = load_song_from_file(&song_file)?;
 
-        emit_project_load_progress(app, 10, "Leyendo proyecto...".into(), 0, 0, 0, 0);
+        emit_project_load_progress(app, 10, "Proyecto leido.".into(), 0, 0, 0, 0);
+        emit_project_load_progress(app, 14, "Cargando sesion de audio...".into(), 0, 0, 0, 0);
         self.load_song_from_path(song, song_dir, audio)?;
+        emit_project_load_progress(app, 18, "Registrando fuentes de audio...".into(), 0, 0, 0, 0);
         self.song_file_path = Some(song_file);
         self.wait_for_project_audio_preparation(app, audio)?;
         append_project_load_debug_line(app, "[backend:open] finished");
@@ -3963,11 +3966,12 @@ impl DesktopSession {
     ) -> Result<(), DesktopError> {
         const TIMEOUT: Duration = Duration::from_secs(120);
         const POLL_INTERVAL: Duration = Duration::from_millis(50);
-        // Sources occupy 0..=85% of the bar; waveforms 85..=92%; prearm 92..=100%.
-        // Leaving the last slice for prearm keeps the UI honest: once we reach
-        // 100% it means Play will be instant (no Bungee voice construction on
-        // the critical path).
-        const SOURCES_SPAN: u8 = 85;
+        // The loader reserves visible bands for each blocking phase so cached
+        // projects still show meaningful progress instead of jumping 2 -> 96.
+        // 0..18: file/model/session, 18..80: source/cache readiness,
+        // 80..92: waveforms + first-play cache, 92..99: prearmed jump voices.
+        const SOURCES_BASE: u8 = 18;
+        const SOURCES_SPAN: u8 = 62;
         let started_at = Instant::now();
         let mut last_ready = usize::MAX;
         let mut last_total = usize::MAX;
@@ -4019,9 +4023,10 @@ impl DesktopSession {
             let disk_cache_mb = (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
 
             let percent = if total == 0 {
-                10
+                SOURCES_BASE
             } else {
-                10 + ((ready * SOURCES_SPAN as usize) / total).min(SOURCES_SPAN as usize) as u8
+                SOURCES_BASE
+                    + ((ready * SOURCES_SPAN as usize) / total).min(SOURCES_SPAN as usize) as u8
             };
             // Emit on every ready/total change so the UI shows 1/31 → 2/31 …
             // not just the few percent-step boundaries.
@@ -4104,7 +4109,7 @@ impl DesktopSession {
                     let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
                     emit_project_load_progress(
                         app,
-                        87,
+                        84,
                         "Preparando waveforms...".into(),
                         ready,
                         total,
@@ -4112,8 +4117,26 @@ impl DesktopSession {
                         disk_cache_mb,
                     );
                     self.ensure_project_waveforms_ready(&song_dir, &song, audio)?;
+                    emit_project_load_progress(
+                        app,
+                        88,
+                        "Waveforms preparadas.".into(),
+                        ready,
+                        total,
+                        ram_cache_mb,
+                        disk_cache_mb,
+                    );
                     let runtime_position_seconds =
                         self.runtime_seconds_for_engine_position(self.current_position());
+                    emit_project_load_progress(
+                        app,
+                        90,
+                        "Preparando cache inicial de reproduccion...".into(),
+                        ready,
+                        total,
+                        ram_cache_mb,
+                        disk_cache_mb,
+                    );
                     audio.prepare_playback_at(song.clone(), runtime_position_seconds)?;
                     emit_project_load_progress(
                         app,
@@ -4132,8 +4155,8 @@ impl DesktopSession {
                         (prepared_snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
                     emit_project_load_progress(
                         app,
-                        100,
-                        "Proyecto listo para reproducir.".into(),
+                        99,
+                        "Audio preparado. Construyendo vista del proyecto...".into(),
                         ready,
                         total,
                         ram_cache_mb,
@@ -4143,8 +4166,8 @@ impl DesktopSession {
                 }
                 emit_project_load_progress(
                     app,
-                    100,
-                    "Proyecto listo para reproducir.".into(),
+                    99,
+                    "Audio preparado. Construyendo vista del proyecto...".into(),
                     ready,
                     total,
                     ram_cache_mb,

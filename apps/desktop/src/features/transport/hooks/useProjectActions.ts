@@ -97,9 +97,9 @@ export function useProjectActions({
           }
           setBusyFeedback({
             message: t("transport.shell.loadingProjectView", {
-              defaultValue: "Loading project view...",
+              defaultValue: "Construyendo vista del proyecto...",
             }),
-            percent: 96,
+            percent: 99,
           });
           const nextSong = await refreshSongView({ sync: true });
           void appendDebugLog(
@@ -107,6 +107,12 @@ export function useProjectActions({
           ).catch(() => {});
           applyPlaybackSnapshot(nextSnapshot);
           setActiveSidebarTab(null);
+          setBusyFeedback({
+            message: t("transport.shell.projectReady", {
+              defaultValue: "Proyecto listo para reproducir.",
+            }),
+            percent: 100,
+          });
           // Wait two animation frames so React commits the new SongView and
           // paints the tracks before we tear down the loading overlay —
           // prevents the 1-2s flash of an empty timeline between the
@@ -151,9 +157,9 @@ export function useProjectActions({
 
           setBusyFeedback({
             message: t("transport.shell.loadingProjectView", {
-              defaultValue: "Loading project view...",
+              defaultValue: "Construyendo vista del proyecto...",
             }),
-            percent: 96,
+            percent: 99,
           });
           const nextSong = await refreshSongView({ sync: true });
           applyPlaybackSnapshot(nextSnapshot);
@@ -161,6 +167,12 @@ export function useProjectActions({
           setActiveSidebarTab(null);
           setStatus(t("transport.status.songImported"));
           if (nextSong) {
+            setBusyFeedback({
+              message: t("transport.shell.projectReady", {
+                defaultValue: "Proyecto listo para reproducir.",
+              }),
+              percent: 100,
+            });
             await nextPaint();
             setProjectViewHydrating(false);
           }

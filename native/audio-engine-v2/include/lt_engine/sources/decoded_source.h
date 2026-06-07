@@ -3,6 +3,7 @@
 #include <lt_engine/core/types.h>
 #include <lt_engine/session/session.h>
 #include <lt_engine/sources/block_cache.h>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -63,6 +64,7 @@ private:
     std::vector<float> samples_;
     BlockCache*        cache_ = nullptr;
     std::function<void(const Id&, int)> request_block_;
+    mutable std::atomic<int> read_ahead_anchor_block_{-1};
     int    channel_count_   = 0;
     int    sample_rate_      = 0;
     Frame  duration_frames_  = 0;
