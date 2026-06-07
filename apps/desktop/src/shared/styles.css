@@ -1194,6 +1194,69 @@ textarea {
   align-items: stretch;
 }
 
+/* Cache controls: a flexible input followed by one or more compact buttons
+   that keep their natural width instead of stretching across the row. */
+.lt-cache-control-row {
+  display: flex;
+  gap: 0.55rem;
+  align-items: stretch;
+}
+
+.lt-cache-control-row > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lt-cache-control-row > .lt-secondary-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* "Default" is a low-frequency reset, so render it as a quieter, borderless
+   affordance next to the primary "Change…" button. */
+.lt-cache-reset-button {
+  background: transparent;
+  border-color: transparent;
+  opacity: 0.7;
+}
+
+.lt-cache-reset-button:hover:not(:disabled) {
+  opacity: 1;
+}
+
+/* Maximum-size row: label + a narrow numeric input with an inline "GB" unit
+   so the field reads as a size, not a free-form box stretched across the row. */
+.lt-cache-max-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.lt-cache-max-label {
+  font: 600 0.82rem/1 "Space Grotesk", sans-serif;
+  color: rgb(243 240 239 / 0.85);
+}
+
+.lt-cache-max-input {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.lt-cache-max-input > input {
+  width: 6rem;
+  padding-right: 2.2rem; /* room for the GB suffix */
+}
+
+.lt-cache-max-unit {
+  position: absolute;
+  right: 0.6rem;
+  pointer-events: none;
+  font: 600 0.78rem/1 "Space Grotesk", sans-serif;
+  color: rgb(243 240 239 / 0.5);
+}
+
 .lt-output-channel-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));

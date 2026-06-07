@@ -112,6 +112,24 @@ LT_API const char* lt_audio_engine_get_source_peaks(LtEngine* engine,
                                                     const char* source_id,
                                                     int32_t resolution_frames);
 
+// ---------------------------------------------------------------------------
+// Decoding cache maintenance (no engine handle required)
+//
+// These operate on the env-resolved on-disk PCM cache directory
+// ($LIBRETRACKS_CACHE_DIR), so the host UI can report or clear the cache
+// without a live engine instance. Both honour the configured folder.
+// ---------------------------------------------------------------------------
+
+/** Effective on-disk decoded-PCM cache directory (honours $LIBRETRACKS_CACHE_DIR).
+ *  Returned pointer is valid until the next string-returning call on this thread. */
+LT_API const char* lt_audio_engine_source_cache_dir(void);
+
+/** Total bytes occupied by the on-disk decoded-PCM cache (.rf64 files). */
+LT_API uint64_t lt_audio_engine_source_cache_size_bytes(void);
+
+/** Delete all on-disk decoded-PCM cache files. Returns bytes freed. */
+LT_API uint64_t lt_audio_engine_purge_source_cache(void);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

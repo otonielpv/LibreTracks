@@ -254,6 +254,35 @@ impl Drop for Engine {
 }
 
 // ---------------------------------------------------------------------------
+// Decoding-cache maintenance (engine-independent)
+//
+// These operate on the on-disk decoded-PCM cache directory, which the C++ side
+// resolves from $LIBRETRACKS_CACHE_DIR. They do NOT need a live `Engine`, so a
+// host can report or clear the cache from a plain command without holding the
+// engine lock.
+// ---------------------------------------------------------------------------
+
+/// The effective on-disk decoded-PCM cache directory (honours
+/// `LIBRETRACKS_CACHE_DIR`). Empty string if the engine could not resolve it.
+pub fn decoding_cache_dir() -> String {
+    let ptr = unsafe { lt_audio_engine_source_cache_dir() };
+    if ptr.is_null() {
+        return String::new();
+    }
+    unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() }
+}
+
+/// Total bytes occupied by the on-disk decoded-PCM cache (.rf64 files).
+pub fn decoding_cache_size_bytes() -> u64 {
+    unsafe { lt_audio_engine_source_cache_size_bytes() }
+}
+
+/// Delete all on-disk decoded-PCM cache files. Returns bytes freed.
+pub fn purge_decoding_cache() -> u64 {
+    unsafe { lt_audio_engine_purge_source_cache() }
+}
+
+// ---------------------------------------------------------------------------
 // Internal helper
 // ---------------------------------------------------------------------------
 fn lt_result_to_rust(rc: LtResult) -> Result<(), EngineError> {

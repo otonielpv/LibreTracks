@@ -56,6 +56,11 @@ fn main() {
 
             app.manage(AppSettingsStore::new(initial_settings.clone()));
 
+            // Apply the decoding-cache preferences to the process env BEFORE the
+            // audio engine is first used, so the configured folder / size cap
+            // take effect for the very first decode.
+            settings::apply_decoding_cache_env(&initial_settings);
+
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
             let initial_device = initial_settings.selected_output_device_id.clone();
@@ -116,6 +121,10 @@ fn main() {
             commands::settings::set_metronome_enabled_realtime,
             commands::settings::set_metronome_volume_realtime,
             commands::settings::set_metronome_sound_realtime,
+            commands::settings::get_decoding_cache_info,
+            commands::settings::set_decoding_cache_dir,
+            commands::settings::set_decoding_cache_max_gb,
+            commands::settings::purge_decoding_cache,
             commands::project::get_song_view,
             commands::library::get_library_assets,
             commands::library::get_library_folders,

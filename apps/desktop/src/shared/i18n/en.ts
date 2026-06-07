@@ -93,6 +93,22 @@ const en = {
       diagnosticsCopy: "Copy error log",
       diagnosticsCopied: "Error log copied to clipboard.",
       diagnosticsEmpty: "No errors have been recorded yet.",
+      decodingCacheTitle: "Audio cache",
+      decodingCacheDescription:
+        "Non-WAV audio (MP3, FLAC…) is decoded once and stored here so it loads instantly next time. Changing the folder leaves old files behind until you clear the cache.",
+      decodingCacheLocation: "Cache location",
+      decodingCacheChange: "Change…",
+      decodingCacheReset: "Default",
+      decodingCacheResetHint: "Use the default location",
+      decodingCacheMaxLabel: "Maximum size",
+      decodingCacheMaxAuto: "Auto",
+      decodingCacheApplyMax: "Set limit",
+      decodingCacheMaxHelp:
+        "Size in GB. Leave empty for automatic (10% of free disk space, at least 4 GB).",
+      decodingCacheMaxInvalid:
+        "Enter a whole number of GB (1 or more), or leave empty for automatic.",
+      decodingCacheCurrentSize: "On disk: {{size}}",
+      decodingCacheClear: "Clear cache",
       timelineNavigationScheme: "Timeline navigation",
       timelineNavigationSchemeAbleton:
         "Ableton / Audacity (pinch to zoom, scroll to pan)",

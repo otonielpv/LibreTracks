@@ -40,6 +40,27 @@ namespace lt {
 
 namespace {
 
+// Read an environment variable in a way that reflects live updates made by the
+// host process. On Windows, Rust's std::env::set_var calls SetEnvironmentVariableW
+// (the Win32 block), but the MSVC CRT's getenv() reads a *separate* copy that is
+// snapshotted at startup and only refreshed by _putenv — so getenv() would not
+// see a folder the user just picked. Querying the Win32 block directly keeps the
+// C++ side in sync with what Rust wrote. Returns empty when unset.
+std::string read_env(const char* name) {
+#if defined(_WIN32)
+    DWORD needed = GetEnvironmentVariableA(name, nullptr, 0);
+    if (needed == 0)
+        return {};
+    std::string value(needed, '\0');
+    DWORD written = GetEnvironmentVariableA(name, value.data(), needed);
+    value.resize(written);
+    return value;
+#else
+    const char* raw = std::getenv(name);
+    return raw ? std::string(raw) : std::string();
+#endif
+}
+
 size_t source_cache_blocks_from_env() {
     constexpr size_t kDefaultCacheMb = 512;
     size_t cache_mb = kDefaultCacheMb;
@@ -156,13 +177,11 @@ std::string temp_directory_compat() {
 // useful — and unlike %TEMP%, Windows won't clean it behind our back.
 // Honours $LIBRETRACKS_CACHE_DIR for tests and power users.
 std::string resolve_app_cache_dir() {
-    if (const char* override_dir = std::getenv("LIBRETRACKS_CACHE_DIR")) {
-        if (override_dir[0] != '\0') {
-            std::string out(override_dir);
-            while (out.size() > 1 && is_path_separator(out.back()))
-                out.pop_back();
-            return out;
-        }
+    if (std::string override_dir = read_env("LIBRETRACKS_CACHE_DIR"); !override_dir.empty()) {
+        std::string out(std::move(override_dir));
+        while (out.size() > 1 && is_path_separator(out.back()))
+            out.pop_back();
+        return out;
     }
 #if defined(_WIN32)
     PWSTR path = nullptr;
@@ -233,8 +252,8 @@ unsigned long long free_disk_bytes_for(const std::string& dir) {
 // as an explicit override (0 disables eviction entirely; any positive value
 // fixes the cap to that many MiB).
 size_t source_disk_cache_limit_bytes() {
-    if (const char* raw = std::getenv("LIBRETRACKS_SOURCE_DISK_CACHE_MB")) {
-        const long long parsed = std::atoll(raw);
+    if (std::string raw = read_env("LIBRETRACKS_SOURCE_DISK_CACHE_MB"); !raw.empty()) {
+        const long long parsed = std::atoll(raw.c_str());
         if (parsed >= 0 && parsed <= 1024ll * 1024ll) // sanity 1 TiB
             return static_cast<size_t>(parsed) * 1024ull * 1024ull;
     }
@@ -365,6 +384,46 @@ FileStat stat_file(const std::string& path) {
 }
 
 } // namespace
+
+// ---------------------------------------------------------------------------
+// Free-function cache maintenance API.
+//
+// These operate purely on the env-resolved cache directory (source_cache_dir())
+// and do NOT require a live SourceManager / Engine instance — the UI can call
+// them to report or clear the on-disk PCM cache without any source loaded. They
+// honour LIBRETRACKS_CACHE_DIR exactly like the rest of the cache machinery, so
+// changing the configured folder is reflected immediately.
+// ---------------------------------------------------------------------------
+
+// The env-resolved cache directory the engine writes .rf64 files into. Mirrors
+// what the cache machinery uses, so a host can display the effective path.
+std::string source_cache_directory() {
+    return source_cache_dir();
+}
+
+// Total size in bytes of every .rf64 PCM cache file currently on disk.
+unsigned long long source_cache_dir_size_bytes() {
+    const std::string dir = source_cache_dir();
+    unsigned long long total = 0;
+    for (const auto& e : list_cache_entries(dir)) {
+        if (e.size_bytes > 0)
+            total += static_cast<unsigned long long>(e.size_bytes);
+    }
+    return total;
+}
+
+// Delete every .rf64 PCM cache file. Returns the number of bytes freed (only
+// files actually removed are counted). Best-effort: a file that fails to delete
+// (e.g. still mapped/open) is skipped and simply remains.
+unsigned long long purge_source_cache() {
+    const std::string dir = source_cache_dir();
+    unsigned long long freed = 0;
+    for (const auto& e : list_cache_entries(dir)) {
+        if (std::remove(e.path.c_str()) == 0 && e.size_bytes > 0)
+            freed += static_cast<unsigned long long>(e.size_bytes);
+    }
+    return freed;
+}
 
 SourceManager::SourceManager()
     : entries_(std::make_shared<EntryMap>())

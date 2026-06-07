@@ -7,6 +7,7 @@
 
 #include <lt_engine/lt_engine.h>
 #include <lt_engine/engine_impl.h>
+#include <lt_engine/sources/source_manager.h>
 
 static lt::EngineImpl* as_impl(LtEngine* e) {
     return reinterpret_cast<lt::EngineImpl*>(e);
@@ -98,6 +99,38 @@ LT_API const char* lt_audio_engine_get_source_peaks(LtEngine* engine,
     thread_local std::string buf;
     buf = as_impl(engine)->get_source_peaks(source_id, static_cast<int>(resolution_frames));
     return buf.c_str();
+}
+
+// ---------------------------------------------------------------------------
+// Cache maintenance — no engine handle required. These operate on the
+// env-resolved PCM cache directory ($LIBRETRACKS_CACHE_DIR), so the UI can
+// report / clear the decoding cache without a live engine instance.
+// ---------------------------------------------------------------------------
+
+LT_API const char* lt_audio_engine_source_cache_dir(void) {
+    thread_local std::string buf;
+    try {
+        buf = lt::source_cache_directory();
+    } catch (...) {
+        buf.clear();
+    }
+    return buf.c_str();
+}
+
+LT_API uint64_t lt_audio_engine_source_cache_size_bytes(void) {
+    try {
+        return static_cast<uint64_t>(lt::source_cache_dir_size_bytes());
+    } catch (...) {
+        return 0;
+    }
+}
+
+LT_API uint64_t lt_audio_engine_purge_source_cache(void) {
+    try {
+        return static_cast<uint64_t>(lt::purge_source_cache());
+    } catch (...) {
+        return 0;
+    }
 }
 
 } // extern "C"

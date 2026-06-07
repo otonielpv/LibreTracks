@@ -152,6 +152,15 @@ pub struct AppSettings {
     pub timeline_navigation_scheme: String,
     #[serde(default)]
     pub midi_mappings: HashMap<String, MidiBinding>,
+    /// Custom location for the decoded-PCM cache (`.rf64` files written when a
+    /// non-WAV source is decoded). `None` = OS default cache dir. Maps to the
+    /// engine's `LIBRETRACKS_CACHE_DIR` env override.
+    #[serde(default)]
+    pub decoding_cache_dir: Option<String>,
+    /// Maximum decoding-cache size in GiB. `None` = automatic policy (the engine
+    /// uses 10% of free disk, min 4 GiB). Maps to `LIBRETRACKS_SOURCE_DISK_CACHE_MB`.
+    #[serde(default)]
+    pub decoding_cache_max_gb: Option<u32>,
 }
 
 impl Default for AppSettings {
@@ -191,7 +200,32 @@ impl Default for AppSettings {
             vamp_bars: default_vamp_bars(),
             timeline_navigation_scheme: default_timeline_navigation_scheme(),
             midi_mappings: HashMap::new(),
+            decoding_cache_dir: None,
+            decoding_cache_max_gb: None,
         }
+    }
+}
+
+/// Apply the decoding-cache preferences to the process environment so the audio
+/// engine (which reads these env vars lazily on every cache operation) picks
+/// them up. Call at startup before the engine is first used, and again whenever
+/// the settings change — the native side re-reads `std::getenv` each call, so a
+/// live update takes effect without restarting.
+///
+/// Note: changing the folder does NOT migrate existing `.rf64` files — the old
+/// directory keeps its contents until purged (matches Ableton Live's behaviour).
+pub fn apply_decoding_cache_env(settings: &AppSettings) {
+    match settings.decoding_cache_dir.as_deref() {
+        Some(dir) if !dir.is_empty() => std::env::set_var("LIBRETRACKS_CACHE_DIR", dir),
+        _ => std::env::remove_var("LIBRETRACKS_CACHE_DIR"),
+    }
+    match settings.decoding_cache_max_gb {
+        // The engine override is expressed in MiB.
+        Some(gb) => std::env::set_var(
+            "LIBRETRACKS_SOURCE_DISK_CACHE_MB",
+            (u64::from(gb) * 1024).to_string(),
+        ),
+        None => std::env::remove_var("LIBRETRACKS_SOURCE_DISK_CACHE_MB"),
     }
 }
 
@@ -325,6 +359,27 @@ mod tests {
         })
         .expect("serialize");
         assert!(json.contains("isCc"));
+    }
+
+    #[test]
+    fn decoding_cache_fields_default_to_none_and_survive_empty_object() {
+        // Older settings files predate these fields; an empty object must still
+        // deserialize and leave them unset (= OS default dir / automatic limit).
+        let settings: AppSettings = serde_json::from_str("{}").expect("defaults");
+        assert_eq!(settings.decoding_cache_dir, None);
+        assert_eq!(settings.decoding_cache_max_gb, None);
+    }
+
+    #[test]
+    fn decoding_cache_fields_round_trip() {
+        let mut settings = AppSettings::default();
+        settings.decoding_cache_dir = Some("D:/lt-cache".into());
+        settings.decoding_cache_max_gb = Some(8);
+        let json = serde_json::to_string(&settings).expect("serialize");
+        assert!(json.contains("decodingCacheDir"));
+        assert!(json.contains("decodingCacheMaxGb"));
+        let restored: AppSettings = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored, settings);
     }
 
     #[test]

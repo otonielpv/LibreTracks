@@ -44,6 +44,9 @@ extern "C" {
         source_id: *const c_char,
         resolution_frames: i32,
     ) -> *const c_char;
+    pub fn lt_audio_engine_source_cache_dir() -> *const c_char;
+    pub fn lt_audio_engine_source_cache_size_bytes() -> u64;
+    pub fn lt_audio_engine_purge_source_cache() -> u64;
 }
 
 // ── Stubs (no-link feature — tests only) ───────────────────────────────────
@@ -130,4 +133,16 @@ pub unsafe fn lt_audio_engine_get_source_peaks(
     _: i32,
 ) -> *const c_char {
     b"{\"ok\":false,\"error\":\"no-link\"}\0".as_ptr().cast()
+}
+#[cfg(feature = "no-link")]
+pub unsafe fn lt_audio_engine_source_cache_dir() -> *const c_char {
+    b"\0".as_ptr().cast()
+}
+#[cfg(feature = "no-link")]
+pub unsafe fn lt_audio_engine_source_cache_size_bytes() -> u64 {
+    0
+}
+#[cfg(feature = "no-link")]
+pub unsafe fn lt_audio_engine_purge_source_cache() -> u64 {
+    0
 }

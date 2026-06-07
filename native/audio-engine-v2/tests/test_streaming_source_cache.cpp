@@ -491,6 +491,42 @@ TEST_CASE("PCM cache writes go into LIBRETRACKS_CACHE_DIR/source-cache") {
     CHECK(stats.file_count == 1);
 }
 
+TEST_CASE("source_cache_dir_size_bytes and purge_source_cache operate on the configured dir") {
+    ScopedCacheDir scope("size_and_purge");
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 2;
+
+    // Empty cache to start.
+    CHECK(source_cache_dir_size_bytes() == 0);
+    CHECK(purge_source_cache() == 0);
+
+    // Write two distinct .rf64 caches.
+    for (const char* id : {"size-purge-a", "size-purge-b"}) {
+        SourceManager manager;
+        manager.register_source(id, std::string(id) + ".wav");
+        REQUIRE(manager.store_decoded_source(
+            id, make_reference_audio(kFrames, kChannels),
+            kChannels, kSampleRate, kFrames).is_ok());
+    }
+
+    const std::string cache_sub =
+        scope.path() + std::string(1, kTestPathSep) + "source-cache";
+    const auto stats = stat_cache_dir(cache_sub);
+    REQUIRE(stats.file_count == 2);
+
+    // The free function must agree with an independent directory walk.
+    const unsigned long long reported = source_cache_dir_size_bytes();
+    CHECK(reported == stats.total_bytes);
+    CHECK(reported > 0);
+
+    // Purge removes every file and reports the freed bytes.
+    const unsigned long long freed = purge_source_cache();
+    CHECK(freed == reported);
+    CHECK(source_cache_dir_size_bytes() == 0);
+    CHECK(stat_cache_dir(cache_sub).file_count == 0);
+}
+
 TEST_CASE("LRU eviction removes oldest .rf64 files when the budget is exceeded") {
     ScopedCacheDir scope("lru_eviction");
     // 1 MiB budget: each ~1 MiB source forces eviction of older ones.

@@ -35,6 +35,20 @@ struct SourceDiagnostics {
 using SourceReadyCallback = std::function<void(const Id&)>;
 
 // ---------------------------------------------------------------------------
+// Cache maintenance free functions — operate on the env-resolved PCM cache
+// directory (honours $LIBRETRACKS_CACHE_DIR) without needing a live engine.
+// ---------------------------------------------------------------------------
+
+// The env-resolved directory the engine writes .rf64 cache files into.
+std::string source_cache_directory();
+
+// Total bytes occupied by .rf64 PCM cache files currently on disk.
+unsigned long long source_cache_dir_size_bytes();
+
+// Delete all .rf64 PCM cache files; returns bytes freed. Best-effort.
+unsigned long long purge_source_cache();
+
+// ---------------------------------------------------------------------------
 // SourceManager — owns all DecodedSources for a session.
 //
 // Thread model (Phases 6-9): all operations are called from the main/command

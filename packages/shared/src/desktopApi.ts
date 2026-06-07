@@ -285,6 +285,36 @@ export async function revealErrorLog(): Promise<void> {
   await invokeCommand("reveal_error_log");
 }
 
+export type DecodingCacheInfo = {
+  /** Effective directory the engine writes decoded `.rf64` cache files into. */
+  dir: string;
+  /** Bytes currently occupied by cache files on disk. */
+  sizeBytes: number;
+  /** Configured maximum in GiB, or `null` for the automatic policy. */
+  maxGb: number | null;
+};
+
+export async function getDecodingCacheInfo(): Promise<DecodingCacheInfo> {
+  return invokeCommand<DecodingCacheInfo>("get_decoding_cache_info");
+}
+
+export async function setDecodingCacheDir(
+  dir: string | null,
+): Promise<AppSettings> {
+  return invokeCommand<AppSettings>("set_decoding_cache_dir", { dir });
+}
+
+export async function setDecodingCacheMaxGb(
+  maxGb: number | null,
+): Promise<AppSettings> {
+  return invokeCommand<AppSettings>("set_decoding_cache_max_gb", { maxGb });
+}
+
+/** Delete all on-disk decoded-PCM cache files. Returns bytes freed. */
+export async function purgeDecodingCache(): Promise<number> {
+  return invokeCommand<number>("purge_decoding_cache");
+}
+
 export async function createSong(): Promise<TransportSnapshot | null> {
   return runProjectLoadCommand("start_create_song");
 }

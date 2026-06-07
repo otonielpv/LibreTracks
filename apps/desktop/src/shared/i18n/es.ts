@@ -94,6 +94,22 @@ const es = {
       diagnosticsCopy: "Copiar registro de errores",
       diagnosticsCopied: "Registro de errores copiado al portapapeles.",
       diagnosticsEmpty: "Aún no se han registrado errores.",
+      decodingCacheTitle: "Caché de audio",
+      decodingCacheDescription:
+        "El audio que no es WAV (MP3, FLAC…) se decodifica una vez y se guarda aquí para que cargue al instante la próxima vez. Al cambiar la carpeta, los archivos anteriores quedan en la antigua hasta que vacíes la caché.",
+      decodingCacheLocation: "Ubicación de la caché",
+      decodingCacheChange: "Cambiar…",
+      decodingCacheReset: "Predeterminada",
+      decodingCacheResetHint: "Usar la ubicación predeterminada",
+      decodingCacheMaxLabel: "Tamaño máximo",
+      decodingCacheMaxAuto: "Auto",
+      decodingCacheApplyMax: "Fijar límite",
+      decodingCacheMaxHelp:
+        "Tamaño en GB. Déjalo vacío para automático (10% del espacio libre del disco, mínimo 4 GB).",
+      decodingCacheMaxInvalid:
+        "Introduce un número entero de GB (1 o más), o déjalo vacío para automático.",
+      decodingCacheCurrentSize: "En disco: {{size}}",
+      decodingCacheClear: "Vaciar caché",
       timelineNavigationScheme: "Navegación de la línea de tiempo",
       timelineNavigationSchemeAbleton:
         "Ableton / Audacity (pellizcar para hacer zoom, scroll para desplazar)",
