@@ -116,7 +116,7 @@ export function drawTrackClipsLayer(
       context.fillText(
         childCount ? `${childCount} tracks dentro del folder` : "Folder track",
         20,
-        trackTop + snapshot.trackHeight / 2 - 4,
+        trackTop + snapshot.trackHeight / 2,
       );
       continue;
     }

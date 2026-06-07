@@ -3,13 +3,20 @@ import type { MidiLearnCommand } from "./types";
 export const HEADER_WIDTH = 260;
 export const DEFAULT_TIMELINE_VIEWPORT_WIDTH = 1100;
 export const TIMELINE_FIT_RIGHT_GUTTER_PX = 140;
-export const TRACK_HEIGHT_MIN = 60;
+export const TRACK_HEIGHT_MIN = 18;
 export const TRACK_HEIGHT_MAX = 148;
 export const TRACK_HEIGHT_STEP = 8;
 
-export type TrackHeaderDensity = "is-micro" | "is-compact" | "is-condensed" | "";
+export type TrackHeaderDensity =
+  | "is-lane"
+  | "is-micro"
+  | "is-compact"
+  | "is-condensed"
+  | "";
 
 export function densityFromHeight(trackHeight: number): TrackHeaderDensity {
+  // Ableton-style single-line lane: everything but the name collapses away.
+  if (trackHeight <= 44) return "is-lane";
   if (trackHeight <= 68) return "is-micro";
   if (trackHeight <= 80) return "is-compact";
   if (trackHeight <= 96) return "is-condensed";
