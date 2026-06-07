@@ -104,6 +104,16 @@ a {
   background: color-mix(in srgb, var(--lt-primary) 12%, transparent);
 }
 
+.nav-links .social-link {
+  width: 2.4rem;
+  padding: 0;
+}
+
+.social-link svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
 .button-link.primary {
   color: #003731;
   background: linear-gradient(180deg, var(--lt-primary), var(--lt-primary-container));
@@ -753,6 +763,11 @@ h1 {
     min-height: 2.2rem;
     padding-inline: 0.65rem;
     font-size: 0.72rem;
+  }
+
+  .nav-links .social-link {
+    width: 2.2rem;
+    padding: 0;
   }
 
   .hero {
