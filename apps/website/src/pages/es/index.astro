@@ -1,48 +1,54 @@
 ---
 import SiteLayout from "../../layouts/SiteLayout.astro";
 
-const features = [
-  ["Routing de directo", "Envia stems a Master y rutea click, cues, count-ins o guias directamente a salidas externas dedicadas."],
-  ["Saltos musicales", "Usa Immediate, At next marker, After X bars, Vamp, saltos de cancion y transiciones desde la misma superficie."],
-  ["Edicion no destructiva", "Corta, mueve, duplica y organiza clips sin reescribir los audios de los que depende el show."],
-  ["Remote y MIDI", "Controla transporte, mixer, saltos, Vamp y transiciones desde hardware MIDI o el remote web movil."],
-];
-
-const comparison = [
-  ["Trabajo principal", "Playback, saltos musicales, interaccion en vivo y control de show.", "Produccion, grabacion, edicion, mezcla y flujos amplios de estudio."],
-  ["Saltos de seccion", "Logica integrada Immediate, At next marker y After X bars resuelta por el transporte Rust.", "Normalmente requiere marcadores, acciones, macros, escenas o rigs de control personalizados."],
-  ["Peso en runtime", "Enfocado en WAV, estado de timeline, routing, remote y operaciones predecibles de directo.", "Entornos generales con instrumentos, plug-ins, grabacion y herramientas de produccion."],
-  ["Intencion en vivo", "Disenado para evitar la complejidad fragil de una sesion de produccion durante un show.", "Muy potentes, pero no especializados en extender, saltar o repetir secciones desde direccion musical."],
+const capabilities = [
+  ["Directos organizados por canciones", "Organiza el concierto como canciones con sus propias regiones, clips, tempo, nivel principal, marcas y paquetes reutilizables."],
+  ["Control musical en vivo", "Usa saltos de marca, saltos de cancion, bucles Vamp, modos de transicion, atajos y mapeos MIDI desde una superficie enfocada."],
+  ["Tono y tempo", "Transpone canciones, ajusta el audio al tempo del timeline con Warp y decide que pistas siguen el cambio de tono con el control T por pista."],
+  ["Ruteo y control remoto", "Envia pistas, click, cues, guias y buses de carpeta a las salidas correctas, y controla transporte o mezcla desde movil/tablet."],
 ];
 
 const workflow = [
-  ["Prepara", "Importa audio en Biblioteca, organiza assets en carpetas virtuales y crea pistas de audio o carpetas para stems, cues y bloques de playback.", "/screenshots/Library-Assets-Import.gif"],
-  ["Organiza", "Arrastra clips al timeline, duplica material repetido, corta en el cursor, activa Snap to Grid y define regiones de cancion.", "/screenshots/Create-Region.png"],
-  ["Ejecuta", "Crea marcas, configura saltos, activa Vamp, exporta canciones preparadas y delega transporte o mixer a un movil o tablet.", "/screenshots/Remote_Mixer.png"],
+  ["Construye la biblioteca", "Importa WAVs preparados, organiza recursos en carpetas virtuales y reutiliza canciones con paquetes LibreTracks.", "/screenshots/Library-Assets-Import.gif"],
+  ["Da forma al repertorio", "Organiza clips en un timeline musical, crea regiones de cancion, colorea sesiones densas y coloca marcas donde ocurren las decisiones en vivo.", "/screenshots/Proyecto.png"],
+  ["Ensaya y toca", "Cambia a Vista Compacta para ver una columna por cancion, ajustar la mezcla compartida, disparar canciones y leer el repertorio bajo presion.", "/screenshots/Compact-View.png"],
 ];
 
-const docsHighlights = [
-  ["Audio", "Seleccion de dispositivo dedicado, salidas hardware, routing por pista, metronomo y configuracion MIDI Learn."],
-  ["Proyecto", "Importacion en Biblioteca, carpetas virtuales, audio tracks, folder tracks, duplicado, cortes y edicion con rejilla."],
-  ["Directo", "Marcas, cambios de compas, regiones, saltos de marca, Vamp, saltos de cancion, transiciones, atajos y remote movil."],
+const viewHighlights = [
+  ["Timeline lineal", "Una vista tipo DAW para organizar pistas, editar clips, revisar marcas y preparar la estructura del concierto."],
+  ["Vista Compacta", "Una vista orientada a canciones para ensayo y directo, con columnas, controles de reproduccion, faders master y mezclador compartido."],
+  ["Un unico proyecto", "Las dos vistas editan la misma sesion, asi que clips, ruteo, canciones, colores y mezcla se mantienen sincronizados."],
+];
+
+const controlHighlights = [
+  ["Saltos en vivo", "Dispara secciones inmediatamente, en la siguiente marca, despues de varios compases o en limites de cancion con transiciones opcionales."],
+  ["Warp y transposicion", "Cambia tempo o tonalidad por region de cancion mientras mantienes click, guias o referencias bajo control explicito."],
+  ["Ruteo de escenario", "Usa pistas de audio, pistas de carpeta, ruteo heredado, metronomo, salidas hardware, MIDI Learn y control remoto movil."],
+];
+
+const fit = [
+  ["Produccion", "Compone, graba, edita, mezcla y disena sonido en tu DAW de estudio.", "Trae el audio terminado a una sesion de playback enfocada en directo."],
+  ["Preparacion del repertorio", "Un DAW general puede hacerlo, pero suele depender de escenas, acciones o plantillas de ruteo personalizadas.", "Construye canciones, marcas, clips, ruteo, paquetes y controles en vivo alrededor del repertorio."],
+  ["Decisiones en vivo", "Flexible, pero normalmente atado a la complejidad de una sesion de produccion.", "Usa controles dedicados para Vamp, saltos, transiciones, transposicion, ruteo, MIDI y mezcla remota."],
+  ["Superficie de escenario", "Potente para operadores que necesitan todo el entorno de produccion.", "Enfocado para musicos, directores musicales y operadores de playback que ejecutan directos preparados."],
 ];
 ---
 
-<SiteLayout title="LibreTracks - Workstation de Playback en Vivo" description="LibreTracks es una workstation de playback en vivo para musicos y directores musicales." lang="es">
+<SiteLayout title="LibreTracks - Playback en Vivo Por Canciones" description="LibreTracks es una herramienta de playback en vivo por canciones para musicos, directores musicales y operadores de playback." lang="es">
   <main>
     <section class="site-shell hero">
       <div class="hero-grid">
         <div>
-          <p class="eyebrow">Workstation de playback en vivo</p>
+          <p class="eyebrow">Playback en vivo por canciones</p>
           <h1>LibreTracks</h1>
-          <p>Una workstation multitrack enfocada en musicos en vivo, directores musicales y playback engineers. Prepara stems, rutea cues, crea regiones de cancion y adapta el show en tiempo real.</p>
+          <p>Prepara un concierto como canciones, pistas, marcas, cues y rutas. Organizalo en un timeline, ensayalo en Vista Compacta y ejecuta el directo con saltos musicales, control de tono, MIDI y control remoto movil.</p>
           <div class="hero-actions">
             <a class="button-link primary" href="/es/download">Descargar</a>
-            <a class="button-link" href="/es/docs/">Leer docs</a>
+            <a class="button-link" href="/es/docs/">Explorar docs</a>
           </div>
         </div>
         <div class="product-shot">
-          <img src="/screenshots/Proyecto.png" alt="Timeline de proyecto en LibreTracks con pistas y controles de transporte" />
+          <img src="/screenshots/Compact-View.png" alt="Vista Compacta de LibreTracks con columnas de canciones y controles de mezcla" />
         </div>
       </div>
     </section>
@@ -50,12 +56,12 @@ const docsHighlights = [
     <section class="band">
       <div class="site-shell">
         <div class="section-heading">
-          <p class="eyebrow">Superficie de directo</p>
-          <h2>Todo lo necesario para playback, routing y decisiones en vivo.</h2>
-          <p>LibreTracks mantiene el flujo centrado: importa audio preparado, organizalo en un timeline musical, rutealo con claridad y controlalo desde desktop, MIDI o movil.</p>
+          <p class="eyebrow">Para que sirve</p>
+          <h2>Un lugar enfocado para convertir audio preparado en un directo controlado.</h2>
+          <p>LibreTracks no intenta reemplazar tu DAW de produccion. Es una herramienta de escenario que toma pistas terminadas, las organiza por canciones y da al operador controles predecibles para ensayo y directo.</p>
         </div>
         <div class="feature-grid">
-          {features.map(([title, body]) => (
+          {capabilities.map(([title, body]) => (
             <article class="feature-card">
               <strong>{title}</strong>
               <p>{body}</p>
@@ -69,7 +75,7 @@ const docsHighlights = [
       <div class="site-shell">
         <div class="section-heading">
           <p class="eyebrow">Flujo</p>
-          <h2>De stems preparados a un show controlado.</h2>
+          <h2>De pistas preparadas a un repertorio listo para tocar.</h2>
         </div>
         <div class="workflow-grid">
           {workflow.map(([title, body, image]) => (
@@ -88,16 +94,16 @@ const docsHighlights = [
     <section class="band">
       <div class="site-shell docs-preview">
         <div class="section-heading">
-          <p class="eyebrow">Documentacion</p>
-          <h2>Manual detallado con screenshots y flujos de directo.</h2>
-          <p>La documentacion sigue el manual de usuario: audio, routing, metronomo, MIDI, Biblioteca, edicion de timeline, marcas, compases, Vamp, paquetes de cancion y remote movil.</p>
+          <p class="eyebrow">Dos vistas, un directo</p>
+          <h2>Prepara en el timeline. Toca desde la lista de canciones.</h2>
+          <p>El timeline lineal es ideal para construir la sesion; la Vista Compacta es ideal para ensayar canciones, disparar transiciones y mantener visible el mezclador. Las dos son proyecciones del mismo proyecto.</p>
           <div class="hero-actions">
-            <a class="button-link primary" href="/es/docs/">Abrir documentacion</a>
-            <a class="button-link" href="https://github.com/otonielpv/LibreTracks/blob/main/docs/USER_MANUAL.es.md">Manual de usuario</a>
+            <a class="button-link primary" href="/es/docs/compact-view/">Docs Vista Compacta</a>
+            <a class="button-link" href="/es/docs/core-concepts/">Conceptos base</a>
           </div>
         </div>
         <div class="docs-list">
-          {docsHighlights.map(([title, body]) => (
+          {viewHighlights.map(([title, body]) => (
             <article>
               <strong>{title}</strong>
               <p>{body}</p>
@@ -110,16 +116,35 @@ const docsHighlights = [
     <section class="band">
       <div class="site-shell">
         <div class="section-heading">
-          <p class="eyebrow">LibreTracks vs. DAWs tradicionales</p>
-          <h2>No es para producir. Es para el concierto.</h2>
+          <p class="eyebrow">Control en vivo</p>
+          <h2>Haz flexible el directo sin convertirlo en una sesion de produccion.</h2>
+          <p>LibreTracks mantiene las operaciones de escenario cerca de la intencion musical: saltar a secciones, sostener un Vamp, moverse entre canciones, transponer el repertorio, enviar cues y delegar mezcla a otro dispositivo.</p>
+        </div>
+        <div class="feature-grid">
+          {controlHighlights.map(([title, body]) => (
+            <article class="feature-card">
+              <strong>{title}</strong>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">Donde encaja</p>
+          <h2>Usa tu DAW para producir. Usa LibreTracks para el concierto.</h2>
+          <p>LibreTracks complementa herramientas como Reaper, Ableton Live, Logic o Cubase llevando audio preparado a un flujo dedicado de playback en directo.</p>
         </div>
         <table class="compare-table">
           <thead>
-            <tr><th>Foco</th><th>LibreTracks</th><th>Reaper / Ableton Live</th></tr>
+            <tr><th>Necesidad</th><th>DAW de estudio</th><th>LibreTracks</th></tr>
           </thead>
           <tbody>
-            {comparison.map(([focus, libretracks, daws]) => (
-              <tr><td>{focus}</td><td>{libretracks}</td><td>{daws}</td></tr>
+            {fit.map(([need, daw, libretracks]) => (
+              <tr><td>{need}</td><td>{daw}</td><td>{libretracks}</td></tr>
             ))}
           </tbody>
         </table>

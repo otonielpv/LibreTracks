@@ -1,48 +1,54 @@
 ---
 import SiteLayout from "../layouts/SiteLayout.astro";
 
-const features = [
-  ["Live routing", "Send stems to Master and route click, cues, count-ins, or guides directly to dedicated external outputs."],
-  ["Musical jumps", "Use Immediate, At next marker, After X bars, Vamp, song jumps, and fade transitions from the same live surface."],
-  ["Non-destructive editing", "Split, move, duplicate, and arrange clips without rewriting the audio files your show depends on."],
-  ["Remote and MIDI", "Control transport, mixer, jumps, Vamp, and song transitions from MIDI hardware or the mobile web remote."],
-];
-
-const comparison = [
-  ["Primary job", "Playback, musical jumps, live interaction, and show control.", "Production, recording, editing, mixing, and broad studio workflows."],
-  ["Section jumps", "Built-in Immediate, At next marker, and After X bars logic resolved by the Rust transport.", "Usually built with markers, actions, macros, scenes, or custom control rigs."],
-  ["Runtime weight", "Focused on WAV playback, timeline state, routing, remote control, and predictable live operations.", "Large general-purpose environments with instruments, plug-ins, recording, and production tooling."],
-  ["Live intent", "Designed to avoid fragile production-session complexity during a show.", "Extremely powerful, but not specialized around musical directors extending, skipping, or repeating sections."],
+const capabilities = [
+  ["Song-based show building", "Organize the show as songs with their own regions, clips, tempo, master level, markers, and reusable packages."],
+  ["Musical live control", "Use marker jumps, song jumps, Vamp loops, transition modes, keyboard shortcuts, and MIDI mappings from one focused surface."],
+  ["Pitch and tempo tools", "Transpose songs, warp audio to the timeline tempo, and choose which tracks follow pitch with the per-track T control."],
+  ["Routing and remote operation", "Route stems, click, cues, guide tracks, and folder buses to the right outputs, then control transport and mix from a phone or tablet."],
 ];
 
 const workflow = [
-  ["Prepare", "Import audio into the Library, organize assets into virtual folders, and create audio or folder tracks for stems, cues, and playback blocks.", "/screenshots/Library-Assets-Import.gif"],
-  ["Arrange", "Drag clips to the timeline, duplicate repeated material, split at the cursor, enable Snap to Grid, and define song regions.", "/screenshots/Create-Region.png"],
-  ["Perform", "Create markers, configure jump behavior, enable Vamp, export prepared songs, and hand transport or mixer control to a phone or tablet.", "/screenshots/Remote_Mixer.png"],
+  ["Build the library", "Import prepared WAV files, keep assets organized in virtual folders, and reuse songs through LibreTracks packages.", "/screenshots/Library-Assets-Import.gif"],
+  ["Shape the set", "Arrange clips on a musical timeline, create song regions, color-code dense sessions, and place markers where live decisions happen.", "/screenshots/Proyecto.png"],
+  ["Rehearse and perform", "Switch to Compact View to see one column per song, adjust the shared mix, trigger songs, and keep the set readable under pressure.", "/screenshots/Compact-View.png"],
 ];
 
-const docsHighlights = [
-  ["Audio setup", "Dedicated audio device selection, hardware output activation, track routing, metronome routing, and MIDI Learn configuration."],
-  ["Project organization", "Library import, virtual folders, audio tracks, folder tracks, clip duplication, splitting, and grid-based editing."],
-  ["Live control", "Markers, meter changes, section/song regions, marker jumps, Vamp loops, song jumps, transitions, shortcuts, and mobile remote operation."],
+const viewHighlights = [
+  ["Linear timeline", "A DAW-like view for arranging stems, editing clips, checking markers, and preparing the structure of the show."],
+  ["Compact View", "A song-first view for rehearsal and performance, with song columns, play controls, masters, and a shared mixer."],
+  ["One project model", "Both views edit the same session, so changes to clips, routing, songs, colors, and mix state stay in sync."],
+];
+
+const controlHighlights = [
+  ["Live jumps", "Trigger sections immediately, at the next marker, after a bar count, or at song boundaries with optional fade transitions."],
+  ["Warp and transpose", "Change tempo or key per song region while keeping click, guide, or reference tracks under explicit control."],
+  ["Stage routing", "Use audio tracks, folder tracks, inherited routing, metronome routing, hardware outputs, MIDI Learn, and the mobile remote."],
+];
+
+const fit = [
+  ["Production", "Write, record, edit, mix, and sound-design stems in your studio DAW.", "Bring finished audio into a show-focused playback session."],
+  ["Set preparation", "General DAWs can do it, but often through custom scenes, actions, or routing templates.", "Build songs, markers, clips, routing, packages, and live controls around the set list."],
+  ["Live decisions", "Flexible, but usually tied to production-session complexity.", "Use dedicated controls for Vamp, marker jumps, song jumps, transitions, transpose, routing, MIDI, and remote mixing."],
+  ["On-stage surface", "Powerful for operators who need the full production environment.", "Focused for musicians, music directors, and playback engineers running prepared shows."],
 ];
 ---
 
-<SiteLayout title="LibreTracks - Live Playback Workstation" description="LibreTracks is a live playback workstation for musicians and musical directors." lang="en">
+<SiteLayout title="LibreTracks - Song-Based Live Playback Workstation" description="LibreTracks is a song-based live playback workstation for musicians, music directors, and playback engineers." lang="en">
   <main>
     <section class="site-shell hero">
       <div class="hero-grid">
         <div>
-          <p class="eyebrow">Live playback workstation</p>
+          <p class="eyebrow">Song-based live playback workstation</p>
           <h1>LibreTracks</h1>
-          <p>A focused multitrack playback workstation for live musicians, musical directors, and playback engineers. Prepare stems, route cues, create song regions, and adapt the show in real time.</p>
+          <p>Prepare a show as songs, stems, markers, cues, and routes. Arrange it on a timeline, rehearse it in Compact View, and run the performance with musical jumps, pitch tools, MIDI, and a mobile remote.</p>
           <div class="hero-actions">
             <a class="button-link primary" href="/download">Download</a>
-            <a class="button-link" href="/docs/">Read docs</a>
+            <a class="button-link" href="/docs/">Explore docs</a>
           </div>
         </div>
         <div class="product-shot">
-          <img src="/screenshots/Proyecto.png" alt="LibreTracks project timeline with tracks and transport controls" />
+          <img src="/screenshots/Compact-View.png" alt="LibreTracks Compact View with song columns and mixer controls" />
         </div>
       </div>
     </section>
@@ -50,12 +56,12 @@ const docsHighlights = [
     <section class="band">
       <div class="site-shell">
         <div class="section-heading">
-          <p class="eyebrow">Stage-first surface</p>
-          <h2>Everything needed for playback, routing, and live decisions.</h2>
-          <p>LibreTracks keeps the show workflow focused: import prepared audio, arrange it on a musical timeline, route it clearly, and control it from desktop, MIDI, or mobile.</p>
+          <p class="eyebrow">What it is for</p>
+          <h2>A focused place to turn prepared audio into a controlled live show.</h2>
+          <p>LibreTracks is not trying to replace your production DAW. It is the stage workstation that takes finished stems, organizes them by song, and gives the operator predictable controls for rehearsal and performance.</p>
         </div>
         <div class="feature-grid">
-          {features.map(([title, body]) => (
+          {capabilities.map(([title, body]) => (
             <article class="feature-card">
               <strong>{title}</strong>
               <p>{body}</p>
@@ -69,7 +75,7 @@ const docsHighlights = [
       <div class="site-shell">
         <div class="section-heading">
           <p class="eyebrow">Workflow</p>
-          <h2>From prepared stems to a controlled live show.</h2>
+          <h2>From stems to a playable set.</h2>
         </div>
         <div class="workflow-grid">
           {workflow.map(([title, body, image]) => (
@@ -88,16 +94,16 @@ const docsHighlights = [
     <section class="band">
       <div class="site-shell docs-preview">
         <div class="section-heading">
-          <p class="eyebrow">Documentation</p>
-          <h2>A detailed manual with screenshots and stage workflows.</h2>
-          <p>The docs now follow the user manual: audio setup, routing, metronome, MIDI, library organization, timeline editing, markers, time signatures, Vamp, song packages, and mobile remote control.</p>
+          <p class="eyebrow">Two views, one show</p>
+          <h2>Arrange like a timeline. Perform like a set list.</h2>
+          <p>The linear timeline is ideal for building the session; Compact View is ideal for rehearsing songs, triggering transitions, and keeping the mixer visible. Both views are projections of the same project.</p>
           <div class="hero-actions">
-            <a class="button-link primary" href="/docs/">Open documentation</a>
-            <a class="button-link" href="https://github.com/otonielpv/LibreTracks/blob/main/docs/USER_MANUAL.md">User manual</a>
+            <a class="button-link primary" href="/docs/compact-view/">Compact View docs</a>
+            <a class="button-link" href="/docs/core-concepts/">Core concepts</a>
           </div>
         </div>
         <div class="docs-list">
-          {docsHighlights.map(([title, body]) => (
+          {viewHighlights.map(([title, body]) => (
             <article>
               <strong>{title}</strong>
               <p>{body}</p>
@@ -110,16 +116,35 @@ const docsHighlights = [
     <section class="band">
       <div class="site-shell">
         <div class="section-heading">
-          <p class="eyebrow">LibreTracks vs. traditional DAWs</p>
-          <h2>Not for producing. Built for the gig.</h2>
+          <p class="eyebrow">Live control</p>
+          <h2>Make the show flexible without turning it into a production session.</h2>
+          <p>LibreTracks keeps stage operations close to musical intent: jump to sections, hold a Vamp, move between songs, transpose the set, route cue material, and hand mixer control to another device.</p>
+        </div>
+        <div class="feature-grid">
+          {controlHighlights.map(([title, body]) => (
+            <article class="feature-card">
+              <strong>{title}</strong>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="site-shell">
+        <div class="section-heading">
+          <p class="eyebrow">Where it fits</p>
+          <h2>Use your DAW for production. Use LibreTracks for the gig.</h2>
+          <p>LibreTracks complements tools like Reaper, Ableton Live, Logic, and Cubase by taking prepared audio into a dedicated live playback workflow.</p>
         </div>
         <table class="compare-table">
           <thead>
-            <tr><th>Focus</th><th>LibreTracks</th><th>Reaper / Ableton Live</th></tr>
+            <tr><th>Need</th><th>Studio DAW</th><th>LibreTracks</th></tr>
           </thead>
           <tbody>
-            {comparison.map(([focus, libretracks, daws]) => (
-              <tr><td>{focus}</td><td>{libretracks}</td><td>{daws}</td></tr>
+            {fit.map(([need, daw, libretracks]) => (
+              <tr><td>{need}</td><td>{daw}</td><td>{libretracks}</td></tr>
             ))}
           </tbody>
         </table>
