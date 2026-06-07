@@ -494,9 +494,16 @@ pub async fn export_region_as_package(
         .save_file();
 
     if let Some(path) = output_path {
+        let cache_root = crate::state::decoding_cache_root();
         tauri::async_runtime::spawn_blocking(move || {
-            libretracks_project::export_region_as_package(&song_dir, &song, &region_id, &path)
-                .map_err(|error| error.to_string())
+            libretracks_project::export_region_as_package(
+                &cache_root,
+                &song_dir,
+                &song,
+                &region_id,
+                &path,
+            )
+            .map_err(|error| error.to_string())
         })
         .await
         .map_err(|error| error.to_string())??;

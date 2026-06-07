@@ -20,9 +20,10 @@ pub use song_store::{
     song_file_path, ProjectError, SONG_FILE_NAME,
 };
 pub use waveform::{
-    analyze_wav_file, generate_waveform_summary, load_waveform_summary, waveform_file_path,
-    waveform_summary_from_peaks, write_waveform_summary, AnalyzedWav, SeekIndexEntry, WaveformLod,
-    WaveformSummary,
+    analyze_wav_file, generate_waveform_summary, global_waveform_file_path, is_waveform_fresh,
+    load_global_waveform, load_or_generate_global_waveform, load_waveform_summary,
+    waveform_file_path, waveform_summary_from_peaks, write_global_waveform, write_waveform_summary,
+    AnalyzedWav, SeekIndexEntry, WaveformLod, WaveformSummary,
 };
 
 #[cfg(test)]
@@ -102,10 +103,12 @@ mod tests {
         let song_dir =
             create_song_folder(root.path(), "digno-y-santo").expect("folder should be created");
 
+        // A new project materialises only its own directory (for the
+        // song.ltsession). It no longer creates audio/ or a cache/ folder —
+        // decoded peaks live in the global per-file waveform cache.
         assert!(song_dir.exists());
         assert!(!song_dir.join("audio").exists());
-        assert!(song_dir.join("cache").exists());
-        assert!(song_dir.join("cache").join("waveforms").exists());
+        assert!(!song_dir.join("cache").exists());
     }
 
     #[test]
@@ -425,11 +428,12 @@ mod tests {
         let wav_path = song_dir.join("audio").join("click.wav");
         write_test_wav(&wav_path, 44_100, 2, 1);
 
-        fs::write(
-            waveform_file_path(&song_dir, "audio/click.wav"),
-            b"not-a-valid-waveform-cache",
-        )
-        .expect("invalid waveform should be written");
+        let cache_path = waveform_file_path(&song_dir, "audio/click.wav");
+        // Projects no longer pre-create cache/waveforms/, so make the parent here.
+        fs::create_dir_all(cache_path.parent().expect("cache parent"))
+            .expect("cache dir should be created");
+        fs::write(&cache_path, b"not-a-valid-waveform-cache")
+            .expect("invalid waveform should be written");
 
         let error = load_waveform_summary(&song_dir, "audio/click.wav")
             .expect_err("invalid waveform should fail");

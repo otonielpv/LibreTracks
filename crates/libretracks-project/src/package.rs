@@ -10,7 +10,7 @@ use libretracks_core::{Clip, Song, SongRegion, TempoMarker, TimeSignatureMarker,
 use serde::{Deserialize, Serialize};
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
-use crate::{song_store::ProjectError, waveform_file_path};
+use crate::song_store::ProjectError;
 
 fn timestamp_suffix() -> u128 {
     SystemTime::now()
@@ -134,6 +134,7 @@ pub struct SongPackageImportResult {
 }
 
 pub fn export_region_as_package(
+    cache_root: &Path,
     song_dir: &Path,
     song: &Song,
     region_id: &str,
@@ -269,16 +270,35 @@ pub fn export_region_as_package(
         if !added_files.insert(clip.file_path.clone()) {
             continue;
         }
-        let waveform_path = waveform_file_path(song_dir, &clip.file_path);
-        if !waveform_path.exists() {
-            continue;
+        // Bundle the waveform so the package opens instantly on another machine.
+        // Resolve (and, if missing, generate) it in the per-file global cache,
+        // then ship the encoded `.ltpeaks` bytes from disk.
+        if crate::load_or_generate_global_waveform(cache_root, song_dir, Path::new(&clip.file_path))
+            .is_err()
+        {
+            continue; // can't analyse this source — ship without its waveform
         }
-        let Some(file_name) = waveform_path.file_name().and_then(|value| value.to_str()) else {
+        let source_abs = if Path::new(&clip.file_path).is_absolute() {
+            PathBuf::from(&clip.file_path)
+        } else {
+            song_dir.join(&clip.file_path)
+        };
+        let waveform_path = crate::global_waveform_file_path(cache_root, &source_abs);
+        let Ok(waveform_bytes) = fs::read(&waveform_path) else {
             continue;
         };
-        zip.start_file(format!("waveforms/{file_name}"), waveform_options)
-            .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-        zip.write_all(&fs::read(waveform_path)?)?;
+        // Stable per-clip file name inside the archive, derived from the audio
+        // file stem (the importer re-keys into the destination's global cache).
+        let stem = Path::new(&clip.file_path)
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("waveform");
+        zip.start_file(
+            format!("waveforms/{stem}.waveform.ltpeaks"),
+            waveform_options,
+        )
+        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        zip.write_all(&waveform_bytes)?;
     }
 
     zip.finish()
@@ -322,6 +342,11 @@ fn import_song_package_from_archive<R: Read + Seek>(
     }
     let library_meta = manifest.library_meta.clone();
 
+    // The package still ships its `.ltpeaks`; we extract them into the legacy
+    // project staging dir. The waveform loader's lazy migration then copies each
+    // into the per-file global cache the first time the clip is loaded (keyed by
+    // the audio's path+size+mtime on THIS machine), so a freshly imported
+    // package opens without re-analysing on the destination.
     let waveform_dir = song_dir.join("cache").join("waveforms");
     fs::create_dir_all(&waveform_dir)?;
 
@@ -662,7 +687,7 @@ mod tests {
         let source = song();
         let package_path = song_dir.join("verse.ltsong");
 
-        export_region_as_package(song_dir, &source, "r1", &package_path)
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path)
             .expect("export region");
         assert!(package_path.exists());
 
@@ -692,7 +717,7 @@ mod tests {
         let song_dir = dir.path();
         let source = song();
         let package_path = song_dir.join("verse.ltsong");
-        export_region_as_package(song_dir, &source, "r1", &package_path)
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path)
             .expect("export");
 
         let empty = Song {
@@ -718,7 +743,7 @@ mod tests {
         let mut source = song();
         source.regions[0].transpose_semitones = 99; // beyond MAX
         let package_path = song_dir.join("bad.ltsong");
-        export_region_as_package(song_dir, &source, "r1", &package_path)
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path)
             .expect("export");
 
         let empty = Song {
@@ -735,6 +760,7 @@ mod tests {
     fn export_errors_for_an_unknown_region() {
         let dir = tempdir().expect("tempdir");
         let result = export_region_as_package(
+            dir.path(),
             dir.path(),
             &song(),
             "nonexistent",

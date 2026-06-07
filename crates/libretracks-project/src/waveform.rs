@@ -19,7 +19,7 @@ use symphonia::core::{
 
 use crate::ProjectError;
 
-const WAVEFORM_FORMAT_VERSION: u32 = 5;
+const WAVEFORM_FORMAT_VERSION: u32 = 6;
 const MIN_READABLE_WAVEFORM_FORMAT_VERSION: u32 = 4;
 const WAVEFORM_FILE_MAGIC: &[u8; 8] = b"LTPEAKS1";
 const WAVEFORM_LOD_RESOLUTIONS: [usize; 4] = [256, 2_048, 16_384, 131_072];
@@ -53,6 +53,14 @@ pub struct WaveformSummary {
     pub lods: Vec<WaveformLod>,
     #[serde(default)]
     pub seek_index: Vec<SeekIndexEntry>,
+    /// Size in bytes of the source audio this waveform was derived from, used to
+    /// detect a stale cache when the original file is edited in place. 0 means
+    /// "unknown" (a pre-v6 cache that predates freshness tracking).
+    #[serde(default)]
+    pub source_size: u64,
+    /// Source audio mtime in milliseconds since the unix epoch. See `source_size`.
+    #[serde(default)]
+    pub source_modified_millis: u128,
 }
 
 impl WaveformSummary {
@@ -102,12 +110,67 @@ pub fn waveform_file_path(
         .join(format!("{file_stem}.waveform.ltpeaks"))
 }
 
+/// Read the freshness signature (size, mtime-millis) of a source audio file.
+/// Returns (0, 0) when the file can't be stat'd — callers treat 0 as "unknown",
+/// which keeps a cache usable rather than discarding it on a transient stat error.
+fn source_freshness(source_path: &Path) -> (u64, u128) {
+    let Ok(metadata) = fs::metadata(source_path) else {
+        return (0, 0);
+    };
+    let size = metadata.len();
+    let modified_millis = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|delta| delta.as_millis())
+        .unwrap_or(0);
+    (size, modified_millis)
+}
+
+/// Whether a persisted waveform still matches its source audio. A v6+ summary
+/// carries the source size+mtime it was built from; if either differs from the
+/// file on disk the cache is stale and must be regenerated. Pre-v6 summaries
+/// (source_size == 0) carry no signature, so we cannot prove staleness and treat
+/// them as fresh — they get refreshed naturally on the next version bump or edit.
+pub fn is_waveform_fresh(summary: &WaveformSummary, source_path: &Path) -> bool {
+    if summary.source_size == 0 && summary.source_modified_millis == 0 {
+        return true; // unknown provenance (legacy cache) — keep it
+    }
+    let (size, modified_millis) = source_freshness(source_path);
+    if size == 0 && modified_millis == 0 {
+        return true; // can't stat the source right now — don't discard the cache
+    }
+    summary.source_size == size && summary.source_modified_millis == modified_millis
+}
+
 fn resolve_audio_source_path(song_dir: &Path, audio_path: &Path) -> PathBuf {
     if audio_path.is_absolute() {
         audio_path.to_path_buf()
     } else {
         song_dir.join(audio_path)
     }
+}
+
+/// Per-file global waveform cache path: `<cache_root>/waveform-cache/<stem>-<hash>.waveform.ltpeaks`.
+/// The hash folds the resolved absolute source path plus its size+mtime, so the
+/// same audio reused across projects hits one cache entry, and an edited file
+/// (new size/mtime) maps to a different entry — a first line of invalidation on
+/// top of the freshness signature embedded inside the file.
+pub fn global_waveform_file_path(cache_root: &Path, source_abs_path: &Path) -> PathBuf {
+    let (size, modified_millis) = source_freshness(source_abs_path);
+    let stem = source_abs_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("waveform");
+
+    let mut hasher = DefaultHasher::new();
+    source_abs_path.to_string_lossy().hash(&mut hasher);
+    size.hash(&mut hasher);
+    modified_millis.hash(&mut hasher);
+
+    cache_root
+        .join("waveform-cache")
+        .join(format!("{stem}-{:016x}.waveform.ltpeaks", hasher.finish()))
 }
 
 fn legacy_waveform_json_file_path(
@@ -253,12 +316,15 @@ pub fn analyze_wav_file(path: impl AsRef<Path>) -> Result<AnalyzedWav, ProjectEr
     buckets.truncate(frame_index);
     let duration_seconds = frame_index as f64 / f64::from(sample_rate.max(1));
 
+    let (source_size, source_modified_millis) = source_freshness(path);
     let waveform = WaveformSummary {
         version: WAVEFORM_FORMAT_VERSION,
         duration_seconds,
         sample_rate,
         lods: build_waveform_lods(buckets.finish()),
         seek_index,
+        source_size,
+        source_modified_millis,
     };
 
     Ok(AnalyzedWav {
@@ -289,6 +355,7 @@ pub fn waveform_summary_from_peaks(
     resolution_frames: usize,
     min_peaks: Vec<f32>,
     max_peaks: Vec<f32>,
+    source_path: &Path,
 ) -> Result<WaveformSummary, ProjectError> {
     if sample_rate == 0
         || duration_frames == 0
@@ -308,12 +375,15 @@ pub fn waveform_summary_from_peaks(
         min_peaks_right: Vec::new(),
         max_peaks_right: Vec::new(),
     };
+    let (source_size, source_modified_millis) = source_freshness(source_path);
     let summary = WaveformSummary {
         version: WAVEFORM_FORMAT_VERSION,
         duration_seconds: duration_frames as f64 / f64::from(sample_rate),
         sample_rate,
         lods: build_waveform_lods(base_lod),
         seek_index: Vec::new(),
+        source_size,
+        source_modified_millis,
     };
     validate_waveform_summary(&summary, "<native-waveform>")?;
     Ok(summary)
@@ -370,6 +440,126 @@ pub fn load_waveform_summary(
     Ok(summary)
 }
 
+/// Read a decoded `.ltpeaks` from disk and treat it as a miss (Err) when it is
+/// either an older format version or stale relative to `source_path`. A v6+ file
+/// that is fresh is returned as-is; everything else surfaces as
+/// `InvalidWaveformSummary` so callers regenerate.
+fn read_fresh_waveform_file(
+    path: &Path,
+    source_path: &Path,
+) -> Result<WaveformSummary, ProjectError> {
+    let summary = decode_waveform_summary_binary(&fs::read(path)?)
+        .ok_or_else(|| ProjectError::InvalidWaveformSummary(path.to_path_buf()))?;
+    if summary.version < WAVEFORM_FORMAT_VERSION || !is_waveform_fresh(&summary, source_path) {
+        return Err(ProjectError::InvalidWaveformSummary(path.to_path_buf()));
+    }
+    validate_waveform_summary(&summary, path)?;
+    Ok(summary)
+}
+
+/// Migrate a project-local (or package-staged) `.ltpeaks` into the global cache.
+/// Unlike the global read, this does NOT require the embedded freshness to match
+/// the source mtime: a packaged waveform carries the *origin* machine's mtime,
+/// which legitimately differs after copying to another PC. We accept any
+/// current-version, structurally-valid summary whose embedded source_size either
+/// matches the local file or is unknown (0), then **re-stamp** it with the local
+/// source freshness so future fresh-checks pass. Returns None when the legacy
+/// file is missing/older/corrupt or clearly belongs to a different audio (size
+/// mismatch), so the caller regenerates instead.
+fn migrate_legacy_waveform(
+    legacy_path: &Path,
+    source_path: &Path,
+) -> Option<WaveformSummary> {
+    if !legacy_path.exists() {
+        return None;
+    }
+    let mut summary = decode_waveform_summary_binary(&fs::read(legacy_path).ok()?)?;
+    if summary.version < WAVEFORM_FORMAT_VERSION {
+        return None; // older format — let the caller regenerate at the new version
+    }
+    if validate_waveform_summary(&summary, legacy_path).is_err() {
+        return None;
+    }
+    let (size, modified_millis) = source_freshness(source_path);
+    // If we can read the local size and it disagrees with what the cache was
+    // built from, it's a different file — don't migrate a mismatched waveform.
+    if size != 0 && summary.source_size != 0 && summary.source_size != size {
+        return None;
+    }
+    // Re-stamp to the local source so the migrated entry is considered fresh.
+    summary.source_size = size;
+    summary.source_modified_millis = modified_millis;
+    Some(summary)
+}
+
+/// Load a waveform from the per-file **global** cache, migrating in from a
+/// project-local cache when present. Read order:
+///   1. `<cache_root>/waveform-cache/…` — if present, current-version and fresh.
+///   2. project-local `song_dir/cache/waveforms/…` (legacy/package) — migrate it
+///      into the global cache (re-stamping freshness) and use it.
+///   3. otherwise analyse the source and write **only** the global cache.
+pub fn load_or_generate_global_waveform(
+    cache_root: &Path,
+    song_dir: &Path,
+    audio_relative_path: &Path,
+) -> Result<WaveformSummary, ProjectError> {
+    let source_path = resolve_audio_source_path(song_dir, audio_relative_path);
+    let global_path = global_waveform_file_path(cache_root, &source_path);
+
+    if global_path.exists() {
+        if let Ok(summary) = read_fresh_waveform_file(&global_path, &source_path) {
+            return Ok(summary);
+        }
+    }
+
+    let legacy_path = waveform_file_path(song_dir, audio_relative_path);
+    if let Some(summary) = migrate_legacy_waveform(&legacy_path, &source_path) {
+        write_waveform_summary(&global_path, &summary)?;
+        return Ok(summary);
+    }
+
+    let summary = analyze_wav_file(&source_path)?.waveform;
+    write_waveform_summary(&global_path, &summary)?;
+    Ok(summary)
+}
+
+/// Read-only counterpart of [`load_or_generate_global_waveform`]: returns the
+/// cached summary from the global (or migrated project-local) cache, or an Err
+/// when no fresh cache exists. Never analyses the source — use when the caller
+/// wants to fall back to a different generation path (e.g. native engine peaks).
+pub fn load_global_waveform(
+    cache_root: &Path,
+    song_dir: &Path,
+    audio_relative_path: &Path,
+) -> Result<WaveformSummary, ProjectError> {
+    let source_path = resolve_audio_source_path(song_dir, audio_relative_path);
+    let global_path = global_waveform_file_path(cache_root, &source_path);
+
+    if global_path.exists() {
+        if let Ok(summary) = read_fresh_waveform_file(&global_path, &source_path) {
+            return Ok(summary);
+        }
+    }
+    let legacy_path = waveform_file_path(song_dir, audio_relative_path);
+    if let Some(summary) = migrate_legacy_waveform(&legacy_path, &source_path) {
+        write_waveform_summary(&global_path, &summary)?;
+        return Ok(summary);
+    }
+    Err(ProjectError::InvalidWaveformSummary(global_path))
+}
+
+/// Persist an externally-built summary (e.g. native engine peaks) into the
+/// global per-file cache, returning the path written.
+pub fn write_global_waveform(
+    cache_root: &Path,
+    source_abs_path: &Path,
+    summary: &WaveformSummary,
+) -> Result<PathBuf, ProjectError> {
+    let path = global_waveform_file_path(cache_root, source_abs_path);
+    write_waveform_summary(&path, summary)?;
+    Ok(path)
+}
+
 fn validate_waveform_summary(
     summary: &WaveformSummary,
     path: impl AsRef<Path>,
@@ -413,7 +603,8 @@ fn load_legacy_waveform_summary(
         ));
     }
 
-    let metadata = analyze_wav_file(resolve_audio_source_path(song_dir, audio_relative_path))?;
+    let source_path = resolve_audio_source_path(song_dir, audio_relative_path);
+    let metadata = analyze_wav_file(&source_path)?;
     let frame_count = (metadata.duration_seconds * f64::from(metadata.sample_rate.max(1)))
         .round()
         .max(1.0) as usize;
@@ -426,12 +617,15 @@ fn load_legacy_waveform_summary(
         max_peaks_right: Vec::new(),
     };
 
+    let (source_size, source_modified_millis) = source_freshness(&source_path);
     let summary = WaveformSummary {
         version: WAVEFORM_FORMAT_VERSION,
         duration_seconds: legacy.duration_seconds,
         sample_rate: metadata.sample_rate,
         lods: build_waveform_lods(base_lod),
         seek_index: Vec::new(),
+        source_size,
+        source_modified_millis,
     };
     validate_waveform_summary(&summary, legacy_path)?;
     Ok(summary)
@@ -552,6 +746,10 @@ fn encode_waveform_summary_binary(summary: &WaveformSummary) -> Result<Vec<u8>, 
         bytes.extend_from_slice(&entry.timestamp.to_le_bytes());
         bytes.extend_from_slice(&entry.packet_offset.to_le_bytes());
     }
+    // v6+ appends the source-audio freshness signature (size + mtime millis) so a
+    // cache can be invalidated when the original file is edited in place.
+    bytes.extend_from_slice(&summary.source_size.to_le_bytes());
+    bytes.extend_from_slice(&summary.source_modified_millis.to_le_bytes());
 
     Ok(bytes)
 }
@@ -624,6 +822,13 @@ fn decode_waveform_summary_binary(bytes: &[u8]) -> Option<WaveformSummary> {
         }
     }
 
+    let mut source_size = 0u64;
+    let mut source_modified_millis = 0u128;
+    if version >= 6 {
+        source_size = read_u64(bytes, &mut offset)?;
+        source_modified_millis = read_u128(bytes, &mut offset)?;
+    }
+
     if offset != bytes.len() {
         return None;
     }
@@ -634,6 +839,8 @@ fn decode_waveform_summary_binary(bytes: &[u8]) -> Option<WaveformSummary> {
         sample_rate,
         lods,
         seek_index,
+        source_size,
+        source_modified_millis,
     })
 }
 
@@ -652,6 +859,10 @@ fn read_u32(bytes: &[u8], offset: &mut usize) -> Option<u32> {
 
 fn read_u64(bytes: &[u8], offset: &mut usize) -> Option<u64> {
     Some(u64::from_le_bytes(read_exact(bytes, offset)?))
+}
+
+fn read_u128(bytes: &[u8], offset: &mut usize) -> Option<u128> {
+    Some(u128::from_le_bytes(read_exact(bytes, offset)?))
 }
 
 fn read_f32(bytes: &[u8], offset: &mut usize) -> Option<f32> {
@@ -805,6 +1016,7 @@ mod tests {
             256,
             vec![-0.5; 172],
             vec![0.5; 172],
+            Path::new("<test-source>"),
         )
         .expect("valid peaks");
         assert_eq!(summary.sample_rate, 44_100);
@@ -816,10 +1028,11 @@ mod tests {
     #[test]
     fn summary_from_peaks_rejects_invalid_input() {
         // Zero sample rate, mismatched peak lengths, and empty peaks all fail.
-        assert!(waveform_summary_from_peaks(0, 100, 256, vec![0.0], vec![0.0]).is_err());
-        assert!(waveform_summary_from_peaks(44_100, 0, 256, vec![0.0], vec![0.0]).is_err());
-        assert!(waveform_summary_from_peaks(44_100, 100, 256, vec![0.0], vec![]).is_err());
-        assert!(waveform_summary_from_peaks(44_100, 100, 256, vec![], vec![]).is_err());
+        let src = Path::new("<test-source>");
+        assert!(waveform_summary_from_peaks(0, 100, 256, vec![0.0], vec![0.0], src).is_err());
+        assert!(waveform_summary_from_peaks(44_100, 0, 256, vec![0.0], vec![0.0], src).is_err());
+        assert!(waveform_summary_from_peaks(44_100, 100, 256, vec![0.0], vec![], src).is_err());
+        assert!(waveform_summary_from_peaks(44_100, 100, 256, vec![], vec![], src).is_err());
     }
 
     // ── LOD pyramid ───────────────────────────────────────────────────────
@@ -856,8 +1069,15 @@ mod tests {
     // ── Binary round-trip ─────────────────────────────────────────────────
 
     fn sample_summary() -> WaveformSummary {
-        waveform_summary_from_peaks(48_000, 48_000, 256, vec![-0.3; 188], vec![0.3; 188])
-            .expect("summary")
+        waveform_summary_from_peaks(
+            48_000,
+            48_000,
+            256,
+            vec![-0.3; 188],
+            vec![0.3; 188],
+            Path::new("<test-source>"),
+        )
+        .expect("summary")
     }
 
     #[test]
@@ -882,6 +1102,67 @@ mod tests {
         assert!(decode_waveform_summary_binary(&bytes[..10]).is_none());
     }
 
+    // ── v6 freshness ──────────────────────────────────────────────────────
+
+    #[test]
+    fn v6_round_trip_preserves_source_freshness() {
+        let mut summary = sample_summary();
+        summary.source_size = 123_456;
+        summary.source_modified_millis = 1_700_000_000_000;
+        let bytes = encode_waveform_summary_binary(&summary).expect("encode");
+        let decoded = decode_waveform_summary_binary(&bytes).expect("decode");
+        assert_eq!(decoded.source_size, 123_456);
+        assert_eq!(decoded.source_modified_millis, 1_700_000_000_000);
+        assert_eq!(decoded, summary);
+    }
+
+    #[test]
+    fn pre_v6_bytes_decode_with_zeroed_freshness() {
+        // A v5 file has no freshness trailer; emulate one by encoding a v6 file
+        // and stripping the version down + trimming the trailing 24 bytes
+        // (u64 size + u128 mtime). The decoder must accept it with 0/0.
+        let mut summary = sample_summary();
+        summary.version = 5;
+        summary.source_size = 0;
+        summary.source_modified_millis = 0;
+        // Re-encode at v6 layout but mark version 5 so decode skips the trailer.
+        let mut bytes = encode_waveform_summary_binary(&summary).expect("encode");
+        // Drop the 24-byte freshness trailer the encoder appended.
+        bytes.truncate(bytes.len() - 24);
+        // Patch the version field (bytes 8..12) to 5.
+        bytes[8..12].copy_from_slice(&5u32.to_le_bytes());
+        let decoded = decode_waveform_summary_binary(&bytes).expect("decode v5");
+        assert_eq!(decoded.version, 5);
+        assert_eq!(decoded.source_size, 0);
+        assert_eq!(decoded.source_modified_millis, 0);
+    }
+
+    #[test]
+    fn is_waveform_fresh_detects_edited_source() {
+        let dir = tempdir().expect("tempdir");
+        let audio = dir.path().join("tone.wav");
+        std::fs::write(&audio, b"first version of the audio bytes").expect("write audio");
+
+        let (size, mtime) = source_freshness(&audio);
+        let mut summary = sample_summary();
+        summary.source_size = size;
+        summary.source_modified_millis = mtime;
+        assert!(is_waveform_fresh(&summary, &audio));
+
+        // Rewriting with a different length changes the size → stale.
+        std::fs::write(&audio, b"a clearly different and longer audio payload here")
+            .expect("rewrite audio");
+        assert!(!is_waveform_fresh(&summary, &audio));
+    }
+
+    #[test]
+    fn legacy_unknown_freshness_is_treated_as_fresh() {
+        // source_size == 0 && mtime == 0 → can't prove staleness, keep the cache.
+        let summary = sample_summary(); // built with a non-existent path → 0/0
+        assert_eq!(summary.source_size, 0);
+        assert!(is_waveform_fresh(&summary, Path::new("/whatever/does/not/exist")));
+    }
+
     // ── write + load through the filesystem ───────────────────────────────
 
     #[test]
@@ -902,6 +1183,58 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         let result = load_waveform_summary(dir.path(), "audio/missing.wav");
         assert!(result.is_err());
+    }
+
+    // ── global per-file cache + lazy migration ────────────────────────────
+
+    #[test]
+    fn global_waveform_path_is_stable_per_source_and_under_cache_root() {
+        let cache_root = Path::new("/cache/root");
+        let source = Path::new("/music/kick.wav");
+        let a = global_waveform_file_path(cache_root, source);
+        let b = global_waveform_file_path(cache_root, source);
+        assert_eq!(a, b);
+        assert!(a.starts_with(cache_root.join("waveform-cache")));
+        assert!(a
+            .to_string_lossy()
+            .ends_with(".waveform.ltpeaks"));
+        // A different source yields a different file.
+        let other = global_waveform_file_path(cache_root, Path::new("/music/snare.wav"));
+        assert_ne!(a, other);
+    }
+
+    #[test]
+    fn lazy_migration_copies_a_fresh_project_cache_into_the_global_cache() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path().join("song");
+        let cache_root = dir.path().join("global");
+        std::fs::create_dir_all(&song_dir).expect("song dir");
+
+        // Real audio so freshness + analysis can run.
+        let audio_rel = Path::new("kick.wav");
+        let audio_abs = song_dir.join(audio_rel);
+        let samples: Vec<i16> = (0..4_800).map(|i| ((i % 200) as i16 - 100) * 64).collect();
+        write_mono_wav(&audio_abs, 48_000, &samples);
+
+        // Seed a project-local (legacy) cache by generating it the old way.
+        let legacy = generate_waveform_summary(&song_dir, audio_rel).expect("legacy gen");
+        let legacy_path = waveform_file_path(&song_dir, audio_rel);
+        assert!(legacy_path.exists());
+
+        let global_path = global_waveform_file_path(&cache_root, &audio_abs);
+        assert!(!global_path.exists());
+
+        // First global load migrates the legacy cache up.
+        let migrated =
+            load_or_generate_global_waveform(&cache_root, &song_dir, audio_rel).expect("migrate");
+        assert_eq!(migrated.sample_rate, legacy.sample_rate);
+        assert!(global_path.exists());
+
+        // Second load is served from the global cache (delete legacy to prove it).
+        std::fs::remove_file(&legacy_path).expect("rm legacy");
+        let from_global =
+            load_or_generate_global_waveform(&cache_root, &song_dir, audio_rel).expect("global");
+        assert_eq!(from_global.sample_rate, legacy.sample_rate);
     }
 
     // ── validate_waveform_summary ─────────────────────────────────────────

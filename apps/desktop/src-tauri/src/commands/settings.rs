@@ -171,7 +171,8 @@ pub fn get_decoding_cache_info(
     }
     Ok(DecodingCacheInfo {
         dir,
-        size_bytes: lt_audio_engine_v2::decoding_cache_size_bytes(),
+        size_bytes: lt_audio_engine_v2::decoding_cache_size_bytes()
+            + waveform_cache_size_bytes(),
         max_gb: settings.decoding_cache_max_gb,
     })
 }
@@ -213,8 +214,60 @@ pub fn set_decoding_cache_max_gb(
     persist_settings(&app, &settings_store, next)
 }
 
-/// Delete all on-disk decoded-PCM cache files. Returns bytes freed.
+/// The per-file waveform cache directory, alongside the engine's PCM cache under
+/// the same configurable root (`<cache_root>/waveform-cache`). Returns None when
+/// the engine reports no path (e.g. the no-link test build).
+fn waveform_cache_dir() -> Option<std::path::PathBuf> {
+    let engine_dir = lt_audio_engine_v2::decoding_cache_dir();
+    if engine_dir.is_empty() {
+        return None;
+    }
+    // engine_dir is `<root>/source-cache`; the waveform cache is a sibling.
+    let root = std::path::Path::new(&engine_dir).parent()?;
+    Some(root.join("waveform-cache"))
+}
+
+/// Total bytes occupied by the per-file waveform cache on disk.
+fn waveform_cache_size_bytes() -> u64 {
+    let Some(dir) = waveform_cache_dir() else {
+        return 0;
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| entry.metadata().ok())
+        .filter(|meta| meta.is_file())
+        .map(|meta| meta.len())
+        .sum()
+}
+
+/// Delete every file in the waveform cache directory. Returns bytes freed.
+fn purge_waveform_cache() -> u64 {
+    let Some(dir) = waveform_cache_dir() else {
+        return 0;
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return 0;
+    };
+    let mut freed = 0u64;
+    for entry in entries.flatten() {
+        let Ok(meta) = entry.metadata() else { continue };
+        if !meta.is_file() {
+            continue;
+        }
+        if std::fs::remove_file(entry.path()).is_ok() {
+            freed += meta.len();
+        }
+    }
+    freed
+}
+
+/// Delete all on-disk caches the decoding-cache setting governs: the engine's
+/// PCM `.rf64` files plus the per-file waveform `.ltpeaks`. Returns bytes freed.
 #[tauri::command]
 pub fn purge_decoding_cache() -> Result<u64, String> {
-    Ok(lt_audio_engine_v2::purge_decoding_cache())
+    let pcm_freed = lt_audio_engine_v2::purge_decoding_cache();
+    Ok(pcm_freed + purge_waveform_cache())
 }

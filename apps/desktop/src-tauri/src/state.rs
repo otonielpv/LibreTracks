@@ -18,12 +18,11 @@ use libretracks_core::{
     TimeSignatureMarker, Track, TrackKind, MAX_TRANSPOSE_SEMITONES, MIN_TRANSPOSE_SEMITONES,
 };
 use libretracks_project::{
-    append_wav_files_to_song, generate_waveform_summary,
+    append_wav_files_to_song, global_waveform_file_path,
     import_song_package as import_song_package_into_project, import_wav_files_to_library,
-    load_song_from_file, load_waveform_summary, read_audio_metadata, save_song_to_file,
-    waveform_file_path, waveform_summary_from_peaks, write_waveform_summary,
-    ImportOperationMetrics, ImportedSong, PackageLibraryAssetEntry, ProjectError, WaveformSummary,
-    SONG_FILE_NAME,
+    load_global_waveform, load_or_generate_global_waveform, load_song_from_file, read_audio_metadata,
+    save_song_to_file, waveform_summary_from_peaks, write_global_waveform, ImportOperationMetrics,
+    ImportedSong, PackageLibraryAssetEntry, ProjectError, WaveformSummary, SONG_FILE_NAME,
 };
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 use rayon::prelude::*;
@@ -271,7 +270,8 @@ fn process_waveform_job(job: WaveformJob) {
         waveform_key,
     } = job;
 
-    let summary_result = generate_waveform_summary(&song_dir, &waveform_key);
+    let summary_result =
+        load_or_generate_global_waveform(&decoding_cache_root(), &song_dir, Path::new(&waveform_key));
 
     match summary_result {
         Ok(summary) => {
@@ -664,18 +664,11 @@ impl DesktopSession {
             fs::write(library_manifest_path(&song_dir), manifest_json)?;
         }
 
-        let old_waveform_path = waveform_file_path(&song_dir, old_path);
-        let new_waveform_path = waveform_file_path(&song_dir, new_path);
-        if old_waveform_path.exists() && old_waveform_path != new_waveform_path {
-            if let Some(parent) = new_waveform_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            if new_waveform_path.exists() {
-                fs::remove_file(&new_waveform_path)?;
-            }
-            fs::rename(&old_waveform_path, &new_waveform_path)?;
-        }
-
+        // Waveforms now live in the global per-file cache keyed by the audio's
+        // path+size+mtime. Renaming the audio simply maps to a different cache
+        // entry: the new path migrates/regenerates on next load and the old
+        // entry is reclaimed by the cache's purge — there is nothing per-project
+        // to move here. We only drop the stale in-memory entry.
         self.waveform_cache.remove(&song_dir, old_path);
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
@@ -1008,13 +1001,20 @@ impl DesktopSession {
         write_library_manifest_assets(&song_dir, &library_assets)?;
 
         let audio_file_path = resolve_audio_file_path(&song_dir, &normalized_file_path);
-        if !Path::new(&normalized_file_path).is_absolute() && audio_file_path.exists() {
+        let deleted_local_audio =
+            !Path::new(&normalized_file_path).is_absolute() && audio_file_path.exists();
+        // The global waveform entry is keyed by the audio's path+size+mtime, so
+        // capture its path BEFORE removing the audio (stat must still succeed).
+        let global_waveform_path = global_waveform_file_path(&decoding_cache_root(), &audio_file_path);
+        if deleted_local_audio {
             fs::remove_file(&audio_file_path)?;
         }
 
-        let waveform_path = waveform_file_path(&song_dir, &normalized_file_path);
-        if waveform_path.exists() {
-            fs::remove_file(waveform_path)?;
+        // Only reclaim the shared waveform when the underlying audio was a
+        // project-local file we just deleted; for external (absolute) audio the
+        // file lives on and other projects may still use its cached waveform.
+        if deleted_local_audio && global_waveform_path.exists() {
+            let _ = fs::remove_file(&global_waveform_path);
         }
 
         self.waveform_cache.remove(&song_dir, &normalized_file_path);
@@ -5036,10 +5036,15 @@ impl DesktopSession {
         // Entries that fail with Io/InvalidWaveformSummary are returned as
         // None so we can fall back to native peak generation sequentially —
         // that path needs &mut self because it writes the .peaks file.
+        let cache_root = decoding_cache_root();
         let parallel_results: Vec<(String, Option<(WaveformCacheToken, WaveformSummary)>)> = keys
             .par_iter()
             .map(|key| {
-                let summary = load_waveform_summary(song_dir, key).ok();
+                // Read (and lazily migrate) the per-file global cache, generating
+                // from the source if absent. The freshness check inside guards
+                // against a stale .ltpeaks for an edited audio file.
+                let summary =
+                    load_or_generate_global_waveform(&cache_root, song_dir, Path::new(key)).ok();
                 let token = build_waveform_cache_token(song_dir, key).ok();
                 let entry = match (token, summary) {
                     (Some(t), Some(s)) => Some((t, s)),
@@ -5122,18 +5127,16 @@ impl DesktopSession {
         }
 
         self.perf_metrics.waveform_cache_misses += 1;
-        let summary = match load_waveform_summary(song_dir, waveform_key) {
-            Ok(summary) => summary,
-            Err(error)
-                if allow_regenerate
-                    && matches!(
-                        error,
-                        ProjectError::Io(_) | ProjectError::InvalidWaveformSummary(_)
-                    ) =>
-            {
-                generate_waveform_summary(song_dir, waveform_key)?
-            }
-            Err(error) => return Err(error.into()),
+        let cache_root = decoding_cache_root();
+        let key_path = Path::new(waveform_key);
+        let summary = if allow_regenerate {
+            // Read the global cache (migrating a project-local one), analysing the
+            // source as a last resort.
+            load_or_generate_global_waveform(&cache_root, song_dir, key_path)?
+        } else {
+            // Read-only: never analyse here so the caller can fall back to native
+            // engine peaks for sources symphonia can't decode.
+            load_global_waveform(&cache_root, song_dir, key_path)?
         };
         let refreshed_token = build_waveform_cache_token(song_dir, waveform_key)?;
 
@@ -5161,15 +5164,16 @@ impl DesktopSession {
     ) -> Result<&WaveformSummary, DesktopError> {
         let peaks = audio.source_peaks(song_dir, waveform_key)?;
         let duration_frames = u64::try_from(peaks.duration_frames.max(0)).unwrap_or(0);
+        let source_path = resolve_audio_file_path(song_dir, waveform_key);
         let summary = waveform_summary_from_peaks(
             peaks.sample_rate,
             duration_frames,
             peaks.resolution_frames,
             peaks.min_peaks,
             peaks.max_peaks,
+            &source_path,
         )?;
-        let path = waveform_file_path(song_dir, waveform_key);
-        write_waveform_summary(path, &summary)?;
+        write_global_waveform(&decoding_cache_root(), &source_path, &summary)?;
         let refreshed_token = build_waveform_cache_token(song_dir, waveform_key)?;
 
         self.waveform_cache.reset_if_song_changed(song_dir);
@@ -6187,8 +6191,10 @@ fn build_waveform_cache_token(
     song_dir: &Path,
     waveform_key: &str,
 ) -> Result<WaveformCacheToken, DesktopError> {
-    let audio_metadata = fs::metadata(resolve_audio_file_path(song_dir, waveform_key))?;
-    let waveform_metadata = fs::metadata(waveform_file_path(song_dir, waveform_key))?;
+    let audio_path = resolve_audio_file_path(song_dir, waveform_key);
+    let audio_metadata = fs::metadata(&audio_path)?;
+    let waveform_path = global_waveform_file_path(&decoding_cache_root(), &audio_path);
+    let waveform_metadata = fs::metadata(&waveform_path)?;
 
     Ok(WaveformCacheToken {
         audio_size: audio_metadata.len(),
@@ -6205,6 +6211,26 @@ fn resolve_audio_file_path(song_dir: &Path, file_path: &str) -> PathBuf {
     } else {
         song_dir.join(path)
     }
+}
+
+/// Root directory for the on-disk caches (PCM `.rf64` and per-file waveform
+/// `.ltpeaks`), honouring the configurable decoding-cache folder. The engine
+/// reports `<cache_root>/source-cache`; we take its parent so the waveform
+/// cache lives alongside it under the same configurable root. Falls back to the
+/// engine value verbatim (then to a temp dir) if the parent can't be derived.
+pub(crate) fn decoding_cache_root() -> PathBuf {
+    let engine_dir = lt_audio_engine_v2::decoding_cache_dir();
+    if !engine_dir.is_empty() {
+        let path = PathBuf::from(&engine_dir);
+        // engine_dir is `<root>/source-cache`; the root is its parent.
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                return parent.to_path_buf();
+            }
+        }
+        return path;
+    }
+    std::env::temp_dir().join("LibreTracks")
 }
 
 fn modified_millis(metadata: &fs::Metadata) -> Result<u128, DesktopError> {
@@ -8555,8 +8581,15 @@ mod tests {
         .expect("source manifest should save");
 
         let package_path = source_song_dir.join("demo.ltpkg");
-        export_region_as_package(&source_song_dir, &source_song, "region_1", &package_path)
-            .expect("package should export");
+        let export_cache_root = tempdir().expect("export cache root");
+        export_region_as_package(
+            export_cache_root.path(),
+            &source_song_dir,
+            &source_song,
+            "region_1",
+            &package_path,
+        )
+        .expect("package should export");
 
         let target_root = tempdir().expect("temp dir should exist");
         let target_song_dir = create_song_folder(target_root.path(), "package-import-target")
