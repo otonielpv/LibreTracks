@@ -73,6 +73,9 @@ const STRINGS = {
     empty: "Empty",
     folder: "Folder",
     audio: "Audio",
+    activeSongOnly: "Active song only",
+    activeSongFilterOn: "Showing only tracks in the active song",
+    activeSongFilterOff: "Show only tracks in the active song",
   },
   es: {
     appTitle: "Remote",
@@ -123,6 +126,9 @@ const STRINGS = {
     empty: "Vacío",
     folder: "Carpeta",
     audio: "Audio",
+    activeSongOnly: "Solo canción activa",
+    activeSongFilterOn: "Mostrando solo los tracks de la canción activa",
+    activeSongFilterOff: "Mostrar solo los tracks de la canción activa",
   },
 } as const;
 

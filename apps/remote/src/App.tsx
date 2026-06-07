@@ -116,6 +116,7 @@ type RgbColor = {
 const CHROME_TIMELINE_PIXELS_PER_SECOND = BASE_PIXELS_PER_SECOND * 2.35;
 const PAN_CENTER_MAGNET = 0.08;
 const REMOTE_SIZE_STORAGE_KEY = "libretracks.remote.uiSize";
+const MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY = "libretracks.remote.mixerFilterActiveSong";
 const MAX_REMOTE_SIZE_LEVEL = 3;
 const TIMELINE_JITTER_RESET_THRESHOLD_SECONDS = 0.18;
 const TIMELINE_CORRECTION_SNAP_THRESHOLD_SECONDS = 0.32;
@@ -446,6 +447,74 @@ function buildFolderPaletteMap(tracks: TrackSummary[]) {
   }
 
   return paletteByTrackId;
+}
+
+/**
+ * Track ids that participate in the song the playhead is currently on. A
+ * track participates when it has at least one clip whose timeline span
+ * overlaps the active region. Returns `null` when the playhead is not inside
+ * any region (between songs, or fresh project), in which case the caller
+ * should fall back to showing every track. Mirrors the desktop
+ * CompactView's `activeSongTrackIds` derivation so the two views agree on
+ * what "the active song's tracks" means.
+ */
+function computeActiveSongTrackIds(
+  songView: SongView | null,
+  positionSeconds: number,
+): Set<string> | null {
+  if (!songView) {
+    return null;
+  }
+
+  const activeRegion = songView.regions.find(
+    (region) =>
+      positionSeconds >= region.startSeconds && positionSeconds < region.endSeconds,
+  );
+  if (!activeRegion) {
+    return null;
+  }
+
+  const ids = new Set<string>();
+  for (const clip of songView.clips) {
+    const clipEnd = clip.timelineStartSeconds + clip.durationSeconds;
+    if (
+      clipEnd > activeRegion.startSeconds &&
+      clip.timelineStartSeconds < activeRegion.endSeconds
+    ) {
+      ids.add(clip.trackId);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Given the set of tracks that participate in the active song, expand it
+ * to also include every ancestor folder so a child strip never appears
+ * orphaned from its folder. Returns the visible track list in project
+ * order. When `activeSongTrackIds` is null (no active song) every track is
+ * returned unchanged. Mirrors the desktop CompactMixer filter.
+ */
+function filterTracksToActiveSong(
+  tracks: TrackSummary[],
+  activeSongTrackIds: Set<string> | null,
+): TrackSummary[] {
+  if (!activeSongTrackIds) {
+    return tracks;
+  }
+
+  const trackById = new Map(tracks.map((track) => [track.id, track]));
+  const visibleIds = new Set<string>(activeSongTrackIds);
+  for (const id of activeSongTrackIds) {
+    let current = trackById.get(id);
+    while (current?.parentTrackId) {
+      if (visibleIds.has(current.parentTrackId)) {
+        break;
+      }
+      visibleIds.add(current.parentTrackId);
+      current = trackById.get(current.parentTrackId);
+    }
+  }
+  return tracks.filter((track) => visibleIds.has(track.id));
 }
 
 function useRemoteBridge() {
@@ -1873,15 +1942,111 @@ function MixerStrip({
   );
 }
 
+function readMixerFilterActiveSong() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.localStorage.getItem(MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY) === "1";
+}
+
+/**
+ * Tracks which song region the live playhead is inside, re-rendering only
+ * when that crosses a region boundary (not on every animation frame). Used
+ * by the mixer's "active song only" filter so toggling between songs
+ * updates the visible strips without spinning a per-frame React render.
+ */
+function useActiveRegionId(): string | null {
+  const songView = useRemoteSyncStore((state) => state.songView);
+  const [activeRegionId, setActiveRegionId] = useState<string | null>(null);
+  const songViewRef = useRef(songView);
+
+  useEffect(() => {
+    songViewRef.current = songView;
+  }, [songView]);
+
+  useEffect(() => {
+    let frameId = 0;
+    const tick = () => {
+      const currentSongView = songViewRef.current;
+      const { snapshot, snapshotReceivedAtMs } = useRemoteSyncStore.getState();
+      const positionSeconds = resolveLivePosition(snapshot, snapshotReceivedAtMs);
+      const region = currentSongView?.regions.find(
+        (candidate) =>
+          positionSeconds >= candidate.startSeconds &&
+          positionSeconds < candidate.endSeconds,
+      );
+      const nextId = region?.id ?? null;
+      setActiveRegionId((current) => (current === nextId ? current : nextId));
+      frameId = window.requestAnimationFrame(tick);
+    };
+    frameId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frameId);
+  }, []);
+
+  return activeRegionId;
+}
+
 function MixerView() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const tracks = songView?.tracks ?? [];
   const folderPaletteMap = useMemo(() => buildFolderPaletteMap(tracks), [tracks]);
 
+  const [filterActiveSong, setFilterActiveSong] = useState(readMixerFilterActiveSong);
+  const activeRegionId = useActiveRegionId();
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      MIXER_FILTER_ACTIVE_SONG_STORAGE_KEY,
+      filterActiveSong ? "1" : "0",
+    );
+  }, [filterActiveSong]);
+
+  // Recomputed whenever the active region changes (a boundary crossing) or
+  // the song view updates. The active region drives which clips count, so
+  // we key off its start/end via the resolved region id.
+  const activeSongTrackIds = useMemo(() => {
+    if (!songView || !activeRegionId) {
+      return null;
+    }
+    const region = songView.regions.find((candidate) => candidate.id === activeRegionId);
+    if (!region) {
+      return null;
+    }
+    const midpoint = (region.startSeconds + region.endSeconds) / 2;
+    return computeActiveSongTrackIds(songView, midpoint);
+  }, [songView, activeRegionId]);
+
+  const visibleTracks = useMemo(
+    () =>
+      filterActiveSong ? filterTracksToActiveSong(tracks, activeSongTrackIds) : tracks,
+    [filterActiveSong, tracks, activeSongTrackIds],
+  );
+
+  // The filter is only meaningful while the playhead is inside a song. When
+  // it isn't, leave the toggle visible but inert so the user understands it
+  // has no target right now (matches the desktop compact-view behaviour).
+  const filterAvailable = activeSongTrackIds !== null;
+
   return (
     <section className="remote-panel remote-panel-mixer">
+      <div className="mixer-filter-bar">
+        <button
+          type="button"
+          className={`mixer-filter-toggle ${filterActiveSong ? "is-active" : ""}`}
+          aria-pressed={filterActiveSong}
+          disabled={!filterAvailable && !filterActiveSong}
+          title={
+            filterActiveSong
+              ? STRINGS.activeSongFilterOn
+              : STRINGS.activeSongFilterOff
+          }
+          onClick={() => setFilterActiveSong((current) => !current)}
+        >
+          {STRINGS.activeSongOnly}
+        </button>
+      </div>
       <div className="mixer-scroll">
-        {tracks.map((track) => {
+        {visibleTracks.map((track) => {
           const directPalette = paletteFromTrackColor(track.color);
           const inheritedPalette = directPalette ? null : (folderPaletteMap.get(track.id) ?? null);
 
