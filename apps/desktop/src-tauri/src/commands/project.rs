@@ -10,8 +10,8 @@ use crate::commands::events::{
 use crate::error::DesktopError;
 use crate::models::{LibraryAssetSummary, SongPackageImportResponse, SongView, TransportSnapshot};
 use crate::state::{
-    AudioFileImportPayload, AudioFilePathImportPayload, CreateClipRequest,
-    CreateClipWithAutoTrackRequest, DesktopState,
+    ProjectLoadProgressEvent, AudioFileImportPayload, AudioFilePathImportPayload,
+    CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession, DesktopState,
 };
 use rfd::FileDialog;
 
@@ -57,7 +57,7 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
 /// Spawn the heavy half of a dialog-driven project operation on a worker
 /// thread, emitting `project:load-complete` when it finishes. The native rfd
 /// dialog must run on the calling (main) thread on macOS, but the lock + engine
-/// work must NOT — running it on the main thread freezes the macOS run loop and
+/// work must NOT run there: running it on the main thread freezes the macOS run loop and
 /// hangs the window on the "Applying changes" overlay. The frontend awaits the
 /// completion event (see `openProject`/`createSong` in desktopApi.ts).
 fn spawn_project_work<F>(app: &AppHandle, work: F)
@@ -212,6 +212,17 @@ pub fn open_project_from_dialog(
 }
 
 #[tauri::command]
+pub fn get_project_load_progress_snapshot(
+    state: State<'_, DesktopState>,
+) -> Result<Option<ProjectLoadProgressEvent>, String> {
+    state
+        .project_load_progress
+        .lock()
+        .map(|progress| progress.clone())
+        .map_err(|_| DesktopError::StatePoisoned.to_string())
+}
+
+#[tauri::command]
 pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
     let song_file = FileDialog::new()
         .add_filter("LibreTracks Session", &["ltsession"])
@@ -226,13 +237,21 @@ pub fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, String> {
     thread::spawn(move || {
         let state = worker_app.state::<DesktopState>();
         let result = (|| -> Result<TransportSnapshot, String> {
-            let mut session = state
-                .session
-                .lock()
-                .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-            let snapshot = session
-                .open_project_from_path(&worker_app, &state.audio, song_file)
-                .map_err(|error| error.to_string())?;
+            {
+                let mut session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+                session
+                    .begin_open_project_from_path(&worker_app, &state.audio, song_file)
+                    .map_err(|error| error.to_string())?;
+            }
+            let snapshot = DesktopSession::wait_for_project_audio_preparation_unlocked(
+                &worker_app,
+                &state,
+                &state.audio,
+            )
+            .map_err(|error| error.to_string())?;
             Ok(snapshot)
         })();
 
@@ -347,7 +366,7 @@ pub fn create_clips_with_auto_tracks(
 /// the result via the `library:import-complete` event. Running the import on
 /// the main thread froze the macOS run loop and hung the window (same failure
 /// mode the project load/save commands fixed). Returns `false` if the user
-/// cancels the dialog — no event fires in that case, so the frontend resolves
+/// cancels the dialog. No event fires in that case, so the frontend resolves
 /// to null without waiting (see `importLibraryAssetsFromDialog` in desktopApi.ts).
 #[tauri::command]
 pub fn start_import_library_assets_from_dialog(app: AppHandle) -> Result<bool, String> {

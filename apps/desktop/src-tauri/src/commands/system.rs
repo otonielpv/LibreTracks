@@ -1,6 +1,7 @@
 use std::{
     fs::{self, OpenOptions},
     io::Write,
+    path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -285,10 +286,21 @@ fn append_update_log(app: &AppHandle, line: &str) {
 
 #[tauri::command]
 pub fn append_debug_log(app: AppHandle, line: String) -> Result<(), String> {
-    let log_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| error.to_string())?;
+    let log_dir = {
+        #[cfg(target_os = "windows")]
+        {
+            std::env::var_os("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .map(|dir| dir.join("LibreTracks"))
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            None
+        }
+    }
+    .or_else(|| app.path().app_local_data_dir().ok())
+    .or_else(|| app.path().app_data_dir().ok())
+    .ok_or_else(|| "could not resolve app log directory".to_string())?;
     fs::create_dir_all(&log_dir).map_err(|error| error.to_string())?;
 
     let log_path = log_dir.join("transport-dnd.log");

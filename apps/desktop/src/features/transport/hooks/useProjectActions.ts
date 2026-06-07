@@ -1,7 +1,11 @@
-import type { LibraryAssetSummary, TransportSnapshot } from "@libretracks/shared/models";
+import type {
+  LibraryAssetSummary,
+  ProjectLoadProgressEvent,
+  TransportSnapshot,
+} from "@libretracks/shared/models";
 import {
-  appendDebugLog,
   createSong,
+  getProjectLoadProgressSnapshot,
   openProject,
   pickAndImportSong,
   saveProject,
@@ -44,6 +48,47 @@ export function useProjectActions({
   setStatus,
   setActiveSidebarTab,
 }: UseProjectActionsProps) {
+  function applyProjectProgressFeedback(event: ProjectLoadProgressEvent) {
+    const detail =
+      event.sourcesTotal > 0
+        ? `${event.sourcesReady}/${event.sourcesTotal} fuentes | RAM ${event.ramCacheMb} MB | disco ${event.diskCacheMb} MB`
+        : undefined;
+    setBusyFeedback({
+      message: event.message,
+      percent: event.percent,
+      detail,
+    });
+  }
+
+  function startProjectProgressPolling(startedAtUnixMs: number) {
+    let stopped = false;
+    let timeoutId: number | null = null;
+    const poll = async () => {
+      try {
+        const event = await getProjectLoadProgressSnapshot();
+        if (
+          event &&
+          (!event.emittedAtUnixMs || event.emittedAtUnixMs >= startedAtUnixMs)
+        ) {
+          applyProjectProgressFeedback(event);
+        }
+      } catch {
+        // Best effort: progress events still update the overlay if polling fails.
+      } finally {
+        if (!stopped) {
+          timeoutId = window.setTimeout(poll, 250);
+        }
+      }
+    };
+    timeoutId = window.setTimeout(poll, 0);
+    return () => {
+      stopped = true;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }
+
   function handleCreateSongClick() {
     void runAction(
       async () => {
@@ -70,8 +115,9 @@ export function useProjectActions({
     void runAction(
       async () => {
         let unlistenProjectProgress: (() => void) | null = null;
+        let stopProjectProgressPolling: (() => void) | null = null;
+        const progressStartedAt = Date.now();
         setProjectViewHydrating(true);
-        void appendDebugLog("[frontend:open] handleOpenProjectClick start").catch(() => {});
         setBusyFeedback({
           message: t("transport.shell.loadingProject", {
             defaultValue: "Opening project...",
@@ -80,31 +126,20 @@ export function useProjectActions({
         });
         try {
           unlistenProjectProgress = await registerProjectLoadProgressListener();
-          void appendDebugLog("[frontend:open] progress listener registered").catch(() => {});
+          stopProjectProgressPolling = startProjectProgressPolling(progressStartedAt);
+          await nextPaint();
           // openProject() returns null if the user cancels the native dialog.
           // Otherwise it returns only after the backend has finished decoding
-          // all sources AND prearmed Bungee voices — see
+          // all sources AND prearmed Bungee voices; see
           // wait_for_project_audio_preparation in state.rs. So by the time we
           // continue, the engine is ready to Play instantly.
           const nextSnapshot = await openProject();
-          void appendDebugLog(
-            `[frontend:open] openProject resolved hasSnapshot=${Boolean(nextSnapshot)}`,
-          ).catch(() => {});
           if (!nextSnapshot) {
             setProjectViewHydrating(false);
             setBusyFeedback(null);
             return;
           }
-          setBusyFeedback({
-            message: t("transport.shell.loadingProjectView", {
-              defaultValue: "Construyendo vista del proyecto...",
-            }),
-            percent: 99,
-          });
           const nextSong = await refreshSongView({ sync: true });
-          void appendDebugLog(
-            `[frontend:open] refreshSongView resolved hasSong=${Boolean(nextSong)}`,
-          ).catch(() => {});
           applyPlaybackSnapshot(nextSnapshot);
           setActiveSidebarTab(null);
           setBusyFeedback({
@@ -114,20 +149,17 @@ export function useProjectActions({
             percent: 100,
           });
           // Wait two animation frames so React commits the new SongView and
-          // paints the tracks before we tear down the loading overlay —
+          // paints the tracks before we tear down the loading overlay;
           // prevents the 1-2s flash of an empty timeline between the
           // overlay closing and the tracks appearing.
           await nextPaint();
           setProjectViewHydrating(false);
         } catch (error) {
-          void appendDebugLog(
-            `[frontend:open] error=${error instanceof Error ? error.message : String(error)}`,
-          ).catch(() => {});
           setProjectViewHydrating(false);
           setBusyFeedback(null);
           throw error;
         } finally {
-          void appendDebugLog("[frontend:open] cleanup").catch(() => {});
+          stopProjectProgressPolling?.();
           unlistenProjectProgress?.();
         }
       },
@@ -139,6 +171,8 @@ export function useProjectActions({
     void runAction(
       async () => {
         let unlistenProjectProgress: (() => void) | null = null;
+        let stopProjectProgressPolling: (() => void) | null = null;
+        const progressStartedAt = Date.now();
         setProjectViewHydrating(true);
         setBusyFeedback({
           message: t("transport.shell.importingProject", {
@@ -148,6 +182,8 @@ export function useProjectActions({
         });
         try {
           unlistenProjectProgress = await registerProjectLoadProgressListener();
+          stopProjectProgressPolling = startProjectProgressPolling(progressStartedAt);
+          await nextPaint();
           const nextSnapshot = await pickAndImportSong();
           if (!nextSnapshot) {
             setProjectViewHydrating(false);
@@ -155,12 +191,6 @@ export function useProjectActions({
             return;
           }
 
-          setBusyFeedback({
-            message: t("transport.shell.loadingProjectView", {
-              defaultValue: "Construyendo vista del proyecto...",
-            }),
-            percent: 99,
-          });
           const nextSong = await refreshSongView({ sync: true });
           applyPlaybackSnapshot(nextSnapshot);
           await refreshLibraryState();
@@ -181,6 +211,7 @@ export function useProjectActions({
           setBusyFeedback(null);
           throw error;
         } finally {
+          stopProjectProgressPolling?.();
           unlistenProjectProgress?.();
         }
       },

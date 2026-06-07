@@ -1,6 +1,7 @@
 #include <lt_engine/sources/worker_pool.h>
 #include <lt_engine/sources/audio_decoder.h>
 
+#include <algorithm>
 #include <atomic>
 #include <condition_variable>
 #include <cstdlib>
@@ -10,7 +11,27 @@
 #include <unordered_map>
 #include <vector>
 
+#if defined(_WIN32)
+#  define WIN32_LEAN_AND_MEAN
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#endif
+
 namespace lt {
+
+namespace {
+
+void configure_decode_worker_thread() {
+#if defined(_WIN32)
+    // Keep cold project opens from starving the WebView/UI thread while large
+    // compressed sources are decoded and written to the RF64 cache.
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#endif
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 struct DecodeTask {
@@ -18,6 +39,7 @@ struct DecodeTask {
     Id                    source_id;
     std::string           file_path;
     int                   target_sample_rate;
+    JobProgressCallback   on_progress;
     JobCompletionCallback on_done;
     std::atomic<bool>     cancelled{false};
 };
@@ -33,6 +55,7 @@ struct DecodeWorkerPool::Impl {
     std::unordered_map<Id, Job>          jobs;
 
     void worker_loop() {
+        configure_decode_worker_thread();
         while (true) {
             std::shared_ptr<DecodeTask> task;
             {
@@ -58,9 +81,26 @@ struct DecodeWorkerPool::Impl {
             // Decode.
             int   channel_count   = 0;
             Frame duration_frames = 0;
+            auto report_progress = [this, task](int progress_pct) {
+                Job progress_job;
+                {
+                    std::lock_guard lock(jobs_mtx);
+                    auto it = jobs.find(task->job_id);
+                    if (it == jobs.end())
+                        return;
+                    it->second.status = JobStatus::Running;
+                    it->second.progress_pct = std::max(
+                        it->second.progress_pct,
+                        std::clamp(progress_pct, 0, 99));
+                    progress_job = it->second;
+                }
+                if (task->on_progress)
+                    task->on_progress(progress_job);
+            };
+
             auto  result = decode_file_to_float32(
                 task->file_path, task->target_sample_rate,
-                &channel_count, &duration_frames);
+                &channel_count, &duration_frames, report_progress);
 
             if (task->cancelled.load(std::memory_order_relaxed)) {
                 finish_job(task->job_id, JobStatus::Cancelled, "", task->on_done, task);
@@ -144,12 +184,14 @@ void DecodeWorkerPool::submit_decode(const Id& job_id,
                                       const Id& source_id,
                                       const std::string& file_path,
                                       int target_sample_rate,
+                                      JobProgressCallback on_progress,
                                       JobCompletionCallback on_done) {
     auto task = std::make_shared<DecodeTask>();
     task->job_id             = job_id;
     task->source_id          = source_id;
     task->file_path          = file_path;
     task->target_sample_rate = target_sample_rate;
+    task->on_progress        = std::move(on_progress);
     task->on_done            = std::move(on_done);
 
     {

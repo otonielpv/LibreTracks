@@ -59,7 +59,7 @@ fn main() {
             // Apply the decoding-cache preferences to the process env BEFORE the
             // audio engine is first used, so the configured folder / size cap
             // take effect for the very first decode.
-            settings::apply_decoding_cache_env(&initial_settings);
+            settings::apply_decoding_cache_env(&app.handle(), &initial_settings);
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
@@ -126,6 +126,7 @@ fn main() {
             commands::settings::set_decoding_cache_max_gb,
             commands::settings::purge_decoding_cache,
             commands::project::get_song_view,
+            commands::project::get_project_load_progress_snapshot,
             commands::library::get_library_assets,
             commands::library::get_library_folders,
             commands::library::get_waveform_summaries,

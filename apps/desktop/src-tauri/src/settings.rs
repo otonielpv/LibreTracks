@@ -214,11 +214,34 @@ impl Default for AppSettings {
 ///
 /// Note: changing the folder does NOT migrate existing `.rf64` files — the old
 /// directory keeps its contents until purged (matches Ableton Live's behaviour).
-pub fn apply_decoding_cache_env(settings: &AppSettings) {
-    match settings.decoding_cache_dir.as_deref() {
-        Some(dir) if !dir.is_empty() => std::env::set_var("LIBRETRACKS_CACHE_DIR", dir),
-        _ => std::env::remove_var("LIBRETRACKS_CACHE_DIR"),
+pub fn default_decoding_cache_dir(app: &AppHandle) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+            return PathBuf::from(local_app_data).join("LibreTracks").join("cache");
+        }
     }
+
+    app.path()
+        .app_local_data_dir()
+        .unwrap_or_else(|_| std::env::temp_dir().join("LibreTracks"))
+        .join("cache")
+}
+
+pub fn effective_decoding_cache_dir(app: &AppHandle, settings: &AppSettings) -> PathBuf {
+    settings
+        .decoding_cache_dir
+        .as_deref()
+        .filter(|dir| !dir.trim().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| default_decoding_cache_dir(app))
+}
+
+pub fn apply_decoding_cache_env(app: &AppHandle, settings: &AppSettings) {
+    std::env::set_var(
+        "LIBRETRACKS_CACHE_DIR",
+        effective_decoding_cache_dir(app, settings),
+    );
     match settings.decoding_cache_max_gb {
         // The engine override is expressed in MiB.
         Some(gb) => std::env::set_var(

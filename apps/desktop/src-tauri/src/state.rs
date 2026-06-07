@@ -63,13 +63,14 @@ struct LibraryImportProgressEvent {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ProjectLoadProgressEvent {
-    percent: u8,
-    message: String,
-    sources_ready: usize,
-    sources_total: usize,
-    ram_cache_mb: usize,
-    disk_cache_mb: usize,
+pub(crate) struct ProjectLoadProgressEvent {
+    pub percent: u8,
+    pub message: String,
+    pub sources_ready: usize,
+    pub sources_total: usize,
+    pub ram_cache_mb: usize,
+    pub disk_cache_mb: usize,
+    pub emitted_at_unix_ms: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -112,6 +113,7 @@ pub struct DesktopState {
     pub midi: MidiManager,
     pub waveform_jobs: WaveformGenerationQueue,
     pub session: Mutex<DesktopSession>,
+    pub project_load_progress: Mutex<Option<ProjectLoadProgressEvent>>,
 }
 
 impl Default for DesktopState {
@@ -121,6 +123,7 @@ impl Default for DesktopState {
             midi: MidiManager::default(),
             waveform_jobs: WaveformGenerationQueue::default(),
             session: Mutex::new(DesktopSession::default()),
+            project_load_progress: Mutex::new(None),
         }
     }
 }
@@ -789,20 +792,24 @@ impl DesktopSession {
         audio: &AudioController,
         song_file: PathBuf,
     ) -> Result<TransportSnapshot, DesktopError> {
+        self.begin_open_project_from_path(app, audio, song_file)?;
+        self.wait_for_project_audio_preparation(app, audio)?;
+
+        Ok(self.snapshot())
+    }
+
+    pub fn begin_open_project_from_path(
+        &mut self,
+        app: &AppHandle,
+        audio: &AudioController,
+        song_file: PathBuf,
+    ) -> Result<TransportSnapshot, DesktopError> {
         let song_dir = song_file
             .parent()
             .map(std::path::Path::to_path_buf)
             .ok_or_else(|| {
                 DesktopError::AudioCommand("session.ltsession must live inside a folder".into())
             })?;
-        append_project_load_debug_line(
-            app,
-            &format!(
-                "[backend:open] start song_file={} song_dir={}",
-                song_file.to_string_lossy(),
-                song_dir.to_string_lossy(),
-            ),
-        );
         emit_project_load_progress(app, 5, "Leyendo archivo de proyecto...".into(), 0, 0, 0, 0);
         let song = load_song_from_file(&song_file)?;
 
@@ -811,8 +818,6 @@ impl DesktopSession {
         self.load_song_from_path(song, song_dir, audio)?;
         emit_project_load_progress(app, 18, "Registrando fuentes de audio...".into(), 0, 0, 0, 0);
         self.song_file_path = Some(song_file);
-        self.wait_for_project_audio_preparation(app, audio)?;
-        append_project_load_debug_line(app, "[backend:open] finished");
 
         Ok(self.snapshot())
     }
@@ -3983,7 +3988,7 @@ impl DesktopSession {
         let started_at = Instant::now();
         let mut last_ready = usize::MAX;
         let mut last_total = usize::MAX;
-        let mut last_heartbeat_second = u64::MAX;
+        let mut last_percent = u8::MAX;
 
         loop {
             // engine_snapshot() uses try_lock and returns Err if the lock is
@@ -3993,17 +3998,6 @@ impl DesktopSession {
             let snapshot = match audio.engine_snapshot() {
                 Ok(s) => s,
                 Err(_) => {
-                    let elapsed_seconds = started_at.elapsed().as_secs();
-                    if elapsed_seconds != last_heartbeat_second {
-                        last_heartbeat_second = elapsed_seconds;
-                        append_project_load_debug_line(
-                            app,
-                            &format!(
-                                "[backend:wait] snapshot contention elapsed={}s",
-                                elapsed_seconds,
-                            ),
-                        );
-                    }
                     if started_at.elapsed() >= TIMEOUT {
                         return Ok(());
                     }
@@ -4027,6 +4021,20 @@ impl DesktopSession {
                 .iter()
                 .filter(|source| source.status == "failed")
                 .count();
+            let source_progress_sum = snapshot
+                .source_states
+                .iter()
+                .map(|source| {
+                    if matches!(
+                        source.status.as_str(),
+                        "ready" | "cache_ready" | "failed" | "cancelled"
+                    ) {
+                        100_usize
+                    } else {
+                        source.progress_percent.clamp(0, 99) as usize
+                    }
+                })
+                .sum::<usize>();
             let ram_cache_mb = (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
             let disk_cache_mb = (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
 
@@ -4034,13 +4042,15 @@ impl DesktopSession {
                 SOURCES_BASE
             } else {
                 SOURCES_BASE
-                    + ((ready * SOURCES_SPAN as usize) / total).min(SOURCES_SPAN as usize) as u8
+                    + ((source_progress_sum * SOURCES_SPAN as usize) / (total * 100))
+                        .min(SOURCES_SPAN as usize) as u8
             };
             // Emit on every ready/total change so the UI shows 1/31 → 2/31 …
             // not just the few percent-step boundaries.
-            if ready != last_ready || total != last_total {
+            if ready != last_ready || total != last_total || percent != last_percent {
                 last_ready = ready;
                 last_total = total;
+                last_percent = percent;
                 let message = if total == 0 {
                     "Inicializando preparacion de audio...".to_string()
                 } else if failures > 0 {
@@ -4059,39 +4069,11 @@ impl DesktopSession {
                 );
             }
 
-            let elapsed_seconds = started_at.elapsed().as_secs();
-            if elapsed_seconds != last_heartbeat_second {
-                last_heartbeat_second = elapsed_seconds;
-                append_project_load_debug_line(
-                    app,
-                    &format!(
-                        "[backend:wait] elapsed={}s ready={}/{} failures={} ram={}MB disk={}MB statuses={}",
-                        elapsed_seconds,
-                        ready,
-                        total,
-                        failures,
-                        ram_cache_mb,
-                        disk_cache_mb,
-                        snapshot
-                            .source_states
-                            .iter()
-                            .take(6)
-                            .map(|source| source.status.as_str())
-                            .collect::<Vec<_>>()
-                            .join(","),
-                    ),
-                );
-            }
-
             // Empty project (no sources): give the engine a brief moment to
             // register sources from LoadSession, then short-circuit straight
             // to 100% so the loader doesn't hang on "Inicializando..." forever
             // for projects that legitimately contain no audio.
             if total == 0 && started_at.elapsed() >= Duration::from_millis(300) {
-                append_project_load_debug_line(
-                    app,
-                    "[backend:wait] total remained 0 after 300ms, short-circuiting to ready",
-                );
                 emit_project_load_progress(
                     app,
                     100,
@@ -4105,92 +4087,17 @@ impl DesktopSession {
             }
 
             if total > 0 && ready >= total {
-                append_project_load_debug_line(
+                self.finish_project_audio_preparation(
                     app,
-                    &format!(
-                        "[backend:wait] all sources ready ready={}/{} entering waveform/prearm",
-                        ready, total,
-                    ),
-                );
-                let song_opt = self.engine.song().cloned();
-                if let Some(song) = song_opt {
-                    let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-                    emit_project_load_progress(
-                        app,
-                        84,
-                        "Preparando waveforms...".into(),
-                        ready,
-                        total,
-                        ram_cache_mb,
-                        disk_cache_mb,
-                    );
-                    self.ensure_project_waveforms_ready(app, &song_dir, &song)?;
-                    emit_project_load_progress(
-                        app,
-                        88,
-                        "Waveforms preparadas.".into(),
-                        ready,
-                        total,
-                        ram_cache_mb,
-                        disk_cache_mb,
-                    );
-                    let runtime_position_seconds =
-                        self.runtime_seconds_for_engine_position(self.current_position());
-                    emit_project_load_progress(
-                        app,
-                        90,
-                        "Preparando cache inicial de reproduccion...".into(),
-                        ready,
-                        total,
-                        ram_cache_mb,
-                        disk_cache_mb,
-                    );
-                    audio.prepare_playback_at(song.clone(), runtime_position_seconds)?;
-                    emit_project_load_progress(
-                        app,
-                        92,
-                        "Preparando voces para reproduccion instantanea...".into(),
-                        ready,
-                        total,
-                        ram_cache_mb,
-                        disk_cache_mb,
-                    );
-                    self.wait_for_prearm_idle(app, audio, ready, total)?;
-                    let prepared_snapshot = audio.engine_snapshot()?;
-                    let ram_cache_mb =
-                        (prepared_snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
-                    let disk_cache_mb =
-                        (prepared_snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
-                    emit_project_load_progress(
-                        app,
-                        99,
-                        "Audio preparado. Construyendo vista del proyecto...".into(),
-                        ready,
-                        total,
-                        ram_cache_mb,
-                        disk_cache_mb,
-                    );
-                    return Ok(());
-                }
-                emit_project_load_progress(
-                    app,
-                    99,
-                    "Audio preparado. Construyendo vista del proyecto...".into(),
+                    audio,
                     ready,
                     total,
                     ram_cache_mb,
                     disk_cache_mb,
-                );
+                )?;
                 return Ok(());
             }
             if started_at.elapsed() >= TIMEOUT {
-                append_project_load_debug_line(
-                    app,
-                    &format!(
-                        "[backend:wait] timeout ready={}/{} percent={}",
-                        ready, total, percent,
-                    ),
-                );
                 emit_project_load_progress(
                     app,
                     percent,
@@ -4205,6 +4112,231 @@ impl DesktopSession {
 
             thread::sleep(POLL_INTERVAL);
         }
+    }
+
+    pub fn wait_for_project_audio_preparation_unlocked(
+        app: &AppHandle,
+        state: &DesktopState,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        const TIMEOUT: Duration = Duration::from_secs(120);
+        const POLL_INTERVAL: Duration = Duration::from_millis(50);
+        const SOURCES_BASE: u8 = 18;
+        const SOURCES_SPAN: u8 = 62;
+        let started_at = Instant::now();
+        let mut last_ready = usize::MAX;
+        let mut last_total = usize::MAX;
+        let mut last_percent = u8::MAX;
+        loop {
+            let snapshot = match audio.engine_snapshot() {
+                Ok(s) => s,
+                Err(_) => {
+                    if started_at.elapsed() >= TIMEOUT {
+                        let mut session = state
+                            .session
+                            .lock()
+                            .map_err(|_| DesktopError::StatePoisoned)?;
+                        return Ok(session.snapshot());
+                    }
+                    thread::sleep(POLL_INTERVAL);
+                    continue;
+                }
+            };
+            let total = snapshot.source_states.len();
+            let ready = snapshot
+                .source_states
+                .iter()
+                .filter(|source| {
+                    matches!(
+                        source.status.as_str(),
+                        "ready" | "cache_ready" | "failed" | "cancelled"
+                    )
+                })
+                .count();
+            let failures = snapshot
+                .source_states
+                .iter()
+                .filter(|source| source.status == "failed")
+                .count();
+            let source_progress_sum = snapshot
+                .source_states
+                .iter()
+                .map(|source| {
+                    if matches!(
+                        source.status.as_str(),
+                        "ready" | "cache_ready" | "failed" | "cancelled"
+                    ) {
+                        100_usize
+                    } else {
+                        source.progress_percent.clamp(0, 99) as usize
+                    }
+                })
+                .sum::<usize>();
+            let ram_cache_mb = (snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
+            let disk_cache_mb = (snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
+            let percent = if total == 0 {
+                SOURCES_BASE
+            } else {
+                SOURCES_BASE
+                    + ((source_progress_sum * SOURCES_SPAN as usize) / (total * 100))
+                        .min(SOURCES_SPAN as usize) as u8
+            };
+
+            if ready != last_ready || total != last_total || percent != last_percent {
+                last_ready = ready;
+                last_total = total;
+                last_percent = percent;
+                let message = if total == 0 {
+                    "Inicializando preparacion de audio...".to_string()
+                } else if failures > 0 {
+                    format!("Preparando audio... {ready}/{total} fuentes ({failures} con error)")
+                } else {
+                    format!("Preparando audio... {ready}/{total} fuentes")
+                };
+                emit_project_load_progress(
+                    app,
+                    percent,
+                    message,
+                    ready,
+                    total,
+                    ram_cache_mb,
+                    disk_cache_mb,
+                );
+            }
+
+            if total == 0 && started_at.elapsed() >= Duration::from_millis(300) {
+                emit_project_load_progress(
+                    app,
+                    100,
+                    "Proyecto listo para reproducir.".into(),
+                    0,
+                    0,
+                    ram_cache_mb,
+                    disk_cache_mb,
+                );
+                let mut session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned)?;
+                return Ok(session.snapshot());
+            }
+
+            if total > 0 && ready >= total {
+                let mut session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned)?;
+                session.finish_project_audio_preparation(
+                    app,
+                    audio,
+                    ready,
+                    total,
+                    ram_cache_mb,
+                    disk_cache_mb,
+                )?;
+                return Ok(session.snapshot());
+            }
+
+            if started_at.elapsed() >= TIMEOUT {
+                emit_project_load_progress(
+                    app,
+                    percent,
+                    "El proyecto se abrio; la preparacion continua en segundo plano.".into(),
+                    ready,
+                    total,
+                    ram_cache_mb,
+                    disk_cache_mb,
+                );
+                let mut session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned)?;
+                return Ok(session.snapshot());
+            }
+
+            thread::sleep(POLL_INTERVAL);
+        }
+    }
+
+    fn finish_project_audio_preparation(
+        &mut self,
+        app: &AppHandle,
+        audio: &AudioController,
+        ready: usize,
+        total: usize,
+        ram_cache_mb: usize,
+        disk_cache_mb: usize,
+    ) -> Result<(), DesktopError> {
+        let song_opt = self.engine.song().cloned();
+        if let Some(song) = song_opt {
+            let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+            emit_project_load_progress(
+                app,
+                84,
+                "Preparando waveforms...".into(),
+                ready,
+                total,
+                ram_cache_mb,
+                disk_cache_mb,
+            );
+            self.ensure_project_waveforms_ready(app, &song_dir, &song)?;
+            emit_project_load_progress(
+                app,
+                88,
+                "Waveforms preparadas.".into(),
+                ready,
+                total,
+                ram_cache_mb,
+                disk_cache_mb,
+            );
+            let runtime_position_seconds =
+                self.runtime_seconds_for_engine_position(self.current_position());
+            emit_project_load_progress(
+                app,
+                90,
+                "Preparando cache inicial de reproduccion...".into(),
+                ready,
+                total,
+                ram_cache_mb,
+                disk_cache_mb,
+            );
+            audio.prepare_playback_at(song.clone(), runtime_position_seconds)?;
+            emit_project_load_progress(
+                app,
+                92,
+                "Preparando voces para reproduccion instantanea...".into(),
+                ready,
+                total,
+                ram_cache_mb,
+                disk_cache_mb,
+            );
+            self.wait_for_prearm_idle(app, audio, ready, total)?;
+            let prepared_snapshot = audio.engine_snapshot()?;
+            let ram_cache_mb =
+                (prepared_snapshot.source_cache.ram_bytes_used / (1024 * 1024)) as usize;
+            let disk_cache_mb =
+                (prepared_snapshot.source_cache.disk_bytes_used / (1024 * 1024)) as usize;
+            emit_project_load_progress(
+                app,
+                99,
+                "Audio preparado. Construyendo vista del proyecto...".into(),
+                ready,
+                total,
+                ram_cache_mb,
+                disk_cache_mb,
+            );
+            return Ok(());
+        }
+        emit_project_load_progress(
+            app,
+            99,
+            "Audio preparado. Construyendo vista del proyecto...".into(),
+            ready,
+            total,
+            ram_cache_mb,
+            disk_cache_mb,
+        );
+        Ok(())
     }
 
     fn wait_for_prearm_idle(
@@ -4265,41 +4397,12 @@ impl DesktopSession {
             if idle {
                 stable_polls = stable_polls.saturating_add(1);
                 if stable_polls >= STABLE_REQUIRED {
-                    append_project_load_debug_line(
-                        app,
-                        &format!(
-                            "[backend:prearm] idle posted={} completed={} latest_revision={}/{} ready_count={} prepared_total={} active_completed={}/{}",
-                            prearm.posted_count,
-                            prearm.completed_count,
-                            prearm.last_completed_revision,
-                            prearm.latest_posted_revision,
-                            prearm.ready_count,
-                            prearm.prepared_total,
-                            prearm.active_target_completed,
-                            prearm.active_target_total,
-                        ),
-                    );
                     return Ok(());
                 }
             } else {
                 stable_polls = 0;
             }
             if started_at.elapsed() >= PREARM_TIMEOUT {
-                append_project_load_debug_line(
-                    app,
-                    &format!(
-                        "[backend:prearm] timeout posted={} completed={} latest_revision={}/{} ready_count={} prepared_total={} active_completed={}/{} worker_busy={}",
-                        prearm.posted_count,
-                        prearm.completed_count,
-                        prearm.last_completed_revision,
-                        prearm.latest_posted_revision,
-                        prearm.ready_count,
-                        prearm.prepared_total,
-                        prearm.active_target_completed,
-                        prearm.active_target_total,
-                        prearm.worker_busy,
-                    ),
-                );
                 return Ok(());
             }
             let active_progress = if prearm.active_target_total > 0 {
@@ -5300,30 +5403,6 @@ fn emit_library_import_progress(app: &AppHandle, percent: u8, message: String) {
     }
 }
 
-fn append_project_load_debug_line(app: &AppHandle, line: &str) {
-    let Ok(log_dir) = app.path().app_data_dir() else {
-        return;
-    };
-    if fs::create_dir_all(&log_dir).is_err() {
-        return;
-    }
-
-    let log_path = log_dir.join("project-load-debug.log");
-    let Ok(mut file) = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-    else {
-        return;
-    };
-
-    let timestamp_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or(0);
-    let _ = std::io::Write::write_all(&mut file, format!("[{timestamp_ms}] {line}\n").as_bytes());
-}
-
 fn emit_project_load_progress(
     app: &AppHandle,
     percent: u8,
@@ -5333,18 +5412,10 @@ fn emit_project_load_progress(
     ram_cache_mb: usize,
     disk_cache_mb: usize,
 ) {
-    append_project_load_debug_line(
-        app,
-        &format!(
-            "[backend:emit] percent={} ready={}/{} ram={}MB disk={}MB message={}",
-            percent.min(100),
-            sources_ready,
-            sources_total,
-            ram_cache_mb,
-            disk_cache_mb,
-            message,
-        ),
-    );
+    let emitted_at_unix_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
     let payload = ProjectLoadProgressEvent {
         percent: percent.min(100),
         message,
@@ -5352,7 +5423,14 @@ fn emit_project_load_progress(
         sources_total,
         ram_cache_mb,
         disk_cache_mb,
+        emitted_at_unix_ms,
     };
+
+    if let Some(state) = app.try_state::<DesktopState>() {
+        if let Ok(mut progress) = state.project_load_progress.lock() {
+            *progress = Some(payload.clone());
+        }
+    }
 
     if let Err(error) = app.emit(PROJECT_LOAD_PROGRESS_EVENT, payload) {
         eprintln!("[libretracks-project] failed to emit load progress: {error}");

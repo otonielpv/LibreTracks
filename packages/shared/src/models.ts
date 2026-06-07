@@ -761,6 +761,7 @@ export type ProjectLoadProgressEvent = {
   sourcesTotal: number;
   ramCacheMb: number;
   diskCacheMb: number;
+  emittedAtUnixMs?: number;
 };
 
 export type WaveformReadyEvent = {

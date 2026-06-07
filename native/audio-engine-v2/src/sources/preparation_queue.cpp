@@ -93,6 +93,20 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
             if (!impl) {
                 return;
             }
+            std::lock_guard lock(impl->mtx);
+            auto& info = impl->states[source_id];
+            if (info.status != "ready" && info.status != "failed" && info.status != "cancelled") {
+                info.status = "loading";
+                info.progress_percent = std::max(
+                    info.progress_percent,
+                    std::clamp(job.progress_pct, 0, 99));
+            }
+        },
+        [weak_impl, source_id](const Job& job) {
+            auto impl = weak_impl.lock();
+            if (!impl) {
+                return;
+            }
             // Worker thread callback — marshal into engine event queue.
             if (job.status == JobStatus::Completed) {
                 auto stored = impl->source_manager->store_decoded_source(
@@ -100,7 +114,17 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
                     job.decoded_samples,
                     job.channel_count,
                     job.sample_rate,
-                    job.duration_frames);
+                    job.duration_frames,
+                    [impl, source_id](int progress_pct) {
+                        std::lock_guard lock(impl->mtx);
+                        auto& info = impl->states[source_id];
+                        if (info.status != "ready" && info.status != "failed" && info.status != "cancelled") {
+                            info.status = "loading";
+                            info.progress_percent = std::max(
+                                info.progress_percent,
+                                std::clamp(progress_pct, 0, 99));
+                        }
+                    });
                 {
                     std::lock_guard lock(impl->mtx);
                     auto& info = impl->states[source_id];

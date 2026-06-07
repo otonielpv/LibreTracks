@@ -3,7 +3,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -19,6 +21,14 @@
 
 namespace lt {
 
+namespace {
+
+void yield_to_ui_scheduler() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+}
+
+} // namespace
+
 // ============================================================================
 // libsndfile decoder
 // ============================================================================
@@ -28,7 +38,8 @@ class SndfileDecoder : public AudioDecoder {
 public:
     ~SndfileDecoder() override { close(); }
 
-    Result<void> open(const std::string& path) override {
+    Result<void> open(const std::string& path, DecodeProgressCallback on_progress = {}) override {
+        (void)on_progress;
         SF_INFO info{};
         sndfile_ = sf_open(path.c_str(), SFM_READ, &info);
         if (!sndfile_)
@@ -84,7 +95,8 @@ class DrMp3Decoder : public AudioDecoder {
 public:
     ~DrMp3Decoder() override { close(); }
 
-    Result<void> open(const std::string& path) override {
+    Result<void> open(const std::string& path, DecodeProgressCallback on_progress = {}) override {
+        (void)on_progress;
         if (!drmp3_init_file(&mp3_, path.c_str(), nullptr))
             return Result<void>::err("dr_mp3: failed to open " + path);
 
@@ -185,14 +197,23 @@ Result<std::vector<float>> decode_file_to_float32(
     const std::string& file_path,
     int                target_sample_rate,
     int*               out_channel_count,
-    Frame*             out_duration_frames)
+    Frame*             out_duration_frames,
+    DecodeProgressCallback on_progress)
 {
+    auto report_progress = [&](int progress_pct) {
+        if (on_progress) {
+            on_progress(std::clamp(progress_pct, 0, 100));
+            yield_to_ui_scheduler();
+        }
+    };
+
     const std::string normalized_path = normalize_input_path(file_path);
     auto decoder = make_decoder(normalized_path);
     if (!decoder)
         return Result<std::vector<float>>::err("No decoder available for: " + normalized_path);
 
-    auto open_result = decoder->open(normalized_path);
+    report_progress(1);
+    auto open_result = decoder->open(normalized_path, on_progress);
     if (open_result.is_err()) {
         return Result<std::vector<float>>::err(open_result.error());
     }
@@ -201,28 +222,48 @@ Result<std::vector<float>> decode_file_to_float32(
     if (fi.duration_frames <= 0 || fi.channel_count <= 0)
         return Result<std::vector<float>>::err("Invalid audio file info: " + normalized_path);
 
-    // Read all frames.
-    std::vector<float> raw(static_cast<size_t>(fi.duration_frames) * fi.channel_count);
-    int read = decoder->read_frames(raw.data(), static_cast<int>(fi.duration_frames));
+    std::vector<float> raw;
+    raw.reserve(static_cast<size_t>(fi.duration_frames) * fi.channel_count);
+    Frame total_read = 0;
+    constexpr int kReadChunkFrames = 65536;
+    while (total_read < fi.duration_frames) {
+        const int frames_to_read = static_cast<int>(
+            std::min<Frame>(kReadChunkFrames, fi.duration_frames - total_read));
+        if (frames_to_read <= 0)
+            break;
+        const std::size_t old_size = raw.size();
+        raw.resize(old_size + static_cast<std::size_t>(frames_to_read) * fi.channel_count);
+        const int read = decoder->read_frames(raw.data() + old_size, frames_to_read);
+        if (read <= 0) {
+            raw.resize(old_size);
+            break;
+        }
+        if (read < frames_to_read) {
+            raw.resize(old_size + static_cast<std::size_t>(read) * fi.channel_count);
+        }
+        total_read += read;
+        const int decode_pct = 1 + static_cast<int>(
+            (std::min<Frame>(total_read, fi.duration_frames) * 69) / fi.duration_frames);
+        report_progress(decode_pct);
+    }
     decoder->close();
 
-    if (read <= 0)
+    if (total_read <= 0)
         return Result<std::vector<float>>::err("Failed to decode: " + normalized_path);
 
-    raw.resize(static_cast<size_t>(read) * fi.channel_count);
-
-    // Resample if needed.
+    report_progress(72);
     auto resampler = make_resampler();
     ResamplerDiagnostics resampler_diagnostics;
     auto resample_result = resampler->process(raw, fi.channel_count,
                                               fi.original_sample_rate,
                                               target_sample_rate,
-                                              static_cast<Frame>(read),
+                                              total_read,
                                               &resampler_diagnostics);
     if (resample_result.is_err()) {
         return Result<std::vector<float>>::err(resample_result.error());
     }
     auto resampled = resample_result.take();
+    report_progress(85);
 
     Frame out_frames = static_cast<Frame>(resampled.size()) / fi.channel_count;
 

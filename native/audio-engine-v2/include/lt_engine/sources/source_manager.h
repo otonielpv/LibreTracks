@@ -33,6 +33,7 @@ struct SourceDiagnostics {
 };
 
 using SourceReadyCallback = std::function<void(const Id&)>;
+using SourceStoreProgressCallback = std::function<void(int progress_pct)>;
 
 // ---------------------------------------------------------------------------
 // Cache maintenance free functions — operate on the env-resolved PCM cache
@@ -73,7 +74,8 @@ public:
                                       std::vector<float> samples,
                                       int channel_count,
                                       int sample_rate,
-                                      Frame duration_frames);
+                                      Frame duration_frames,
+                                      SourceStoreProgressCallback on_progress = {});
 
     // If a previously-written PCM cache file exists for this source, install
     // it as a streaming entry (status = "cache_ready") without re-decoding

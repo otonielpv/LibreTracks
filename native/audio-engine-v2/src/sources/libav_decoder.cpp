@@ -3,9 +3,12 @@
 #if LT_ENGINE_USE_FFMPEG
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
+#include <cmath>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 extern "C" {
@@ -52,11 +55,15 @@ std::string codec_name(const AVCodecParameters* params) {
     return descriptor && descriptor->name ? descriptor->name : "unknown";
 }
 
+void yield_to_ui_scheduler() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+}
+
 class LibavDecoder : public AudioDecoder {
 public:
     ~LibavDecoder() override { close(); }
 
-    Result<void> open(const std::string& path) override {
+    Result<void> open(const std::string& path, DecodeProgressCallback on_progress = {}) override {
         close();
         av_log_set_level(AV_LOG_ERROR);
         info_ = {};
@@ -90,6 +97,13 @@ public:
         rc = avcodec_parameters_to_context(codec_ctx_, params);
         if (rc < 0)
             return Result<void>::err("libav: codec parameters failed: " + av_error(rc));
+
+        // FFmpeg defaults to codec-dependent worker counts. During a cold
+        // project open that can silently spawn many CPU-heavy decoder threads
+        // from inside our single decode job and starve the WebView. Keep each
+        // source decode single-threaded; DecodeWorkerPool controls outer
+        // concurrency.
+        codec_ctx_->thread_count = 1;
 
         rc = avcodec_open2(codec_ctx_, codec, nullptr);
         if (rc < 0)
@@ -143,7 +157,7 @@ public:
         if (rc < 0)
             return Result<void>::err("libav: swr init failed: " + av_error(rc));
 
-        auto decoded = decode_all();
+        auto decoded = decode_all(estimated_duration_frames(stream), std::move(on_progress));
         if (decoded.is_err())
             return Result<void>::err(decoded.error());
         samples_ = decoded.take();
@@ -206,19 +220,54 @@ public:
     }
 
 private:
-    Result<std::vector<float>> decode_all() {
+    Frame estimated_duration_frames(const AVStream* stream) const {
+        if (!stream || sample_rate_ <= 0)
+            return 0;
+        if (stream->duration > 0) {
+            return static_cast<Frame>(
+                av_rescale_q(stream->duration, stream->time_base, AVRational{1, sample_rate_}));
+        }
+        if (format_ && format_->duration > 0) {
+            const double seconds = static_cast<double>(format_->duration) / AV_TIME_BASE;
+            return static_cast<Frame>(std::max(0.0, seconds * sample_rate_));
+        }
+        return 0;
+    }
+
+    Result<std::vector<float>> decode_all(Frame estimated_total_frames,
+                                          DecodeProgressCallback on_progress) {
         std::unique_ptr<AVPacket, AvPacketDeleter> packet(av_packet_alloc());
         std::unique_ptr<AVFrame, AvFrameDeleter> frame(av_frame_alloc());
         if (!packet || !frame)
             return Result<std::vector<float>>::err("libav: packet/frame allocation failed");
 
         std::vector<float> out;
+        int last_reported = 1;
+        auto report_progress = [&](int progress_pct) {
+            if (!on_progress)
+                return;
+            progress_pct = std::clamp(progress_pct, 1, 70);
+            if (progress_pct <= last_reported)
+                return;
+            last_reported = progress_pct;
+            on_progress(progress_pct);
+            yield_to_ui_scheduler();
+        };
+        report_progress(1);
         int rc = 0;
         while ((rc = av_read_frame(format_, packet.get())) >= 0) {
             if (packet->stream_index == stream_index_) {
                 auto sent = send_packet(packet.get(), frame.get(), out);
                 if (sent.is_err())
                     return sent;
+                if (estimated_total_frames > 0 && channels_ > 0) {
+                    const Frame decoded_frames =
+                        static_cast<Frame>(out.size() / static_cast<std::size_t>(channels_));
+                    const int progress_pct = 1 + static_cast<int>(
+                        (std::min<Frame>(decoded_frames, estimated_total_frames) * 69)
+                            / estimated_total_frames);
+                    report_progress(progress_pct);
+                }
             }
             av_packet_unref(packet.get());
         }
@@ -228,6 +277,7 @@ private:
         auto flushed = send_packet(nullptr, frame.get(), out);
         if (flushed.is_err())
             return flushed;
+        report_progress(70);
 
         return Result<std::vector<float>>::ok(std::move(out));
     }

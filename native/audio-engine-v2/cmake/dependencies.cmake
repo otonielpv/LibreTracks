@@ -187,6 +187,7 @@ if(LT_ENGINE_USE_R8BRAIN)
         GIT_REPOSITORY https://github.com/avaneev/r8brain-free-src.git
         GIT_TAG        master
         GIT_SHALLOW    TRUE
+        UPDATE_DISCONNECTED TRUE
     )
     FetchContent_MakeAvailable(r8brain)
     # r8brain is header-only; expose its source dir as include path.

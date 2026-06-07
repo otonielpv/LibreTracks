@@ -178,6 +178,10 @@ export async function getSongView(
   return null;
 }
 
+export async function getProjectLoadProgressSnapshot(): Promise<ProjectLoadProgressEvent | null> {
+  return invokeCommand<ProjectLoadProgressEvent | null>("get_project_load_progress_snapshot");
+}
+
 export async function getWaveformSummaries(
   waveformKeys: string[],
 ): Promise<WaveformSummaryDto[]> {

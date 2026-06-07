@@ -36,6 +36,7 @@ struct Job {
 // Fired on the worker thread when a job finishes (success or failure).
 // Must be fast and non-blocking — will be marshalled to the event queue.
 using JobCompletionCallback = std::function<void(const Job&)>;
+using JobProgressCallback = std::function<void(const Job&)>;
 
 class DecodeWorkerPool {
 public:
@@ -49,6 +50,7 @@ public:
                        const Id&          source_id,
                        const std::string& file_path,
                        int                target_sample_rate,
+                       JobProgressCallback on_progress,
                        JobCompletionCallback on_done);
 
     // Cancel a pending or running job.  No-op if already complete.

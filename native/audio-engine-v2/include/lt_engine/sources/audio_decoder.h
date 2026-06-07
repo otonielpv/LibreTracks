@@ -8,11 +8,14 @@
 
 #include <lt_engine/core/result.h>
 #include <lt_engine/core/types.h>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace lt {
+
+using DecodeProgressCallback = std::function<void(int progress_pct)>;
 
 struct AudioFileInfo {
     std::string file_path;
@@ -26,7 +29,8 @@ class AudioDecoder {
 public:
     virtual ~AudioDecoder() = default;
 
-    virtual Result<void>         open(const std::string& file_path)   = 0;
+    virtual Result<void>         open(const std::string& file_path,
+                                      DecodeProgressCallback on_progress = {}) = 0;
     virtual AudioFileInfo        info()                         const  = 0;
 
     // Read up to `frame_count` interleaved float frames into `out`.
@@ -53,6 +57,7 @@ Result<std::vector<float>> decode_file_to_float32(
     const std::string& file_path,
     int                target_sample_rate,
     int*               out_channel_count,
-    Frame*             out_duration_frames);
+    Frame*             out_duration_frames,
+    DecodeProgressCallback on_progress = {});
 
 } // namespace lt

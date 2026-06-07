@@ -2,11 +2,13 @@
 #include <lt_engine/sources/audio_decoder.h>
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #if defined(_WIN32)
@@ -59,6 +61,10 @@ std::string read_env(const char* name) {
     const char* raw = std::getenv(name);
     return raw ? std::string(raw) : std::string();
 #endif
+}
+
+void yield_to_ui_scheduler() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
 size_t source_cache_blocks_from_env() {
@@ -512,7 +518,12 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
                                                  std::vector<float> samples,
                                                  int channel_count,
                                                  int sample_rate,
-                                                 Frame duration_frames) {
+                                                 Frame duration_frames,
+                                                 SourceStoreProgressCallback on_progress) {
+    auto report_progress = [&](int progress_pct) {
+        if (on_progress)
+            on_progress(std::clamp(progress_pct, 0, 100));
+    };
     SourceReadyCallback ready_callback;
     std::string file_path;
     {
@@ -551,6 +562,7 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
     const std::string cache_file = cache_file_for(source_id, file_path, sample_rate);
     const size_t projected_bytes = samples.size() * sizeof(float);
     try {
+        report_progress(86);
         if (!create_directories_compat(parent_path_compat(cache_file)))
             return Result<void>::err("Could not create PCM cache directory: " + cache_file);
         // Keep the on-disk cache under the configured budget before we add
@@ -565,8 +577,26 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         SNDFILE* sf = sf_open(cache_file.c_str(), SFM_WRITE, &info);
         if (!sf)
             return Result<void>::err(std::string("Could not create PCM cache: ") + sf_strerror(nullptr));
-        const sf_count_t written = sf_writef_float(
-            sf, samples.data(), static_cast<sf_count_t>(duration_frames));
+        sf_count_t written = 0;
+        constexpr sf_count_t kWriteChunkFrames = 65536;
+        while (written < static_cast<sf_count_t>(duration_frames)) {
+            const sf_count_t frames = std::min<sf_count_t>(
+                kWriteChunkFrames,
+                static_cast<sf_count_t>(duration_frames) - written);
+            const float* ptr = samples.data()
+                + static_cast<std::size_t>(written) * channel_count;
+            const sf_count_t chunk_written = sf_writef_float(sf, ptr, frames);
+            if (chunk_written <= 0)
+                break;
+            written += chunk_written;
+            if (duration_frames > 0) {
+                const int pct = 86 + static_cast<int>(
+                    (std::min<sf_count_t>(written, static_cast<sf_count_t>(duration_frames)) * 13)
+                        / static_cast<sf_count_t>(duration_frames));
+                report_progress(pct);
+            }
+            yield_to_ui_scheduler();
+        }
         sf_close(sf);
         if (written != static_cast<sf_count_t>(duration_frames))
             return Result<void>::err("Could not write complete PCM cache: " + cache_file);
@@ -575,8 +605,22 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         if (!out)
             return Result<void>::err("Could not create PCM cache: " + cache_file);
         if (!samples.empty()) {
-            out.write(reinterpret_cast<const char*>(samples.data()),
-                      static_cast<std::streamsize>(samples.size() * sizeof(float)));
+            constexpr std::size_t kWriteChunkSamples = 65536 * 2;
+            std::size_t written_samples = 0;
+            while (written_samples < samples.size()) {
+                const std::size_t chunk_samples = std::min<std::size_t>(
+                    kWriteChunkSamples, samples.size() - written_samples);
+                out.write(
+                    reinterpret_cast<const char*>(samples.data() + written_samples),
+                    static_cast<std::streamsize>(chunk_samples * sizeof(float)));
+                if (!out)
+                    break;
+                written_samples += chunk_samples;
+                const int pct = 86 + static_cast<int>(
+                    (written_samples * 13) / samples.size());
+                report_progress(pct);
+                yield_to_ui_scheduler();
+            }
         }
         if (!out)
             return Result<void>::err("Could not write PCM cache: " + cache_file);

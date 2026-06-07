@@ -3,7 +3,8 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::error::DesktopError;
 use crate::settings::{
-    apply_decoding_cache_env, save_app_settings, AppSettings, AppSettingsStore,
+    apply_decoding_cache_env, effective_decoding_cache_dir, save_app_settings, AppSettings,
+    AppSettingsStore,
 };
 use crate::state::DesktopState;
 
@@ -132,7 +133,8 @@ pub fn set_metronome_sound_realtime(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecodingCacheInfo {
-    /// Effective directory the engine writes `.rf64` files into.
+    /// Effective cache root. The engine writes `.rf64` files under
+    /// `<dir>/source-cache`; waveform peaks live under `<dir>/waveform-cache`.
     pub dir: String,
     /// Bytes currently occupied by cache files on disk.
     pub size_bytes: u64,
@@ -150,7 +152,7 @@ fn persist_settings(
     let previous = settings_store.current().map_err(|e| e.to_string())?;
     settings_store.set(next.clone()).map_err(|e| e.to_string())?;
     save_app_settings(app, &next).map_err(|e| e.to_string())?;
-    apply_decoding_cache_env(&next);
+    apply_decoding_cache_env(app, &next);
     if previous != next {
         app.emit("settings:updated", next.clone())
             .map_err(|e| e.to_string())?;
@@ -160,17 +162,13 @@ fn persist_settings(
 
 #[tauri::command]
 pub fn get_decoding_cache_info(
+    app: AppHandle,
     settings_store: State<'_, AppSettingsStore>,
 ) -> Result<DecodingCacheInfo, String> {
     let settings = settings_store.current().map_err(|e| e.to_string())?;
-    // The engine resolves the effective path from the env we keep in sync; fall
-    // back to the configured value if the engine returns nothing (e.g. no-link).
-    let mut dir = lt_audio_engine_v2::decoding_cache_dir();
-    if dir.is_empty() {
-        dir = settings.decoding_cache_dir.clone().unwrap_or_default();
-    }
+    let dir = effective_decoding_cache_dir(&app, &settings);
     Ok(DecodingCacheInfo {
-        dir,
+        dir: dir.to_string_lossy().replace('\\', "/"),
         size_bytes: lt_audio_engine_v2::decoding_cache_size_bytes()
             + waveform_cache_size_bytes(),
         max_gb: settings.decoding_cache_max_gb,
