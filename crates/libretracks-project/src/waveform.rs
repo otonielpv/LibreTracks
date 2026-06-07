@@ -474,12 +474,18 @@ fn migrate_legacy_waveform(
         return None;
     }
     let mut summary = decode_waveform_summary_binary(&fs::read(legacy_path).ok()?)?;
-    if summary.version < WAVEFORM_FORMAT_VERSION {
-        return None; // older format — let the caller regenerate at the new version
+    // A v4/v5 cache is valid waveform data — it just predates the freshness
+    // signature. Migrate (and re-stamp) it instead of throwing it away and
+    // re-analysing the whole file; only truly unreadable formats (< v4) are
+    // regenerated. This is what keeps opening a project with old caches fast.
+    if summary.version < MIN_READABLE_WAVEFORM_FORMAT_VERSION {
+        return None;
     }
     if validate_waveform_summary(&summary, legacy_path).is_err() {
         return None;
     }
+    // Stamp the current format version so the migrated copy is written as v6.
+    summary.version = WAVEFORM_FORMAT_VERSION;
     let (size, modified_millis) = source_freshness(source_path);
     // If we can read the local size and it disagrees with what the cache was
     // built from, it's a different file — don't migrate a mismatched waveform.
@@ -1235,6 +1241,43 @@ mod tests {
         let from_global =
             load_or_generate_global_waveform(&cache_root, &song_dir, audio_rel).expect("global");
         assert_eq!(from_global.sample_rate, legacy.sample_rate);
+    }
+
+    #[test]
+    fn legacy_v5_cache_is_migrated_not_regenerated() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path().join("song");
+        let cache_root = dir.path().join("global");
+        std::fs::create_dir_all(&song_dir).expect("song dir");
+
+        let audio_rel = Path::new("kick.wav");
+        let audio_abs = song_dir.join(audio_rel);
+        let samples: Vec<i16> = (0..4_800).map(|i| ((i % 200) as i16 - 100) * 64).collect();
+        write_mono_wav(&audio_abs, 48_000, &samples);
+
+        // Hand-craft a v5 legacy cache: encode a v6 summary, drop the 24-byte
+        // freshness trailer and patch the version field to 5.
+        let summary = analyze_wav_file(&audio_abs).expect("analyze").waveform;
+        let mut bytes = encode_waveform_summary_binary(&summary).expect("encode");
+        bytes.truncate(bytes.len() - 24);
+        bytes[8..12].copy_from_slice(&5u32.to_le_bytes());
+        let legacy_path = waveform_file_path(&song_dir, audio_rel);
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).expect("cache dir");
+        std::fs::write(&legacy_path, &bytes).expect("write v5");
+
+        // The read-only loader must migrate the v5 cache (NOT analyse). To prove
+        // no analysis happened we delete the audio first: a regeneration would
+        // fail to open it, a migration succeeds from the legacy bytes alone.
+        std::fs::remove_file(&audio_abs).expect("rm audio");
+        let migrated = load_global_waveform(&cache_root, &song_dir, audio_rel)
+            .expect("v5 must migrate without re-analysing");
+        assert_eq!(migrated.sample_rate, summary.sample_rate);
+
+        // The migrated copy is written to the global cache at the current version.
+        let global_path = global_waveform_file_path(&cache_root, &audio_abs);
+        assert!(global_path.exists());
+        let on_disk = decode_waveform_summary_binary(&std::fs::read(&global_path).unwrap()).unwrap();
+        assert_eq!(on_disk.version, WAVEFORM_FORMAT_VERSION);
     }
 
     // ── validate_waveform_summary ─────────────────────────────────────────

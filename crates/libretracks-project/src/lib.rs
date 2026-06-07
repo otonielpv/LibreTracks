@@ -103,12 +103,10 @@ mod tests {
         let song_dir =
             create_song_folder(root.path(), "digno-y-santo").expect("folder should be created");
 
-        // A new project materialises only its own directory (for the
-        // song.ltsession). It no longer creates audio/ or a cache/ folder —
-        // decoded peaks live in the global per-file waveform cache.
         assert!(song_dir.exists());
         assert!(!song_dir.join("audio").exists());
-        assert!(!song_dir.join("cache").exists());
+        assert!(song_dir.join("cache").exists());
+        assert!(song_dir.join("cache").join("waveforms").exists());
     }
 
     #[test]
@@ -429,7 +427,6 @@ mod tests {
         write_test_wav(&wav_path, 44_100, 2, 1);
 
         let cache_path = waveform_file_path(&song_dir, "audio/click.wav");
-        // Projects no longer pre-create cache/waveforms/, so make the parent here.
         fs::create_dir_all(cache_path.parent().expect("cache parent"))
             .expect("cache dir should be created");
         fs::write(&cache_path, b"not-a-valid-waveform-cache")

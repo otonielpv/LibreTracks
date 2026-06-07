@@ -3337,12 +3337,16 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let imported = import_song_package_into_project(
+        let mut imported = import_song_package_into_project(
             &song_dir,
             &song,
             Path::new(package_path),
             insert_at_seconds,
         )?;
+        // Self-contained packages carry their audio: copy it into this project's
+        // audio/ folder and re-point the imported clips before anything else
+        // touches the source paths.
+        place_bundled_audio_and_repoint(&song_dir, &mut imported.song, &imported.bundled_audio)?;
         let mut library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
         merge_package_library_meta(
             &song_dir,
@@ -3364,7 +3368,10 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
         self.prime_waveform_cache(&song_dir, &loaded_song)?;
         audio.wait_until_sources_ready(Duration::from_secs(120))?;
-        self.ensure_project_waveforms_ready(&song_dir, &loaded_song, audio)?;
+        // Read-only cache population (migrates any global/legacy .ltpeaks). Misses
+        // are generated on demand by the frontend's normal waveform requests
+        // post-import, so no background enqueue / AppHandle is needed here.
+        let _ = self.populate_waveform_cache_readonly(&song_dir, &loaded_song);
         let runtime_position_seconds =
             self.runtime_seconds_for_engine_position(self.current_position());
         audio.prepare_playback_at(loaded_song, runtime_position_seconds)?;
@@ -3390,12 +3397,13 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
-        let imported = import_song_package_into_project(
+        let mut imported = import_song_package_into_project(
             &song_dir,
             &song,
             Path::new(package_path),
             insert_at_seconds,
         )?;
+        place_bundled_audio_and_repoint(&song_dir, &mut imported.song, &imported.bundled_audio)?;
         let mut library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
         merge_package_library_meta(
             &song_dir,
@@ -4116,7 +4124,7 @@ impl DesktopSession {
                         ram_cache_mb,
                         disk_cache_mb,
                     );
-                    self.ensure_project_waveforms_ready(&song_dir, &song, audio)?;
+                    self.ensure_project_waveforms_ready(app, &song_dir, &song)?;
                     emit_project_load_progress(
                         app,
                         88,
@@ -5019,32 +5027,19 @@ impl DesktopSession {
         Ok(())
     }
 
-    fn ensure_project_waveforms_ready(
-        &mut self,
-        song_dir: &Path,
-        song: &Song,
-        audio: &AudioController,
-    ) -> Result<(), DesktopError> {
+    /// Populate the in-memory waveform cache from the per-file global cache
+    /// (migrating any project-local/packaged `.ltpeaks` in). READ-ONLY: never
+    /// analyses audio, so it stays cheap under the session lock. Returns the keys
+    /// that had no cache yet (misses) so the caller can decide how to generate
+    /// them — on the project-open path that means enqueueing background jobs.
+    fn populate_waveform_cache_readonly(&mut self, song_dir: &Path, song: &Song) -> Vec<String> {
         self.waveform_cache.reset_if_song_changed(song_dir);
-
         let keys = unique_waveform_keys(song);
-
-        // Phase 1: read every .peaks summary from disk in parallel. Older
-        // waveform caches may be upgraded while loading, so the freshness
-        // token is captured after the summary read. We collect (key, token,
-        // summary) tuples so the mutation pass below can be a single locked write.
-        // Entries that fail with Io/InvalidWaveformSummary are returned as
-        // None so we can fall back to native peak generation sequentially —
-        // that path needs &mut self because it writes the .peaks file.
         let cache_root = decoding_cache_root();
         let parallel_results: Vec<(String, Option<(WaveformCacheToken, WaveformSummary)>)> = keys
             .par_iter()
             .map(|key| {
-                // Read (and lazily migrate) the per-file global cache, generating
-                // from the source if absent. The freshness check inside guards
-                // against a stale .ltpeaks for an edited audio file.
-                let summary =
-                    load_or_generate_global_waveform(&cache_root, song_dir, Path::new(key)).ok();
+                let summary = load_global_waveform(&cache_root, song_dir, Path::new(key)).ok();
                 let token = build_waveform_cache_token(song_dir, key).ok();
                 let entry = match (token, summary) {
                     (Some(t), Some(s)) => Some((t, s)),
@@ -5054,27 +5049,39 @@ impl DesktopSession {
             })
             .collect();
 
-        // Phase 2: install successful reads in the cache, fall back to native
-        // peak generation for any that failed (sequential by necessity).
+        let mut misses = Vec::new();
         for (key, entry) in parallel_results {
             if let Some((token, summary)) = entry {
-                self.perf_metrics.waveform_cache_misses += 1;
+                self.perf_metrics.waveform_cache_hits += 1;
                 self.waveform_cache
                     .entries
                     .insert(key, CachedWaveformSummary { token, summary });
-                continue;
-            }
-            // Fallback path: disk read failed (missing or corrupt .peaks).
-            // Regenerate from the source file first so stereo channels remain
-            // separate in the visual cache; use native peaks only as a last resort.
-            if self
-                .load_waveform_summary_cached(song_dir, &key, true)
-                .is_err()
-            {
-                let _ = self.load_native_waveform_summary(song_dir, &key, audio)?;
+            } else {
+                self.perf_metrics.waveform_cache_misses += 1;
+                misses.push(key);
             }
         }
+        misses
+    }
 
+    /// Project-open waveform readiness. Reads the global cache (cheap), then for
+    /// any miss enqueues generation on the BACKGROUND worker (which does not hold
+    /// the session lock). The worker emits WAVEFORM_READY_EVENT and the frontend
+    /// paints each waveform as it lands. Waveforms are purely visual — playback
+    /// readiness is handled separately by prepare_playback_at + prearm — so this
+    /// never blocks the open on audio analysis and the UI stays responsive.
+    fn ensure_project_waveforms_ready(
+        &mut self,
+        app: &AppHandle,
+        song_dir: &Path,
+        song: &Song,
+    ) -> Result<(), DesktopError> {
+        let misses = self.populate_waveform_cache_readonly(song_dir, song);
+        let jobs = &app.state::<DesktopState>().waveform_jobs;
+        for key in misses {
+            // Best-effort: a full/unavailable worker must not fail the open.
+            let _ = jobs.enqueue(app.clone(), song_dir.to_path_buf(), key);
+        }
         Ok(())
     }
 
@@ -5429,6 +5436,54 @@ fn allocate_library_audio_path(reserved_paths: &HashSet<String>, file_name: &str
         }
         index += 1;
     }
+}
+
+/// Place audio files bundled in a self-contained `.ltpkg` into the destination
+/// project's `audio/` folder and re-point the imported clips to those copies.
+///
+/// `bundled_audio` maps each original audio file name to its bytes. We allocate
+/// a collision-free `audio/<name>` per file (reusing the library's allocator),
+/// write the bytes, then rewrite every imported clip whose `file_path` has that
+/// same file name to the new relative path. Clips whose audio wasn't bundled are
+/// left untouched (light packages reference audio by their original path).
+fn place_bundled_audio_and_repoint(
+    song_dir: &Path,
+    song: &mut Song,
+    bundled_audio: &HashMap<String, Vec<u8>>,
+) -> Result<(), DesktopError> {
+    if bundled_audio.is_empty() {
+        return Ok(());
+    }
+
+    let audio_dir = song_dir.join("audio");
+    fs::create_dir_all(&audio_dir)?;
+    let mut reserved_paths = collect_library_file_paths(song_dir, Some(song))?
+        .into_iter()
+        .collect::<HashSet<_>>();
+
+    // original file name -> new "audio/<final>" relative path
+    let mut remap: HashMap<String, String> = HashMap::new();
+    for (original_name, bytes) in bundled_audio {
+        let relative_path = allocate_library_audio_path(&reserved_paths, original_name);
+        reserved_paths.insert(relative_path.clone());
+        let destination = song_dir.join(&relative_path);
+        fs::write(&destination, bytes)?;
+        remap.insert(original_name.clone(), relative_path);
+    }
+
+    for clip in &mut song.clips {
+        let Some(file_name) = Path::new(&clip.file_path)
+            .file_name()
+            .and_then(|value| value.to_str())
+        else {
+            continue;
+        };
+        if let Some(new_path) = remap.get(file_name) {
+            clip.file_path = new_path.clone();
+        }
+    }
+
+    Ok(())
 }
 
 pub fn import_audio_files_from_bytes_to_library(
@@ -8588,6 +8643,7 @@ mod tests {
             &source_song,
             "region_1",
             &package_path,
+            false,
         )
         .expect("package should export");
 

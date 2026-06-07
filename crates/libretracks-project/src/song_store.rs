@@ -127,10 +127,7 @@ pub fn create_song_folder(
     }
 
     let song_dir = root.as_ref().join(trimmed);
-    // A project now materialises only the song.ltsession file (plus whatever the
-    // user saves). Waveform peaks live in the global per-file cache, not in a
-    // per-project cache/ folder, so we no longer create cache/waveforms/ here.
-    fs::create_dir_all(&song_dir)?;
+    fs::create_dir_all(song_dir.join("cache").join("waveforms"))?;
 
     Ok(song_dir)
 }

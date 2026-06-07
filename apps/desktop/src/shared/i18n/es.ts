@@ -219,6 +219,19 @@ const es = {
       midiLearnRelearn: "Reaprender",
       midiLearnListeningShort: "Escuchando",
     },
+    exportModal: {
+      eyebrow: "Exportar",
+      title: "Exportar canción",
+      description: "{{name}}",
+      fullTitle: "Completo (para compartir)",
+      fullDescription:
+        "Incluye los audios usados y las ondas. Autocontenido: se abre en otro PC sin los archivos originales.",
+      lightTitle: "Ligero",
+      lightDescription:
+        "Solo el proyecto y las ondas; referencia los audios por su ruta. Más pequeño, para reusar en este equipo.",
+      cancel: "Cancelar",
+      confirm: "Exportar",
+    },
     menu: {
       createSongRegionFromSelection: "Crear Cancion desde seleccion",
       createMarker: "Crear Marca",

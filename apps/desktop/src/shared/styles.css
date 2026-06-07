@@ -1224,6 +1224,39 @@ textarea {
   opacity: 1;
 }
 
+/* Export song chooser (Light / Full) — radio options stacked in the modal body. */
+.lt-export-modal {
+  max-width: 32rem;
+}
+
+.lt-export-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.8rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.lt-export-option:hover {
+  border-color: rgb(87 241 219 / 0.28);
+}
+
+.lt-export-option > input {
+  margin-top: 0.2rem;
+}
+
+.lt-export-option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.lt-export-modal-actions {
+  margin-top: 0.4rem;
+}
+
 /* Maximum-size row: label + a narrow numeric input with an inline "GB" unit
    so the field reads as a size, not a free-form box stretched across the row. */
 .lt-cache-max-row {

@@ -462,6 +462,7 @@ pub async fn import_audio_files_from_paths(
 #[tauri::command]
 pub async fn export_region_as_package(
     region_id: String,
+    include_audio: bool,
     state: State<'_, DesktopState>,
 ) -> Result<(), String> {
     let (song_dir, song, region_name) = {
@@ -502,6 +503,7 @@ pub async fn export_region_as_package(
                 &song,
                 &region_id,
                 &path,
+                include_audio,
             )
             .map_err(|error| error.to_string())
         })

@@ -213,6 +213,19 @@ const en = {
       midiLearnRelearn: "Relearn",
       midiLearnListeningShort: "Listening",
     },
+    exportModal: {
+      eyebrow: "Export",
+      title: "Export song",
+      description: "{{name}}",
+      fullTitle: "Full (for sharing)",
+      fullDescription:
+        "Includes the used audio files and waveforms. Self-contained: opens on another PC without the original files.",
+      lightTitle: "Light",
+      lightDescription:
+        "Only the project and waveforms; references audio by path. Smaller, for reuse on this machine.",
+      cancel: "Cancel",
+      confirm: "Export",
+    },
     menu: {
       createSongRegionFromSelection: "Create Song From Selection",
       createMarker: "Create Marker",

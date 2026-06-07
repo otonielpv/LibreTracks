@@ -470,8 +470,11 @@ export async function importAudioFilesFromPaths(
   return invokeCommand<LibraryAssetSummary[]>("import_audio_files_from_paths", { files });
 }
 
-export async function exportRegionAsPackage(regionId: string): Promise<void> {
-  await invokeCommand("export_region_as_package", { regionId });
+export async function exportRegionAsPackage(
+  regionId: string,
+  includeAudio = false,
+): Promise<void> {
+  await invokeCommand("export_region_as_package", { regionId, includeAudio });
 }
 
 export async function exportRegionRenderedAudio(regionId: string): Promise<void> {

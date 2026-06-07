@@ -163,6 +163,10 @@ import {
 import { TIMELINE_DEFAULT_TRACK_HEIGHT, useTimelineUIStore } from "./uiStore";
 import { SideNav } from "./shell/SideNav";
 import { SettingsPanel } from "./panels/SettingsPanel";
+import {
+  ExportSongModal,
+  type ExportSongTarget,
+} from "./panels/ExportSongModal";
 import { RemotePanel } from "./panels/RemotePanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
@@ -583,6 +587,9 @@ export function TransportPanelContent() {
     NativeDropCandidateDebug[]
   >([]);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
+  // When set, the export-mode chooser (Light / Full) is shown for this song.
+  const [exportSongTarget, setExportSongTarget] =
+    useState<ExportSongTarget | null>(null);
   const selectedRegion = useMemo(
     () =>
       song?.regions.find((region) => region.id === selectedRegionId) ?? null,
@@ -3525,10 +3532,25 @@ export function TransportPanelContent() {
         (region) => region.id === regionId,
       );
       if (!currentRegion) return;
+      // Open the Light/Full chooser; the actual export runs on confirm.
+      setExportSongTarget({ regionId, regionName: currentRegion.name });
+    },
+    [setExportSongTarget],
+  );
+
+  // Runs the export once the user picked a mode in the ExportSongModal.
+  const handleConfirmExportSong = useCallback(
+    (regionId: string, includeAudio: boolean) => {
+      const currentRegion = songRef.current?.regions.find(
+        (region) => region.id === regionId,
+      );
+      setExportSongTarget(null);
       void runAction(
         async () => {
-          await exportRegionAsPackage(regionId);
-          setStatus(`Paquete exportado para ${currentRegion.name}`);
+          await exportRegionAsPackage(regionId, includeAudio);
+          setStatus(
+            `Paquete exportado para ${currentRegion?.name ?? "la canción"}`,
+          );
         },
         { busy: true },
       );
@@ -5328,14 +5350,8 @@ export function TransportPanelContent() {
       },
       {
         label: "Exportar Cancion",
-        onSelect: async () => {
-          await runAction(
-            async () => {
-              await exportRegionAsPackage(region.id);
-              setStatus(`Paquete exportado para ${region.name}`);
-            },
-            { busy: true },
-          );
+        onSelect: () => {
+          setExportSongTarget({ regionId: region.id, regionName: region.name });
         },
       },
       {
@@ -9476,6 +9492,12 @@ export function TransportPanelContent() {
               isOpen={isRemoteModalOpen}
               onClose={() => setIsRemoteModalOpen(false)}
               remoteServerInfo={remoteServerInfo}
+            />
+
+            <ExportSongModal
+              target={exportSongTarget}
+              onCancel={() => setExportSongTarget(null)}
+              onConfirm={handleConfirmExportSong}
             />
 
             <TimelineContextMenus

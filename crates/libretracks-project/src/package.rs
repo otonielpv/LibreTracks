@@ -119,6 +119,11 @@ struct SongPackageManifest {
     time_signature_markers: Vec<TimeSignatureMarker>,
     #[serde(default)]
     library_meta: Vec<PackageLibraryAssetEntry>,
+    /// True when the package bundles the source audio files (under `audio/` in
+    /// the zip), making it self-contained and portable to another machine.
+    /// Absent/false in light packages that only reference audio by path.
+    #[serde(default)]
+    bundled_audio: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -131,6 +136,10 @@ pub struct SongPackageImportResult {
     pub song: Song,
     pub package_title: String,
     pub library_meta: Vec<PackageLibraryAssetEntry>,
+    /// Audio files bundled in a self-contained package, keyed by their original
+    /// file name. Empty for light packages. The caller copies these into the
+    /// destination project's `audio/` folder and re-points the imported clips.
+    pub bundled_audio: std::collections::HashMap<String, Vec<u8>>,
 }
 
 pub fn export_region_as_package(
@@ -139,6 +148,7 @@ pub fn export_region_as_package(
     song: &Song,
     region_id: &str,
     output_path: &Path,
+    include_audio: bool,
 ) -> Result<SongPackageExport, ProjectError> {
     let region = song
         .regions
@@ -254,6 +264,7 @@ pub fn export_region_as_package(
         tempo_markers,
         time_signature_markers,
         library_meta,
+        bundled_audio: include_audio,
     };
 
     let file = File::create(output_path)?;
@@ -270,25 +281,40 @@ pub fn export_region_as_package(
         if !added_files.insert(clip.file_path.clone()) {
             continue;
         }
-        // Bundle the waveform so the package opens instantly on another machine.
-        // Resolve (and, if missing, generate) it in the per-file global cache,
-        // then ship the encoded `.ltpeaks` bytes from disk.
-        if crate::load_or_generate_global_waveform(cache_root, song_dir, Path::new(&clip.file_path))
-            .is_err()
-        {
-            continue; // can't analyse this source — ship without its waveform
-        }
         let source_abs = if Path::new(&clip.file_path).is_absolute() {
             PathBuf::from(&clip.file_path)
         } else {
             song_dir.join(&clip.file_path)
         };
+
+        // Full packages bundle the source audio so they open on another machine
+        // without the original file. Stored under `audio/<file_name>`; the import
+        // copies it into the destination project's `audio/` folder and re-points
+        // the clip. Independent of the waveform below — a source we can't analyse
+        // for peaks should still ship its audio.
+        if include_audio {
+            if let Some(file_name) = source_abs.file_name().and_then(|value| value.to_str()) {
+                if let Ok(audio_bytes) = fs::read(&source_abs) {
+                    zip.start_file(format!("audio/{file_name}"), waveform_options)
+                        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+                    zip.write_all(&audio_bytes)?;
+                }
+            }
+        }
+
+        // Bundle the waveform so the package opens instantly on another machine.
+        // Resolve (and, if missing, generate) it in the per-file global cache,
+        // then ship the encoded `.ltpeaks` bytes from disk. A failure here only
+        // skips this clip's waveform, not its audio.
+        if crate::load_or_generate_global_waveform(cache_root, song_dir, Path::new(&clip.file_path))
+            .is_err()
+        {
+            continue;
+        }
         let waveform_path = crate::global_waveform_file_path(cache_root, &source_abs);
         let Ok(waveform_bytes) = fs::read(&waveform_path) else {
             continue;
         };
-        // Stable per-clip file name inside the archive, derived from the audio
-        // file stem (the importer re-keys into the destination's global cache).
         let stem = Path::new(&clip.file_path)
             .file_stem()
             .and_then(|value| value.to_str())
@@ -369,12 +395,28 @@ fn import_song_package_from_archive<R: Read + Seek>(
     let insert_at_seconds = insert_at_seconds.max(0.0);
     let is_empty_session = next_song.tracks.is_empty() && next_song.clips.is_empty();
 
+    let mut bundled_audio: std::collections::HashMap<String, Vec<u8>> =
+        std::collections::HashMap::new();
     for index in 0..archive.len() {
         let mut zip_file = archive
             .by_index(index)
             .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
-        let file_name = match zip_file
-            .name()
+        let entry_name = zip_file.name().to_string();
+
+        // Bundled source audio (full packages): keep the bytes for the caller to
+        // place into the destination project's audio/ folder.
+        if let Some(file_name) = entry_name
+            .strip_prefix("audio/")
+            .filter(|name| !name.is_empty() && !name.contains('/') && !name.contains('\\'))
+        {
+            let file_name = file_name.to_string();
+            let mut bytes = Vec::new();
+            zip_file.read_to_end(&mut bytes)?;
+            bundled_audio.insert(file_name, bytes);
+            continue;
+        }
+
+        let file_name = match entry_name
             .strip_prefix("waveforms/")
             .filter(|file_name| !file_name.is_empty() && !file_name.contains('/'))
         {
@@ -545,6 +587,7 @@ fn import_song_package_from_archive<R: Read + Seek>(
         song: next_song,
         package_title: manifest.song_title,
         library_meta,
+        bundled_audio,
     })
 }
 
@@ -687,7 +730,7 @@ mod tests {
         let source = song();
         let package_path = song_dir.join("verse.ltsong");
 
-        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path)
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
             .expect("export region");
         assert!(package_path.exists());
 
@@ -712,12 +755,80 @@ mod tests {
     }
 
     #[test]
+    fn full_export_bundles_audio_and_import_exposes_it() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let source = song();
+
+        // The clip references audio/loop.wav (relative to song_dir); create it so
+        // the exporter can bundle its bytes. Content is opaque to bundling.
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir");
+        fs::write(song_dir.join("audio").join("loop.wav"), b"RIFF....fake-wav-bytes")
+            .expect("write fake audio");
+
+        let package_path = song_dir.join("verse.ltpkg");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, true)
+            .expect("export full");
+
+        // The archive must contain an audio/ entry and the manifest flag.
+        let file = File::open(&package_path).expect("open pkg");
+        let mut archive = ZipArchive::new(file).expect("zip");
+        let mut has_audio = false;
+        for i in 0..archive.len() {
+            let name = archive.by_index(i).expect("entry").name().to_string();
+            if name.starts_with("audio/") {
+                has_audio = true;
+            }
+        }
+        assert!(has_audio, "full package must bundle audio/");
+
+        // Import surfaces the bundled bytes keyed by original file name.
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        let target = tempdir().expect("target");
+        let result = import_song_package(target.path(), &empty, &package_path, 0.0)
+            .expect("import full");
+        assert_eq!(result.bundled_audio.len(), 1);
+        assert!(result.bundled_audio.contains_key("loop.wav"));
+    }
+
+    #[test]
+    fn light_export_does_not_bundle_audio() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let source = song();
+        fs::create_dir_all(song_dir.join("audio")).expect("audio dir");
+        fs::write(song_dir.join("audio").join("loop.wav"), b"fake").expect("audio");
+
+        let package_path = song_dir.join("verse.ltpkg");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
+            .expect("export light");
+
+        let target = tempdir().expect("target");
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        let result = import_song_package(target.path(), &empty, &package_path, 0.0)
+            .expect("import light");
+        assert!(result.bundled_audio.is_empty());
+    }
+
+    #[test]
     fn import_offsets_clips_and_markers_by_insert_position() {
         let dir = tempdir().expect("tempdir");
         let song_dir = dir.path();
         let source = song();
         let package_path = song_dir.join("verse.ltsong");
-        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path)
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
             .expect("export");
 
         let empty = Song {
@@ -743,7 +854,7 @@ mod tests {
         let mut source = song();
         source.regions[0].transpose_semitones = 99; // beyond MAX
         let package_path = song_dir.join("bad.ltsong");
-        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path)
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
             .expect("export");
 
         let empty = Song {
@@ -765,6 +876,7 @@ mod tests {
             &song(),
             "nonexistent",
             &dir.path().join("x.ltsong"),
+            false,
         );
         assert!(result.is_err());
     }
