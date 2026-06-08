@@ -671,13 +671,31 @@ button {
 }
 
 .jump-mode-group {
-  display: inline-grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: inline-flex;
   gap: 0.22rem;
   padding: 0.22rem;
   border-radius: 4px;
   background: rgb(255 255 255 / 0.04);
   border: 1px solid rgb(255 255 255 / 0.06);
+}
+
+.jump-mode-group button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.jump-field-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.jump-field-label {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.56rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .jump-mode-group button,
@@ -723,14 +741,6 @@ button {
 
 .jump-bars-field input:not([type="range"]) {
   width: 3.25rem;
-  border: 0;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.06);
-  color: var(--text);
-  padding: 0.36rem 0.55rem;
-}
-
-.jump-bars-field select {
   border: 0;
   border-radius: 999px;
   background: rgb(255 255 255 / 0.06);
@@ -848,11 +858,6 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.song-config-summary {
-  flex: 1 1 14rem;
-  justify-content: flex-start;
 }
 
 .region-actions-row {
@@ -1598,11 +1603,16 @@ button {
   }
 
   .remote-inline-panel .jump-mode-group,
+  .remote-inline-panel .jump-field-group,
   .remote-inline-panel .jump-bars-field,
   .remote-inline-panel .pending-jump-card,
   .remote-inline-panel .jump-cancel-button {
     width: 100%;
     box-sizing: border-box;
+  }
+
+  .remote-inline-panel .jump-field-group {
+    justify-content: space-between;
   }
 
   .remote-control-card-head {

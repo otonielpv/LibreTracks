@@ -1406,20 +1406,26 @@ function TransportView() {
 
   const renderVampControls = () => (
     <div className="jump-toolbar jump-toolbar-sheet">
-      <label className="jump-bars-field">
-        <span>{STRINGS.vampMode}</span>
-        <select
-          value={vampMode}
-          onChange={(event) => {
-            const nextMode = event.currentTarget.value as VampMode;
-            setVampMode(nextMode);
-            patchRemoteSettings({ vampMode: nextMode });
+      <div className="jump-mode-group" role="group" aria-label={STRINGS.vampMode}>
+        <button
+          className={vampMode === "section" ? "is-active" : ""}
+          onClick={() => {
+            setVampMode("section");
+            patchRemoteSettings({ vampMode: "section" });
           }}
         >
-          <option value="section">{STRINGS.section}</option>
-          <option value="bars">{STRINGS.bars}</option>
-        </select>
-      </label>
+          {STRINGS.section}
+        </button>
+        <button
+          className={vampMode === "bars" ? "is-active" : ""}
+          onClick={() => {
+            setVampMode("bars");
+            patchRemoteSettings({ vampMode: "bars" });
+          }}
+        >
+          {STRINGS.bars}
+        </button>
+      </div>
 
       {vampMode === "bars" ? (
         <StepperField
@@ -1453,21 +1459,38 @@ function TransportView() {
 
   const renderSongControls = () => (
     <div className="jump-toolbar jump-toolbar-sheet">
-      <label className="jump-bars-field">
-        <span>{STRINGS.songTrigger}</span>
-        <select
-          value={songTrigger}
-          onChange={(event) => {
-            const nextTrigger = event.currentTarget.value as SongJumpTrigger;
-            setSongTrigger(nextTrigger);
-            patchRemoteSettings({ songJumpTrigger: nextTrigger });
-          }}
-        >
-          <option value="immediate">{STRINGS.immediate}</option>
-          <option value="region_end">{STRINGS.songEnd}</option>
-          <option value="after_bars">{STRINGS.bars}</option>
-        </select>
-      </label>
+      <div className="jump-field-group">
+        <span className="jump-field-label">{STRINGS.songTrigger}</span>
+        <div className="jump-mode-group" role="group" aria-label={STRINGS.songTrigger}>
+          <button
+            className={songTrigger === "immediate" ? "is-active" : ""}
+            onClick={() => {
+              setSongTrigger("immediate");
+              patchRemoteSettings({ songJumpTrigger: "immediate" });
+            }}
+          >
+            {STRINGS.immediate}
+          </button>
+          <button
+            className={songTrigger === "region_end" ? "is-active" : ""}
+            onClick={() => {
+              setSongTrigger("region_end");
+              patchRemoteSettings({ songJumpTrigger: "region_end" });
+            }}
+          >
+            {STRINGS.songEnd}
+          </button>
+          <button
+            className={songTrigger === "after_bars" ? "is-active" : ""}
+            onClick={() => {
+              setSongTrigger("after_bars");
+              patchRemoteSettings({ songJumpTrigger: "after_bars" });
+            }}
+          >
+            {STRINGS.bars}
+          </button>
+        </div>
+      </div>
 
       {songTrigger === "after_bars" ? (
         <StepperField
@@ -1480,23 +1503,28 @@ function TransportView() {
         />
       ) : null}
 
-      <label className="jump-bars-field">
-        <span>{STRINGS.songTransition}</span>
-        <select
-          value={songTransition}
-          onChange={(event) => {
-            const nextTransition = event.currentTarget.value as SongTransitionMode;
-            setSongTransition(nextTransition);
-            patchRemoteSettings({ songTransitionMode: nextTransition });
-          }}
-        >
-          <option value="instant">{STRINGS.cleanCut}</option>
-          <option value="fade_out">{STRINGS.fadeOut}</option>
-        </select>
-      </label>
-      <div className="pending-jump-card song-config-summary">
-        <span>{STRINGS.songTransition}</span>
-        <strong>{songSummary}</strong>
+      <div className="jump-field-group">
+        <span className="jump-field-label">{STRINGS.songTransition}</span>
+        <div className="jump-mode-group" role="group" aria-label={STRINGS.songTransition}>
+          <button
+            className={songTransition === "instant" ? "is-active" : ""}
+            onClick={() => {
+              setSongTransition("instant");
+              patchRemoteSettings({ songTransitionMode: "instant" });
+            }}
+          >
+            {STRINGS.cleanCut}
+          </button>
+          <button
+            className={songTransition === "fade_out" ? "is-active" : ""}
+            onClick={() => {
+              setSongTransition("fade_out");
+              patchRemoteSettings({ songTransitionMode: "fade_out" });
+            }}
+          >
+            {STRINGS.fadeOut}
+          </button>
+        </div>
       </div>
     </div>
   );

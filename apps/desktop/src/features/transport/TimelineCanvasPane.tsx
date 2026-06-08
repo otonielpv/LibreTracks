@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
@@ -278,6 +279,34 @@ export function TimelineCanvasPane({
 }: TimelineCanvasPaneProps) {
   useRenderCounter("TimelineCanvasPane");
   const trackLayersRef = useRef<HTMLDivElement | null>(null);
+
+  // Measured pixel height of the track-list cell (.lt-track-list). This cell is
+  // CSS-stretched to fill its grid row, so its clientHeight is the exact area
+  // the track canvas must cover. We observe it directly instead of deriving the
+  // floor from the upstream viewportHeight state, which can lag behind layout
+  // changes (panel toggles, splitter drags) that don't re-run the parent's
+  // ResizeObserver effect — that lag is what leaves the black gap at the bottom.
+  const [measuredTrackAreaHeight, setMeasuredTrackAreaHeight] = useState(0);
+  useEffect(() => {
+    const cell = laneAreaRef.current;
+    if (!cell || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const measure = () => {
+      const next = cell.clientHeight;
+      // Ignore transient 0 measurements (mid-layout / detached) so we never
+      // shrink the canvas to a stale-short height and expose the gap.
+      if (next > 0) {
+        setMeasuredTrackAreaHeight((prev) => (prev === next ? prev : next));
+      }
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(cell);
+    return () => observer.disconnect();
+  }, [laneAreaRef]);
 
   // ── Region resize drag ──────────────────────────────────────────────────
   // Local-only state for the in-flight resize. Backend is touched once on
@@ -701,13 +730,27 @@ export function TimelineCanvasPane({
     );
   };
 
-  // Track canvas pixel height. The ruler row shares the scroll viewport, so
-  // the visible track area is the viewport height minus the ruler. We floor
-  // the canvas at that area (so the painted grid reaches the bottom with few
-  // tracks) and let it grow past it when there are enough tracks to scroll.
-  const visibleTrackAreaHeight =
+  // Track canvas pixel height. We floor the canvas at the visible track area
+  // (so the painted grid always reaches the bottom with few tracks) and let it
+  // grow past it when there are enough tracks to scroll.
+  //
+  // Preferred floor is the directly-measured track-list cell height, which is
+  // exactly the area the canvas must fill and stays in sync via this component's
+  // own ResizeObserver. We fall back to deriving it from the upstream viewport
+  // height (minus the ruler row, which shares the scroll viewport) only until
+  // that measurement lands, so a stale/short viewportHeight can never re-open
+  // the bottom gap.
+  const derivedTrackAreaHeight =
     (viewportHeight || scrollViewportRef.current?.clientHeight || 500) -
     RULER_HEIGHT;
+  // The measured cell is the source of truth once it lands; only fall back to
+  // the derived value while it is still 0 (first paint, before the observer
+  // fires). Maxing the two would let a stale-large derived value overshoot the
+  // real cell and add phantom scroll.
+  const visibleTrackAreaHeight =
+    measuredTrackAreaHeight > 0
+      ? measuredTrackAreaHeight
+      : derivedTrackAreaHeight;
   const trackCanvasHeight = Math.max(
     visibleTrackAreaHeight,
     visibleTracks.length * trackHeight,
