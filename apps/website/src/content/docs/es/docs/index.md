@@ -37,7 +37,7 @@ Las fuentes importadas grandes se preparan para reproduccion apoyada en disco. L
 
 Cada region de cancion puede cambiar tempo y tonalidad de forma independiente. Region Warp estira el audio para encajar con el BPM del timeline sin cambiar el tono, y Region Transpose desplaza el tono cambiando o no la duracion segun este el warp. Consulta [Pitch, warp y el boton T](./pitch-and-warp) para la tabla de decision completa.
 
-La edicion de clips soporta flujos al estilo Ableton: Ctrl/Cmd+click y Shift+click para seleccion multiple, arrastre en grupo con IPC agrupado, y magnets con Ctrl al arrastrar que pegan los bordes del clip al playhead, marcas, regiones y bordes de otros clips. Ademas, pistas y clips pueden colorearse desde el menu contextual para leer sesiones densas mas rapido.
+La edicion de clips soporta flujos al estilo Ableton: Ctrl/Cmd+click y Shift+click para seleccion multiple, arrastre en grupo con IPC agrupado, y magnets con Ctrl al arrastrar que pegan los bordes del clip al playhead, marcas, regiones y bordes de otros clips. Tambien puedes arrastrar clips verticalmente para moverlos a otra pista, validando el destino mientras arrastras. Ademas, pistas y clips pueden colorearse desde el menu contextual para leer sesiones densas mas rapido.
 
 Las folder tracks tambien pueden actuar como dueñas del routing: las pistas hijas pueden dejar su salida en `Inherited (Folder)` para seguir automaticamente el bus de la carpeta, manteniendo la misma agrupacion visual en el timeline desktop y en el mixer remote.
 
