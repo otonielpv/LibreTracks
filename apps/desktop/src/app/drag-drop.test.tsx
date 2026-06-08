@@ -148,6 +148,91 @@ describe("App / drag-drop", () => {
     expect(await screen.findByText(interpolate(en.timelineToolbar.clipsCount, { count: 6 }))).toBeTruthy();
   });
 
+  it("toggles the drop layout when Ctrl is pressed while the cursor is stationary", async () => {
+    disablePointerEventSupport();
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTrackListBounds(container);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.transport.shell.library) }));
+    });
+
+    await screen.findByText("drums.wav");
+
+    await act(async () => {
+      fireEvent.click(getLibraryAssetButton("drums.wav"));
+      fireEvent.click(getLibraryAssetButton("bass.wav"), { ctrlKey: true });
+    });
+
+    // The drop hit-test reads document.elementFromPoint, which jsdom can't
+    // resolve from geometry. Pin it to the Drums lane so the drag has a real
+    // target track — that's the prerequisite for the in-line ↔ separate-tracks
+    // toggle (a null target always forces vertical).
+    const drumsRow = getTrackLaneRow(container, "Drums");
+    const drumsLane = drumsRow.querySelector(".lt-track-lane") as HTMLElement;
+    const elementFromPointSpy = vi
+      .spyOn(document, "elementFromPoint")
+      .mockReturnValue(drumsLane);
+
+    // Distinct timeline positions of the preview ghosts. Horizontal layout
+    // staggers them in time (different left); vertical stacks them at the same
+    // start across separate tracks (same left). Re-read each render.
+    const distinctGhostLefts = () => {
+      const lefts = Array.from(
+        container.querySelectorAll(".lt-library-clip-ghost"),
+      ).map((ghost) => (ghost as HTMLElement).style.left);
+      return { ghostCount: lefts.length, distinctLefts: new Set(lefts).size };
+    };
+
+    try {
+      // Hover the Drums lane WITHOUT a modifier → horizontal: two clips in-line,
+      // so two distinct left positions.
+      await act(async () => {
+        fireEvent.mouseDown(getLibraryAssetButton("drums.wav"), {
+          button: 0,
+          clientX: 90,
+          clientY: 210,
+        });
+        fireEvent.mouseMove(window, { clientX: 420, clientY: 160 });
+      });
+
+      await waitFor(() => {
+        const { ghostCount, distinctLefts } = distinctGhostLefts();
+        expect(ghostCount).toBe(2);
+        expect(distinctLefts).toBe(2);
+      });
+
+      // Press Ctrl with the cursor STATIONARY → vertical: both clips share the
+      // same start (one distinct left), stacked on separate tracks.
+      await act(async () => {
+        fireEvent.keyDown(window, { key: "Control", ctrlKey: true });
+      });
+
+      await waitFor(() => {
+        const { ghostCount, distinctLefts } = distinctGhostLefts();
+        expect(ghostCount).toBe(2);
+        expect(distinctLefts).toBe(1);
+      });
+
+      // Release Ctrl (still stationary) → back to in-line (two distinct lefts).
+      await act(async () => {
+        fireEvent.keyUp(window, { key: "Control", ctrlKey: false });
+      });
+
+      await waitFor(() => {
+        expect(distinctGhostLefts().distinctLefts).toBe(2);
+      });
+
+      await act(async () => {
+        fireEvent.mouseUp(window, { clientX: 420, clientY: 160 });
+      });
+    } finally {
+      elementFromPointSpy.mockRestore();
+    }
+  });
+
   it("drops a song package on the timeline", async () => {
     const desktopApi = await import("../features/transport/desktopApi");
     const importSongPackageMock = vi.mocked(desktopApi.importSongPackage);

@@ -1181,6 +1181,7 @@ export function TransportPanelContent() {
     cancel: (event: PointerEvent) => void;
     mouseMove: (event: MouseEvent) => void;
     mouseUp: (event: MouseEvent) => void;
+    key: (event: KeyboardEvent) => void;
   } | null>(null);
   const libraryDragAutoScrollRef = useRef<LibraryDragAutoScrollState>({
     frameId: null,
@@ -7336,6 +7337,8 @@ export function TransportPanelContent() {
     window.removeEventListener("pointercancel", listeners.cancel);
     window.removeEventListener("mousemove", listeners.mouseMove);
     window.removeEventListener("mouseup", listeners.mouseUp);
+    window.removeEventListener("keydown", listeners.key);
+    window.removeEventListener("keyup", listeners.key);
     internalLibraryPointerDragListenersRef.current = null;
   }
 
@@ -7417,6 +7420,38 @@ export function TransportPanelContent() {
     };
   }
 
+  // Recompute hover + drop layout from a cursor position and the live modifier
+  // keys. Shared by pointer-move and by the keyboard handler so that pressing
+  // or releasing Ctrl/Cmd while the cursor is stationary still flips the
+  // in-line ↔ separate-tracks layout (the modifier changes the drop plan, not
+  // just the cursor position).
+  function refreshInternalLibraryDrag(args: {
+    drag: InternalLibraryPointerDrag;
+    clientX: number;
+    clientY: number;
+    ctrlKey: boolean;
+    metaKey: boolean;
+  }): InternalLibraryPointerDrag {
+    const nextDrag = updateInternalLibraryPointerDragHover(args);
+
+    // Compact-view drop preview: library items are never .ltpkg, so
+    // we always emit isPackage=false and let the per-column handler
+    // render `count` dashed placeholders.
+    const hit = resolveCompactRegionAtPoint(args.clientX, args.clientY);
+    if (hit.hit) {
+      const count = nextDrag.payload.length;
+      setCompactDragPreview({
+        targetRegionId: hit.regionId,
+        count,
+        isPackage: false,
+      });
+    } else {
+      setCompactDragPreview((current) => (current === null ? current : null));
+    }
+
+    return nextDrag;
+  }
+
   function handleInternalLibraryPointerMove(event: PointerEvent) {
     const drag = internalLibraryPointerDragRef.current;
     if (!drag) {
@@ -7438,30 +7473,36 @@ export function TransportPanelContent() {
     };
 
     if (nextDrag.isDragging) {
-      nextDrag = updateInternalLibraryPointerDragHover({
+      nextDrag = refreshInternalLibraryDrag({
         drag: nextDrag,
         clientX: event.clientX,
         clientY: event.clientY,
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
       });
-
-      // Compact-view drop preview: library items are never .ltpkg, so
-      // we always emit isPackage=false and let the per-column handler
-      // render `count` dashed placeholders.
-      const hit = resolveCompactRegionAtPoint(event.clientX, event.clientY);
-      if (hit.hit) {
-        const count = nextDrag.payload.length;
-        setCompactDragPreview({
-          targetRegionId: hit.regionId,
-          count,
-          isPackage: false,
-        });
-      } else {
-        setCompactDragPreview((current) => (current === null ? current : null));
-      }
     }
 
+    setInternalLibraryPointerDragState(nextDrag);
+  }
+
+  function handleInternalLibraryPointerKey(event: KeyboardEvent) {
+    // Only Ctrl/Cmd toggles the layout; ignore other keys to avoid needless
+    // recomputation. The event fires for the key itself (Control/Meta) and for
+    // any key while a modifier is held, so we gate on the modifier flags.
+    if (event.key !== "Control" && event.key !== "Meta") {
+      return;
+    }
+    const drag = internalLibraryPointerDragRef.current;
+    if (!drag || !drag.isDragging) {
+      return;
+    }
+    const nextDrag = refreshInternalLibraryDrag({
+      drag,
+      clientX: drag.current.x,
+      clientY: drag.current.y,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+    });
     setInternalLibraryPointerDragState(nextDrag);
   }
 
@@ -7579,18 +7620,24 @@ export function TransportPanelContent() {
     const mouseUp = (event: MouseEvent) => {
       handleInternalLibraryPointerUp(event as unknown as PointerEvent);
     };
+    const key = (event: KeyboardEvent) => {
+      handleInternalLibraryPointerKey(event);
+    };
 
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", cancel);
     window.addEventListener("mousemove", mouseMove);
     window.addEventListener("mouseup", mouseUp);
+    window.addEventListener("keydown", key);
+    window.addEventListener("keyup", key);
     internalLibraryPointerDragListenersRef.current = {
       move,
       up,
       cancel,
       mouseMove,
       mouseUp,
+      key,
     };
   }
 
