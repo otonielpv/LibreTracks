@@ -67,6 +67,13 @@ type LibraryPreviewRow = {
 
 type TimelineCanvasPaneProps = {
   laneViewportWidth: number;
+  /**
+   * Visible height of the scroll viewport (reactive, observed upstream).
+   * Used as the floor for the track canvas pixel height so the painted
+   * background grid always reaches the bottom of the viewport — otherwise,
+   * with few tracks, a black unpainted gap shows below the last lane.
+   */
+  viewportHeight: number;
   trackHeight: number;
   playheadDurationSeconds: number;
   song: SongView | null;
@@ -204,6 +211,7 @@ type TimelineCanvasPaneProps = {
 
 export function TimelineCanvasPane({
   laneViewportWidth,
+  viewportHeight,
   trackHeight,
   playheadDurationSeconds,
   song,
@@ -691,6 +699,18 @@ export function TimelineCanvasPane({
     );
   };
 
+  // Track canvas pixel height. The ruler row shares the scroll viewport, so
+  // the visible track area is the viewport height minus the ruler. We floor
+  // the canvas at that area (so the painted grid reaches the bottom with few
+  // tracks) and let it grow past it when there are enough tracks to scroll.
+  const visibleTrackAreaHeight =
+    (viewportHeight || scrollViewportRef.current?.clientHeight || 500) -
+    RULER_HEIGHT;
+  const trackCanvasHeight = Math.max(
+    visibleTrackAreaHeight,
+    visibleTracks.length * trackHeight,
+  );
+
   const externalDropGuideLeft = (() => {
     if (!externalDropPreview) {
       return 0;
@@ -1015,10 +1035,7 @@ export function TimelineCanvasPane({
           {song ? (
             <TimelineTrackCanvas
               width={laneViewportWidth}
-              height={Math.max(
-                scrollViewportRef.current?.clientHeight ?? 500,
-                visibleTracks.length * trackHeight,
-              )}
+              height={trackCanvasHeight}
               trackHeight={trackHeight}
               song={song}
               visibleTracks={visibleTracks}

@@ -2723,24 +2723,86 @@ textarea {
   display: none;
 }
 
-/* Controls fade out as the lane collapses instead of vanishing in one
-   step. visibility is delayed until the fade finishes so they stop
-   taking pointer events but the transition stays smooth. */
+/* In lane mode we keep the essentials inline like Ableton: the M/S/T
+   toggles and the Audio-To routing combobox. Only the volume/pan
+   faders (which need vertical room) are dropped. The control row sits
+   to the right of the name as a single horizontal strip. */
 .lt-track-header.is-lane .lt-track-control-row {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  height: auto;
+  min-height: 0;
+  width: auto;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+}
+
+/* Faders fade out — they don't fit on a single line. Collapse their
+   box and flex basis so they stop reserving horizontal space. */
+.lt-track-header.is-lane .lt-track-volume,
+.lt-track-header.is-lane .lt-track-pan {
   opacity: 0;
   visibility: hidden;
-  /* Collapse to zero box AND zero flex basis so the hidden controls
-     stop reserving horizontal space — otherwise they steal width from
-     the title and truncate the name prematurely. */
-  height: 0;
   width: 0;
-  min-height: 0;
   min-width: 0;
   flex: 0 0 0;
   padding: 0;
   margin: 0;
   overflow: hidden;
   transition: opacity 120ms linear, visibility 0s linear 120ms;
+}
+
+/* Mix-controls wrapper: drop the 2-col grid, lay the (now fader-less)
+   children out in a row so Audio-To sits next to the toggles. */
+.lt-track-header.is-lane .lt-track-mix-controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+/* M/S/T stay as a tight horizontal trio in lane mode. */
+.lt-track-header.is-lane .lt-track-toggle-group {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  gap: 0.12rem;
+}
+
+.lt-track-header.is-lane .lt-track-toggle-group button {
+  width: 18px;
+  height: 14px;
+  font-size: 8px;
+  border-radius: 2px;
+}
+
+/* Audio-To: compact button, label hidden, fixed width so it doesn't
+   crowd out the track name. */
+.lt-track-header.is-lane .lt-track-audio-to {
+  flex: 0 0 auto;
+}
+
+.lt-track-header.is-lane .lt-track-audio-to > span {
+  display: none;
+}
+
+.lt-track-header.is-lane .lt-audio-route-trigger {
+  height: 16px;
+  min-width: 64px;
+  width: 64px;
+  padding: 0 0.4rem;
+  font-size: 9px;
+}
+
+.lt-track-header.is-lane .lt-audio-route-trigger-caret {
+  font-size: 9px;
 }
 
 /* Keep the meter visible in lane mode — Ableton shows a thin vertical
@@ -2947,6 +3009,12 @@ textarea {
 .lt-track-toggle-group button.is-active {
   color: #57f1db;
   background: rgb(87 241 219 / 0.16);
+}
+
+/* Mute (first toggle) goes red when active, matching the compact mixer. */
+.lt-track-toggle-group button:nth-child(1).is-active {
+  color: #0e0e0e;
+  background: rgb(255 95 95 / 0.85);
 }
 
 .lt-track-toggle-group button:nth-child(2).is-active {

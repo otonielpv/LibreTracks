@@ -644,6 +644,14 @@ export function TransportPanelContent() {
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(
     DEFAULT_TIMELINE_VIEWPORT_WIDTH,
   );
+  // Visible height of the scroll viewport, observed reactively. The track
+  // canvas paints its background grid up to a pixel height; if that height
+  // is shorter than the viewport (which happens with few tracks, where the
+  // tracks don't reach the bottom), an unpainted black gap appears below the
+  // last lane. We feed this value into the canvas height so it always fills
+  // the visible area. Kept reactive via the ResizeObserver below — reading
+  // clientHeight inline during render goes stale on window/panel resize.
+  const [timelineViewportHeight, setTimelineViewportHeight] = useState(0);
   // Mirrors `selectedOutputChannelCount` (derived far below in render) so the
   // settings handler factory — instantiated near the top — can read the current
   // value without depending on render-order of the derived memo.
@@ -3602,6 +3610,10 @@ export function TransportPanelContent() {
           DEFAULT_TIMELINE_VIEWPORT_WIDTH) - HEADER_WIDTH,
       );
       setTimelineViewportWidth(Math.max(320, paneWidth ?? fallbackWidth));
+
+      const viewportHeight =
+        timelineScrollViewportRef.current?.clientHeight ?? 0;
+      setTimelineViewportHeight(viewportHeight);
     };
 
     updateViewportWidth();
@@ -8888,6 +8900,7 @@ export function TransportPanelContent() {
 
                         <TimelineCanvasPane
                           laneViewportWidth={laneViewportWidth}
+                          viewportHeight={timelineViewportHeight}
                           trackHeight={trackHeight}
                           song={song}
                           visibleTracks={visibleTracks}
