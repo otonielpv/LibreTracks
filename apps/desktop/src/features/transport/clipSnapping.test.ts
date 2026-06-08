@@ -80,7 +80,12 @@ describe("buildClipSnapAnchors", () => {
     });
 
     const draggedMembers: ClipDragMember[] = [
-      { clipId: "clip-a", originSeconds: 100, previewSeconds: 100 },
+      {
+        clipId: "clip-a",
+        originSeconds: 100,
+        previewSeconds: 100,
+        originTrackId: "track-a",
+      },
     ];
 
     const anchors = buildClipSnapAnchors(song, draggedMembers, 42);
@@ -106,6 +111,7 @@ describe("findSnappedGroupDelta", () => {
     clipId: "clip-a",
     originSeconds: 10,
     previewSeconds: 10,
+    originTrackId: "track-a",
   };
 
   it("returns the proposed delta when no anchor is within range", () => {
@@ -153,7 +159,12 @@ describe("findSnappedGroupDelta", () => {
     // so clip-b's start lands at 35.1.
     const members: ClipDragMember[] = [
       member,
-      { clipId: "clip-b", originSeconds: 30, previewSeconds: 30 },
+      {
+        clipId: "clip-b",
+        originSeconds: 30,
+        previewSeconds: 30,
+        originTrackId: "track-b",
+      },
     ];
     const anchors: ClipSnapAnchor[] = [
       { seconds: 35.1, kind: "clip-start" },

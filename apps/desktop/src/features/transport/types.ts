@@ -81,6 +81,12 @@ export type ClipDragMember = {
   clipId: string;
   originSeconds: number;
   previewSeconds: number;
+  /**
+   * Track the clip lived on when the drag started. Combined with the drag's
+   * `trackRowDelta` it yields the member's preview track while dragging
+   * vertically and the commit-time `targetTrackId`.
+   */
+  originTrackId: string;
 };
 
 export type ClipSnapAnchorKind =
@@ -107,6 +113,18 @@ export type ClipDragState = {
   previewSeconds: number;
   clickSeekSeconds: number;
   startClientX: number;
+  /**
+   * Pointer Y at drag start. With the uniform track height it converts cursor
+   * vertical movement into a whole-row delta (`trackRowDelta`).
+   */
+  startClientY: number;
+  /**
+   * Number of track rows the group has shifted vertically (negative = up).
+   * Driven by the primary clip and applied uniformly to every member so the
+   * relative vertical spacing of a multi-selection is preserved. Clamped so no
+   * member lands outside the track list or on a folder lane.
+   */
+  trackRowDelta: number;
   hasMoved: boolean;
   /**
    * All clips that should follow the drag — at least the primary clip. When

@@ -309,6 +309,92 @@ describe("App / timeline-clips", () => {
     expect(bassMove.timelineStartSeconds - 8).toBeCloseTo(groupDelta, 3);
   });
 
+  it("drags a clip vertically onto another track via the batch move IPC", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    const moveClipsBatchSpy = vi.spyOn(desktopApi, "moveClipsBatch");
+    const moveClipSpy = vi.spyOn(desktopApi, "moveClip");
+
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTimelineShellMetrics(container, 1500);
+
+    await act(async () => {
+      fireEvent(window, new Event("resize"));
+    });
+
+    const drumsRow = getTrackLaneRow(container, "Drums");
+    const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(drumsLane).toBeTruthy();
+
+    // Drag the Drums clip straight DOWN by exactly one track row. Drums and
+    // Bass are adjacent lanes, so a one-row delta lands the clip on Bass. The
+    // row delta is derived from the store track height, independent of the
+    // mocked lane geometry, so we move clientY by exactly that height.
+    await act(async () => {
+      fireEvent.mouseDown(drumsLane as HTMLElement, {
+        button: 0,
+        clientX: 320,
+        clientY: 140,
+      });
+      fireEvent.mouseMove(window, {
+        clientX: 320,
+        clientY: 140 + TIMELINE_DEFAULT_TRACK_HEIGHT,
+      });
+      fireEvent.mouseUp(window, {
+        button: 0,
+        clientX: 320,
+        clientY: 140 + TIMELINE_DEFAULT_TRACK_HEIGHT,
+      });
+    });
+
+    await waitFor(() => {
+      expect(moveClipsBatchSpy).toHaveBeenCalled();
+    });
+    // A single clip changing track must still route through the batch IPC so
+    // position + track commit atomically (one undo, one revision).
+    expect(moveClipSpy).not.toHaveBeenCalled();
+
+    const batchArg = moveClipsBatchSpy.mock.calls[0][0];
+    expect(batchArg).toHaveLength(1);
+    expect(batchArg[0].clipId).toBe("clip-drums");
+    expect(batchArg[0].targetTrackId).toBe("track-bass");
+  });
+
+  it("does not set a target track for a purely horizontal clip drag", async () => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    const moveClipSpy = vi.spyOn(desktopApi, "moveClip");
+
+    const { container } = await renderApp();
+    mockRulerBounds(container);
+    mockLaneBounds(container);
+    mockTimelineShellMetrics(container, 1500);
+
+    await act(async () => {
+      fireEvent(window, new Event("resize"));
+    });
+
+    const drumsRow = getTrackLaneRow(container, "Drums");
+    const drumsLane = drumsRow?.querySelector(".lt-track-lane") as HTMLElement | null;
+    expect(drumsLane).toBeTruthy();
+
+    // Horizontal-only drag: single clip, no track change → the single-clip
+    // move IPC (no targetTrackId concept) handles it.
+    await act(async () => {
+      fireEvent.mouseDown(drumsLane as HTMLElement, {
+        button: 0,
+        clientX: 320,
+        clientY: 140,
+      });
+      fireEvent.mouseMove(window, { clientX: 440, clientY: 140 });
+      fireEvent.mouseUp(window, { button: 0, clientX: 440, clientY: 140 });
+    });
+
+    await waitFor(() => {
+      expect(moveClipSpy).toHaveBeenCalled();
+    });
+  });
+
   it("opens the clip context menu and allows splitting at the cursor", async () => {
     const { container } = await renderApp();
     mockRulerBounds(container);

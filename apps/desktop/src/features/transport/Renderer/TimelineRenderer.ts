@@ -19,6 +19,13 @@ export type TrackSceneSnapshot = {
   selectedClipId: string | null;
   selectedClipIds: string[];
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
+  /**
+   * Per-clip destination track override during a vertical clip drag. When a
+   * clip id maps to a track id here, it is painted on that lane instead of its
+   * own bucket, giving a live "moving to another track" preview without a React
+   * re-render.
+   */
+  clipPreviewTrackIdRef: MutableRefObject<Record<string, string>>;
   cameraX: number;
 };
 
@@ -103,6 +110,7 @@ export class TimelineRenderer {
   private lastViewportHeight = Number.NaN;
 
   private lastPreviewClipState: Record<string, number> | null = null;
+  private lastPreviewTrackState: Record<string, string> | null = null;
 
   constructor(
     private readonly backgroundCanvas: HTMLCanvasElement,
@@ -204,14 +212,20 @@ export class TimelineRenderer {
     if (snapshot) {
       const viewport = this.getViewportMetrics(snapshot);
       const previewClipState = snapshot.clipPreviewSecondsRef.current;
+      const previewTrackState = snapshot.clipPreviewTrackIdRef.current;
       const viewportChanged =
         viewport.scrollTop !== this.lastViewportScrollTop || viewport.height !== this.lastViewportHeight;
 
-      if (viewportChanged || previewClipState !== this.lastPreviewClipState) {
+      if (
+        viewportChanged ||
+        previewClipState !== this.lastPreviewClipState ||
+        previewTrackState !== this.lastPreviewTrackState
+      ) {
         this.dirtyTracks = true;
         this.lastViewportScrollTop = viewport.scrollTop;
         this.lastViewportHeight = viewport.height;
         this.lastPreviewClipState = previewClipState;
+        this.lastPreviewTrackState = previewTrackState;
       }
 
       if (isRenderableCanvasSize(snapshot.width) && isRenderableCanvasSize(snapshot.height)) {

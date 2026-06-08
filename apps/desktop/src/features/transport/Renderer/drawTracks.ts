@@ -97,6 +97,15 @@ export function drawTrackClipsLayer(
   context.save();
   context.clearRect(0, 0, snapshot.width, snapshot.height);
 
+  // Vertical clip-drag preview: a clip can be temporarily painted on a lane
+  // other than its own bucket. Resolve destination lane indices up front so the
+  // per-clip loop can shift `clipTop` to the target row.
+  const previewTrackIdByClip = snapshot.clipPreviewTrackIdRef.current;
+  const trackIndexById = new Map<string, number>();
+  for (let i = 0; i < snapshot.visibleTracks.length; i += 1) {
+    trackIndexById.set(snapshot.visibleTracks[i].id, i);
+  }
+
   for (let trackIndex = visibleTrackStart; trackIndex < visibleTrackEnd; trackIndex += 1) {
     const track = snapshot.visibleTracks[trackIndex];
     const trackTop = trackIndex * snapshot.trackHeight;
@@ -139,7 +148,14 @@ export function drawTrackClipsLayer(
       const clippedLeft = clamp(left, 0, snapshot.width);
       const clippedRight = clamp(right, 0, snapshot.width);
       const visibleWidth = Math.max(2, clippedRight - clippedLeft);
-      const clipTop = trackTop;
+      // While dragging vertically, paint the clip on its destination lane.
+      const previewTrackId = previewTrackIdByClip[clip.id];
+      const previewTrackIndex =
+        previewTrackId !== undefined ? trackIndexById.get(previewTrackId) : undefined;
+      const clipTop =
+        previewTrackIndex !== undefined
+          ? previewTrackIndex * snapshot.trackHeight
+          : trackTop;
       const clipHeight = snapshot.trackHeight;
       const isSelected =
         snapshot.selectedClipId === clip.id || snapshot.selectedClipIds.includes(clip.id);

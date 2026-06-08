@@ -154,6 +154,7 @@ function createSnapshot(withWaveform: boolean): TrackSceneSnapshot {
     selectedClipId: null,
     selectedClipIds: [],
     clipPreviewSecondsRef: { current: {} },
+    clipPreviewTrackIdRef: { current: {} },
     cameraX: 0,
   };
 }

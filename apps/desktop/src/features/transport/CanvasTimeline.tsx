@@ -100,6 +100,7 @@ type TrackCanvasProps = {
   selectedClipId: string | null;
   selectedClipIds: string[];
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
+  clipPreviewTrackIdRef: MutableRefObject<Record<string, string>>;
   trackHeightForInput: number;
   canNativeZoom: boolean;
   navigationScheme: TimelineNavigationScheme;
@@ -590,6 +591,7 @@ export function TimelineTrackCanvas({
   selectedClipId,
   selectedClipIds,
   clipPreviewSecondsRef,
+  clipPreviewTrackIdRef,
   trackHeightForInput,
   canNativeZoom,
   navigationScheme,
@@ -617,6 +619,7 @@ export function TimelineTrackCanvas({
     selectedClipId,
     selectedClipIds,
     clipPreviewSecondsRef,
+    clipPreviewTrackIdRef,
     cameraX: cameraXRef.current,
   });
   const trackStructureSignature = useMemo(
@@ -698,6 +701,7 @@ export function TimelineTrackCanvas({
     selectedClipId,
     selectedClipIds,
     clipPreviewSecondsRef,
+    clipPreviewTrackIdRef,
     cameraX: cameraXRef.current,
   };
 
@@ -772,10 +776,12 @@ export function TimelineTrackCanvas({
       selectedClipId,
       selectedClipIds,
       clipPreviewSecondsRef,
+      clipPreviewTrackIdRef,
     };
     rendererRef.current?.updateState(snapshotRef.current);
   }, [
     clipPreviewSecondsRef,
+    clipPreviewTrackIdRef,
     clipSceneSignature,
     height,
     pixelsPerSecond,

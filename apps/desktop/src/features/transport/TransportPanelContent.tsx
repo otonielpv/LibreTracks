@@ -130,6 +130,10 @@ import { TimelineToolbar } from "./TimelineToolbar";
 import { TimelineTopbar } from "./TimelineTopbar";
 import { TrackHeadersPane } from "./TrackHeadersPane";
 import { buildClipSnapAnchors, findSnappedGroupDelta } from "./clipSnapping";
+import {
+  clampGroupRowDelta,
+  resolveMemberTargetTrackId,
+} from "./clipVerticalDrag";
 import { snapToTimelineGrid, useTimelineGrid } from "./useTimelineGrid";
 import {
   BASE_PIXELS_PER_SECOND,
@@ -1156,6 +1160,10 @@ export function TransportPanelContent() {
   const trackDragRef = useRef<TrackDragState>(null);
   const timelinePanRef = useRef<TimelinePanState>(null);
   const clipPreviewSecondsRef = useRef<Record<string, number>>({});
+  // Per-clip destination track override during a vertical clip drag. Read
+  // inside the canvas rAF loop (like clipPreviewSecondsRef) so dragging a clip
+  // onto another lane re-paints it there without a React re-render.
+  const clipPreviewTrackIdRef = useRef<Record<string, string>>({});
   const trackDropStateRef = useRef<TrackDropState>(null);
   const draggedTrackRowRef = useRef<HTMLDivElement | null>(null);
   const draggedTrackRowsRef = useRef<HTMLDivElement[]>([]);
@@ -4176,9 +4184,41 @@ export function TransportPanelContent() {
       if (clipDrag && effectSong) {
         const effectPixelsPerSecond = livePixelsPerSecondRef.current;
         const exceededThreshold =
-          Math.abs(event.clientX - clipDrag.startClientX) > DRAG_THRESHOLD_PX;
+          Math.abs(event.clientX - clipDrag.startClientX) > DRAG_THRESHOLD_PX ||
+          Math.abs(event.clientY - clipDrag.startClientY) > DRAG_THRESHOLD_PX;
         if (!clipDrag.hasMoved && exceededThreshold) {
           restoreConfirmedTransportVisual();
+        }
+
+        // Vertical axis: convert the cursor's Y travel into a whole-row delta
+        // (tracks share a uniform height) and clamp it so every dragged member
+        // stays on a droppable lane. The resulting per-clip destination tracks
+        // are written to clipPreviewTrackIdRef, which the canvas reads to paint
+        // the ghost on the target lane without a React re-render.
+        const liveTrackHeight = Math.max(
+          1,
+          useTimelineUIStore.getState().trackHeight,
+        );
+        const desiredRowDelta = Math.round(
+          (event.clientY - clipDrag.startClientY) / liveTrackHeight,
+        );
+        const trackRowDelta = clampGroupRowDelta(
+          clipDrag.members,
+          desiredRowDelta,
+          visibleTracksRef.current,
+        );
+        const nextPreviewTrackIds: Record<string, string> = {};
+        if (trackRowDelta !== 0) {
+          for (const member of clipDrag.members) {
+            const targetTrackId = resolveMemberTargetTrackId(
+              member,
+              trackRowDelta,
+              visibleTracksRef.current,
+            );
+            if (targetTrackId) {
+              nextPreviewTrackIds[member.clipId] = targetTrackId;
+            }
+          }
         }
         const rawDeltaSeconds =
           (event.clientX - clipDrag.startClientX) / effectPixelsPerSecond;
@@ -4277,10 +4317,12 @@ export function TransportPanelContent() {
           hasMoved: clipDrag.hasMoved || exceededThreshold,
           previewSeconds: primaryPreview,
           members: nextMembers,
+          trackRowDelta,
           activeSnapAnchor,
         };
         clipDragRef.current = nextDrag;
         clipPreviewSecondsRef.current = nextPreviewSeed;
+        clipPreviewTrackIdRef.current = nextPreviewTrackIds;
         setClipDragSnapIndicatorSeconds(
           activeSnapAnchor ? activeSnapAnchor.seconds : null,
         );
@@ -4332,11 +4374,24 @@ export function TransportPanelContent() {
       clipDragRef.current = null;
       setClipDragSnapIndicatorSeconds(null);
       if (activeClipDrag) {
+        // Destination tracks captured from the live preview (final clamped
+        // row delta). A clip changed lane only when it has an entry here.
+        const previewTrackIds = clipPreviewTrackIdRef.current;
+        const changedTrack = activeClipDrag.trackRowDelta !== 0;
         const movedEnough =
           activeClipDrag.hasMoved ||
+          changedTrack ||
           Math.abs(event.clientX - activeClipDrag.startClientX) >
+            DRAG_THRESHOLD_PX ||
+          Math.abs(event.clientY - activeClipDrag.startClientY) >
             DRAG_THRESHOLD_PX;
-        if (movedEnough && activeClipDrag.members.length > 1) {
+        // Any track reassignment routes through the batch path so position +
+        // track commit in a single operation (one undo, one revision), even
+        // for a single clip.
+        const useBatch =
+          movedEnough &&
+          (activeClipDrag.members.length > 1 || changedTrack);
+        if (useBatch) {
           // Multi-clip drag: commit all positions in one batch so the engine
           // rebuilds the timeline window once, the history records a single
           // entry, and only one project_revision bumps.
@@ -4344,6 +4399,9 @@ export function TransportPanelContent() {
             (member) => ({
               clipId: member.clipId,
               timelineStartSeconds: member.previewSeconds,
+              ...(previewTrackIds[member.clipId]
+                ? { targetTrackId: previewTrackIds[member.clipId] }
+                : {}),
             }),
           );
           for (const move of batchMoves) {
@@ -4381,6 +4439,7 @@ export function TransportPanelContent() {
               );
               if (!anyPending) {
                 clipPreviewSecondsRef.current = {};
+                clipPreviewTrackIdRef.current = {};
               }
             }
           });
@@ -4414,11 +4473,13 @@ export function TransportPanelContent() {
                 !clipPreviewClearAfterRevisionRef.current[activeClipDrag.clipId]
               ) {
                 clipPreviewSecondsRef.current = {};
+                clipPreviewTrackIdRef.current = {};
               }
             }
           });
         } else {
           clipPreviewSecondsRef.current = {};
+          clipPreviewTrackIdRef.current = {};
           // Plain click on a clip that was part of a multi-selection at
           // mouseDown time: collapse the selection to just this clip now
           // that we know the user did NOT drag the group.
@@ -4434,6 +4495,7 @@ export function TransportPanelContent() {
         }
       } else {
         clipPreviewSecondsRef.current = {};
+        clipPreviewTrackIdRef.current = {};
       }
       clipSelectionPendingCollapseRef.current = null;
 
@@ -4938,6 +5000,11 @@ export function TransportPanelContent() {
     const realTracks = song ? buildVisibleTracks(song, collapsedFolders) : [];
     return [...realTracks, ...pendingAudioImports.map(toPendingTrack)];
   }, [collapsedFolders, pendingAudioImports, song]);
+  // Mirror the visible-track order into a ref so the global mouse handlers
+  // (which intentionally don't re-bind on every track/zoom change) can map a
+  // cursor Y to a destination track during a vertical clip drag.
+  const visibleTracksRef = useRef<TimelineTrackSummary[]>(visibleTracks);
+  visibleTracksRef.current = visibleTracks;
   const visibleLibraryAssets = useMemo<PendingLibraryAssetSummary[]>(
     () => [...libraryAssets, ...pendingAudioImports.map(toPendingLibraryAsset)],
     [libraryAssets, pendingAudioImports],
@@ -6303,6 +6370,7 @@ export function TransportPanelContent() {
             clipId: clip.id,
             originSeconds: clip.timelineStartSeconds,
             previewSeconds: clip.timelineStartSeconds,
+            originTrackId: clip.trackId,
           });
           previewSeed[clip.id] = clip.timelineStartSeconds;
         }
@@ -6314,6 +6382,7 @@ export function TransportPanelContent() {
           clipId: hitClip.id,
           originSeconds: hitClip.timelineStartSeconds,
           previewSeconds: hitClip.timelineStartSeconds,
+          originTrackId: hitClip.trackId,
         });
         previewSeed[hitClip.id] = hitClip.timelineStartSeconds;
       }
@@ -6329,12 +6398,15 @@ export function TransportPanelContent() {
         previewSeconds: hitClip.timelineStartSeconds,
         clickSeekSeconds,
         startClientX: event.clientX,
+        startClientY: event.clientY,
+        trackRowDelta: 0,
         hasMoved: false,
         members,
         snapAnchors,
         activeSnapAnchor: null,
       };
       clipPreviewSecondsRef.current = previewSeed;
+      clipPreviewTrackIdRef.current = {};
       return;
     }
 
@@ -8927,6 +8999,7 @@ export function TransportPanelContent() {
                           displayPositionSecondsRef={displayPositionSecondsRef}
                           playheadDragRef={playheadDragRef}
                           clipPreviewSecondsRef={clipPreviewSecondsRef}
+                          clipPreviewTrackIdRef={clipPreviewTrackIdRef}
                           playheadDurationSeconds={workspaceDurationSeconds}
                           rulerTrackRef={rulerTrackRef}
                           horizontalScrollbarRef={horizontalScrollbarRef}

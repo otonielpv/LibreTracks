@@ -601,6 +601,12 @@ export async function moveClipLive(
 export type ClipMoveRequest = {
   clipId: string;
   timelineStartSeconds: number;
+  /**
+   * Optional destination track. When set, the batch move also reassigns the
+   * clip to this track (dragging a clip vertically onto another lane). Omit to
+   * keep the clip on its current track. The target must not be a folder track.
+   */
+  targetTrackId?: string;
 };
 
 export async function moveClipsBatch(

@@ -1204,18 +1204,26 @@ export const testDesktopApiMock = {
   },
   moveClipLive: async (_clipId: string, _timelineStartSeconds: number) => {},
   moveClipsBatch: async (
-    moves: Array<{ clipId: string; timelineStartSeconds: number }>,
+    moves: Array<{
+      clipId: string;
+      timelineStartSeconds: number;
+      targetTrackId?: string;
+    }>,
   ) => {
-    const movesByClipId = new Map(
-      moves.map((move) => [move.clipId, move.timelineStartSeconds]),
-    );
+    const movesByClipId = new Map(moves.map((move) => [move.clipId, move]));
     replaceSong({
       ...state.song,
-      clips: state.song.clips.map((clip) =>
-        movesByClipId.has(clip.id)
-          ? { ...clip, timelineStartSeconds: movesByClipId.get(clip.id)! }
-          : clip,
-      ),
+      clips: state.song.clips.map((clip) => {
+        const move = movesByClipId.get(clip.id);
+        if (!move) {
+          return clip;
+        }
+        return {
+          ...clip,
+          timelineStartSeconds: move.timelineStartSeconds,
+          trackId: move.targetTrackId ?? clip.trackId,
+        };
+      }),
     });
     return clone(buildSnapshot());
   },

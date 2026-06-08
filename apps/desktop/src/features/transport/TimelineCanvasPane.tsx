@@ -99,6 +99,7 @@ type TimelineCanvasPaneProps = {
     currentSeconds: number;
   } | null>;
   clipPreviewSecondsRef: MutableRefObject<Record<string, number>>;
+  clipPreviewTrackIdRef: MutableRefObject<Record<string, string>>;
   rulerTrackRef: RefObject<HTMLDivElement | null>;
   horizontalScrollbarRef: RefObject<HTMLDivElement | null>;
   laneAreaRef: RefObject<HTMLDivElement | null>;
@@ -234,6 +235,7 @@ export function TimelineCanvasPane({
   displayPositionSecondsRef,
   playheadDragRef,
   clipPreviewSecondsRef,
+  clipPreviewTrackIdRef,
   rulerTrackRef,
   horizontalScrollbarRef,
   laneAreaRef,
@@ -1050,6 +1052,7 @@ export function TimelineCanvasPane({
               selectedClipId={selectedClipId}
               selectedClipIds={selectedClipIds}
               clipPreviewSecondsRef={clipPreviewSecondsRef}
+              clipPreviewTrackIdRef={clipPreviewTrackIdRef}
               trackHeightForInput={trackHeight}
               canNativeZoom={canNativeZoom}
               navigationScheme={navigationScheme}

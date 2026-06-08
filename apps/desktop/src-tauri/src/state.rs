@@ -506,6 +506,12 @@ pub struct CreateClipWithAutoTrackRequest {
 pub struct ClipMoveRequest {
     pub clip_id: String,
     pub timeline_start_seconds: f64,
+    /// Optional destination track. When present, the clip is reassigned to
+    /// this track as part of the same move (dragging a clip vertically onto
+    /// another lane). `None` keeps the clip on its current track. The target
+    /// must exist and must not be a folder track.
+    #[serde(default)]
+    pub target_track_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -6546,6 +6552,22 @@ fn apply_clip_moves_with_region_reshape(
             .find(|clip| clip.id == request.clip_id)
             .map(|clip| clip.duration_seconds)
             .ok_or_else(|| DesktopError::ClipNotFound(request.clip_id.clone()))?;
+        // When the move reassigns the clip to another track, validate the
+        // destination before touching anything (same rule as
+        // move_clip_to_track: target must exist and must not be a folder).
+        if let Some(target_track_id) = &request.target_track_id {
+            let target_kind = song
+                .tracks
+                .iter()
+                .find(|track| &track.id == target_track_id)
+                .map(|track| track.kind)
+                .ok_or_else(|| DesktopError::TrackNotFound(target_track_id.clone()))?;
+            if target_kind == libretracks_core::TrackKind::Folder {
+                return Err(DesktopError::AudioCommand(
+                    "no se puede mover un clip a un folder".into(),
+                ));
+            }
+        }
         ensure_region_covers_clip(song, new_start, new_start + clip_duration)?;
         let clip = song
             .clips
@@ -6553,6 +6575,9 @@ fn apply_clip_moves_with_region_reshape(
             .find(|clip| clip.id == request.clip_id)
             .ok_or_else(|| DesktopError::ClipNotFound(request.clip_id.clone()))?;
         clip.timeline_start_seconds = new_start;
+        if let Some(target_track_id) = &request.target_track_id {
+            clip.track_id = target_track_id.clone();
+        }
     }
     Ok(())
 }
@@ -7357,8 +7382,8 @@ mod tests {
     use super::{
         build_empty_song, list_library_assets, next_downbeat_after_in_view_timeline,
         realign_regions_after_warp_tempo_change, write_library_manifest,
-        write_library_manifest_assets, AudioFileImportPayload, CreateClipRequest, DesktopSession,
-        TransportClock, WaveformMemoryCache,
+        write_library_manifest_assets, AudioFileImportPayload, ClipMoveRequest, CreateClipRequest,
+        DesktopSession, TransportClock, WaveformMemoryCache,
     };
 
     fn demo_song() -> Song {
@@ -8314,6 +8339,81 @@ mod tests {
         let saved_song = load_song(&song_dir).expect("song json should load");
         assert_eq!(saved_song.clips[0].timeline_start_seconds, 1.0);
         assert_eq!(session.engine.playback_state(), PlaybackState::Stopped);
+    }
+
+    #[test]
+    fn batch_move_can_reassign_clip_to_another_track() {
+        // Dragging a clip vertically onto another lane: the batch move
+        // carries target_track_id, so position and track change together in
+        // one operation. The origin track (auto_created) is then pruned
+        // because it lost its only clip.
+        let mut song = demo_song();
+        song.tracks[0].auto_created = true;
+        song.tracks.push(Track {
+            id: "track_2".into(),
+            name: "Track 2".into(),
+            kind: TrackKind::Audio,
+            parent_track_id: None,
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            transpose_enabled: true,
+            audio_to: "master".to_string(),
+            color: None,
+            auto_created: false,
+        });
+        let mut session = session_with_song_dir("batch-move-track", song);
+        let audio = crate::audio_engine::AudioController::default();
+
+        session
+            .move_clips_batch(
+                &[ClipMoveRequest {
+                    clip_id: "clip_1".into(),
+                    timeline_start_seconds: 3.0,
+                    target_track_id: Some("track_2".into()),
+                }],
+                &audio,
+            )
+            .expect("batch move with track change should succeed");
+
+        let song_view = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song view should exist");
+        let clip = song_view
+            .clips
+            .iter()
+            .find(|clip| clip.id == "clip_1")
+            .expect("clip should still exist");
+        assert_eq!(clip.track_id, "track_2");
+        assert_eq!(clip.timeline_start_seconds, 3.0);
+        // Origin track was auto-created and is now empty → pruned.
+        assert!(song_view.tracks.iter().all(|track| track.id != "track_1"));
+    }
+
+    #[test]
+    fn batch_move_rejects_folder_as_target_track() {
+        let mut song = demo_song_with_folder_track();
+        let folder_id = song
+            .tracks
+            .iter()
+            .find(|track| track.kind == TrackKind::Folder)
+            .expect("folder track should exist")
+            .id
+            .clone();
+        let mut session = session_with_song_dir("batch-move-folder", song);
+        let audio = crate::audio_engine::AudioController::default();
+
+        let result = session.move_clips_batch(
+            &[ClipMoveRequest {
+                clip_id: "clip_1".into(),
+                timeline_start_seconds: 1.0,
+                target_track_id: Some(folder_id),
+            }],
+            &audio,
+        );
+        assert!(result.is_err(), "moving a clip onto a folder must fail");
     }
 
     #[test]
